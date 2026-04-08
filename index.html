@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RS Screener">
+<meta name="theme-color" content="#0f172a">
+<title>RS Screener v11</title>
+
+
+<!-- iOS icon fallback -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%230f172a'/><text x='90' y='125' font-size='90' text-anchor='middle' fill='%23f59e0b'>🧙</text></svg>">
+
+<style>
+:root {
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --surface2:  #263248;
+  --border:    #334155;
+  --accent:    #f59e0b;
+  --accent2:   #3b82f6;
+  --text:      #f1f5f9;
+  --text2:     #94a3b8;
+  --green:     #22c55e;
+  --red:       #ef4444;
+  --orange:    #f97316;
+  --gold:      #f59e0b;
+  --safe: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'SF Pro Text', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif; overflow: hidden; }
+
+/* ===== LAYOUT ===== */
+#app { display: flex; flex-direction: column; height: 100dvh; }
+
+/* Header */
+.hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 8px;
+  padding-top: max(12px, env(safe-area-inset-top, 12px));
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.hdr-title { font-size: 18px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+.hdr-sub   { font-size: 10px; color: var(--text2); margin-top: 1px; }
+
+/* Status pill */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* Tab bar */
+.tabs {
+  display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; overflow-x: auto; scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: 1; padding: 10px 8px; font-size: 11px; font-weight: 600;
+  color: var(--text2); border: none; background: none; cursor: pointer;
+  white-space: nowrap; position: relative; transition: color 0.2s;
+  min-width: 70px;
+}
+.tab.active { color: var(--accent); }
+.tab.active::after {
+  content: ''; position: absolute; bottom: 0; left: 20%; right: 20%;
+  height: 2px; background: var(--accent); border-radius: 2px;
+}
+
+/* Scroll area */
+.scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+
+/* Cards */
+.card {
+  background: var(--surface); border-radius: 12px; margin: 10px 12px;
+  border: 1px solid var(--border); overflow: hidden;
+}
+.card-hdr {
+  padding: 10px 14px; font-size: 12px; font-weight: 700;
+  color: var(--text2); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+/* ENV banner */
+.env-banner {
+  margin: 10px 12px; border-radius: 12px; padding: 14px 16px;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+}
+.env-stat { text-align: center; min-width: 60px; }
+.env-stat-val { font-size: 17px; font-weight: 800; }
+.env-stat-lbl { font-size: 9px; color: rgba(255,255,255,0.7); margin-top: 1px; }
+
+/* Stock row */
+.stock-row {
+  padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+  transition: background 0.15s; position: relative;
+}
+.stock-row:last-child { border-bottom: none; }
+.stock-row:active { background: var(--surface2); }
+.stock-row.selected { background: rgba(59,130,246,0.12); }
+
+.sym { font-size: 15px; font-weight: 800; color: var(--text); min-width: 50px; }
+.sector-sm { font-size: 10px; color: var(--text2); margin-top: 1px; line-height: 1.2; }
+.stars { font-size: 13px; color: #f59e0b; min-width: 38px; text-align: right; }
+
+/* Badges */
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 700;
+  white-space: nowrap; min-width: 28px;
+}
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Grade colors */
+.g-ap  { background: #16a34a; color: #fff; }
+.g-a   { background: #4ade80; color: #14532d; }
+.g-b   { background: #fbbf24; color: #451a03; }
+.g-c   { background: #f87171; color: #450a0a; }
+.g-n   { background: #334155; color: #94a3b8; }
+
+/* RS color */
+.rs-gold { background: #f59e0b; color: #451a03; }
+.rs-ok   { background: #4ade80; color: #14532d; }
+.rs-dim  { background: #334155; color: #cbd5e1; }
+
+/* Metric row */
+.metrics { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+/* Detail expand */
+.detail {
+  margin: 0 12px 10px; padding: 12px 14px;
+  background: rgba(59,130,246,0.08); border-radius: 0 0 12px 12px;
+  border: 1px solid rgba(59,130,246,0.2); border-top: none;
+  font-size: 11px; line-height: 1.7; color: var(--text2);
+  animation: slideDown 0.2s ease;
+}
+.detail b { color: var(--accent); }
+@keyframes slideDown { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+
+/* Main grid (3-col key metrics) */
+.main-metrics {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1px; background: var(--border);
+}
+.metric-cell {
+  background: var(--surface2); padding: 8px 10px; text-align: center;
+}
+.metric-val { font-size: 16px; font-weight: 800; color: var(--text); }
+.metric-lbl { font-size: 9px; color: var(--text2); margin-top: 1px; }
+
+/* Sector bar */
+.sec-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sec-row:last-child { border-bottom: none; }
+.sec-rank { font-size: 10px; color: var(--text2); min-width: 18px; }
+.sec-etf  { font-size: 12px; font-weight: 800; min-width: 38px; }
+.sec-name { font-size: 11px; color: var(--text2); flex: 1; }
+.sec-bar  { height: 4px; border-radius: 2px; min-width: 4px; }
+
+/* Filter chips */
+.chips { display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;
+  white-space: nowrap; cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text2); transition: all 0.15s;
+}
+.chip.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* Update panel */
+.update-panel {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100;
+  display: flex; align-items: flex-end; padding-bottom: var(--safe);
+}
+.update-sheet {
+  background: var(--surface); border-radius: 20px 20px 0 0; width: 100%; padding: 20px 16px;
+  padding-bottom: calc(20px + var(--safe));
+}
+.update-sheet h3 { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+.update-sheet p  { font-size: 12px; color: var(--text2); margin-bottom: 12px; line-height: 1.5; }
+textarea {
+  width: 100%; height: 140px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px;
+  font-size: 12px; font-family: monospace; resize: none;
+}
+.btn {
+  width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 800;
+  border: none; cursor: pointer; margin-top: 10px; transition: opacity 0.15s;
+}
+.btn:active { opacity: 0.8; }
+.btn-primary { background: var(--accent); color: #000; }
+.btn-cancel  { background: var(--surface2); color: var(--text2); }
+
+/* Empty state */
+.empty { padding: 40px 20px; text-align: center; color: var(--text2); font-size: 13px; }
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+/* Bottom safe area */
+.bottom-space { height: max(16px, env(safe-area-inset-bottom, 16px)); }
+
+/* Scrollbar */
+.scroll::-webkit-scrollbar { width: 3px; }
+.scroll::-webkit-scrollbar-track { background: transparent; }
+.scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">🧙 RS Screener</div>
+      <div class="hdr-sub" id="hdr-date">データなし — 右上の更新ボタンをタップ</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="status-pill" id="status-pill">—</div>
+      <button onclick="openUpdate()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;">更新</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" onclick="showTab('home')"   id="tab-home">🏠 ホーム</button>
+    <button class="tab"        onclick="showTab('main')"   id="tab-main">📋 メイン</button>
+    <button class="tab"        onclick="showTab('tight')"  id="tab-tight">📊 保ち合い</button>
+    <button class="tab"        onclick="showTab('sector')" id="tab-sector">🏭 セクター</button>
+  </div>
+
+  <!-- ホーム -->
+  <div class="scroll" id="pane-home">
+    <div id="env-banner-wrap"></div>
+    <div class="card">
+      <div class="card-hdr">📋 メイン最有望</div>
+      <div id="home-main-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">📊 高値保ち合い TOP5</div>
+      <div id="home-tight-list"></div>
+    </div>
+    <div class="bottom-space"></div>
+  </div>
+
+  <!-- メイン -->
+  <div class="scroll" id="pane-main" style="display:none">
+    <div class="card" style="margin-top:10px;">
+      <div id="main-list"></div>
+    </div>
+    <div class="bottom-space"></div>
+  </div>
+
+  <!-- 高値保ち合い -->
+  <div id="pane-tight" style="display:none;display:flex;flex-direction:column;height:100%;overflow:hidden;">
+    <div class="chips" id="tight-chips">
+      <div class="chip active" onclick="setFilter('all',this)">全件</div>
+      <div class="chip" onclick="setFilter('energy',this)">🛢️ エネルギー</div>
+      <div class="chip" onclick="setFilter('rl',this)">★ RSライン</div>
+      <div class="chip" onclick="setFilter('vdu',this)">📉 VDU</div>
+      <div class="chip" onclick="setFilter('bkt',this)">🔥 BKT出来高</div>
+    </div>
+    <div class="scroll" style="flex:1;">
+      <div class="card" style="margin-top:0;">
+        <div id="tight-list"></div>
+      </div>
+      <div class="bottom-space"></div>
+    </div>
+  </div>
+
+  <!-- セクター -->
+  <div class="scroll" id="pane-sector" style="display:none">
+    <div class="card" style="margin-top:10px;">
+      <div class="card-hdr">セクターRS順位（11セクター）</div>
+      <div id="sector-list"></div>
+    </div>
+    <div class="bottom-space"></div>
+  </div>
+</div>
+
+<!-- 更新パネル -->
+<div class="update-panel" id="update-panel" style="display:none">
+  <div class="update-sheet">
+    <h3>📥 データを更新</h3>
+    <p>ColabでCell12を実行し、出力された<b>screener_latest.json</b>の内容を全てコピーして貼り付けてください。</p>
+    <textarea id="json-input" placeholder='{"env":{...},"main":[...],"tight":[...],"sectors":[...]}'></textarea>
+    <button class="btn btn-primary" onclick="loadJSON()">読み込む</button>
+    <button class="btn btn-cancel" onclick="closeUpdate()" style="margin-top:6px;">キャンセル</button>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+let DATA = null;
+let currentTab = 'home';
+let tightFilter = 'all';
+let selectedSym = null;
+
+// ===== COLORS =====
+const statusBg = { 'BUY MODE':'#16a34a','CAUTION':'#f97316','DO NOT BUY':'#dc2626' };
+const gradeClass = { 'A+':'g-ap','A':'g-a','B':'g-b','C':'g-c','C-':'g-c','N':'g-n' };
+const gradeLabel = { 'A+':'A+','A':'A','B':'B','C':'C','C-':'C-','N':'—' };
+
+function rsClass(rs) {
+  if (rs >= 93) return 'rs-gold';
+  if (rs >= 70) return 'rs-ok';
+  return 'rs-dim';
+}
+function secRsColor(rs) {
+  if (rs >= 85) return '#f59e0b';
+  if (rs >= 70) return '#22c55e';
+  if (rs < 50)  return '#ef4444';
+  return '#475569';
+}
+function rrColor(rr) {
+  if (rr >= 5) return '#f59e0b';
+  if (rr >= 3) return '#22c55e';
+  return '#475569';
+}
+function depthColor(d) {
+  if (d <= 10) return '#22c55e';
+  if (d <= 18) return '#f59e0b';
+  return '#475569';
+}
+
+// ===== RENDER HELPERS =====
+function badge(text, cls, extra='') {
+  return `<span class="badge ${cls}" ${extra}>${text}</span>`;
+}
+function tag(text, color) {
+  return `<span class="tag" style="background:${color};color:#fff;">${text}</span>`;
+}
+function n(v, unit='', dec=1) {
+  if (v === null || v === undefined || v !== v) return '—';
+  return (typeof v === 'number' ? v.toFixed(dec) : v) + unit;
+}
+
+// ===== ENV BANNER =====
+function renderEnv() {
+  if (!DATA) return;
+  const e = DATA.env;
+  const col = statusBg[e.status] || '#475569';
+  const ma200sign = e.spy_ma200_pct >= 0 ? '+' : '';
+  document.getElementById('env-banner-wrap').innerHTML = `
+    <div class="env-banner" style="background:${col}20;border:1px solid ${col}50;">
+      <div style="flex:0 0 auto;">
+        <div style="font-size:20px;font-weight:900;color:${col};">
+          ${e.status === 'BUY MODE' ? '✅' : e.status === 'CAUTION' ? '⚠️' : '🚫'} ${e.status}
+        </div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px;">${e.date || ''}</div>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        ${[
+          ['ENV', `${e.env_score}/100`],
+          ['SPY', `$${e.spy}`],
+          ['vs MA200', `${ma200sign}${e.spy_ma200_pct}%`],
+          ['Stage2', `${e.stage2_count}銘柄`],
+          ['RS70+', `${e.rs70_count}/${e.rs70_total}`],
+        ].map(([l,v])=>`
+          <div class="env-stat">
+            <div class="env-stat-val" style="color:${col};">${v}</div>
+            <div class="env-stat-lbl">${l}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+
+  const pill = document.getElementById('status-pill');
+  pill.textContent = e.status === 'BUY MODE' ? '✅ BUY' : e.status === 'CAUTION' ? '⚠️ CAUTION' : '🚫 NO BUY';
+  pill.style.background = col;
+  pill.style.color = '#fff';
+
+  document.getElementById('hdr-date').textContent = e.date || '';
+}
+
+// ===== STOCK ROW =====
+function stockRow(r, mode='main') {
+  const gc = gradeClass[r.grade] || 'g-n';
+  const gl = gradeLabel[r.grade] || '—';
+  const rlTag = r['RSライン52日'] === '★' || r['RSライン52'] === '★'
+    ? tag('★52','#d97706') : '';
+  const vduTag = r['VDU'] === 'YES' ? tag('VDU','#16a34a') : '';
+  const bktTag = (r['BKT出来高'] === '✓' || r['BKT'] === '✓')
+    ? tag('BKT','#f59e0b') : '';
+  const c33Tag = r['Code33'] === '✓' ? tag('C33','#7c3aed') : '';
+
+  const sym = r['シンボル'] || r['sym'] || '?';
+  const sector = r['セクター'] || r['sector'] || '';
+  const secRs = r['セクターRS数値'] || r['セクターRS'] || r['sec_rs'] || 0;
+  const rs = r['RS'] || 0;
+  const stars = r['★'] || r['stars'] || '';
+  const grade = r['ファンダG'] || r['grade'] || 'N';
+  const volM = r['出来高$M'] || r['vol_m'];
+  const score = r['総合Score'] || r['score'] || 0;
+
+  if (mode === 'main') {
+    const pvt  = r['ピボット'] || r['pivot'];
+    const stop = r['ストップ'] || r['stop'];
+    const rr   = r['RR比'] || r['rr'];
+    const risk = r['リスク%'] || r['risk'];
+    const depth= r['深さ%'] || r['depth'];
+    const bc   = r['ベース回数'] || r['bc'];
+    const hi52 = r['高値比%'] || r['hi52'];
+
+    return `
+      <div class="stock-row ${selectedSym===sym?'selected':''}" onclick="toggleSym('${sym}','main')">
+        <div style="flex:0 0 auto;">
+          <div class="sym">${sym}</div>
+          <div class="sector-sm">${sector}</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+            ${badge(gl, gc)}
+            ${badge(`RS${rs}`, rsClass(rs))}
+            ${badge(`SecRS${secRs}`, secRs >= 70 ? 'rs-ok' : secRs < 50 ? 'g-c' : 'g-n')}
+            ${rlTag}${vduTag}${bktTag}${c33Tag}
+          </div>
+          <div style="display:flex;gap:10px;font-size:11px;color:var(--text2);">
+            <span>Pvt <b style="color:var(--text)">$${n(pvt,'',2)}</b></span>
+            <span>Stop <b style="color:#ef4444">$${n(stop,'',2)}</b></span>
+            <span style="color:${rrColor(rr)}">RR <b>${n(rr,'x')}</b></span>
+          </div>
+        </div>
+        <div style="flex:0 0 auto;text-align:right;">
+          <div class="stars">${stars}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">${n(score,'',0)}pt</div>
+        </div>
+      </div>`;
+  } else {
+    const range = r['値幅%'] || r['range_pct'];
+    const hi52  = r['高値比%'] || r['hi52'];
+    const type  = r['リスト種別'] || r['type'] || '';
+    const typeTag = type === '救済枠' ? tag('救済','#6366f1') : '';
+
+    return `
+      <div class="stock-row ${selectedSym===sym?'selected':''}" onclick="toggleSym('${sym}','tight')">
+        <div style="flex:0 0 auto;">
+          <div class="sym">${sym}</div>
+          <div class="sector-sm">${sector}</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+            ${badge(gl, gc)}
+            ${badge(`RS${rs}`, rsClass(rs))}
+            ${badge(`${n(range,'%')}`, range <= 3 ? 'rs-gold' : range <= 8 ? 'rs-ok' : 'rs-dim')}
+            ${rlTag}${vduTag}${bktTag}${typeTag}
+          </div>
+          <div style="font-size:11px;color:var(--text2);">
+            <span>SecRS <b style="color:${secRsColor(secRs)}">${secRs}</b></span>
+            <span style="margin-left:10px;">高値比 <b style="color:var(--text)">${n(hi52,'%')}</b></span>
+            <span style="margin-left:10px;">$<b style="color:var(--text)">${n(volM,'M')}</b></span>
+          </div>
+        </div>
+        <div style="flex:0 0 auto;text-align:right;">
+          <div class="stars">${stars}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">${n(score,'',0)}pt</div>
+        </div>
+      </div>`;
+  }
+}
+
+// ===== DETAIL PANEL =====
+function detailPanel(sym, mode) {
+  const rows = mode === 'main' ? DATA.main : DATA.tight;
+  const r = rows.find(x => (x['シンボル']||x['sym']) === sym);
+  if (!r) return '';
+
+  const reason = r['有望理由'] || r['reason'] || '';
+  const eps    = r['EPS成長%'];
+  const rev    = r['売上成長%'];
+  const nxt    = r['次回決算'] || r['next_earnings'] || '';
+  const c33    = r['Code33'] === '✓';
+
+  let extras = [];
+  if (eps !== null && eps !== undefined && eps === eps) extras.push(`EPS成長: <b>${n(eps,'%')}</b>`);
+  if (rev !== null && rev !== undefined && rev === rev) extras.push(`売上成長: <b>${n(rev,'%')}</b>`);
+  if (c33) extras.push(`<b style="color:#7c3aed">✦ Code 33 達成</b>`);
+  if (nxt && nxt !== 'None' && nxt.length > 4) extras.push(`次回決算: <b>${nxt}</b>`);
+
+  const reasonHtml = reason.replace(/\n/g,'<br>').replace('【好材料】','<b style="color:#22c55e">【好材料】</b>').replace('【注意】','<b style="color:#f87171">【注意】</b>');
+
+  return `
+    <div class="detail">
+      ${extras.length ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">${extras.map(e=>`<span>${e}</span>`).join('')}</div>` : ''}
+      ${reasonHtml || '<span style="color:var(--text2)">有望理由なし</span>'}
+    </div>`;
+}
+
+// ===== TOGGLE =====
+function toggleSym(sym, mode) {
+  selectedSym = selectedSym === sym ? null : sym;
+  if (mode === 'main')  renderMain();
+  if (mode === 'tight') renderTight();
+  if (mode === 'home') { renderHomeMain(); renderHomeTight(); }
+}
+
+// ===== RENDER LISTS =====
+function renderMain() {
+  if (!DATA || !DATA.main) return;
+  const el = document.getElementById('main-list');
+  el.innerHTML = DATA.main.map(r => {
+    const sym = r['シンボル']||r['sym'];
+    const rows = stockRow(r,'main');
+    const det  = selectedSym === sym ? detailPanel(sym,'main') : '';
+    return rows + det;
+  }).join('');
+}
+
+function renderTight() {
+  if (!DATA || !DATA.tight) return;
+  let rows = DATA.tight;
+  if (tightFilter === 'energy') rows = rows.filter(r => (r['セクター']||'').includes('エネルギー'));
+  if (tightFilter === 'rl')     rows = rows.filter(r => r['RSライン52日']==='★'||r['RSライン52']==='★');
+  if (tightFilter === 'vdu')    rows = rows.filter(r => r['VDU']==='YES');
+  if (tightFilter === 'bkt')    rows = rows.filter(r => r['BKT出来高']==='✓'||r['BKT']==='✓');
+
+  const el = document.getElementById('tight-list');
+  if (rows.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div>該当なし</div>';
+    return;
+  }
+  el.innerHTML = rows.map(r => {
+    const sym = r['シンボル']||r['sym'];
+    const row = stockRow(r,'tight');
+    const det = selectedSym === sym ? detailPanel(sym,'tight') : '';
+    return row + det;
+  }).join('');
+}
+
+function renderHomeMain() {
+  if (!DATA || !DATA.main) return;
+  const top = DATA.main.slice(0,3);
+  document.getElementById('home-main-list').innerHTML =
+    top.map(r => {
+      const sym = r['シンボル']||r['sym'];
+      const row = stockRow(r,'main');
+      const det = selectedSym === sym ? detailPanel(sym,'main') : '';
+      return row + det;
+    }).join('') || '<div class="empty"><div class="empty-icon">📭</div>候補なし</div>';
+}
+
+function renderHomeTight() {
+  if (!DATA || !DATA.tight) return;
+  const top = DATA.tight.slice(0,5);
+  document.getElementById('home-tight-list').innerHTML =
+    top.map(r => {
+      const sym = r['シンボル']||r['sym'];
+      const row = stockRow(r,'tight');
+      const det = selectedSym === sym ? detailPanel(sym,'tight') : '';
+      return row + det;
+    }).join('') || '<div class="empty"><div class="empty-icon">📭</div>候補なし</div>';
+}
+
+function renderSectors() {
+  if (!DATA || !DATA.sectors) return;
+  const el = document.getElementById('sector-list');
+  el.innerHTML = DATA.sectors.map(s => {
+    const rs = s.rs || s['RS'] || 0;
+    const col = secRsColor(rs);
+    const barW = Math.max(4, rs);
+    return `
+      <div class="sec-row">
+        <div class="sec-rank">#${s.rank||s['順位']}</div>
+        <div class="sec-etf">${s.etf||s['ETF']}</div>
+        <div class="sec-name">${s.sector||s['セクター']}</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div class="sec-bar" style="width:${barW}px;background:${col};"></div>
+          <span class="badge" style="background:${col}20;color:${col};border:1px solid ${col}50;font-size:11px;font-weight:800;">
+            RS${rs}
+          </span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ===== TABS =====
+function showTab(tab) {
+  currentTab = tab;
+  selectedSym = null;
+  ['home','main','tight','sector'].forEach(t => {
+    const p = document.getElementById('pane-'+t);
+    if (p) p.style.display = t === tab ? (t === 'tight' ? 'flex' : 'block') : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'tight')  { renderTight(); document.getElementById('pane-tight').style.flexDirection = 'column'; }
+  if (tab === 'main')   renderMain();
+  if (tab === 'sector') renderSectors();
+  if (tab === 'home')   { renderHomeMain(); renderHomeTight(); }
+}
+
+// ===== FILTER =====
+function setFilter(f, el) {
+  tightFilter = f;
+  selectedSym = null;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderTight();
+}
+
+// ===== UPDATE =====
+function openUpdate()  { document.getElementById('update-panel').style.display='flex'; }
+function closeUpdate() { document.getElementById('update-panel').style.display='none'; }
+
+function loadJSON() {
+  const txt = document.getElementById('json-input').value.trim();
+  if (!txt) { alert('JSONを貼り付けてください'); return; }
+  try {
+    const d = JSON.parse(txt);
+    if (!d.env || !d.main) { alert('形式が正しくありません。\nenv と main が必要です。'); return; }
+    DATA = d;
+    localStorage.setItem('screener_data', txt);
+    localStorage.setItem('screener_ts', new Date().toISOString());
+    closeUpdate();
+    document.getElementById('json-input').value = '';
+    renderAll();
+    alert('✅ データを更新しました！');
+  } catch(e) {
+    alert('JSONの解析に失敗しました。\n' + e.message);
+  }
+}
+
+function renderAll() {
+  renderEnv();
+  renderHomeMain();
+  renderHomeTight();
+  if (currentTab === 'main')   renderMain();
+  if (currentTab === 'tight')  renderTight();
+  if (currentTab === 'sector') renderSectors();
+}
+
+// ===== INIT =====
+function init() {
+  // localStorageからデータを復元
+  const saved = localStorage.getItem('screener_data');
+  if (saved) {
+    try {
+      DATA = JSON.parse(saved);
+      renderAll();
+    } catch(e) {
+      localStorage.removeItem('screener_data');
+    }
+  }
+  // pane-tight の flex 設定
+  document.getElementById('pane-tight').style.cssText = 'display:none;flex-direction:column;height:100%;overflow:hidden;';
+}
+
+init();
+
+</script>
+</body>
+</html>
