@@ -638,12 +638,15 @@ function setChartPref(k, v, sym) {
   renderBigChart(sym);
 }
 
+let chartLoading = {};
 function loadChart(sym) {
   if (chartCache[sym]) { renderBigChart(sym); return; }
+  if (chartLoading[sym]) return;
+  chartLoading[sym] = true;
   fetch(`data/charts/${encodeURIComponent(sym)}.json?v=${Date.now()}`, { cache: 'no-store' })
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(j => { chartCache[sym] = j; renderBigChart(sym); })
-    .catch(() => {});  // 取得失敗時はフォールバックのスパークラインを維持
+    .then(j => { chartCache[sym] = j; delete chartLoading[sym]; renderBigChart(sym); })
+    .catch(() => { delete chartLoading[sym]; });  // 取得失敗時はフォールバックのスパークラインを維持
 }
 
 function renderBigChart(sym) {
@@ -660,7 +663,10 @@ function renderBigChart(sym) {
   const W = 320, H = 170;
   const priceH = H * 0.60, volTop = H * 0.64, volH = H * 0.15, rsTop = H * 0.84, rsH = H * 0.13;
 
-  let lo = Math.min(...sub.l), hi = Math.max(...sub.h);
+  // 欠損足 (取得元のNaN→null) は無視して描画
+  const lvals = sub.l.filter(v => v != null), hvals = sub.h.filter(v => v != null);
+  if (!lvals.length || !hvals.length) return;
+  let lo = Math.min(...lvals), hi = Math.max(...hvals);
   const maVals = (sub.ma || []).filter(v => v != null);
   if (maVals.length) { lo = Math.min(lo, ...maVals); hi = Math.max(hi, ...maVals); }
   const pvt = cj.pivot || null, stp = cj.stop || null;
@@ -676,6 +682,7 @@ function renderBigChart(sym) {
 
   let bars = '';
   for (let i = 0; i < n_; i++) {
+    if (sub.o[i] == null || sub.h[i] == null || sub.l[i] == null || sub.c[i] == null) continue;
     const up = sub.c[i] >= sub.o[i];
     const col = up ? '#22c55e' : '#ef4444';
     const x = X(i);
@@ -758,7 +765,6 @@ function toggleSym(sym, mode) {
   if (mode === 'main')  renderMain();
   if (mode === 'tight') renderTight();
   if (mode === 'home') { renderHomeMain(); renderHomeTight(); }
-  if (selectedSym) loadChart(selectedSym);
 }
 
 // ===== RENDER LISTS =====
@@ -771,6 +777,7 @@ function renderMain() {
     const det  = selectedSym === sym ? detailPanel(sym,'main') : '';
     return rows + det;
   }).join('');
+  if (selectedSym) loadChart(selectedSym);  // 再描画でスパークラインに戻った本格チャートを復元
 }
 
 function renderTight() {
@@ -793,6 +800,7 @@ function renderTight() {
     const det = selectedSym === sym ? detailPanel(sym,'tight') : '';
     return row + det;
   }).join('');
+  if (selectedSym) loadChart(selectedSym);
 }
 
 function renderHomeMain() {
@@ -805,6 +813,7 @@ function renderHomeMain() {
       const det = selectedSym === sym ? detailPanel(sym,'main') : '';
       return row + det;
     }).join('') || '<div class="empty"><div class="empty-icon">📭</div>候補なし</div>';
+  if (selectedSym) loadChart(selectedSym);
 }
 
 function renderHomeTight() {
@@ -817,6 +826,7 @@ function renderHomeTight() {
       const det = selectedSym === sym ? detailPanel(sym,'tight') : '';
       return row + det;
     }).join('') || '<div class="empty"><div class="empty-icon">📭</div>候補なし</div>';
+  if (selectedSym) loadChart(selectedSym);
 }
 
 function renderSectors() {
