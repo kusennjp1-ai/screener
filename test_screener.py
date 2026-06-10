@@ -599,7 +599,34 @@ class Ratings(unittest.TestCase):
 
     def test_up_down_volume_no_down_days(self):
         ud = sc.up_down_volume(uptrend())
-        self.assertLessEqual(ud, 9.9, "下落日ゼロでもキャップされる")
+        self.assertEqual(ud, 9.9, "下落日ゼロ(上昇日出来高あり)はキャップ値ちょうど")
+
+    def test_up_down_volume_no_information(self):
+        # 全日同値 (売買停止級) — 最強扱いせずNone
+        px = np.full(320, 50.0)
+        ud = sc.up_down_volume(mkdf(px, high=px, low=px))
+        self.assertIsNone(ud)
+
+    def test_smr_partial_data_not_penalized(self):
+        # 売上成長50%だがmargin/ROE欠損 → 欠損を悪材料扱いしない
+        self.assertIn(sc.smr_rating(0.50, None, None), ("A", "B"))
+
+    def test_handle_requires_5plus_bars(self):
+        # 3本足の小押しはハンドルではない → ただのカップ
+        base = segment(98, 75, 28) + segment(75, 96, 29) + [96, 95.5, 95]
+        lead = list(np.linspace(50, 100, 320 - len(base)))
+        b = sc.classify_base(mkdf(lead + base))
+        self.assertEqual(b["type"], "カップ")
+
+    def test_drifting_decline_not_praised(self):
+        # 1年かけて-28%ジリ下げ → 「保ち合い」はreason好材料に載らない
+        px = list(np.linspace(100, 72, 320))
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(mkdf(px), spy)
+        m.update({"rs": 40, "sec_rs": 50, "score": 30,
+                  "accdis_pct": 0.5, "accdis_letter": "C"})
+        reason = sc.build_reason(m, {})
+        self.assertNotIn("保ち合い形成中", reason)
 
     def test_eps_rating_monotonic_and_bounded(self):
         weak = sc.eps_rating(5, 0, 0)

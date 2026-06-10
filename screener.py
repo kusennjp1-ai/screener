@@ -407,7 +407,8 @@ def up_down_volume(df, window=50):
     up = float(vv[chg > 0].sum())
     down = float(vv[chg < 0].sum())
     if down <= 0:
-        return 9.9
+        # 下落日出来高ゼロ: 上昇日出来高があれば最強、情報ゼロならNone
+        return 9.9 if up > 0 else None
     return round(min(9.9, up / down), 2)
 
 
@@ -428,17 +429,23 @@ def eps_rating(q1_growth, q2_growth, annual_growth):
 
 
 def smr_rating(rev_growth, margin, roe):
-    """SMR Rating (A-E): 売上成長・利益率・ROE (yfinanceは小数表記)。"""
-    if rev_growth is None and margin is None and roe is None:
+    """SMR Rating (A-E): 売上成長・利益率・ROE (yfinanceは小数表記)。
+    欠損項目は「悪い」扱いせず、取得できた項目だけの達成率で評価する。"""
+    checks = [(rev_growth, 0.20, 0.08), (margin, 0.15, 0.05), (roe, 0.25, 0.15)]
+    avail = [(v, hi, lo) for v, hi, lo in checks if v is not None]
+    if not avail:
         return "N"
-    pts = 0
-    if rev_growth is not None:
-        pts += 2 if rev_growth >= 0.20 else 1 if rev_growth >= 0.08 else 0
-    if margin is not None:
-        pts += 2 if margin >= 0.15 else 1 if margin >= 0.05 else 0
-    if roe is not None:
-        pts += 2 if roe >= 0.25 else 1 if roe >= 0.15 else 0
-    return {6: "A", 5: "A", 4: "B", 3: "C", 2: "D"}.get(pts, "E")
+    pts = sum(2 if v >= hi else 1 if v >= lo else 0 for v, hi, lo in avail)
+    frac = pts / (2 * len(avail))
+    if frac >= 0.85:
+        return "A"
+    if frac >= 0.65:
+        return "B"
+    if frac >= 0.45:
+        return "C"
+    if frac >= 0.25:
+        return "D"
+    return "E"
 
 
 def composite_rating(rs, eps_r, accdis_pct, sec_rs, dist_high):
@@ -484,7 +491,8 @@ def classify_base(df, lookback=252):
         hw = min(15, base_len // 3)
         win_h = seg_h[-hw:]
         am = int(np.argmax(win_h))
-        if am <= hw - 4:
+        # ハンドルは高値+押し5本以上 (IBD基準)。3本程度の押しはハンドルではない
+        if am <= hw - 6:
             h_high = float(win_h[am])
             h_low = float(np.min(ll[-(hw - am):]))
             h_depth = (h_high - h_low) / h_high if h_high else 0.0
@@ -810,10 +818,13 @@ def build_reason(m, fund):
     if m["sec_rs"] >= 80:
         good.append("所属セクターが市場をリード")
     base = m.get("base") or {}
-    if base.get("type"):
+    if base.get("type") and base["type"] != "保ち合い":
+        # 名前のあるベース (フラット/カップ系) のみ好材料扱い。
+        # ただの保ち合いは下落継続中でも付くため評価しない
         good.append(f"{base['type']}形成中（{base['weeks']}週・深さ{base['depth']:.0f}%）")
     if m.get("accdis_letter") in ("A", "B"):
-        good.append(f"機関投資家の買い集め優勢（Acc/Dis {m['accdis_letter']}・U/D比{m['ud']:.1f}）")
+        ud_txt = f"・U/D比{m['ud']:.1f}" if m.get("ud") is not None else ""
+        good.append(f"機関投資家の買い集め優勢（Acc/Dis {m['accdis_letter']}{ud_txt}）")
     eps_g = fund.get("EPS成長%")
     if eps_g is not None and eps_g >= 25:
         good.append(f"EPS成長+{eps_g:.0f}%")
@@ -864,7 +875,7 @@ def make_row(sym, m, fund, mode):
         "EPSレート": eps_r,
         "SMR": fund.get("_smr", "N"),
         "AccDis": m.get("accdis_letter", "C"),
-        "UD比": round(m["ud"], 2),
+        "UD比": round(m["ud"], 2) if m.get("ud") is not None else None,
         "ベース": binfo.get("type", ""),
         "ベース週数": binfo.get("weeks", 0),
         "ベース深さ%": binfo.get("depth", 0),
