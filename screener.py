@@ -77,7 +77,9 @@ MAIN_LIST_SIZE = 20
 TIGHT_LIST_SIZE = 30
 MAIN_POOL = 60    # ファンダ取得対象の技術面予備候補 (ここからファンダ適格で絞る)
 TIGHT_POOL = 45
-FUNDAMENTALS_LIMIT = 90  # yfinanceへの追加リクエスト上限
+# 必ず MAIN_POOL + TIGHT_POOL 以上にする。上限が予備候補数を下回ると、
+# ファンダ合成済みスコアと技術のみスコアが同じリスト内で混在してしまう
+FUNDAMENTALS_LIMIT = 105
 
 
 def log(*args):
@@ -282,7 +284,9 @@ def behavior_counts(df, ma50_s):
     c, o, h, l, v = t["Close"], t["Open"], t["High"], t["Low"], t["Volume"]
     rng = (h - l).where((h - l) > 0)
     pos = (c - l) / rng  # 終値の日中レンジ内位置 (上=強い引け)
-    vavg = float(df["Volume"].iloc[-50:].mean()) or 1.0
+    vavg = float(df["Volume"].iloc[-50:].mean())
+    if not vavg == vavg or vavg <= 0:  # NaN/ゼロ出来高ガード
+        vavg = 1.0
     up = c.diff() > 0
     dn = c.diff() < 0
     conf = int(((pos >= 0.67) & up).sum())            # 良い引け

@@ -1261,6 +1261,54 @@ class Backtest(unittest.TestCase):
         self.assertEqual(res["stats"]["トレード数"], 0,
                          "SPYがMA200割れの間は新規買いゼロ")
 
+    def test_extended_pop_not_bought(self):
+        # Verifier指摘: 旧実装の買いゾーン判定 (当日高値込みのh20) は恒真だった。
+        # 5日で+18.7%のポップ直後 (単日±18%ルールには掛からない) はEXTとして見送る
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        data["POPX"] = self._frame(
+            grow([np.full(280, 0.002), np.full(5, 0.035), np.full(days - 285, 0.0)]), idx)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        m = bt.build_matrices(data)
+        syms = [s for s, _, _ in bt.candidates_at(m, 286)]
+        self.assertNotIn("POPX", syms, "ベース上限+5%超 (EXT) は追いかけない")
+
+    def test_delisted_position_closed(self):
+        # Verifier指摘: 上場廃止 (NaN) 銘柄が建値のまま不死身になっていた
+        import backtest as bt
+        data = self._bull_data()
+        df = data["WINX"]
+        df.iloc[290:, :] = np.nan
+        res = bt.simulate(data)
+        win = [t for t in res["trades"] if t["sym"] == "WINX"]
+        self.assertTrue(any(t["reason"] == "取引停止/廃止" for t in win),
+                        f"NaN継続は強制手仕舞いされること: {win}")
+
+    def test_open_trades_excluded_from_stats(self):
+        # Verifier指摘: 勝率に末日清算 (未完了) が混入していた
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        # 検証期間の終盤にだけ買われ、末日まで持ち越す銘柄 (+22%にも60日にも届かない)
+        data["LATE"] = self._frame(
+            grow([np.full(days - 40, 0.0015), np.full(40, 0.003)]), idx)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        res = bt.simulate(data)
+        late = [t for t in res["trades"] if t["sym"] == "LATE" and t["reason"] == "末日清算"]
+        if late:  # 末日清算が起きたケースでは統計から除外されていること
+            s = res["stats"]
+            self.assertEqual(s["トレード数"] + s["未完了(末日清算)"], len(res["trades"]))
+            self.assertGreaterEqual(s["未完了(末日清算)"], 1)
+
     def test_breakeven_stop_after_gain(self):
         # +12%到達後に反落 → 建値撤退 (利益を損失にしない)
         import backtest as bt
