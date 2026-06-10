@@ -275,7 +275,8 @@ def detect_vcp(depths):
 def compute_metrics(df, spy_close):
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
     close = float(c.iloc[-1])
-    ma50 = float(c.rolling(50).mean().iloc[-1])
+    ma50_s = c.rolling(50).mean()
+    ma50 = float(ma50_s.iloc[-1])
     ma150 = float(c.rolling(150).mean().iloc[-1]) if len(c) >= 150 else np.nan
     ma200_s = c.rolling(200).mean()
     ma200 = float(ma200_s.iloc[-1]) if len(c) >= 200 else np.nan
@@ -336,6 +337,25 @@ def compute_metrics(df, spy_close):
     # ADR% (直近20日の日中変動率平均) — 値動きの質の目安
     adr = float(((h.iloc[-20:] / l.iloc[-20:]) - 1).mean() * 100)
 
+    # 買付適格性審査の素点 (buyability用): イベント急騰/急落・荒い日の頻度・MA200乖離
+    ret = c.pct_change() * 100
+    rseg = ret.iloc[-60:].dropna()
+    max_up60 = float(rseg.max()) if len(rseg) else 0.0
+    max_dn60 = float(rseg.min()) if len(rseg) else 0.0
+    n_chop60 = int((rseg.abs() >= 6).sum()) if len(rseg) else 0
+    # 急騰ギャップが「確立した上昇トレンド中」で起きたか (決算ギャップとイベント株の区別)
+    gap_from_base = None
+    if max_up60 >= 18:
+        gap_from_base = False
+        pos = c.index.get_loc(rseg.idxmax())
+        if pos >= 1:
+            prev = float(c.iloc[pos - 1])
+            m50p = float(ma50_s.iloc[pos - 1])
+            m200p = float(ma200_s.iloc[pos - 1])
+            gap_from_base = (m50p == m50p and prev >= m50p
+                             and (m200p != m200p or prev >= m200p))
+    ext200 = (close / ma200 - 1) * 100 if (ma200 == ma200 and ma200 > 0) else None
+
     # 本日の52週新高値 / 新安値 (市場ブレッドス用)
     new_high = float(h.iloc[-1]) >= hi52 * 0.999
     new_low = float(l.iloc[-1]) <= lo52 * 1.001
@@ -345,7 +365,7 @@ def compute_metrics(df, spy_close):
     step = max(1, len(tail) // 60)
     spark = [round(float(x), 2) for x in tail.iloc[::step][-60:]]
     vols = [round(float(x) / 1e6, 2) for x in v.iloc[-90:].iloc[::step][-60:]]
-    ma50_t = c.rolling(50).mean().iloc[-90:].iloc[::step][-60:]
+    ma50_t = ma50_s.iloc[-90:].iloc[::step][-60:]
     ma50px = [round(float(x), 2) if x == x else None for x in ma50_t]
 
     # MarketSurge流レーティング素点・ベース判定
@@ -363,6 +383,8 @@ def compute_metrics(df, spy_close):
         "pivot": pivot, "stop": stop, "risk": risk, "rr": rr,
         "depth60": depth60,
         "vcp": vcp, "n_contractions": len(depths), "adr": adr,
+        "max_up60": max_up60, "max_dn60": max_dn60, "n_chop60": n_chop60,
+        "gap_from_base": gap_from_base, "ext200": ext200,
         "ext": ext, "new_high": new_high, "new_low": new_low,
         "spark": spark, "vols": vols, "ma50px": ma50px,
         "accdis": accdis, "ud": ud, "base": base, "stage": stage,
@@ -1043,6 +1065,59 @@ def total_score(m):
     return int(round(s))
 
 
+def buyability(m):
+    """Minervini買付適格性審査 — 「ミネルヴィニはこのチャートを本当に買うか」。
+
+    RS・高値圏・トレンドテンプレートの条件だけなら通過してしまう
+    「買えないチャート」(バイナリーイベントで急騰したバイオ株、wide & loose、
+    クライマックス的乖離) を拒否し、グレーゾーンは減点+警告にとどめる。
+    返り値: (拒否理由list, スコア減点int, 警告list)。
+    拒否理由が1つでもあればメイン/高値保ち合いの両リストから除外する。"""
+    vetoes, warns, penalty = [], [], 0
+
+    # 1) イベント型急騰: 1日±18%超は機関の継続的な買い集めでは起きない値動き。
+    #    確立した上昇トレンド中の決算ギャップ (NVDA型) だけは正当なので拒否しない。
+    if m["max_up60"] >= 35:
+        vetoes.append(f"直近60日に1日+{m['max_up60']:.0f}%のイベント急騰 — 新ベース形成まで見送り")
+    elif m["max_up60"] >= 18 and not m.get("gap_from_base"):
+        vetoes.append(f"+{m['max_up60']:.0f}%の急騰ギャップ以前に上昇トレンド不在 — イベント主導の値動き")
+    if m["max_dn60"] <= -18:
+        vetoes.append(f"直近60日に1日{m['max_dn60']:.0f}%の急落 — 破損チャート")
+
+    # 2) 値動きの荒さ: wide & loose はベースとして機能しない
+    if m["adr"] >= 8:
+        vetoes.append(f"ADR {m['adr']:.1f}%と値動きが荒すぎる (wide & loose)")
+    elif m["adr"] >= 6:
+        penalty += int(round((m["adr"] - 6) * 5))
+        warns.append(f"ADR {m['adr']:.1f}%とやや荒い値動き")
+
+    # 3) 200日線からの乖離: 急伸後の異常乖離はクライマックス圏 (買い場ではなく売り場)
+    ext200 = m.get("ext200")
+    if ext200 is not None and ext200 == ext200:
+        if ext200 >= 120:
+            vetoes.append(f"200日線から+{ext200:.0f}%の異常乖離 — クライマックス圏")
+        elif ext200 >= 70:
+            penalty += 10
+            warns.append(f"200日線から+{ext200:.0f}%乖離と過熱気味 — 押し目を待つ")
+
+    # 4) 荒い日の頻発 / ベース未形成のV字回復
+    if m["n_chop60"] > 2:
+        penalty += min(15, (m["n_chop60"] - 2) * 3)
+        if m["n_chop60"] >= 5:
+            warns.append(f"±6%超の値動きが直近60日で{m['n_chop60']}日と荒い")
+    base = m.get("base") or {}
+    if m["depth60"] >= 35 and base.get("type", "") in ("", "保ち合い"):
+        penalty += 8
+        warns.append(f"深さ{m['depth60']:.0f}%の調整からベース未形成のV字回復")
+
+    return vetoes, penalty, warns
+
+
+def final_score(m):
+    """総合Score = total_score - 買付適格性の減点 (下限1)。"""
+    return max(1, total_score(m) - m.get("q_penalty", 0))
+
+
 def build_reason(m, fund):
     good, warn = [], []
     if m["rs"] >= 90:
@@ -1080,6 +1155,7 @@ def build_reason(m, fund):
         warn.append("売買代金がやや薄い")
     if m["depth60"] > 20:
         warn.append(f"ベースが深め（{m['depth60']:.0f}%）")
+    warn.extend(m.get("q_warns", []))
     nxt = fund.get("次回決算") or ""
     if len(nxt) >= 10:
         try:
@@ -1228,8 +1304,17 @@ def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
         metrics[sym]["grp_rank"] = g["rank"]
         metrics[sym]["grp_total"] = g["total"]
 
+    # Minervini買付適格性審査: イベント急騰・荒い値動き・クライマックス乖離を排除
+    n_veto = 0
     for m in metrics.values():
-        m["score"] = total_score(m)
+        vetoes, q_pen, q_warns = buyability(m)
+        m["veto"] = vetoes
+        m["q_penalty"] = q_pen
+        m["q_warns"] = q_warns
+        n_veto += bool(vetoes)
+        m["score"] = final_score(m)
+    if n_veto:
+        log(f"buyability veto: {n_veto} symbols excluded from candidate lists")
 
     env = market_env(spy_df, metrics, last_date, prev=prev, qqq_df=data.get("QQQ"))
     env_history = env.pop("env_history")
@@ -1242,14 +1327,14 @@ def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
     # メイン: Stage2 + RS80+ + 高値圏 + 流動性
     main_syms = [s for s, m in metrics.items()
                  if m["stage2"] and m["rs"] >= 80 and m["dist_high"] <= 25
-                 and m["vol_m"] >= 15 and m["close"] >= 12]
+                 and m["vol_m"] >= 15 and m["close"] >= 12 and not m["veto"]]
     main_syms.sort(key=lambda s: -metrics[s]["score"])
     main_syms = main_syms[:MAIN_LIST_SIZE]
 
     # 高値保ち合い: Stage2 + 高値から15%以内 + 直近10日の値幅が小さい
     tight_syms = [s for s, m in metrics.items()
                   if m["stage2"] and m["dist_high"] <= 15 and m["range10"] <= 7.5
-                  and m["vol_m"] >= 10 and m["close"] >= 12]
+                  and m["vol_m"] >= 10 and m["close"] >= 12 and not m["veto"]]
     tight_syms.sort(key=lambda s: -metrics[s]["score"])
     tight_syms = tight_syms[:TIGHT_LIST_SIZE]
 
@@ -1277,7 +1362,7 @@ def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
                     if sym not in sym_grp:
                         metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
                         # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
-                        metrics[sym]["score"] = total_score(metrics[sym])
+                        metrics[sym]["score"] = final_score(metrics[sym])
 
     out = {
         "env": env,

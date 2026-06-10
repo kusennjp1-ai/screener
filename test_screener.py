@@ -874,5 +874,156 @@ class ChartPayload(unittest.TestCase):
         self.assertIn("w", p)
 
 
+class Buyability(unittest.TestCase):
+    """Minervini買付適格性審査 — 「ミネルヴィニはこのチャートを本当に買うか」。
+
+    KALV/CNTA型 (バイナリーイベントで2倍になったバイオ株等) がメイン候補の
+    上位に出ないことを第一原理から検証する。
+    """
+
+    @staticmethod
+    def _event_rocket(days=320, gap_mult=2.0, post_days=55, wob=0.055):
+        """1年横ばい→1日でgap_mult倍→荒い値動きで高値追い (KALV型)。"""
+        pre = segment(5.8, 6.2, days - post_days)
+        start = pre[-1] * gap_mult
+        targets = np.geomspace(start, 27.0, post_days)
+        post = []
+        for i, t in enumerate(targets):
+            z = 0.0 if i >= post_days - 10 else (wob if i % 2 == 0 else -wob)
+            post.append(t * (1 + z))
+        close = np.array(pre + post)
+        spread = np.concatenate([np.full(days - post_days, 0.006),
+                                 np.full(post_days, 0.05)])
+        return mkdf(close, high=close * (1 + spread), low=close * (1 - spread))
+
+    @staticmethod
+    def _earnings_gap_leader(days=320, gap=0.20, post_days=30):
+        """確立した上昇トレンド中の決算ギャップ — Minerviniが普通に買う形。"""
+        pre = segment(50, 100, days - post_days)
+        start = pre[-1] * (1 + gap)
+        close = np.array(pre + segment(start, start * 1.05, post_days))
+        return mkdf(close)
+
+    def _qm(self, **over):
+        """buyability() 単体テスト用の素点。デフォルトは健全な主導株。"""
+        m = {"max_up60": 4.0, "max_dn60": -3.5, "n_chop60": 0,
+             "gap_from_base": None, "adr": 3.0, "ext200": 30.0,
+             "depth60": 15.0,
+             "base": {"type": "フラットベース", "weeks": 6, "depth": 15.0}}
+        m.update(over)
+        return m
+
+    # ----- 単体: 拒否条件 (veto)
+    def test_binary_event_vetoed(self):
+        v, p, w = sc.buyability(self._qm(max_up60=95.0, gap_from_base=False))
+        self.assertTrue(v, "1日+95%のバイナリーイベントは拒否")
+
+    def test_gap_without_prior_trend_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(max_up60=22.0, gap_from_base=False))
+        self.assertTrue(v, "トレンド不在からの急騰ギャップはイベント主導 — 拒否")
+
+    def test_earnings_gap_from_uptrend_allowed(self):
+        v, _, _ = sc.buyability(self._qm(max_up60=22.0, gap_from_base=True))
+        self.assertFalse(v, "上昇トレンド中の+22%決算ギャップは正当 (NVDA型) — 拒否しない")
+
+    def test_huge_gap_vetoed_even_from_uptrend(self):
+        v, _, _ = sc.buyability(self._qm(max_up60=40.0, gap_from_base=True))
+        self.assertTrue(v, "+35%超の1日急騰は出自を問わず新ベース形成まで見送り")
+
+    def test_crash_day_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(max_dn60=-22.0))
+        self.assertTrue(v, "直近60日に-22%日があれば破損銘柄 — 拒否")
+
+    def test_wide_loose_adr_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(adr=9.5))
+        self.assertTrue(v, "ADR 9.5%はwide & loose — 拒否")
+
+    def test_climax_extension_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(ext200=140.0))
+        self.assertTrue(v, "200日線+140%乖離はクライマックス圏 — 拒否")
+
+    # ----- 単体: 減点 (penalty) と警告
+    def test_moderate_extension_penalized_not_vetoed(self):
+        v, p, w = sc.buyability(self._qm(ext200=85.0))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+        self.assertTrue(any("乖離" in x or "過熱" in x for x in w))
+
+    def test_elevated_adr_penalized(self):
+        v, p, _ = sc.buyability(self._qm(adr=7.0))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+
+    def test_choppiness_penalized(self):
+        v, p, _ = sc.buyability(self._qm(n_chop60=8))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+
+    def test_v_shape_recovery_penalized(self):
+        v, p, w = sc.buyability(self._qm(depth60=42.0, base={"type": "保ち合い"}))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+        self.assertTrue(any("V字" in x or "ベース未形成" in x for x in w))
+
+    def test_clean_leader_passes_clean(self):
+        v, p, w = sc.buyability(self._qm())
+        self.assertEqual((v, p, w), ([], 0, []))
+
+    def test_final_score_floor(self):
+        m = self._qm(n_chop60=20, ext200=85.0, adr=7.9)
+        m.update({"rs": 1, "sec_rs": 1, "dist_high": 50.0, "range10": 20.0})
+        _, p, _ = sc.buyability(m)
+        m["q_penalty"] = p
+        self.assertGreaterEqual(sc.final_score(m), 1)
+
+    # ----- 価格パスからの統合検証
+    def test_event_rocket_metrics_and_veto(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(self._event_rocket(), spy)
+        self.assertGreaterEqual(m["max_up60"], 35, "ギャップ日が検出される")
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "KALV型イベントロケットは買付不適格")
+
+    def test_earnings_gap_leader_metrics_not_vetoed(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(self._earnings_gap_leader(), spy)
+        self.assertGreaterEqual(m["max_up60"], 18)
+        self.assertTrue(m["gap_from_base"], "ギャップ前から上昇トレンド確立済み")
+        v, _, _ = sc.buyability(m)
+        self.assertFalse(v, "上昇トレンド中の決算ギャップ銘柄を捨てない")
+
+    def test_orderly_uptrend_clean_from_path(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(uptrend(), spy)
+        v, p, _ = sc.buyability(m)
+        self.assertEqual(v, [])
+        self.assertEqual(p, 0, "整然とした上昇トレンドは無減点")
+
+    def test_event_rocket_excluded_from_lists(self):
+        data, universe = sc.synthetic_data()
+        df = self._event_rocket()
+        df.index = data["SPY"].index
+        data["EVNT"] = df
+        universe["EVNT"] = "Health Care"
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        syms = [r["シンボル"] for r in out["main"] + out["tight"]]
+        # RS最上位・高値圏でもイベント型は両リストから締め出される
+        m = sc.compute_metrics(data["EVNT"], data["SPY"]["Close"])
+        self.assertTrue(m["tt"], "前提: テンプレート自体は通過してしまう形")
+        self.assertNotIn("EVNT", syms, "Minervini審査がEVNTを除外する")
+
+    def test_quality_warning_in_reason(self):
+        m = self._qm(ext200=85.0)
+        m.update({"rs": 95, "dist_high": 3.0, "rs_line_high": False, "vcp": False,
+                  "vdu": False, "bkt": False, "sec_rs": 50, "accdis_letter": "C",
+                  "ud": None, "ext": False, "stage": 2, "vol_m": 50.0,
+                  "n_contractions": 0, "range10": 5.0})
+        _, p, w = sc.buyability(m)
+        m["q_warns"] = w
+        txt = sc.build_reason(m, {})
+        self.assertTrue(any(x in txt for x in ("乖離", "過熱")),
+                        "品質警告が有望理由の【注意】に表示される")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
