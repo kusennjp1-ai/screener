@@ -907,8 +907,10 @@ class Buyability(unittest.TestCase):
     def _qm(self, **over):
         """buyability() 単体テスト用の素点。デフォルトは健全な主導株。"""
         m = {"max_up60": 4.0, "max_dn60": -3.5, "n_chop60": 0,
-             "gap_from_base": None, "adr": 3.0, "ext200": 30.0,
-             "depth60": 15.0,
+             "up3_60": 7.0, "dn3_60": -6.0, "up1_120": 5.0,
+             "gap_from_base": None, "gap3_from_base": None,
+             "gap120_from_base": None, "adr": 3.0, "ext200": 30.0,
+             "depth60": 15.0, "dd60": 10.0,
              "base": {"type": "フラットベース", "weeks": 6, "depth": 15.0}}
         m.update(over)
         return m
@@ -942,6 +944,33 @@ class Buyability(unittest.TestCase):
         v, _, _ = sc.buyability(self._qm(ext200=140.0))
         self.assertTrue(v, "200日線+140%乖離はクライマックス圏 — 拒否")
 
+    def test_multi_day_event_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(up3_60=32.0, gap3_from_base=False))
+        self.assertTrue(v, "複数日に分散したイベント急騰 (3日+32%) も拒否")
+
+    def test_multi_day_gap_from_uptrend_allowed(self):
+        v, _, _ = sc.buyability(self._qm(up3_60=32.0, gap3_from_base=True))
+        self.assertFalse(v, "上昇トレンド中の3日+32%は正当")
+
+    def test_huge_multi_day_vetoed_unconditionally(self):
+        v, _, _ = sc.buyability(self._qm(up3_60=55.0, gap3_from_base=True))
+        self.assertTrue(v, "3日+50%超は出自を問わずクライマックス的 — 拒否")
+
+    def test_multi_day_crash_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(dn3_60=-27.0))
+        self.assertTrue(v, "3日間で-27%の急落は破損チャート")
+
+    def test_old_unbased_event_still_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(
+            up1_120=40.0, gap120_from_base=False, base={"type": "保ち合い"}))
+        self.assertTrue(v, "60日窓を抜けてもベース未形成なら見送り継続")
+
+    def test_old_event_with_proper_base_allowed(self):
+        v, _, _ = sc.buyability(self._qm(
+            up1_120=40.0, gap120_from_base=False,
+            base={"type": "フラットベース", "weeks": 7, "depth": 12.0}))
+        self.assertFalse(v, "イベント後に正規ベースを形成すれば買付可能に戻る")
+
     # ----- 単体: 減点 (penalty) と警告
     def test_moderate_extension_penalized_not_vetoed(self):
         v, p, w = sc.buyability(self._qm(ext200=85.0))
@@ -960,7 +989,7 @@ class Buyability(unittest.TestCase):
         self.assertGreater(p, 0)
 
     def test_v_shape_recovery_penalized(self):
-        v, p, w = sc.buyability(self._qm(depth60=42.0, base={"type": "保ち合い"}))
+        v, p, w = sc.buyability(self._qm(dd60=42.0, base={"type": "保ち合い"}))
         self.assertFalse(v)
         self.assertGreater(p, 0)
         self.assertTrue(any("V字" in x or "ベース未形成" in x for x in w))
@@ -1011,6 +1040,76 @@ class Buyability(unittest.TestCase):
         m = sc.compute_metrics(data["EVNT"], data["SPY"]["Close"])
         self.assertTrue(m["tt"], "前提: テンプレート自体は通過してしまう形")
         self.assertNotIn("EVNT", syms, "Minervini審査がEVNTを除外する")
+
+    def test_flat_base_30pct_gap_vetoed(self):
+        # Verifier指摘: フラット停滞は 株価≈MA50≈MA200 で素朴なMA比較を素通りする
+        days = 320
+        pre = segment(5.9, 6.2, days - 31)
+        start = pre[-1] * 1.30
+        close = np.array(pre + segment(start, start * 1.04, 31))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertFalse(m["gap_from_base"], "1年フラットはトレンド確立とみなさない")
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "+30%バイナリーイベント (35%未満帯) も拒否")
+
+    def test_two_day_rocket_vetoed_from_path(self):
+        # Verifier指摘: +15%×2日 (累計+32%) は1日ルールをすり抜けていた
+        days = 320
+        pre = segment(5.9, 6.2, days - 32)
+        s1 = pre[-1] * 1.15
+        close = np.array(pre + [s1] + segment(s1 * 1.15, s1 * 1.15 * 1.03, 31))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertLess(m["max_up60"], 18, "前提: 1日ルールには掛からない形")
+        self.assertGreaterEqual(m["up3_60"], 28)
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "2日合計+32%のイベントも拒否")
+
+    def test_duplicate_index_no_crash(self):
+        # Verifier指摘: ギャップ日のタイムスタンプ重複で get_loc がsliceを返し落ちた
+        df = self._event_rocket()
+        idx = list(df.index)
+        gap_pos = len(idx) - 55
+        idx[gap_pos] = idx[gap_pos - 1]
+        df.index = pd.DatetimeIndex(idx)
+        m = sc.compute_metrics(df, flat_spy()["Close"])  # 例外を出さない
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v)
+
+    def test_glitch_low_zero_not_vetoed(self):
+        # Verifier指摘: Low=0の不良行1つでADR=inf→健全な主導株を誤拒否していた
+        df = uptrend()
+        df.iloc[-5, df.columns.get_loc("Low")] = 0.0
+        m = sc.compute_metrics(df, flat_spy()["Close"])
+        self.assertFalse(math.isinf(m["adr"]))
+        v, _, _ = sc.buyability(m)
+        self.assertEqual(v, [])
+
+    def test_glitch_zero_close_not_vetoed(self):
+        df = uptrend()
+        df.iloc[-10, df.columns.get_loc("Close")] = 0.0
+        m = sc.compute_metrics(df, flat_spy()["Close"])
+        v, _, _ = sc.buyability(m)
+        self.assertEqual(v, [], "Close=0の不良行は-100%/+inf%急変として扱わない")
+
+    def test_monotonic_runner_no_vshape_warn(self):
+        # Verifier指摘: 押し目ゼロの単調上昇がdepth60 (レンジ) でV字扱いされていた
+        days = 320
+        close = np.array(segment(40, 50, days - 60) + list(np.geomspace(50, 80, 60)))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertLess(m["dd60"], 5, "実ドローダウンはほぼゼロ")
+        _, _, w = sc.buyability(m)
+        self.assertFalse(any("V字" in x for x in w))
+
+    def test_unbased_event_beyond_60bars_vetoed_from_path(self):
+        # Verifier指摘: イベントが60日窓を抜けると無条件で再適格化していた
+        days = 320
+        pre = segment(5.9, 6.2, days - 71)
+        start = pre[-1] * 1.40
+        close = np.array(pre + segment(start, start * 1.5, 71))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertLess(m["max_up60"], 18, "前提: ギャップは60日窓の外")
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "ベース未形成のままなら見送り継続")
 
     def test_quality_warning_in_reason(self):
         m = self._qm(ext200=85.0)

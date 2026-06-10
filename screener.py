@@ -272,6 +272,30 @@ def detect_vcp(depths):
     return sig[-1] <= 0.12
 
 
+def trend_established(c, ma50_s, ma200_s, pos, lookback=120, min_gain=1.20):
+    """pos = 急騰の前日のバー位置。その時点で上昇トレンドが確立していたか。
+
+    フラットな低迷チャートは 株価≈MA50≈MA200 となり素朴なMA比較を
+    素通りするため、MAの並び・MA200の傾き・直近120日で+20%以上の
+    値上がりまで要求する (決算ギャップとバイナリーイベントの区別)。"""
+    if pos is None or pos < 1:
+        return False
+    prev = float(c.iloc[pos])
+    m50p = float(ma50_s.iloc[pos])
+    if not (m50p == m50p and prev >= m50p):
+        return False
+    m200p = float(ma200_s.iloc[pos])
+    if m200p == m200p:
+        if m50p < m200p:
+            return False
+        if pos >= 22:
+            m200e = float(ma200_s.iloc[pos - 22])
+            if m200e == m200e and m200p < m200e:
+                return False
+    lo = float(c.iloc[max(0, pos - lookback):pos + 1].min())
+    return lo > 0 and prev / lo >= min_gain
+
+
 def compute_metrics(df, spy_close):
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
     close = float(c.iloc[-1])
@@ -334,26 +358,41 @@ def compute_metrics(df, spy_close):
     depths = contraction_depths(h, l)
     vcp = detect_vcp(depths)
 
-    # ADR% (直近20日の日中変動率平均) — 値動きの質の目安
-    adr = float(((h.iloc[-20:] / l.iloc[-20:]) - 1).mean() * 100)
+    # ADR% (直近20日の日中変動率平均) — 値動きの質の目安。Low≤0の不良行は除外
+    l20 = l.iloc[-20:].where(l.iloc[-20:] > 0)
+    adr = float(((h.iloc[-20:] / l20) - 1).mean() * 100)
 
-    # 買付適格性審査の素点 (buyability用): イベント急騰/急落・荒い日の頻度・MA200乖離
-    ret = c.pct_change() * 100
-    rseg = ret.iloc[-60:].dropna()
-    max_up60 = float(rseg.max()) if len(rseg) else 0.0
-    max_dn60 = float(rseg.min()) if len(rseg) else 0.0
-    n_chop60 = int((rseg.abs() >= 6).sum()) if len(rseg) else 0
-    # 急騰ギャップが「確立した上昇トレンド中」で起きたか (決算ギャップとイベント株の区別)
-    gap_from_base = None
-    if max_up60 >= 18:
-        gap_from_base = False
-        pos = c.index.get_loc(rseg.idxmax())
-        if pos >= 1:
-            prev = float(c.iloc[pos - 1])
-            m50p = float(ma50_s.iloc[pos - 1])
-            m200p = float(ma200_s.iloc[pos - 1])
-            gap_from_base = (m50p == m50p and prev >= m50p
-                             and (m200p != m200p or prev >= m200p))
+    # 買付適格性審査の素点 (buyability用): イベント急騰/急落 (1日・3日累計)・
+    # 荒い日の頻度・MA200乖離・60日内ドローダウン。0以下の価格はデータ不良として除外
+    c_pos = c.where(c > 0)
+    ret1 = c_pos.pct_change(fill_method=None) * 100
+    ret3 = (c_pos / c_pos.shift(3) - 1) * 100
+
+    def _extreme(series, n):
+        """直近nバーの最大/最小と、最大値の発生バー位置 (重複日付でも安全な位置ベース)。"""
+        seg = series.iloc[-n:]
+        vals = seg.to_numpy(dtype=float)
+        if not np.isfinite(vals).any():
+            return 0.0, 0.0, None
+        return (float(np.nanmax(vals)), float(np.nanmin(vals)),
+                len(series) - len(seg) + int(np.nanargmax(vals)))
+
+    max_up60, max_dn60, pos_up1 = _extreme(ret1, 60)
+    up3_60, dn3_60, pos_up3 = _extreme(ret3, 60)
+    up1_120, _, pos_up120 = _extreme(ret1, 120)
+    v60 = ret1.iloc[-60:].to_numpy(dtype=float)
+    n_chop60 = int((np.abs(v60) >= 6).sum())
+    # 急騰が「確立した上昇トレンド中」で起きたか (決算ギャップとイベント株の区別)
+    gap_from_base = (trend_established(c, ma50_s, ma200_s, pos_up1 - 1)
+                     if max_up60 >= 18 and pos_up1 is not None else None)
+    gap3_from_base = (trend_established(c, ma50_s, ma200_s, pos_up3 - 3)
+                      if up3_60 >= 28 and pos_up3 is not None else None)
+    gap120_from_base = (trend_established(c, ma50_s, ma200_s, pos_up120 - 1)
+                        if up1_120 >= 30 and pos_up120 is not None else None)
+    # 60日内の実ドローダウン (高値→安値のレンジではなく実際の下落率)
+    c60 = c_pos.iloc[-60:].dropna()
+    dd60 = (float(((c60.cummax() - c60) / c60.cummax()).max() * 100)
+            if len(c60) else 0.0)
     ext200 = (close / ma200 - 1) * 100 if (ma200 == ma200 and ma200 > 0) else None
 
     # 本日の52週新高値 / 新安値 (市場ブレッドス用)
@@ -384,7 +423,9 @@ def compute_metrics(df, spy_close):
         "depth60": depth60,
         "vcp": vcp, "n_contractions": len(depths), "adr": adr,
         "max_up60": max_up60, "max_dn60": max_dn60, "n_chop60": n_chop60,
-        "gap_from_base": gap_from_base, "ext200": ext200,
+        "up3_60": up3_60, "dn3_60": dn3_60, "up1_120": up1_120,
+        "gap_from_base": gap_from_base, "gap3_from_base": gap3_from_base,
+        "gap120_from_base": gap120_from_base, "dd60": dd60, "ext200": ext200,
         "ext": ext, "new_high": new_high, "new_low": new_low,
         "spark": spark, "vols": vols, "ma50px": ma50px,
         "accdis": accdis, "ud": ud, "base": base, "stage": stage,
@@ -1074,15 +1115,26 @@ def buyability(m):
     返り値: (拒否理由list, スコア減点int, 警告list)。
     拒否理由が1つでもあればメイン/高値保ち合いの両リストから除外する。"""
     vetoes, warns, penalty = [], [], 0
+    base = m.get("base") or {}
+    based = base.get("type", "") not in ("", "保ち合い")  # 名前のあるベースを形成済みか
 
-    # 1) イベント型急騰: 1日±18%超は機関の継続的な買い集めでは起きない値動き。
-    #    確立した上昇トレンド中の決算ギャップ (NVDA型) だけは正当なので拒否しない。
-    if m["max_up60"] >= 35:
-        vetoes.append(f"直近60日に1日+{m['max_up60']:.0f}%のイベント急騰 — 新ベース形成まで見送り")
-    elif m["max_up60"] >= 18 and not m.get("gap_from_base"):
-        vetoes.append(f"+{m['max_up60']:.0f}%の急騰ギャップ以前に上昇トレンド不在 — イベント主導の値動き")
-    if m["max_dn60"] <= -18:
-        vetoes.append(f"直近60日に1日{m['max_dn60']:.0f}%の急落 — 破損チャート")
+    # 1) イベント型急騰: 1日±18%超・3日累計+28%超は機関の継続的な買い集めでは
+    #    起きない値動き。確立した上昇トレンド中の決算ギャップ (NVDA型) は正当。
+    if m["max_up60"] >= 35 or m["up3_60"] >= 50:
+        vetoes.append(f"直近60日に短期+{max(m['max_up60'], m['up3_60']):.0f}%の"
+                      "イベント急騰 — 新ベース形成まで見送り")
+    else:
+        if m["max_up60"] >= 18 and not m.get("gap_from_base"):
+            vetoes.append(f"+{m['max_up60']:.0f}%の急騰ギャップ以前に上昇トレンド不在"
+                          " — イベント主導の値動き")
+        if m["up3_60"] >= 28 and not m.get("gap3_from_base"):
+            vetoes.append(f"3日間で+{m['up3_60']:.0f}%の急騰以前に上昇トレンド不在"
+                          " — イベント主導の値動き")
+        # 60日窓を抜けた古いイベント急騰も、ベース未形成のままなら不適格
+        if m["up1_120"] >= 30 and not m.get("gap120_from_base") and not based:
+            vetoes.append(f"+{m['up1_120']:.0f}%のイベント急騰後ベース未形成 — 見送り継続")
+    if m["max_dn60"] <= -18 or m["dn3_60"] <= -25:
+        vetoes.append(f"直近60日に{min(m['max_dn60'], m['dn3_60']):.0f}%級の急落 — 破損チャート")
 
     # 2) 値動きの荒さ: wide & loose はベースとして機能しない
     if m["adr"] >= 8:
@@ -1100,15 +1152,14 @@ def buyability(m):
             penalty += 10
             warns.append(f"200日線から+{ext200:.0f}%乖離と過熱気味 — 押し目を待つ")
 
-    # 4) 荒い日の頻発 / ベース未形成のV字回復
+    # 4) 荒い日の頻発 / ベース未形成のV字回復 (実ドローダウンで判定)
     if m["n_chop60"] > 2:
         penalty += min(15, (m["n_chop60"] - 2) * 3)
         if m["n_chop60"] >= 5:
             warns.append(f"±6%超の値動きが直近60日で{m['n_chop60']}日と荒い")
-    base = m.get("base") or {}
-    if m["depth60"] >= 35 and base.get("type", "") in ("", "保ち合い"):
+    if m["dd60"] >= 35 and not based:
         penalty += 8
-        warns.append(f"深さ{m['depth60']:.0f}%の調整からベース未形成のV字回復")
+        warns.append(f"60日内に{m['dd60']:.0f}%の下落からベース未形成のV字回復")
 
     return vetoes, penalty, warns
 
