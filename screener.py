@@ -558,18 +558,25 @@ def fetch_industry_map(prev_map=None):
     fresh = {}
 
     def fetch_one(key):
-        tc = yf.Industry(key).top_companies
-        if tc is None or len(tc) == 0:
-            return False
-        if "symbol" in getattr(tc, "columns", []):
-            syms = list(tc["symbol"])
-        else:
-            syms = list(tc.index)
-        for sym in syms:
-            s = str(sym).strip().upper().replace(".", "-")
-            if s and s != "NAN":
-                fresh[s] = key
-        return True
+        """1業種ぶん取得。yfinanceの定数キーにはem-dash (—) や & が含まれるが、
+        Yahooの実エンドポイントはASCIIハイフン区切りのため404になる (run #5で
+        33業種が該当)。変形キーを順に試し、保存は元キーで統一する。
+        yfinanceは404を内部で握りつぶしてNoneを返すため、None/空も変形で再試行。"""
+        for variant in dict.fromkeys((key, key.replace("—", "-"),
+                                      key.replace("—", "-").replace("&", "-"))):
+            tc = yf.Industry(variant).top_companies  # 429等は例外で伝播→再試行パスへ
+            if tc is None or len(tc) == 0:
+                continue
+            if "symbol" in getattr(tc, "columns", []):
+                syms = list(tc["symbol"])
+            else:
+                syms = list(tc.index)
+            for sym in syms:
+                s = str(sym).strip().upper().replace(".", "-")
+                if s and s != "NAN":
+                    fresh[s] = key
+            return True
+        return False
 
     keys = [k for ind_keys in MAPPING.values() for k in ind_keys]
     n_ok, failed = 0, []
