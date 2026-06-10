@@ -340,10 +340,19 @@ def compute_metrics(df, spy_close):
     new_high = float(h.iloc[-1]) >= hi52 * 0.999
     new_low = float(l.iloc[-1]) <= lo52 * 1.001
 
-    # ミニチャート用: 直近の終値を最大60点に間引き
+    # ミニチャート用: 直近の終値・出来高・MA50を同じ間隔で最大60点に間引き
     tail = c.iloc[-90:]
     step = max(1, len(tail) // 60)
     spark = [round(float(x), 2) for x in tail.iloc[::step][-60:]]
+    vols = [round(float(x) / 1e6, 2) for x in v.iloc[-90:].iloc[::step][-60:]]
+    ma50_t = c.rolling(50).mean().iloc[-90:].iloc[::step][-60:]
+    ma50px = [round(float(x), 2) if x == x else None for x in ma50_t]
+
+    # MarketSurge流レーティング素点・ベース判定
+    accdis = accdis_raw(df)
+    ud = up_down_volume(df)
+    base = classify_base(df)
+    stage = base_stage(h)
 
     return {
         "close": close, "ma200": ma200, "tt": tt,
@@ -354,9 +363,162 @@ def compute_metrics(df, spy_close):
         "pivot": pivot, "stop": stop, "risk": risk, "rr": rr,
         "depth60": depth60,
         "vcp": vcp, "n_contractions": len(depths), "adr": adr,
-        "ext": ext, "new_high": new_high, "new_low": new_low, "spark": spark,
+        "ext": ext, "new_high": new_high, "new_low": new_low,
+        "spark": spark, "vols": vols, "ma50px": ma50px,
+        "accdis": accdis, "ud": ud, "base": base, "stage": stage,
         "wret": weighted_return(c),
     }
+
+
+# ---------------------------------------------------------------- ratings (MarketSurge流)
+
+def accdis_raw(df, window=65):
+    """Acc/Dis素点: 13週の出来高加重CLV (-1〜+1)。終値が日中レンジの
+    どこで引けたかに出来高を掛け、機関の買い集め/売り抜けを測る。"""
+    h = df["High"].iloc[-window:]
+    l = df["Low"].iloc[-window:]
+    c = df["Close"].iloc[-window:]
+    v = df["Volume"].iloc[-window:]
+    rng = (h - l).replace(0, np.nan)
+    clv = (((c - l) - (h - c)) / rng).fillna(0.0)
+    tv = float(v.sum())
+    return float((clv * v).sum() / tv) if tv > 0 else 0.0
+
+
+def accdis_letter(pct):
+    """ユニバース内百分位 (0-1) を IBD流 A〜E に変換。"""
+    if pct >= 0.8:
+        return "A"
+    if pct >= 0.6:
+        return "B"
+    if pct >= 0.4:
+        return "C"
+    if pct >= 0.2:
+        return "D"
+    return "E"
+
+
+def up_down_volume(df, window=50):
+    """Up/Down Volume比 (50日): 上昇日出来高 ÷ 下落日出来高。1.0超=買い優勢。"""
+    c = df["Close"].iloc[-window - 1:]
+    v = df["Volume"].iloc[-window - 1:]
+    chg = c.diff().iloc[1:]
+    vv = v.iloc[1:]
+    up = float(vv[chg > 0].sum())
+    down = float(vv[chg < 0].sum())
+    if down <= 0:
+        return 9.9
+    return round(min(9.9, up / down), 2)
+
+
+def eps_rating(q1_growth, q2_growth, annual_growth):
+    """EPS Rating (1-99) 近似: 直近2四半期のEPS成長 + 年次成長の合成。
+    IBDの百分位方式と違い式ベースだが、同じ序列性を持つ。"""
+    if q1_growth is None and q2_growth is None and annual_growth is None:
+        return None
+
+    def clip(x, lo, hi):
+        return max(lo, min(hi, x)) if x is not None else 0.0
+
+    score = (1 + 25
+             + clip(q1_growth, -50, 150) * 0.35
+             + clip(q2_growth, -50, 150) * 0.15
+             + clip(annual_growth, -50, 100) * 0.25)
+    return int(max(1, min(99, round(score))))
+
+
+def smr_rating(rev_growth, margin, roe):
+    """SMR Rating (A-E): 売上成長・利益率・ROE (yfinanceは小数表記)。"""
+    if rev_growth is None and margin is None and roe is None:
+        return "N"
+    pts = 0
+    if rev_growth is not None:
+        pts += 2 if rev_growth >= 0.20 else 1 if rev_growth >= 0.08 else 0
+    if margin is not None:
+        pts += 2 if margin >= 0.15 else 1 if margin >= 0.05 else 0
+    if roe is not None:
+        pts += 2 if roe >= 0.25 else 1 if roe >= 0.15 else 0
+    return {6: "A", 5: "A", 4: "B", 3: "C", 2: "D"}.get(pts, "E")
+
+
+def composite_rating(rs, eps_r, accdis_pct, sec_rs, dist_high):
+    """Composite Rating (1-99): RS 40% + EPS 20% + Acc/Dis 15%
+    + セクターRS 10% + 52週高値への近さ 15%。EPS欠損は中立50で計算。"""
+    eps = eps_r if eps_r is not None else 50
+    off_high = max(0.0, 100 - min(float(dist_high) * 4, 100))
+    raw = (0.40 * rs + 0.20 * eps + 0.15 * accdis_pct * 100
+           + 0.10 * sec_rs + 0.15 * off_high)
+    return int(max(1, min(99, round(raw))))
+
+
+# ---------------------------------------------------------------- base detection (MarketSurge流)
+
+def classify_base(df, lookback=252):
+    """ベース自動判定: フラットベース / カップ / カップウィズハンドル。
+
+    ベース起点 = 直近52週高値。5週(25日)未満はベース未形成、
+    深さ35%超は崩壊とみなしベースと認めない (Minervini/IBD基準)。
+    """
+    h, l = df["High"], df["Low"]
+    n = min(len(h), lookback)
+    hh = h.iloc[-n:].to_numpy(dtype=float)
+    ll = l.iloc[-n:].to_numpy(dtype=float)
+    out = {"type": "", "weeks": 0, "depth": 0.0}
+    peak_pos = int(np.argmax(hh))
+    base_len = (n - 1) - peak_pos
+    if base_len < 25:
+        return out
+    peak = hh[peak_pos]
+    seg_l = ll[peak_pos + 1:]
+    seg_h = hh[peak_pos + 1:]
+    trough_rel = int(np.argmin(seg_l))
+    depth = (peak - seg_l[trough_rel]) / peak if peak else 0.0
+    out["weeks"] = int(base_len // 5)
+    out["depth"] = round(float(depth * 100), 1)
+    if depth > 0.35 or depth <= 0:
+        return out
+
+    # ハンドル: ベース終盤に「高値→小さな押し(12%以内)」がベース上半分で発生
+    handle = False
+    if base_len >= 35:
+        hw = min(15, base_len // 3)
+        win_h = seg_h[-hw:]
+        am = int(np.argmax(win_h))
+        if am <= hw - 4:
+            h_high = float(win_h[am])
+            h_low = float(np.min(ll[-(hw - am):]))
+            h_depth = (h_high - h_low) / h_high if h_high else 0.0
+            in_upper = h_low > peak * (1 - depth * 0.5)
+            handle = 0.0 < h_depth <= 0.12 and in_upper
+
+    if depth <= 0.15:
+        out["type"] = "フラットベース"
+        return out
+    pos = trough_rel / max(1, len(seg_l) - 1)
+    if 0.15 <= pos <= 0.80:  # U字 (底が中央寄り)
+        out["type"] = "カップウィズハンドル" if handle else "カップ"
+    else:
+        out["type"] = "保ち合い"
+    return out
+
+
+def base_stage(h, lookback=252, gap=25):
+    """ベース段階 (第Nステージ): 25日以上の非新高値期間を挟んで新高値を
+    更新するたびに+1。後期ステージ (4以降) のベースは失敗率が高い。"""
+    hh = h.iloc[-lookback:].to_numpy(dtype=float)
+    stage = 1
+    run_max = hh[0]
+    days_since_high = 0
+    for x in hh[1:]:
+        # 新高値は厳密超え。同値タッチはブレイクではない (カウンタ維持)
+        if x > run_max:
+            if days_since_high >= gap:
+                stage += 1
+            run_max = x
+            days_since_high = 0
+        else:
+            days_since_high += 1
+    return min(stage, 9)
 
 
 # ---------------------------------------------------------------- env (IBD流)
@@ -549,6 +711,10 @@ def fetch_fundamentals(sym):
         try:
             info = t.info or {}
             res["_sector"] = str(info.get("sector") or "")
+            # SMR Rating (売上成長・利益率・ROE)
+            res["_smr"] = smr_rating(info.get("revenueGrowth"),
+                                     info.get("profitMargins"),
+                                     info.get("returnOnEquity"))
         except Exception:
             pass
         eps_g = rev_g = None
@@ -573,6 +739,17 @@ def fetch_fundamentals(sym):
                 eps_hist = [yoy(eps, i) for i in range(3)]
             if rev is not None:
                 rev_g = yoy(rev, 0)
+        # EPS Rating用の追加成長指標: 前四半期yoy + 年次EPS成長
+        res["_eps_q2"] = eps_hist[1]
+        try:
+            a = t.income_stmt
+            if a is not None and not a.empty and "Diluted EPS" in a.index:
+                s = a.loc["Diluted EPS"].dropna()
+                if len(s) >= 2 and not pd.isna(s.iloc[1]) and abs(float(s.iloc[1])) > 0:
+                    res["_annual_g"] = round(
+                        float((s.iloc[0] - s.iloc[1]) / abs(s.iloc[1]) * 100), 1)
+        except Exception:
+            pass
         res["EPS成長%"] = eps_g
         res["売上成長%"] = rev_g
         if eps_g is not None:
@@ -632,11 +809,20 @@ def build_reason(m, fund):
         good.append("直近で出来高を伴う上昇")
     if m["sec_rs"] >= 80:
         good.append("所属セクターが市場をリード")
+    base = m.get("base") or {}
+    if base.get("type"):
+        good.append(f"{base['type']}形成中（{base['weeks']}週・深さ{base['depth']:.0f}%）")
+    if m.get("accdis_letter") in ("A", "B"):
+        good.append(f"機関投資家の買い集め優勢（Acc/Dis {m['accdis_letter']}・U/D比{m['ud']:.1f}）")
     eps_g = fund.get("EPS成長%")
     if eps_g is not None and eps_g >= 25:
         good.append(f"EPS成長+{eps_g:.0f}%")
     if m["ext"]:
         warn.append("ピボットから5%以上の上放れ（EXT）— 追いかけ買いは避け、押しを待つ")
+    if m.get("stage", 0) >= 4:
+        warn.append(f"第{m['stage']}ステージの後期ベース — 失敗率が高まる段階")
+    if m.get("accdis_letter") in ("D", "E"):
+        warn.append(f"出来高面で売り抜け気味（Acc/Dis {m['accdis_letter']}）")
     if m["vol_m"] < 20:
         warn.append("売買代金がやや薄い")
     if m["depth60"] > 20:
@@ -667,7 +853,24 @@ def make_row(sym, m, fund, mode):
         except Exception:
             pass
 
+    # MarketSurge流レーティング
+    eps_r = eps_rating(fund.get("EPS成長%"), fund.get("_eps_q2"), fund.get("_annual_g"))
+    comp = composite_rating(m["rs"], eps_r, m.get("accdis_pct", 0.5),
+                            m["sec_rs"], m["dist_high"])
+    binfo = m.get("base") or {}
+
     base = {
+        "Comp": comp,
+        "EPSレート": eps_r,
+        "SMR": fund.get("_smr", "N"),
+        "AccDis": m.get("accdis_letter", "C"),
+        "UD比": round(m["ud"], 2),
+        "ベース": binfo.get("type", ""),
+        "ベース週数": binfo.get("weeks", 0),
+        "ベース深さ%": binfo.get("depth", 0),
+        "ベース段階": m.get("stage", 1),
+        "vols": m["vols"],
+        "ma50px": m["ma50px"],
         "シンボル": sym,
         "セクター": m["sector_ja"],
         "セクターRS数値": m["sec_rs"],
@@ -739,9 +942,13 @@ def run(data, universe, skip_fundamentals=False, prev=None):
     # RSレーティング: 加重リターンのユニバース内百分位 (1-99)
     wret = pd.Series({s: m["wret"] for s, m in metrics.items()})
     rs_rank = (wret.rank(pct=True) * 98 + 1).round().astype(int)
+    # Acc/Dis: 出来高加重CLVのユニバース内百分位 → A〜E
+    accdis_rank = pd.Series({s: m["accdis"] for s, m in metrics.items()}).rank(pct=True)
     for s, m in metrics.items():
         m["rs"] = int(rs_rank[s])
         m["stage2"] = bool(m["tt"] and m["rs"] >= 70)
+        m["accdis_pct"] = float(accdis_rank[s])
+        m["accdis_letter"] = accdis_letter(m["accdis_pct"])
 
     # セクターETFのRS: 同じ加重リターンを株式分布の百分位に当てはめる
     sorted_wret = np.sort(wret.values)
