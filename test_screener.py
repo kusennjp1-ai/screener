@@ -789,6 +789,30 @@ class IndustryGroups(unittest.TestCase):
         self.assertEqual(vrow["業種"], sc.industry_ja("semiconductors"))
         self.assertIsNotNone(vrow["業種順位"])
 
+    def test_fundamentals_backfill_keeps_group_rs(self):
+        # フルユニバース銘柄 (セクター未付与) のセクター補完が、
+        # 先に付与された細分の業種グループRSを粗いETFセクターRSで上書きしない
+        data, universe = sc.synthetic_data()
+        universe = {s: "" for s in universe}
+        imap = {f"TST{i:03d}": "semiconductors" for i in range(0, 20)}
+        imap.update({f"TST{i:03d}": "gold" for i in range(20, 40)})
+        imap["VCPX"] = "semiconductors"
+        orig_fund, orig_sleep = sc.fetch_fundamentals, sc.time.sleep
+        sc.fetch_fundamentals = lambda sym: {"_sector": "Technology", "_industry_key": ""}
+        sc.time.sleep = lambda s: None
+        try:
+            out = sc.jclean(sc.run(data, universe, skip_fundamentals=False,
+                                   industry_map=imap))
+        finally:
+            sc.fetch_fundamentals, sc.time.sleep = orig_fund, orig_sleep
+        grs = {g["key"]: g["rs"] for g in out["groups"]}
+        grouped = [r for r in out["main"] + out["tight"]
+                   if r["シンボル"] in imap and r["業種順位"] is not None]
+        self.assertTrue(grouped, "業種グループ付き候補が出ること")
+        for r in grouped:
+            self.assertEqual(r["セクターRS数値"], grs[imap[r["シンボル"]]],
+                             f"{r['シンボル']}: セクター補完が業種RSを上書きした")
+
 
 class ChartPayload(unittest.TestCase):
     """本格チャート用の個別JSON (日足/週足/RSライン)。"""

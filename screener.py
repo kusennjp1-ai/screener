@@ -1272,9 +1272,12 @@ def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
                 if etf:
                     metrics[sym]["sector_etf"] = etf
                     metrics[sym]["sector_ja"] = ja
-                    metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
-                    # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
-                    metrics[sym]["score"] = total_score(metrics[sym])
+                    # 業種グループRSが付いている銘柄は細分RSを優先し、
+                    # 粗いETFセクターRSで上書きしない
+                    if sym not in sym_grp:
+                        metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
+                        # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
+                        metrics[sym]["score"] = total_score(metrics[sym])
 
     out = {
         "env": env,
