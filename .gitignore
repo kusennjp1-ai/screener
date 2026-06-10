@@ -1,3 +1,6 @@
 data/screener_latest.json
 data/screener_prev.json
+data/industry_map.json
+data/industry_map_prev.json
+data/charts/
 __pycache__/

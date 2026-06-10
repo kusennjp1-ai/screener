@@ -272,10 +272,35 @@ def detect_vcp(depths):
     return sig[-1] <= 0.12
 
 
+def trend_established(c, ma50_s, ma200_s, pos, lookback=120, min_gain=1.20):
+    """pos = 急騰の前日のバー位置。その時点で上昇トレンドが確立していたか。
+
+    フラットな低迷チャートは 株価≈MA50≈MA200 となり素朴なMA比較を
+    素通りするため、MAの並び・MA200の傾き・直近120日で+20%以上の
+    値上がりまで要求する (決算ギャップとバイナリーイベントの区別)。"""
+    if pos is None or pos < 1:
+        return False
+    prev = float(c.iloc[pos])
+    m50p = float(ma50_s.iloc[pos])
+    if not (m50p == m50p and prev >= m50p):
+        return False
+    m200p = float(ma200_s.iloc[pos])
+    if m200p == m200p:
+        if m50p < m200p:
+            return False
+        if pos >= 22:
+            m200e = float(ma200_s.iloc[pos - 22])
+            if m200e == m200e and m200p < m200e:
+                return False
+    lo = float(c.iloc[max(0, pos - lookback):pos + 1].min())
+    return lo > 0 and prev / lo >= min_gain
+
+
 def compute_metrics(df, spy_close):
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
     close = float(c.iloc[-1])
-    ma50 = float(c.rolling(50).mean().iloc[-1])
+    ma50_s = c.rolling(50).mean()
+    ma50 = float(ma50_s.iloc[-1])
     ma150 = float(c.rolling(150).mean().iloc[-1]) if len(c) >= 150 else np.nan
     ma200_s = c.rolling(200).mean()
     ma200 = float(ma200_s.iloc[-1]) if len(c) >= 200 else np.nan
@@ -333,8 +358,42 @@ def compute_metrics(df, spy_close):
     depths = contraction_depths(h, l)
     vcp = detect_vcp(depths)
 
-    # ADR% (直近20日の日中変動率平均) — 値動きの質の目安
-    adr = float(((h.iloc[-20:] / l.iloc[-20:]) - 1).mean() * 100)
+    # ADR% (直近20日の日中変動率平均) — 値動きの質の目安。Low≤0の不良行は除外
+    l20 = l.iloc[-20:].where(l.iloc[-20:] > 0)
+    adr = float(((h.iloc[-20:] / l20) - 1).mean() * 100)
+
+    # 買付適格性審査の素点 (buyability用): イベント急騰/急落 (1日・3日累計)・
+    # 荒い日の頻度・MA200乖離・60日内ドローダウン。0以下の価格はデータ不良として除外
+    c_pos = c.where(c > 0)
+    ret1 = c_pos.pct_change(fill_method=None) * 100
+    ret3 = (c_pos / c_pos.shift(3) - 1) * 100
+
+    def _extreme(series, n):
+        """直近nバーの最大/最小と、最大値の発生バー位置 (重複日付でも安全な位置ベース)。"""
+        seg = series.iloc[-n:]
+        vals = seg.to_numpy(dtype=float)
+        if not np.isfinite(vals).any():
+            return 0.0, 0.0, None
+        return (float(np.nanmax(vals)), float(np.nanmin(vals)),
+                len(series) - len(seg) + int(np.nanargmax(vals)))
+
+    max_up60, max_dn60, pos_up1 = _extreme(ret1, 60)
+    up3_60, dn3_60, pos_up3 = _extreme(ret3, 60)
+    up1_120, _, pos_up120 = _extreme(ret1, 120)
+    v60 = ret1.iloc[-60:].to_numpy(dtype=float)
+    n_chop60 = int((np.abs(v60) >= 6).sum())
+    # 急騰が「確立した上昇トレンド中」で起きたか (決算ギャップとイベント株の区別)
+    gap_from_base = (trend_established(c, ma50_s, ma200_s, pos_up1 - 1)
+                     if max_up60 >= 18 and pos_up1 is not None else None)
+    gap3_from_base = (trend_established(c, ma50_s, ma200_s, pos_up3 - 3)
+                      if up3_60 >= 28 and pos_up3 is not None else None)
+    gap120_from_base = (trend_established(c, ma50_s, ma200_s, pos_up120 - 1)
+                        if up1_120 >= 30 and pos_up120 is not None else None)
+    # 60日内の実ドローダウン (高値→安値のレンジではなく実際の下落率)
+    c60 = c_pos.iloc[-60:].dropna()
+    dd60 = (float(((c60.cummax() - c60) / c60.cummax()).max() * 100)
+            if len(c60) else 0.0)
+    ext200 = (close / ma200 - 1) * 100 if (ma200 == ma200 and ma200 > 0) else None
 
     # 本日の52週新高値 / 新安値 (市場ブレッドス用)
     new_high = float(h.iloc[-1]) >= hi52 * 0.999
@@ -345,7 +404,7 @@ def compute_metrics(df, spy_close):
     step = max(1, len(tail) // 60)
     spark = [round(float(x), 2) for x in tail.iloc[::step][-60:]]
     vols = [round(float(x) / 1e6, 2) for x in v.iloc[-90:].iloc[::step][-60:]]
-    ma50_t = c.rolling(50).mean().iloc[-90:].iloc[::step][-60:]
+    ma50_t = ma50_s.iloc[-90:].iloc[::step][-60:]
     ma50px = [round(float(x), 2) if x == x else None for x in ma50_t]
 
     # MarketSurge流レーティング素点・ベース判定
@@ -363,11 +422,192 @@ def compute_metrics(df, spy_close):
         "pivot": pivot, "stop": stop, "risk": risk, "rr": rr,
         "depth60": depth60,
         "vcp": vcp, "n_contractions": len(depths), "adr": adr,
+        "max_up60": max_up60, "max_dn60": max_dn60, "n_chop60": n_chop60,
+        "up3_60": up3_60, "dn3_60": dn3_60, "up1_120": up1_120,
+        "gap_from_base": gap_from_base, "gap3_from_base": gap3_from_base,
+        "gap120_from_base": gap120_from_base, "dd60": dd60, "ext200": ext200,
         "ext": ext, "new_high": new_high, "new_low": new_low,
         "spark": spark, "vols": vols, "ma50px": ma50px,
         "accdis": accdis, "ud": ud, "base": base, "stage": stage,
         "wret": weighted_return(c),
     }
+
+
+# ---------------------------------------------------------------- industry groups (IBD流145業種)
+
+# yfinance業種キー → 日本語名 (一般的なカテゴリ名の独自訳。未収載キーは英語整形にフォールバック)
+INDUSTRY_JA = {
+    # Basic Materials
+    "agricultural-inputs": "農業資材", "aluminum": "アルミニウム",
+    "building-materials": "建材", "chemicals": "総合化学",
+    "coking-coal": "原料炭", "copper": "銅", "gold": "金鉱",
+    "lumber-wood-production": "木材・林産", "other-industrial-metals-mining": "産業用金属鉱業",
+    "other-precious-metals-mining": "貴金属鉱業", "paper-paper-products": "紙・紙製品",
+    "silver": "銀鉱", "specialty-chemicals": "特殊化学", "steel": "鉄鋼",
+    # Communication Services
+    "advertising-agencies": "広告代理店", "broadcasting": "放送",
+    "electronic-gaming-multimedia": "ゲーム・マルチメディア", "entertainment": "エンターテインメント",
+    "internet-content-information": "ネットコンテンツ・情報", "publishing": "出版",
+    "telecom-services": "通信サービス",
+    # Consumer Cyclical
+    "apparel-manufacturing": "アパレル製造", "apparel-retail": "アパレル小売",
+    "auto-manufacturers": "自動車メーカー", "auto-parts": "自動車部品",
+    "auto-truck-dealerships": "自動車販売", "department-stores": "百貨店",
+    "footwear-accessories": "靴・服飾雑貨", "furnishings-fixtures-appliances": "家具・家電",
+    "gambling": "ギャンブル", "home-improvement-retail": "ホームセンター",
+    "internet-retail": "ネット通販", "leisure": "レジャー用品", "lodging": "宿泊",
+    "luxury-goods": "高級品", "packaging-containers": "包装・容器",
+    "personal-services": "対個人サービス", "recreational-vehicles": "RV・レジャー車両",
+    "residential-construction": "住宅建設", "resorts-casinos": "リゾート・カジノ",
+    "restaurants": "外食", "specialty-retail": "専門小売",
+    "textile-manufacturing": "繊維", "travel-services": "旅行サービス",
+    # Consumer Defensive
+    "beverages—brewers": "ビール", "beverages—non-alcoholic": "清涼飲料",
+    "beverages—wineries-distilleries": "ワイン・蒸留酒", "confectioners": "菓子",
+    "discount-stores": "ディスカウントストア", "education-training-services": "教育・研修",
+    "farm-products": "農産物", "food-distribution": "食品卸",
+    "grocery-stores": "食品スーパー", "household-personal-products": "日用品・トイレタリー",
+    "packaged-foods": "加工食品", "tobacco": "たばこ",
+    # Energy
+    "oil-gas-drilling": "石油・ガス掘削", "oil-gas-e&p": "石油・ガス開発生産(E&P)",
+    "oil-gas-equipment-services": "石油・ガス機器サービス", "oil-gas-integrated": "総合石油",
+    "oil-gas-midstream": "石油・ガス中流(パイプライン)", "oil-gas-refining-marketing": "石油精製・販売",
+    "thermal-coal": "一般炭", "uranium": "ウラン",
+    # Financial Services
+    "asset-management": "資産運用", "banks—diversified": "大手銀行",
+    "banks—regional": "地方銀行", "capital-markets": "証券・投資銀行",
+    "credit-services": "クレジットサービス", "financial-conglomerates": "金融コングロマリット",
+    "financial-data-stock-exchanges": "金融データ・取引所", "insurance-brokers": "保険ブローカー",
+    "insurance—diversified": "総合保険", "insurance—life": "生命保険",
+    "insurance—property-casualty": "損害保険", "insurance—reinsurance": "再保険",
+    "insurance—specialty": "特殊保険", "mortgage-finance": "住宅ローン金融",
+    "shell-companies": "SPAC・ペーパーカンパニー",
+    # Healthcare
+    "biotechnology": "バイオテクノロジー", "diagnostics-research": "診断・研究受託",
+    "drug-manufacturers—general": "大手製薬", "drug-manufacturers—specialty-generic": "特殊・後発医薬品",
+    "health-information-services": "医療情報サービス", "healthcare-plans": "医療保険",
+    "medical-care-facilities": "医療施設", "medical-devices": "医療機器",
+    "medical-distribution": "医薬品卸", "medical-instruments-supplies": "医療器具・消耗品",
+    "pharmaceutical-retailers": "ドラッグストア",
+    # Industrials
+    "aerospace-defense": "航空宇宙・防衛", "airlines": "航空会社",
+    "airports-air-services": "空港・航空サービス", "building-products-equipment": "建築資材・設備",
+    "business-equipment-supplies": "業務用機器・備品", "conglomerates": "コングロマリット",
+    "consulting-services": "コンサルティング", "electrical-equipment-parts": "電気機器・部品",
+    "engineering-construction": "エンジニアリング・建設",
+    "farm-heavy-construction-machinery": "農機・建機",
+    "industrial-distribution": "産業用品卸", "infrastructure-operations": "インフラ運営",
+    "integrated-freight-logistics": "総合物流", "marine-shipping": "海運",
+    "metal-fabrication": "金属加工", "pollution-treatment-controls": "環境・公害対策",
+    "railroads": "鉄道", "rental-leasing-services": "レンタル・リース",
+    "security-protection-services": "警備・セキュリティ",
+    "specialty-business-services": "専門ビジネスサービス",
+    "specialty-industrial-machinery": "産業機械",
+    "staffing-employment-services": "人材サービス", "tools-accessories": "工具",
+    "trucking": "トラック輸送", "waste-management": "廃棄物処理",
+    # Real Estate
+    "real-estate-services": "不動産サービス", "real-estate—development": "不動産開発",
+    "real-estate—diversified": "総合不動産", "reit—diversified": "REIT(総合)",
+    "reit—healthcare-facilities": "REIT(ヘルスケア)", "reit—hotel-motel": "REIT(ホテル)",
+    "reit—industrial": "REIT(産業・物流)", "reit—mortgage": "モーゲージREIT",
+    "reit—office": "REIT(オフィス)", "reit—residential": "REIT(住宅)",
+    "reit—retail": "REIT(商業施設)", "reit—specialty": "REIT(特化型)",
+    # Technology
+    "communication-equipment": "通信機器", "computer-hardware": "コンピュータハードウェア",
+    "consumer-electronics": "コンシューマ電子機器", "electronic-components": "電子部品",
+    "electronics-computer-distribution": "電子機器卸",
+    "information-technology-services": "ITサービス",
+    "scientific-technical-instruments": "計測・精密機器",
+    "semiconductor-equipment-materials": "半導体製造装置・材料",
+    "semiconductors": "半導体", "software—application": "ソフトウェア(アプリ)",
+    "software—infrastructure": "ソフトウェア(インフラ)", "solar": "太陽光",
+    # Utilities
+    "utilities—diversified": "総合公益", "utilities—independent-power-producers": "独立系発電",
+    "utilities—regulated-electric": "電力", "utilities—regulated-gas": "ガス",
+    "utilities—regulated-water": "水道", "utilities—renewable": "再生可能エネルギー",
+}
+
+
+def industry_ja(key):
+    """業種キーの日本語名。未収載キーは英語を整形して返す。"""
+    if not key:
+        return ""
+    name = INDUSTRY_JA.get(key)
+    if name:
+        return name
+    return key.replace("—", " ").replace("-", " ").title()
+
+
+def merge_industry_maps(prev, new):
+    """業種マップのマージ: 前回分を保持しつつ、新規取得分で上書き。"""
+    out = dict(prev or {})
+    out.update({k: v for k, v in (new or {}).items() if v})
+    return out
+
+
+def fetch_industry_map(prev_map=None):
+    """yfinanceの145業種を巡回し {シンボル: 業種キー} を構築。
+    top_companiesは業種上位銘柄のみなので、前回マップ+候補銘柄のinfo取得で
+    日々カバレッジが蓄積されていく。"""
+    import yfinance as yf
+    try:
+        from yfinance.const import SECTOR_INDUSTY_MAPPING_LC as MAPPING
+    except ImportError:
+        log("industry mapping const not available")
+        return dict(prev_map or {})
+    fresh = {}
+    n_ok = 0
+    for sec_key, ind_keys in MAPPING.items():
+        for key in ind_keys:
+            try:
+                tc = yf.Industry(key).top_companies
+                if tc is None or len(tc) == 0:
+                    continue
+                if "symbol" in getattr(tc, "columns", []):
+                    syms = list(tc["symbol"])
+                else:
+                    syms = list(tc.index)
+                for sym in syms:
+                    s = str(sym).strip().upper().replace(".", "-")
+                    if s and s != "NAN":
+                        fresh[s] = key
+                n_ok += 1
+            except Exception:
+                pass
+            time.sleep(0.2)
+    log(f"industry map: {n_ok} industries fetched, {len(fresh)} fresh symbols, "
+        f"{len(prev_map or {})} carried over")
+    return merge_industry_maps(prev_map, fresh)
+
+
+def compute_group_rs(metrics, industry_map, min_members=3):
+    """業種グループRS: メンバー3銘柄以上の業種ごとに加重リターン中央値を取り、
+    業種間順位から RS(1-99) を付与。(groupsリスト, sym→グループ情報) を返す。"""
+    by_ind = {}
+    for sym, m in metrics.items():
+        key = (industry_map or {}).get(sym)
+        if key:
+            by_ind.setdefault(key, []).append((sym, m["wret"], m.get("rs", 0)))
+    rows = []
+    for key, members in by_ind.items():
+        if len(members) < min_members:
+            continue
+        med = float(np.median([w for _, w, _ in members]))
+        top = max(members, key=lambda x: x[2])[0]
+        rows.append({"key": key, "med": med, "count": len(members), "top": top})
+    if not rows:
+        return [], {}
+    rows.sort(key=lambda r: -r["med"])
+    total = len(rows)
+    groups = []
+    for i, r in enumerate(rows):
+        rs = int(round((1 - i / (total - 1)) * 98 + 1)) if total > 1 else 99
+        groups.append({"rank": i + 1, "key": r["key"], "name": industry_ja(r["key"]),
+                       "rs": rs, "count": r["count"], "top": r["top"], "total": total})
+    ginfo = {g["key"]: g for g in groups}
+    sym_info = {sym: ginfo[k] for sym, k in (industry_map or {}).items()
+                if sym in metrics and k in ginfo}
+    return groups, sym_info
 
 
 # ---------------------------------------------------------------- ratings (MarketSurge流)
@@ -527,6 +767,70 @@ def base_stage(h, lookback=252, gap=25):
         else:
             days_since_high += 1
     return min(stage, 9)
+
+
+# ---------------------------------------------------------------- chart payload
+
+def _bars(df, ma_window, n):
+    """OHLCV+MAをチャート用の並列配列に変換 (出来高は百万株、NaNはNone)。"""
+    tail = df.iloc[-n:]
+    ma = df["Close"].rolling(ma_window).mean().iloc[-n:]
+    rnd = lambda x: round(float(x), 2)
+    return {
+        "t": [f"{d:%y/%m/%d}" for d in tail.index],
+        "o": [rnd(x) for x in tail["Open"]],
+        "h": [rnd(x) for x in tail["High"]],
+        "l": [rnd(x) for x in tail["Low"]],
+        "c": [rnd(x) for x in tail["Close"]],
+        "v": [round(float(x) / 1e6, 2) if x == x else 0.0 for x in tail["Volume"]],
+        "ma": [rnd(x) if x == x else None for x in ma],
+    }
+
+
+def build_chart_payload(df, spy_close=None, pivot=None, stop=None,
+                        daily_bars=90, weekly_bars=52):
+    """候補銘柄1つ分のチャートJSON: 日足90本 + 週足52本 + RSライン。"""
+    daily = _bars(df, 50, daily_bars)
+
+    weekly_df = df.resample("W-FRI").agg(
+        {"Open": "first", "High": "max", "Low": "min",
+         "Close": "last", "Volume": "sum"}).dropna(subset=["Close"])
+    weekly = _bars(weekly_df, 10, weekly_bars)
+
+    rs = []
+    if spy_close is not None:
+        ratio = (df["Close"] / spy_close.reindex(df.index).ffill().bfill()).iloc[-daily_bars:]
+        rs = [round(float(x), 4) if x == x else None for x in ratio]
+    out = {"d": daily, "w": weekly, "rs": rs}
+    if pivot is not None:
+        out["pivot"] = round(float(pivot), 2)
+    if stop is not None:
+        out["stop"] = round(float(stop), 2)
+    return out
+
+
+def write_chart_files(out, data, spy_close, charts_dir):
+    """main/tight候補のチャートJSONを data/charts/ に書き出す。"""
+    import shutil
+    shutil.rmtree(charts_dir, ignore_errors=True)
+    os.makedirs(charts_dir, exist_ok=True)
+    pivots = {r["シンボル"]: (r.get("ピボット"), r.get("ストップ")) for r in out["main"]}
+    written = 0
+    for row in out["main"] + out["tight"]:
+        sym = row["シンボル"]
+        path = os.path.join(charts_dir, f"{sym}.json")
+        if os.path.exists(path) or sym not in data:
+            continue
+        pvt, stp = pivots.get(sym, (None, None))
+        try:
+            payload = jclean(build_chart_payload(data[sym], spy_close=spy_close,
+                                                 pivot=pvt, stop=stp))
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
+            written += 1
+        except Exception as e:
+            log(f"chart write failed for {sym}:", e)
+    log(f"wrote {written} chart files to {charts_dir}")
 
 
 # ---------------------------------------------------------------- env (IBD流)
@@ -719,6 +1023,7 @@ def fetch_fundamentals(sym):
         try:
             info = t.info or {}
             res["_sector"] = str(info.get("sector") or "")
+            res["_industry_key"] = str(info.get("industryKey") or "")
             # SMR Rating (売上成長・利益率・ROE)
             res["_smr"] = smr_rating(info.get("revenueGrowth"),
                                      info.get("profitMargins"),
@@ -801,6 +1106,69 @@ def total_score(m):
     return int(round(s))
 
 
+def buyability(m):
+    """Minervini買付適格性審査 — 「ミネルヴィニはこのチャートを本当に買うか」。
+
+    RS・高値圏・トレンドテンプレートの条件だけなら通過してしまう
+    「買えないチャート」(バイナリーイベントで急騰したバイオ株、wide & loose、
+    クライマックス的乖離) を拒否し、グレーゾーンは減点+警告にとどめる。
+    返り値: (拒否理由list, スコア減点int, 警告list)。
+    拒否理由が1つでもあればメイン/高値保ち合いの両リストから除外する。"""
+    vetoes, warns, penalty = [], [], 0
+    base = m.get("base") or {}
+    based = base.get("type", "") not in ("", "保ち合い")  # 名前のあるベースを形成済みか
+
+    # 1) イベント型急騰: 1日±18%超・3日累計+28%超は機関の継続的な買い集めでは
+    #    起きない値動き。確立した上昇トレンド中の決算ギャップ (NVDA型) は正当。
+    if m["max_up60"] >= 35 or m["up3_60"] >= 50:
+        vetoes.append(f"直近60日に短期+{max(m['max_up60'], m['up3_60']):.0f}%の"
+                      "イベント急騰 — 新ベース形成まで見送り")
+    else:
+        if m["max_up60"] >= 18 and not m.get("gap_from_base"):
+            vetoes.append(f"+{m['max_up60']:.0f}%の急騰ギャップ以前に上昇トレンド不在"
+                          " — イベント主導の値動き")
+        if m["up3_60"] >= 28 and not m.get("gap3_from_base"):
+            vetoes.append(f"3日間で+{m['up3_60']:.0f}%の急騰以前に上昇トレンド不在"
+                          " — イベント主導の値動き")
+        # 60日窓を抜けた古いイベント急騰も、ベース未形成のままなら不適格
+        if m["up1_120"] >= 30 and not m.get("gap120_from_base") and not based:
+            vetoes.append(f"+{m['up1_120']:.0f}%のイベント急騰後ベース未形成 — 見送り継続")
+    if m["max_dn60"] <= -18 or m["dn3_60"] <= -25:
+        vetoes.append(f"直近60日に{min(m['max_dn60'], m['dn3_60']):.0f}%級の急落 — 破損チャート")
+
+    # 2) 値動きの荒さ: wide & loose はベースとして機能しない
+    if m["adr"] >= 8:
+        vetoes.append(f"ADR {m['adr']:.1f}%と値動きが荒すぎる (wide & loose)")
+    elif m["adr"] >= 6:
+        penalty += int(round((m["adr"] - 6) * 5))
+        warns.append(f"ADR {m['adr']:.1f}%とやや荒い値動き")
+
+    # 3) 200日線からの乖離: 急伸後の異常乖離はクライマックス圏 (買い場ではなく売り場)
+    ext200 = m.get("ext200")
+    if ext200 is not None and ext200 == ext200:
+        if ext200 >= 120:
+            vetoes.append(f"200日線から+{ext200:.0f}%の異常乖離 — クライマックス圏")
+        elif ext200 >= 70:
+            penalty += 10
+            warns.append(f"200日線から+{ext200:.0f}%乖離と過熱気味 — 押し目を待つ")
+
+    # 4) 荒い日の頻発 / ベース未形成のV字回復 (実ドローダウンで判定)
+    if m["n_chop60"] > 2:
+        penalty += min(15, (m["n_chop60"] - 2) * 3)
+        if m["n_chop60"] >= 5:
+            warns.append(f"±6%超の値動きが直近60日で{m['n_chop60']}日と荒い")
+    if m["dd60"] >= 35 and not based:
+        penalty += 8
+        warns.append(f"60日内に{m['dd60']:.0f}%の下落からベース未形成のV字回復")
+
+    return vetoes, penalty, warns
+
+
+def final_score(m):
+    """総合Score = total_score - 買付適格性の減点 (下限1)。"""
+    return max(1, total_score(m) - m.get("q_penalty", 0))
+
+
 def build_reason(m, fund):
     good, warn = [], []
     if m["rs"] >= 90:
@@ -838,6 +1206,7 @@ def build_reason(m, fund):
         warn.append("売買代金がやや薄い")
     if m["depth60"] > 20:
         warn.append(f"ベースが深め（{m['depth60']:.0f}%）")
+    warn.extend(m.get("q_warns", []))
     nxt = fund.get("次回決算") or ""
     if len(nxt) >= 10:
         try:
@@ -871,6 +1240,9 @@ def make_row(sym, m, fund, mode):
     binfo = m.get("base") or {}
 
     base = {
+        "業種": m.get("industry_ja", ""),
+        "業種順位": m.get("grp_rank"),
+        "業種総数": m.get("grp_total"),
         "Comp": comp,
         "EPSレート": eps_r,
         "SMR": fund.get("_smr", "N"),
@@ -924,9 +1296,10 @@ def make_row(sym, m, fund, mode):
 
 # ---------------------------------------------------------------- main pipeline
 
-def run(data, universe, skip_fundamentals=False, prev=None):
+def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
     """data: {symbol: OHLCV DataFrame} — SPY とセクターETF を含むこと。
-    prev: 前回出力JSON (env_history引き継ぎ用、なければNone)。"""
+    prev: 前回出力JSON (env_history引き継ぎ用、なければNone)。
+    industry_map: {symbol: 業種キー} — 業種グループRS算出用 (なければETFセクターのみ)。"""
     spy_df = data["SPY"]
     spy_close = spy_df["Close"]
     last_date = spy_df.index[-1]
@@ -973,8 +1346,26 @@ def run(data, universe, skip_fundamentals=False, prev=None):
             sec_rs[etf] = 0
     for m in metrics.values():
         m["sec_rs"] = sec_rs.get(m["sector_etf"], 50)
+
+    # IBD流145業種グループRS: 判明している銘柄はETFセクターより細かい業種RSで上書き
+    groups, sym_grp = compute_group_rs(metrics, industry_map)
+    for sym, g in sym_grp.items():
+        metrics[sym]["sec_rs"] = g["rs"]
+        metrics[sym]["industry_ja"] = g["name"]
+        metrics[sym]["grp_rank"] = g["rank"]
+        metrics[sym]["grp_total"] = g["total"]
+
+    # Minervini買付適格性審査: イベント急騰・荒い値動き・クライマックス乖離を排除
+    n_veto = 0
     for m in metrics.values():
-        m["score"] = total_score(m)
+        vetoes, q_pen, q_warns = buyability(m)
+        m["veto"] = vetoes
+        m["q_penalty"] = q_pen
+        m["q_warns"] = q_warns
+        n_veto += bool(vetoes)
+        m["score"] = final_score(m)
+    if n_veto:
+        log(f"buyability veto: {n_veto} symbols excluded from candidate lists")
 
     env = market_env(spy_df, metrics, last_date, prev=prev, qqq_df=data.get("QQQ"))
     env_history = env.pop("env_history")
@@ -987,14 +1378,14 @@ def run(data, universe, skip_fundamentals=False, prev=None):
     # メイン: Stage2 + RS80+ + 高値圏 + 流動性
     main_syms = [s for s, m in metrics.items()
                  if m["stage2"] and m["rs"] >= 80 and m["dist_high"] <= 25
-                 and m["vol_m"] >= 15 and m["close"] >= 12]
+                 and m["vol_m"] >= 15 and m["close"] >= 12 and not m["veto"]]
     main_syms.sort(key=lambda s: -metrics[s]["score"])
     main_syms = main_syms[:MAIN_LIST_SIZE]
 
     # 高値保ち合い: Stage2 + 高値から15%以内 + 直近10日の値幅が小さい
     tight_syms = [s for s, m in metrics.items()
                   if m["stage2"] and m["dist_high"] <= 15 and m["range10"] <= 7.5
-                  and m["vol_m"] >= 10 and m["close"] >= 12]
+                  and m["vol_m"] >= 10 and m["close"] >= 12 and not m["veto"]]
     tight_syms.sort(key=lambda s: -metrics[s]["score"])
     tight_syms = tight_syms[:TIGHT_LIST_SIZE]
 
@@ -1007,15 +1398,22 @@ def run(data, universe, skip_fundamentals=False, prev=None):
             time.sleep(0.4)
         # フルユニバース銘柄 (セクター未付与) にyfinanceのセクターを反映
         for sym, f in funds.items():
+            # 業種キーをマップに蓄積 (top_companies未収載の中小型を日々補完)
+            ikey = f.pop("_industry_key", "")
+            if ikey and industry_map is not None and sym not in industry_map:
+                industry_map[sym] = ikey
             sec_en = f.pop("_sector", "")
             if sec_en and not metrics[sym]["sector_etf"]:
                 etf, ja = SECTOR_MAP.get(sec_en, ("", sec_en))
                 if etf:
                     metrics[sym]["sector_etf"] = etf
                     metrics[sym]["sector_ja"] = ja
-                    metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
-                    # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
-                    metrics[sym]["score"] = total_score(metrics[sym])
+                    # 業種グループRSが付いている銘柄は細分RSを優先し、
+                    # 粗いETFセクターRSで上書きしない
+                    if sym not in sym_grp:
+                        metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
+                        # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
+                        metrics[sym]["score"] = final_score(metrics[sym])
 
     out = {
         "env": env,
@@ -1023,6 +1421,7 @@ def run(data, universe, skip_fundamentals=False, prev=None):
         "main": [make_row(s, metrics[s], funds.get(s, {}), "main") for s in main_syms],
         "tight": [make_row(s, metrics[s], funds.get(s, {}), "tight") for s in tight_syms],
         "sectors": sectors,
+        "groups": groups[:60],
     }
     return out
 
@@ -1059,9 +1458,25 @@ def main():
         except Exception as e:
             log("failed to load previous data:", e)
 
+    # 業種マップ: 前回分 (ワークフローがダウンロード) を引き継いで毎日蓄積
+    data_dir = os.path.dirname(OUT_PATH)
+    prev_industry = {}
+    imap_prev_path = os.path.join(data_dir, "industry_map_prev.json")
+    if os.path.exists(imap_prev_path):
+        try:
+            with open(imap_prev_path, encoding="utf-8") as f:
+                prev_industry = json.load(f)
+            log(f"loaded previous industry map ({len(prev_industry)} symbols)")
+        except Exception as e:
+            log("failed to load previous industry map:", e)
+
     if args.selftest:
         data, universe = synthetic_data()
-        out = run(data, universe, skip_fundamentals=True, prev=prev)
+        # 合成業種マップでグループRS〜チャート生成まで全経路を通す
+        imap = {f"TST{i:03d}": ("semiconductors" if i % 2 else "gold") for i in range(30)}
+        imap["VCPX"] = "semiconductors"
+        out = run(data, universe, skip_fundamentals=True, prev=prev, industry_map=imap)
+        industry_map = imap
     else:
         universe = get_universe()
         if args.max_tickers:
@@ -1071,12 +1486,22 @@ def main():
         if "SPY" not in data:
             raise RuntimeError("SPY data missing — aborting")
         log(f"price data for {len(data)} symbols")
-        out = run(data, universe, prev=prev)
+        try:
+            industry_map = fetch_industry_map(prev_industry)
+        except Exception as e:
+            log("industry map fetch failed, using previous:", e)
+            industry_map = prev_industry
+        # run()内のファンダ取得が industry_map を直接補完する (中小型のカバレッジ蓄積)
+        out = run(data, universe, prev=prev, industry_map=industry_map)
 
     out = jclean(out)
-    os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+    with open(os.path.join(data_dir, "industry_map.json"), "w", encoding="utf-8") as f:
+        json.dump(industry_map, f, ensure_ascii=False, separators=(",", ":"))
+    write_chart_files(out, data, data["SPY"]["Close"],
+                      os.path.join(data_dir, "charts"))
     log(f"wrote {OUT_PATH}")
     log(f"env: {out['env']['status']} score={out['env']['env_score']} "
         f"stage2={out['env']['stage2_count']} main={len(out['main'])} tight={len(out['tight'])}")

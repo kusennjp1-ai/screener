@@ -37,8 +37,9 @@ jobs:
       - name: Fetch previous data as fallback
         run: |
           mkdir -p data
-          curl -fsSL "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/screener_latest.json" \
-            -o data/screener_prev.json || echo "no previous data"
+          BASE="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data"
+          curl -fsSL "$BASE/screener_latest.json" -o data/screener_prev.json || echo "no previous data"
+          curl -fsSL "$BASE/industry_map.json" -o data/industry_map_prev.json || echo "no previous industry map"
 
       - name: Run screener
         id: screener
@@ -62,6 +63,8 @@ jobs:
           mkdir -p _site/data
           cp index.html manifest.json sw.js icon.svg _site/
           cp data/screener_latest.json _site/data/
+          [ -f data/industry_map.json ] && cp data/industry_map.json _site/data/ || true
+          [ -d data/charts ] && cp -r data/charts _site/data/ || true
 
       - uses: actions/configure-pages@v5
         with:

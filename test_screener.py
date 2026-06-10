@@ -11,6 +11,7 @@ GitHub Actions ではデータ生成前のゲートとして実行される。
 import datetime as dt
 import json
 import math
+import sys
 import unittest
 
 import numpy as np
@@ -724,6 +725,403 @@ class BaseDetection(unittest.TestCase):
             self.assertIn("ma50px", row)
             self.assertEqual(len(row["vols"]), len(row["px"]))
             self.assertEqual(len(row["ma50px"]), len(row["px"]))
+
+
+class IndustryGroups(unittest.TestCase):
+    """IBD流145業種グループRS。"""
+
+    def _metrics(self, spec):
+        # spec: {sym: (wret, rs)}
+        return {s: {"wret": w, "rs": r} for s, (w, r) in spec.items()}
+
+    def test_group_rs_ranking(self):
+        metrics = self._metrics({
+            "A1": (2.0, 95), "A2": (1.8, 92), "A3": (1.9, 93),   # 強い業種
+            "B1": (0.1, 40), "B2": (0.2, 45), "B3": (0.0, 35),   # 弱い業種
+            "C1": (1.0, 70),                                       # 2銘柄 → 対象外
+            "C2": (1.0, 70),
+        })
+        imap = {"A1": "semiconductors", "A2": "semiconductors", "A3": "semiconductors",
+                "B1": "banks—regional", "B2": "banks—regional", "B3": "banks—regional",
+                "C1": "gold", "C2": "gold"}
+        groups, sym_info = sc.compute_group_rs(metrics, imap)
+        self.assertEqual(len(groups), 2, "3銘柄未満の業種は対象外")
+        self.assertEqual(groups[0]["key"], "semiconductors")
+        self.assertEqual(groups[0]["rank"], 1)
+        self.assertGreater(groups[0]["rs"], groups[1]["rs"])
+        self.assertEqual(groups[0]["top"], "A1", "代表銘柄はRS最高の銘柄")
+        self.assertIn("A1", sym_info)
+        self.assertNotIn("C1", sym_info)
+
+    def test_group_rs_empty(self):
+        groups, sym_info = sc.compute_group_rs(self._metrics({"X": (1.0, 50)}), {})
+        self.assertEqual(groups, [])
+        self.assertEqual(sym_info, {})
+
+    def test_industry_map_merge(self):
+        merged = sc.merge_industry_maps(
+            {"AAPL": "consumer-electronics", "OLD": "gold"},
+            {"AAPL": "computer-hardware", "NVDA": "semiconductors"})
+        self.assertEqual(merged["AAPL"], "computer-hardware", "新しい取得が優先")
+        self.assertEqual(merged["OLD"], "gold", "前回分は保持")
+        self.assertEqual(merged["NVDA"], "semiconductors")
+
+    def test_industry_ja_full_coverage(self):
+        from yfinance.const import SECTOR_INDUSTY_MAPPING_LC
+        for sec, inds in SECTOR_INDUSTY_MAPPING_LC.items():
+            for key in inds:
+                name = sc.industry_ja(key)
+                self.assertTrue(name and isinstance(name, str), f"no name for {key}")
+
+    def test_run_applies_group_rs_to_rows(self):
+        data, universe = sc.synthetic_data()
+        # 候補入りしやすい強い銘柄に業種を付与
+        imap = {f"TST{i:03d}": "semiconductors" for i in range(0, 20)}
+        imap.update({f"TST{i:03d}": "gold" for i in range(20, 40)})
+        imap["VCPX"] = "semiconductors"
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True, industry_map=imap))
+        self.assertIn("groups", out)
+        self.assertGreaterEqual(len(out["groups"]), 2)
+        g = out["groups"][0]
+        for k in ("rank", "key", "name", "rs", "count", "top", "total"):
+            self.assertIn(k, g)
+        vrow = next(r for r in out["main"] + out["tight"] if r["シンボル"] == "VCPX")
+        self.assertEqual(vrow["業種"], sc.industry_ja("semiconductors"))
+        self.assertIsNotNone(vrow["業種順位"])
+
+    def test_fundamentals_backfill_keeps_group_rs(self):
+        # フルユニバース銘柄 (セクター未付与) のセクター補完が、
+        # 先に付与された細分の業種グループRSを粗いETFセクターRSで上書きしない
+        data, universe = sc.synthetic_data()
+        universe = {s: "" for s in universe}
+        imap = {f"TST{i:03d}": "semiconductors" for i in range(0, 20)}
+        imap.update({f"TST{i:03d}": "gold" for i in range(20, 40)})
+        imap["VCPX"] = "semiconductors"
+        orig_fund, orig_sleep = sc.fetch_fundamentals, sc.time.sleep
+        sc.fetch_fundamentals = lambda sym: {"_sector": "Technology", "_industry_key": ""}
+        sc.time.sleep = lambda s: None
+        try:
+            out = sc.jclean(sc.run(data, universe, skip_fundamentals=False,
+                                   industry_map=imap))
+        finally:
+            sc.fetch_fundamentals, sc.time.sleep = orig_fund, orig_sleep
+        grs = {g["key"]: g["rs"] for g in out["groups"]}
+        grouped = [r for r in out["main"] + out["tight"]
+                   if r["シンボル"] in imap and r["業種順位"] is not None]
+        self.assertTrue(grouped, "業種グループ付き候補が出ること")
+        for r in grouped:
+            self.assertEqual(r["セクターRS数値"], grs[imap[r["シンボル"]]],
+                             f"{r['シンボル']}: セクター補完が業種RSを上書きした")
+
+
+class ChartPayload(unittest.TestCase):
+    """本格チャート用の個別JSON (日足/週足/RSライン)。"""
+
+    def test_weekly_resample_correct(self):
+        # 月〜金きっかり2週間: 週足OHLCVが手計算と一致する
+        idx = pd.bdate_range("2026-05-25", periods=10)  # 月曜始まり2週
+        o = list(range(10, 20)); h = [x + 2 for x in o]
+        l = [x - 2 for x in o]; c = [x + 1 for x in o]
+        v = [1e6] * 10
+        df = pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c, "Volume": v},
+                          index=idx, dtype=float)
+        spy = pd.Series(100.0, index=idx)
+        p = sc.build_chart_payload(df, spy_close=spy)
+        w = p["w"]
+        self.assertEqual(len(w["c"]), 2)
+        self.assertEqual(w["o"][0], 10.0)   # 週1の始値 = 月曜Open
+        self.assertEqual(w["h"][0], 16.0)   # 週1の高値 = max(High[0:5])
+        self.assertEqual(w["l"][0], 8.0)    # 週1の安値
+        self.assertEqual(w["c"][0], 15.0)   # 週1の終値 = 金曜Close
+        self.assertEqual(w["v"][0], 5.0)    # 出来高合計 5e6 → 5 (百万株)
+        self.assertEqual(w["c"][1], 20.0)
+
+    def test_chart_payload_schema(self):
+        data, universe = sc.synthetic_data()
+        spy = data["SPY"]["Close"]
+        p = sc.build_chart_payload(data["VCPX"], spy_close=spy, pivot=130.0, stop=124.0)
+        for tf in ("d", "w"):
+            sub = p[tf]
+            n = len(sub["c"])
+            for k in ("t", "o", "h", "l", "c", "v"):
+                self.assertEqual(len(sub[k]), n, f"{tf}.{k} length")
+            self.assertGreater(n, 10)
+        self.assertEqual(len(p["d"]["ma"]), len(p["d"]["c"]))
+        self.assertEqual(len(p["w"]["ma"]), len(p["w"]["c"]))
+        self.assertEqual(len(p["rs"]), len(p["d"]["c"]))
+        self.assertEqual(p["pivot"], 130.0)
+        # NaNはJSONに残さない (None化される)
+        s = json.dumps(sc.jclean(p))
+        self.assertNotIn("NaN", s)
+
+    def test_chart_short_history(self):
+        spy = flat_spy(130)["Close"]
+        p = sc.build_chart_payload(uptrend(125), spy_close=spy)
+        self.assertGreater(len(p["d"]["c"]), 10)
+        self.assertGreater(len(p["w"]["c"]), 5)
+
+    def test_chart_files_written_by_selftest(self):
+        import subprocess, glob, os
+        subprocess.run([sys.executable, "screener.py", "--selftest"],
+                       cwd=os.path.dirname(os.path.abspath(sc.__file__)), check=True,
+                       capture_output=True)
+        files = glob.glob(os.path.join(os.path.dirname(os.path.abspath(sc.__file__)),
+                                       "data", "charts", "*.json"))
+        self.assertGreater(len(files), 5, "selftestで候補銘柄のチャートJSONが生成される")
+        with open(files[0]) as f:
+            p = json.load(f)
+        self.assertIn("d", p)
+        self.assertIn("w", p)
+
+
+class Buyability(unittest.TestCase):
+    """Minervini買付適格性審査 — 「ミネルヴィニはこのチャートを本当に買うか」。
+
+    KALV/CNTA型 (バイナリーイベントで2倍になったバイオ株等) がメイン候補の
+    上位に出ないことを第一原理から検証する。
+    """
+
+    @staticmethod
+    def _event_rocket(days=320, gap_mult=2.0, post_days=55, wob=0.055):
+        """1年横ばい→1日でgap_mult倍→荒い値動きで高値追い (KALV型)。"""
+        pre = segment(5.8, 6.2, days - post_days)
+        start = pre[-1] * gap_mult
+        targets = np.geomspace(start, 27.0, post_days)
+        post = []
+        for i, t in enumerate(targets):
+            z = 0.0 if i >= post_days - 10 else (wob if i % 2 == 0 else -wob)
+            post.append(t * (1 + z))
+        close = np.array(pre + post)
+        spread = np.concatenate([np.full(days - post_days, 0.006),
+                                 np.full(post_days, 0.05)])
+        return mkdf(close, high=close * (1 + spread), low=close * (1 - spread))
+
+    @staticmethod
+    def _earnings_gap_leader(days=320, gap=0.20, post_days=30):
+        """確立した上昇トレンド中の決算ギャップ — Minerviniが普通に買う形。"""
+        pre = segment(50, 100, days - post_days)
+        start = pre[-1] * (1 + gap)
+        close = np.array(pre + segment(start, start * 1.05, post_days))
+        return mkdf(close)
+
+    def _qm(self, **over):
+        """buyability() 単体テスト用の素点。デフォルトは健全な主導株。"""
+        m = {"max_up60": 4.0, "max_dn60": -3.5, "n_chop60": 0,
+             "up3_60": 7.0, "dn3_60": -6.0, "up1_120": 5.0,
+             "gap_from_base": None, "gap3_from_base": None,
+             "gap120_from_base": None, "adr": 3.0, "ext200": 30.0,
+             "depth60": 15.0, "dd60": 10.0,
+             "base": {"type": "フラットベース", "weeks": 6, "depth": 15.0}}
+        m.update(over)
+        return m
+
+    # ----- 単体: 拒否条件 (veto)
+    def test_binary_event_vetoed(self):
+        v, p, w = sc.buyability(self._qm(max_up60=95.0, gap_from_base=False))
+        self.assertTrue(v, "1日+95%のバイナリーイベントは拒否")
+
+    def test_gap_without_prior_trend_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(max_up60=22.0, gap_from_base=False))
+        self.assertTrue(v, "トレンド不在からの急騰ギャップはイベント主導 — 拒否")
+
+    def test_earnings_gap_from_uptrend_allowed(self):
+        v, _, _ = sc.buyability(self._qm(max_up60=22.0, gap_from_base=True))
+        self.assertFalse(v, "上昇トレンド中の+22%決算ギャップは正当 (NVDA型) — 拒否しない")
+
+    def test_huge_gap_vetoed_even_from_uptrend(self):
+        v, _, _ = sc.buyability(self._qm(max_up60=40.0, gap_from_base=True))
+        self.assertTrue(v, "+35%超の1日急騰は出自を問わず新ベース形成まで見送り")
+
+    def test_crash_day_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(max_dn60=-22.0))
+        self.assertTrue(v, "直近60日に-22%日があれば破損銘柄 — 拒否")
+
+    def test_wide_loose_adr_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(adr=9.5))
+        self.assertTrue(v, "ADR 9.5%はwide & loose — 拒否")
+
+    def test_climax_extension_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(ext200=140.0))
+        self.assertTrue(v, "200日線+140%乖離はクライマックス圏 — 拒否")
+
+    def test_multi_day_event_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(up3_60=32.0, gap3_from_base=False))
+        self.assertTrue(v, "複数日に分散したイベント急騰 (3日+32%) も拒否")
+
+    def test_multi_day_gap_from_uptrend_allowed(self):
+        v, _, _ = sc.buyability(self._qm(up3_60=32.0, gap3_from_base=True))
+        self.assertFalse(v, "上昇トレンド中の3日+32%は正当")
+
+    def test_huge_multi_day_vetoed_unconditionally(self):
+        v, _, _ = sc.buyability(self._qm(up3_60=55.0, gap3_from_base=True))
+        self.assertTrue(v, "3日+50%超は出自を問わずクライマックス的 — 拒否")
+
+    def test_multi_day_crash_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(dn3_60=-27.0))
+        self.assertTrue(v, "3日間で-27%の急落は破損チャート")
+
+    def test_old_unbased_event_still_vetoed(self):
+        v, _, _ = sc.buyability(self._qm(
+            up1_120=40.0, gap120_from_base=False, base={"type": "保ち合い"}))
+        self.assertTrue(v, "60日窓を抜けてもベース未形成なら見送り継続")
+
+    def test_old_event_with_proper_base_allowed(self):
+        v, _, _ = sc.buyability(self._qm(
+            up1_120=40.0, gap120_from_base=False,
+            base={"type": "フラットベース", "weeks": 7, "depth": 12.0}))
+        self.assertFalse(v, "イベント後に正規ベースを形成すれば買付可能に戻る")
+
+    # ----- 単体: 減点 (penalty) と警告
+    def test_moderate_extension_penalized_not_vetoed(self):
+        v, p, w = sc.buyability(self._qm(ext200=85.0))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+        self.assertTrue(any("乖離" in x or "過熱" in x for x in w))
+
+    def test_elevated_adr_penalized(self):
+        v, p, _ = sc.buyability(self._qm(adr=7.0))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+
+    def test_choppiness_penalized(self):
+        v, p, _ = sc.buyability(self._qm(n_chop60=8))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+
+    def test_v_shape_recovery_penalized(self):
+        v, p, w = sc.buyability(self._qm(dd60=42.0, base={"type": "保ち合い"}))
+        self.assertFalse(v)
+        self.assertGreater(p, 0)
+        self.assertTrue(any("V字" in x or "ベース未形成" in x for x in w))
+
+    def test_clean_leader_passes_clean(self):
+        v, p, w = sc.buyability(self._qm())
+        self.assertEqual((v, p, w), ([], 0, []))
+
+    def test_final_score_floor(self):
+        m = self._qm(n_chop60=20, ext200=85.0, adr=7.9)
+        m.update({"rs": 1, "sec_rs": 1, "dist_high": 50.0, "range10": 20.0})
+        _, p, _ = sc.buyability(m)
+        m["q_penalty"] = p
+        self.assertGreaterEqual(sc.final_score(m), 1)
+
+    # ----- 価格パスからの統合検証
+    def test_event_rocket_metrics_and_veto(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(self._event_rocket(), spy)
+        self.assertGreaterEqual(m["max_up60"], 35, "ギャップ日が検出される")
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "KALV型イベントロケットは買付不適格")
+
+    def test_earnings_gap_leader_metrics_not_vetoed(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(self._earnings_gap_leader(), spy)
+        self.assertGreaterEqual(m["max_up60"], 18)
+        self.assertTrue(m["gap_from_base"], "ギャップ前から上昇トレンド確立済み")
+        v, _, _ = sc.buyability(m)
+        self.assertFalse(v, "上昇トレンド中の決算ギャップ銘柄を捨てない")
+
+    def test_orderly_uptrend_clean_from_path(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(uptrend(), spy)
+        v, p, _ = sc.buyability(m)
+        self.assertEqual(v, [])
+        self.assertEqual(p, 0, "整然とした上昇トレンドは無減点")
+
+    def test_event_rocket_excluded_from_lists(self):
+        data, universe = sc.synthetic_data()
+        df = self._event_rocket()
+        df.index = data["SPY"].index
+        data["EVNT"] = df
+        universe["EVNT"] = "Health Care"
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        syms = [r["シンボル"] for r in out["main"] + out["tight"]]
+        # RS最上位・高値圏でもイベント型は両リストから締め出される
+        m = sc.compute_metrics(data["EVNT"], data["SPY"]["Close"])
+        self.assertTrue(m["tt"], "前提: テンプレート自体は通過してしまう形")
+        self.assertNotIn("EVNT", syms, "Minervini審査がEVNTを除外する")
+
+    def test_flat_base_30pct_gap_vetoed(self):
+        # Verifier指摘: フラット停滞は 株価≈MA50≈MA200 で素朴なMA比較を素通りする
+        days = 320
+        pre = segment(5.9, 6.2, days - 31)
+        start = pre[-1] * 1.30
+        close = np.array(pre + segment(start, start * 1.04, 31))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertFalse(m["gap_from_base"], "1年フラットはトレンド確立とみなさない")
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "+30%バイナリーイベント (35%未満帯) も拒否")
+
+    def test_two_day_rocket_vetoed_from_path(self):
+        # Verifier指摘: +15%×2日 (累計+32%) は1日ルールをすり抜けていた
+        days = 320
+        pre = segment(5.9, 6.2, days - 32)
+        s1 = pre[-1] * 1.15
+        close = np.array(pre + [s1] + segment(s1 * 1.15, s1 * 1.15 * 1.03, 31))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertLess(m["max_up60"], 18, "前提: 1日ルールには掛からない形")
+        self.assertGreaterEqual(m["up3_60"], 28)
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "2日合計+32%のイベントも拒否")
+
+    def test_duplicate_index_no_crash(self):
+        # Verifier指摘: ギャップ日のタイムスタンプ重複で get_loc がsliceを返し落ちた
+        df = self._event_rocket()
+        idx = list(df.index)
+        gap_pos = len(idx) - 55
+        idx[gap_pos] = idx[gap_pos - 1]
+        df.index = pd.DatetimeIndex(idx)
+        m = sc.compute_metrics(df, flat_spy()["Close"])  # 例外を出さない
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v)
+
+    def test_glitch_low_zero_not_vetoed(self):
+        # Verifier指摘: Low=0の不良行1つでADR=inf→健全な主導株を誤拒否していた
+        df = uptrend()
+        df.iloc[-5, df.columns.get_loc("Low")] = 0.0
+        m = sc.compute_metrics(df, flat_spy()["Close"])
+        self.assertFalse(math.isinf(m["adr"]))
+        v, _, _ = sc.buyability(m)
+        self.assertEqual(v, [])
+
+    def test_glitch_zero_close_not_vetoed(self):
+        df = uptrend()
+        df.iloc[-10, df.columns.get_loc("Close")] = 0.0
+        m = sc.compute_metrics(df, flat_spy()["Close"])
+        v, _, _ = sc.buyability(m)
+        self.assertEqual(v, [], "Close=0の不良行は-100%/+inf%急変として扱わない")
+
+    def test_monotonic_runner_no_vshape_warn(self):
+        # Verifier指摘: 押し目ゼロの単調上昇がdepth60 (レンジ) でV字扱いされていた
+        days = 320
+        close = np.array(segment(40, 50, days - 60) + list(np.geomspace(50, 80, 60)))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertLess(m["dd60"], 5, "実ドローダウンはほぼゼロ")
+        _, _, w = sc.buyability(m)
+        self.assertFalse(any("V字" in x for x in w))
+
+    def test_unbased_event_beyond_60bars_vetoed_from_path(self):
+        # Verifier指摘: イベントが60日窓を抜けると無条件で再適格化していた
+        days = 320
+        pre = segment(5.9, 6.2, days - 71)
+        start = pre[-1] * 1.40
+        close = np.array(pre + segment(start, start * 1.5, 71))
+        m = sc.compute_metrics(mkdf(close), flat_spy()["Close"])
+        self.assertLess(m["max_up60"], 18, "前提: ギャップは60日窓の外")
+        v, _, _ = sc.buyability(m)
+        self.assertTrue(v, "ベース未形成のままなら見送り継続")
+
+    def test_quality_warning_in_reason(self):
+        m = self._qm(ext200=85.0)
+        m.update({"rs": 95, "dist_high": 3.0, "rs_line_high": False, "vcp": False,
+                  "vdu": False, "bkt": False, "sec_rs": 50, "accdis_letter": "C",
+                  "ud": None, "ext": False, "stage": 2, "vol_m": 50.0,
+                  "n_contractions": 0, "range10": 5.0})
+        _, p, w = sc.buyability(m)
+        m["q_warns"] = w
+        txt = sc.build_reason(m, {})
+        self.assertTrue(any(x in txt for x in ("乖離", "過熱")),
+                        "品質警告が有望理由の【注意】に表示される")
 
 
 if __name__ == "__main__":
