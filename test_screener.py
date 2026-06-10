@@ -361,6 +361,8 @@ ABCDR|ABC Corp - Rights|Q|N|N|100|N|N
 ABCDU|ABC Corp - Units|Q|N|N|100|N|N
 GFND|Global Growth Fund Inc.|Q|N|N|100|N|N
 NVDA|NVIDIA Corporation - Common Stock|Q|N|N|100|N|N
+ARM|Arm Holdings plc - American Depositary Shares|Q|N|N|100|N|N
+BNKR|Bankrupt Corp - Common Stock|Q|N|Q|100|N|N
 File Creation Time: 0610202622:01|||||||"""
 
     OTHER_SAMPLE = """ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
@@ -368,13 +370,16 @@ BRK.B|Berkshire Hathaway Inc. Class B Common Stock|N|BRK B|N|100|N|BRK=B
 XYZ$A|XYZ Corp 5.25% Preferred Series A|N|XYZpA|N|100|N|XYZ-A
 SPYX|SPDR Something ETF|P|SPYX|Y|100|N|SPYX
 GM|General Motors Company Common Stock|N|GM|N|100|N|GM
-DPN|Depositary Shares Each Representing|N|DPN|N|100|N|DPN
+TSM|Taiwan Semiconductor Manufacturing Company Ltd. American Depositary Shares|N|TSM|N|100|N|TSM
+DPN|ABC Corp Depositary Shares Each Representing 1/1000th Interest in 5.00% Preferred Series A|N|DPN|N|100|N|DPN
 File Creation Time: 0610202622:01|||||||"""
 
     def test_nasdaq_file(self):
         syms = sc.parse_listed_file(self.NASDAQ_SAMPLE, "Symbol")
         self.assertIn("AAPL", syms)
         self.assertIn("NVDA", syms)
+        self.assertIn("ARM", syms, "ADR (American Depositary Shares) は普通株として含める")
+        self.assertNotIn("BNKR", syms, "Financial Status異常 (破産等) は除外")
         self.assertNotIn("ZWZZT", syms, "テスト銘柄は除外")
         self.assertNotIn("TQQQ", syms, "ETFは除外")
         self.assertNotIn("ABCDW", syms, "ワラントは除外")
@@ -386,6 +391,7 @@ File Creation Time: 0610202622:01|||||||"""
         syms = sc.parse_listed_file(self.OTHER_SAMPLE, "ACT Symbol")
         self.assertIn("BRK-B", syms, "クラス株はYahoo形式(BRK-B)に変換")
         self.assertIn("GM", syms)
+        self.assertIn("TSM", syms, "NYSE上場のADRも含める")
         self.assertNotIn("XYZ$A", syms, "優先株シンボルは除外")
         self.assertNotIn("SPYX", syms, "ETFは除外")
         self.assertNotIn("DPN", syms, "預託証券は除外")
@@ -490,6 +496,21 @@ class IBDEnvironment(unittest.TestCase):
         status, pulse = sc.market_pulse(55, False, 2, "confirmed", "rally_attempt", 3)
         self.assertNotEqual(status, "DO NOT BUY")
 
+    def test_market_pulse_ftd_upgrades_even_at_bear_bottom_score(self):
+        # 本物の底打ち時はスコアが構造的に低い(30前後)。それでもFTD直後は
+        # DO NOT BUYにしない — これがFTDの存在意義
+        status, pulse = sc.market_pulse(30, False, 2, "confirmed", "confirmed", 1)
+        self.assertEqual(status, "CAUTION")
+        self.assertIn("フォロースルー", pulse)
+
+    def test_market_pulse_no_buy_without_ftd_after_correction(self):
+        # 調整入り後、FTDなしの静かな戻りでは「確認済み上昇トレンド」に戻れない
+        for s_spy, s_qqq in (("correction", "uptrend"), ("rally_attempt", "rally_attempt"),
+                             ("rally_attempt", "correction"), ("correction", "rally_attempt")):
+            status, _ = sc.market_pulse(70, True, 2, s_spy, s_qqq, None)
+            self.assertNotEqual(status, "BUY MODE",
+                                f"FTDなしでBUYは不可: {s_spy}/{s_qqq}")
+
     def test_env_includes_ibd_fields(self):
         data, universe = sc.synthetic_data(n=20)
         out = sc.run(data, universe, skip_fundamentals=True)
@@ -506,6 +527,9 @@ class MinerviniFidelity(unittest.TestCase):
         spy = flat_spy()["Close"]
         m = sc.compute_metrics(mkdf(px), spy)
         self.assertTrue(m["ext"])
+        # EXT時は表示ピボット(=ベース上限)と整合: 株価は実際に買いゾーン上方
+        self.assertGreater(m["close"], m["pivot"] * 1.05)
+        self.assertLess(m["stop"], m["pivot"])
 
     def test_not_extended_on_steady_climb(self):
         spy = flat_spy()["Close"]

@@ -391,7 +391,9 @@ function renderEnv() {
           ];
           if (e.qqq) stats.push(['QQQ', `$${e.qqq}`]);
           else if (e.spy_ma50_pct !== undefined) stats.push(['vs MA50', `${e.spy_ma50_pct>=0?'+':''}${e.spy_ma50_pct}%`]);
-          if (e.dist_spy !== undefined) stats.push(['分配日', `S${e.dist_spy}/Q${e.dist_qqq}`]);
+          if (e.dist_spy !== undefined && e.dist_qqq !== null && e.dist_qqq !== undefined)
+            stats.push(['分配日', `S${e.dist_spy}/Q${e.dist_qqq}`]);
+          else if (e.dist_spy !== undefined) stats.push(['分配日', `${e.dist_spy}日`]);
           else if (e.dist_days !== undefined) stats.push(['分配日', `${e.dist_days}日`]);
           stats.push(['Stage2', `${e.stage2_count}銘柄`]);
           if (e.nh !== undefined) stats.push(['NH/NL', `${e.nh}/${e.nl}`]);

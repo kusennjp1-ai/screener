@@ -36,10 +36,13 @@ NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
-# 普通株以外 (ワラント・ライツ・ユニット・優先株・債券・ファンド類) を銘柄名で除外
+# 普通株以外 (ワラント・ライツ・ユニット・優先株・債券・ファンド類) を銘柄名で除外。
+# 注意: "depositary" 単体は除外しない — ADR (TSM/ARM/BABA等の
+# "American Depositary Shares") は重要な主導株。優先株の預託証券は
+# "preferred" や $付きシンボルで別途除外される。
 EXCLUDE_NAME_RE = re.compile(
-    r"\bwarrants?\b|\brights?\b|\bunits?\b|\bpreferred\b|\bdepositary\b"
-    r"|\bnotes?\b|\bdebentures?\b|\bETN\b|\bfunds?\b|\btrust preferred\b",
+    r"\bwarrants?\b|\brights?\b|\bunits?\b|\bpreferred\b"
+    r"|\bnotes?\b|\bdebentures?\b|\bETN\b|\bfunds?\b",
     re.I,
 )
 SYMBOL_RE = re.compile(r"[A-Z]{1,5}([.\-][A-Z])?")
@@ -101,6 +104,9 @@ def parse_listed_file(text, sym_field):
             return p[i].strip() if i is not None and i < len(p) else ""
 
         if g("ETF") == "Y" or g("Test Issue") == "Y":
+            continue
+        fin = g("Financial Status")  # NASDAQ上場のみ: N=正常以外(欠損/破産等)は除外
+        if fin and fin != "N":
             continue
         if EXCLUDE_NAME_RE.search(g("Security Name")):
             continue
@@ -307,8 +313,15 @@ def compute_metrics(df, spy_close):
     except Exception:
         pass
 
+    # EXT: ベース上限 (直近の急騰5日を除く20日高値) から5%超の上放れ = 追いかけ買い禁止
+    ext = False
+    base_high = float(h.iloc[-25:-5].max()) if len(h) >= 25 else float(h.iloc[-20:].max())
+    if base_high > 0:
+        ext = close > base_high * 1.05
+
     # ピボット/ストップ (直近20日高値ブレイク想定、リスク3〜8%に収める)
-    pivot = float(h.iloc[-20:].max())
+    # EXT時は表示の整合性のためベース上限をピボットとする (株価はゾーン上方)
+    pivot = base_high if ext else float(h.iloc[-20:].max())
     stop = max(float(l.iloc[-10:].min()), pivot * 0.92)
     stop = min(stop, pivot * 0.97)
     risk = (pivot - stop) / pivot * 100
@@ -322,12 +335,6 @@ def compute_metrics(df, spy_close):
 
     # ADR% (直近20日の日中変動率平均) — 値動きの質の目安
     adr = float(((h.iloc[-20:] / l.iloc[-20:]) - 1).mean() * 100)
-
-    # EXT: ベース上限 (直近の急騰5日を除く20日高値) から5%超の上放れ = 追いかけ買い禁止
-    ext = False
-    if len(h) >= 25:
-        base_high = float(h.iloc[-25:-5].max())
-        ext = base_high > 0 and close > base_high * 1.05
 
     # 本日の52週新高値 / 新安値 (市場ブレッドス用)
     new_high = float(h.iloc[-1]) >= hi52 * 0.999
@@ -407,23 +414,39 @@ def detect_ftd(df, lookback=80, correction_pct=0.06):
             break
     if ftd_k is None:
         return ("rally_attempt", None)
-    if float(rally_c.iloc[ftd_k:].min()) < trough:
-        return ("correction", None)
+    # FTD後の底割れは、troughが「ピーク以降の最安値」である構造上、
+    # 新しいtroughとしてラリー起点が引き直されることで自然に無効化される
     return ("confirmed", len(rally_c) - 1 - ftd_k)
 
 
 def market_pulse(score, spy_above_ma200, dd, state_spy, state_qqq, days_since_ftd):
-    """IBD Market Pulse風の3状態判定。(status, pulse文言) を返す。"""
+    """IBD Market Pulse風の3状態判定。(status, pulse文言) を返す。
+
+    IBDルールに合わせた制約:
+      - 調整入り後はFTDなしに「確認済み上昇トレンド」へは戻れない
+      - FTD確認直後は環境スコアが低くてもCAUTIONまで格上げ (底打ち時の
+        スコアは構造的に低いため、ここで弾くとFTDが機能しない)
+    """
     states = (state_spy, state_qqq)
-    if "confirmed" not in states:
+    confirmed = "confirmed" in states
+    ftd_fresh = confirmed and days_since_ftd is not None and days_since_ftd <= 25
+    healthy = (state_spy in ("uptrend", "confirmed")
+               and state_qqq in ("uptrend", "confirmed"))
+
+    if not confirmed:
         if (states == ("correction", "correction")) or (not spy_above_ma200) or score < 40:
             if "rally_attempt" in states:
                 return ("DO NOT BUY", "調整局面 — ラリー試行中（フォロースルー日待ち）")
-            if state_spy == "uptrend" and state_qqq == "uptrend" and score >= 40:
+            if healthy and score >= 40:
                 return ("CAUTION", "圧力下の上昇トレンド（Uptrend Under Pressure）")
             return ("DO NOT BUY", "調整局面（Market in Correction）")
     if score < 40:
+        if ftd_fresh:
+            return ("CAUTION",
+                    f"フォロースルー日確認（{days_since_ftd}営業日前）— 環境は脆弱、試験的買いのみ")
         return ("DO NOT BUY", "調整局面（Market in Correction）")
+    if not healthy:
+        return ("CAUTION", "調整からの戻り — フォロースルー日待ち（Uptrend Under Pressure）")
     if dd >= 4 or score < 65:
         return ("CAUTION", "圧力下の上昇トレンド（Uptrend Under Pressure）")
     label = "確認済み上昇トレンド（Confirmed Uptrend）"
@@ -452,9 +475,11 @@ def market_env(spy_df, metrics, last_date, prev=None, qqq_df=None):
         qqq_ma200 = float(qqq_df["Close"].rolling(200).mean().iloc[-1])
         qqq_ma200_pct = round((qqq / qqq_ma200 - 1) * 100, 1)
     else:
-        dist_qqq, state_qqq, since_qqq = dist_spy, state_spy, since_spy
+        # QQQデータなし: 分配日は捏造せずNone (UIは単一表示にフォールバック)
+        dist_qqq = None
+        state_qqq, since_qqq = state_spy, since_spy
         qqq, qqq_ma200_pct = None, None
-    dist_days = max(dist_spy, dist_qqq)
+    dist_days = max(dist_spy, dist_qqq) if dist_qqq is not None else dist_spy
     days_since_ftd = min((d for d in (since_spy, since_qqq) if d is not None), default=None)
 
     total = len(metrics)
@@ -633,7 +658,7 @@ def build_reason(m, fund):
 
 
 def make_row(sym, m, fund, mode):
-    # 次回決算までの営業日数 (10日以内なら警戒タグ用)
+    # 次回決算までの暦日数 (10日以内なら警戒タグ用)
     earnings_days = None
     nxt = fund.get("次回決算") or ""
     if len(nxt) >= 10:
@@ -771,6 +796,8 @@ def run(data, universe, skip_fundamentals=False, prev=None):
                     metrics[sym]["sector_etf"] = etf
                     metrics[sym]["sector_ja"] = ja
                     metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
+                    # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
+                    metrics[sym]["score"] = total_score(metrics[sym])
 
     out = {
         "env": env,
