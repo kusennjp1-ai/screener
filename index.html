@@ -7,7 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="RS Screener">
 <meta name="theme-color" content="#0f172a">
-<title>RS Screener v11</title>
+<link rel="manifest" href="manifest.json">
+<title>RS Screener v12</title>
 
 
 <!-- iOS icon fallback -->
@@ -221,7 +222,7 @@ textarea {
   <div class="hdr">
     <div>
       <div class="hdr-title">🧙 RS Screener</div>
-      <div class="hdr-sub" id="hdr-date">データなし — 右上の更新ボタンをタップ</div>
+      <div class="hdr-sub" id="hdr-date">最新データを取得中…</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <div class="status-pill" id="status-pill">—</div>
@@ -289,9 +290,10 @@ textarea {
 <div class="update-panel" id="update-panel" style="display:none">
   <div class="update-sheet">
     <h3>📥 データを更新</h3>
-    <p>ColabでCell12を実行し、出力された<b>screener_latest.json</b>の内容を全てコピーして貼り付けてください。</p>
-    <textarea id="json-input" placeholder='{"env":{...},"main":[...],"tight":[...],"sectors":[...]}'></textarea>
-    <button class="btn btn-primary" onclick="loadJSON()">読み込む</button>
+    <p>データは毎営業日、GitHub Actionsで自動更新されます。手動で再取得するか、JSONを直接貼り付けることもできます。</p>
+    <button class="btn btn-primary" onclick="manualFetch()">🔄 最新データを取得</button>
+    <textarea id="json-input" style="margin-top:12px;" placeholder='手動更新する場合: {"env":{...},"main":[...],"tight":[...],"sectors":[...]} を貼り付け'></textarea>
+    <button class="btn btn-primary" onclick="loadJSON()">貼り付けたJSONを読み込む</button>
     <button class="btn btn-cancel" onclick="closeUpdate()" style="margin-top:6px;">キャンセル</button>
   </div>
 </div>
@@ -357,13 +359,19 @@ function renderEnv() {
         <div style="font-size:10px;color:var(--text2);margin-top:2px;">${e.date || ''}</div>
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;">
-        ${[
-          ['ENV', `${e.env_score}/100`],
-          ['SPY', `$${e.spy}`],
-          ['vs MA200', `${ma200sign}${e.spy_ma200_pct}%`],
-          ['Stage2', `${e.stage2_count}銘柄`],
-          ['RS70+', `${e.rs70_count}/${e.rs70_total}`],
-        ].map(([l,v])=>`
+        ${(() => {
+          const stats = [
+            ['ENV', `${e.env_score}/100`],
+            ['SPY', `$${e.spy}`],
+            ['vs MA200', `${ma200sign}${e.spy_ma200_pct}%`],
+          ];
+          if (e.spy_ma50_pct !== undefined) stats.push(['vs MA50', `${e.spy_ma50_pct>=0?'+':''}${e.spy_ma50_pct}%`]);
+          if (e.dist_days !== undefined) stats.push(['分配日', `${e.dist_days}日`]);
+          stats.push(['Stage2', `${e.stage2_count}銘柄`]);
+          if (e.pct_above_ma200 !== undefined) stats.push(['MA200超', `${e.pct_above_ma200}%`]);
+          else stats.push(['RS70+', `${e.rs70_count}/${e.rs70_total}`]);
+          return stats;
+        })().map(([l,v])=>`
           <div class="env-stat">
             <div class="env-stat-val" style="color:${col};">${v}</div>
             <div class="env-stat-lbl">${l}</div>
@@ -635,9 +643,33 @@ function renderAll() {
   if (currentTab === 'sector') renderSectors();
 }
 
+// ===== AUTO FETCH =====
+async function fetchLatest(showAlert) {
+  try {
+    const res = await fetch('data/screener_latest.json?v=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    if (!d.env || !d.main) throw new Error('invalid format');
+    DATA = d;
+    localStorage.setItem('screener_data', JSON.stringify(d));
+    localStorage.setItem('screener_ts', new Date().toISOString());
+    renderAll();
+    if (showAlert) alert('✅ 最新データを取得しました');
+    return true;
+  } catch(e) {
+    if (showAlert) alert('取得に失敗しました。\n' + e.message);
+    if (!DATA) document.getElementById('hdr-date').textContent = 'データなし — 右上の更新ボタンをタップ';
+    return false;
+  }
+}
+function manualFetch() {
+  closeUpdate();
+  fetchLatest(true);
+}
+
 // ===== INIT =====
 function init() {
-  // localStorageからデータを復元
+  // localStorageからデータを復元（オフライン時のフォールバック）
   const saved = localStorage.getItem('screener_data');
   if (saved) {
     try {
@@ -647,8 +679,18 @@ function init() {
       localStorage.removeItem('screener_data');
     }
   }
+  // GitHub Pages上の最新JSONを自動取得
+  fetchLatest(false);
+  // タブ復帰時にも再取得（朝イチで開いたとき用）
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') fetchLatest(false);
+  });
   // pane-tight の flex 設定
   document.getElementById('pane-tight').style.cssText = 'display:none;flex-direction:column;height:100%;overflow:hidden;';
+  // PWA: Service Worker登録
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
 }
 
 init();
