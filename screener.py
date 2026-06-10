@@ -556,27 +556,45 @@ def fetch_industry_map(prev_map=None):
         log("industry mapping const not available")
         return dict(prev_map or {})
     fresh = {}
-    n_ok = 0
-    for sec_key, ind_keys in MAPPING.items():
-        for key in ind_keys:
-            try:
-                tc = yf.Industry(key).top_companies
-                if tc is None or len(tc) == 0:
-                    continue
-                if "symbol" in getattr(tc, "columns", []):
-                    syms = list(tc["symbol"])
-                else:
-                    syms = list(tc.index)
-                for sym in syms:
-                    s = str(sym).strip().upper().replace(".", "-")
-                    if s and s != "NAN":
-                        fresh[s] = key
+
+    def fetch_one(key):
+        tc = yf.Industry(key).top_companies
+        if tc is None or len(tc) == 0:
+            return False
+        if "symbol" in getattr(tc, "columns", []):
+            syms = list(tc["symbol"])
+        else:
+            syms = list(tc.index)
+        for sym in syms:
+            s = str(sym).strip().upper().replace(".", "-")
+            if s and s != "NAN":
+                fresh[s] = key
+        return True
+
+    keys = [k for ind_keys in MAPPING.values() for k in ind_keys]
+    n_ok, failed = 0, []
+    for key in keys:
+        try:
+            if fetch_one(key):
                 n_ok += 1
+        except Exception:
+            failed.append(key)
+        time.sleep(0.25)
+    # レート制限 (429) でまとめて失敗することがあるため、一呼吸おいて1回だけ再試行
+    if failed:
+        time.sleep(30)
+        still = []
+        for key in failed:
+            try:
+                if fetch_one(key):
+                    n_ok += 1
             except Exception:
-                pass
-            time.sleep(0.2)
+                still.append(key)
+            time.sleep(0.5)
+        failed = still
     log(f"industry map: {n_ok} industries fetched, {len(fresh)} fresh symbols, "
-        f"{len(prev_map or {})} carried over")
+        f"{len(prev_map or {})} carried over"
+        + (f", {len(failed)} failed" if failed else ""))
     return merge_industry_maps(prev_map, fresh)
 
 
@@ -1481,16 +1499,18 @@ def main():
         universe = get_universe()
         if args.max_tickers:
             universe = dict(list(universe.items())[:args.max_tickers])
-        symbols = list(universe.keys()) + ["SPY", "QQQ"] + list(ETF_JA.keys())
-        data = batch_download(symbols)
-        if "SPY" not in data:
-            raise RuntimeError("SPY data missing — aborting")
-        log(f"price data for {len(data)} symbols")
+        # 業種巡回は価格一括ダウンロードの前に実行する。後に回すと5000銘柄超の
+        # 履歴取得でyfinanceのレート枠を使い切り、145業種が全件429になる (run #4で実証)
         try:
             industry_map = fetch_industry_map(prev_industry)
         except Exception as e:
             log("industry map fetch failed, using previous:", e)
             industry_map = prev_industry
+        symbols = list(universe.keys()) + ["SPY", "QQQ"] + list(ETF_JA.keys())
+        data = batch_download(symbols)
+        if "SPY" not in data:
+            raise RuntimeError("SPY data missing — aborting")
+        log(f"price data for {len(data)} symbols")
         # run()内のファンダ取得が industry_map を直接補完する (中小型のカバレッジ蓄積)
         out = run(data, universe, prev=prev, industry_map=industry_map)
 
