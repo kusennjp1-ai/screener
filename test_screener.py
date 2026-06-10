@@ -551,5 +551,180 @@ class MinerviniFidelity(unittest.TestCase):
             self.assertIn("EXT", row)
 
 
+class Ratings(unittest.TestCase):
+    """MarketSurge流レーティング群の既知正解テスト。"""
+
+    def test_accdis_raw_buying_vs_selling(self):
+        # 毎日高値引け(買い集め) > 毎日安値引け(売り抜け)
+        n = 320
+        idx = pd.bdate_range(end=dt.date.today(), periods=n)
+        close_at_high = pd.DataFrame({
+            "Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 100.9,
+            "Volume": 5e6}, index=idx)
+        close_at_low = pd.DataFrame({
+            "Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 99.1,
+            "Volume": 5e6}, index=idx)
+        acc = sc.accdis_raw(close_at_high)
+        dis = sc.accdis_raw(close_at_low)
+        self.assertGreater(acc, 0.5)
+        self.assertLess(dis, -0.5)
+        self.assertGreater(acc, dis)
+
+    def test_accdis_letter_quintiles(self):
+        self.assertEqual(sc.accdis_letter(0.95), "A")
+        self.assertEqual(sc.accdis_letter(0.65), "B")
+        self.assertEqual(sc.accdis_letter(0.50), "C")
+        self.assertEqual(sc.accdis_letter(0.25), "D")
+        self.assertEqual(sc.accdis_letter(0.05), "E")
+
+    def test_up_down_volume_ratio(self):
+        # 上昇日に大出来高・下落日に小出来高 → 比率 > 1
+        n = 320
+        px, vol = [100.0], [5e6]
+        for i in range(1, n):
+            if i % 2:
+                px.append(px[-1] * 1.01); vol.append(9e6)
+            else:
+                px.append(px[-1] * 0.995); vol.append(3e6)
+        ud = sc.up_down_volume(mkdf(px, vol=vol))
+        self.assertGreater(ud, 1.5)
+        # 逆 → 1未満
+        px2, vol2 = [100.0], [5e6]
+        for i in range(1, n):
+            if i % 2:
+                px2.append(px2[-1] * 1.01); vol2.append(3e6)
+            else:
+                px2.append(px2[-1] * 0.995); vol2.append(9e6)
+        self.assertLess(sc.up_down_volume(mkdf(px2, vol=vol2)), 1.0)
+
+    def test_up_down_volume_no_down_days(self):
+        ud = sc.up_down_volume(uptrend())
+        self.assertEqual(ud, 9.9, "下落日ゼロ(上昇日出来高あり)はキャップ値ちょうど")
+
+    def test_up_down_volume_no_information(self):
+        # 全日同値 (売買停止級) — 最強扱いせずNone
+        px = np.full(320, 50.0)
+        ud = sc.up_down_volume(mkdf(px, high=px, low=px))
+        self.assertIsNone(ud)
+
+    def test_smr_partial_data_not_penalized(self):
+        # 売上成長50%だがmargin/ROE欠損 → 欠損を悪材料扱いしない
+        self.assertIn(sc.smr_rating(0.50, None, None), ("A", "B"))
+
+    def test_handle_requires_5plus_bars(self):
+        # 3本足の小押しはハンドルではない → ただのカップ
+        base = segment(98, 75, 28) + segment(75, 96, 29) + [96, 95.5, 95]
+        lead = list(np.linspace(50, 100, 320 - len(base)))
+        b = sc.classify_base(mkdf(lead + base))
+        self.assertEqual(b["type"], "カップ")
+
+    def test_drifting_decline_not_praised(self):
+        # 1年かけて-28%ジリ下げ → 「保ち合い」はreason好材料に載らない
+        px = list(np.linspace(100, 72, 320))
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(mkdf(px), spy)
+        m.update({"rs": 40, "sec_rs": 50, "score": 30,
+                  "accdis_pct": 0.5, "accdis_letter": "C"})
+        reason = sc.build_reason(m, {})
+        self.assertNotIn("保ち合い形成中", reason)
+
+    def test_eps_rating_monotonic_and_bounded(self):
+        weak = sc.eps_rating(5, 0, 0)
+        mid = sc.eps_rating(30, 20, 15)
+        strong = sc.eps_rating(100, 80, 40)
+        self.assertLess(weak, mid)
+        self.assertLess(mid, strong)
+        for v in (sc.eps_rating(-50, -50, -50), sc.eps_rating(500, 500, 500)):
+            self.assertGreaterEqual(v, 1)
+            self.assertLessEqual(v, 99)
+        self.assertIsNone(sc.eps_rating(None, None, None), "データなしはNone")
+
+    def test_smr_rating(self):
+        self.assertEqual(sc.smr_rating(0.25, 0.20, 0.30), "A")
+        self.assertEqual(sc.smr_rating(0.02, 0.01, 0.02), "E")
+        self.assertEqual(sc.smr_rating(None, None, None), "N")
+        # 中間はB〜Dのどれか
+        self.assertIn(sc.smr_rating(0.12, 0.08, 0.18), ("B", "C", "D"))
+
+    def test_composite_rating_ordering_and_bounds(self):
+        strong = sc.composite_rating(rs=95, eps_r=90, accdis_pct=0.9, sec_rs=85, dist_high=2)
+        weak = sc.composite_rating(rs=30, eps_r=20, accdis_pct=0.2, sec_rs=30, dist_high=20)
+        self.assertGreater(strong, weak)
+        self.assertGreaterEqual(weak, 1)
+        self.assertLessEqual(strong, 99)
+        # EPS欠損時は中立値で計算され、Noneにはならない
+        self.assertIsInstance(sc.composite_rating(95, None, 0.9, 85, 2), int)
+
+    def test_rows_carry_ratings(self):
+        data, universe = sc.synthetic_data()
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        for row in out["main"] + out["tight"]:
+            self.assertIn("Comp", row)
+            self.assertIn("AccDis", row)
+            self.assertIn("UD比", row)
+            self.assertIn(row["AccDis"], ("A", "B", "C", "D", "E"))
+            self.assertGreaterEqual(row["Comp"], 1)
+            self.assertLessEqual(row["Comp"], 99)
+
+
+class BaseDetection(unittest.TestCase):
+    """MarketSurge流ベース自動判定 (フラット/カップ/カップウィズハンドル)。"""
+
+    def _with_base(self, base):
+        """50→100の上昇に続けてベース部分を貼り付けて320日にする。"""
+        lead = list(np.linspace(50, 100, 320 - len(base)))
+        return mkdf(lead + base)
+
+    def test_flat_base(self):
+        # 高値100のあと7週間 (35日) を93〜99で横ばい — 深さ7%
+        base = [96 + (i % 5) * 0.7 for i in range(35)]
+        b = sc.classify_base(self._with_base(base))
+        self.assertEqual(b["type"], "フラットベース")
+        self.assertGreaterEqual(b["weeks"], 5)
+        self.assertLessEqual(b["depth"], 15)
+
+    def test_cup(self):
+        # 100 → 75 (-25%) → 98 のU字、12週
+        base = segment(98, 75, 30) + segment(75, 98, 30)
+        b = sc.classify_base(self._with_base(base))
+        self.assertEqual(b["type"], "カップ")
+        self.assertGreater(b["depth"], 15)
+
+    def test_cup_with_handle(self):
+        # カップ完成後、上部で小さな押し (ハンドル -5%)
+        base = segment(98, 75, 28) + segment(75, 97, 28) + segment(97, 92.5, 5) + [92.5, 93]
+        b = sc.classify_base(self._with_base(base))
+        self.assertEqual(b["type"], "カップウィズハンドル")
+
+    def test_too_short_is_no_base(self):
+        base = segment(98, 92, 6) + segment(92, 97, 6)  # 2.4週しかない
+        b = sc.classify_base(self._with_base(base))
+        self.assertEqual(b["type"], "")
+
+    def test_too_deep_is_no_base(self):
+        base = segment(98, 55, 30) + segment(55, 80, 30)  # -44%は崩壊でありベースではない
+        b = sc.classify_base(self._with_base(base))
+        self.assertEqual(b["type"], "")
+
+    def test_base_stage_counting(self):
+        # 階段状に2回ベース→ブレイクした銘柄 → 現在は第3ステージ近辺
+        px = segment(50, 70, 60) + [70 - (i % 5) * 0.5 for i in range(35)]   # ベース1
+        px += segment(70, 90, 40) + [90 - (i % 5) * 0.6 for i in range(35)]  # ベース2
+        px += segment(90, 110, 40) + [110 - (i % 5) * 0.7 for i in range(40)]  # 現ベース
+        px = px[:320] if len(px) >= 320 else px + [px[-1]] * (320 - len(px))
+        stage = sc.base_stage(mkdf(px)["High"])
+        self.assertGreaterEqual(stage, 2)
+        self.assertLessEqual(stage, 4)
+
+    def test_uptrend_has_chart_arrays(self):
+        data, universe = sc.synthetic_data()
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        for row in out["main"][:3] + out["tight"][:3]:
+            self.assertIn("vols", row)
+            self.assertIn("ma50px", row)
+            self.assertEqual(len(row["vols"]), len(row["px"]))
+            self.assertEqual(len(row["ma50px"]), len(row["px"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

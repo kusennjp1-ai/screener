@@ -531,25 +531,67 @@ function detailPanel(sym, mode) {
 
   const reasonHtml = reason.replace(/\n/g,'<br>').replace('【好材料】','<b style="color:#22c55e">【好材料】</b>').replace('【注意】','<b style="color:#f87171">【注意】</b>');
 
-  // ミニチャート（終値 + ピボット/ストップ線）
+  // レーティングストリップ（Comp / EPS / RS / SMR / A/D / U/D）
+  let strip = '';
+  if (r['Comp'] !== undefined) {
+    const cell = (lbl, val, hot) => `
+      <div style="flex:1;text-align:center;padding:5px 1px;background:var(--surface2);border-radius:6px;${hot?'border:1px solid var(--accent);':''}">
+        <div style="font-size:13px;font-weight:800;color:${hot?'var(--accent)':'var(--text)'};">${val ?? '—'}</div>
+        <div style="font-size:8px;color:var(--text2);">${lbl}</div>
+      </div>`;
+    strip = `<div style="display:flex;gap:4px;margin-bottom:8px;">
+      ${cell('Comp', r['Comp'], r['Comp'] >= 90)}
+      ${cell('EPS', r['EPSレート'], r['EPSレート'] >= 80)}
+      ${cell('RS', r['RS'], r['RS'] >= 90)}
+      ${cell('SMR', r['SMR'] || 'N', 'AB'.includes(r['SMR']))}
+      ${cell('A/D', r['AccDis'], 'AB'.includes(r['AccDis']))}
+      ${cell('U/D', n(r['UD比'],'',1), r['UD比'] >= 1.5)}
+    </div>`;
+  }
+
+  // ベース情報（フラットベース / カップ / カップウィズハンドル + 段階）
+  const baseLine = r['ベース']
+    ? `<div style="margin-bottom:6px;">ベース: <b style="color:var(--accent2)">${r['ベース']}</b>
+        （${r['ベース週数']}週・深さ${n(r['ベース深さ%'],'%')}・<b ${r['ベース段階']>=4?'style="color:#ef4444"':''}>第${r['ベース段階']}ステージ</b>）</div>`
+    : (r['ベース段階'] !== undefined ? `<div style="margin-bottom:6px;">ベース: 形成中ではない（第${r['ベース段階']}ステージ圏）</div>` : '');
+
+  // ミニチャート（終値 + MA50 + 出来高バー + ピボット/ストップ線）
   let chart = '';
   const px = r['px'];
   if (Array.isArray(px) && px.length >= 10) {
     const pvt = mode === 'main' ? r['ピボット'] : null;
     const stp = mode === 'main' ? r['ストップ'] : null;
+    const ma = Array.isArray(r['ma50px']) && r['ma50px'].length === px.length ? r['ma50px'] : null;
+    const maVals = ma ? ma.filter(v => v !== null && v !== undefined) : [];
     let lo = Math.min(...px), hi = Math.max(...px);
+    if (maVals.length) { lo = Math.min(lo, ...maVals); hi = Math.max(hi, ...maVals); }
     if (pvt) hi = Math.max(hi, pvt);
     if (stp) lo = Math.min(lo, stp);
     const pad = (hi - lo) * 0.05 || 1; lo -= pad; hi += pad;
-    const W = 280, H = 64;
+    const W = 280, H = 76;
     const X = i => (i / (px.length - 1) * W).toFixed(1);
-    const Y = v => ((1 - (v - lo) / (hi - lo)) * H).toFixed(1);
+    const Y = v => ((1 - (v - lo) / (hi - lo)) * (H * 0.78)).toFixed(1);
     const pts = px.map((v, i) => `${X(i)},${Y(v)}`).join(' ');
+    const maPts = maVals.length >= 2
+      ? ma.map((v, i) => v == null ? null : `${X(i)},${Y(v)}`).filter(Boolean).join(' ') : '';
+    // 出来高バー（下部22%）
+    let volBars = '';
+    const vols = r['vols'];
+    if (Array.isArray(vols) && vols.length === px.length) {
+      const vmax = Math.max(...vols) || 1;
+      const bw = W / vols.length;
+      volBars = vols.map((v, i) => {
+        const bh = Math.max(0.5, (v / vmax) * (H * 0.20));
+        return `<rect x="${(i*bw).toFixed(1)}" y="${(H-bh).toFixed(1)}" width="${Math.max(bw-0.4,0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill="rgba(148,163,184,0.4)"/>`;
+      }).join('');
+    }
     const hline = (v, color, label) => v ? `
       <line x1="0" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="${color}" stroke-width="1" stroke-dasharray="4,3"/>
       <text x="${W-2}" y="${Math.max(8, Y(v) - 2)}" font-size="7" fill="${color}" text-anchor="end">${label} $${v}</text>` : '';
     chart = `
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:64px;display:block;margin-bottom:8px;background:rgba(0,0,0,0.2);border-radius:6px;">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:76px;display:block;margin-bottom:8px;background:rgba(0,0,0,0.2);border-radius:6px;">
+        ${volBars}
+        ${maPts ? `<polyline points="${maPts}" fill="none" stroke="#f97316" stroke-width="1" stroke-linejoin="round" opacity="0.9"/>` : ''}
         <polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linejoin="round"/>
         ${hline(pvt, '#f59e0b', 'Pvt')}${hline(stp, '#ef4444', 'Stop')}
       </svg>`;
@@ -569,7 +611,9 @@ function detailPanel(sym, mode) {
 
   return `
     <div class="detail">
+      ${strip}
       ${chart}
+      ${baseLine}
       ${buyZone}
       ${extras.length ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">${extras.map(e=>`<span>${e}</span>`).join('')}</div>` : ''}
       ${reasonHtml || '<span style="color:var(--text2)">有望理由なし</span>'}
