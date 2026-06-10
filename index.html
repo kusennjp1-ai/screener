@@ -279,8 +279,12 @@ textarea {
 
   <!-- セクター -->
   <div class="scroll" id="pane-sector" style="display:none">
+    <div class="card" style="margin-top:10px;display:none;" id="group-card">
+      <div class="card-hdr">業種グループRS順位（IBD流 細分化業種）</div>
+      <div id="group-list"></div>
+    </div>
     <div class="card" style="margin-top:10px;">
-      <div class="card-hdr">セクターRS順位（11セクター）</div>
+      <div class="card-hdr">セクターRS順位（11セクターETF）</div>
       <div id="sector-list"></div>
     </div>
     <div class="bottom-space"></div>
@@ -305,6 +309,11 @@ let DATA = null;
 let currentTab = 'home';
 let tightFilter = 'all';
 let selectedSym = null;
+
+// チャート設定 (足種・形式) — localStorageに保存
+let chartCache = {};
+let chartPrefs = { tf: 'w', style: 'candle' };
+try { Object.assign(chartPrefs, JSON.parse(localStorage.getItem('chart_prefs') || '{}')); } catch(e) {}
 
 // ===== COLORS =====
 const statusBg = { 'BUY MODE':'#16a34a','CAUTION':'#f97316','DO NOT BUY':'#dc2626' };
@@ -435,7 +444,7 @@ function stockRow(r, mode='main') {
     ? tag(`E${ed}d`,'#be123c') : '';
 
   const sym = r['シンボル'] || r['sym'] || '?';
-  const sector = r['セクター'] || r['sector'] || '';
+  const sector = r['業種'] || r['セクター'] || r['sector'] || '';
   const secRs = r['セクターRS数値'] || r['セクターRS'] || r['sec_rs'] || 0;
   const rs = r['RS'] || 0;
   const stars = r['★'] || r['stars'] || '';
@@ -525,6 +534,7 @@ function detailPanel(sym, mode) {
   if (eps !== null && eps !== undefined && eps === eps) extras.push(`EPS成長: <b>${n(eps,'%')}</b>`);
   if (rev !== null && rev !== undefined && rev === rev) extras.push(`売上成長: <b>${n(rev,'%')}</b>`);
   if (c33) extras.push(`<b style="color:#7c3aed">✦ Code 33 達成</b>`);
+  if (r['業種順位']) extras.push(`業種順位: <b>#${r['業種順位']}/${r['業種総数']}</b>`);
   if (r['ADR%'] !== undefined && r['ADR%'] !== null) extras.push(`ADR: <b>${n(r['ADR%'],'%')}</b>`);
   if (r['収縮回数']) extras.push(`収縮: <b>${r['収縮回数']}回</b>`);
   if (nxt && nxt !== 'None' && nxt.length > 4) extras.push(`次回決算: <b>${nxt}</b>`);
@@ -612,12 +622,133 @@ function detailPanel(sym, mode) {
   return `
     <div class="detail">
       ${strip}
-      ${chart}
+      <div id="bc-${sym}">${chart}</div>
       ${baseLine}
       ${buyZone}
       ${extras.length ? `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">${extras.map(e=>`<span>${e}</span>`).join('')}</div>` : ''}
       ${reasonHtml || '<span style="color:var(--text2)">有望理由なし</span>'}
       ${links}
+    </div>`;
+}
+
+// ===== BIG CHART =====
+function setChartPref(k, v, sym) {
+  chartPrefs[k] = v;
+  try { localStorage.setItem('chart_prefs', JSON.stringify(chartPrefs)); } catch(e) {}
+  renderBigChart(sym);
+}
+
+function loadChart(sym) {
+  if (chartCache[sym]) { renderBigChart(sym); return; }
+  fetch(`data/charts/${encodeURIComponent(sym)}.json?v=${Date.now()}`, { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(j => { chartCache[sym] = j; renderBigChart(sym); })
+    .catch(() => {});  // 取得失敗時はフォールバックのスパークラインを維持
+}
+
+function renderBigChart(sym) {
+  const box = document.getElementById('bc-' + sym);
+  const cj = chartCache[sym];
+  if (!box || !cj) return;
+  const tf = chartPrefs.tf === 'd' ? 'd' : 'w';
+  const style = chartPrefs.style === 'bar' ? 'bar' : 'candle';
+  const sub = cj[tf];
+  if (!sub || !Array.isArray(sub.c) || sub.c.length < 2) return;
+  const n_ = sub.c.length;
+
+  // レイアウト: 価格62% / 出来高16% / RSライン12%
+  const W = 320, H = 170;
+  const priceH = H * 0.60, volTop = H * 0.64, volH = H * 0.15, rsTop = H * 0.84, rsH = H * 0.13;
+
+  let lo = Math.min(...sub.l), hi = Math.max(...sub.h);
+  const maVals = (sub.ma || []).filter(v => v != null);
+  if (maVals.length) { lo = Math.min(lo, ...maVals); hi = Math.max(hi, ...maVals); }
+  const pvt = cj.pivot || null, stp = cj.stop || null;
+  if (pvt) hi = Math.max(hi, pvt);
+  if (stp) lo = Math.min(lo, stp);
+  const pad = (hi - lo) * 0.04 || 1; lo -= pad; hi += pad;
+
+  const bw = W / n_;
+  const half = Math.max(0.6, bw * 0.32);
+  const X = i => (i * bw + bw / 2);
+  const Y = v => ((1 - (v - lo) / (hi - lo)) * priceH);
+  const f = x => Number(x).toFixed(1);
+
+  let bars = '';
+  for (let i = 0; i < n_; i++) {
+    const up = sub.c[i] >= sub.o[i];
+    const col = up ? '#22c55e' : '#ef4444';
+    const x = X(i);
+    if (style === 'bar') {
+      // IBD風HLCバー: 高安の縦線 + 始値の左ティック + 終値の右ティック
+      bars += `<line x1="${f(x)}" y1="${f(Y(sub.h[i]))}" x2="${f(x)}" y2="${f(Y(sub.l[i]))}" stroke="${col}" stroke-width="1"/>`
+            + `<line x1="${f(x-half)}" y1="${f(Y(sub.o[i]))}" x2="${f(x)}" y2="${f(Y(sub.o[i]))}" stroke="${col}" stroke-width="1"/>`
+            + `<line x1="${f(x)}" y1="${f(Y(sub.c[i]))}" x2="${f(x+half)}" y2="${f(Y(sub.c[i]))}" stroke="${col}" stroke-width="1"/>`;
+    } else {
+      const top = Y(Math.max(sub.o[i], sub.c[i])), bot = Y(Math.min(sub.o[i], sub.c[i]));
+      bars += `<line x1="${f(x)}" y1="${f(Y(sub.h[i]))}" x2="${f(x)}" y2="${f(Y(sub.l[i]))}" stroke="${col}" stroke-width="0.8"/>`
+            + `<rect x="${f(x-half)}" y="${f(top)}" width="${f(half*2)}" height="${f(Math.max(0.8, bot-top))}" fill="${col}"/>`;
+    }
+  }
+
+  // MA線 (日足=MA50 / 週足=MA10週)
+  let maLine = '';
+  if (maVals.length >= 2) {
+    const pts = sub.ma.map((v, i) => v == null ? null : `${f(X(i))},${f(Y(v))}`).filter(Boolean).join(' ');
+    maLine = `<polyline points="${pts}" fill="none" stroke="#f97316" stroke-width="1.1" opacity="0.9"/>`;
+  }
+
+  // 出来高バー (色は陽線/陰線連動)
+  let volBars = '';
+  const vmax = Math.max(...sub.v) || 1;
+  for (let i = 0; i < n_; i++) {
+    const bh = Math.max(0.5, (sub.v[i] / vmax) * volH);
+    const col = sub.c[i] >= sub.o[i] ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)';
+    volBars += `<rect x="${f(X(i)-half)}" y="${f(volTop + volH - bh)}" width="${f(half*2)}" height="${f(bh)}" fill="${col}"/>`;
+  }
+
+  // RSライン (対SPY相対線 — 日足のみ。上向き=市場より強い)
+  let rsLine = '';
+  if (tf === 'd' && Array.isArray(cj.rs) && cj.rs.length === n_) {
+    const rv = cj.rs.filter(v => v != null);
+    if (rv.length >= 2) {
+      const rlo = Math.min(...rv), rhi = Math.max(...rv);
+      const RY = v => rsTop + (1 - (v - rlo) / ((rhi - rlo) || 1)) * rsH;
+      const pts = cj.rs.map((v, i) => v == null ? null : `${f(X(i))},${f(RY(v))}`).filter(Boolean).join(' ');
+      rsLine = `<polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="1"/>`
+             + `<text x="2" y="${f(rsTop + 7)}" font-size="7" fill="#3b82f6">RSライン</text>`;
+    }
+  }
+
+  const hline = (v, color, label) => v ? `
+    <line x1="0" x2="${W}" y1="${f(Y(v))}" y2="${f(Y(v))}" stroke="${color}" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="${W-2}" y="${f(Math.max(8, Y(v) - 2))}" font-size="7" fill="${color}" text-anchor="end">${label} $${v}</text>` : '';
+
+  const axis = `
+    <text x="2" y="9" font-size="8" fill="var(--text2)">$${hi.toFixed(hi >= 100 ? 0 : 2)}</text>
+    <text x="2" y="${f(priceH - 2)}" font-size="8" fill="var(--text2)">$${lo.toFixed(lo >= 100 ? 0 : 2)}</text>
+    <text x="2" y="${f(H - 2)}" font-size="7" fill="var(--text2)">${sub.t[0] || ''}</text>
+    <text x="${W-2}" y="${f(H - 2)}" font-size="7" fill="var(--text2)" text-anchor="end">${sub.t[n_-1] || ''}</text>`;
+
+  const btn = (label, active, on) =>
+    `<button onclick="${on}" style="flex:1;padding:6px 4px;border-radius:6px;border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'rgba(245,158,11,0.15)':'var(--surface2)'};color:${active?'var(--accent)':'var(--text2)'};font-size:11px;font-weight:700;cursor:pointer;">${label}</button>`;
+  const controls = `
+    <div style="display:flex;gap:5px;margin-bottom:6px;">
+      ${btn('日足', tf === 'd', `setChartPref('tf','d','${sym}')`)}
+      ${btn('週足', tf === 'w', `setChartPref('tf','w','${sym}')`)}
+      <div style="width:6px;"></div>
+      ${btn('ローソク', style === 'candle', `setChartPref('style','candle','${sym}')`)}
+      ${btn('バー', style === 'bar', `setChartPref('style','bar','${sym}')`)}
+    </div>`;
+
+  box.innerHTML = controls + `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;margin-bottom:6px;background:rgba(0,0,0,0.25);border-radius:8px;">
+      ${volBars}${bars}${maLine}${rsLine}
+      ${hline(pvt, '#f59e0b', 'Pvt')}${hline(stp, '#ef4444', 'Stop')}
+      ${axis}
+    </svg>
+    <div style="font-size:9px;color:var(--text2);margin-bottom:6px;">
+      ${tf === 'w' ? '週足52週・橙=MA10週' : '日足90日・橙=MA50・青=RSライン'}｜緑=陽線/赤=陰線
     </div>`;
 }
 
@@ -627,6 +758,7 @@ function toggleSym(sym, mode) {
   if (mode === 'main')  renderMain();
   if (mode === 'tight') renderTight();
   if (mode === 'home') { renderHomeMain(); renderHomeTight(); }
+  if (selectedSym) loadChart(selectedSym);
 }
 
 // ===== RENDER LISTS =====
@@ -688,7 +820,26 @@ function renderHomeTight() {
 }
 
 function renderSectors() {
-  if (!DATA || !DATA.sectors) return;
+  if (!DATA) return;
+  // IBD流 業種グループ (細分化145業種) — 旧データでは非表示
+  const groups = DATA.groups || [];
+  const gcard = document.getElementById('group-card');
+  if (gcard) gcard.style.display = groups.length ? 'block' : 'none';
+  if (groups.length) {
+    document.getElementById('group-list').innerHTML = groups.map(g => {
+      const col = secRsColor(g.rs);
+      return `
+        <div class="sec-row">
+          <div class="sec-rank" style="min-width:30px;">#${g.rank}</div>
+          <div class="sec-name" style="color:var(--text);font-weight:600;">${g.name}</div>
+          <div style="font-size:9px;color:var(--text2);min-width:44px;text-align:right;">${g.count}銘柄 ${g.top||''}</div>
+          <span class="badge" style="background:${col}20;color:${col};border:1px solid ${col}50;font-size:11px;font-weight:800;min-width:42px;">
+            RS${g.rs}
+          </span>
+        </div>`;
+    }).join('');
+  }
+  if (!DATA.sectors) return;
   const el = document.getElementById('sector-list');
   el.innerHTML = DATA.sectors.map(s => {
     const rs = s.rs || s['RS'] || 0;

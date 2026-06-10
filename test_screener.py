@@ -11,6 +11,7 @@ GitHub Actions ではデータ生成前のゲートとして実行される。
 import datetime as dt
 import json
 import math
+import sys
 import unittest
 
 import numpy as np
@@ -724,6 +725,129 @@ class BaseDetection(unittest.TestCase):
             self.assertIn("ma50px", row)
             self.assertEqual(len(row["vols"]), len(row["px"]))
             self.assertEqual(len(row["ma50px"]), len(row["px"]))
+
+
+class IndustryGroups(unittest.TestCase):
+    """IBD流145業種グループRS。"""
+
+    def _metrics(self, spec):
+        # spec: {sym: (wret, rs)}
+        return {s: {"wret": w, "rs": r} for s, (w, r) in spec.items()}
+
+    def test_group_rs_ranking(self):
+        metrics = self._metrics({
+            "A1": (2.0, 95), "A2": (1.8, 92), "A3": (1.9, 93),   # 強い業種
+            "B1": (0.1, 40), "B2": (0.2, 45), "B3": (0.0, 35),   # 弱い業種
+            "C1": (1.0, 70),                                       # 2銘柄 → 対象外
+            "C2": (1.0, 70),
+        })
+        imap = {"A1": "semiconductors", "A2": "semiconductors", "A3": "semiconductors",
+                "B1": "banks—regional", "B2": "banks—regional", "B3": "banks—regional",
+                "C1": "gold", "C2": "gold"}
+        groups, sym_info = sc.compute_group_rs(metrics, imap)
+        self.assertEqual(len(groups), 2, "3銘柄未満の業種は対象外")
+        self.assertEqual(groups[0]["key"], "semiconductors")
+        self.assertEqual(groups[0]["rank"], 1)
+        self.assertGreater(groups[0]["rs"], groups[1]["rs"])
+        self.assertEqual(groups[0]["top"], "A1", "代表銘柄はRS最高の銘柄")
+        self.assertIn("A1", sym_info)
+        self.assertNotIn("C1", sym_info)
+
+    def test_group_rs_empty(self):
+        groups, sym_info = sc.compute_group_rs(self._metrics({"X": (1.0, 50)}), {})
+        self.assertEqual(groups, [])
+        self.assertEqual(sym_info, {})
+
+    def test_industry_map_merge(self):
+        merged = sc.merge_industry_maps(
+            {"AAPL": "consumer-electronics", "OLD": "gold"},
+            {"AAPL": "computer-hardware", "NVDA": "semiconductors"})
+        self.assertEqual(merged["AAPL"], "computer-hardware", "新しい取得が優先")
+        self.assertEqual(merged["OLD"], "gold", "前回分は保持")
+        self.assertEqual(merged["NVDA"], "semiconductors")
+
+    def test_industry_ja_full_coverage(self):
+        from yfinance.const import SECTOR_INDUSTY_MAPPING_LC
+        for sec, inds in SECTOR_INDUSTY_MAPPING_LC.items():
+            for key in inds:
+                name = sc.industry_ja(key)
+                self.assertTrue(name and isinstance(name, str), f"no name for {key}")
+
+    def test_run_applies_group_rs_to_rows(self):
+        data, universe = sc.synthetic_data()
+        # 候補入りしやすい強い銘柄に業種を付与
+        imap = {f"TST{i:03d}": "semiconductors" for i in range(0, 20)}
+        imap.update({f"TST{i:03d}": "gold" for i in range(20, 40)})
+        imap["VCPX"] = "semiconductors"
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True, industry_map=imap))
+        self.assertIn("groups", out)
+        self.assertGreaterEqual(len(out["groups"]), 2)
+        g = out["groups"][0]
+        for k in ("rank", "key", "name", "rs", "count", "top", "total"):
+            self.assertIn(k, g)
+        vrow = next(r for r in out["main"] + out["tight"] if r["シンボル"] == "VCPX")
+        self.assertEqual(vrow["業種"], sc.industry_ja("semiconductors"))
+        self.assertIsNotNone(vrow["業種順位"])
+
+
+class ChartPayload(unittest.TestCase):
+    """本格チャート用の個別JSON (日足/週足/RSライン)。"""
+
+    def test_weekly_resample_correct(self):
+        # 月〜金きっかり2週間: 週足OHLCVが手計算と一致する
+        idx = pd.bdate_range("2026-05-25", periods=10)  # 月曜始まり2週
+        o = list(range(10, 20)); h = [x + 2 for x in o]
+        l = [x - 2 for x in o]; c = [x + 1 for x in o]
+        v = [1e6] * 10
+        df = pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c, "Volume": v},
+                          index=idx, dtype=float)
+        spy = pd.Series(100.0, index=idx)
+        p = sc.build_chart_payload(df, spy_close=spy)
+        w = p["w"]
+        self.assertEqual(len(w["c"]), 2)
+        self.assertEqual(w["o"][0], 10.0)   # 週1の始値 = 月曜Open
+        self.assertEqual(w["h"][0], 16.0)   # 週1の高値 = max(High[0:5])
+        self.assertEqual(w["l"][0], 8.0)    # 週1の安値
+        self.assertEqual(w["c"][0], 15.0)   # 週1の終値 = 金曜Close
+        self.assertEqual(w["v"][0], 5.0)    # 出来高合計 5e6 → 5 (百万株)
+        self.assertEqual(w["c"][1], 20.0)
+
+    def test_chart_payload_schema(self):
+        data, universe = sc.synthetic_data()
+        spy = data["SPY"]["Close"]
+        p = sc.build_chart_payload(data["VCPX"], spy_close=spy, pivot=130.0, stop=124.0)
+        for tf in ("d", "w"):
+            sub = p[tf]
+            n = len(sub["c"])
+            for k in ("t", "o", "h", "l", "c", "v"):
+                self.assertEqual(len(sub[k]), n, f"{tf}.{k} length")
+            self.assertGreater(n, 10)
+        self.assertEqual(len(p["d"]["ma"]), len(p["d"]["c"]))
+        self.assertEqual(len(p["w"]["ma"]), len(p["w"]["c"]))
+        self.assertEqual(len(p["rs"]), len(p["d"]["c"]))
+        self.assertEqual(p["pivot"], 130.0)
+        # NaNはJSONに残さない (None化される)
+        s = json.dumps(sc.jclean(p))
+        self.assertNotIn("NaN", s)
+
+    def test_chart_short_history(self):
+        spy = flat_spy(130)["Close"]
+        p = sc.build_chart_payload(uptrend(125), spy_close=spy)
+        self.assertGreater(len(p["d"]["c"]), 10)
+        self.assertGreater(len(p["w"]["c"]), 5)
+
+    def test_chart_files_written_by_selftest(self):
+        import subprocess, glob, os
+        subprocess.run([sys.executable, "screener.py", "--selftest"],
+                       cwd=os.path.dirname(os.path.abspath(sc.__file__)), check=True,
+                       capture_output=True)
+        files = glob.glob(os.path.join(os.path.dirname(os.path.abspath(sc.__file__)),
+                                       "data", "charts", "*.json"))
+        self.assertGreater(len(files), 5, "selftestで候補銘柄のチャートJSONが生成される")
+        with open(files[0]) as f:
+            p = json.load(f)
+        self.assertIn("d", p)
+        self.assertIn("w", p)
 
 
 if __name__ == "__main__":
