@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: pip install yfinance pandas numpy lxml requests
 
+      - name: Run verifier test suite
+        run: python test_screener.py
+
       - name: Fetch previous data as fallback
         run: |
           mkdir -p data

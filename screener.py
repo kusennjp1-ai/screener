@@ -156,6 +156,40 @@ def weighted_return(close):
     return 2 * ret(63) + ret(126) + ret(189) + ret(252)
 
 
+def contraction_depths(h, l, lookback=130, min_depth=0.03):
+    """ベース内の押し(収縮)の深さを時系列順に返す。VCP判定の素材。
+
+    高値を更新するたびに「直前の高値→その後の安値」の下落率を1収縮として記録する。
+    """
+    hh = h.iloc[-lookback:].to_numpy(dtype=float)
+    ll = l.iloc[-lookback:].to_numpy(dtype=float)
+    depths = []
+    peak, trough = hh[0], ll[0]
+    for i in range(1, len(hh)):
+        if hh[i] >= peak:
+            d = (peak - trough) / peak if peak else 0.0
+            if d >= min_depth:
+                depths.append(d)
+            peak, trough = hh[i], ll[i]
+        else:
+            trough = min(trough, ll[i])
+    d = (peak - trough) / peak if peak else 0.0
+    if d >= min_depth:
+        depths.append(d)
+    return depths
+
+
+def detect_vcp(depths):
+    """Minervini流VCP: 収縮が2回以上、後の収縮ほど浅く(前の8割以下)、
+    直近の収縮が12%以内なら成立とみなす近似。"""
+    sig = [d for d in depths if d >= 0.04]
+    if len(sig) < 2:
+        return False
+    if any(sig[i + 1] > sig[i] * 0.8 for i in range(len(sig) - 1)):
+        return False
+    return sig[-1] <= 0.12
+
+
 def compute_metrics(df, spy_close):
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
     close = float(c.iloc[-1])
@@ -169,12 +203,14 @@ def compute_metrics(df, spy_close):
     lo52 = float(l.iloc[-lookback:].min())
 
     # Minervini トレンドテンプレート (RS条件は百分位確定後に追加)
+    # 株価 vs MA は >= で判定 (高値圏で完全に横ばいだと株価とMAが一致し、
+    # 厳密な > では本物のStage 2を境界値で弾いてしまう)
     tt = (
-        not math.isnan(ma200) and close > ma150 and close > ma200
+        not math.isnan(ma200) and close >= ma150 and close >= ma200
         and ma150 > ma200
         and (not math.isnan(ma200_22) and ma200 > ma200_22)
-        and ma50 > ma150 > ma200
-        and close > ma50
+        and ma50 >= ma150 > ma200
+        and close >= ma50
         and close >= lo52 * 1.30
         and close >= hi52 * 0.75
     )
@@ -204,6 +240,13 @@ def compute_metrics(df, spy_close):
 
     depth60 = float((h.iloc[-60:].max() - l.iloc[-60:].min()) / h.iloc[-60:].max() * 100)
 
+    # VCP (ボラティリティ収縮パターン)
+    depths = contraction_depths(h, l)
+    vcp = detect_vcp(depths)
+
+    # ADR% (直近20日の日中変動率平均) — 値動きの質の目安
+    adr = float(((h.iloc[-20:] / l.iloc[-20:]) - 1).mean() * 100)
+
     return {
         "close": close, "ma200": ma200, "tt": tt,
         "above_ma200": not math.isnan(ma200) and close > ma200,
@@ -212,13 +255,14 @@ def compute_metrics(df, spy_close):
         "rs_line_high": rs_line_high,
         "pivot": pivot, "stop": stop, "risk": risk, "rr": rr,
         "depth60": depth60,
+        "vcp": vcp, "n_contractions": len(depths), "adr": adr,
         "wret": weighted_return(c),
     }
 
 
 # ---------------------------------------------------------------- env
 
-def market_env(spy_df, metrics, last_date):
+def market_env(spy_df, metrics, last_date, prev=None):
     c, v = spy_df["Close"], spy_df["Volume"]
     spy = float(c.iloc[-1])
     ma50 = float(c.rolling(50).mean().iloc[-1])
@@ -262,7 +306,15 @@ def market_env(spy_df, metrics, last_date):
     if dist_days >= 6 and status == "BUY MODE":
         status = "CAUTION"
 
+    # ENVスコア履歴 (前回データから引き継いで蓄積 — 環境の変化を可視化する)
+    today_str = f"{last_date:%Y-%m-%d}"
+    hist = list((prev or {}).get("env_history") or [])
+    hist = [h for h in hist if h.get("d") != today_str]
+    hist.append({"d": today_str, "s": score, "st": status})
+    hist = hist[-60:]
+
     return {
+        "env_history": hist,
         "status": status,
         "date": f"{last_date:%Y-%m-%d} 米国市場終値ベース（毎営業日 自動更新）",
         "env_score": score,
@@ -359,6 +411,8 @@ def build_reason(m, fund):
         good.append(f"52週高値まで{m['dist_high']:.1f}%と目前")
     if m["rs_line_high"]:
         good.append("RSライン52日新高値（株価に先行する強気サイン）")
+    if m["vcp"]:
+        good.append(f"VCP形成中（{m['n_contractions']}段階のボラ収縮）")
     if m["vdu"]:
         good.append("出来高枯渇（VDU）でブレイク前の静けさ")
     if m["bkt"]:
@@ -402,6 +456,9 @@ def make_row(sym, m, fund, mode):
         "RSライン52日": "★" if m["rs_line_high"] else "",
         "VDU": "YES" if m["vdu"] else "",
         "BKT出来高": "✓" if m["bkt"] else "",
+        "VCP": "✓" if m["vcp"] else "",
+        "収縮回数": m["n_contractions"],
+        "ADR%": round(m["adr"], 1),
         "Code33": fund.get("Code33", ""),
         "EPS成長%": fund.get("EPS成長%"),
         "売上成長%": fund.get("売上成長%"),
@@ -426,8 +483,9 @@ def make_row(sym, m, fund, mode):
 
 # ---------------------------------------------------------------- main pipeline
 
-def run(data, universe, skip_fundamentals=False):
-    """data: {symbol: OHLCV DataFrame} — SPY とセクターETF を含むこと。"""
+def run(data, universe, skip_fundamentals=False, prev=None):
+    """data: {symbol: OHLCV DataFrame} — SPY とセクターETF を含むこと。
+    prev: 前回出力JSON (env_history引き継ぎ用、なければNone)。"""
     spy_df = data["SPY"]
     spy_close = spy_df["Close"]
     last_date = spy_df.index[-1]
@@ -473,7 +531,8 @@ def run(data, universe, skip_fundamentals=False):
     for m in metrics.values():
         m["score"] = total_score(m)
 
-    env = market_env(spy_df, metrics, last_date)
+    env = market_env(spy_df, metrics, last_date, prev=prev)
+    env_history = env.pop("env_history")
 
     sectors = [
         {"rank": i + 1, "etf": etf, "sector": ETF_JA[etf], "rs": rs}
@@ -504,6 +563,7 @@ def run(data, universe, skip_fundamentals=False):
 
     out = {
         "env": env,
+        "env_history": env_history,
         "main": [make_row(s, metrics[s], funds.get(s, {}), "main") for s in main_syms],
         "tight": [make_row(s, metrics[s], funds.get(s, {}), "tight") for s in tight_syms],
         "sectors": sectors,
@@ -532,9 +592,20 @@ def main():
     ap.add_argument("--max-tickers", type=int, default=int(os.environ.get("MAX_TICKERS", "0")))
     args = ap.parse_args()
 
+    # 前回出力 (ワークフローが公開サイトからダウンロードしてくれる) — ENV履歴の引き継ぎ
+    prev = None
+    prev_path = os.path.join(os.path.dirname(OUT_PATH), "screener_prev.json")
+    if os.path.exists(prev_path):
+        try:
+            with open(prev_path, encoding="utf-8") as f:
+                prev = json.load(f)
+            log(f"loaded previous data ({len(prev.get('env_history') or [])} history entries)")
+        except Exception as e:
+            log("failed to load previous data:", e)
+
     if args.selftest:
         data, universe = synthetic_data()
-        out = run(data, universe, skip_fundamentals=True)
+        out = run(data, universe, skip_fundamentals=True, prev=prev)
     else:
         universe = get_universe()
         if args.max_tickers:
@@ -544,7 +615,7 @@ def main():
         if "SPY" not in data:
             raise RuntimeError("SPY data missing — aborting")
         log(f"price data for {len(data)} symbols")
-        out = run(data, universe)
+        out = run(data, universe, prev=prev)
 
     out = jclean(out)
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
@@ -584,6 +655,21 @@ def synthetic_data(n=60, days=320, seed=42):
         drift = rng.uniform(-0.001, 0.0035)
         data[sym] = walk(drift, tight_tail=(i % 3 == 0))
         universe[sym] = sectors_en[i % len(sectors_en)]
+
+    # 教科書通りのVCP形状を1銘柄入れて、検出〜表示のパイプライン全体を検証できるようにする
+    seg = lambda a, b, m: list(np.linspace(a, b, m))
+    px = (seg(50, 130, days - 120) + seg(130, 106, 25) + seg(106, 131, 25)
+          + seg(131, 119, 20) + seg(119, 132, 20) + seg(132, 126, 15)
+          + seg(126, 131.5, 15))
+    # 全体に上昇ドリフトを掛けてRS上位の主導株プロファイルにする
+    px = np.array(px[:days]) * np.exp(0.002 * np.arange(days))
+    vol = np.full(days, 5e6)
+    vol[-5:] = 2.5e6  # VDU
+    data["VCPX"] = pd.DataFrame({
+        "Open": px, "High": px * 1.004, "Low": px * 0.996,
+        "Close": px, "Volume": vol,
+    }, index=idx)
+    universe["VCPX"] = "Information Technology"
     return data, universe
 
 

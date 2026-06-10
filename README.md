@@ -14,7 +14,9 @@ GitHub Actions (毎営業日 22:15 UTC = 日本時間 朝7:15)
        ├─ 株価取得: yfinance (約15ヶ月日足)
        ├─ RSレーティング算出 (IBD流 加重リターン百分位 1-99)
        ├─ トレンドテンプレート8条件 (Stage 2 判定)
+       ├─ VCP検出 (収縮が浅くなっていくボラティリティ収縮パターン)
        ├─ 市場環境スコア (SPY MA50/200・分配日・ブレッドス → BUY/CAUTION/NO BUY)
+       │    └─ スコアは60日分蓄積され、アプリにトレンド表示
        ├─ セクターRS (SPDR 11セクターETF)
        └─ data/screener_latest.json 出力
   └─ GitHub Pages へデプロイ (index.html + JSON)
@@ -42,10 +44,15 @@ GitHub Actions (毎営業日 22:15 UTC = 日本時間 朝7:15)
 
 GitHub の Actions タブ → 「Daily Screener」 → Run workflow。
 
-ローカル検証 (ネットワーク不要):
+## 検証 (Verifier)
+
+`test_screener.py` は Minervini のルールから第一原理で構築した既知正解ケースで
+スクリーナーを採点する独立検証スイート。CI で毎回データ生成前のゲートとして実行され、
+失敗した場合はその日のデータ更新を中止する (前日のデータが維持される)。
 
 ```bash
-python screener.py --selftest
+python test_screener.py        # 検証スイート (ネットワーク不要)
+python screener.py --selftest  # 合成データでパイプライン全体を実行
 ```
 
 ## 免責
