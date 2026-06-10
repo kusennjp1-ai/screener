@@ -1,0 +1,38 @@
+name: Backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: '検証期間 (年)'
+        required: false
+        default: '2'
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas numpy lxml requests
+
+      - name: Run verifier test suite
+        run: python test_screener.py
+
+      - name: Run backtest
+        run: python backtest.py --years "${{ github.event.inputs.years || '2' }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backtest-result
+          path: data/backtest.json
+          retention-days: 30
