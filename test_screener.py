@@ -349,5 +349,183 @@ class Adversarial(unittest.TestCase):
             self.assertIsInstance(row["有望理由"], str)
 
 
+class UniverseParser(unittest.TestCase):
+    """NASDAQ Trader シンボルディレクトリのパース — Minervini級フルユニバースの入口。"""
+
+    NASDAQ_SAMPLE = """Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
+AAPL|Apple Inc. - Common Stock|Q|N|N|100|N|N
+ZWZZT|NASDAQ TEST STOCK|Q|Y|N|100|N|N
+TQQQ|ProShares UltraPro QQQ|G|N|N|100|Y|N
+ABCDW|ABC Corp - Warrant|Q|N|N|100|N|N
+ABCDR|ABC Corp - Rights|Q|N|N|100|N|N
+ABCDU|ABC Corp - Units|Q|N|N|100|N|N
+GFND|Global Growth Fund Inc.|Q|N|N|100|N|N
+NVDA|NVIDIA Corporation - Common Stock|Q|N|N|100|N|N
+File Creation Time: 0610202622:01|||||||"""
+
+    OTHER_SAMPLE = """ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
+BRK.B|Berkshire Hathaway Inc. Class B Common Stock|N|BRK B|N|100|N|BRK=B
+XYZ$A|XYZ Corp 5.25% Preferred Series A|N|XYZpA|N|100|N|XYZ-A
+SPYX|SPDR Something ETF|P|SPYX|Y|100|N|SPYX
+GM|General Motors Company Common Stock|N|GM|N|100|N|GM
+DPN|Depositary Shares Each Representing|N|DPN|N|100|N|DPN
+File Creation Time: 0610202622:01|||||||"""
+
+    def test_nasdaq_file(self):
+        syms = sc.parse_listed_file(self.NASDAQ_SAMPLE, "Symbol")
+        self.assertIn("AAPL", syms)
+        self.assertIn("NVDA", syms)
+        self.assertNotIn("ZWZZT", syms, "テスト銘柄は除外")
+        self.assertNotIn("TQQQ", syms, "ETFは除外")
+        self.assertNotIn("ABCDW", syms, "ワラントは除外")
+        self.assertNotIn("ABCDR", syms, "ライツは除外")
+        self.assertNotIn("ABCDU", syms, "ユニットは除外")
+        self.assertNotIn("GFND", syms, "ファンドは除外")
+
+    def test_other_file(self):
+        syms = sc.parse_listed_file(self.OTHER_SAMPLE, "ACT Symbol")
+        self.assertIn("BRK-B", syms, "クラス株はYahoo形式(BRK-B)に変換")
+        self.assertIn("GM", syms)
+        self.assertNotIn("XYZ$A", syms, "優先株シンボルは除外")
+        self.assertNotIn("SPYX", syms, "ETFは除外")
+        self.assertNotIn("DPN", syms, "預託証券は除外")
+
+    def test_yahoo_sector_mapping(self):
+        # yfinanceが返すセクター名(GICSと微妙に違う)もマップできる
+        for ya in ("Technology", "Healthcare", "Financial Services",
+                   "Consumer Cyclical", "Consumer Defensive", "Basic Materials"):
+            etf, ja = sc.SECTOR_MAP[ya]
+            self.assertTrue(etf.startswith("XL"))
+            self.assertTrue(ja)
+
+
+class IBDEnvironment(unittest.TestCase):
+    """IBD流: 分配日の5%ルール失効・フォロースルー日・Market Pulse。"""
+
+    def test_distribution_day_expires_after_5pct_rally(self):
+        # 分配日(-0.5%・出来高増)のあと株価が5%以上上昇 → カウントから失効
+        n = 320
+        px = [500.0] * (n - 20)
+        vol = [5e6] * n
+        px.append(px[-1] * 0.995)          # 分配日
+        vol[len(px) - 1] = 8e6
+        for _ in range(19):                # その後 +6% 上昇
+            px.append(px[-1] * 1.003)
+        dd = sc.distribution_days(mkdf(px[:n], vol=vol))
+        self.assertEqual(dd, 0, "5%上昇で分配日は失効すべき")
+
+    def test_distribution_day_counted_without_rally(self):
+        n = 320
+        px = [500.0] * n
+        vol = [5e6] * n
+        i = n - 10
+        px[i] = px[i - 1] * 0.994          # 分配日、その後横ばい
+        for j in range(i + 1, n):
+            px[j] = px[i]
+        vol[i] = 8e6
+        dd = sc.distribution_days(mkdf(px, vol=vol))
+        self.assertEqual(dd, 1)
+
+    def _ftd_series(self, undercut=False, no_ftd=False):
+        """上昇 → -10%調整 → 底 → 4日目以降に+1.6%出来高増(FTD)のシナリオ。"""
+        px = list(np.linspace(400, 500, 280))           # 上昇
+        px += list(np.linspace(500, 450, 12))           # -10% 調整
+        rally = [450 * (1 + 0.002 * k) for k in range(1, 5)]   # 弱い立ち直り day1-4
+        px += rally
+        vol = [5e6] * len(px)
+        if not no_ftd:
+            px.append(px[-1] * 1.016)                   # day5: +1.6% = FTD
+            vol.append(8e6)
+        for _ in range(320 - len(px) - (6 if undercut else 0)):
+            px.append(px[-1] * 1.001)
+            vol.append(5e6)
+        if undercut:
+            for _ in range(6):                          # FTD後に底割れ
+                px.append(440.0)
+                vol.append(5e6)
+        return mkdf(px[:320], vol=vol[:320])
+
+    def test_ftd_confirmed(self):
+        state, since = sc.detect_ftd(self._ftd_series())
+        self.assertEqual(state, "confirmed")
+        self.assertIsNotNone(since)
+
+    def test_ftd_undercut_invalidates(self):
+        state, _ = sc.detect_ftd(self._ftd_series(undercut=True))
+        self.assertEqual(state, "correction")
+
+    def test_no_ftd_is_rally_attempt(self):
+        # 底から戻しているがFTD条件の日がない
+        px = list(np.linspace(400, 500, 290)) + list(np.linspace(500, 440, 15))
+        px += [440 * (1 + 0.003 * k) for k in range(1, 16)]   # 弱い戻り
+        state, _ = sc.detect_ftd(mkdf(px[:320]))
+        self.assertEqual(state, "rally_attempt")
+
+    def test_plain_uptrend(self):
+        state, _ = sc.detect_ftd(mkdf(np.geomspace(400, 500, 320)))
+        self.assertEqual(state, "uptrend")
+
+    def test_crash_is_correction(self):
+        px = list(np.linspace(400, 500, 290)) + list(np.linspace(500, 420, 30))
+        state, _ = sc.detect_ftd(mkdf(px[:320]))
+        self.assertEqual(state, "correction")
+
+    def test_market_pulse_confirmed_uptrend(self):
+        status, pulse = sc.market_pulse(90, True, 0, "uptrend", "uptrend", None)
+        self.assertEqual(status, "BUY MODE")
+        self.assertIn("確認済み上昇トレンド", pulse)
+
+    def test_market_pulse_under_pressure(self):
+        status, pulse = sc.market_pulse(80, True, 4, "uptrend", "uptrend", None)
+        self.assertEqual(status, "CAUTION")
+        self.assertIn("圧力下", pulse)
+
+    def test_market_pulse_correction(self):
+        status, pulse = sc.market_pulse(30, False, 6, "correction", "correction", None)
+        self.assertEqual(status, "DO NOT BUY")
+        self.assertIn("調整局面", pulse)
+
+    def test_market_pulse_ftd_overrides_low_ma(self):
+        # FTD確認直後はSPYがまだMA200の下でもCAUTION以上(調整局面とはしない)
+        status, pulse = sc.market_pulse(55, False, 2, "confirmed", "rally_attempt", 3)
+        self.assertNotEqual(status, "DO NOT BUY")
+
+    def test_env_includes_ibd_fields(self):
+        data, universe = sc.synthetic_data(n=20)
+        out = sc.run(data, universe, skip_fundamentals=True)
+        e = out["env"]
+        for key in ("pulse", "dist_spy", "dist_qqq", "qqq", "qqq_ma200_pct", "nh", "nl"):
+            self.assertIn(key, e, f"env missing {key}")
+
+
+class MinerviniFidelity(unittest.TestCase):
+    def test_extended_flag(self):
+        # 3日で12%上放れ → EXT(追いかけ買い禁止ゾーン)
+        px = list(np.geomspace(50, 100, 317))
+        px += [px[-1] * 1.04, px[-1] * 1.08, px[-1] * 1.12]
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(mkdf(px), spy)
+        self.assertTrue(m["ext"])
+
+    def test_not_extended_on_steady_climb(self):
+        spy = flat_spy()["Close"]
+        m = sc.compute_metrics(uptrend(), spy)
+        self.assertFalse(m["ext"], "緩やかな上昇はEXTではない")
+
+    def test_new_high_low_flags(self):
+        spy = flat_spy()["Close"]
+        self.assertTrue(sc.compute_metrics(uptrend(), spy)["new_high"])
+        self.assertTrue(sc.compute_metrics(downtrend(), spy)["new_low"])
+
+    def test_rows_carry_chart_and_ext(self):
+        data, universe = sc.synthetic_data()
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        for row in out["main"] + out["tight"]:
+            self.assertIn("px", row)
+            self.assertLessEqual(len(row["px"]), 60)
+            self.assertGreaterEqual(len(row["px"]), 10)
+            self.assertIn("EXT", row)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
