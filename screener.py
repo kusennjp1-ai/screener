@@ -19,6 +19,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import time
 
@@ -30,7 +31,21 @@ FALLBACK_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", 
 
 WIKI_SP500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 WIKI_NDX = "https://en.wikipedia.org/wiki/Nasdaq-100"
+# NASDAQ Trader 公式シンボルディレクトリ — 米国全上場銘柄 (Minervini級フルユニバース)
+NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+
+# 普通株以外 (ワラント・ライツ・ユニット・優先株・債券・ファンド類) を銘柄名で除外。
+# 注意: "depositary" 単体は除外しない — ADR (TSM/ARM/BABA等の
+# "American Depositary Shares") は重要な主導株。優先株の預託証券は
+# "preferred" や $付きシンボルで別途除外される。
+EXCLUDE_NAME_RE = re.compile(
+    r"\bwarrants?\b|\brights?\b|\bunits?\b|\bpreferred\b"
+    r"|\bnotes?\b|\bdebentures?\b|\bETN\b|\bfunds?\b",
+    re.I,
+)
+SYMBOL_RE = re.compile(r"[A-Z]{1,5}([.\-][A-Z])?")
 
 # GICS英語セクター名 -> (SPDRセクターETF, 日本語名)
 SECTOR_MAP = {
@@ -60,7 +75,7 @@ ETF_JA = {
 
 MAIN_LIST_SIZE = 20
 TIGHT_LIST_SIZE = 30
-FUNDAMENTALS_LIMIT = 35  # yfinanceへの追加リクエストを抑えるため上位のみ
+FUNDAMENTALS_LIMIT = 50  # yfinanceへの追加リクエストを抑えるため上位のみ
 
 
 def log(*args):
@@ -68,6 +83,50 @@ def log(*args):
 
 
 # ---------------------------------------------------------------- universe
+
+def parse_listed_file(text, sym_field):
+    """NASDAQ Trader のパイプ区切りリストから普通株シンボルを抽出する。"""
+    lines = [l for l in text.splitlines() if l.strip()]
+    if not lines:
+        return []
+    header = lines[0].split("|")
+    col = {name.strip(): i for i, name in enumerate(header)}
+    out = []
+    for line in lines[1:]:
+        if "File Creation Time" in line:
+            continue
+        p = line.split("|")
+        if len(p) < len(header):
+            continue
+
+        def g(name):
+            i = col.get(name)
+            return p[i].strip() if i is not None and i < len(p) else ""
+
+        if g("ETF") == "Y" or g("Test Issue") == "Y":
+            continue
+        fin = g("Financial Status")  # NASDAQ上場のみ: N=正常以外(欠損/破産等)は除外
+        if fin and fin != "N":
+            continue
+        if EXCLUDE_NAME_RE.search(g("Security Name")):
+            continue
+        sym = g(sym_field)
+        if not SYMBOL_RE.fullmatch(sym):
+            continue
+        out.append(sym.replace(".", "-"))
+    return out
+
+
+def universe_from_nasdaqtrader():
+    """米国全上場普通株 (NASDAQ + NYSE/AMEX/ARCA)。セクターは未付与 ("")。"""
+    import requests
+    syms = set()
+    for url, field in ((NASDAQ_LISTED, "Symbol"), (OTHER_LISTED, "ACT Symbol")):
+        text = requests.get(url, headers=UA, timeout=60).text
+        syms |= set(parse_listed_file(text, field))
+    syms -= set(ETF_JA) | {"SPY", "QQQ", "DIA", "IWM"}
+    return {s: "" for s in sorted(syms)}
+
 
 def universe_from_wikipedia():
     import requests
@@ -99,14 +158,35 @@ def universe_from_fallback():
 
 
 def get_universe():
+    """フルユニバース優先。既知セクター (S&P500/NDX) はWikipediaから補完。
+    取得失敗時は Wikipedia → 同梱CSV へフォールバック。"""
+    u = {}
     try:
-        u = universe_from_wikipedia()
-        if len(u) >= 300:
-            log(f"universe from Wikipedia: {len(u)} tickers")
-            return u
-        log(f"Wikipedia universe too small ({len(u)}), using fallback")
+        u = universe_from_nasdaqtrader()
+        if len(u) >= 3000:
+            log(f"universe from NASDAQ Trader: {len(u)} tickers")
+        else:
+            log(f"NASDAQ Trader universe too small ({len(u)})")
+            u = {}
+    except Exception as e:
+        log("NASDAQ Trader fetch failed:", e)
+        u = {}
+
+    wiki = {}
+    try:
+        wiki = universe_from_wikipedia()
     except Exception as e:
         log("Wikipedia fetch failed:", e)
+
+    if u:
+        # フルユニバースに既知セクターを焼き込む (残りは候補確定後にyfinanceで補完)
+        for s, sec in wiki.items():
+            if s in u:
+                u[s] = sec
+        return u
+    if len(wiki) >= 300:
+        log(f"universe from Wikipedia: {len(wiki)} tickers")
+        return wiki
     u = universe_from_fallback()
     log(f"universe from fallback CSV: {len(u)} tickers")
     return u
@@ -141,7 +221,9 @@ def batch_download(symbols, period="15mo", chunk=100):
                 continue
             if len(sub) >= 120:
                 out[s] = sub
-        log(f"downloaded {min(i + chunk, len(symbols))}/{len(symbols)}")
+        if (i // chunk) % 5 == 4 or i + chunk >= len(symbols):
+            log(f"downloaded {min(i + chunk, len(symbols))}/{len(symbols)}")
+        time.sleep(0.3)  # フルユニバースでのレート制限対策
     return out
 
 
@@ -231,8 +313,15 @@ def compute_metrics(df, spy_close):
     except Exception:
         pass
 
+    # EXT: ベース上限 (直近の急騰5日を除く20日高値) から5%超の上放れ = 追いかけ買い禁止
+    ext = False
+    base_high = float(h.iloc[-25:-5].max()) if len(h) >= 25 else float(h.iloc[-20:].max())
+    if base_high > 0:
+        ext = close > base_high * 1.05
+
     # ピボット/ストップ (直近20日高値ブレイク想定、リスク3〜8%に収める)
-    pivot = float(h.iloc[-20:].max())
+    # EXT時は表示の整合性のためベース上限をピボットとする (株価はゾーン上方)
+    pivot = base_high if ext else float(h.iloc[-20:].max())
     stop = max(float(l.iloc[-10:].min()), pivot * 0.92)
     stop = min(stop, pivot * 0.97)
     risk = (pivot - stop) / pivot * 100
@@ -247,6 +336,15 @@ def compute_metrics(df, spy_close):
     # ADR% (直近20日の日中変動率平均) — 値動きの質の目安
     adr = float(((h.iloc[-20:] / l.iloc[-20:]) - 1).mean() * 100)
 
+    # 本日の52週新高値 / 新安値 (市場ブレッドス用)
+    new_high = float(h.iloc[-1]) >= hi52 * 0.999
+    new_low = float(l.iloc[-1]) <= lo52 * 1.001
+
+    # ミニチャート用: 直近の終値を最大60点に間引き
+    tail = c.iloc[-90:]
+    step = max(1, len(tail) // 60)
+    spark = [round(float(x), 2) for x in tail.iloc[::step][-60:]]
+
     return {
         "close": close, "ma200": ma200, "tt": tt,
         "above_ma200": not math.isnan(ma200) and close > ma200,
@@ -256,14 +354,109 @@ def compute_metrics(df, spy_close):
         "pivot": pivot, "stop": stop, "risk": risk, "rr": rr,
         "depth60": depth60,
         "vcp": vcp, "n_contractions": len(depths), "adr": adr,
+        "ext": ext, "new_high": new_high, "new_low": new_low, "spark": spark,
         "wret": weighted_return(c),
     }
 
 
-# ---------------------------------------------------------------- env
+# ---------------------------------------------------------------- env (IBD流)
 
-def market_env(spy_df, metrics, last_date, prev=None):
-    c, v = spy_df["Close"], spy_df["Volume"]
+def distribution_days(df, window=25):
+    """IBD流 分配日カウント: 前日比-0.2%以下かつ出来高増の日。
+    その後 終値が分配日終値から5%以上上昇したら失効 (IBDの5%ルール)。"""
+    c, v = df["Close"], df["Volume"]
+    chg = c.pct_change()
+    count = 0
+    for i in range(-window, 0):
+        try:
+            if float(chg.iloc[i]) <= -0.002 and float(v.iloc[i]) > float(v.iloc[i - 1]):
+                future_max = float(c.iloc[i:].max())
+                if future_max < float(c.iloc[i]) * 1.05:
+                    count += 1
+        except Exception:
+            pass
+    return count
+
+
+def detect_ftd(df, lookback=80, correction_pct=0.06):
+    """IBD流 フォロースルー日(FTD)検出。
+
+    直近lookback日の高値から6%以上の調整があった場合、安値からの立ち直り
+    4日目以降に「前日比+1.25%以上かつ出来高増」の日があれば上昇トレンド確認。
+
+    Returns (state, days_since_ftd):
+      state: 'uptrend' (調整なし) / 'correction' (調整中・FTD無効化含む)
+             / 'rally_attempt' (底打ち試行中) / 'confirmed' (FTD確認済み)
+    """
+    c, v = df["Close"], df["Volume"]
+    win = c.iloc[-lookback:]
+    arr = win.to_numpy(dtype=float)
+    peak_pos = int(np.argmax(arr))
+    peak = arr[peak_pos]
+    after = arr[peak_pos:]
+    trough_rel = int(np.argmin(after))
+    trough = after[trough_rel]
+    if peak <= 0 or (1 - trough / peak) < correction_pct:
+        return ("uptrend", None)
+
+    trough_abs = len(c) - lookback + peak_pos + trough_rel
+    rally_c = c.iloc[trough_abs:]
+    rally_v = v.iloc[trough_abs:]
+    last = float(c.iloc[-1])
+    if len(rally_c) < 2 or last <= trough * 1.001:
+        return ("correction", None)
+
+    ftd_k = None
+    for k in range(4, len(rally_c)):
+        day_chg = float(rally_c.iloc[k] / rally_c.iloc[k - 1] - 1)
+        if day_chg >= 0.0125 and float(rally_v.iloc[k]) > float(rally_v.iloc[k - 1]):
+            ftd_k = k
+            break
+    if ftd_k is None:
+        return ("rally_attempt", None)
+    # FTD後の底割れは、troughが「ピーク以降の最安値」である構造上、
+    # 新しいtroughとしてラリー起点が引き直されることで自然に無効化される
+    return ("confirmed", len(rally_c) - 1 - ftd_k)
+
+
+def market_pulse(score, spy_above_ma200, dd, state_spy, state_qqq, days_since_ftd):
+    """IBD Market Pulse風の3状態判定。(status, pulse文言) を返す。
+
+    IBDルールに合わせた制約:
+      - 調整入り後はFTDなしに「確認済み上昇トレンド」へは戻れない
+      - FTD確認直後は環境スコアが低くてもCAUTIONまで格上げ (底打ち時の
+        スコアは構造的に低いため、ここで弾くとFTDが機能しない)
+    """
+    states = (state_spy, state_qqq)
+    confirmed = "confirmed" in states
+    ftd_fresh = confirmed and days_since_ftd is not None and days_since_ftd <= 25
+    healthy = (state_spy in ("uptrend", "confirmed")
+               and state_qqq in ("uptrend", "confirmed"))
+
+    if not confirmed:
+        if (states == ("correction", "correction")) or (not spy_above_ma200) or score < 40:
+            if "rally_attempt" in states:
+                return ("DO NOT BUY", "調整局面 — ラリー試行中（フォロースルー日待ち）")
+            if healthy and score >= 40:
+                return ("CAUTION", "圧力下の上昇トレンド（Uptrend Under Pressure）")
+            return ("DO NOT BUY", "調整局面（Market in Correction）")
+    if score < 40:
+        if ftd_fresh:
+            return ("CAUTION",
+                    f"フォロースルー日確認（{days_since_ftd}営業日前）— 環境は脆弱、試験的買いのみ")
+        return ("DO NOT BUY", "調整局面（Market in Correction）")
+    if not healthy:
+        return ("CAUTION", "調整からの戻り — フォロースルー日待ち（Uptrend Under Pressure）")
+    if dd >= 4 or score < 65:
+        return ("CAUTION", "圧力下の上昇トレンド（Uptrend Under Pressure）")
+    label = "確認済み上昇トレンド（Confirmed Uptrend）"
+    if days_since_ftd is not None and days_since_ftd <= 25:
+        label += f"｜FTD確認から{days_since_ftd}営業日"
+    return ("BUY MODE", label)
+
+
+def market_env(spy_df, metrics, last_date, prev=None, qqq_df=None):
+    c = spy_df["Close"]
     spy = float(c.iloc[-1])
     ma50 = float(c.rolling(50).mean().iloc[-1])
     ma200_s = c.rolling(200).mean()
@@ -272,20 +465,29 @@ def market_env(spy_df, metrics, last_date, prev=None):
     ma200_pct = round((spy / ma200 - 1) * 100, 1)
     ma50_pct = round((spy / ma50 - 1) * 100, 1)
 
-    # 分配日: 直近25営業日で前日比-0.2%以下かつ出来高増の日 (機関の売り抜け)
-    dist_days = 0
-    chg = c.pct_change()
-    for i in range(-25, 0):
-        try:
-            if float(chg.iloc[i]) <= -0.002 and float(v.iloc[i]) > float(v.iloc[i - 1]):
-                dist_days += 1
-        except Exception:
-            pass
+    # 分配日 (5%失効ルール付き) と FTD は SPY / QQQ 両指数で評価
+    dist_spy = distribution_days(spy_df)
+    state_spy, since_spy = detect_ftd(spy_df)
+    if qqq_df is not None and len(qqq_df) >= 200:
+        dist_qqq = distribution_days(qqq_df)
+        state_qqq, since_qqq = detect_ftd(qqq_df)
+        qqq = round(float(qqq_df["Close"].iloc[-1]), 2)
+        qqq_ma200 = float(qqq_df["Close"].rolling(200).mean().iloc[-1])
+        qqq_ma200_pct = round((qqq / qqq_ma200 - 1) * 100, 1)
+    else:
+        # QQQデータなし: 分配日は捏造せずNone (UIは単一表示にフォールバック)
+        dist_qqq = None
+        state_qqq, since_qqq = state_spy, since_spy
+        qqq, qqq_ma200_pct = None, None
+    dist_days = max(dist_spy, dist_qqq) if dist_qqq is not None else dist_spy
+    days_since_ftd = min((d for d in (since_spy, since_qqq) if d is not None), default=None)
 
     total = len(metrics)
     above = sum(1 for m in metrics.values() if m["above_ma200"])
     stage2 = sum(1 for m in metrics.values() if m.get("stage2"))
     rs70 = sum(1 for m in metrics.values() if m.get("rs", 0) >= 70)
+    nh = sum(1 for m in metrics.values() if m.get("new_high"))
+    nl = sum(1 for m in metrics.values() if m.get("new_low"))
     breadth = above / total * 100 if total else 0
 
     score = 0
@@ -297,14 +499,8 @@ def market_env(spy_df, metrics, last_date, prev=None):
     score += max(0, 20 - 4 * dist_days)
     score = int(round(min(100, score)))
 
-    if score >= 65 and spy > ma200:
-        status = "BUY MODE"
-    elif score >= 40:
-        status = "CAUTION"
-    else:
-        status = "DO NOT BUY"
-    if dist_days >= 6 and status == "BUY MODE":
-        status = "CAUTION"
+    status, pulse = market_pulse(score, spy > ma200, dist_days,
+                                 state_spy, state_qqq, days_since_ftd)
 
     # ENVスコア履歴 (前回データから引き継いで蓄積 — 環境の変化を可視化する)
     today_str = f"{last_date:%Y-%m-%d}"
@@ -321,7 +517,17 @@ def market_env(spy_df, metrics, last_date, prev=None):
         "spy": round(spy, 2),
         "spy_ma200_pct": ma200_pct,
         "spy_ma50_pct": ma50_pct,
+        "pulse": pulse,
+        "market_state_spy": state_spy,
+        "market_state_qqq": state_qqq,
+        "days_since_ftd": days_since_ftd,
+        "qqq": qqq,
+        "qqq_ma200_pct": qqq_ma200_pct,
         "dist_days": dist_days,
+        "dist_spy": dist_spy,
+        "dist_qqq": dist_qqq,
+        "nh": nh,
+        "nl": nl,
         "pct_above_ma200": round(breadth, 1),
         "stage2_count": stage2,
         "rs70_count": rs70,
@@ -335,9 +541,16 @@ def market_env(spy_df, metrics, last_date, prev=None):
 
 def fetch_fundamentals(sym):
     import yfinance as yf
-    res = {"EPS成長%": None, "売上成長%": None, "Code33": "", "次回決算": "", "ファンダG": "N"}
+    res = {"EPS成長%": None, "売上成長%": None, "Code33": "", "次回決算": "",
+           "ファンダG": "N", "_sector": ""}
     try:
         t = yf.Ticker(sym)
+        # フルユニバース銘柄はセクター未付与なのでここで補完する
+        try:
+            info = t.info or {}
+            res["_sector"] = str(info.get("sector") or "")
+        except Exception:
+            pass
         eps_g = rev_g = None
         eps_hist = [None, None, None]
         try:
@@ -422,6 +635,8 @@ def build_reason(m, fund):
     eps_g = fund.get("EPS成長%")
     if eps_g is not None and eps_g >= 25:
         good.append(f"EPS成長+{eps_g:.0f}%")
+    if m["ext"]:
+        warn.append("ピボットから5%以上の上放れ（EXT）— 追いかけ買いは避け、押しを待つ")
     if m["vol_m"] < 20:
         warn.append("売買代金がやや薄い")
     if m["depth60"] > 20:
@@ -443,6 +658,15 @@ def build_reason(m, fund):
 
 
 def make_row(sym, m, fund, mode):
+    # 次回決算までの暦日数 (10日以内なら警戒タグ用)
+    earnings_days = None
+    nxt = fund.get("次回決算") or ""
+    if len(nxt) >= 10:
+        try:
+            earnings_days = (dt.date.fromisoformat(nxt[:10]) - dt.date.today()).days
+        except Exception:
+            pass
+
     base = {
         "シンボル": sym,
         "セクター": m["sector_ja"],
@@ -457,8 +681,11 @@ def make_row(sym, m, fund, mode):
         "VDU": "YES" if m["vdu"] else "",
         "BKT出来高": "✓" if m["bkt"] else "",
         "VCP": "✓" if m["vcp"] else "",
+        "EXT": "✓" if m["ext"] else "",
         "収縮回数": m["n_contractions"],
         "ADR%": round(m["adr"], 1),
+        "px": m["spark"],
+        "決算日数": earnings_days,
         "Code33": fund.get("Code33", ""),
         "EPS成長%": fund.get("EPS成長%"),
         "売上成長%": fund.get("売上成長%"),
@@ -531,7 +758,7 @@ def run(data, universe, skip_fundamentals=False, prev=None):
     for m in metrics.values():
         m["score"] = total_score(m)
 
-    env = market_env(spy_df, metrics, last_date, prev=prev)
+    env = market_env(spy_df, metrics, last_date, prev=prev, qqq_df=data.get("QQQ"))
     env_history = env.pop("env_history")
 
     sectors = [
@@ -560,6 +787,17 @@ def run(data, universe, skip_fundamentals=False, prev=None):
         for sym in fund_syms:
             funds[sym] = fetch_fundamentals(sym)
             time.sleep(0.4)
+        # フルユニバース銘柄 (セクター未付与) にyfinanceのセクターを反映
+        for sym, f in funds.items():
+            sec_en = f.pop("_sector", "")
+            if sec_en and not metrics[sym]["sector_etf"]:
+                etf, ja = SECTOR_MAP.get(sec_en, ("", sec_en))
+                if etf:
+                    metrics[sym]["sector_etf"] = etf
+                    metrics[sym]["sector_ja"] = ja
+                    metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
+                    # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
+                    metrics[sym]["score"] = total_score(metrics[sym])
 
     out = {
         "env": env,
@@ -610,7 +848,7 @@ def main():
         universe = get_universe()
         if args.max_tickers:
             universe = dict(list(universe.items())[:args.max_tickers])
-        symbols = list(universe.keys()) + ["SPY"] + list(ETF_JA.keys())
+        symbols = list(universe.keys()) + ["SPY", "QQQ"] + list(ETF_JA.keys())
         data = batch_download(symbols)
         if "SPY" not in data:
             raise RuntimeError("SPY data missing — aborting")
@@ -646,7 +884,7 @@ def synthetic_data(n=60, days=320, seed=42):
         return pd.DataFrame({"Open": op, "High": high, "Low": low,
                              "Close": close, "Volume": volu}, index=idx)
 
-    data = {"SPY": walk(0.0006)}
+    data = {"SPY": walk(0.0006), "QQQ": walk(0.0007)}
     for etf in ETF_JA:
         data[etf] = walk(rng.uniform(-0.0005, 0.0015))
     universe = {}
