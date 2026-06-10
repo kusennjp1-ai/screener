@@ -1,0 +1,18 @@
+{
+  "name": "RS Screener — Minervini式スクリーナー",
+  "short_name": "RS Screener",
+  "description": "Minervini流トレンドテンプレート + 市場環境判定スクリーナー（毎営業日自動更新）",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
