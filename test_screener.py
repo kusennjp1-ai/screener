@@ -1336,6 +1336,36 @@ class Backtest(unittest.TestCase):
         self.assertEqual(res["stats"]["トレード数"] + res["stats"]["未完了(末日清算)"], 0,
                          "ブレイクの瞬間がない銘柄は買わない")
 
+    def _vcp_frame(self, idx, days, dry_volume):
+        # 上昇300日 → フラットベース30日 (直前10日は出来高指定) → ブレイク
+        rise = 50 * np.cumprod(1 + np.full(300, 0.003))
+        base = np.full(30, rise[-1] * 0.99)
+        bo = rise[-1] * 1.03 * np.cumprod(1 + np.full(days - 330, 0.005))
+        df = self._frame(np.concatenate([rise, base, bo]), idx)
+        vcol = df.columns.get_loc("Volume")
+        df.iloc[320:330, vcol] = dry_volume    # ピボット手前10日
+        df.iloc[330, vcol] = 5e6               # ブレイク日は大商い
+        return df
+
+    def test_vcp_mode_requires_quality(self):
+        # vcpモード: 出来高の枯れたタイトなベースからのブレイクだけ買う
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx),
+                "VCPX": self._vcp_frame(idx, days, dry_volume=1.0e6),
+                "WETX": self._vcp_frame(idx, days, dry_volume=2.4e6)}
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                50 * np.cumprod(1 + np.full(days, 0.0002 + k * 1e-5)), idx)
+        res = bt.simulate(data, mode="vcp")
+        syms = {t["sym"] for t in res["trades"]}
+        self.assertIn("VCPX", syms, "枯れたベースのブレイクは買う")
+        self.assertNotIn("WETX", syms, "出来高が枯れていないベースは見送る")
+        # 同じデータでもbreakoutモードなら両方買われる (差分はvcpゲートのみ)
+        res2 = bt.simulate(data, mode="breakout")
+        self.assertEqual({t["sym"] for t in res2["trades"]}, {"VCPX", "WETX"})
+
     def test_fast_winner_held_8_weeks(self):
         # 3週間で+20%の急騰銘柄は+22%で売らず8週間保有 (大化けの右裾を切らない)
         import backtest as bt

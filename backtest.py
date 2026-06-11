@@ -71,6 +71,16 @@ def build_matrices(data, bench=("SPY", "QQQ")):
         "absret60": (closes.pct_change(fill_method=None).abs() * 100)
                     .rolling(60).max(),
     }
+    # VCP品質ゲート用の派生指標 (vcpモード)
+    spy_c = data["SPY"]["Close"].reindex(closes.index).ffill()
+    rs_line = closes.div(spy_c, axis=0)            # RSライン (対SPY相対力)
+    m["rs_line"] = rs_line
+    m["rs_line_hi"] = rs_line.rolling(252, min_periods=120).max()
+    m["l40"] = lows.rolling(40).min()              # ベースの深さ判定用
+    # ピボット手前10日の値幅 (当日を除く) — タイトな収縮を要求
+    m["tight10"] = (highs.shift(1).rolling(10).max()
+                    / lows.shift(1).rolling(10).min() - 1)
+    m["vol10p"] = vols.shift(1).rolling(10).mean()  # 直前10日の出来高 (枯れ判定)
     return m
 
 
@@ -97,6 +107,9 @@ def candidates_at(m, i, mode="breakout"):
 
     mode="breakout": Minervini本来の買い方 — ベース上限 (ピボット) を当日
       出来高1.4倍以上でブレイクした銘柄のみ (前日終値はピボット以下)。
+    mode="vcp": breakoutに加えて入口の質を要求 — RS90以上・RSラインが高値圏・
+      ベース深さ25%以内・ピボット手前の値幅タイト化・ボラ収縮・出来高の枯れ。
+      (Minerviniの勝率を支える銘柄選別のうち株価・出来高で再現可能な部分)
     mode="zone": 買いゾーン (ピボット+5%以内) に居る銘柄を全て返す旧方式。
       ブレイクの瞬間を要求しないぶん緩く、忠実度は低い (比較検証用)。"""
     c = m["closes"].iloc[i]
@@ -121,11 +134,22 @@ def candidates_at(m, i, mode="breakout"):
           & (c / ma200 - 1 < 1.2)
           # 買いゾーン: ベース上限+5%以内 (EXT=上放れは追いかけない)
           & (c <= m["base20_5"].iloc[i] * 1.05))
-    if mode == "breakout":
+    if mode in ("breakout", "vcp"):
         base = m["base20_5"].iloc[i]
         prev_c = m["closes"].iloc[i - 1]
         ok = (ok & (c > base) & (prev_c <= base)          # 当日ピボット越え
               & (m["vols"].iloc[i] >= 1.4 * m["vol50"].iloc[i]))  # 出来高確認
+    if mode == "vcp":
+        ok = (ok & (rs_pct >= 0.90)                       # 真のリーダーのみ (RS90)
+              # 相対力の文脈: RSラインが52週高値圏 (市場をリードしてブレイク)
+              & (m["rs_line"].iloc[i] >= m["rs_line_hi"].iloc[i] * 0.95)
+              # ベースの深さ25%以内 (深い修正からのブレイクは失敗しやすい)
+              & ((base - m["l40"].iloc[i]) / base <= 0.25)
+              # 収縮の質: ピボット手前10日の値幅がタイト + ボラが40日前より縮小
+              & (m["tight10"].iloc[i] <= 0.12)
+              & (m["adr20"].iloc[i] <= m["adr20"].iloc[i - 40])
+              # 出来高の枯れ: 直前10日の出来高が50日平均を下回る
+              & (m["vol10p"].iloc[i] <= 0.95 * m["vol50"].iloc[i]))
     score = (0.45 * rs_pct * 99 + 0.20 * 50
              + 0.20 * (100 - np.minimum(dist_high * 4, 100)))
     out = []
@@ -146,7 +170,7 @@ def collect_candidates(data, mode="breakout"):
     from collections import Counter
     m = build_matrices(data)
     spy = data["SPY"].reindex(m["closes"].index).ffill()
-    step = 1 if mode == "breakout" else EVAL_STEP
+    step = EVAL_STEP if mode == "zone" else 1
     cnt = Counter()
     for i in range(260, len(m["closes"].index)):
         if (i - 260) % step:
@@ -215,7 +239,7 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
     eps_hist (fetch_eps_historyの結果) を渡すと、シグナル日時点で減益が
     判明していた銘柄の買いを見送る (本番スクリーナーのファンダゲート相当)。"""
     if eval_step is None:
-        eval_step = 1 if mode == "breakout" else EVAL_STEP
+        eval_step = EVAL_STEP if mode == "zone" else 1
     m = build_matrices(data)
     dates = m["closes"].index
     # SPYを銘柄群と同じ日付軸に揃える (位置ズレによる先読みを防ぐ)
@@ -358,8 +382,9 @@ def summarize(trades, equity_curve, capital, spy_c, dates, start,
     gross_w = sum(t["pnl_pct"] for t in wins)
     gross_l = abs(sum(t["pnl_pct"] for t in losses))
     stats = {
-        "方式": ("ブレイクアウト型 (ピボット越え+出来高確認)" if mode == "breakout"
-               else "ゾーン型 (買いゾーン内を週次バスケット買い)"),
+        "方式": {"breakout": "ブレイクアウト型 (ピボット越え+出来高確認)",
+               "vcp": "VCP型 (ブレイクアウト+収縮の質+RS90+RSライン高値圏)",
+               "zone": "ゾーン型 (買いゾーン内を週次バスケット買い)"}[mode],
         "ファンダゲート": ("有効 (シグナル日時点のEPS実績で減益を除外)"
                     if fund_gated else "無効 (技術面のみ)"),
         "期間": f"{equity_curve[0][0]} 〜 {equity_curve[-1][0]}" if equity_curve else "",
@@ -398,8 +423,9 @@ def report(result):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=float, default=2.0, help="検証期間 (年)")
-    ap.add_argument("--mode", choices=("breakout", "zone"), default="breakout",
-                    help="breakout=ピボット越え+出来高確認 / zone=旧ゾーン買い (比較用)")
+    ap.add_argument("--mode", choices=("breakout", "vcp", "zone"), default="breakout",
+                    help="breakout=ピボット越え+出来高確認 / vcp=+収縮の質とRS90 / "
+                         "zone=旧ゾーン買い (比較用)")
     ap.add_argument("--fund", choices=("on", "off"), default="on",
                     help="on=シグナル日時点のEPS実績で減益銘柄を除外 (2パス)")
     ap.add_argument("--selftest", action="store_true")

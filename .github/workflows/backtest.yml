@@ -8,7 +8,7 @@ on:
         required: false
         default: '2'
       mode:
-        description: 'breakout=ピボット越え+出来高確認 / zone=旧ゾーン買い'
+        description: 'breakout=ピボット越え+出来高確認 / vcp=+収縮の質とRS90 / zone=旧ゾーン買い'
         required: false
         default: 'breakout'
       fund:
