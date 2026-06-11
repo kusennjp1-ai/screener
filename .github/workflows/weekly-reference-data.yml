@@ -1,0 +1,271 @@
+name: Weekly Reference Data
+
+on:
+  schedule:
+    - cron: '10 8 * * 6'
+      timezone: 'America/New_York'
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "Run only this market (or 'all' for the full matrix)."
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - US
+          - HK
+          - IN
+          - JP
+          - KR
+          - TW
+          - CN
+          - CA
+          - DE
+          - SG
+          - AU
+          - MY
+      max_runtime_minutes:
+        description: >-
+          Per-market deadline in minutes for the fundamentals refresh. Blank
+          uses the built-in defaults (CN=300, others=0). CN bootstrap runs
+          should keep a deadline so a partial resumable bundle can publish
+          before the GitHub Actions job cap.
+        required: false
+        type: string
+        default: ''
+      allow_partial_publish:
+        description: >-
+          Whether to publish the bundle when the deadline trips. "default"
+          keeps the per-market default (CN=enable, others=disable); "enable"
+          forces partial publish on; "disable" forces it off (useful for
+          first-time CN runs where there is no prior bundle to fall back to).
+        required: false
+        type: choice
+        default: default
+        options:
+          - default
+          - enable
+          - disable
+      cn_resume_partial_seed:
+        description: >-
+          CN only: continue an initial partial bootstrap by skipping symbols
+          already present in the partial bundle. Keep disabled for ordinary
+          weekly refreshes so stale prior-bundle rows are refreshed.
+        required: false
+        type: choice
+        default: disable
+        options:
+          - disable
+          - enable
+
+concurrency:
+  group: weekly-reference-data
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  ensure_release:
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure weekly release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view weekly-reference-data \
+            --repo "${{ github.repository }}" >/dev/null 2>&1 || \
+          gh release create weekly-reference-data \
+            --repo "${{ github.repository }}" \
+            --title "Weekly Reference Data" \
+            --notes "Automated weekly market-scoped reference bundles for static-site builds."
+
+  publish:
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    needs: ensure_release
+    runs-on: ubuntu-latest
+    # GitHub Actions hard-caps a job at 360 minutes. Setting an explicit ceiling
+    # below that gives the build script's --max-runtime-minutes deadline a
+    # chance to fire (and publish a partial bundle) before the runner is killed.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        # When workflow_dispatch.market is set to a specific market, run only
+        # that variant; otherwise (scheduled cron, or dispatch with market=all)
+        # run the full matrix. ``github.event.inputs.market`` is null on
+        # scheduled runs, so we coerce to '' before the equality check.
+        market: ${{ fromJSON((github.event.inputs.market || 'all') != 'all' && format('["{0}"]', github.event.inputs.market) || '["US","HK","IN","JP","KR","TW","CN","CA","DE","SG","AU","MY"]') }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: stockscanner
+          POSTGRES_USER: stockscanner
+          POSTGRES_PASSWORD: stockscanner
+        options: >-
+          --health-cmd "pg_isready -U stockscanner -d stockscanner"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      REDIS_ENABLED: "false"
+      DATABASE_URL: postgresql://stockscanner:stockscanner@localhost:5432/stockscanner
+      SG_UNIVERSE_SOURCE_URL: ${{ matrix.market == 'SG' && 'https://api.sgx.com/securities/v1.1?excludetypes=bonds' || '' }}
+      # Bursa Malaysia equities-listing JSON endpoint. The bundled CSV
+      # fallback only ships the FBM KLCI 30 + a handful of Top 100 names
+      # (~47 issuers); the live endpoint covers all Main + ACE Market
+      # listings. Override via the ``MY_UNIVERSE_SOURCE_URL`` Actions
+      # variable when the operator has confirmed acceptable use; the
+      # default URL below is the public endpoint that powers the
+      # equities_prices page. On any HTTP or parse failure the fetcher
+      # falls back to the bundled CSV so a broken URL is not a regression.
+      MY_UNIVERSE_SOURCE_URL: ${{ matrix.market == 'MY' && (vars.MY_UNIVERSE_SOURCE_URL || 'https://www.bursamalaysia.com/api/v1/equities_prices?legacy=1&format=json&perPage=2000&board=MAIN-MKT,ACE-MKT&sector=&sub_sector=&page=1') || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Seed prior weekly reference bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/weekly-reference-seed
+          export MARKET_LOWER="$(echo "${{ matrix.market }}" | tr '[:upper:]' '[:lower:]')"
+          BUNDLE_ASSET_NAME=""
+
+          if gh release download weekly-reference-data \
+            --pattern "weekly-reference-latest-${MARKET_LOWER}.json" \
+            --dir /tmp/weekly-reference-seed >/dev/null 2>&1; then
+            BUNDLE_ASSET_NAME="$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          market = os.environ["MARKET_LOWER"]
+          manifest = json.loads(
+              Path(f"/tmp/weekly-reference-seed/weekly-reference-latest-{market}.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          print(manifest["bundle_asset_name"])
+          PY
+            )"
+          elif [ "${{ matrix.market }}" = "US" ] && gh release download weekly-reference-data \
+            --pattern "weekly-reference-latest.json" \
+            --dir /tmp/weekly-reference-seed >/dev/null 2>&1; then
+            BUNDLE_ASSET_NAME="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(
+              Path("/tmp/weekly-reference-seed/weekly-reference-latest.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          print(manifest["bundle_asset_name"])
+          PY
+            )"
+          fi
+
+          if [ -n "$BUNDLE_ASSET_NAME" ]; then
+            if gh release download weekly-reference-data \
+              --pattern "$BUNDLE_ASSET_NAME" \
+              --dir /tmp/weekly-reference-seed >/dev/null 2>&1; then
+              cd backend
+              python -m app.scripts.import_weekly_reference_bundle \
+                --input "/tmp/weekly-reference-seed/${BUNDLE_ASSET_NAME}" \
+                --hydrate-mode full
+            else
+              echo "Unable to download prior bundle ${BUNDLE_ASSET_NAME} for ${{ matrix.market }}; continuing without seed."
+            fi
+          else
+            echo "No prior weekly reference bundle found for ${{ matrix.market }}; continuing without seed."
+          fi
+
+      - name: Resolve build inputs
+        id: build_inputs
+        env:
+          # Per-market wall-clock budget defaults for the fundamentals refresh.
+          # CN is the slow path: ~5,500 sequential AKShare+yfinance round-trips
+          # can blow past 6h, so we leave ~50 min headroom under the 350-min
+          # job cap and opt in to partial publish. Initial bootstrap
+          # continuation requires explicitly enabling cn_resume_partial_seed on
+          # a manual CN run so ordinary weekly refreshes do not skip stale
+          # prior-bundle rows.
+          INPUT_RUNTIME: ${{ github.event.inputs.max_runtime_minutes }}
+          INPUT_PARTIAL: ${{ github.event.inputs.allow_partial_publish }}
+          INPUT_CN_RESUME_PARTIAL_SEED: ${{ github.event.inputs.cn_resume_partial_seed }}
+          MATRIX_MARKET: ${{ matrix.market }}
+        run: |
+          if [ -n "$INPUT_RUNTIME" ]; then
+            RUNTIME="$INPUT_RUNTIME"
+          elif [ "$MATRIX_MARKET" = "CN" ]; then
+            RUNTIME="300"
+          else
+            RUNTIME="0"
+          fi
+
+          case "$INPUT_PARTIAL" in
+            enable)
+              PARTIAL="--allow-partial-publish"
+              ;;
+            disable)
+              PARTIAL=""
+              ;;
+            *)
+              if [ "$MATRIX_MARKET" = "CN" ]; then
+                PARTIAL="--allow-partial-publish"
+              else
+                PARTIAL=""
+              fi
+              ;;
+          esac
+
+          RESUME=""
+          if [ "$MATRIX_MARKET" = "CN" ] && [ "$INPUT_CN_RESUME_PARTIAL_SEED" = "enable" ]; then
+            RESUME="--resume-partial-seed"
+          fi
+
+          echo "max_runtime_minutes=$RUNTIME" >> "$GITHUB_OUTPUT"
+          echo "partial_flag=$PARTIAL" >> "$GITHUB_OUTPUT"
+          echo "resume_flag=$RESUME" >> "$GITHUB_OUTPUT"
+          echo "Resolved build inputs for $MATRIX_MARKET: runtime=$RUNTIME partial='$PARTIAL' resume='$RESUME'"
+
+      - name: Build weekly reference bundle
+        run: |
+          cd backend
+          python -m app.scripts.build_weekly_reference_bundle \
+            --market "${{ matrix.market }}" \
+            --output-dir /tmp/weekly-reference \
+            --max-runtime-minutes "${{ steps.build_inputs.outputs.max_runtime_minutes }}" \
+            ${{ steps.build_inputs.outputs.resume_flag }} \
+            ${{ steps.build_inputs.outputs.partial_flag }}
+
+      - name: Upload weekly reference assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MARKET_LOWER="$(echo "${{ matrix.market }}" | tr '[:upper:]' '[:lower:]')"
+          BUNDLE_PATH="$(find /tmp/weekly-reference -maxdepth 1 -name "weekly-reference-${MARKET_LOWER}-*.json.gz" | head -n 1)"
+          MANIFEST_PATH="/tmp/weekly-reference/weekly-reference-latest-${MARKET_LOWER}.json"
+
+          if [ -z "$BUNDLE_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
+            echo "Missing weekly reference bundle outputs" >&2
+            exit 1
+          fi
+
+          gh release upload weekly-reference-data "$BUNDLE_PATH" --clobber
+          gh release upload weekly-reference-data "$MANIFEST_PATH" --clobber

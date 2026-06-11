@@ -1,0 +1,226 @@
+"""Integration tests proving DataSourceService honours the routing policy.
+
+These tests exist to lock in the acceptance criterion for
+``StockScreenClaude-asia.5.1``: non-US requests must not attempt
+unsupported provider calls.
+"""
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+import pytest
+
+from app.domain.providers.data_plan import DATASET_FUNDAMENTALS, PLAN_VERSION
+from app.services.data_source_service import DataSourceService
+
+
+class _FakeOpenDart:
+    is_configured = True
+
+    def __init__(self, statement_fields=None):
+        self.statement_fields = statement_fields or {}
+        self.calls = []
+
+    def get_statement_fundamentals(self, local_code):
+        self.calls.append(local_code)
+        return dict(self.statement_fields)
+
+
+def _make_service(
+    finviz_return=None,
+    yfinance_return=None,
+    *,
+    cn_market_data_service=None,
+    krx_fundamentals_service=None,
+    opendart_fundamentals_service=None,
+    enable_fallback=True,
+) -> DataSourceService:
+    """Build a DataSourceService with fully mocked provider dependencies."""
+    finviz = MagicMock()
+    finviz.get_fundamentals.return_value = finviz_return
+    finviz.get_quarterly_growth.return_value = finviz_return
+    yfinance = MagicMock()
+    yfinance.get_fundamentals.return_value = yfinance_return or {
+        "market_cap": 1_000,
+        "pe_ratio": 10.0,
+    }
+    yfinance.get_quarterly_growth.return_value = yfinance_return or {
+        "eps_growth_qq": 0.1,
+    }
+    eps_rating = MagicMock()
+    rate_limiter = MagicMock()
+    return DataSourceService(
+        finviz_service=finviz,
+        yfinance_service=yfinance,
+        eps_rating_service=eps_rating,
+        cn_market_data_service=cn_market_data_service,
+        krx_fundamentals_service=krx_fundamentals_service,
+        opendart_fundamentals_service=opendart_fundamentals_service,
+        rate_limiter=rate_limiter,
+        prefer_finviz=True,
+        enable_fallback=enable_fallback,
+    )
+
+
+class TestGetFundamentalsPolicyGate:
+    """Acceptance: non-US markets skip finviz, go straight to yfinance."""
+
+    @pytest.mark.parametrize("market", ["HK", "IN", "JP", "TW"])
+    def test_non_us_market_skips_finviz(self, market):
+        svc = _make_service()
+        result = svc.get_fundamentals("0700.HK", market=market)
+
+        svc.finviz_service.get_fundamentals.assert_not_called()
+        svc.yfinance_service.get_fundamentals.assert_called_once_with("0700.HK")
+        assert result is not None
+        assert result["data_source"] == "yfinance"
+        assert result["provider_data_plan"] == {
+            "version": PLAN_VERSION,
+            "dataset": DATASET_FUNDAMENTALS,
+            "market": market,
+            "mic": None,
+            "providers": ["yfinance"],
+        }
+        assert svc.metrics["finviz_skipped_by_policy"] == 1
+        assert svc.metrics["finviz_success"] == 0
+
+    def test_fundamentals_plan_controls_fallback_order(self):
+        svc = _make_service(finviz_return=None, yfinance_return={"market_cap": 1_000})
+        result = svc.get_fundamentals("AAPL", market="US")
+
+        svc.finviz_service.get_fundamentals.assert_called_once_with("AAPL")
+        svc.yfinance_service.get_fundamentals.assert_called_once_with("AAPL")
+        assert result["data_source"] == "yfinance"
+        assert result["provider_data_plan"]["providers"] == [
+            "finviz",
+            "yfinance",
+            "alphavantage",
+        ]
+
+    def test_korea_market_uses_native_fundamental_providers_before_yfinance(self):
+        krx = MagicMock()
+        krx.core_fundamentals.return_value = {"market_cap": 1_000, "pe_ratio": 9.5}
+        opendart = _FakeOpenDart({"revenue_current": 10_000})
+        svc = _make_service(
+            krx_fundamentals_service=krx,
+            opendart_fundamentals_service=opendart,
+        )
+
+        result = svc.get_fundamentals("005930.KS", market="KR")
+
+        svc.finviz_service.get_fundamentals.assert_not_called()
+        krx.core_fundamentals.assert_called_once_with("005930")
+        assert opendart.calls == ["005930"]
+        svc.yfinance_service.get_fundamentals.assert_called_once_with("005930.KS")
+        assert result["data_source"] == "krx+opendart+yfinance"
+        assert result["provider_data_plan"]["providers"] == ["krx", "opendart", "yfinance"]
+        assert result["market"] == "KR"
+        assert result["currency"] == "KRW"
+
+    def test_china_statement_fundamentals_uses_neutral_statement_provenance(self):
+        cn = MagicMock()
+        cn.core_fundamentals.return_value = {"market_cap": 1_000, "pe_ratio": 9.5}
+        cn.statement_fundamentals.return_value = {"revenue_current": 10_000}
+        svc = _make_service(cn_market_data_service=cn, enable_fallback=False)
+
+        result = svc.get_fundamentals("600519.SS", market="CN")
+
+        svc.finviz_service.get_fundamentals.assert_not_called()
+        cn.core_fundamentals.assert_called_once_with("600519")
+        cn.statement_fundamentals.assert_called_once_with("600519")
+        assert result["data_source"] == "akshare+cn_statement"
+        assert result["market"] == "CN"
+        assert result["currency"] == "CNY"
+
+    def test_china_bjse_plan_disables_yfinance_fallback_by_mic(self):
+        cn = MagicMock()
+        cn.core_fundamentals.return_value = {"market_cap": 1_000}
+        cn.statement_fundamentals.return_value = {"revenue_current": 10_000}
+        svc = _make_service(cn_market_data_service=cn)
+
+        result = svc.get_fundamentals("920118.BJ", market="CN")
+
+        svc.yfinance_service.get_fundamentals.assert_not_called()
+        assert result["yfinance_status"] == "disabled_for_beijing"
+        assert result["provider_data_plan"] == {
+            "version": PLAN_VERSION,
+            "dataset": DATASET_FUNDAMENTALS,
+            "market": "CN",
+            "mic": "XBSE",
+            "providers": ["akshare", "baostock"],
+        }
+
+    def test_korea_market_respects_disabled_yfinance_fallback(self):
+        krx = MagicMock()
+        krx.core_fundamentals.return_value = {"market_cap": 1_000, "pe_ratio": 9.5}
+        opendart = _FakeOpenDart({"revenue_current": 10_000})
+        svc = _make_service(
+            krx_fundamentals_service=krx,
+            opendart_fundamentals_service=opendart,
+            enable_fallback=False,
+        )
+
+        result = svc.get_fundamentals("005930.KS", market="KR")
+
+        svc.yfinance_service.get_fundamentals.assert_not_called()
+        assert result["data_source"] == "krx+opendart"
+
+    def test_us_market_still_prefers_finviz(self):
+        svc = _make_service(finviz_return={"market_cap": 2_000})
+        svc.get_fundamentals("AAPL", market="US")
+        svc.finviz_service.get_fundamentals.assert_called_once_with("AAPL")
+        assert svc.metrics["finviz_skipped_by_policy"] == 0
+
+    def test_none_market_defaults_to_us_behaviour(self):
+        svc = _make_service(finviz_return={"market_cap": 2_000})
+        svc.get_fundamentals("AAPL")  # no market kwarg
+        svc.finviz_service.get_fundamentals.assert_called_once_with("AAPL")
+        assert svc.metrics["finviz_skipped_by_policy"] == 0
+
+
+class TestGetQuarterlyGrowthPolicyGate:
+    @pytest.mark.parametrize("market", ["HK", "IN", "JP", "TW"])
+    def test_non_us_market_skips_finviz_growth(self, market):
+        svc = _make_service()
+        result = svc.get_quarterly_growth("7203.T", market=market)
+        svc.finviz_service.get_quarterly_growth.assert_not_called()
+        svc.yfinance_service.get_quarterly_growth.assert_called_once_with("7203.T", market=market)
+        assert result is not None
+        assert result["data_source"] == "yfinance"
+
+
+class TestGetCombinedDataPolicyGate:
+    @pytest.mark.parametrize("market", ["HK", "IN", "JP", "TW"])
+    def test_non_us_market_skips_finviz_combined(self, market):
+        svc = _make_service()
+        result = svc.get_combined_data("2330.TW", market=market)
+        svc.finviz_service.get_combined_data.assert_not_called()
+        svc.yfinance_service.get_fundamentals.assert_called_once_with("2330.TW")
+        svc.yfinance_service.get_quarterly_growth.assert_called_once_with("2330.TW", market=market)
+        assert result is not None
+
+    def test_korea_combined_data_uses_kr_fundamentals_path(self):
+        krx = MagicMock()
+        krx.core_fundamentals.return_value = {"market_cap": 1_000, "pe_ratio": 9.5}
+        opendart = _FakeOpenDart({"revenue_current": 10_000})
+        svc = _make_service(
+            krx_fundamentals_service=krx,
+            opendart_fundamentals_service=opendart,
+        )
+
+        result = svc.get_combined_data("005930.KS", market="KR")
+
+        svc.finviz_service.get_combined_data.assert_not_called()
+        krx.core_fundamentals.assert_called_once_with("005930")
+        svc.yfinance_service.get_quarterly_growth.assert_called_once_with("005930.KS", market="KR")
+        assert result is not None
+        assert result["fundamentals"]["data_source"] == "krx+opendart+yfinance"
+        assert result["growth"]["data_source"] == "yfinance"
+
+
+class TestMetricsIncludePolicySkipCounter:
+    """The policy metric is exposed so operators can observe impact."""
+
+    def test_metrics_dict_contains_policy_skip_counter(self):
+        svc = _make_service()
+        assert "finviz_skipped_by_policy" in svc.get_metrics()

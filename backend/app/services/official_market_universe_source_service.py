@@ -1,0 +1,2517 @@
+"""Fetch and parse official exchange universe snapshots for HK, IN, JP, KR, TW, CN, CA, DE, SG, MY, and AU.
+
+MY (Bursa Malaysia) supports two paths: a live JSON fetch driven by
+``MY_UNIVERSE_SOURCE_URL`` (walks the paginated Bursa equities listing
+endpoint and emits ``source_name == 'bursa_official'``), and a bundled CSV
+fallback that ships the FBM KLCI 30 plus a handful of FBM Top 100 names.
+When the live URL is blank, unreachable, returns no rows, or yields fewer
+than ``settings.my_live_min_universe_size`` rows after filtering, the
+fetcher falls back to the seed CSV and emits ``source_name == 'my_manual_csv'``
+so downstream coverage gates can see the snapshot is degraded.
+"""
+
+from __future__ import annotations
+
+import csv
+from datetime import UTC, date, datetime, timedelta
+from email.utils import parsedate_to_datetime
+import io
+import json
+import logging
+import math
+from pathlib import Path
+import re
+import time
+from typing import Any, Iterable
+from zoneinfo import ZoneInfo
+
+from bs4 import BeautifulSoup
+import pandas as pd
+import requests
+import urllib3
+
+from ..config import settings
+from ..domain.markets.catalog import get_market_catalog
+from .asx_official_universe_source import ASXOfficialUniverseSource
+from .official_market_universe_types import (
+    FetchedSource as _FetchedSource,
+    OfficialMarketUniverseSnapshot,
+)
+
+logger = logging.getLogger(__name__)
+
+
+_HK_SOURCE_NAME = "hkex_official"
+_IN_SOURCE_NAME = "in_reference_bundle"
+_NSE_SOURCE_NAME = "nse_official"
+_BSE_SOURCE_NAME = "bse_official"
+_JP_SOURCE_NAME = "jpx_official"
+_KR_SOURCE_NAME = "krx_official"
+_TW_SOURCE_NAME = "tw_reference_bundle"
+_CN_SOURCE_NAME = "cn_akshare_eastmoney"
+_CA_SOURCE_NAME = "tmx_official"
+_DE_SOURCE_NAME = "dbg_official"
+# Source identifier emitted on snapshot rows when the live CSV is unreachable
+# and the bundled DE seed CSV is used instead. Distinct from `_DE_SOURCE_NAME`
+# so downstream coverage gates can tell live from fallback.
+_DE_FALLBACK_SOURCE_NAME = "de_manual_csv"
+_SG_SOURCE_NAME = "sgx_official"
+# Source identifier emitted on snapshot rows when the live SGX API is
+# unreachable / blanked and the bundled SG seed CSV is used instead.
+_SG_FALLBACK_SOURCE_NAME = "sg_manual_csv"
+_MY_SOURCE_NAME = "bursa_official"
+# Source identifier emitted when the live Bursa Malaysia feed is unconfigured
+# or unreachable and the bundled MY seed CSV is used instead.
+_MY_FALLBACK_SOURCE_NAME = "my_manual_csv"
+# Bursa issuer codes are exactly four numeric digits; the live parser drops
+# rows whose ticker token cannot be canonicalized to ``<NNNN>.KL``.
+_MY_LIVE_TICKER_RE = re.compile(r"^[0-9]{4}$")
+# Bursa labels boards in several formats: ``MAIN MARKET``, ``MAIN-MKT``,
+# ``MAIN_MKT``, sometimes bare ``MAIN``. ACE follows the same shape. LEAP
+# Market (private-investor venue) and structured-product boards are excluded.
+_MY_EQUITY_BOARD_TOKENS = frozenset({"MAIN", "ACE"})
+# Word-boundary tokens that disqualify a Bursa row from the supported
+# universe (REITs, business trusts, ETFs, structured warrants). Tokens are
+# matched after splitting the haystack on non-alphanumerics so substring
+# matches inside ordinary issuer names cannot trigger exclusion.
+_MY_EXCLUDED_TOKENS = frozenset(
+    {"reit", "reits", "etf", "etfs", "trust", "trusts", "warrant", "warrants"}
+)
+# SGX issuer codes follow the same ``[A-Z0-9]{1,8}`` shape the SG ingestion
+# adapter enforces — reject Yahoo-incompatible codes from the live response
+# before they reach downstream consumers.
+_SG_LIVE_TICKER_RE = re.compile(r"^[A-Z0-9]{1,8}$")
+# SGX equity boards. Mainboard hosts established issuers; Catalist is the
+# sponsor-supervised growth board. Both are common-stock venues; everything
+# else (e.g., GlobalQuote, structured warrants) is excluded.
+_SG_EQUITY_BOARDS = frozenset({"MAINBOARD", "CATALIST"})
+# Yahoo-incompatible local codes are dropped from live results. The DE adapter
+# enforces ``[A-Z0-9]{1,8}`` and downstream yfinance only accepts well-formed
+# tickers — there is no value in publishing a row whose symbol cannot be
+# resolved to a market data feed.
+_DE_LIVE_TICKER_RE = re.compile(r"^[A-Z0-9]{1,8}$")
+# Single tokens (matched as whole words after splitting the instrument-type
+# string on non-alphanumeric chars). Plurals are listed explicitly so that
+# "Notes" matches but "Footnotes" does not.
+_CA_EXCLUDED_INSTRUMENT_TOKENS: frozenset[str] = frozenset(
+    {
+        "etf",
+        "etn",
+        "bond",
+        "bonds",
+        "debenture",
+        "debentures",
+        "note",
+        "notes",
+        "right",
+        "rights",
+        "warrant",
+        "warrants",
+        "nvcc",
+        "convertible",
+        "convertibles",
+    }
+)
+# Multi-word phrases (matched as case-insensitive substrings; specific enough
+# that false positives are unlikely).
+_CA_EXCLUDED_INSTRUMENT_PHRASES: frozenset[str] = frozenset(
+    {
+        "exchange-traded fund",
+        "exchange traded fund",
+        "exchange-traded note",
+        "exchange traded note",
+        "mutual fund",
+        "closed-end fund",
+        "closed end fund",
+        "investment fund",
+        "subscription receipt",
+        "structured product",
+    }
+)
+_CA_INSTRUMENT_TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+_KR_VALIDATED_BASELINE = {
+    "source_url": "https://global.krx.co.kr/main/main.jspx?bld=listing_list",
+    "validated_at": "2026-04-29",
+    "kospi": 839,
+    "kosdaq": 1819,
+    "konex": 110,
+    "total": 2768,
+    "kospi_kosdaq_target": 2658,
+}
+_KR_VALIDATED_BASELINE_TOLERANCE = 0.02
+_CN_VALIDATED_BASELINE = {
+    "source_url": "https://en.people.cn/n3/2026/0326/c90000-20440055.html",
+    "validated_at": "2026-04-30",
+    "as_of": "2026-02-28",
+    "sse": 2310,
+    "szse": 2887,
+    "bse": 295,
+    "total": 5492,
+    "notes": "Xinhua/China Association for Public Companies end-February 2026 domestic listed company count.",
+}
+_CN_VALIDATED_BASELINE_TOLERANCE = 0.02
+
+_HK_EQUITY_CATEGORY = "equity"
+_HK_EQUITY_SUBCATEGORY_TOKEN = "equity securities"
+_JP_ALLOWED_MARKET_SECTIONS = frozenset(
+    {
+        "プライム（内国株式）",
+        "スタンダード（内国株式）",
+        "グロース（内国株式）",
+    }
+)
+_TW_UPDATED_AT_RE = re.compile(r"Date\s+Stock\s+Updated:\s*(\d{4}/\d{2}/\d{2})", re.IGNORECASE)
+_TW_CODE_NAME_RE = re.compile(r"^([0-9A-Z]{3,6}[A-Z]?)\s+(.+?)$")
+_HTTP_GET_MAX_ATTEMPTS = 3
+_NSE_ARCHIVE_SOURCE_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+_NSE_SOURCE_HEADERS = {
+    "Accept": "text/csv,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/123.0.0.0 Safari/537.36"
+    ),
+}
+_BSE_SOURCE_HEADERS = {
+    "Accept": "application/json,*/*",
+    "Referer": "https://www.bseindia.com/corporates/List_Scrips.html",
+}
+_OFFICIAL_SOURCE_MARKETS = frozenset(
+    get_market_catalog().market_codes_with_capability("official_universe")
+)
+
+
+class OfficialMarketUniverseSourceService:
+    """Fetch official exchange listings and normalize them into ingest rows."""
+
+    def __init__(
+        self,
+        *,
+        timeout_seconds: int | None = None,
+        user_agent: str | None = None,
+        kr_provider: Any | None = None,
+        cn_provider: Any | None = None,
+        market_calendar: Any | None = None,
+    ) -> None:
+        self._explicit_timeout_seconds = timeout_seconds
+        self._timeout_seconds = int(
+            timeout_seconds or settings.universe_source_timeout_seconds
+        )
+        self._user_agent = user_agent or settings.universe_source_user_agent
+        self._kr_provider = kr_provider
+        self._cn_provider = cn_provider
+        self._market_calendar = market_calendar
+        self._asx_source = ASXOfficialUniverseSource(
+            http_get=lambda *args, **kwargs: self._http_get(*args, **kwargs)
+        )
+
+    def fetch_market_snapshot(self, market: str) -> OfficialMarketUniverseSnapshot:
+        normalized_market = str(market or "").strip().upper()
+        fetchers = self._snapshot_fetchers()
+        fetcher = fetchers.get(normalized_market)
+        if fetcher is not None:
+            return fetcher()
+        raise ValueError(f"Official universe refresh is unsupported for market {market!r}")
+
+    def _snapshot_fetchers(self) -> dict[str, Any]:
+        fetchers = {
+            "HK": self.fetch_hk_snapshot,
+            "IN": self.fetch_in_snapshot,
+            "JP": self.fetch_jp_snapshot,
+            "KR": self.fetch_kr_snapshot,
+            "TW": self.fetch_tw_snapshot,
+            "CN": self.fetch_cn_snapshot,
+            "CA": self.fetch_ca_snapshot,
+            "DE": self.fetch_de_snapshot,
+            "SG": self.fetch_sg_snapshot,
+            "MY": self.fetch_my_snapshot,
+            "AU": self._asx_source.fetch_snapshot,
+        }
+        fetcher_markets = frozenset(fetchers)
+        if fetcher_markets != _OFFICIAL_SOURCE_MARKETS:
+            missing = sorted(_OFFICIAL_SOURCE_MARKETS - fetcher_markets)
+            extra = sorted(fetcher_markets - _OFFICIAL_SOURCE_MARKETS)
+            raise RuntimeError(
+                "Official universe fetch dispatch must match Market Catalog "
+                f"official_universe capability; missing={missing}, extra={extra}"
+            )
+        return fetchers
+
+    def fetch_hk_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        fetched = self._http_get(settings.hk_universe_source_url)
+        fallback_as_of = self._date_from_http_header(fetched.last_modified) or self._utc_today()
+        rows = self.parse_hk_rows(fetched.content)
+        snapshot_as_of = fallback_as_of.isoformat()
+        source_metadata = {
+            "source_urls": [settings.hk_universe_source_url],
+            "fetched_at": fetched.fetched_at,
+            "http_last_modified": fetched.last_modified,
+            "tls_verification_disabled": fetched.tls_verification_disabled,
+            "filters": {
+                "category_equals": "Equity",
+                "sub_category_contains": "Equity Securities",
+            },
+            "sheet_name": "ListOfSecurities",
+        }
+        return OfficialMarketUniverseSnapshot(
+            market="HK",
+            source_name=_HK_SOURCE_NAME,
+            snapshot_id=f"hkex-listofsecurities-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    def fetch_jp_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        fetched = self._http_get(settings.jp_universe_source_url)
+        frame = self._read_excel_bytes(fetched.content, engine="xlrd")
+        rows, snapshot_date = self._parse_jp_frame(frame)
+        snapshot_as_of = snapshot_date.isoformat()
+        source_metadata = {
+            "source_urls": [settings.jp_universe_source_url],
+            "fetched_at": fetched.fetched_at,
+            "http_last_modified": fetched.last_modified,
+            "tls_verification_disabled": fetched.tls_verification_disabled,
+            "filters": {
+                "market_product_category_in": sorted(_JP_ALLOWED_MARKET_SECTIONS),
+            },
+        }
+        return OfficialMarketUniverseSnapshot(
+            market="JP",
+            source_name=_JP_SOURCE_NAME,
+            snapshot_id=f"jpx-data-j-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    def fetch_kr_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        provider = self._get_kr_provider()
+        requested_listing_as_of = self._kr_listing_as_of()
+        rows = list(
+            provider.listing_rows(boards=("KOSPI", "KOSDAQ"), as_of=requested_listing_as_of)
+        )
+        historical_listing_empty = False
+        krx_listing_mode = "last_completed_trading_day"
+        listing_as_of = requested_listing_as_of
+        if self._kr_kospi_kosdaq_row_count(rows) == 0:
+            historical_listing_empty = True
+            logger.warning(
+                "KR official universe fetch returned no rows for historical as_of=%s; "
+                "retrying current KRX listing finder.",
+                requested_listing_as_of.isoformat(),
+            )
+            rows = list(provider.listing_rows(boards=("KOSPI", "KOSDAQ"), as_of=None))
+            if self._kr_kospi_kosdaq_row_count(rows) > 0:
+                krx_listing_mode = "current_listing_fallback"
+                listing_as_of = requested_listing_as_of
+        if self._kr_kospi_kosdaq_row_count(rows) == 0:
+            raise ValueError("KR official universe fetch returned no KOSPI/KOSDAQ rows")
+
+        rows = self._kr_supported_board_rows(rows)
+        rows = self._enrich_kr_rows_with_taxonomy(rows)
+        row_counts = {
+            "kospi": sum(1 for row in rows if str(row.get("exchange") or "").upper() == "KOSPI"),
+            "kosdaq": sum(1 for row in rows if str(row.get("exchange") or "").upper() == "KOSDAQ"),
+        }
+        count_breaches = self._kr_baseline_count_breaches(row_counts)
+        if count_breaches:
+            logger.warning(
+                "KR official universe fetch count outside static KRX baseline: %s",
+                "; ".join(
+                    f"{breach['board']} actual={breach['actual']} expected={breach['expected']} "
+                    f"range=[{breach['min']},{breach['max']}]"
+                    for breach in count_breaches
+                ),
+            )
+
+        snapshot_as_of = listing_as_of.isoformat()
+        source_metadata = {
+            "source_urls": [_KR_VALIDATED_BASELINE["source_url"]],
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "listing_as_of": snapshot_as_of,
+            "requested_listing_as_of": requested_listing_as_of.isoformat(),
+            "krx_listing_mode": krx_listing_mode,
+            "historical_listing_empty": historical_listing_empty,
+            "filters": {
+                "boards": ["KOSPI", "KOSDAQ"],
+                "excluded_products": ["ETF", "ETN", "ELW", "funds", "REITs"],
+            },
+            "excluded_boards": ["KONEX"],
+            "row_counts": row_counts,
+            "source_count": len(rows),
+            "validated_krx_baseline": dict(_KR_VALIDATED_BASELINE),
+            "validated_krx_baseline_tolerance": _KR_VALIDATED_BASELINE_TOLERANCE,
+            "validated_krx_baseline_breaches": count_breaches,
+            "krx_baseline_status": (
+                "outside_static_baseline" if count_breaches else "within_static_baseline"
+            ),
+        }
+        return OfficialMarketUniverseSnapshot(
+            market="KR",
+            source_name=_KR_SOURCE_NAME,
+            snapshot_id=f"krx-listings-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    def fetch_cn_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        provider = self._get_cn_provider()
+        rows = list(provider.listing_rows(as_of=self._utc_today()))
+        if not rows:
+            raise ValueError("CN official universe fetch returned no A-share rows")
+
+        rows = self._enrich_cn_rows_with_taxonomy(rows)
+        row_counts = {
+            "sse": sum(1 for row in rows if str(row.get("exchange") or "").upper() == "SSE"),
+            "szse": sum(1 for row in rows if str(row.get("exchange") or "").upper() == "SZSE"),
+            "bse": sum(1 for row in rows if str(row.get("exchange") or "").upper() in {"BJSE", "BSE"}),
+        }
+        count_breaches = self._cn_baseline_count_breaches(row_counts)
+
+        snapshot_as_of = self._utc_today().isoformat()
+        source_metadata = {
+            "source_urls": [
+                _CN_VALIDATED_BASELINE["source_url"],
+                "https://akshare.akfamily.xyz/data/stock/stock.html",
+            ],
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "snapshot_as_of": snapshot_as_of,
+            "filters": {
+                "market": "mainland_a_shares",
+                "exchanges": ["SSE", "SZSE", "BJSE"],
+                "excluded_products": [
+                    "B-shares",
+                    "ETFs",
+                    "funds",
+                    "bonds",
+                    "convertibles",
+                    "indices",
+                    "NEEQ-only securities",
+                ],
+            },
+            "row_counts": row_counts,
+            "source_count": len(rows),
+            "validated_cn_baseline": dict(_CN_VALIDATED_BASELINE),
+            "validated_cn_baseline_tolerance": _CN_VALIDATED_BASELINE_TOLERANCE,
+            "validated_cn_baseline_breaches": count_breaches,
+            "cn_baseline_status": (
+                "outside_static_baseline" if count_breaches else "within_static_baseline"
+            ),
+        }
+        return OfficialMarketUniverseSnapshot(
+            market="CN",
+            source_name=_CN_SOURCE_NAME,
+            snapshot_id=f"cn-a-share-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    @staticmethod
+    def _seoul_today() -> date:
+        return datetime.now(ZoneInfo("Asia/Seoul")).date()
+
+    def _kr_listing_as_of(self) -> date:
+        try:
+            listing_day = self._get_market_calendar().last_completed_trading_day("KR")
+            if isinstance(listing_day, datetime):
+                return listing_day.date()
+            if isinstance(listing_day, date):
+                return listing_day
+            raise ValueError(f"KR calendar returned invalid date: {listing_day!r}")
+        except (AttributeError, ImportError, RuntimeError, TypeError, ValueError) as exc:
+            logger.warning(
+                "KR calendar lookup unavailable; using Seoul weekday fallback: %s",
+                exc,
+            )
+            return self._previous_seoul_business_day(self._seoul_today())
+
+    def _get_market_calendar(self):
+        if self._market_calendar is None:
+            from .market_calendar_service import MarketCalendarService
+
+            self._market_calendar = MarketCalendarService()
+        return self._market_calendar
+
+    @staticmethod
+    def _previous_seoul_business_day(day: date) -> date:
+        if day.weekday() == 0:
+            return day - timedelta(days=3)
+        if day.weekday() == 6:
+            return day - timedelta(days=2)
+        return day - timedelta(days=1)
+
+    def fetch_nse_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        source_urls = [settings.nse_universe_source_url]
+        try:
+            fetched = self._http_get(
+                settings.nse_universe_source_url,
+                extra_headers=_NSE_SOURCE_HEADERS,
+            )
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            if settings.nse_universe_source_url == _NSE_ARCHIVE_SOURCE_URL:
+                raise
+            source_urls.append(_NSE_ARCHIVE_SOURCE_URL)
+            fetched = self._http_get(
+                _NSE_ARCHIVE_SOURCE_URL,
+                extra_headers=_NSE_SOURCE_HEADERS,
+            )
+        fallback_as_of = self._date_from_http_header(fetched.last_modified) or self._utc_today()
+        rows = self.parse_nse_rows(fetched.content)
+        snapshot_as_of = fallback_as_of.isoformat()
+        return OfficialMarketUniverseSnapshot(
+            market="IN",
+            source_name=_NSE_SOURCE_NAME,
+            snapshot_id=f"nse-equity-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata={
+                "source_urls": source_urls,
+                "fetched_at": fetched.fetched_at,
+                "http_last_modified": fetched.last_modified,
+                "tls_verification_disabled": fetched.tls_verification_disabled,
+                "filters": {"series_equals": "EQ"},
+            },
+            rows=tuple(rows),
+        )
+
+    def _get_kr_provider(self):
+        if self._kr_provider is None:
+            from .kr_market_data_service import KrxMarketDataService
+
+            self._kr_provider = KrxMarketDataService()
+        return self._kr_provider
+
+    def _get_cn_provider(self):
+        if self._cn_provider is None:
+            from .cn_market_data_service import CnMarketDataService
+
+            self._cn_provider = CnMarketDataService(
+                timeout_seconds=self._explicit_timeout_seconds,
+            )
+        return self._cn_provider
+
+    @staticmethod
+    def _kr_expected_range(expected: int) -> tuple[int, int]:
+        tolerance = _KR_VALIDATED_BASELINE_TOLERANCE
+        return (
+            math.ceil(expected * (1.0 - tolerance)),
+            math.floor(expected * (1.0 + tolerance)),
+        )
+
+    @staticmethod
+    def _kr_kospi_kosdaq_row_count(rows: Iterable[dict[str, Any]]) -> int:
+        return sum(
+            1
+            for row in rows
+            if OfficialMarketUniverseSourceService._is_kr_supported_board(row)
+        )
+
+    @staticmethod
+    def _kr_supported_board_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            row
+            for row in rows
+            if OfficialMarketUniverseSourceService._is_kr_supported_board(row)
+        ]
+
+    @staticmethod
+    def _is_kr_supported_board(row: dict[str, Any]) -> bool:
+        return str(row.get("exchange") or "").strip().upper() in {"KOSPI", "KOSDAQ"}
+
+    @classmethod
+    def _kr_baseline_count_breaches(cls, row_counts: dict[str, int]) -> list[dict[str, Any]]:
+        breaches: list[dict[str, Any]] = []
+        for board in ("kospi", "kosdaq"):
+            expected = int(_KR_VALIDATED_BASELINE[board])
+            minimum, maximum = cls._kr_expected_range(expected)
+            actual = int(row_counts.get(board) or 0)
+            if actual < minimum or actual > maximum:
+                breaches.append(
+                    {
+                        "board": board,
+                        "actual": actual,
+                        "expected": expected,
+                        "min": minimum,
+                        "max": maximum,
+                    }
+                )
+        return breaches
+
+    @staticmethod
+    def _cn_expected_range(expected: int) -> tuple[int, int]:
+        tolerance = _CN_VALIDATED_BASELINE_TOLERANCE
+        return (
+            math.ceil(expected * (1.0 - tolerance)),
+            math.floor(expected * (1.0 + tolerance)),
+        )
+
+    @classmethod
+    def _cn_baseline_count_breaches(cls, row_counts: dict[str, int]) -> list[dict[str, Any]]:
+        breaches: list[dict[str, Any]] = []
+        for exchange in ("sse", "szse", "bse"):
+            expected = int(_CN_VALIDATED_BASELINE[exchange])
+            minimum, maximum = cls._cn_expected_range(expected)
+            actual = int(row_counts.get(exchange) or 0)
+            if actual < minimum or actual > maximum:
+                breaches.append(
+                    {
+                        "exchange": exchange,
+                        "actual": actual,
+                        "expected": expected,
+                        "min": minimum,
+                        "max": maximum,
+                    }
+                )
+        expected_total = int(_CN_VALIDATED_BASELINE["total"])
+        minimum, maximum = cls._cn_expected_range(expected_total)
+        actual_total = sum(int(row_counts.get(exchange) or 0) for exchange in ("sse", "szse", "bse"))
+        if actual_total < minimum or actual_total > maximum:
+            breaches.append(
+                {
+                    "exchange": "total",
+                    "actual": actual_total,
+                    "expected": expected_total,
+                    "min": minimum,
+                    "max": maximum,
+                }
+            )
+        return breaches
+
+    @staticmethod
+    def _enrich_kr_rows_with_taxonomy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Attach committed KR taxonomy fields where the KRX listing row is sparse."""
+        try:
+            from .market_taxonomy_service import TaxonomyLoadError, get_market_taxonomy_service
+        except ImportError as exc:  # pragma: no cover - taxonomy availability is launch-gated separately
+            logger.warning("KR taxonomy enrichment unavailable: %s", exc)
+            return rows
+
+        try:
+            taxonomy = get_market_taxonomy_service()
+        except TaxonomyLoadError as exc:  # pragma: no cover - taxonomy availability is launch-gated separately
+            logger.warning("KR taxonomy enrichment unavailable: %s", exc)
+            return rows
+
+        enriched_rows: list[dict[str, Any]] = []
+        for row in rows:
+            enriched = dict(row)
+            try:
+                entry = taxonomy.get(
+                    enriched.get("symbol") or enriched.get("local_code"),
+                    market="KR",
+                    exchange=enriched.get("exchange"),
+                )
+            except TaxonomyLoadError as exc:
+                logger.warning("KR taxonomy enrichment unavailable: %s", exc)
+                return rows
+            if entry is not None:
+                if not str(enriched.get("sector") or "").strip() and entry.sector:
+                    enriched["sector"] = entry.sector
+                if not str(enriched.get("industry_group") or "").strip() and entry.industry_group:
+                    enriched["industry_group"] = entry.industry_group
+                if not str(enriched.get("industry") or "").strip() and entry.industry:
+                    enriched["industry"] = entry.industry
+                if not str(enriched.get("sub_industry") or "").strip() and entry.sub_industry:
+                    enriched["sub_industry"] = entry.sub_industry
+            enriched_rows.append(enriched)
+        return enriched_rows
+
+    @staticmethod
+    def _enrich_cn_rows_with_taxonomy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Attach committed CN taxonomy fields where the listing row is sparse."""
+        try:
+            from .market_taxonomy_service import TaxonomyLoadError, get_market_taxonomy_service
+        except ImportError as exc:  # pragma: no cover - taxonomy availability is launch-gated separately
+            logger.warning("CN taxonomy enrichment unavailable: %s", exc)
+            return rows
+
+        try:
+            taxonomy = get_market_taxonomy_service()
+        except TaxonomyLoadError as exc:  # pragma: no cover - taxonomy availability is launch-gated separately
+            logger.warning("CN taxonomy enrichment unavailable: %s", exc)
+            return rows
+
+        enriched_rows: list[dict[str, Any]] = []
+        for row in rows:
+            enriched = dict(row)
+            try:
+                entry = taxonomy.get(
+                    enriched.get("symbol") or enriched.get("local_code"),
+                    market="CN",
+                    exchange=enriched.get("exchange"),
+                )
+            except TaxonomyLoadError as exc:
+                logger.warning("CN taxonomy enrichment unavailable: %s", exc)
+                return rows
+            if entry is not None:
+                if not str(enriched.get("sector") or "").strip() and entry.sector:
+                    enriched["sector"] = entry.sector
+                if not str(enriched.get("industry_group") or "").strip() and entry.industry_group:
+                    enriched["industry_group"] = entry.industry_group
+                if not str(enriched.get("industry") or "").strip() and entry.industry:
+                    enriched["industry"] = entry.industry
+                if not str(enriched.get("sub_industry") or "").strip() and entry.sub_industry:
+                    enriched["sub_industry"] = entry.sub_industry
+            enriched_rows.append(enriched)
+        return enriched_rows
+
+    def fetch_bse_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        fetched = self._http_get(
+            settings.bse_universe_source_url,
+            extra_headers=_BSE_SOURCE_HEADERS,
+        )
+        fallback_as_of = self._date_from_http_header(fetched.last_modified) or self._utc_today()
+        rows = self.parse_bse_rows(fetched.content)
+        snapshot_as_of = fallback_as_of.isoformat()
+        return OfficialMarketUniverseSnapshot(
+            market="IN",
+            source_name=_BSE_SOURCE_NAME,
+            snapshot_id=f"bse-equity-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata={
+                "source_urls": [settings.bse_universe_source_url],
+                "fetched_at": fetched.fetched_at,
+                "http_last_modified": fetched.last_modified,
+                "tls_verification_disabled": fetched.tls_verification_disabled,
+                "filters": {"segment_equals": "Equity", "status_equals": "Active"},
+            },
+            rows=tuple(rows),
+        )
+
+    def fetch_in_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        nse_snapshot = self.fetch_nse_snapshot()
+        bse_snapshot = self.fetch_bse_snapshot()
+
+        nse_by_isin = {
+            str(row.get("isin") or "").strip().upper(): row
+            for row in nse_snapshot.rows
+            if str(row.get("isin") or "").strip()
+        }
+        bse_by_isin = {
+            str(row.get("isin") or "").strip().upper(): row
+            for row in bse_snapshot.rows
+            if str(row.get("isin") or "").strip()
+        }
+
+        overlap_isins = sorted(set(nse_by_isin) & set(bse_by_isin))
+        combined_rows = list(sorted(nse_snapshot.rows, key=lambda row: str(row.get("symbol") or "")))
+        for isin, row in sorted(bse_by_isin.items()):
+            if isin in nse_by_isin:
+                continue
+            combined_rows.append(row)
+
+        snapshot_as_of = max(nse_snapshot.snapshot_as_of, bse_snapshot.snapshot_as_of)
+        return OfficialMarketUniverseSnapshot(
+            market="IN",
+            source_name=_IN_SOURCE_NAME,
+            snapshot_id=f"in-reference-bundle-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata={
+                "source_urls": [
+                    settings.nse_universe_source_url,
+                    settings.bse_universe_source_url,
+                ],
+                "nse_snapshot_id": nse_snapshot.snapshot_id,
+                "bse_snapshot_id": bse_snapshot.snapshot_id,
+                "nse_count": len(nse_snapshot.rows),
+                "bse_count": len(bse_snapshot.rows),
+                "overlap_isin_count": len(overlap_isins),
+                "combined_count": len(combined_rows),
+            },
+            rows=tuple(combined_rows),
+        )
+
+    def fetch_tw_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        twse_fetched = self._http_get(
+            settings.tw_universe_source_twse_url,
+            allow_insecure_fallback=settings.tw_universe_allow_insecure_fallback,
+        )
+        tpex_fetched = self._http_get(
+            settings.tw_universe_source_tpex_url,
+            allow_insecure_fallback=settings.tw_universe_allow_insecure_fallback,
+        )
+
+        twse_html = twse_fetched.content.decode("cp950", errors="replace")
+        tpex_html = tpex_fetched.content.decode("cp950", errors="replace")
+        twse_date = self._parse_tw_updated_at(twse_html)
+        tpex_date = self._parse_tw_updated_at(tpex_html)
+        if twse_date != tpex_date:
+            raise ValueError(
+                "TW reference bundle date mismatch between TWSE and TPEx "
+                f"({twse_date.isoformat()} vs {tpex_date.isoformat()})"
+            )
+
+        twse_rows = self.parse_tw_rows(twse_html, exchange="TWSE")
+        tpex_rows = self.parse_tw_rows(tpex_html, exchange="TPEX")
+        snapshot_as_of = twse_date.isoformat()
+        source_metadata = {
+            "source_urls": [
+                settings.tw_universe_source_twse_url,
+                settings.tw_universe_source_tpex_url,
+            ],
+            "fetched_at": max(twse_fetched.fetched_at, tpex_fetched.fetched_at),
+            "http_last_modified": {
+                "twse": twse_fetched.last_modified,
+                "tpex": tpex_fetched.last_modified,
+            },
+            "tls_verification_disabled": {
+                "twse": twse_fetched.tls_verification_disabled,
+                "tpex": tpex_fetched.tls_verification_disabled,
+            },
+            "filters": {
+                "sections": ["Stocks"],
+                "exchanges": ["TWSE", "TPEX"],
+            },
+            "row_counts": {
+                "twse": len(twse_rows),
+                "tpex": len(tpex_rows),
+            },
+        }
+        return OfficialMarketUniverseSnapshot(
+            market="TW",
+            source_name=_TW_SOURCE_NAME,
+            snapshot_id=f"tw-reference-bundle-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple([*twse_rows, *tpex_rows]),
+        )
+
+    def fetch_ca_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        """Fetch combined TSX + TSXV issuer listings from TMX.
+
+        TMX publishes per-board JSON issuer directories. Each endpoint returns
+        a payload like ``{"length": N, "results": [{"symbol": "...",
+        "name": "...", "instrumentType": "..."}]}``. We combine both boards,
+        exclude non-equity instrument types (ETFs, debentures, warrants, etc.),
+        and tag each row with its exchange so the ingestion adapter can pick
+        the correct ``.TO`` / ``.V`` suffix.
+
+        The configured URLs may contain a ``{initial}`` placeholder, in which
+        case we iterate A-Z and concatenate the results. This is needed for
+        TMX's letter-bucketed directory; a single letter typically returns
+        ~50-200 issuers so all 26 fetches together cover the universe. Per-
+        letter failures are logged and skipped — the snapshot still succeeds
+        as long as at least one letter returned rows on each board.
+        """
+        tsx_rows, tsx_metadata = self._fetch_ca_board("TSX", settings.ca_universe_source_tsx_url)
+        tsxv_rows, tsxv_metadata = self._fetch_ca_board("TSXV", settings.ca_universe_source_tsxv_url)
+
+        # Both boards must contribute rows. A full TSX or TSXV outage (or
+        # parse failure on every letter) should surface as a hard error so
+        # operators can retry, rather than silently publishing a half-empty
+        # CA snapshot that bypasses reconciliation safety checks downstream.
+        empty_boards = [
+            board for board, rows in (("TSX", tsx_rows), ("TSXV", tsxv_rows)) if not rows
+        ]
+        if empty_boards:
+            raise ValueError(
+                "CA official universe fetch returned no equity rows for "
+                f"{', '.join(empty_boards)}; refusing to publish a partial snapshot."
+            )
+
+        snapshot_as_of = (
+            self._date_from_http_header(tsx_metadata.get("http_last_modified"))
+            or self._date_from_http_header(tsxv_metadata.get("http_last_modified"))
+            or self._utc_today()
+        ).isoformat()
+        fetched_ats = [
+            metadata["fetched_at"]
+            for metadata in (tsx_metadata, tsxv_metadata)
+            if metadata.get("fetched_at")
+        ]
+        source_metadata = {
+            "source_urls": [
+                settings.ca_universe_source_tsx_url,
+                settings.ca_universe_source_tsxv_url,
+            ],
+            "fetched_at": max(fetched_ats) if fetched_ats else datetime.now(UTC).isoformat(),
+            "http_last_modified": {
+                "tsx": tsx_metadata.get("http_last_modified"),
+                "tsxv": tsxv_metadata.get("http_last_modified"),
+            },
+            "tls_verification_disabled": {
+                "tsx": tsx_metadata.get("tls_verification_disabled"),
+                "tsxv": tsxv_metadata.get("tls_verification_disabled"),
+            },
+            "fetch_mode": {
+                "tsx": tsx_metadata.get("fetch_mode"),
+                "tsxv": tsxv_metadata.get("fetch_mode"),
+            },
+            "fetch_attempts": {
+                "tsx": tsx_metadata.get("attempts"),
+                "tsxv": tsxv_metadata.get("attempts"),
+            },
+            "fetch_errors": {
+                "tsx": tsx_metadata.get("errors"),
+                "tsxv": tsxv_metadata.get("errors"),
+            },
+            "filters": {
+                "exchanges": ["TSX", "TSXV"],
+                "excluded_instrument_tokens": sorted(_CA_EXCLUDED_INSTRUMENT_TOKENS),
+                "excluded_instrument_phrases": sorted(_CA_EXCLUDED_INSTRUMENT_PHRASES),
+            },
+            "row_counts": {
+                "tsx": len(tsx_rows),
+                "tsxv": len(tsxv_rows),
+            },
+        }
+        return OfficialMarketUniverseSnapshot(
+            market="CA",
+            source_name=_CA_SOURCE_NAME,
+            snapshot_id=f"tmx-issuer-directory-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple([*tsx_rows, *tsxv_rows]),
+        )
+
+    def _fetch_ca_board(
+        self,
+        exchange: str,
+        url_template: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Fetch one TMX board (TSX or TSXV) with optional A-Z pagination.
+
+        Returns ``(rows, metadata)`` where metadata describes how the fetch
+        was performed (single vs paginated, attempt count, last_modified,
+        per-letter errors). Symbols are deduplicated across letter buckets
+        on ``(exchange, symbol)``.
+        """
+        templated = "{initial}" in url_template
+        attempts: list[str] = []
+        errors: dict[str, str] = {}
+        last_modified: str | None = None
+        tls_verification_disabled = False
+        fetched_ats: list[str] = []
+        rows_by_symbol: dict[str, dict[str, Any]] = {}
+
+        if templated:
+            letters = [chr(code) for code in range(ord("A"), ord("Z") + 1)]
+            for letter in letters:
+                url = url_template.format(initial=letter)
+                attempts.append(letter)
+                try:
+                    fetched = self._http_get(
+                        url,
+                        allow_insecure_fallback=settings.ca_universe_allow_insecure_fallback,
+                    )
+                except requests.exceptions.RequestException as exc:
+                    errors[letter] = str(exc)
+                    logger.warning(
+                        "TMX directory fetch failed for %s/%s: %s", exchange, letter, exc
+                    )
+                    continue
+                fetched_ats.append(fetched.fetched_at)
+                if fetched.last_modified:
+                    last_modified = fetched.last_modified
+                if fetched.tls_verification_disabled:
+                    tls_verification_disabled = True
+                try:
+                    bucket_rows = self.parse_ca_rows(fetched.content, exchange=exchange)
+                except ValueError as exc:
+                    errors[letter] = f"parse failed: {exc}"
+                    logger.warning(
+                        "TMX directory parse failed for %s/%s: %s", exchange, letter, exc
+                    )
+                    continue
+                for row in bucket_rows:
+                    rows_by_symbol.setdefault(row["symbol"], row)
+        else:
+            attempts.append("single")
+            fetched = self._http_get(
+                url_template,
+                allow_insecure_fallback=settings.ca_universe_allow_insecure_fallback,
+            )
+            fetched_ats.append(fetched.fetched_at)
+            last_modified = fetched.last_modified
+            tls_verification_disabled = fetched.tls_verification_disabled
+            for row in self.parse_ca_rows(fetched.content, exchange=exchange):
+                rows_by_symbol.setdefault(row["symbol"], row)
+
+        rows = sorted(rows_by_symbol.values(), key=lambda row: row["symbol"])
+        metadata: dict[str, Any] = {
+            "fetch_mode": "letter_buckets" if templated else "single_url",
+            "attempts": attempts,
+            "errors": errors,
+            "fetched_at": max(fetched_ats) if fetched_ats else None,
+            "http_last_modified": last_modified,
+            "tls_verification_disabled": tls_verification_disabled,
+        }
+        return rows, metadata
+
+    @classmethod
+    def parse_ca_rows(cls, content: bytes, *, exchange: str) -> list[dict[str, Any]]:
+        """Parse a TMX issuer-directory JSON payload into ingestion rows."""
+        if exchange not in ("TSX", "TSXV"):
+            raise ValueError(f"Unsupported CA exchange '{exchange}'")
+
+        try:
+            payload = json.loads(content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"Invalid TMX directory payload for {exchange}: {exc}"
+            ) from exc
+
+        if isinstance(payload, dict):
+            results = payload.get("results") or payload.get("companies") or []
+        elif isinstance(payload, list):
+            results = payload
+        else:
+            raise ValueError(f"Unexpected TMX payload shape for {exchange}: {type(payload).__name__}")
+
+        rows: list[dict[str, Any]] = []
+        for entry in results:
+            if not isinstance(entry, dict):
+                continue
+            raw_symbol = (
+                entry.get("symbol")
+                or entry.get("ticker")
+                or entry.get("rootTicker")
+                or ""
+            )
+            symbol = str(raw_symbol).strip().upper().replace(" ", "")
+            if not symbol:
+                continue
+
+            instrument_type = str(
+                entry.get("instrumentType")
+                or entry.get("type")
+                or entry.get("securityType")
+                or ""
+            ).strip().lower()
+            if cls._ca_is_excluded_instrument(instrument_type):
+                continue
+
+            name = str(entry.get("name") or entry.get("issuerName") or entry.get("companyName") or "").strip()
+            sector = str(entry.get("sector") or entry.get("gicsSector") or "").strip()
+            industry = str(entry.get("industry") or entry.get("gicsIndustry") or "").strip()
+
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "exchange": exchange,
+                    "sector": sector,
+                    "industry": industry,
+                    "market_cap": entry.get("marketCap"),
+                    "instrument_type": instrument_type,
+                }
+            )
+
+        return rows
+
+    @staticmethod
+    def _ca_is_excluded_instrument(instrument_type: str) -> bool:
+        """Return True for non-equity TMX instrument types.
+
+        Multi-word phrases (e.g. "Closed-End Fund") match as substrings.
+        Single-word tokens (e.g. "ETF", "Notes") match only as whole words —
+        so "Common Shares" passes but "Notes 6.5%" is excluded.
+        """
+        if not instrument_type:
+            return False
+        normalized = instrument_type.lower().strip()
+        for phrase in _CA_EXCLUDED_INSTRUMENT_PHRASES:
+            if phrase in normalized:
+                return True
+        tokens = (token for token in _CA_INSTRUMENT_TOKEN_SPLIT.split(normalized) if token)
+        return any(token in _CA_EXCLUDED_INSTRUMENT_TOKENS for token in tokens)
+
+    def fetch_de_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        """Fetch the DE equity universe from Deutsche Boerse's reference CSV.
+
+        Source: ``settings.de_universe_source_url`` points at the Xetra
+        ``t7-xetr-allTradableInstruments.csv`` file published by Deutsche
+        Boerse Cash Market. Plain ``;``-delimited file with two metadata
+        header rows preceding the column header. We filter to
+        ``Instrument Status = "Active"`` AND ``Instrument Type = "CS"`` (Common
+        Stock) — that drops ETFs/ETNs/ETCs and inactive listings — and emit
+        one snapshot row per remaining instrument with ``symbol =
+        {Mnemonic}.DE``. The Mnemonic is the Xetra trading code that Yahoo
+        Finance uses as its ticker prefix.
+
+        Fallback path: when the live CSV is unreachable (404 because the blob
+        hash rotated, network error, parse failure, or fewer than
+        ``settings.de_live_min_universe_size`` Common Stock rows survive the
+        filter) the fetcher falls back to the bundled seed CSV at
+        ``settings.de_universe_fallback_csv_path``. The snapshot still
+        publishes but with ``source_name == 'de_manual_csv'`` and
+        ``fetch_mode == 'csv_fallback'`` so the coverage gate / operators can
+        see the snapshot is degraded.
+
+        Replaces the earlier signed Boerse Frankfurt JSON API path which
+        required reverse-engineered ``X-Security`` HMAC signing whose salt
+        rotated without notice. The Xetra reference CSV needs no auth, has a
+        stable schema, and the ``Mnemonic`` column carries the Yahoo ticker
+        directly — no slug-derivation heuristics required.
+        """
+        fetch_mode = "live_http"
+        fetch_errors: dict[str, str] = {}
+        fetched_at: str | None = None
+        last_modified: str | None = None
+        tls_verification_disabled = False
+        live_meta: dict[str, Any] = {}
+
+        try:
+            live_meta = self._fetch_de_live()
+        except (requests.exceptions.RequestException, ValueError) as exc:
+            live_error = str(exc)
+            # ``logger.warning`` writes to stderr and the CI build-step log
+            # often misses it — surface the failure reason on stdout too so
+            # operators inspecting the workflow output can see why fallback
+            # fired without diving into the log viewer's stderr stream.
+            print(
+                f"[de] Live universe fetch failed: {live_error!s}. "
+                f"Falling back to bundled CSV at {settings.de_universe_fallback_csv_path}.",
+                flush=True,
+            )
+            logger.warning(
+                "Live DE universe fetch failed (%s); falling back to bundled CSV at %s",
+                live_error,
+                settings.de_universe_fallback_csv_path,
+            )
+            fetch_errors["live_http"] = live_error
+            rows = self._load_de_csv_fallback()
+            if not rows:
+                raise ValueError(
+                    "DE official universe fetch failed and no fallback CSV rows are available "
+                    f"(live error: {live_error})"
+                ) from exc
+            fetch_mode = "csv_fallback"
+            fetched_at = datetime.now(UTC).isoformat()
+        else:
+            rows = live_meta["rows"]
+            fetched_at = live_meta.get("fetched_at")
+            last_modified = live_meta.get("http_last_modified")
+            tls_verification_disabled = bool(live_meta.get("tls_verification_disabled"))
+            print(
+                f"[de] Live universe fetch succeeded: {len(rows)} Common Stock rows "
+                f"from {settings.de_universe_source_url}",
+                flush=True,
+            )
+
+        if not rows:
+            raise ValueError("DE official universe fetch returned no rows")
+
+        snapshot_as_of = (
+            self._date_from_http_header(last_modified) or self._utc_today()
+        ).isoformat()
+        source_name = (
+            _DE_FALLBACK_SOURCE_NAME if fetch_mode == "csv_fallback" else _DE_SOURCE_NAME
+        )
+        source_metadata: dict[str, Any] = {
+            "source_urls": [settings.de_universe_source_url],
+            "fetched_at": fetched_at or datetime.now(UTC).isoformat(),
+            "http_last_modified": last_modified,
+            "tls_verification_disabled": tls_verification_disabled,
+            "fetch_mode": fetch_mode,
+            "fetch_errors": fetch_errors,
+            "row_counts": {
+                "xetra": sum(1 for row in rows if row.get("exchange") == "XETR"),
+                "frankfurt": sum(1 for row in rows if row.get("exchange") == "XFRA"),
+                "total": len(rows),
+            },
+        }
+        for key in (
+            "baseline_status",
+            "baseline_missing_count",
+            "baseline_missing_symbols",
+            "baseline_missing_symbols_truncated",
+        ):
+            if key in live_meta:
+                source_metadata[key] = live_meta[key]
+        if fetch_mode == "csv_fallback":
+            source_metadata["fallback_csv_path"] = settings.de_universe_fallback_csv_path
+
+        snapshot_id_prefix = "xetra-allinstruments" if fetch_mode == "live_http" else "de-csv-fallback"
+        return OfficialMarketUniverseSnapshot(
+            market="DE",
+            source_name=source_name,
+            snapshot_id=f"{snapshot_id_prefix}-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    def _fetch_de_live(self) -> dict[str, Any]:
+        """Download and parse the Xetra all-tradable-instruments CSV.
+
+        Raises ``ValueError`` (and the caller falls back to the bundled seed
+        CSV) when:
+
+        * the HTTP request errors (``RequestException`` bubbles up unchanged),
+        * the CSV cannot be parsed,
+        * fewer than ``settings.de_live_min_universe_size`` Common Stock rows
+          survive the filter, or
+        Missing symbols from the bundled baseline CSV are returned as warning
+        metadata instead of forcing fallback; the live Xetra CSV remains the
+        authoritative universe when it is otherwise healthy.
+        """
+        url = settings.de_universe_source_url
+        # Deutsche Boerse Cash Market 403s the default bot-style User-Agent
+        # (``StockScannerUniverseRefresh/1.0 ...``) — a developer-machine
+        # curl with ``Mozilla/5.0`` reaches the CSV fine but a GH Actions
+        # runner using the bot UA falls straight into CSV fallback. Pass a
+        # browser-like UA + accompanying headers so the live path actually
+        # gets a response.
+        browser_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/csv,application/vnd.ms-excel,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9,de;q=0.8",
+            "Referer": "https://www.xetra.com/xetra-en/instruments/all-tradable-instruments",
+        }
+        fetched = self._http_get(
+            url,
+            allow_insecure_fallback=settings.de_universe_allow_insecure_fallback,
+            extra_headers=browser_headers,
+        )
+
+        rows = self._parse_de_xetra_csv(fetched.content)
+        if not rows:
+            raise ValueError(
+                "Xetra reference CSV yielded no Common Stock rows after filtering"
+            )
+
+        min_universe_size = int(getattr(settings, "de_live_min_universe_size", 0) or 0)
+        if min_universe_size > 0 and len(rows) < min_universe_size:
+            raise ValueError(
+                f"DE live universe has only {len(rows)} rows "
+                f"(below {min_universe_size} threshold); refusing to publish — "
+                "the Xetra blob URL likely rotated and needs refreshing"
+            )
+
+        # Safety signal: the reconciler in ``ingest_de_snapshot_rows`` can
+        # deactivate rows that are absent from the snapshot. A live universe
+        # that drops curated DAX-40 names is worth surfacing, but it should not
+        # collapse an otherwise healthy 800+ row Xetra snapshot to the tiny
+        # fallback CSV.
+        #
+        # When the baseline CSV is absent from disk entirely (container layout
+        # drift, image-build glitch, etc.) ``_load_de_csv_fallback`` returns an
+        # empty list and the superset check trivially passes — silently
+        # disabling the safety net. Log a loud warning so the gap is
+        # observable rather than vanishing.
+        live_symbols = {row["symbol"] for row in rows}
+        baseline_rows = self._load_de_csv_fallback()
+        if not baseline_rows and not Path(settings.de_universe_fallback_csv_path).exists():
+            logger.warning(
+                "DE baseline CSV at %s is missing on disk; the curated-baseline "
+                "superset check cannot run and the live universe will publish "
+                "unverified. Restore the seed file to re-enable the safety guard.",
+                settings.de_universe_fallback_csv_path,
+            )
+        csv_symbols = {row["symbol"] for row in baseline_rows}
+        missing_csv_symbols = csv_symbols - live_symbols
+        baseline_metadata: dict[str, Any] = {
+            "baseline_status": "ok",
+            "baseline_missing_count": 0,
+            "baseline_missing_symbols": [],
+            "baseline_missing_symbols_truncated": False,
+        }
+        if missing_csv_symbols:
+            missing_symbols = sorted(missing_csv_symbols)
+            sample = missing_symbols[:5]
+            logger.warning(
+                "DE live universe missing %s curated baseline symbols (e.g. %s); "
+                "publishing live Xetra universe with warning metadata.",
+                len(missing_symbols),
+                sample,
+            )
+            baseline_metadata = {
+                "baseline_status": "missing_symbols",
+                "baseline_missing_count": len(missing_symbols),
+                "baseline_missing_symbols": missing_symbols[:25],
+                "baseline_missing_symbols_truncated": len(missing_symbols) > 25,
+            }
+
+        return {
+            "rows": sorted(rows, key=lambda row: row["symbol"]),
+            "fetched_at": fetched.fetched_at,
+            "http_last_modified": fetched.last_modified,
+            "tls_verification_disabled": fetched.tls_verification_disabled,
+            **baseline_metadata,
+        }
+
+    @classmethod
+    def _parse_de_xetra_csv(cls, content: bytes) -> list[dict[str, Any]]:
+        """Parse the Xetra all-tradable-instruments CSV.
+
+        The file is plain ASCII, ``;``-delimited, with two metadata rows
+        (``Market:;XETR`` and ``Date Last Update:;...``) preceding the column
+        header. Returns one row per active Common Stock instrument with the
+        Mnemonic mapped to a Yahoo-compatible ``{MNEM}.DE`` symbol.
+        """
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            # Some Deutsche Boerse files ship as CP1252 — fall back gracefully.
+            text = content.decode("cp1252", errors="replace")
+
+        # Strip an optional UTF-8 BOM. Without this, if Deutsche Boerse ever
+        # starts emitting one, the first cell becomes ``"﻿Market:"`` (or
+        # ``"﻿Product Status"`` if the metadata rows are removed) and
+        # the exact ``== "Product Status"`` match below never fires —
+        # ``_parse_de_xetra_csv`` would then raise on a perfectly valid file.
+        if text.startswith("﻿"):
+            text = text[1:]
+
+        reader = csv.reader(io.StringIO(text), delimiter=";")
+        header: list[str] | None = None
+        rows: list[dict[str, Any]] = []
+        for raw_row in reader:
+            if not raw_row:
+                continue
+            # Skip the two metadata rows (``Market:;XETR`` and
+            # ``Date Last Update:;...``) — the column header starts with
+            # ``Product Status`` per the published schema.
+            if header is None:
+                if raw_row[0].strip() == "Product Status":
+                    header = [col.strip() for col in raw_row]
+                continue
+
+            row_dict = dict(zip(header, raw_row, strict=False))
+            # Both status fields must be Active. The Xetra feed schema
+            # distinguishes ``Product Status`` (the product itself is tradable)
+            # from ``Instrument Status`` (this specific instrument record is
+            # tradable). ``Product Status == "Published"`` means the product is
+            # listed but not yet open for trading — those rows would inflate
+            # the universe with symbols that yfinance / Finviz can't quote.
+            if (row_dict.get("Product Status") or "").strip() != "Active":
+                continue
+            if (row_dict.get("Instrument Status") or "").strip() != "Active":
+                continue
+            if (row_dict.get("Instrument Type") or "").strip() != "CS":
+                continue
+            mnemonic = (row_dict.get("Mnemonic") or "").strip().upper()
+            isin = (row_dict.get("ISIN") or "").strip().upper()
+            if not mnemonic or not isin:
+                continue
+            if not _DE_LIVE_TICKER_RE.fullmatch(mnemonic):
+                # Mnemonic doesn't fit the DE adapter's local-code regex
+                # (``[A-Z0-9]{1,8}``). Skip rather than publish a symbol
+                # that the adapter would reject anyway.
+                continue
+
+            name = (row_dict.get("Instrument") or "").strip()
+            # WKNs in the file are zero-padded to 9 chars; strip the padding
+            # to keep the diagnostic field consistent with the 6-char WKNs in
+            # the bundled CSV.
+            wkn = (row_dict.get("WKN") or "").strip().lstrip("0").upper()
+
+            rows.append(
+                {
+                    "symbol": f"{mnemonic}.DE",
+                    "name": name,
+                    "exchange": "XETR",
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                    "isin": isin,
+                    "wkn": wkn,
+                }
+            )
+
+        if header is None:
+            raise ValueError(
+                "Xetra reference CSV missing the expected 'Product Status' "
+                "column header — file format may have changed"
+            )
+        return rows
+
+    @classmethod
+    def _load_de_csv_fallback(cls) -> list[dict[str, Any]]:
+        """Read the bundled DE seed CSV into the same row schema as the live path.
+
+        Emits the same 8-key dict shape ``_parse_de_xetra_csv`` produces, so
+        downstream consumers (``ingest_de_snapshot_rows``, the DE adapter)
+        see identical fields whether the snapshot came from the live Xetra
+        CSV or this curated seed. ``isin`` is read from the optional ``isin``
+        column; ``wkn`` is always empty here because the seed CSV doesn't
+        carry WKNs.
+        """
+        csv_path = Path(settings.de_universe_fallback_csv_path)
+        if not csv_path.exists():
+            return []
+
+        frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        rows: list[dict[str, Any]] = []
+        for record in frame.to_dict("records"):
+            symbol = str(record.get("symbol") or "").strip()
+            name = str(record.get("name") or "").strip()
+            exchange = str(record.get("exchange") or "XETR").strip().upper()
+            isin = str(record.get("isin") or "").strip().upper()
+            if not symbol or not name:
+                continue
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "exchange": exchange,
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                    "isin": isin,
+                    "wkn": "",
+                }
+            )
+        return sorted(rows, key=lambda row: row["symbol"])
+
+    def fetch_sg_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        """Fetch the SG equity universe from the SGX public JSON API.
+
+        Source: ``settings.sg_universe_source_url`` defaults to the SGX public
+        JSON API at ``https://api.sgx.com/securities/v1.1`` (no auth required;
+        widely used by community scrapers). The response carries one record
+        per listed security; this method parses Mainboard/Catalist equities,
+        normalizes ``nc`` (issuer code) to ``<NC>.SI``, and applies the same
+        Yahoo-compatible ticker regex the SG adapter enforces downstream.
+
+        Fallback path: when the live API is unreachable, returns no rows,
+        fails to parse, or yields fewer than ``settings.sg_live_min_universe_size``
+        rows, the fetcher falls back to the bundled seed CSV at
+        ``settings.sg_universe_fallback_csv_path``. The snapshot publishes
+        with ``source_name == 'sg_manual_csv'`` and ``fetch_mode == 'csv_fallback'``
+        so downstream coverage gates can see the snapshot is degraded.
+
+        Operators concerned about SGX terms of service can blank
+        ``sg_universe_source_url`` to force fallback unconditionally.
+        """
+        fetch_mode = "live_http"
+        fetch_errors: dict[str, str] = {}
+        fetched_at: str | None = None
+        last_modified: str | None = None
+        tls_verification_disabled = False
+        rows: list[dict[str, Any]] = []
+
+        if settings.sg_universe_source_url:
+            try:
+                live_meta = self._fetch_sg_live()
+            except (requests.exceptions.RequestException, ValueError) as exc:
+                live_error = str(exc)
+                print(
+                    f"[sg] Live universe fetch failed: {live_error!s}. "
+                    f"Falling back to bundled CSV at {settings.sg_universe_fallback_csv_path}.",
+                    flush=True,
+                )
+                logger.warning(
+                    "Live SG universe fetch failed (%s); falling back to bundled CSV at %s",
+                    live_error,
+                    settings.sg_universe_fallback_csv_path,
+                )
+                fetch_errors["live_http"] = live_error
+                rows = self._load_sg_csv_fallback()
+                fetch_mode = "csv_fallback"
+                fetched_at = datetime.now(UTC).isoformat()
+            else:
+                rows = live_meta["rows"]
+                fetched_at = live_meta.get("fetched_at")
+                last_modified = live_meta.get("http_last_modified")
+                tls_verification_disabled = bool(live_meta.get("tls_verification_disabled"))
+                print(
+                    f"[sg] Live universe fetch succeeded: {len(rows)} rows "
+                    f"from {settings.sg_universe_source_url}",
+                    flush=True,
+                )
+        else:
+            logger.info(
+                "SG universe source URL is blank; using bundled fallback CSV at %s",
+                settings.sg_universe_fallback_csv_path,
+            )
+            rows = self._load_sg_csv_fallback()
+            fetch_mode = "csv_fallback"
+            fetched_at = datetime.now(UTC).isoformat()
+
+        if not rows:
+            raise ValueError(
+                "SG official universe fetch returned no rows (live + fallback both empty)"
+            )
+
+        snapshot_as_of = (
+            self._date_from_http_header(last_modified) or self._utc_today()
+        ).isoformat()
+        source_name = (
+            _SG_FALLBACK_SOURCE_NAME if fetch_mode == "csv_fallback" else _SG_SOURCE_NAME
+        )
+        source_metadata: dict[str, Any] = {
+            "source_urls": [settings.sg_universe_source_url] if settings.sg_universe_source_url else [],
+            "fetched_at": fetched_at or datetime.now(UTC).isoformat(),
+            "http_last_modified": last_modified,
+            "tls_verification_disabled": tls_verification_disabled,
+            "fetch_mode": fetch_mode,
+            "fetch_errors": fetch_errors,
+            "row_counts": {
+                "xses": len(rows),
+                "total": len(rows),
+            },
+        }
+        if fetch_mode == "csv_fallback":
+            source_metadata["fallback_csv_path"] = settings.sg_universe_fallback_csv_path
+
+        snapshot_id_prefix = "sgx-securities" if fetch_mode == "live_http" else "sg-csv-fallback"
+        return OfficialMarketUniverseSnapshot(
+            market="SG",
+            source_name=source_name,
+            snapshot_id=f"{snapshot_id_prefix}-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    def fetch_my_snapshot(self) -> OfficialMarketUniverseSnapshot:
+        """Fetch the MY equity universe from the Bursa Malaysia JSON API.
+
+        Source: ``settings.my_universe_source_url`` should point at the
+        Bursa Malaysia equities-listing JSON endpoint (the one that powers
+        the public ``equities_prices`` table). The fetcher walks the
+        paginated response, normalizes each 4-digit issuer code to
+        ``<NNNN>.KL``, and filters to Main Market + ACE Market common
+        equities (REITs, business trusts, ETFs, and structured warrants
+        are dropped).
+
+        Fallback path: when the live URL is blank, unreachable, fails to
+        parse, returns no rows, or yields fewer than
+        ``settings.my_live_min_universe_size`` rows after filtering, the
+        fetcher falls back to the bundled seed CSV at
+        ``settings.my_universe_fallback_csv_path``. The snapshot publishes
+        with ``source_name == 'my_manual_csv'`` and
+        ``fetch_mode == 'csv_fallback'`` so downstream coverage gates can
+        tell live from fallback.
+        """
+        fetch_mode = "live_http"
+        fetch_errors: dict[str, str] = {}
+        fetched_at: str | None = None
+        last_modified: str | None = None
+        tls_verification_disabled = False
+        page_count = 0
+        rows: list[dict[str, Any]] = []
+
+        if settings.my_universe_source_url:
+            try:
+                live_meta = self._fetch_my_live()
+            except (requests.exceptions.RequestException, ValueError) as exc:
+                live_error = str(exc)
+                print(
+                    f"[my] Live universe fetch failed: {live_error!s}. "
+                    f"Falling back to bundled CSV at {settings.my_universe_fallback_csv_path}.",
+                    flush=True,
+                )
+                logger.warning(
+                    "Live MY universe fetch failed (%s); falling back to bundled CSV at %s",
+                    live_error,
+                    settings.my_universe_fallback_csv_path,
+                )
+                fetch_errors["live_http"] = live_error
+                rows = self._load_my_csv_fallback()
+                fetch_mode = "csv_fallback"
+                fetched_at = datetime.now(UTC).isoformat()
+            else:
+                rows = live_meta["rows"]
+                fetched_at = live_meta.get("fetched_at")
+                last_modified = live_meta.get("http_last_modified")
+                tls_verification_disabled = bool(live_meta.get("tls_verification_disabled"))
+                page_count = int(live_meta.get("page_count") or 0)
+                print(
+                    f"[my] Live universe fetch succeeded: {len(rows)} rows "
+                    f"from {settings.my_universe_source_url}",
+                    flush=True,
+                )
+        else:
+            logger.info(
+                "MY universe source URL is blank; using bundled fallback CSV at %s",
+                settings.my_universe_fallback_csv_path,
+            )
+            rows = self._load_my_csv_fallback()
+            fetch_mode = "csv_fallback"
+            fetched_at = datetime.now(UTC).isoformat()
+
+        if not rows:
+            raise ValueError(
+                "MY official universe fetch returned no rows (live + fallback both empty)"
+            )
+        min_size = int(settings.my_live_min_universe_size or 0)
+        if fetch_mode == "csv_fallback" and min_size and len(rows) < min_size:
+            raise ValueError(
+                "MY official universe fetch returned "
+                f"{len(rows)} rows from fallback CSV, below {min_size} threshold"
+            )
+
+        snapshot_as_of = (
+            self._date_from_http_header(last_modified) or self._utc_today()
+        ).isoformat()
+        source_name = (
+            _MY_FALLBACK_SOURCE_NAME if fetch_mode == "csv_fallback" else _MY_SOURCE_NAME
+        )
+        source_metadata: dict[str, Any] = {
+            "source_urls": [settings.my_universe_source_url] if settings.my_universe_source_url else [],
+            "fetched_at": fetched_at or datetime.now(UTC).isoformat(),
+            "http_last_modified": last_modified,
+            "tls_verification_disabled": tls_verification_disabled,
+            "fetch_mode": fetch_mode,
+            "fetch_errors": fetch_errors,
+            "row_counts": {
+                "xkls": len(rows),
+                "total": len(rows),
+            },
+        }
+        if fetch_mode == "csv_fallback":
+            source_metadata["fallback_csv_path"] = settings.my_universe_fallback_csv_path
+        else:
+            source_metadata["page_count"] = page_count
+
+        snapshot_id_prefix = "bursa-equities" if fetch_mode == "live_http" else "my-csv-fallback"
+        return OfficialMarketUniverseSnapshot(
+            market="MY",
+            source_name=source_name,
+            snapshot_id=f"{snapshot_id_prefix}-{snapshot_as_of}",
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            rows=tuple(rows),
+        )
+
+    def _fetch_my_live(self) -> dict[str, Any]:
+        """Download and parse the Bursa Malaysia equities-listing API response.
+
+        The Bursa endpoint is paginated; the first request reveals
+        ``totalPages`` (or an equivalent meta field) and subsequent pages are
+        requested by appending ``&page=N`` to the configured URL. The page
+        count is capped at ``settings.my_universe_max_pages`` so a runaway
+        ``totalPages`` value cannot trigger an unbounded fetch loop.
+
+        Raises ``ValueError`` when the response cannot be parsed or fewer
+        than ``settings.my_live_min_universe_size`` rows survive the filter.
+        """
+        base_url = settings.my_universe_source_url
+        # Bursa serves CDN-cached JSON; a browser-like UA + Referer reduces 403s.
+        browser_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.bursamalaysia.com/market_information/equities_prices",
+        }
+
+        first_fetched = self._http_get(base_url, extra_headers=browser_headers)
+        first_payload = self._decode_my_payload(first_fetched.content)
+        records: list[Any] = list(self._extract_my_records(first_payload))
+
+        max_pages = int(getattr(settings, "my_universe_max_pages", 100) or 100)
+        total_pages = self._extract_my_total_pages(first_payload)
+        page_count = 1
+        if total_pages > 1:
+            capped_pages = min(total_pages, max_pages)
+            for page in range(2, capped_pages + 1):
+                paged_url = self._with_query_param(base_url, "page", str(page))
+                page_fetched = self._http_get(paged_url, extra_headers=browser_headers)
+                page_payload = self._decode_my_payload(page_fetched.content)
+                page_records = self._extract_my_records(page_payload)
+                if not page_records:
+                    break
+                records.extend(page_records)
+                page_count += 1
+
+        rows = self._parse_my_records(records)
+        if not rows:
+            raise ValueError(
+                "Bursa Malaysia API response yielded no equity rows after filtering"
+            )
+
+        min_universe_size = int(getattr(settings, "my_live_min_universe_size", 0) or 0)
+        if min_universe_size > 0 and len(rows) < min_universe_size:
+            raise ValueError(
+                f"MY live universe has only {len(rows)} rows "
+                f"(below {min_universe_size} threshold); refusing to publish — "
+                "the Bursa Malaysia API response shape may have changed"
+            )
+
+        return {
+            "rows": sorted(rows, key=lambda row: row["symbol"]),
+            "fetched_at": first_fetched.fetched_at,
+            "http_last_modified": first_fetched.last_modified,
+            "tls_verification_disabled": first_fetched.tls_verification_disabled,
+            "page_count": page_count,
+        }
+
+    @classmethod
+    def _decode_my_payload(cls, content: bytes) -> Any:
+        """Decode a Bursa response body into a JSON-native object.
+
+        Raises ``ValueError`` if the body is not valid JSON so the live path
+        falls back to the seed CSV instead of publishing an empty snapshot.
+        """
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            text = content.decode("utf-8", errors="replace")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Bursa Malaysia API response is not valid JSON: {exc}"
+            ) from exc
+
+    @classmethod
+    def _parse_my_api_json(cls, content: bytes) -> list[dict[str, Any]]:
+        """Convenience parser used by tests: bytes -> filtered row list."""
+        payload = cls._decode_my_payload(content)
+        return cls._parse_my_records(cls._extract_my_records(payload))
+
+    @classmethod
+    def _parse_my_records(cls, records: Iterable[Any]) -> list[dict[str, Any]]:
+        """Filter and normalize a list of Bursa issuer records.
+
+        Each record must carry a 4-digit numeric local code in one of the
+        canonical fields (``code`` / ``stock_code`` / ``symbol`` / ``ticker``
+        / ``short_name``). Records must be listed on the Main Market or ACE
+        Market (the equity boards); a missing board is accepted permissively
+        so partial responses are not silently discarded. REITs, business
+        trusts, ETFs, and structured warrants are dropped via
+        ``_my_is_excluded_instrument``.
+        """
+        rows: list[dict[str, Any]] = []
+        seen_codes: set[str] = set()
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            local_code = ""
+            for key in ("code", "stock_code", "symbol", "ticker", "short_name"):
+                value = record.get(key)
+                if value is None:
+                    continue
+                candidate = str(value).strip().upper()
+                if _MY_LIVE_TICKER_RE.fullmatch(candidate):
+                    local_code = candidate
+                    break
+            if not local_code or local_code in seen_codes:
+                continue
+
+            board_raw = str(
+                record.get("board")
+                or record.get("market")
+                or record.get("m")
+                or record.get("mkt")
+                or ""
+            ).strip().upper()
+            if board_raw and not cls._my_board_is_equity(board_raw):
+                continue
+
+            name = str(
+                record.get("name")
+                or record.get("company_name")
+                or record.get("company")
+                or record.get("issuer_name")
+                or record.get("n")
+                or ""
+            ).strip()
+            if not name:
+                continue
+
+            sector = str(
+                record.get("sector")
+                or record.get("sec")
+                or ""
+            ).strip()
+            industry = str(
+                record.get("industry")
+                or record.get("sub_sector")
+                or record.get("subsector")
+                or ""
+            ).strip()
+            if cls._my_is_excluded_instrument(name, sector, industry):
+                continue
+
+            isin = str(record.get("isin") or "").strip().upper()
+
+            seen_codes.add(local_code)
+            rows.append(
+                {
+                    "symbol": f"{local_code}.KL",
+                    "name": name,
+                    "exchange": "XKLS",
+                    "sector": sector,
+                    "industry": industry,
+                    "market_cap": None,
+                    "isin": isin,
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _extract_my_records(payload: Any) -> list[Any]:
+        """Walk the Bursa response payload and return the issuer record list."""
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+        for key in (
+            "data",
+            "data_list",
+            "securities",
+            "items",
+            "results",
+            "rows",
+            "equities",
+            "records",
+        ):
+            candidate = payload.get(key)
+            if isinstance(candidate, list):
+                return candidate
+            if isinstance(candidate, dict):
+                for nested_key in (
+                    "data",
+                    "data_list",
+                    "rows",
+                    "items",
+                    "securities",
+                    "equities",
+                    "records",
+                ):
+                    nested = candidate.get(nested_key)
+                    if isinstance(nested, list):
+                        return nested
+        return []
+
+    @staticmethod
+    def _extract_my_total_pages(payload: Any) -> int:
+        """Read the page count from common Bursa-style meta wrappings.
+
+        Returns ``1`` when no pagination metadata is present so the live
+        fetch treats the response as single-page rather than re-requesting.
+        """
+        if not isinstance(payload, dict):
+            return 1
+        candidates: list[Any] = []
+        for meta_key in ("meta", "pagination", "page_info"):
+            meta = payload.get(meta_key)
+            if isinstance(meta, dict):
+                for field in ("totalPages", "total_pages", "pageCount", "last_page"):
+                    if field in meta:
+                        candidates.append(meta[field])
+        for field in ("totalPages", "total_pages", "pageCount", "last_page"):
+            if field in payload:
+                candidates.append(payload[field])
+        for raw in candidates:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                return value
+        return 1
+
+    @staticmethod
+    def _with_query_param(url: str, key: str, value: str) -> str:
+        """Return ``url`` with ``key=value`` set (replaces any existing value).
+
+        Used to walk Bursa's paginated endpoint without depending on
+        ``urllib.parse``'s behavior of dropping the existing query string
+        when the URL is incomplete.
+        """
+        pattern = re.compile(rf"([?&]){re.escape(key)}=[^&]*")
+        if pattern.search(url):
+            return pattern.sub(rf"\g<1>{key}={value}", url)
+        separator = "&" if "?" in url else "?"
+        return f"{url}{separator}{key}={value}"
+
+    @staticmethod
+    def _my_board_is_equity(board: str) -> bool:
+        """Accept Bursa Main and ACE markets; reject LEAP and non-equity venues.
+
+        Board labels arrive in several shapes (``MAIN MARKET``, ``MAIN-MKT``,
+        ``MAIN_MKT``, ``MAIN``, ``ACE MARKET``, ``ACE-MKT``, etc.). A
+        normalized token check accepts any spelling that contains a ``MAIN``
+        or ``ACE`` token; LEAP Market and other non-equity venues are
+        rejected.
+        """
+        normalized = re.sub(r"[^A-Z]+", " ", str(board or "").upper()).strip()
+        if not normalized:
+            return True
+        tokens = set(normalized.split())
+        return bool(tokens & _MY_EQUITY_BOARD_TOKENS)
+
+    @staticmethod
+    def _my_is_excluded_instrument(name: str, sector: str, industry: str) -> bool:
+        """Identify Bursa rows that fall outside the supported common-equity universe.
+
+        Bursa lists REITs, business trusts, ETFs, and structured warrants
+        alongside common stocks. REIT/Trust/ETF/Warrant tokens are matched
+        at word boundaries via the same haystack split used for SG so
+        ordinary issuer names containing substrings (e.g., ``Trustco``)
+        are not falsely excluded. Bursa also appends ``-WA`` / ``-WB``
+        suffixes to call-warrant names and ``-PA`` / ``-PB`` to preference
+        share lines; those are caught separately because the 4-digit
+        local code on its own is ambiguous.
+        """
+        haystack = " ".join(part for part in (industry, sector, name) if part).lower()
+        if haystack:
+            tokens = set(re.split(r"[^a-z0-9]+", haystack))
+            if tokens & _MY_EXCLUDED_TOKENS:
+                return True
+        upper_name = (name or "").upper()
+        if re.search(r"-W[A-Z]?\b", upper_name) or re.search(r"-PA?\b", upper_name):
+            return True
+        return False
+
+    @classmethod
+    def _load_my_csv_fallback(cls) -> list[dict[str, Any]]:
+        """Read the bundled MY seed CSV into the same row schema as live paths."""
+        csv_path = Path(settings.my_universe_fallback_csv_path)
+        if not csv_path.exists():
+            return []
+
+        frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        rows: list[dict[str, Any]] = []
+        seen_symbols: set[str] = set()
+        for record in frame.to_dict("records"):
+            symbol = str(record.get("symbol") or "").strip().upper()
+            name = str(record.get("name") or "").strip()
+            exchange = str(record.get("exchange") or "XKLS").strip().upper() or "XKLS"
+            isin = str(record.get("isin") or "").strip().upper()
+            if not symbol or not name:
+                continue
+            if symbol in seen_symbols:
+                continue
+            seen_symbols.add(symbol)
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "exchange": exchange,
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                    "isin": isin,
+                }
+            )
+        return sorted(rows, key=lambda row: row["symbol"])
+
+    def _fetch_sg_live(self) -> dict[str, Any]:
+        """Download and parse the SGX securities JSON API response.
+
+        Raises ``ValueError`` when the response cannot be parsed or fewer
+        than ``settings.sg_live_min_universe_size`` rows survive the filter.
+        """
+        url = settings.sg_universe_source_url
+        # SGX API serves CDN-cached JSON; a browser-like UA reduces 403s.
+        browser_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.sgx.com/securities/equities",
+        }
+        fetched = self._http_get(
+            url,
+            allow_insecure_fallback=settings.sg_universe_allow_insecure_fallback,
+            extra_headers=browser_headers,
+        )
+
+        rows = self._parse_sg_api_json(fetched.content)
+        if not rows:
+            raise ValueError("SGX API response yielded no equity rows after filtering")
+
+        min_universe_size = int(getattr(settings, "sg_live_min_universe_size", 0) or 0)
+        if min_universe_size > 0 and len(rows) < min_universe_size:
+            raise ValueError(
+                f"SG live universe has only {len(rows)} rows "
+                f"(below {min_universe_size} threshold); refusing to publish — "
+                "the SGX API response shape may have changed"
+            )
+
+        return {
+            "rows": sorted(rows, key=lambda row: row["symbol"]),
+            "fetched_at": fetched.fetched_at,
+            "http_last_modified": fetched.last_modified,
+            "tls_verification_disabled": fetched.tls_verification_disabled,
+        }
+
+    @classmethod
+    def _parse_sg_api_json(cls, content: bytes) -> list[dict[str, Any]]:
+        """Parse the SGX securities JSON payload.
+
+        Response shape verified 2026-05-15 against the live endpoint::
+
+            {
+              "meta": {"code": "200", "totalPages": 1, ...},
+              "data": {"prices": [
+                {"type": "stocks", "nc": "LVR", "n": "17LIVE GROUP",
+                 "m": "MAINBOARD", "issuer-name": "17LIVE GROUP", "sc": "K",
+                 "cur": "SGD", "trading_time": "...", ...},
+                {"type": "companywarrants", "nc": "VT2W", ...},
+                ...
+              ]}
+            }
+
+        SGX does not return ICB industry/subsector, ISIN, or market cap in the
+        default response. The ``params=`` query argument is not accepted by
+        the current endpoint (every known field list returns ``SGX_4015``),
+        so this parser consumes the default field set only.
+
+        Filters applied:
+
+        * ``type`` must equal ``"stocks"`` (drops ``companywarrants``,
+          ``listedcertificates``, ``etfs``, and placeholder/null rows).
+        * ``nc`` (issuer name code) must match ``[A-Z0-9]{1,8}`` for Yahoo
+          ticker compatibility.
+        * ``m`` (board) must be ``MAINBOARD`` or ``CATALIST`` (the equity
+          boards). Empty board is accepted as a permissive default.
+        * REITs, Business Trusts, and Stapled Securities are dropped based on
+          the issuer name (SGX does not expose ICB classification here).
+        """
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            text = content.decode("utf-8", errors="replace")
+
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"SGX API response is not valid JSON: {exc}") from exc
+
+        records = cls._extract_sg_records(payload)
+        rows: list[dict[str, Any]] = []
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            instrument_type = str(record.get("type") or "").strip().lower()
+            if instrument_type and instrument_type != "stocks":
+                continue
+            local_code = str(record.get("nc") or record.get("NC") or "").strip().upper()
+            if not local_code or not _SG_LIVE_TICKER_RE.fullmatch(local_code):
+                continue
+            board = str(record.get("m") or "").strip().upper()
+            if board and board not in _SG_EQUITY_BOARDS:
+                continue
+            name = str(
+                record.get("n")
+                or record.get("issuer-name")
+                or record.get("N")
+                or record.get("name")
+                or ""
+            ).strip()
+            if cls._sg_is_excluded_instrument(name, "", ""):
+                continue
+
+            rows.append(
+                {
+                    "symbol": f"{local_code}.SI",
+                    "name": name,
+                    "exchange": "XSES",
+                    "listing_tier": board,
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                    "isin": "",
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _extract_sg_records(payload: Any) -> list[Any]:
+        """Walk the SGX response payload and return the list of security records."""
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+        for key in ("data", "securities", "items", "results", "rows"):
+            candidate = payload.get(key)
+            if isinstance(candidate, list):
+                return candidate
+            if isinstance(candidate, dict):
+                for nested_key in ("prices", "securities", "items", "data"):
+                    nested = candidate.get(nested_key)
+                    if isinstance(nested, list):
+                        return nested
+        return []
+
+    @staticmethod
+    def _sg_is_excluded_instrument(name: str, industry: str, subsector: str) -> bool:
+        """Identify SGX rows that should be excluded from the supported universe.
+
+        SGX tags REITs and Business Trusts with ``LISTED_TYPE=Equity``, so the
+        LISTED_TYPE filter alone does not drop them. This helper matches on the
+        ICB industry/subsector strings and the issuer name. The bare ``trust``
+        token is matched at word boundaries so issuers like "Hutchison Port
+        Holdings Trust" are caught while names like "Trustco" are not.
+        """
+        haystack = " ".join(part for part in (industry, subsector, name) if part).lower()
+        if not haystack:
+            return False
+        if "reit" in haystack or "stapled" in haystack:
+            return True
+        tokens = re.split(r"[^a-z0-9]+", haystack)
+        return "trust" in tokens or "trusts" in tokens
+
+    @classmethod
+    def _load_sg_csv_fallback(cls) -> list[dict[str, Any]]:
+        """Read the bundled SG seed CSV into the same row schema as the live path."""
+        csv_path = Path(settings.sg_universe_fallback_csv_path)
+        if not csv_path.exists():
+            return []
+
+        frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        rows: list[dict[str, Any]] = []
+        for record in frame.to_dict("records"):
+            symbol = str(record.get("symbol") or "").strip().upper()
+            name = str(record.get("name") or "").strip()
+            exchange = str(record.get("exchange") or "XSES").strip().upper() or "XSES"
+            listing_tier = str(record.get("listing_tier") or record.get("board") or "").strip().upper()
+            isin = str(record.get("isin") or "").strip().upper()
+            if not symbol or not name:
+                continue
+            if cls._sg_is_excluded_instrument(name, "", ""):
+                continue
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "exchange": exchange,
+                    "listing_tier": listing_tier,
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                    "isin": isin,
+                }
+            )
+        return sorted(rows, key=lambda row: row["symbol"])
+
+    def parse_hk_rows(self, content: bytes) -> list[dict[str, Any]]:
+        frame = pd.read_excel(
+            io.BytesIO(content),
+            sheet_name="ListOfSecurities",
+            header=2,
+        )
+        normalized = self._normalize_columns(frame)
+        self._require_columns(
+            normalized.columns,
+            required=("stock_code", "name_of_securities", "category"),
+            market="HK",
+        )
+        category = normalized["category"].astype(str).str.strip().str.lower()
+        filtered = normalized[category == _HK_EQUITY_CATEGORY].copy()
+        if "sub_category" in filtered.columns:
+            sub_category = filtered["sub_category"].astype(str).str.strip().str.lower()
+            filtered = filtered[
+                sub_category.eq("")
+                | sub_category.eq("nan")
+                | sub_category.str.contains(_HK_EQUITY_SUBCATEGORY_TOKEN, na=False)
+            ].copy()
+
+        rows: list[dict[str, Any]] = []
+        for row in filtered.to_dict("records"):
+            local_code = self._normalize_digits(row.get("stock_code"), pad_to=4, max_digits=5)
+            name = str(row.get("name_of_securities") or "").strip()
+            if not local_code or not name:
+                continue
+            rows.append(
+                {
+                    "symbol": f"{local_code}.HK",
+                    "name": name,
+                    "exchange": "XHKG",
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                }
+            )
+
+        if not rows:
+            raise ValueError("HK official universe parse returned no equity rows")
+        return rows
+
+    def parse_jp_rows(self, content: bytes) -> OfficialMarketUniverseSnapshot:
+        frame = self._read_excel_bytes(content, engine="xlrd")
+        rows, snapshot_date = self._parse_jp_frame(frame)
+        return OfficialMarketUniverseSnapshot(
+            market="JP",
+            source_name=_JP_SOURCE_NAME,
+            snapshot_id=f"jpx-data-j-{snapshot_date.isoformat()}",
+            snapshot_as_of=snapshot_date.isoformat(),
+            source_metadata={},
+            rows=tuple(rows),
+        )
+
+    def parse_nse_rows(self, content: bytes) -> list[dict[str, Any]]:
+        frame = pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
+        normalized = self._normalize_columns(frame)
+        self._require_columns(
+            normalized.columns,
+            required=("symbol", "name_of_company", "series", "isin_number"),
+            market="IN/NSE",
+        )
+        series = normalized["series"].astype(str).str.strip().str.upper()
+        filtered = normalized[series == "EQ"].copy()
+
+        rows: list[dict[str, Any]] = []
+        for row in filtered.to_dict("records"):
+            local_code = self._collapse_whitespace(str(row.get("symbol") or "")).upper()
+            name = str(row.get("name_of_company") or "").strip()
+            isin = str(row.get("isin_number") or "").strip().upper()
+            if not local_code or not name or not isin:
+                continue
+            rows.append(
+                {
+                    "symbol": f"{local_code}.NS",
+                    "name": name,
+                    "exchange": "XNSE",
+                    "sector": "",
+                    "industry": "",
+                    "market_cap": None,
+                    "isin": isin,
+                }
+            )
+
+        if not rows:
+            raise ValueError("IN/NSE official universe parse returned no EQ rows")
+        return sorted(rows, key=lambda row: row["symbol"])
+
+    def parse_bse_rows(self, content: bytes) -> list[dict[str, Any]]:
+        payload = json.loads(content.decode("utf-8"))
+        if not isinstance(payload, list):
+            raise ValueError("IN/BSE official universe response must be a JSON list")
+
+        rows: list[dict[str, Any]] = []
+        for row in payload:
+            if not isinstance(row, dict):
+                continue
+            local_code = self._normalize_digits(row.get("SCRIP_CD"), pad_to=6, max_digits=6)
+            if not local_code:
+                continue
+            status = str(row.get("Status") or "").strip().lower()
+            segment = str(row.get("Segment") or "").strip().lower()
+            if status != "active":
+                continue
+            if segment != "equity":
+                continue
+
+            name = self._collapse_whitespace(
+                str(row.get("Issuer_Name") or row.get("Scrip_Name") or "")
+            )
+            isin = str(row.get("ISIN_NUMBER") or "").strip().upper()
+            market_cap = self._parse_optional_float(row.get("Mktcap"))
+            industry = self._collapse_whitespace(str(row.get("INDUSTRY") or ""))
+            if not name or not isin:
+                continue
+
+            rows.append(
+                {
+                    "symbol": f"{local_code}.BO",
+                    "name": name,
+                    "exchange": "XBOM",
+                    "sector": industry,
+                    "industry": industry,
+                    "market_cap": market_cap,
+                    "isin": isin,
+                    "security_id": self._collapse_whitespace(str(row.get("scrip_id") or "")).upper(),
+                }
+            )
+
+        if not rows:
+            raise ValueError("IN/BSE official universe parse returned no active equity rows")
+        return sorted(rows, key=lambda row: row["symbol"])
+
+    def parse_tw_rows(self, html: str, *, exchange: str) -> list[dict[str, Any]]:
+        soup = BeautifulSoup(html, "html.parser")
+        current_section = ""
+        rows: list[dict[str, Any]] = []
+
+        for tr in soup.find_all("tr"):
+            cells = tr.find_all("td")
+            if not cells:
+                continue
+
+            texts = [self._collapse_whitespace(td.get_text(" ", strip=True)) for td in cells]
+            if len(cells) == 1 and texts:
+                current_section = texts[0]
+                continue
+
+            if not self._is_tw_stock_section(current_section):
+                continue
+
+            first_cell = texts[0] if texts else ""
+            if not first_cell or first_cell.lower().startswith("code"):
+                continue
+
+            parsed_identity = self._parse_tw_code_name(first_cell)
+            if parsed_identity is None:
+                continue
+            code, name = parsed_identity
+
+            industry = ""
+            if len(texts) >= 5:
+                industry = texts[4]
+            elif len(texts) >= 4:
+                industry = texts[3]
+
+            rows.append(
+                {
+                    "symbol": f"{code}.TW" if exchange == "TWSE" else f"{code}.TWO",
+                    "name": name,
+                    "exchange": exchange,
+                    "sector": industry,
+                    "industry": industry,
+                    "market_cap": None,
+                }
+            )
+
+        if not rows:
+            raise ValueError(f"TW official universe parse returned no stock rows for {exchange}")
+        return rows
+
+    def _parse_jp_frame(self, frame: pd.DataFrame) -> tuple[list[dict[str, Any]], date]:
+        normalized = self._normalize_columns(frame)
+        self._require_columns(
+            normalized.columns,
+            required=("日付", "コード", "銘柄名", "市場・商品区分"),
+            market="JP",
+        )
+        category = normalized["市場・商品区分"].astype(str).str.strip()
+        filtered = normalized[category.isin(_JP_ALLOWED_MARKET_SECTIONS)].copy()
+
+        dates = {
+            self._coerce_date(value)
+            for value in filtered["日付"].tolist()
+            if self._coerce_date(value) is not None
+        }
+        if not dates:
+            raise ValueError("JP official universe parse could not determine snapshot date")
+        if len(dates) != 1:
+            raise ValueError(f"JP official universe parse saw multiple snapshot dates: {sorted(d.isoformat() for d in dates)}")
+        snapshot_date = next(iter(dates))
+
+        rows: list[dict[str, Any]] = []
+        for row in filtered.to_dict("records"):
+            code = self._normalize_jp_code(row.get("コード"))
+            name = str(row.get("銘柄名") or "").strip()
+            if not code or not name:
+                continue
+            industry = str(row.get("33業種区分") or "").strip()
+            sector = str(row.get("17業種区分") or "").strip()
+            rows.append(
+                {
+                    "symbol": f"{code}.T",
+                    "name": name,
+                    "exchange": "XTKS",
+                    "sector": sector,
+                    "industry": industry,
+                    "market_cap": None,
+                }
+            )
+
+        if not rows:
+            raise ValueError("JP official universe parse returned no domestic equity rows")
+        return rows, snapshot_date
+
+    def _http_get(
+        self,
+        url: str,
+        *,
+        allow_insecure_fallback: bool = False,
+        extra_headers: dict[str, str] | None = None,
+    ) -> _FetchedSource:
+        headers = {"User-Agent": self._user_agent}
+        if extra_headers:
+            headers.update(extra_headers)
+        fetched_at = datetime.now(UTC).isoformat()
+        try:
+            return self._http_get_with_retries(
+                url,
+                headers=headers,
+                fetched_at=fetched_at,
+                verify_tls=True,
+            )
+        except requests.exceptions.SSLError:
+            if not allow_insecure_fallback:
+                raise
+            logger.warning(
+                "Retrying official universe fetch with TLS verification disabled for %s",
+                url,
+            )
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            return self._http_get_with_retries(
+                url,
+                headers=headers,
+                fetched_at=fetched_at,
+                verify_tls=False,
+            )
+
+    def _http_get_with_retries(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        fetched_at: str,
+        verify_tls: bool,
+    ) -> _FetchedSource:
+        request_kwargs: dict[str, Any] = {
+            "headers": headers,
+            "timeout": self._timeout_seconds,
+        }
+        if not verify_tls:
+            request_kwargs["verify"] = False
+
+        for attempt in range(1, _HTTP_GET_MAX_ATTEMPTS + 1):
+            try:
+                response = requests.get(url, **request_kwargs)
+                response.raise_for_status()
+                return _FetchedSource(
+                    url=response.url or url,
+                    content=response.content,
+                    fetched_at=fetched_at,
+                    last_modified=response.headers.get("Last-Modified"),
+                    tls_verification_disabled=not verify_tls,
+                )
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                if attempt >= _HTTP_GET_MAX_ATTEMPTS:
+                    raise
+                backoff_seconds = float(attempt)
+                logger.warning(
+                    "Retrying official universe fetch for %s after attempt %s/%s",
+                    url,
+                    attempt,
+                    _HTTP_GET_MAX_ATTEMPTS,
+                )
+                time.sleep(backoff_seconds)
+
+        raise RuntimeError(f"Unreachable retry loop for official universe fetch {url}")
+
+    @staticmethod
+    def _read_excel_bytes(content: bytes, *, engine: str | None = None) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {}
+        if engine:
+            kwargs["engine"] = engine
+        return pd.read_excel(io.BytesIO(content), **kwargs)
+
+    @staticmethod
+    def _normalize_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        renamed = frame.copy()
+        renamed.columns = [OfficialMarketUniverseSourceService._normalize_column_name(col) for col in renamed.columns]
+        return renamed
+
+    @staticmethod
+    def _normalize_column_name(value: Any) -> str:
+        text = OfficialMarketUniverseSourceService._collapse_whitespace(str(value or ""))
+        text = text.replace("/", "_").replace("-", "_")
+        text = re.sub(r"[^0-9A-Za-z\u3040-\u30ff\u3400-\u9fff_]+", "_", text)
+        text = re.sub(r"_+", "_", text).strip("_")
+        return text.lower()
+
+    @staticmethod
+    def _require_columns(columns: Iterable[str], *, required: tuple[str, ...], market: str) -> None:
+        present = set(columns)
+        missing = [column for column in required if column not in present]
+        if missing:
+            raise ValueError(
+                f"{market} official universe source missing required columns: {', '.join(missing)}"
+            )
+
+    @staticmethod
+    def _normalize_digits(value: Any, *, pad_to: int, max_digits: int) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        match = re.search(r"\d+", raw)
+        if match is None:
+            return ""
+        digits = match.group(0).lstrip("0")
+        if not digits:
+            return ""
+        if len(digits) > max_digits:
+            raise ValueError(f"Unexpected local code length for {raw!r}")
+        if len(digits) < pad_to:
+            return digits.zfill(pad_to)
+        return digits
+
+    @staticmethod
+    def _normalize_jp_code(value: Any) -> str:
+        raw = str(value or "").strip().upper().replace(" ", "")
+        if not raw:
+            return ""
+        if raw.endswith(".0") and raw[:-2].isdigit():
+            raw = raw[:-2]
+
+        token = re.sub(r"[^0-9A-Z]", "", raw)
+        match = re.fullmatch(r"([0-9]{3,5})([A-Z]?)", token)
+        if match is None:
+            return ""
+
+        digits, suffix = match.groups()
+        if digits.startswith("0"):
+            return ""
+        if suffix:
+            return f"{digits}{suffix}"
+        return digits if len(digits) == 4 else ""
+
+    @staticmethod
+    def _parse_optional_float(value: Any) -> float | None:
+        raw = str(value or "").strip().replace(",", "")
+        if not raw:
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _coerce_date(value: Any) -> date | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        parsed = pd.to_datetime(value, errors="coerce")
+        if pd.isna(parsed):
+            return None
+        return parsed.date()
+
+    @staticmethod
+    def _utc_today() -> date:
+        return datetime.now(UTC).date()
+
+    @staticmethod
+    def _date_from_http_header(header_value: str | None) -> date | None:
+        if not header_value:
+            return None
+        try:
+            return parsedate_to_datetime(header_value).astimezone(UTC).date()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _collapse_whitespace(value: str) -> str:
+        return " ".join(
+            str(value or "").replace("\u3000", " ").replace("\xa0", " ").split()
+        )
+
+    @staticmethod
+    def _parse_tw_updated_at(html: str) -> date:
+        match = _TW_UPDATED_AT_RE.search(html)
+        if match is None:
+            raise ValueError("TW official universe source missing 'Date Stock Updated' banner")
+        return datetime.strptime(match.group(1), "%Y/%m/%d").date()
+
+    @staticmethod
+    def _is_tw_stock_section(section_label: str) -> bool:
+        normalized = OfficialMarketUniverseSourceService._collapse_whitespace(section_label).lower()
+        return normalized in {"stocks", "stock"} or normalized.startswith("stocks ")
+
+    @staticmethod
+    def _parse_tw_code_name(cell_text: str) -> tuple[str, str] | None:
+        match = _TW_CODE_NAME_RE.match(
+            OfficialMarketUniverseSourceService._collapse_whitespace(cell_text)
+        )
+        if match is None:
+            return None
+        return match.group(1), match.group(2)

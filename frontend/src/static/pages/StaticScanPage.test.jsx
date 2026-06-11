@@ -1,0 +1,888 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+
+import StaticScanPage from './StaticScanPage';
+
+const filterPanelSpy = vi.fn();
+const resultsTableSpy = vi.fn();
+const staticChartModalSpy = vi.fn();
+
+vi.mock('../../components/Scan/FilterPanel', () => ({
+  default: (props) => {
+    filterPanelSpy(props);
+    return <div data-testid="filter-panel" />;
+  },
+}));
+
+vi.mock('../../components/Scan/ResultsTable', () => ({
+  default: (props) => {
+    resultsTableSpy(props);
+    return (
+      <div>
+        <div data-testid="results-table-page">{props.page}</div>
+        <div data-testid="results-table-total">{props.total}</div>
+        <div data-testid="results-table-rows">{props.results.map((row) => row.symbol).join(',')}</div>
+        <div data-testid="results-table-actions">{props.showActions ? 'actions-visible' : 'actions-hidden'}</div>
+        <button type="button" onClick={() => props.onPageChange(3)}>
+          go-to-page-3
+        </button>
+        <button type="button" onClick={() => props.onSortChange('rating', 'asc')}>
+          resort
+        </button>
+        <button type="button" onClick={() => props.onOpenChart?.('NVDA')}>
+          open-chart
+        </button>
+      </div>
+    );
+  },
+}));
+
+vi.mock('../StaticChartViewerModal', () => ({
+  default: (props) => {
+    staticChartModalSpy(props);
+    return props.open ? <div data-testid="static-chart-modal">{props.initialSymbol}</div> : null;
+  },
+}));
+
+const deferred = () => {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+const renderPage = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider theme={createTheme()}>
+        <StaticScanPage />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+};
+
+describe('StaticScanPage', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_STATIC_SITE', 'true');
+    filterPanelSpy.mockClear();
+    resultsTableSpy.mockClear();
+    staticChartModalSpy.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('renders the exported first page before background hydration completes', async () => {
+    const chunkRequest = deferred();
+
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 2,
+            default_filters: { minVolume: 100000000 },
+            default_filtered_rows_total: 1,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5, volume: 150000000 },
+            ],
+            chunks: [{ path: 'scan/chunks/chunk-0001.json', count: 2 }],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 1,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }],
+          }),
+        };
+      }
+
+      if (path === 'scan/chunks/chunk-0001.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: () => chunkRequest.promise,
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/Loading full scan dataset: [01] \/ 2 rows/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-rows')).toHaveTextContent('NVDA');
+    });
+    expect(screen.queryByTestId('filter-panel')).not.toBeInTheDocument();
+
+    await act(async () => {
+      chunkRequest.resolve({
+        rows: [
+          { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5, volume: 150000000 },
+          { symbol: 'MSFT', company_name: 'Microsoft Corporation', composite_score: 89.2, volume: 120000000 },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading full scan dataset/i)).not.toBeInTheDocument();
+      expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('results-table-total')).toHaveTextContent('2');
+      expect(screen.getByTestId('results-table-actions')).toHaveTextContent('actions-visible');
+    });
+  });
+
+  it('passes company_name through to the shared results table before and after hydration', async () => {
+    const chunkRequest = deferred();
+
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 2,
+            default_filters: { minVolume: 100000000 },
+            default_filtered_rows_total: 1,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5, volume: 150000000 },
+            ],
+            chunks: [{ path: 'scan/chunks/chunk-0001.json', count: 2 }],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 1,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }],
+          }),
+        };
+      }
+
+      if (path === 'scan/chunks/chunk-0001.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: () => chunkRequest.promise,
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(resultsTableSpy.mock.calls.at(-1)?.[0]?.results?.[0]?.company_name).toBe('NVIDIA Corporation');
+    });
+
+    await act(async () => {
+      chunkRequest.resolve({
+        rows: [
+          { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5, volume: 150000000 },
+          { symbol: 'MSFT', company_name: 'Microsoft Corporation', composite_score: 89.2, volume: 120000000 },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      const latestResults = resultsTableSpy.mock.calls.at(-1)?.[0]?.results ?? [];
+      expect(latestResults).toHaveLength(2);
+      expect(latestResults[0].company_name).toBe('NVIDIA Corporation');
+      expect(latestResults[1].company_name).toBe('Microsoft Corporation');
+    });
+  });
+
+  it('applies the Leaders in Leading Groups preset from the static manifest', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 4,
+            default_filters: { minVolume: 100000000 },
+            default_filtered_rows_total: 3,
+            filter_options: {
+              ibd_industries: ['Semiconductors', 'Software'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy', 'Buy'],
+            },
+            initial_rows: [
+              {
+                symbol: 'LEAD',
+                company_name: 'Leader Corp',
+                composite_score: 92,
+                rs_rating: 91,
+                volume: 150000000,
+                ibd_group_rank: 12,
+                scan_mode: 'full',
+              },
+              {
+                symbol: 'IPOLEAD',
+                company_name: 'IPO Leader Corp',
+                composite_score: 98,
+                rs_rating: 94,
+                volume: 150000000,
+                ibd_group_rank: 10,
+                scan_mode: 'ipo_weighted',
+              },
+              {
+                symbol: 'LATE',
+                company_name: 'Late Group Inc',
+                composite_score: 96,
+                rs_rating: 95,
+                volume: 150000000,
+                ibd_group_rank: 41,
+              },
+              {
+                symbol: 'THINLEAD',
+                company_name: 'Thin Leader Inc',
+                composite_score: 99,
+                rs_rating: 99,
+                volume: 500000,
+                ibd_group_rank: 5,
+              },
+            ],
+            preset_screens: [
+              {
+                id: 'leaders_in_leading_groups',
+                name: 'Leaders in Leading Groups',
+                short_name: 'Leaders',
+                description: 'Strong report-card stocks in top 40 IBD groups',
+                tier: 2,
+                filters: {
+                  minVolume: 100000000,
+                  ibdGroupRank: { min: null, max: 40 },
+                  rsRating: { min: 80, max: null },
+                },
+                sort_by: 'composite_score',
+                sort_order: 'desc',
+              },
+            ],
+            chunks: [],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 1,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'LEAD', rank: 1, path: 'charts/LEAD.json' }],
+          }),
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Leaders (2)')).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Leaders (2)'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-rows')).toHaveTextContent('IPOLEAD,LEAD');
+      expect(screen.getByTestId('results-table-rows')).not.toHaveTextContent('LATE');
+      expect(screen.getByTestId('results-table-rows')).not.toHaveTextContent('THINLEAD');
+    });
+  });
+
+  it('normalizes exported filter options before rendering the filter panel', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 1,
+            default_filters: { minVolume: 100000000 },
+            default_filtered_rows_total: 1,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5 },
+            ],
+            chunks: [],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 1,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }],
+          }),
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(filterPanelSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            minVolume: 100000000,
+          }),
+          filterOptions: {
+            ibdIndustries: ['Semiconductors'],
+            gicsSectors: ['Technology'],
+            ratings: ['Strong Buy'],
+          },
+          sectionDefaultExpanded: {
+            fundamental: false,
+            technical: false,
+            rating: false,
+          },
+        })
+      );
+    });
+  });
+
+  it('resets back to page 1 when the sort changes after hydration completes', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 1,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5 },
+            ],
+            chunks: [],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 1,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }],
+          }),
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-page')).toHaveTextContent('1');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'go-to-page-3' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-page')).toHaveTextContent('3');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'resort' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-page')).toHaveTextContent('1');
+    });
+
+    expect(resultsTableSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        page: 1,
+        sortBy: 'rating',
+        sortOrder: 'asc',
+      })
+    );
+  });
+
+  it('opens the static chart modal for exported chart symbols', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 1,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5 },
+            ],
+            chunks: [],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 1,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }],
+          }),
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole('heading', { name: 'Daily Scan' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-actions')).toHaveTextContent('actions-visible');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'open-chart' }));
+
+    expect(await screen.findByTestId('static-chart-modal')).toHaveTextContent('NVDA');
+  });
+
+  it('passes the current sorted chart navigation order into the static modal', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 2,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy', 'Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5, rating: 'Strong Buy' },
+              { symbol: 'MSFT', company_name: 'Microsoft Corporation', composite_score: 89.2, rating: 'Buy' },
+            ],
+            chunks: [],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 2,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [
+              { symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' },
+              { symbol: 'MSFT', rank: 2, path: 'charts/MSFT.json' },
+            ],
+          }),
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole('heading', { name: 'Daily Scan' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'resort' }));
+    await user.click(screen.getByRole('button', { name: 'open-chart' }));
+
+    await waitFor(() => {
+      expect(staticChartModalSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          open: true,
+          initialSymbol: 'NVDA',
+          navigationSymbols: ['MSFT', 'NVDA'],
+        })
+      );
+    });
+  });
+
+  it('preserves already hydrated rows on chunk failure and shows the actual exported chart count', async () => {
+    const firstChunk = deferred();
+
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pages: {
+              scan: {
+                path: 'scan/manifest.json',
+              },
+            },
+          }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-04-01T00:00:00Z',
+            as_of_date: '2026-03-31',
+            run_id: 9,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 3,
+            filter_options: {
+              ibd_industries: ['Semiconductors'],
+              gics_sectors: ['Technology'],
+              ratings: ['Strong Buy', 'Buy'],
+            },
+            initial_rows: [
+              { symbol: 'NVDA', company_name: 'NVIDIA Corporation', composite_score: 97.5, rating: 'Strong Buy' },
+            ],
+            chunks: [
+              { path: 'scan/chunks/chunk-0001.json', count: 1 },
+              { path: 'scan/chunks/chunk-0002.json', count: 1 },
+              { path: 'scan/chunks/chunk-0003.json', count: 1 },
+            ],
+            charts: {
+              path: 'charts/index.json',
+              limit: 200,
+              symbols_total: 143,
+              available: true,
+            },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }],
+          }),
+        };
+      }
+
+      if (path === 'scan/chunks/chunk-0001.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: () => firstChunk.promise,
+        };
+      }
+
+      if (path === 'scan/chunks/chunk-0002.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            rows: [
+              { symbol: 'AAPL', company_name: 'Apple Inc.', composite_score: 87.1, rating: 'Buy' },
+            ],
+          }),
+        };
+      }
+
+      if (path === 'scan/chunks/chunk-0003.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new Error('chunk failed');
+          },
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+
+    renderPage();
+
+    await act(async () => {
+      firstChunk.resolve({
+        rows: [
+          { symbol: 'MSFT', company_name: 'Microsoft Corporation', composite_score: 89.2, rating: 'Buy' },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText(/Background hydration failed/i)).toBeInTheDocument();
+    expect(screen.getByTestId('results-table-rows')).toHaveTextContent('NVDA,MSFT,AAPL');
+    expect(screen.getByText(/143 charts/i)).toBeInTheDocument();
+  });
+});

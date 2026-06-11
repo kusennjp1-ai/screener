@@ -1,0 +1,346 @@
+import { fireEvent, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { renderWithProviders } from '../../test/renderWithProviders';
+import { fullSeRow, nullSeRow, mixedSeRow } from '../../test/fixtures/setupEngineFixtures';
+import ResultsTable from './ResultsTable';
+
+/*
+ * Module mocks — required because:
+ * - @tanstack/react-virtual: useVirtualizer depends on DOM layout measurements
+ *   (getBoundingClientRect, scrollHeight) that jsdom doesn't implement -> zero rows render
+ * - RSSparkline/PriceSparkline: Recharts ResponsiveContainer requires real DOM dimensions
+ * - AddToWatchlistMenu: uses React Query (QueryClientProvider) which is not needed here
+ */
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, i) => ({
+        index: i,
+        start: i * 32,
+        end: (i + 1) * 32,
+        size: 32,
+        key: i,
+      })),
+    getTotalSize: () => count * 32,
+  }),
+}));
+vi.mock('./RSSparkline', () => ({
+  default: ({ data, trend }) => (
+    <span data-testid="rs-sparkline">RS:{data?.length ?? 'none'}:{trend}</span>
+  ),
+}));
+vi.mock('./PriceSparkline', () => ({
+  default: ({ data, trend, change1d }) => (
+    <span data-testid="price-sparkline">Price:{data?.length ?? 'none'}:{trend}:{change1d}</span>
+  ),
+}));
+vi.mock('../common/AddToWatchlistMenu', () => ({ default: () => null }));
+
+/** Default props for a basic render — 1 row, page 1. */
+const defaultProps = {
+  results: [fullSeRow],
+  total: 1,
+  page: 1,
+  perPage: 25,
+  sortBy: 'composite_score',
+  sortOrder: 'desc',
+  onPageChange: vi.fn(),
+  onPerPageChange: vi.fn(),
+  onSortChange: vi.fn(),
+  onOpenChart: vi.fn(),
+  loading: false,
+};
+
+describe('ResultsTable', () => {
+  // ── SE column rendering — full data ──────────────────────────────────
+  describe('SE column rendering — full data', () => {
+    beforeEach(() => {
+      renderWithProviders(<ResultsTable {...defaultProps} results={[fullSeRow]} />);
+    });
+
+    it('renders se_setup_score as 78.3', () => {
+      expect(screen.getByText('78.3')).toBeInTheDocument();
+    });
+
+    it('renders se_pattern_primary as cup_with_handle', () => {
+      expect(screen.getByText('cup_with_handle')).toBeInTheDocument();
+    });
+
+    it('renders se_distance_to_pivot_pct as -3.2%', () => {
+      expect(screen.getByText('-3.2%')).toBeInTheDocument();
+    });
+
+    it('renders se_bb_width_pctile_252 as 15', () => {
+      expect(screen.getByText('15')).toBeInTheDocument();
+    });
+
+    it('renders se_volume_vs_50d as 1.8x', () => {
+      expect(screen.getByText('1.8x')).toBeInTheDocument();
+    });
+
+    it('renders CheckIcon for se_rs_line_new_high=true', () => {
+      // Multiple boolean columns render CheckIcon (ma_alignment, passes_template, se_rs_line_new_high).
+      // fullSeRow has ma_alignment=true, passes_template=true, se_rs_line_new_high=true → 3 CheckIcons.
+      const checkIcons = screen.getAllByTestId('CheckIcon');
+      expect(checkIcons.length).toBe(3);
+    });
+
+    it('renders se_pivot_price as $198.50', () => {
+      expect(screen.getByText('$198.50')).toBeInTheDocument();
+    });
+  });
+
+  // ── SE column rendering — null data ──────────────────────────────────
+  describe('SE column rendering — null data', () => {
+    it('renders dash for all 7 SE columns when null', () => {
+      renderWithProviders(<ResultsTable {...defaultProps} results={[nullSeRow]} />);
+      // The table has many '-' dashes (other null columns too). We verify
+      // by checking that none of the SE-specific formatted values appear.
+      expect(screen.queryByText('78.3')).not.toBeInTheDocument();
+      expect(screen.queryByText('cup_with_handle')).not.toBeInTheDocument();
+      expect(screen.queryByText('-3.2%')).not.toBeInTheDocument();
+      expect(screen.queryByText('1.8x')).not.toBeInTheDocument();
+      expect(screen.queryByText('$198.50')).not.toBeInTheDocument();
+      // No CheckIcon should appear for se_rs_line_new_high=null
+      // (other booleans like ma_alignment still render icons)
+    });
+  });
+
+  // ── SE column rendering — mixed data ─────────────────────────────────
+  describe('SE column rendering — mixed data', () => {
+    beforeEach(() => {
+      renderWithProviders(<ResultsTable {...defaultProps} results={[mixedSeRow]} />);
+    });
+
+    it('renders CloseIcon for se_rs_line_new_high=false', () => {
+      // mixedSeRow has se_rs_line_new_high=false, vcp_detected=false, vcp_ready_for_breakout=false → 3 CloseIcons.
+      const closeIcons = screen.getAllByTestId('CloseIcon');
+      expect(closeIcons.length).toBe(3);
+    });
+
+    it('renders populated SE values alongside dashes for null ones', () => {
+      expect(screen.getByText('62.1')).toBeInTheDocument();
+      expect(screen.getByText('4.7%')).toBeInTheDocument();
+      expect(screen.getByText('2.3x')).toBeInTheDocument();
+    });
+  });
+
+  describe('young IPO partial metrics', () => {
+    it('renders calculable short-history values while long-history values stay blank', () => {
+      const youngIpoRow = {
+        ...nullSeRow,
+        symbol: 'NEWIPO',
+        company_name: 'New IPO Inc.',
+        composite_score: null,
+        rating: 'Insufficient Data',
+        data_status: 'insufficient_history',
+        scan_mode: 'listing_only',
+        is_scannable: false,
+        history_bars: 45,
+        rs_sparkline_data: Array.from({ length: 30 }, (_, index) => 1 + index / 100),
+        rs_trend: 1,
+        price_sparkline_data: Array.from({ length: 30 }, (_, index) => 1 + index / 200),
+        price_trend: 1,
+        price_change_1d: 2.5,
+        adr_percent: 10.0,
+        rs_rating_1m: 50.0,
+        rs_rating: null,
+        rs_rating_3m: null,
+        rs_rating_12m: null,
+        stage: null,
+        ma_alignment: null,
+      };
+
+      renderWithProviders(<ResultsTable {...defaultProps} results={[youngIpoRow]} />);
+
+      expect(screen.getByText('New IPO')).toBeInTheDocument();
+      expect(screen.getByText('RS:30:1')).toBeInTheDocument();
+      expect(screen.getByText('Price:30:1:2.5')).toBeInTheDocument();
+      expect(screen.getByText('50')).toBeInTheDocument();
+      expect(screen.getByText('10.0%')).toBeInTheDocument();
+      expect(screen.queryByText('S2')).not.toBeInTheDocument();
+    });
+  });
+
+  // ── SE column headers ────────────────────────────────────────────────
+  describe('SE column headers', () => {
+    it('renders all 7 SE header labels', () => {
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const headers = ['SE', 'Pat', 'Pvt%', 'Sqz', 'V50', 'RSH', 'Pvt$'];
+      headers.forEach((label) => {
+        expect(screen.getByText(label)).toBeInTheDocument();
+      });
+    });
+
+    it('renders a readable IBD industry group column', () => {
+      renderWithProviders(
+        <ResultsTable
+          {...defaultProps}
+          results={[{ ...fullSeRow, ibd_industry_group: 'Semiconductors' }]}
+        />
+      );
+
+      expect(screen.getByText('IBD Industry')).toBeInTheDocument();
+      expect(screen.getByText('Semiconductors')).toBeInTheDocument();
+    });
+
+    it('renders a compact market themes column', () => {
+      renderWithProviders(
+        <ResultsTable
+          {...defaultProps}
+          results={[{
+            ...fullSeRow,
+            ibd_industry_group: 'Semiconductors',
+            market_themes: ['AI Infrastructure', 'Foundry'],
+          }]}
+        />
+      );
+
+      expect(screen.getByText('Themes')).toBeInTheDocument();
+      // Compact variant: first theme renders as a chip, with a +N counter for overflow.
+      expect(screen.getByText('AI Infrastructure')).toBeInTheDocument();
+      expect(screen.getByText('+1')).toBeInTheDocument();
+    });
+  });
+
+  // ── structural ───────────────────────────────────────────────────────
+  describe('structural', () => {
+    it('shows "No results found" when results is empty', () => {
+      renderWithProviders(
+        <ResultsTable {...defaultProps} results={[]} total={0} />
+      );
+      expect(screen.getByText('No results found')).toBeInTheDocument();
+    });
+
+    it('shows loading spinner when loading=true', () => {
+      renderWithProviders(
+        <ResultsTable {...defaultProps} loading={true} />
+      );
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    });
+
+    it('renders pagination controls', () => {
+      renderWithProviders(
+        <ResultsTable {...defaultProps} results={[fullSeRow]} total={50} />
+      );
+      // MUI TablePagination renders "Rows per page:" text
+      expect(screen.getByText(/rows per page/i)).toBeInTheDocument();
+    });
+
+    it('rerenders when showActions changes so the action column is removed', () => {
+      const results = [fullSeRow];
+      const { rerender } = renderWithProviders(
+        <ResultsTable {...defaultProps} results={results} showActions={true} />
+      );
+
+      expect(screen.getByTestId('ShowChartIcon')).toBeInTheDocument();
+
+      rerender(<ResultsTable {...defaultProps} results={results} showActions={false} />);
+
+      expect(screen.queryByTestId('ShowChartIcon')).not.toBeInTheDocument();
+    });
+
+    it('keeps the action column but hides the chart button when a row is not chart-enabled', () => {
+      renderWithProviders(
+        <ResultsTable
+          {...defaultProps}
+          results={[fullSeRow]}
+          showActions={true}
+          showWatchlistMenu={false}
+          isChartEnabled={() => false}
+        />
+      );
+
+      expect(screen.queryByTestId('ShowChartIcon')).not.toBeInTheDocument();
+      expect(screen.getByText('FULL')).toBeInTheDocument();
+    });
+
+    it('renders a young-IPO status chip and suppresses chart actions for non-scannable rows', () => {
+      renderWithProviders(
+        <ResultsTable
+          {...defaultProps}
+          results={[{
+            ...fullSeRow,
+            symbol: '0100.HK',
+            company_name: 'MINIMAX-W',
+            scan_mode: 'listing_only',
+            data_status: 'insufficient_history',
+            is_scannable: false,
+          }]}
+          showActions={true}
+          showWatchlistMenu={false}
+          isChartEnabled={() => true}
+        />
+      );
+
+      expect(screen.getByText('New IPO')).toBeInTheDocument();
+      expect(screen.queryByTestId('ShowChartIcon')).not.toBeInTheDocument();
+    });
+
+    it('does not relabel generic error rows as young IPOs', () => {
+      renderWithProviders(
+        <ResultsTable
+          {...defaultProps}
+          results={[{
+            ...fullSeRow,
+            symbol: 'BROKEN',
+            rating: 'Error',
+            scan_mode: 'listing_only',
+            data_status: 'error',
+            is_scannable: false,
+          }]}
+          showActions={true}
+          showWatchlistMenu={false}
+          isChartEnabled={() => true}
+        />
+      );
+
+      expect(screen.queryByText('New IPO')).not.toBeInTheDocument();
+      expect(screen.getByText('Error')).toBeInTheDocument();
+      expect(screen.queryByTestId('ShowChartIcon')).not.toBeInTheDocument();
+    });
+  });
+
+  // ── interactions ─────────────────────────────────────────────────────
+  describe('interactions', () => {
+    it('calls onOpenChart when row is clicked', async () => {
+      const onOpenChart = vi.fn();
+      renderWithProviders(
+        <ResultsTable {...defaultProps} onOpenChart={onOpenChart} results={[fullSeRow]} />
+      );
+
+      fireEvent.click(screen.getByText('FULL'));
+      expect(onOpenChart).toHaveBeenCalledWith('FULL');
+    });
+
+    it('calls onSortChange when a sortable header is clicked', async () => {
+      const onSortChange = vi.fn();
+      renderWithProviders(
+        <ResultsTable {...defaultProps} onSortChange={onSortChange} />
+      );
+
+      const user = userEvent.setup();
+      // Click the "SE" header (sortable)
+      await user.click(screen.getByText('SE'));
+      expect(onSortChange).toHaveBeenCalledWith('se_setup_score', 'asc');
+    });
+
+    it('toggles sort direction when same header is clicked twice', async () => {
+      const onSortChange = vi.fn();
+      // Start sorted by se_setup_score asc
+      renderWithProviders(
+        <ResultsTable
+          {...defaultProps}
+          sortBy="se_setup_score"
+          sortOrder="asc"
+          onSortChange={onSortChange}
+        />
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByText('SE'));
+      // Since current is asc, clicking again should flip to desc
+      expect(onSortChange).toHaveBeenCalledWith('se_setup_score', 'desc');
+    });
+  });
+});

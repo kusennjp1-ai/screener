@@ -1,0 +1,2038 @@
+"""
+Theme Discovery Service
+
+Aggregates theme mentions, calculates metrics, and discovers emerging themes.
+This is the intelligence layer that identifies what's trending.
+"""
+import logging
+import json
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from collections import defaultdict
+
+import numpy as np
+import pandas as pd
+from sqlalchemy import case, func, and_, or_
+from sqlalchemy.orm import Session
+
+from ..models.theme import (
+    ThemeCluster,
+    ThemeConstituent,
+    ThemeLifecycleTransition,
+    ThemeMention,
+    ThemeMetrics,
+    ThemeAlert,
+    ContentItem,
+    ContentSource,
+    ThemeMergeSuggestion,
+    ThemeRelationship,
+)
+from ..models.app_settings import AppSetting
+from ..models.stock import StockPrice
+from ..models.scan_result import ScanResult
+from ..domain.analytics.scope import AnalyticsFeature, us_only_tag
+from .theme_lifecycle_service import apply_lifecycle_transition
+
+logger = logging.getLogger(__name__)
+
+VALID_LIFECYCLE_STATES = {"candidate", "active", "dormant", "reactivated", "retired"}
+LIFECYCLE_RANK_WEIGHTS = {
+    "candidate": 0.78,
+    "active": 1.0,
+    "reactivated": 1.05,
+    "dormant": 0.6,
+    "retired": 0.2,
+}
+LIFECYCLE_RUNBOOK_URL = "/docs/runbooks/theme-lifecycle.md"
+
+
+def _coerce_utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+class ThemeDiscoveryService:
+    """
+    Service for discovering and ranking market themes
+
+    Key capabilities:
+    1. Calculate mention velocity (social signal strength)
+    2. Calculate theme basket performance (price validation)
+    3. Calculate internal correlation (cohesiveness)
+    4. Rank themes by composite score
+    5. Generate alerts for emerging themes
+    """
+
+    def __init__(self, db: Session, pipeline: str = "technical"):
+        self.db = db
+        self.pipeline = pipeline
+        self.pipeline_config = None
+        self._load_pipeline_config()
+        self.theme_policy_overrides = self._load_theme_policy_overrides()
+
+    def _load_pipeline_config(self):
+        """Load pipeline-specific configuration for scoring weights and thresholds"""
+        try:
+            from ..config.pipeline_config import get_pipeline_config
+            self.pipeline_config = get_pipeline_config(self.pipeline)
+            logger.info(f"ThemeDiscoveryService loaded config for pipeline: {self.pipeline}")
+        except Exception as e:
+            logger.warning(f"Could not load pipeline config: {e}. Using default weights.")
+            self.pipeline_config = None
+
+    def _load_theme_policy_overrides(self) -> dict:
+        setting = self.db.query(AppSetting).filter(AppSetting.key == "theme_policy_overrides").first()
+        if not setting or not setting.value:
+            return {}
+        try:
+            all_overrides = json.loads(setting.value)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(all_overrides, dict):
+            return {}
+        pipeline_overrides = all_overrides.get(self.pipeline, {})
+        if not isinstance(pipeline_overrides, dict):
+            return {}
+        return pipeline_overrides
+
+    def _count_active_ingestion_days(self, since: datetime, until: datetime) -> int:
+        """Count distinct calendar days with at least one ContentItem ingested.
+
+        Uses ContentItem.fetched_at (when the pipeline ran), not published_at,
+        so it reflects actual pipeline uptime. Only counts items from active sources.
+        This is theme-agnostic — pipeline downtime affects all themes equally.
+        """
+        from sqlalchemy import cast, Date
+        count = self.db.query(
+            func.count(func.distinct(cast(ContentItem.fetched_at, Date)))
+        ).join(
+            ContentSource, ContentItem.source_id == ContentSource.id
+        ).filter(
+            ContentItem.fetched_at >= since,
+            ContentItem.fetched_at <= until,
+            ContentSource.is_active == True,
+        ).scalar() or 0
+        return count
+
+    def _empty_mention_metrics(self) -> dict:
+        return {
+            "mentions_1d": 0,
+            "mentions_7d": 0,
+            "mentions_30d": 0,
+            "mention_velocity": 0,
+            "sentiment_score": 0.0,
+        }
+
+    def _calculate_mention_velocity(
+        self,
+        *,
+        mentions_7d: int,
+        mentions_30d: int,
+        as_of_date: datetime,
+    ) -> float:
+        date_7d = as_of_date - timedelta(days=7)
+        date_30d = as_of_date - timedelta(days=30)
+
+        if mentions_30d > 0:
+            if mentions_7d == mentions_30d:
+                return 1.0
+
+            active_days_7d = getattr(self, "_cached_active_days_7d", None)
+            if active_days_7d is None:
+                active_days_7d = self._count_active_ingestion_days(date_7d, as_of_date)
+
+            active_days_30d = getattr(self, "_cached_active_days_30d", None)
+            if active_days_30d is None:
+                active_days_30d = self._count_active_ingestion_days(date_30d, as_of_date)
+
+            if active_days_7d == 0 or active_days_30d == 0:
+                return 1.0
+
+            rate_7d = mentions_7d / active_days_7d
+            rate_30d = mentions_30d / active_days_30d
+            raw_velocity = rate_7d / rate_30d if rate_30d > 0 else 0
+            return max(0.1, min(3.0, raw_velocity))
+
+        return 1.0 if mentions_7d > 0 else 0
+
+    def _calculate_mention_metrics_batch(
+        self,
+        theme_cluster_ids: list[int],
+        *,
+        as_of_date: datetime,
+    ) -> dict[int, dict]:
+        cluster_ids = sorted({int(cluster_id) for cluster_id in theme_cluster_ids if int(cluster_id) > 0})
+        if not cluster_ids:
+            return {}
+
+        date_1d = as_of_date - timedelta(days=1)
+        date_7d = as_of_date - timedelta(days=7)
+        date_30d = as_of_date - timedelta(days=30)
+
+        rows = self.db.query(
+            ThemeMention.theme_cluster_id,
+            func.sum(case((ThemeMention.mentioned_at >= date_1d, 1), else_=0)).label("mentions_1d"),
+            func.sum(case((ThemeMention.mentioned_at >= date_7d, 1), else_=0)).label("mentions_7d"),
+            func.count(ThemeMention.id).label("mentions_30d"),
+            func.sum(
+                case(
+                    (ThemeMention.sentiment == "bullish", ThemeMention.confidence),
+                    (ThemeMention.sentiment == "bearish", -ThemeMention.confidence),
+                    else_=0.0,
+                )
+            ).label("sentiment_weighted_sum"),
+        ).join(
+            ContentItem, ThemeMention.content_item_id == ContentItem.id
+        ).join(
+            ContentSource, ContentItem.source_id == ContentSource.id
+        ).filter(
+            ThemeMention.theme_cluster_id.in_(cluster_ids),
+            ThemeMention.mentioned_at >= date_30d,
+            ThemeMention.mentioned_at <= as_of_date,
+            ContentSource.is_active == True,
+        ).group_by(
+            ThemeMention.theme_cluster_id
+        ).all()
+
+        metrics_by_cluster = {
+            cluster_id: self._empty_mention_metrics()
+            for cluster_id in cluster_ids
+        }
+
+        for row in rows:
+            mentions_1d = int(row.mentions_1d or 0)
+            mentions_7d = int(row.mentions_7d or 0)
+            mentions_30d = int(row.mentions_30d or 0)
+            sentiment_weighted_sum = float(row.sentiment_weighted_sum or 0.0)
+            mention_velocity = self._calculate_mention_velocity(
+                mentions_7d=mentions_7d,
+                mentions_30d=mentions_30d,
+                as_of_date=as_of_date,
+            )
+            sentiment_score = (sentiment_weighted_sum / mentions_30d) if mentions_30d else 0.0
+            metrics_by_cluster[row.theme_cluster_id] = {
+                "mentions_1d": mentions_1d,
+                "mentions_7d": mentions_7d,
+                "mentions_30d": mentions_30d,
+                "mention_velocity": round(mention_velocity, 2),
+                "sentiment_score": round(sentiment_score, 3),
+            }
+
+        return metrics_by_cluster
+
+    def calculate_mention_metrics(self, theme_cluster_id: int, as_of_date: Optional[datetime] = None) -> dict:
+        """
+        Calculate mention velocity and sentiment for a theme
+
+        Returns:
+            mentions_1d: mentions in last 1 day
+            mentions_7d: mentions in last 7 days
+            mentions_30d: mentions in last 30 days
+            mention_velocity: 7d/30d ratio (>1 = accelerating)
+            sentiment_score: weighted average sentiment (-1 to 1)
+        """
+        if as_of_date is None:
+            as_of_date = datetime.utcnow()
+
+        return self._calculate_mention_metrics_batch(
+            [theme_cluster_id],
+            as_of_date=as_of_date,
+        ).get(theme_cluster_id, self._empty_mention_metrics())
+
+    def calculate_price_metrics(self, theme_cluster_id: int, as_of_date: Optional[datetime] = None) -> dict:
+        """
+        Calculate price-based metrics for theme basket
+
+        Returns:
+            basket_return_1d, 1w, 1m: Equal-weight basket returns
+            basket_rs_vs_spy: Relative strength vs SPY
+            pct_above_50ma, pct_above_200ma: Breadth metrics
+            pct_positive_1w: % of stocks up on week
+            avg_internal_correlation: Average pairwise correlation
+        """
+        if as_of_date is None:
+            as_of_date = datetime.utcnow()
+
+        # Get theme constituents
+        constituents = self.db.query(ThemeConstituent).filter(
+            ThemeConstituent.theme_cluster_id == theme_cluster_id,
+            ThemeConstituent.is_active == True,
+        ).all()
+
+        if not constituents:
+            return self._empty_price_metrics()
+
+        symbols = [c.symbol for c in constituents]
+
+        # Fetch price data for constituents
+        # Use extended lookback so 200-day MA and 1-month correlations have enough data.
+        date_lookback = as_of_date - timedelta(days=260)
+
+        prices_query = self.db.query(StockPrice).filter(
+            StockPrice.symbol.in_(symbols),
+            StockPrice.date >= date_lookback.date(),
+            StockPrice.date <= as_of_date.date(),
+        ).all()
+
+        if not prices_query:
+            return self._empty_price_metrics()
+
+        # Convert to DataFrame
+        price_data = defaultdict(list)
+        for p in prices_query:
+            price_data[p.symbol].append({
+                "date": p.date,
+                "close": p.close,
+            })
+
+        # Calculate returns for each stock
+        returns_data = {}
+        current_prices = {}
+        ma_50 = {}
+        ma_200 = {}
+
+        for symbol, prices in price_data.items():
+            if len(prices) < 5:
+                continue
+
+            df = pd.DataFrame(prices).sort_values("date")
+            df["return"] = df["close"].pct_change(fill_method=None)
+
+            current_price = df.iloc[-1]["close"]
+            current_prices[symbol] = current_price
+
+            # Calculate MAs
+            if len(df) >= 50:
+                ma_50[symbol] = df["close"].tail(50).mean()
+            if len(df) >= 200:
+                ma_200[symbol] = df["close"].tail(200).mean()
+
+            # Store returns
+            returns_data[symbol] = df.set_index("date")["return"]
+
+        if not returns_data:
+            return self._empty_price_metrics()
+
+        # Combine returns into DataFrame
+        returns_df = pd.DataFrame(returns_data)
+
+        # Calculate basket returns (equal-weight)
+        basket_returns = returns_df.mean(axis=1)
+
+        # Get SPY returns for comparison. Theme discovery is scoped to the
+        # US universe today (English-language content sources); see
+        # app.domain.analytics.scope. When the feature becomes market-aware,
+        # resolve the benchmark symbol via BenchmarkCacheService.
+        spy_prices = self.db.query(StockPrice).filter(
+            StockPrice.symbol == "SPY",
+            StockPrice.date >= date_lookback.date(),
+            StockPrice.date <= as_of_date.date(),
+        ).order_by(StockPrice.date).all()
+
+        spy_df = pd.DataFrame([{"date": p.date, "close": p.close} for p in spy_prices])
+        if len(spy_df) > 0:
+            spy_df = spy_df.sort_values("date")
+            spy_df["return"] = spy_df["close"].pct_change(fill_method=None)
+            spy_returns = spy_df.set_index("date")["return"]
+        else:
+            spy_returns = pd.Series(dtype=float)
+
+        def _compound_return(series: pd.Series, periods: int) -> float:
+            window = series.tail(periods).dropna()
+            if len(window) < periods:
+                return 0
+            return (1 + window).prod() - 1
+
+        # Calculate period returns (compounded)
+        basket_return_1d = basket_returns.iloc[-1] if len(basket_returns) > 0 else 0
+        basket_return_1w = _compound_return(basket_returns, 5)
+        basket_return_1m = _compound_return(basket_returns, 21)
+
+        # Calculate RS vs SPY (1-month compounded)
+        spy_return_1m = _compound_return(spy_returns, 21)
+        relative_return = basket_return_1m - spy_return_1m
+
+        # Convert to RS rating (0-100 scale, 50 = market, 100 = +10% outperformance)
+        basket_rs_vs_spy = 50 + (relative_return * 500)  # +1% = 55, +10% = 100
+        basket_rs_vs_spy = max(0, min(100, basket_rs_vs_spy))
+
+        # Breadth metrics
+        num_above_50ma = sum(1 for s, p in current_prices.items() if s in ma_50 and p > ma_50[s])
+        num_above_200ma = sum(1 for s, p in current_prices.items() if s in ma_200 and p > ma_200[s])
+
+        pct_above_50ma = num_above_50ma / len(current_prices) * 100 if current_prices else 0
+        pct_above_200ma = num_above_200ma / len(current_prices) * 100 if current_prices else 0
+
+        # % positive on week
+        weekly_window = returns_df.tail(5).fillna(0)
+        weekly_returns = (1 + weekly_window).prod() - 1
+        pct_positive_1w = (weekly_returns > 0).sum() / len(weekly_returns) * 100 if len(weekly_returns) > 0 else 0
+
+        # Internal correlation (average pairwise)
+        if len(returns_df.columns) >= 2:
+            corr_matrix = returns_df.tail(21).corr()  # 1-month correlation
+            # Get upper triangle (excluding diagonal)
+            mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
+            correlations = corr_matrix.where(mask).stack().values
+            avg_correlation = np.nanmean(correlations) if len(correlations) > 0 else 0
+            correlation_tightness = np.nanstd(correlations) if len(correlations) > 0 else 0
+        else:
+            avg_correlation = 0
+            correlation_tightness = 0
+
+        return {
+            "basket_return_1d": round(basket_return_1d * 100, 2),
+            "basket_return_1w": round(basket_return_1w * 100, 2),
+            "basket_return_1m": round(basket_return_1m * 100, 2),
+            "basket_rs_vs_spy": round(basket_rs_vs_spy, 1),
+            "pct_above_50ma": round(pct_above_50ma, 1),
+            "pct_above_200ma": round(pct_above_200ma, 1),
+            "pct_positive_1w": round(pct_positive_1w, 1),
+            "avg_internal_correlation": round(avg_correlation, 3),
+            "correlation_tightness": round(correlation_tightness, 3),
+            "num_constituents": len(symbols),
+            **us_only_tag(AnalyticsFeature.THEME_DISCOVERY),
+        }
+
+    def _empty_price_metrics(self) -> dict:
+        return {
+            "basket_return_1d": 0,
+            "basket_return_1w": 0,
+            "basket_return_1m": 0,
+            "basket_rs_vs_spy": 50,
+            "pct_above_50ma": 0,
+            "pct_above_200ma": 0,
+            "pct_positive_1w": 0,
+            "avg_internal_correlation": 0,
+            "correlation_tightness": 0,
+            "num_constituents": 0,
+            **us_only_tag(AnalyticsFeature.THEME_DISCOVERY),
+        }
+
+    def calculate_screener_metrics(self, theme_cluster_id: int) -> dict:
+        """
+        Calculate metrics from your existing screeners
+
+        Returns count of stocks passing Minervini, stage 2, avg RS
+        """
+        constituents = self.db.query(ThemeConstituent).filter(
+            ThemeConstituent.theme_cluster_id == theme_cluster_id,
+            ThemeConstituent.is_active == True,
+        ).all()
+
+        if not constituents:
+            return {"num_passing_minervini": 0, "num_stage_2": 0, "avg_rs_rating": 0}
+
+        symbols = [c.symbol for c in constituents]
+
+        # Get most recent scan results for these symbols
+        # Find latest scan
+        from ..models.scan_result import Scan
+        latest_scan = self.db.query(Scan).filter(
+            Scan.status == "completed"
+        ).order_by(Scan.completed_at.desc()).first()
+
+        if not latest_scan:
+            return {"num_passing_minervini": 0, "num_stage_2": 0, "avg_rs_rating": 0}
+
+        # Get results for our symbols
+        results = self.db.query(ScanResult).filter(
+            ScanResult.scan_id == latest_scan.scan_id,
+            ScanResult.symbol.in_(symbols),
+        ).all()
+
+        if not results:
+            return {"num_passing_minervini": 0, "num_stage_2": 0, "avg_rs_rating": 0}
+
+        num_passing_minervini = sum(1 for r in results if r.minervini_score and r.minervini_score >= 70)
+        num_stage_2 = sum(1 for r in results if r.stage == 2)
+        rs_ratings = [r.rs_rating for r in results if r.rs_rating is not None]
+        avg_rs_rating = np.mean(rs_ratings) if rs_ratings else 0
+
+        return {
+            "num_passing_minervini": num_passing_minervini,
+            "num_stage_2": num_stage_2,
+            "avg_rs_rating": round(avg_rs_rating, 1),
+        }
+
+    def calculate_composite_score(self, mention_metrics: dict, price_metrics: dict, screener_metrics: dict) -> float:
+        """
+        Calculate composite theme momentum score (0-100)
+
+        Weighted components (configurable per pipeline):
+        - Mention velocity: Social signal strength
+        - RS vs SPY: Price momentum
+        - Breadth: % above 50MA
+        - Internal correlation: Theme cohesiveness
+        - Screener quality: % passing Minervini
+
+        Technical pipeline: 30% velocity, 30% RS, 15% breadth, 15% correlation, 10% quality
+        Fundamental pipeline: 15% velocity, 20% RS, 25% breadth, 15% correlation, 25% quality
+        """
+        # Get weights from pipeline config or use defaults
+        if self.pipeline_config:
+            velocity_weight = self.pipeline_config.velocity_weight
+            rs_weight = self.pipeline_config.rs_weight
+            breadth_weight = self.pipeline_config.breadth_weight
+            correlation_weight = self.pipeline_config.correlation_weight
+            quality_weight = self.pipeline_config.quality_weight
+        else:
+            # Default weights
+            velocity_weight = 0.25
+            rs_weight = 0.25
+            breadth_weight = 0.20
+            correlation_weight = 0.15
+            quality_weight = 0.15
+
+        # Velocity score (0-100)
+        # velocity of 2 = 100, velocity of 1 = 50, velocity of 0.5 = 25
+        velocity = mention_metrics.get("mention_velocity", 0)
+        velocity_score = min(100, velocity * 50)
+
+        # RS score (already 0-100)
+        rs_score = price_metrics.get("basket_rs_vs_spy", 50)
+
+        # Breadth score (already 0-100)
+        breadth_score = price_metrics.get("pct_above_50ma", 0)
+
+        # Correlation score (0-100)
+        # Correlation of 0.7+ = 100, 0.5 = 70, 0.3 = 40
+        correlation = price_metrics.get("avg_internal_correlation", 0)
+        correlation_score = min(100, max(0, correlation * 140))
+
+        # Quality score (0-100)
+        num_constituents = price_metrics.get("num_constituents", 1)
+        num_passing = screener_metrics.get("num_passing_minervini", 0)
+        quality_score = (num_passing / num_constituents * 100) if num_constituents > 0 else 0
+
+        # Weighted composite using pipeline-specific weights
+        composite = (
+            velocity_score * velocity_weight +
+            rs_score * rs_weight +
+            breadth_score * breadth_weight +
+            correlation_score * correlation_weight +
+            quality_score * quality_weight
+        )
+
+        return round(composite, 1)
+
+    def classify_theme_status(self, composite_score: float, mention_velocity: float, rs_vs_spy: float) -> str:
+        """
+        Classify theme status based on metrics
+
+        Uses pipeline-specific thresholds for classification.
+
+        Returns: emerging, trending, fading, dormant
+        """
+        # Get thresholds from pipeline config or use defaults
+        if self.pipeline_config:
+            trending_min_score = self.pipeline_config.trending_min_score
+            trending_min_velocity = self.pipeline_config.trending_min_velocity
+            emerging_min_velocity = self.pipeline_config.emerging_min_velocity
+            emerging_min_score = self.pipeline_config.emerging_min_score
+            fading_max_score = self.pipeline_config.fading_max_score
+            fading_max_rs = self.pipeline_config.fading_max_rs
+            dormant_max_velocity = self.pipeline_config.dormant_max_velocity
+        else:
+            # Default thresholds
+            trending_min_score = 70.0
+            trending_min_velocity = 1.5
+            emerging_min_velocity = 2.0
+            emerging_min_score = 50.0
+            fading_max_score = 40.0
+            fading_max_rs = 45.0
+            dormant_max_velocity = 0.5
+
+        if composite_score >= trending_min_score and mention_velocity >= trending_min_velocity:
+            return "trending"
+        elif mention_velocity >= emerging_min_velocity and composite_score >= emerging_min_score:
+            return "emerging"
+        elif composite_score < fading_max_score and rs_vs_spy < fading_max_rs:
+            return "fading"
+        elif mention_velocity < dormant_max_velocity:
+            return "dormant"
+        else:
+            return "active"
+
+    def update_theme_metrics(self, theme_cluster_id: int, as_of_date: Optional[datetime] = None) -> ThemeMetrics:
+        """
+        Calculate and store all metrics for a theme
+
+        Returns the created ThemeMetrics record
+        """
+        if as_of_date is None:
+            as_of_date = datetime.utcnow()
+
+        # Get cluster
+        cluster = self.db.query(ThemeCluster).filter(ThemeCluster.id == theme_cluster_id).first()
+        if not cluster:
+            raise ValueError(f"Theme cluster {theme_cluster_id} not found")
+
+        # Calculate all metrics
+        mention_metrics = self.calculate_mention_metrics(theme_cluster_id, as_of_date)
+        metrics = self._upsert_theme_metrics(
+            cluster=cluster,
+            as_of_date=as_of_date,
+            mention_metrics=mention_metrics,
+            auto_commit=True,
+        )
+        logger.info(
+            f"Updated metrics for theme '{cluster.name}': "
+            f"score={metrics.momentum_score}, status={metrics.status}"
+        )
+        return metrics
+
+    def _upsert_theme_metrics(
+        self,
+        *,
+        cluster: ThemeCluster,
+        as_of_date: datetime,
+        mention_metrics: dict,
+        auto_commit: bool,
+    ) -> ThemeMetrics:
+        price_metrics = self.calculate_price_metrics(cluster.id, as_of_date)
+        screener_metrics = self.calculate_screener_metrics(cluster.id)
+
+        # Calculate composite
+        momentum_score = self.calculate_composite_score(mention_metrics, price_metrics, screener_metrics)
+
+        # Classify status
+        status = self.classify_theme_status(
+            momentum_score,
+            mention_metrics["mention_velocity"],
+            price_metrics["basket_rs_vs_spy"]
+        )
+
+        # Check for existing metrics for this date
+        existing = self.db.query(ThemeMetrics).filter(
+            ThemeMetrics.theme_cluster_id == cluster.id,
+            ThemeMetrics.date == as_of_date.date(),
+        ).first()
+
+        if existing:
+            metrics = existing
+        else:
+            metrics = ThemeMetrics(
+                theme_cluster_id=cluster.id,
+                date=as_of_date.date(),
+                pipeline=self.pipeline,  # Set pipeline from service instance
+            )
+            self.db.add(metrics)
+
+        # Ensure pipeline is set on existing metrics too
+        metrics.pipeline = self.pipeline
+
+        # Update all fields
+        metrics.mentions_1d = mention_metrics["mentions_1d"]
+        metrics.mentions_7d = mention_metrics["mentions_7d"]
+        metrics.mentions_30d = mention_metrics["mentions_30d"]
+        metrics.mention_velocity = mention_metrics["mention_velocity"]
+        metrics.sentiment_score = mention_metrics["sentiment_score"]
+
+        metrics.basket_return_1d = price_metrics["basket_return_1d"]
+        metrics.basket_return_1w = price_metrics["basket_return_1w"]
+        metrics.basket_return_1m = price_metrics["basket_return_1m"]
+        metrics.basket_rs_vs_spy = price_metrics["basket_rs_vs_spy"]
+
+        metrics.avg_internal_correlation = price_metrics["avg_internal_correlation"]
+        metrics.correlation_tightness = price_metrics["correlation_tightness"]
+
+        metrics.num_constituents = price_metrics["num_constituents"]
+        metrics.pct_above_50ma = price_metrics["pct_above_50ma"]
+        metrics.pct_above_200ma = price_metrics["pct_above_200ma"]
+        metrics.pct_positive_1w = price_metrics["pct_positive_1w"]
+
+        metrics.num_passing_minervini = screener_metrics["num_passing_minervini"]
+        metrics.num_stage_2 = screener_metrics["num_stage_2"]
+        metrics.avg_rs_rating = screener_metrics["avg_rs_rating"]
+
+        metrics.momentum_score = momentum_score
+        metrics.status = status
+
+        if auto_commit:
+            self.db.commit()
+        else:
+            self.db.flush()
+        return metrics
+
+    def update_all_theme_metrics(self, as_of_date: Optional[datetime] = None) -> dict:
+        """
+        Update metrics for all active themes in this pipeline and calculate rankings
+
+        Rankings are calculated separately per pipeline.
+
+        Returns summary of updates
+        """
+        if as_of_date is None:
+            as_of_date = datetime.utcnow()
+
+        # Get all active L2 themes in this pipeline (exclude L1 parent themes)
+        clusters = self.db.query(ThemeCluster).filter(
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.pipeline == self.pipeline,
+        ).all()
+
+        results = {
+            "themes_updated": 0,
+            "errors": 0,
+            "rankings": [],
+            "pipeline": self.pipeline,
+        }
+
+        # Pre-compute active ingestion days once for the entire scoring run
+        # (2 queries total, not 2×N themes)
+        date_7d = as_of_date - timedelta(days=7)
+        date_30d = as_of_date - timedelta(days=30)
+        self._cached_active_days_7d = self._count_active_ingestion_days(date_7d, as_of_date)
+        self._cached_active_days_30d = self._count_active_ingestion_days(date_30d, as_of_date)
+        mention_metrics_by_cluster = self._calculate_mention_metrics_batch(
+            [cluster.id for cluster in clusters if cluster.id is not None],
+            as_of_date=as_of_date,
+        )
+
+        metrics_list = []
+        for cluster in clusters:
+            try:
+                mention_metrics = mention_metrics_by_cluster.get(cluster.id, self._empty_mention_metrics())
+                with self.db.begin_nested():
+                    metrics = self._upsert_theme_metrics(
+                        cluster=cluster,
+                        as_of_date=as_of_date,
+                        mention_metrics=mention_metrics,
+                        auto_commit=False,
+                    )
+                metrics_list.append((cluster, metrics))
+                results["themes_updated"] += 1
+            except Exception as e:
+                logger.error(f"Error updating metrics for {cluster.name}: {e}")
+                results["errors"] += 1
+
+        lifecycle_promotion_result = self.promote_candidate_themes(now=as_of_date, auto_commit=False)
+        lifecycle_state_result = self.apply_dormancy_and_reactivation_policies(now=as_of_date, auto_commit=False)
+        results["lifecycle"] = {
+            "candidate_promotion": lifecycle_promotion_result,
+            "state_policies": lifecycle_state_result,
+        }
+
+        # Calculate rankings using lifecycle-aware weighting to suppress candidate floods.
+        metrics_list.sort(
+            key=lambda x: (x[1].momentum_score or 0) * self._lifecycle_rank_weight(x[0].lifecycle_state),
+            reverse=True,
+        )
+
+        for rank, (cluster, metrics) in enumerate(metrics_list, 1):
+            metrics.rank = rank
+            results["rankings"].append({
+                "rank": rank,
+                "theme": cluster.name,
+                "score": metrics.momentum_score,
+                "status": metrics.status,
+                "lifecycle_state": cluster.lifecycle_state or "candidate",
+            })
+
+        self.db.commit()
+
+        return results
+
+    def get_theme_rankings(
+        self,
+        limit: int = 20,
+        status_filter: Optional[str] = None,
+        source_types_filter: Optional[list[str]] = None,
+        lifecycle_states_filter: Optional[list[str]] = None,
+        offset: int = 0
+    ) -> tuple[list[dict], int]:
+        """
+        Get current theme rankings for this pipeline
+
+        Returns tuple of (list of themes with their metrics, total count)
+
+        Args:
+            limit: Maximum number of themes to return
+            status_filter: Filter by theme status (emerging, trending, fading, dormant)
+            source_types_filter: Filter to themes that have mentions from these source types
+            lifecycle_states_filter: Filter by lifecycle states (candidate, active, dormant, reactivated, retired)
+            offset: Number of themes to skip for pagination
+        """
+        # Get latest date with metrics for this pipeline
+        latest_date = self.db.query(func.max(ThemeMetrics.date)).filter(
+            ThemeMetrics.pipeline == self.pipeline
+        ).scalar()
+        if not latest_date:
+            return [], 0
+
+        base_query = self.db.query(ThemeMetrics, ThemeCluster).join(
+            ThemeCluster, ThemeMetrics.theme_cluster_id == ThemeCluster.id
+        ).filter(
+            ThemeMetrics.date == latest_date,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.pipeline == self.pipeline,  # Filter by pipeline
+        )
+
+        if status_filter:
+            base_query = base_query.filter(ThemeMetrics.status == status_filter)
+
+        normalized_lifecycle_states = self._normalize_lifecycle_states_filter(lifecycle_states_filter)
+        if lifecycle_states_filter is not None and not normalized_lifecycle_states:
+            return [], 0
+        if normalized_lifecycle_states:
+            base_query = base_query.filter(ThemeCluster.lifecycle_state.in_(normalized_lifecycle_states))
+
+        # Filter by source types if specified
+        if source_types_filter:
+            theme_ids_with_sources = self.db.query(ThemeMention.theme_cluster_id).filter(
+                ThemeMention.source_type.in_(source_types_filter),
+                ThemeMention.pipeline == self.pipeline,  # Filter mentions by pipeline too
+            ).distinct().subquery()
+            base_query = base_query.filter(ThemeCluster.id.in_(theme_ids_with_sources))
+
+        # Get total count before pagination
+        total_count = base_query.count()
+
+        # Apply pagination
+        query = base_query.order_by(ThemeMetrics.rank).offset(offset).limit(limit)
+
+        results = []
+        for metrics, cluster in query.all():
+            # Get top constituents
+            top_constituents = self.db.query(ThemeConstituent).filter(
+                ThemeConstituent.theme_cluster_id == cluster.id,
+                ThemeConstituent.is_active == True,
+            ).order_by(ThemeConstituent.mention_count.desc()).limit(15).all()
+
+            results.append({
+                "theme_cluster_id": cluster.id,
+                "rank": metrics.rank,
+                "theme": cluster.name,
+                "status": metrics.status,
+                "lifecycle_state": cluster.lifecycle_state or "candidate",
+                "momentum_score": metrics.momentum_score,
+                "mention_velocity": metrics.mention_velocity,
+                "mentions_7d": metrics.mentions_7d,
+                "basket_rs_vs_spy": metrics.basket_rs_vs_spy,
+                "basket_return_1w": metrics.basket_return_1w,
+                "pct_above_50ma": metrics.pct_above_50ma,
+                "avg_correlation": metrics.avg_internal_correlation,
+                "num_constituents": metrics.num_constituents,
+                "top_tickers": [c.symbol for c in top_constituents],
+                "first_seen": cluster.first_seen_at.isoformat() if cluster.first_seen_at else None,
+            })
+
+        return results, total_count
+
+    def discover_emerging_themes(
+        self,
+        min_velocity: float = 1.5,
+        min_mentions: int = 3,
+        lifecycle_states_filter: Optional[list[str]] = None,
+    ) -> list[dict]:
+        """
+        Find newly emerging themes for this pipeline
+
+        Criteria:
+        - First seen in last 7 days
+        - Mention velocity > min_velocity
+        - At least min_mentions mentions
+        """
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        thresholds = self._lifecycle_thresholds()
+        normalized_lifecycle_states = self._normalize_lifecycle_states_filter(lifecycle_states_filter)
+        if lifecycle_states_filter is not None and not normalized_lifecycle_states:
+            return []
+
+        emerging = self.db.query(ThemeCluster).filter(
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.first_seen_at >= week_ago,
+            ThemeCluster.pipeline == self.pipeline,  # Filter by pipeline
+        ).all()
+
+        results = []
+        for cluster in emerging:
+            if normalized_lifecycle_states and (cluster.lifecycle_state or "candidate") not in normalized_lifecycle_states:
+                continue
+
+            mention_metrics = self.calculate_mention_metrics(cluster.id)
+            lifecycle_observation = self._lifecycle_snapshot(cluster.id)
+
+            if (
+                mention_metrics["mentions_7d"] >= min_mentions
+                and mention_metrics["mention_velocity"] >= min_velocity
+                and self._passes_emerging_lifecycle_gate(
+                    cluster=cluster,
+                    observation=lifecycle_observation,
+                    thresholds=thresholds,
+                )
+            ):
+                # Get constituents
+                constituents = self.db.query(ThemeConstituent).filter(
+                    ThemeConstituent.theme_cluster_id == cluster.id,
+                ).order_by(ThemeConstituent.mention_count.desc()).limit(10).all()
+
+                results.append({
+                    "theme": cluster.name,
+                    "first_seen": cluster.first_seen_at.isoformat(),
+                    "mentions_7d": mention_metrics["mentions_7d"],
+                    "velocity": mention_metrics["mention_velocity"],
+                    "sentiment": mention_metrics["sentiment_score"],
+                    "lifecycle_state": cluster.lifecycle_state or "candidate",
+                    "tickers": [c.symbol for c in constituents],
+                })
+
+        # Sort by velocity
+        results.sort(key=lambda x: x["velocity"], reverse=True)
+        return results
+
+    def _normalize_lifecycle_states_filter(self, lifecycle_states_filter: Optional[list[str]]) -> Optional[list[str]]:
+        if lifecycle_states_filter is None:
+            return None
+        normalized = []
+        for state in lifecycle_states_filter:
+            value = (state or "").strip().lower()
+            if value in VALID_LIFECYCLE_STATES and value not in normalized:
+                normalized.append(value)
+        return normalized or None
+
+    def _lifecycle_rank_weight(self, lifecycle_state: str | None) -> float:
+        state = (lifecycle_state or "candidate").strip().lower()
+        return LIFECYCLE_RANK_WEIGHTS.get(state, 1.0)
+
+    def _passes_emerging_lifecycle_gate(
+        self,
+        *,
+        cluster: ThemeCluster,
+        observation: dict[str, float],
+        thresholds: dict[str, float],
+    ) -> bool:
+        state = (cluster.lifecycle_state or "candidate").strip().lower()
+        if state == "retired":
+            return False
+
+        if state == "candidate":
+            return (
+                observation["mentions_7d"] >= thresholds["promotion_min_mentions_7d"]
+                and observation["source_diversity_7d"] >= thresholds["promotion_min_source_diversity_7d"]
+                and observation["persistence_days_7d"] >= thresholds["promotion_min_persistence_days"]
+                and observation["avg_quality_confidence_30d"] >= thresholds["promotion_min_avg_confidence_30d"]
+            )
+
+        if state == "dormant":
+            return (
+                observation["mentions_7d"] >= thresholds["reactivation_min_mentions_7d"]
+                and observation["source_diversity_7d"] >= thresholds["reactivation_min_source_diversity_7d"]
+                and observation["avg_quality_confidence_30d"] >= thresholds["reactivation_min_avg_confidence_30d"]
+            )
+
+        return True
+
+    def create_alert(
+        self,
+        alert_type: str,
+        title: str,
+        description: str,
+        theme_cluster_id: Optional[int] = None,
+        tickers: Optional[list] = None,
+        metrics: Optional[dict] = None,
+        severity: str = "info",
+        *,
+        auto_commit: bool = True,
+    ) -> ThemeAlert:
+        """Create a theme alert"""
+        alert = ThemeAlert(
+            theme_cluster_id=theme_cluster_id,
+            alert_type=alert_type,
+            title=title,
+            description=description,
+            severity=severity,
+            related_tickers=tickers or [],
+            metrics=metrics or {},
+        )
+        self.db.add(alert)
+        if auto_commit:
+            self.db.commit()
+        return alert
+
+    def _emit_lifecycle_transition_alert(
+        self,
+        *,
+        cluster: ThemeCluster,
+        transition: ThemeLifecycleTransition,
+        reason: str,
+        rule_version: str,
+        observation: dict[str, float] | None = None,
+    ) -> ThemeAlert:
+        title = (
+            f"Lifecycle Transition: {cluster.name} "
+            f"{transition.from_state} -> {transition.to_state}"
+        )
+        reason_text = reason.replace("_", " ")
+        description = (
+            f"Theme '{cluster.name}' transitioned from {transition.from_state} to {transition.to_state}. "
+            f"Reason: {reason_text}. Rule: {rule_version}."
+        )
+        history_path = f"/api/v1/themes/lifecycle-transitions?theme_cluster_id={cluster.id}"
+        return self.create_alert(
+            alert_type=f"lifecycle_{transition.to_state}",
+            title=title,
+            description=description,
+            theme_cluster_id=cluster.id,
+            metrics={
+                "from_state": transition.from_state,
+                "to_state": transition.to_state,
+                "reason": reason,
+                "rule_version": rule_version,
+                "observation": observation or {},
+                "transition_history_path": history_path,
+                "runbook_url": LIFECYCLE_RUNBOOK_URL,
+            },
+            severity="info",
+            auto_commit=False,
+        )
+
+    def check_for_alerts(self) -> list[ThemeAlert]:
+        """
+        Check for alert conditions and create alerts
+
+        Alert types:
+        - new_theme: Theme discovered in last 24h
+        - velocity_spike: Velocity > 3x normal
+        - breakout: RS breakout above 70
+        - theme_confirmed: New theme validated by correlation
+        """
+        alerts = []
+        now = datetime.utcnow()
+        day_ago = now - timedelta(days=1)
+
+        # New themes in last 24h (L2 only — L1 parent themes don't generate alerts)
+        new_themes = self.db.query(ThemeCluster).filter(
+            ThemeCluster.first_seen_at >= day_ago,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.pipeline == self.pipeline,
+        ).all()
+
+        for theme in new_themes:
+            # Check if alert already exists
+            existing = self.db.query(ThemeAlert).filter(
+                ThemeAlert.theme_cluster_id == theme.id,
+                ThemeAlert.alert_type == "new_theme",
+            ).first()
+
+            if not existing:
+                constituents = self.db.query(ThemeConstituent).filter(
+                    ThemeConstituent.theme_cluster_id == theme.id
+                ).all()
+
+                alert = self.create_alert(
+                    alert_type="new_theme",
+                    title=f"New Theme Discovered: {theme.name}",
+                    description=f"New market theme '{theme.name}' detected from social/news sources.",
+                    theme_cluster_id=theme.id,
+                    tickers=[c.symbol for c in constituents[:5]],
+                    severity="info",
+                )
+                alerts.append(alert)
+
+        # Velocity spikes
+        latest_date = self.db.query(func.max(ThemeMetrics.date)).filter(
+            ThemeMetrics.pipeline == self.pipeline
+        ).scalar()
+        if latest_date:
+            velocity_spikes = self.db.query(ThemeMetrics, ThemeCluster).join(
+                ThemeCluster, ThemeMetrics.theme_cluster_id == ThemeCluster.id
+            ).filter(
+                ThemeMetrics.date == latest_date,
+                ThemeMetrics.mention_velocity >= 3.0,
+                ThemeMetrics.pipeline == self.pipeline,
+                ThemeCluster.pipeline == self.pipeline,
+                ThemeCluster.is_l1 == False,
+            ).all()
+
+            for metrics, theme in velocity_spikes:
+                existing = self.db.query(ThemeAlert).filter(
+                    ThemeAlert.theme_cluster_id == theme.id,
+                    ThemeAlert.alert_type == "velocity_spike",
+                    ThemeAlert.triggered_at >= day_ago,
+                ).first()
+
+                if not existing:
+                    alert = self.create_alert(
+                        alert_type="velocity_spike",
+                        title=f"Velocity Spike: {theme.name}",
+                        description=f"Theme '{theme.name}' is seeing {metrics.mention_velocity:.1f}x normal mention rate.",
+                        theme_cluster_id=theme.id,
+                        metrics={"velocity": metrics.mention_velocity, "mentions_7d": metrics.mentions_7d},
+                        severity="warning",
+                    )
+                    alerts.append(alert)
+
+        return alerts
+
+    def _lifecycle_thresholds(self) -> dict[str, float]:
+        cfg = self.pipeline_config
+        if cfg is None:
+            thresholds = {
+                "promotion_min_mentions_7d": 4,
+                "promotion_min_source_diversity_7d": 2,
+                "promotion_min_avg_confidence_30d": 0.60,
+                "promotion_min_persistence_days": 3,
+                "dormancy_inactivity_days": 21,
+                "dormancy_min_mentions_30d": 1,
+                "dormancy_min_silence_days": 10,
+                "reactivation_min_mentions_7d": 2,
+                "reactivation_min_source_diversity_7d": 2,
+                "reactivation_min_avg_confidence_30d": 0.55,
+                "relationship_subset_overlap_ratio": 0.85,
+                "relationship_related_jaccard_threshold": 0.35,
+                "relationship_min_overlap_constituents": 2,
+            }
+        else:
+            thresholds = {
+                "promotion_min_mentions_7d": cfg.promotion_min_mentions_7d,
+                "promotion_min_source_diversity_7d": cfg.promotion_min_source_diversity_7d,
+                "promotion_min_avg_confidence_30d": cfg.promotion_min_avg_confidence_30d,
+                "promotion_min_persistence_days": cfg.promotion_min_persistence_days,
+                "dormancy_inactivity_days": cfg.dormancy_inactivity_days,
+                "dormancy_min_mentions_30d": cfg.dormancy_min_mentions_30d,
+                "dormancy_min_silence_days": cfg.dormancy_min_silence_days,
+                "reactivation_min_mentions_7d": cfg.reactivation_min_mentions_7d,
+                "reactivation_min_source_diversity_7d": cfg.reactivation_min_source_diversity_7d,
+                "reactivation_min_avg_confidence_30d": cfg.reactivation_min_avg_confidence_30d,
+                "relationship_subset_overlap_ratio": cfg.relationship_subset_overlap_ratio,
+                "relationship_related_jaccard_threshold": cfg.relationship_related_jaccard_threshold,
+                "relationship_min_overlap_constituents": cfg.relationship_min_overlap_constituents,
+            }
+
+        lifecycle_overrides = self.theme_policy_overrides.get("lifecycle", {}) if isinstance(self.theme_policy_overrides, dict) else {}
+        if isinstance(lifecycle_overrides, dict):
+            for key in thresholds.keys():
+                if key in lifecycle_overrides and lifecycle_overrides[key] is not None:
+                    thresholds[key] = lifecycle_overrides[key]
+        return thresholds
+
+    def _lifecycle_snapshot(self, theme_cluster_id: int, *, now: datetime | None = None) -> dict[str, float]:
+        now = now or datetime.utcnow()
+        cutoff_7d = now - timedelta(days=7)
+        cutoff_30d = now - timedelta(days=30)
+        comparison_now = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+        comparison_cutoff_7d = comparison_now - timedelta(days=7)
+        source_quality = {
+            "news": 1.00,
+            "substack": 0.95,
+            "twitter": 0.70,
+            "reddit": 0.60,
+        }
+
+        mentions = self.db.query(
+            ThemeMention.mentioned_at,
+            ThemeMention.confidence,
+            ThemeMention.source_type,
+            ThemeMention.source_name,
+        ).filter(
+            ThemeMention.theme_cluster_id == theme_cluster_id,
+            ThemeMention.pipeline == self.pipeline,
+            ThemeMention.mentioned_at >= cutoff_30d,
+            ThemeMention.mentioned_at <= now,
+        ).all()
+
+        mentions_7d = 0
+        mentions_30d = 0
+        sources_7d: set[str] = set()
+        persistence_days_7d: set[str] = set()
+        weighted_conf_sum = 0.0
+        latest_mention_at: datetime | None = None
+
+        for mentioned_at, confidence, source_type, source_name in mentions:
+            seen_at = _coerce_utc_datetime(mentioned_at) or comparison_now
+            confidence_value = max(0.0, min(1.0, float(confidence or 0.5)))
+            quality_weight = source_quality.get((source_type or "").strip().lower(), 0.75)
+            weighted_conf_sum += confidence_value * quality_weight
+            mentions_30d += 1
+            if latest_mention_at is None or seen_at > latest_mention_at:
+                latest_mention_at = seen_at
+
+            if seen_at >= comparison_cutoff_7d:
+                mentions_7d += 1
+                source_marker = (source_name or source_type or "unknown").strip().lower()
+                sources_7d.add(source_marker)
+                persistence_days_7d.add(seen_at.date().isoformat())
+
+        avg_quality_confidence_30d = (weighted_conf_sum / mentions_30d) if mentions_30d else 0.0
+        days_since_last_mention = 9999
+        if latest_mention_at is not None:
+            delta = comparison_now - latest_mention_at
+            days_since_last_mention = max(0, int(delta.total_seconds() // 86400))
+
+        return {
+            "mentions_7d": mentions_7d,
+            "mentions_30d": mentions_30d,
+            "source_diversity_7d": len(sources_7d),
+            "persistence_days_7d": len(persistence_days_7d),
+            "avg_quality_confidence_30d": round(avg_quality_confidence_30d, 4),
+            "days_since_last_mention": days_since_last_mention,
+        }
+
+    def _merge_lifecycle_metadata(
+        self,
+        theme: ThemeCluster,
+        *,
+        observation: dict[str, object] | None = None,
+        counter_field: str | None = None,
+        reason: str | None = None,
+        rule_version: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, object]:
+        current = theme.lifecycle_state_metadata if isinstance(theme.lifecycle_state_metadata, dict) else {}
+        merged = dict(current)
+        merged["policy_version"] = rule_version or "lifecycle-v2"
+        merged["pipeline"] = self.pipeline
+        merged["continuity_id"] = merged.get("continuity_id") or f"{theme.pipeline}:{theme.canonical_key}"
+        if counter_field:
+            merged[counter_field] = int(merged.get(counter_field) or 0) + 1
+        if reason:
+            merged["last_transition_reason"] = reason
+        if observation is not None:
+            merged["last_observation"] = observation
+        if now is not None:
+            merged["last_evaluated_at"] = now.isoformat()
+        return merged
+
+    def promote_candidate_themes(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int | None = None,
+        auto_commit: bool = True,
+    ) -> dict:
+        """
+        Promote candidate themes to active when evidence exceeds policy thresholds.
+        """
+        now = now or datetime.utcnow()
+        thresholds = self._lifecycle_thresholds()
+
+        query = self.db.query(ThemeCluster).filter(
+            ThemeCluster.pipeline == self.pipeline,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.lifecycle_state == "candidate",
+        ).order_by(ThemeCluster.candidate_since_at.asc(), ThemeCluster.id.asc())
+        if limit is not None and limit > 0:
+            query = query.limit(limit)
+        candidates = query.all()
+
+        result = {
+            "pipeline": self.pipeline,
+            "scanned": len(candidates),
+            "promoted": 0,
+            "unchanged": 0,
+            "errors": 0,
+        }
+
+        def _apply_candidate_policy(cluster: ThemeCluster) -> None:
+            observation = self._lifecycle_snapshot(cluster.id, now=now)
+            should_promote = (
+                observation["mentions_7d"] >= thresholds["promotion_min_mentions_7d"]
+                and observation["source_diversity_7d"] >= thresholds["promotion_min_source_diversity_7d"]
+                and observation["avg_quality_confidence_30d"] >= thresholds["promotion_min_avg_confidence_30d"]
+                and observation["persistence_days_7d"] >= thresholds["promotion_min_persistence_days"]
+            )
+
+            if should_promote:
+                transition_reason = "candidate_promotion_thresholds_met"
+                transition_rule_version = "lifecycle-v2"
+                metadata = self._merge_lifecycle_metadata(
+                    cluster,
+                    observation=observation,
+                    counter_field="promotion_count",
+                    reason=transition_reason,
+                    now=now,
+                )
+                transition = apply_lifecycle_transition(
+                    db=self.db,
+                    theme=cluster,
+                    to_state="active",
+                    actor="system",
+                    job_name="promote_candidate_themes",
+                    rule_version=transition_rule_version,
+                    reason=transition_reason,
+                    metadata=metadata,
+                    transitioned_at=now,
+                )
+                self._emit_lifecycle_transition_alert(
+                    cluster=cluster,
+                    transition=transition,
+                    reason=transition_reason,
+                    rule_version=transition_rule_version,
+                    observation=observation,
+                )
+                result["promoted"] += 1
+            else:
+                cluster.lifecycle_state_metadata = self._merge_lifecycle_metadata(
+                    cluster,
+                    observation=observation,
+                    reason="candidate_promotion_thresholds_not_met",
+                    now=now,
+                )
+                result["unchanged"] += 1
+
+        for cluster in candidates:
+            try:
+                if auto_commit:
+                    _apply_candidate_policy(cluster)
+                    self.db.commit()
+                else:
+                    with self.db.begin_nested():
+                        _apply_candidate_policy(cluster)
+                        self.db.flush()
+            except Exception as exc:
+                if auto_commit:
+                    self.db.rollback()
+                result["errors"] += 1
+                logger.error("Candidate promotion policy failed for theme %s: %s", cluster.id, exc)
+
+        return result
+
+    def apply_dormancy_and_reactivation_policies(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int | None = None,
+        auto_commit: bool = True,
+    ) -> dict:
+        """
+        Apply automatic dormancy and reactivation transitions with telemetry counters.
+        """
+        now = now or datetime.utcnow()
+        thresholds = self._lifecycle_thresholds()
+        query = self.db.query(ThemeCluster).filter(
+            ThemeCluster.pipeline == self.pipeline,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.lifecycle_state.in_(["active", "reactivated", "dormant"]),
+        ).order_by(ThemeCluster.lifecycle_state_updated_at.asc(), ThemeCluster.id.asc())
+        if limit is not None and limit > 0:
+            query = query.limit(limit)
+        clusters = query.all()
+
+        result = {
+            "pipeline": self.pipeline,
+            "scanned": len(clusters),
+            "to_dormant": 0,
+            "to_reactivated": 0,
+            "unchanged": 0,
+            "errors": 0,
+        }
+
+        def _apply_state_policy(cluster: ThemeCluster) -> None:
+            observation = self._lifecycle_snapshot(cluster.id, now=now)
+            state = (cluster.lifecycle_state or "candidate").strip()
+
+            to_state: str | None = None
+            reason: str | None = None
+            counter_field: str | None = None
+            if state in {"active", "reactivated"}:
+                stale_inactive = observation["days_since_last_mention"] >= thresholds["dormancy_inactivity_days"]
+                low_volume_stale = (
+                    observation["mentions_30d"] <= thresholds["dormancy_min_mentions_30d"]
+                    and observation["days_since_last_mention"] >= thresholds["dormancy_min_silence_days"]
+                )
+                if stale_inactive or low_volume_stale:
+                    to_state = "dormant"
+                    reason = "dormancy_inactivity_threshold_met"
+                    counter_field = "dormancy_count"
+
+            elif state == "dormant":
+                should_reactivate = (
+                    observation["mentions_7d"] >= thresholds["reactivation_min_mentions_7d"]
+                    and observation["source_diversity_7d"] >= thresholds["reactivation_min_source_diversity_7d"]
+                    and observation["avg_quality_confidence_30d"] >= thresholds["reactivation_min_avg_confidence_30d"]
+                )
+                if should_reactivate:
+                    to_state = "reactivated"
+                    reason = "reactivation_evidence_threshold_met"
+                    counter_field = "reactivation_count"
+
+            if to_state is None:
+                cluster.lifecycle_state_metadata = self._merge_lifecycle_metadata(
+                    cluster,
+                    observation=observation,
+                    reason="lifecycle_policy_no_transition",
+                    now=now,
+                )
+                result["unchanged"] += 1
+                return
+
+            metadata = self._merge_lifecycle_metadata(
+                cluster,
+                observation=observation,
+                counter_field=counter_field,
+                reason=reason,
+                now=now,
+            )
+            transition_rule_version = "lifecycle-v2"
+            transition = apply_lifecycle_transition(
+                db=self.db,
+                theme=cluster,
+                to_state=to_state,
+                actor="system",
+                job_name="apply_lifecycle_policies",
+                rule_version=transition_rule_version,
+                reason=reason,
+                metadata=metadata,
+                transitioned_at=now,
+            )
+            self._emit_lifecycle_transition_alert(
+                cluster=cluster,
+                transition=transition,
+                reason=reason,
+                rule_version=transition_rule_version,
+                observation=observation,
+            )
+            if to_state == "dormant":
+                result["to_dormant"] += 1
+            elif to_state == "reactivated":
+                result["to_reactivated"] += 1
+
+        for cluster in clusters:
+            try:
+                if auto_commit:
+                    _apply_state_policy(cluster)
+                    self.db.commit()
+                else:
+                    with self.db.begin_nested():
+                        _apply_state_policy(cluster)
+                        self.db.flush()
+            except Exception as exc:
+                if auto_commit:
+                    self.db.rollback()
+                result["errors"] += 1
+                logger.error("Dormancy/reactivation policy failed for theme %s: %s", cluster.id, exc)
+
+        return result
+
+    def get_lifecycle_transition_history(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        theme_cluster_id: int | None = None,
+        to_state: str | None = None,
+    ) -> tuple[list[dict], int]:
+        query = self.db.query(ThemeLifecycleTransition, ThemeCluster).join(
+            ThemeCluster, ThemeCluster.id == ThemeLifecycleTransition.theme_cluster_id
+        ).filter(ThemeCluster.pipeline == self.pipeline)
+
+        if theme_cluster_id is not None:
+            query = query.filter(ThemeLifecycleTransition.theme_cluster_id == theme_cluster_id)
+        if to_state:
+            query = query.filter(ThemeLifecycleTransition.to_state == to_state)
+
+        total_count = query.count()
+        rows = query.order_by(ThemeLifecycleTransition.transitioned_at.desc()).offset(offset).limit(limit).all()
+
+        history = []
+        for transition, cluster in rows:
+            history.append(
+                {
+                    "id": transition.id,
+                    "theme_cluster_id": cluster.id,
+                    "theme_name": cluster.name,
+                    "pipeline": cluster.pipeline,
+                    "from_state": transition.from_state,
+                    "to_state": transition.to_state,
+                    "actor": transition.actor,
+                    "job_name": transition.job_name,
+                    "rule_version": transition.rule_version,
+                    "reason": transition.reason,
+                    "transition_metadata": transition.transition_metadata if isinstance(transition.transition_metadata, dict) else {},
+                    "transitioned_at": transition.transitioned_at.isoformat() if transition.transitioned_at else None,
+                    "transition_history_path": f"/api/v1/themes/lifecycle-transitions?theme_cluster_id={cluster.id}",
+                    "runbook_url": LIFECYCLE_RUNBOOK_URL,
+                }
+            )
+        return history, total_count
+
+    def _candidate_confidence_band(self, value: float | None) -> str:
+        if value is None:
+            return "unknown"
+        if value < 0.40:
+            return "0.00-0.39"
+        if value < 0.70:
+            return "0.40-0.69"
+        if value < 0.85:
+            return "0.70-0.84"
+        return "0.85-1.00"
+
+    def get_candidate_theme_queue(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[dict], int]:
+        base_query = self.db.query(ThemeCluster).filter(
+            ThemeCluster.pipeline == self.pipeline,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.lifecycle_state == "candidate",
+        )
+        total_count = base_query.count()
+        candidates = base_query.order_by(ThemeCluster.candidate_since_at.asc(), ThemeCluster.id.asc()).offset(offset).limit(limit).all()
+
+        queue_rows: list[dict] = []
+        for cluster in candidates:
+            latest_metrics = self.db.query(ThemeMetrics).filter(
+                ThemeMetrics.theme_cluster_id == cluster.id
+            ).order_by(ThemeMetrics.date.desc()).first()
+            observation = self._lifecycle_snapshot(cluster.id)
+            avg_confidence = float(observation.get("avg_quality_confidence_30d", 0.0) or 0.0)
+            source_diversity = int(observation.get("source_diversity_7d", 0) or 0)
+            mentions_7d = int(observation.get("mentions_7d", 0) or 0)
+            persistence_days = int(observation.get("persistence_days_7d", 0) or 0)
+            metadata = cluster.lifecycle_state_metadata if isinstance(cluster.lifecycle_state_metadata, dict) else {}
+
+            queue_rows.append(
+                {
+                    "theme_cluster_id": cluster.id,
+                    "theme_name": cluster.name,
+                    "theme_display_name": cluster.display_name,
+                    "candidate_since_at": cluster.candidate_since_at.isoformat() if cluster.candidate_since_at else None,
+                    "avg_confidence_30d": avg_confidence,
+                    "confidence_band": self._candidate_confidence_band(avg_confidence),
+                    "mentions_7d": mentions_7d,
+                    "source_diversity_7d": source_diversity,
+                    "persistence_days_7d": persistence_days,
+                    "momentum_score": float(latest_metrics.momentum_score or 0.0) if latest_metrics else None,
+                    "queue_reason": str(metadata.get("reason") or "candidate_review_pending"),
+                    "evidence": {
+                        "mentions_7d": mentions_7d,
+                        "source_diversity_7d": source_diversity,
+                        "persistence_days_7d": persistence_days,
+                        "avg_quality_confidence_30d": avg_confidence,
+                    },
+                }
+            )
+
+        return queue_rows, total_count
+
+    def get_candidate_theme_confidence_bands(self) -> list[dict]:
+        candidates = self.db.query(ThemeCluster.id).filter(
+            ThemeCluster.pipeline == self.pipeline,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+            ThemeCluster.lifecycle_state == "candidate",
+        ).all()
+        band_counts: dict[str, int] = defaultdict(int)
+        for (cluster_id,) in candidates:
+            observation = self._lifecycle_snapshot(cluster_id)
+            avg_confidence = float(observation.get("avg_quality_confidence_30d", 0.0) or 0.0)
+            band = self._candidate_confidence_band(avg_confidence)
+            band_counts[band] += 1
+        return [{"band": band, "count": count} for band, count in sorted(band_counts.items(), key=lambda item: item[0])]
+
+    def review_candidate_themes(
+        self,
+        *,
+        theme_cluster_ids: list[int],
+        action: str,
+        actor: str = "analyst",
+        note: str | None = None,
+    ) -> dict:
+        requested_ids = sorted({int(theme_id) for theme_id in theme_cluster_ids if int(theme_id) > 0})
+        if not requested_ids:
+            return {"success": False, "action": action, "updated": 0, "skipped": 0, "results": [], "error": "No candidate IDs provided"}
+
+        normalized_action = (action or "").strip().lower()
+        if normalized_action not in {"promote", "reject"}:
+            return {"success": False, "action": normalized_action, "updated": 0, "skipped": len(requested_ids), "results": [], "error": "Unsupported action"}
+
+        target_state = "active" if normalized_action == "promote" else "retired"
+        reason = "analyst_review_promote" if normalized_action == "promote" else "analyst_review_reject"
+
+        clusters = self.db.query(ThemeCluster).filter(
+            ThemeCluster.id.in_(requested_ids),
+            ThemeCluster.pipeline == self.pipeline,
+        ).all()
+        cluster_by_id = {cluster.id: cluster for cluster in clusters}
+
+        results: list[dict] = []
+        updated = 0
+        skipped = 0
+        now = datetime.utcnow()
+
+        try:
+            for theme_id in requested_ids:
+                cluster = cluster_by_id.get(theme_id)
+                if cluster is None:
+                    skipped += 1
+                    results.append({"theme_cluster_id": theme_id, "status": "skipped", "reason": "theme_not_found"})
+                    continue
+
+                current_state = (cluster.lifecycle_state or "candidate").strip().lower()
+                if current_state != "candidate":
+                    skipped += 1
+                    results.append(
+                        {
+                            "theme_cluster_id": theme_id,
+                            "theme_name": cluster.name,
+                            "status": "skipped",
+                            "reason": f"invalid_state:{current_state}",
+                        }
+                    )
+                    continue
+
+                metadata = self._merge_lifecycle_metadata(
+                    cluster,
+                    observation=self._lifecycle_snapshot(cluster.id, now=now),
+                    reason=reason,
+                    rule_version="lifecycle-v2",
+                )
+                metadata["review_action"] = normalized_action
+                metadata["reviewed_by"] = actor or "analyst"
+                metadata["reviewed_at"] = now.isoformat()
+                if note:
+                    metadata["review_note"] = note
+
+                apply_lifecycle_transition(
+                    db=self.db,
+                    theme=cluster,
+                    to_state=target_state,
+                    actor=actor or "analyst",
+                    job_name="candidate_review",
+                    rule_version="lifecycle-v2",
+                    reason=reason,
+                    metadata=metadata,
+                    transitioned_at=now,
+                )
+                updated += 1
+                results.append(
+                    {
+                        "theme_cluster_id": cluster.id,
+                        "theme_name": cluster.name,
+                        "status": "updated",
+                        "to_state": target_state,
+                    }
+                )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        return {
+            "success": True,
+            "action": normalized_action,
+            "updated": updated,
+            "skipped": skipped,
+            "results": results,
+        }
+
+    def _canonicalize_relationship_edge(
+        self,
+        *,
+        source_cluster_id: int,
+        target_cluster_id: int,
+        relationship_type: str,
+    ) -> tuple[int, int]:
+        if source_cluster_id == target_cluster_id:
+            raise ValueError("theme relationship cannot target itself")
+
+        normalized_type = relationship_type.strip().lower()
+        if normalized_type in {"related", "distinct"} and source_cluster_id > target_cluster_id:
+            return target_cluster_id, source_cluster_id
+        return source_cluster_id, target_cluster_id
+
+    def upsert_theme_relationship(
+        self,
+        *,
+        source_cluster_id: int,
+        target_cluster_id: int,
+        relationship_type: str,
+        confidence: float,
+        provenance: str,
+        evidence: dict | None = None,
+        pipeline: str | None = None,
+    ) -> tuple[ThemeRelationship, bool]:
+        relationship_type = relationship_type.strip().lower()
+        if relationship_type not in {"subset", "related", "distinct"}:
+            raise ValueError(f"Unsupported relationship_type: {relationship_type}")
+
+        edge_source, edge_target = self._canonicalize_relationship_edge(
+            source_cluster_id=source_cluster_id,
+            target_cluster_id=target_cluster_id,
+            relationship_type=relationship_type,
+        )
+        edge_pipeline = (pipeline or self.pipeline).strip()
+        edge_confidence = max(0.0, min(1.0, float(confidence or 0.0)))
+
+        existing = self.db.query(ThemeRelationship).filter(
+            ThemeRelationship.source_cluster_id == edge_source,
+            ThemeRelationship.target_cluster_id == edge_target,
+            ThemeRelationship.relationship_type == relationship_type,
+            ThemeRelationship.pipeline == edge_pipeline,
+        ).first()
+
+        if existing:
+            existing.confidence = max(float(existing.confidence or 0.0), edge_confidence)
+            existing.provenance = provenance
+            existing.evidence = evidence
+            existing.is_active = True
+            return existing, False
+
+        relationship = ThemeRelationship(
+            source_cluster_id=edge_source,
+            target_cluster_id=edge_target,
+            relationship_type=relationship_type,
+            pipeline=edge_pipeline,
+            confidence=edge_confidence,
+            provenance=provenance,
+            evidence=evidence,
+            is_active=True,
+        )
+        self.db.add(relationship)
+        return relationship, True
+
+    def _infer_relationships_from_constituent_overlap(self) -> dict[str, int]:
+        thresholds = self._lifecycle_thresholds()
+        min_overlap = int(thresholds["relationship_min_overlap_constituents"])
+        subset_overlap_ratio = float(thresholds["relationship_subset_overlap_ratio"])
+        related_jaccard_threshold = float(thresholds["relationship_related_jaccard_threshold"])
+
+        clusters = self.db.query(ThemeCluster).filter(
+            ThemeCluster.pipeline == self.pipeline,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+        ).all()
+        if len(clusters) < 2:
+            return {"pairs_scanned": 0, "subset_edges": 0, "related_edges": 0, "created": 0, "updated": 0}
+
+        constituents = self.db.query(ThemeConstituent).filter(
+            ThemeConstituent.is_active == True,
+            ThemeConstituent.theme_cluster_id.in_([c.id for c in clusters]),
+        ).all()
+        by_cluster: dict[int, set[str]] = defaultdict(set)
+        for row in constituents:
+            by_cluster[row.theme_cluster_id].add(row.symbol)
+
+        created = 0
+        updated = 0
+        pairs_scanned = 0
+        subset_edges = 0
+        related_edges = 0
+
+        for i in range(len(clusters)):
+            for j in range(i + 1, len(clusters)):
+                left = clusters[i]
+                right = clusters[j]
+                left_set = by_cluster.get(left.id, set())
+                right_set = by_cluster.get(right.id, set())
+                if not left_set or not right_set:
+                    continue
+
+                pairs_scanned += 1
+                overlap = left_set & right_set
+                overlap_count = len(overlap)
+                if overlap_count < min_overlap:
+                    continue
+
+                smaller_size = min(len(left_set), len(right_set))
+                overlap_ratio = overlap_count / smaller_size if smaller_size else 0.0
+                union_size = len(left_set | right_set)
+                jaccard = overlap_count / union_size if union_size else 0.0
+
+                relationship_type: str | None = None
+                source_cluster_id = left.id
+                target_cluster_id = right.id
+                confidence = 0.0
+                if overlap_ratio >= subset_overlap_ratio:
+                    relationship_type = "subset"
+                    subset_edges += 1
+                    if len(left_set) > len(right_set):
+                        source_cluster_id, target_cluster_id = right.id, left.id
+                    confidence = max(overlap_ratio, jaccard)
+                elif jaccard >= related_jaccard_threshold:
+                    relationship_type = "related"
+                    related_edges += 1
+                    confidence = jaccard
+
+                if relationship_type is None:
+                    continue
+
+                _, inserted = self.upsert_theme_relationship(
+                    source_cluster_id=source_cluster_id,
+                    target_cluster_id=target_cluster_id,
+                    relationship_type=relationship_type,
+                    confidence=confidence,
+                    provenance="constituent_overlap_rule",
+                    evidence={
+                        "overlap_count": overlap_count,
+                        "left_size": len(left_set),
+                        "right_size": len(right_set),
+                        "overlap_ratio": round(overlap_ratio, 4),
+                        "jaccard": round(jaccard, 4),
+                    },
+                    pipeline=self.pipeline,
+                )
+                if inserted:
+                    created += 1
+                else:
+                    updated += 1
+
+        return {
+            "pairs_scanned": pairs_scanned,
+            "subset_edges": subset_edges,
+            "related_edges": related_edges,
+            "created": created,
+            "updated": updated,
+        }
+
+    def _active_constituent_symbols_by_cluster(self, cluster_ids: list[int]) -> dict[int, set[str]]:
+        if not cluster_ids:
+            return {}
+        rows = self.db.query(ThemeConstituent.theme_cluster_id, ThemeConstituent.symbol).filter(
+            ThemeConstituent.is_active == True,
+            ThemeConstituent.theme_cluster_id.in_(cluster_ids),
+        ).all()
+        by_cluster: dict[int, set[str]] = defaultdict(set)
+        for cluster_id, symbol in rows:
+            by_cluster[cluster_id].add(symbol)
+        return by_cluster
+
+    def _resolve_subset_direction_from_constituents(
+        self,
+        *,
+        source_cluster_id: int,
+        target_cluster_id: int,
+        constituent_sets: dict[int, set[str]],
+    ) -> tuple[int, int, str] | None:
+        source_set = constituent_sets.get(source_cluster_id, set())
+        target_set = constituent_sets.get(target_cluster_id, set())
+        if not source_set or not target_set:
+            return None
+
+        if source_set < target_set:
+            return source_cluster_id, target_cluster_id, "strict_subset_set_comparison"
+        if target_set < source_set:
+            return target_cluster_id, source_cluster_id, "strict_subset_set_comparison"
+
+        # If strict subset isn't available, keep directional hint only when set sizes differ.
+        if len(source_set) < len(target_set):
+            return source_cluster_id, target_cluster_id, "size_heuristic"
+        if len(target_set) < len(source_set):
+            return target_cluster_id, source_cluster_id, "size_heuristic"
+        return None
+
+    def infer_theme_relationships(
+        self,
+        *,
+        max_merge_suggestions: int = 300,
+    ) -> dict:
+        """
+        Build theme relationship edges from merge analysis + deterministic rules.
+        """
+        result = {
+            "pipeline": self.pipeline,
+            "merge_suggestions_scanned": 0,
+            "merge_edges_written": 0,
+            "rule_pairs_scanned": 0,
+            "rule_edges_written": 0,
+            "created": 0,
+            "updated": 0,
+            "errors": 0,
+        }
+
+        try:
+            merge_suggestions = self.db.query(ThemeMergeSuggestion).filter(
+                ThemeMergeSuggestion.llm_relationship.in_(["subset", "related", "distinct"]),
+            ).order_by(ThemeMergeSuggestion.created_at.desc()).limit(max_merge_suggestions).all()
+            result["merge_suggestions_scanned"] = len(merge_suggestions)
+
+            cluster_lookup = {
+                cluster.id: cluster
+                for cluster in self.db.query(ThemeCluster).filter(
+                    ThemeCluster.pipeline == self.pipeline,
+                    ThemeCluster.is_l1 == False,
+                ).all()
+            }
+            constituent_sets = self._active_constituent_symbols_by_cluster(list(cluster_lookup.keys()))
+
+            for suggestion in merge_suggestions:
+                source = cluster_lookup.get(suggestion.source_cluster_id)
+                target = cluster_lookup.get(suggestion.target_cluster_id)
+                if source is None or target is None:
+                    continue
+                if (source.pipeline or "") != self.pipeline or (target.pipeline or "") != self.pipeline:
+                    continue
+
+                confidence = float(
+                    suggestion.llm_confidence
+                    if suggestion.llm_confidence is not None
+                    else (suggestion.embedding_similarity or 0.5)
+                )
+                relationship_type = str(suggestion.llm_relationship or "related").strip().lower()
+                inferred_source_id = source.id
+                inferred_target_id = target.id
+                direction_resolution = "as_recorded"
+                if relationship_type == "subset":
+                    resolved = self._resolve_subset_direction_from_constituents(
+                        source_cluster_id=source.id,
+                        target_cluster_id=target.id,
+                        constituent_sets=constituent_sets,
+                    )
+                    if resolved is None:
+                        relationship_type = "related"
+                        direction_resolution = "downgraded_to_related_ambiguous_subset_direction"
+                    else:
+                        inferred_source_id, inferred_target_id, direction_resolution = resolved
+
+                _, inserted = self.upsert_theme_relationship(
+                    source_cluster_id=inferred_source_id,
+                    target_cluster_id=inferred_target_id,
+                    relationship_type=relationship_type,
+                    confidence=confidence,
+                    provenance="merge_suggestion_llm",
+                    evidence={
+                        "merge_suggestion_id": suggestion.id,
+                        "status": suggestion.status,
+                        "embedding_similarity": suggestion.embedding_similarity,
+                        "llm_confidence": suggestion.llm_confidence,
+                        "direction_resolution": direction_resolution,
+                    },
+                    pipeline=self.pipeline,
+                )
+                result["merge_edges_written"] += 1
+                if inserted:
+                    result["created"] += 1
+                else:
+                    result["updated"] += 1
+
+            overlap_result = self._infer_relationships_from_constituent_overlap()
+            result["rule_pairs_scanned"] = overlap_result["pairs_scanned"]
+            result["rule_edges_written"] = overlap_result["subset_edges"] + overlap_result["related_edges"]
+            result["created"] += overlap_result["created"]
+            result["updated"] += overlap_result["updated"]
+            self.db.commit()
+        except Exception as exc:
+            self.db.rollback()
+            result["errors"] += 1
+            logger.error("Relationship inference failed for pipeline %s: %s", self.pipeline, exc)
+
+        return result
+
+    def get_theme_relationships(self, theme_cluster_id: int, *, limit: int = 50) -> list[dict]:
+        edges = self.db.query(ThemeRelationship).filter(
+            ThemeRelationship.pipeline == self.pipeline,
+            ThemeRelationship.is_active == True,
+            or_(
+                ThemeRelationship.source_cluster_id == theme_cluster_id,
+                ThemeRelationship.target_cluster_id == theme_cluster_id,
+            ),
+        ).order_by(ThemeRelationship.confidence.desc(), ThemeRelationship.created_at.desc()).limit(limit).all()
+
+        if not edges:
+            return []
+
+        related_ids = {
+            edge.source_cluster_id if edge.source_cluster_id != theme_cluster_id else edge.target_cluster_id
+            for edge in edges
+        }
+        related_clusters = {
+            cluster.id: cluster
+            for cluster in self.db.query(ThemeCluster).filter(ThemeCluster.id.in_(list(related_ids))).all()
+        }
+
+        payload = []
+        for edge in edges:
+            is_outgoing = edge.source_cluster_id == theme_cluster_id
+            peer_id = edge.target_cluster_id if is_outgoing else edge.source_cluster_id
+            peer = related_clusters.get(peer_id)
+            payload.append(
+                {
+                    "relation_id": edge.id,
+                    "relationship_type": edge.relationship_type,
+                    "direction": "outgoing" if is_outgoing else "incoming",
+                    "confidence": float(edge.confidence or 0.0),
+                    "provenance": edge.provenance,
+                    "evidence": edge.evidence or {},
+                    "peer_theme_id": peer_id,
+                    "peer_theme_name": peer.name if peer else None,
+                    "peer_theme_display_name": peer.display_name if peer else None,
+                }
+            )
+        return payload
+
+    def get_theme_relationship_graph(
+        self,
+        theme_cluster_id: int,
+        *,
+        limit: int = 120,
+    ) -> dict:
+        root_cluster = self.db.query(ThemeCluster).filter(
+            ThemeCluster.id == theme_cluster_id,
+            ThemeCluster.pipeline == self.pipeline,
+        ).first()
+        if root_cluster is None:
+            return {"nodes": [], "edges": []}
+
+        primary_edges = self.db.query(ThemeRelationship).filter(
+            ThemeRelationship.pipeline == self.pipeline,
+            ThemeRelationship.is_active == True,
+            or_(
+                ThemeRelationship.source_cluster_id == theme_cluster_id,
+                ThemeRelationship.target_cluster_id == theme_cluster_id,
+            ),
+        ).order_by(ThemeRelationship.confidence.desc(), ThemeRelationship.id.desc()).limit(limit).all()
+
+        node_ids: set[int] = {theme_cluster_id}
+        edge_rows: dict[int, ThemeRelationship] = {}
+        for edge in primary_edges:
+            node_ids.add(edge.source_cluster_id)
+            node_ids.add(edge.target_cluster_id)
+            edge_rows[edge.id] = edge
+
+        if len(node_ids) > 1:
+            secondary_edges = self.db.query(ThemeRelationship).filter(
+                ThemeRelationship.pipeline == self.pipeline,
+                ThemeRelationship.is_active == True,
+                ThemeRelationship.source_cluster_id.in_(list(node_ids)),
+                ThemeRelationship.target_cluster_id.in_(list(node_ids)),
+            ).order_by(ThemeRelationship.confidence.desc(), ThemeRelationship.id.desc()).limit(limit).all()
+            for edge in secondary_edges:
+                edge_rows[edge.id] = edge
+
+        clusters = self.db.query(ThemeCluster).filter(ThemeCluster.id.in_(list(node_ids))).all()
+        cluster_by_id = {cluster.id: cluster for cluster in clusters}
+
+        nodes = [
+            {
+                "theme_cluster_id": cluster.id,
+                "theme_name": cluster.name,
+                "theme_display_name": cluster.display_name,
+                "lifecycle_state": cluster.lifecycle_state or "candidate",
+                "is_root": cluster.id == theme_cluster_id,
+            }
+            for cluster in sorted(clusters, key=lambda c: (0 if c.id == theme_cluster_id else 1, c.name))
+        ]
+
+        edges = []
+        for edge in edge_rows.values():
+            source_cluster = cluster_by_id.get(edge.source_cluster_id)
+            target_cluster = cluster_by_id.get(edge.target_cluster_id)
+            edges.append(
+                {
+                    "relation_id": edge.id,
+                    "source_theme_id": edge.source_cluster_id,
+                    "source_theme_name": source_cluster.name if source_cluster else None,
+                    "target_theme_id": edge.target_cluster_id,
+                    "target_theme_name": target_cluster.name if target_cluster else None,
+                    "relationship_type": edge.relationship_type,
+                    "confidence": float(edge.confidence or 0.0),
+                    "provenance": edge.provenance,
+                    "evidence": edge.evidence or {},
+                }
+            )
+
+        edges.sort(key=lambda row: (-row["confidence"], row["source_theme_id"], row["target_theme_id"], row["relation_id"]))
+        return {"nodes": nodes, "edges": edges}

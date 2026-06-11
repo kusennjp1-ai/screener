@@ -1,0 +1,1932 @@
+"""
+Theme Extraction Service
+
+Uses LLMService (via LiteLLM) to extract themes and tickers from unstructured content.
+This is the core intelligence layer that identifies market themes from text.
+"""
+import json
+import logging
+import re
+import time
+from dataclasses import replace
+from copy import deepcopy
+from datetime import datetime, timedelta
+from difflib import SequenceMatcher
+from typing import Optional
+
+import numpy as np
+from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from ..infra.db.repositories.theme_alias_repo import SqlThemeAliasRepository
+from ..domain.theme_matching import MatchDecision, MatchThresholdConfig
+from ..models.theme import (
+    ContentItem,
+    ContentItemPipelineState,
+    ThemeAlias,
+    ThemeMention,
+    ThemeCluster,
+    ThemeConstituent,
+)
+from ..models.app_settings import AppSetting
+from .errors import ProviderQuotaServiceError, ProviderRateLimitServiceError
+from .llm import LLMService, LLMError, LLMQuotaExceededError, LLMRateLimitError
+from .llm.config import is_model_supported_for_use_case
+from .security_master_service import SecurityMasterResolver, security_master_resolver
+from . import multi_market_ticker_validator as multi_market
+from .theme_embedding_service import ThemeEmbeddingEngine, ThemeEmbeddingRepository
+from .theme_identity_normalization import UNKNOWN_THEME_KEY, canonical_theme_key, display_theme_name
+from .theme_lifecycle_service import set_initial_lifecycle_defaults
+
+logger = logging.getLogger(__name__)
+
+
+class ThemeExtractionParseError(Exception):
+    """Raised when model output cannot be parsed into the extraction schema."""
+
+
+class ThemeExtractionProviderUnavailableError(Exception):
+    """Raised when no extraction provider is configured for the current run."""
+
+
+_LEGACY_THEME_CANONICAL_NAME_MAP = {
+    # AI themes
+    "ai_infrastructure": "AI Infrastructure",
+    "ai_infra": "AI Infrastructure",
+    "ai_datacenter": "AI Infrastructure",
+    "ai_data_center": "AI Infrastructure",
+    "ai_chip": "AI Semiconductors",
+    "ai_semiconductor": "AI Semiconductors",
+    # Healthcare
+    "glp1": "GLP-1 Weight Loss",
+    "weight_loss_drug": "GLP-1 Weight Loss",
+    "obesity_drug": "GLP-1 Weight Loss",
+    # Energy
+    "nuclear_power": "Nuclear Energy",
+    "nuclear_renaissance": "Nuclear Energy",
+    "uranium": "Nuclear Energy",
+    # Defense
+    "defense_drone": "Defense & Drones",
+    "military_drone": "Defense & Drones",
+    "defense_technology": "Defense & Drones",
+    # Quantum
+    "quantum": "Quantum Computing",
+    "quantum_tech": "Quantum Computing",
+    # Manufacturing
+    "reshoring": "Nearshoring & Reshoring",
+    "nearshoring": "Nearshoring & Reshoring",
+    "onshoring": "Nearshoring & Reshoring",
+    # Crypto
+    "bitcoin": "Crypto & Bitcoin",
+    "cryptocurrency": "Crypto & Bitcoin",
+    "bitcoin_mining": "Bitcoin Miners",
+    "crypto_mining": "Bitcoin Miners",
+}
+
+
+# System prompt for theme extraction
+EXTRACTION_SYSTEM_PROMPT = """You are a financial analyst AI that extracts market themes and stock mentions from text.
+
+Your task is to identify:
+1. MARKET THEMES - Investment narratives, sector trends, or thematic plays mentioned in the text
+   Examples: "AI infrastructure", "GLP-1 weight loss drugs", "nuclear energy renaissance",
+   "defense drones", "quantum computing", "nearshoring/reshoring", "datacenter power demand"
+
+2. STOCK TICKERS - Publicly listed stock symbols mentioned or clearly implied
+   Supported markets and canonical symbol forms:
+   - US (NYSE, NASDAQ): plain ticker, e.g. NVDA, AAPL, AMZN
+   - Hong Kong (HKEX): 4-digit zero-padded code with ``.HK`` suffix, e.g. 0700.HK, 0005.HK
+   - India (NSE/BSE): exchange suffix ``.NS`` or ``.BO``, e.g. RELIANCE.NS, 500325.BO
+   - Japan (TSE): 4-digit code with ``.T`` suffix, e.g. 6758.T, 9984.T
+   - Korea (KOSPI/KOSDAQ): 6-digit code with ``.KS`` for KOSPI or ``.KQ`` for KOSDAQ, e.g. 005930.KS, 091990.KQ
+   - Taiwan (TWSE): 4-digit code with ``.TW`` suffix (use ``.TWO`` for TPEx), e.g. 2330.TW
+   Rules:
+   - Convert company names to canonical symbols ONLY when the mapping is unambiguous
+     (e.g., "Nvidia" -> NVDA; "Tencent" -> 0700.HK; "ソニー" -> 6758.T; "台積電" -> 2330.TW)
+   - Leave ambiguous or unknown company references as company names in the excerpt, not in the tickers list
+   - Do NOT include ETFs or indices unless they are the actual subject of the theme
+   - Do NOT fabricate or guess tickers - only include symbols clearly identified in the text
+
+3. SENTIMENT - The author's view on each theme (bullish, bearish, neutral)
+
+4. CONFIDENCE - Your confidence in the extraction (0.0 to 1.0)
+
+IMPORTANT RULES:
+- Only extract themes that are INVESTMENT-RELATED (not general news topics)
+- A theme must be actionable - something an investor could trade on
+- Group related concepts into canonical theme names
+- If no clear themes are present, return an empty list
+- Be conservative - only extract high-confidence mentions
+- Prefer specific themes over vague ones ("AI chip demand" > "technology")
+- Normalize recurring names consistently ("AI Infrastructure", not "AI infra buildout")
+- Deduplicate overlapping mentions from the same content and keep the most specific investable phrasing
+
+DO NOT EXTRACT:
+- Generic sectors or style buckets without a concrete catalyst or thesis: "technology stocks", "growth stocks", "small caps"
+- Calendar or market-wide events by themselves: "earnings season", "Fed meeting", "today's rally"
+- Single-company events unless they clearly signal a broader investable basket
+- Non-investment narratives: politics, celebrity news, sports, or macro chatter with no tradeable angle
+- ETF names, indexes, or vague risk-on / risk-off language as themes
+
+NEGATIVE EXAMPLES:
+- "Apple beat earnings" -> do not create a theme unless the text clearly ties it to a broader basket
+- "Technology stocks were mixed today" -> do not extract "technology stocks"
+- "The market is waiting for CPI" -> do not extract "inflation" unless the text discusses a specific investable trade
+"""
+
+EXTRACTION_USER_PROMPT = """Extract market themes and stock tickers from this content.
+
+Source: {source_name} ({source_type})
+Published: {published_at}
+
+Title: {title}
+
+Content:
+{content}
+
+---
+
+Return a JSON array of theme mentions. Each mention should have:
+- theme: string (the market theme/narrative)
+- tickers: array of strings (canonical stock symbols related to this theme — US tickers, or suffixed forms for Hong Kong (``.HK``), India (``.NS``/``.BO``), Japan (``.T``), Korea (``.KS``/``.KQ``), Taiwan (``.TW``/``.TWO``))
+- sentiment: string ("bullish", "bearish", or "neutral")
+- confidence: float (0.0 to 1.0)
+- excerpt: string (relevant quote from content, max 200 chars)
+
+Example output:
+[
+  {{
+    "theme": "AI Infrastructure",
+    "tickers": ["NVDA", "AVGO", "MRVL"],
+    "sentiment": "bullish",
+    "confidence": 0.9,
+    "excerpt": "The buildout of AI datacenters is accelerating faster than expected..."
+  }}
+]
+
+If no investment themes are found, return an empty array: []
+
+Return ONLY the JSON array, no other text."""
+
+
+class ThemeExtractionService:
+    """Service for extracting themes from content using sanctioned LiteLLM providers."""
+    DEFAULT_EXTRACTION_MAX_TOKENS = 2000
+    HIGH_EXTRACTION_MAX_TOKENS = 4000
+    PROCESSABLE_STATUSES = {"pending", "failed_retryable"}
+    TICKER_FALSE_POSITIVES = {
+        "A", "I", "AI", "CEO", "CFO", "IPO", "ETF", "NYSE", "SEC", "FDA",
+        "GDP", "CPI", "PPI", "PE", "EPS", "YOY", "QOQ", "YTD", "USD",
+        "US", "UK", "EU", "OTC", "ADR", "EV", "DOJ", "OPEC", "ECB",
+    }
+    FUZZY_CANDIDATE_TOKEN_MIN_LENGTH = 3
+    FUZZY_CANDIDATE_MAX_TOKEN_FILTERS = 4
+    MATCH_THRESHOLD_CONFIG = MatchThresholdConfig(
+        version="match-v1",
+        default_threshold=1.0,
+        pipeline_overrides={
+            "technical": 1.0,
+            "fundamental": 1.0,
+        },
+        source_type_overrides={},
+        pipeline_source_type_overrides={},
+    )
+    ALIAS_SOURCE_TRUST = {
+        "manual": 1.0,
+        "correlation": 0.85,
+        "backfill": 0.7,
+        "llm_extraction": 0.45,
+    }
+    ALIAS_AUTO_ATTACH_MIN_SCORE = 0.70
+    ALIAS_AUTO_ATTACH_MIN_EVIDENCE = 2
+    FUZZY_ATTACH_THRESHOLD_DEFAULT = 0.90
+    FUZZY_REVIEW_THRESHOLD_DEFAULT = 0.78
+    FUZZY_AMBIGUITY_MARGIN_DEFAULT = 0.04
+    FUZZY_ATTACH_THRESHOLD_PIPELINE_OVERRIDES = {
+        "technical": 0.91,
+        "fundamental": 0.88,
+    }
+    FUZZY_ATTACH_THRESHOLD_SOURCE_TYPE_OVERRIDES = {
+        "news": 0.89,
+        "substack": 0.91,
+    }
+    FUZZY_ATTACH_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES = {}
+    FUZZY_REVIEW_THRESHOLD_PIPELINE_OVERRIDES = {}
+    FUZZY_REVIEW_THRESHOLD_SOURCE_TYPE_OVERRIDES = {}
+    FUZZY_REVIEW_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES = {}
+    FUZZY_AMBIGUITY_MARGIN_PIPELINE_OVERRIDES = {}
+    FUZZY_AMBIGUITY_MARGIN_SOURCE_TYPE_OVERRIDES = {}
+    FUZZY_AMBIGUITY_MARGIN_PIPELINE_SOURCE_TYPE_OVERRIDES = {}
+    EMBEDDING_MATCH_POLICY_VERSION = "embedding-v1"
+    EMBEDDING_MATCH_MODEL = "all-MiniLM-L6-v2"
+    EMBEDDING_MATCH_MAX_CANDIDATES = 24
+    EMBEDDING_MAX_AGE_DAYS = 30
+    EMBEDDING_ATTACH_THRESHOLD_DEFAULT = 0.84
+    EMBEDDING_REVIEW_THRESHOLD_DEFAULT = 0.76
+    EMBEDDING_AMBIGUITY_MARGIN_DEFAULT = 0.03
+    EMBEDDING_ATTACH_THRESHOLD_PIPELINE_OVERRIDES = {
+        "technical": 0.85,
+        "fundamental": 0.82,
+    }
+    EMBEDDING_ATTACH_THRESHOLD_SOURCE_TYPE_OVERRIDES = {}
+    EMBEDDING_ATTACH_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES = {}
+    EMBEDDING_REVIEW_THRESHOLD_PIPELINE_OVERRIDES = {}
+    EMBEDDING_REVIEW_THRESHOLD_SOURCE_TYPE_OVERRIDES = {}
+    EMBEDDING_REVIEW_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES = {}
+    EMBEDDING_AMBIGUITY_MARGIN_PIPELINE_OVERRIDES = {}
+    EMBEDDING_AMBIGUITY_MARGIN_SOURCE_TYPE_OVERRIDES = {}
+    EMBEDDING_AMBIGUITY_MARGIN_PIPELINE_SOURCE_TYPE_OVERRIDES = {}
+
+    def __init__(self, db: Session, pipeline: str = "technical"):
+        self.db = db
+        self.pipeline = pipeline
+        self.pipeline_config = None
+        self._load_pipeline_config()
+
+        self.llm = None
+        self.provider = None
+        self.configured_model = None  # Model ID from settings
+        self._load_configured_model()
+        self._init_client()
+        self._load_reprocessing_config()
+        self.theme_policy_overrides = self._load_theme_policy_overrides()
+
+        # Cache of valid tickers (loaded from universe)
+        self._valid_tickers: Optional[set] = None
+        self._security_master = security_master_resolver
+
+        # Rate limiting
+        self._last_request_time = 0
+        self._min_request_interval = 0.5  # 0.5 seconds for most providers
+
+    def _load_theme_policy_overrides(self) -> dict:
+        setting = self.db.query(AppSetting).filter(AppSetting.key == "theme_policy_overrides").first()
+        if not setting or not setting.value:
+            return {}
+        try:
+            all_overrides = json.loads(setting.value)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(all_overrides, dict):
+            return {}
+        pipeline_overrides = all_overrides.get(self.pipeline, {})
+        if not isinstance(pipeline_overrides, dict):
+            return {}
+        return pipeline_overrides
+
+    def _matcher_policy_value(self, key: str, fallback: float) -> float:
+        matcher = self.theme_policy_overrides.get("matcher", {}) if isinstance(self.theme_policy_overrides, dict) else {}
+        if not isinstance(matcher, dict):
+            return float(fallback)
+        value = matcher.get(key)
+        if value is None:
+            return float(fallback)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(fallback)
+
+    def _load_pipeline_config(self) -> None:
+        """Load pipeline-specific configuration"""
+        try:
+            from ..config.pipeline_config import get_pipeline_config
+            self.pipeline_config = get_pipeline_config(self.pipeline)
+            logger.info(f"Loaded pipeline config for: {self.pipeline}")
+        except Exception as e:
+            logger.warning(f"Could not load pipeline config: {e}. Using defaults.")
+            self.pipeline_config = None
+
+    def _load_configured_model(self) -> None:
+        """Load configured model from database settings"""
+        try:
+            from ..models.app_settings import AppSetting
+            setting = self.db.query(AppSetting).filter(AppSetting.key == "llm_extraction_model").first()
+            if setting and setting.value and is_model_supported_for_use_case(
+                model_id=setting.value,
+                use_case="extraction",
+            ):
+                self.configured_model = setting.value
+                logger.info("Using configured extraction model: %s", self.configured_model)
+            else:
+                if setting and setting.value:
+                    logger.warning(
+                        "Ignoring unsupported extraction model '%s'; using preset defaults",
+                        setting.value,
+                    )
+                self.configured_model = None
+        except Exception as e:
+            logger.warning(f"Could not load configured model: {e}")
+            self.configured_model = None
+
+    def _load_reprocessing_config(self) -> None:
+        """Load reprocessing settings from database."""
+        try:
+            from ..models.app_settings import AppSetting
+            setting = self.db.query(AppSetting).filter(
+                AppSetting.key == "reprocessing_max_age_days"
+            ).first()
+            self.max_age_days = int(setting.value) if setting else 30
+        except Exception:
+            self.max_age_days = 30
+
+    def _init_client(self) -> None:
+        """Initialize sanctioned LLM extraction client."""
+        try:
+            self.llm = LLMService(use_case="extraction")
+            self.provider = "litellm"
+            self._min_request_interval = 0.5
+            logger.info("LLMService initialized for theme extraction")
+            return
+        except Exception as e:
+            logger.warning("LLMService initialization failed for extraction: %s", e)
+
+        logger.error("No sanctioned LLM provider available for theme extraction")
+
+    def _get_valid_tickers(self) -> set:
+        """Get set of valid tickers from stock universe"""
+        if self._valid_tickers is None:
+            from ..models.stock_universe import StockUniverse
+            tickers = self.db.query(StockUniverse.symbol).filter(
+                StockUniverse.active_filter()
+            ).all()
+            resolver = getattr(self, "_security_master", None) or SecurityMasterResolver()
+            self._valid_tickers = {
+                resolver.normalize_symbol(t[0])
+                for t in tickers
+                if t[0]
+            }
+        return self._valid_tickers
+
+    def _get_company_name_ticker_map(self) -> list[tuple[str, str]]:
+        """Build a deterministic alias -> ticker map from the active stock universe."""
+        mapping = getattr(self, "_company_name_ticker_map", None)
+        if mapping is not None:
+            return mapping
+        if not hasattr(self, "db") or self.db is None:
+            self._company_name_ticker_map = []
+            return self._company_name_ticker_map
+
+        from ..models.stock_universe import StockUniverse
+
+        suffixes = {
+            "inc", "incorporated", "corp", "corporation", "co", "company", "ltd", "limited",
+            "plc", "nv", "sa", "ag", "holdings", "holding", "group", "therapeutics",
+            "pharmaceuticals", "pharma", "biosciences", "biotech", "technologies", "technology",
+        }
+        alias_to_symbol: dict[str, str] = {}
+        ambiguous_aliases: set[str] = set()
+
+        rows = self.db.query(StockUniverse.symbol, StockUniverse.name).filter(
+            StockUniverse.active_filter(),
+            StockUniverse.name.isnot(None),
+        ).all()
+
+        for symbol, raw_name in rows:
+            normalized = self._normalize_company_text(raw_name)
+            if not normalized:
+                continue
+
+            aliases = {normalized}
+            tokens = normalized.split()
+            while tokens and tokens[-1] in suffixes:
+                tokens = tokens[:-1]
+                if tokens:
+                    aliases.add(" ".join(tokens))
+
+            for alias in aliases:
+                if len(alias) < 4:
+                    continue
+                existing = alias_to_symbol.get(alias)
+                if existing is not None and existing != symbol:
+                    ambiguous_aliases.add(alias)
+                    continue
+                alias_to_symbol[alias] = symbol
+
+        for alias in ambiguous_aliases:
+            alias_to_symbol.pop(alias, None)
+
+        mapping = sorted(alias_to_symbol.items(), key=lambda item: (-len(item[0]), item[0]))
+        self._company_name_ticker_map = mapping
+        return mapping
+
+    def _normalize_company_text(self, text: str | None) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+    def _resolve_company_name_tickers(self, *texts: str, limit: int = 5) -> list[str]:
+        normalized_texts = [
+            f" {self._normalize_company_text(text)} "
+            for text in texts
+            if self._normalize_company_text(text)
+        ]
+        if not normalized_texts:
+            return []
+
+        matches: list[str] = []
+        seen: set[str] = set()
+        for alias, symbol in self._get_company_name_ticker_map():
+            needle = f" {alias} "
+            if any(needle in haystack for haystack in normalized_texts):
+                if symbol not in seen:
+                    matches.append(symbol)
+                    seen.add(symbol)
+                    if len(matches) >= limit:
+                        break
+        return matches
+
+    def _gate_ticker(
+        self, raw: object, resolver, valid_tickers: set,
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Apply every acceptance gate to a single raw ticker.
+
+        Returns ``(canonical, None)`` on accept and ``(canonical_or_None,
+        reason)`` on drop, where ``reason`` is a ``multi_market.REASON_*``
+        tag. The canonical field may still be populated on drop so the
+        log line carries both the raw and canonical forms.
+        """
+        result = multi_market.normalize_extracted_ticker(raw, resolver=resolver)
+        if result.canonical is None:
+            return None, result.reason
+        canonical = result.canonical
+        if canonical in self.TICKER_FALSE_POSITIVES:
+            return canonical, multi_market.REASON_FALSE_POSITIVE
+        if not multi_market.TICKER_SHAPE_RE.match(canonical):
+            return canonical, multi_market.REASON_SHAPE
+        if not valid_tickers:
+            return canonical, multi_market.REASON_UNIVERSE_EMPTY
+        if canonical not in valid_tickers:
+            # The CJK resolver may have mapped an English company name to an
+            # Asian canonical (e.g. "HSBC" → "0005.HK"). If that canonical
+            # misses the active universe, retry with SecurityMaster-only
+            # normalization so dual-listed tickers that also trade under the
+            # same name in the US (e.g. NYSE: HSBC) still land correctly in
+            # US-only deployments, preserving the documented US-parity contract.
+            sm_canonical = resolver.normalize_symbol(str(raw))
+            if (
+                sm_canonical
+                and sm_canonical != canonical
+                and sm_canonical not in self.TICKER_FALSE_POSITIVES
+                and multi_market.TICKER_SHAPE_RE.match(sm_canonical)
+                and sm_canonical in valid_tickers
+            ):
+                return sm_canonical, None
+            return canonical, multi_market.REASON_UNIVERSE_MISS
+        return canonical, None
+
+    def _clean_tickers(self, tickers: list) -> list:
+        """Normalize, validate, and de-duplicate an LLM-extracted ticker list.
+
+        Each drop emits a structured debug log via
+        :func:`multi_market.log_drop` so operators can track drop-rate
+        buckets (unresolvable, shape, universe miss) rather than
+        discover them via silent data loss.
+        """
+        resolver = getattr(self, "_security_master", None) or SecurityMasterResolver()
+        valid_tickers = self._get_valid_tickers()
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for raw in tickers:
+            canonical, reason = self._gate_ticker(raw, resolver, valid_tickers)
+            if reason is not None:
+                multi_market.log_drop(raw=raw, canonical=canonical, reason=reason)
+                continue
+            if canonical not in seen:
+                seen.add(canonical)
+                cleaned.append(canonical)
+        return cleaned
+
+    def _rate_limit(self) -> None:
+        """Apply rate limiting between API calls"""
+        now = time.time()
+        elapsed = now - self._last_request_time
+        if elapsed < self._min_request_interval:
+            time.sleep(self._min_request_interval - elapsed)
+        self._last_request_time = time.time()
+
+    def _try_generate_litellm(self, prompt: str) -> str:
+        """Try to generate content with LLMService (LiteLLM)"""
+        import asyncio
+
+        system_prompt = self._get_system_prompt()
+
+        # Use configured model if set
+        model_override = self.configured_model if self.configured_model else None
+        active_model = model_override or self.llm.preset.primary.model_id
+        # Minimax M2.7 is the primary extraction model, with Z.AI as
+        # fallbacks. Each request starts from the primary; fallbacks only activate
+        # if the primary exhausts its retries for that single request.
+        allow_fallbacks = True
+        max_tokens = (
+            self.HIGH_EXTRACTION_MAX_TOKENS
+            if LLMService._is_minimax_model(active_model) or LLMService._is_zai_model(active_model)
+            else self.DEFAULT_EXTRACTION_MAX_TOKENS
+        )
+
+        async def _call():
+            response = await self.llm.completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                model=model_override,  # Use configured model or preset default
+                allow_fallbacks=allow_fallbacks,
+                temperature=0.2,
+                max_tokens=max_tokens,
+            )
+            return LLMService.extract_content(response)
+
+        # Run async in sync context
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            # Already in async context - create a task
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, _call())
+                return future.result()
+        else:
+            return asyncio.run(_call())
+
+    def _get_system_prompt(self) -> str:
+        """Get the system prompt, optionally with pipeline-specific additions"""
+        base_prompt = EXTRACTION_SYSTEM_PROMPT
+
+        if self.pipeline_config and self.pipeline_config.extraction_prompt_additions:
+            # Add pipeline-specific instructions
+            additions = self.pipeline_config.extraction_prompt_additions
+            examples = self.pipeline_config.theme_examples
+            examples_str = ", ".join(f'"{e}"' for e in examples[:5]) if examples else ""
+
+            pipeline_section = f"""
+
+PIPELINE: {self.pipeline_config.display_name.upper()}
+{additions}
+
+Example themes for this pipeline: {examples_str}
+"""
+            return base_prompt + pipeline_section
+
+        return base_prompt
+
+    def extract_from_content(self, content_item: ContentItem) -> list[dict]:
+        """
+        Extract themes from a single content item using sanctioned LLM providers.
+
+        Returns list of extracted theme mentions
+        """
+        if not self.provider:
+            raise ThemeExtractionProviderUnavailableError("No LLM provider available for theme extraction")
+
+        # Truncate content if too long
+        content = content_item.content or ""
+        if len(content) > 10000:
+            content = content[:10000] + "... [truncated]"
+
+        prompt = EXTRACTION_USER_PROMPT.format(
+            source_name=content_item.source_name or "Unknown",
+            source_type=content_item.source_type or "Unknown",
+            published_at=content_item.published_at.isoformat() if content_item.published_at else "Unknown",
+            title=content_item.title or "",
+            content=content,
+        )
+
+        # Telemetry: success only flips True after parsing finishes; the
+        # finally block below records the outcome regardless of return path.
+        _telem_lang = (content_item.source_language or "unknown").lower()
+        _telem_start_ms = int(time.time() * 1000)
+        _telem_success = False
+
+        response_text = ""
+        try:
+            # Apply rate limiting
+            self._rate_limit()
+
+            if self.provider != "litellm":
+                raise ThemeExtractionProviderUnavailableError(
+                    "No sanctioned extraction provider is configured"
+                )
+            try:
+                response_text = self._try_generate_litellm(prompt)
+            except LLMQuotaExceededError as exc:
+                raise ProviderQuotaServiceError(str(exc)) from exc
+            except LLMRateLimitError as exc:
+                raise ProviderRateLimitServiceError(str(exc)) from exc
+
+            # Extract JSON from response
+            # Handle Qwen3 thinking tags first
+            if "<think>" in response_text and "</think>" in response_text:
+                response_text = response_text.split("</think>")[-1].strip()
+
+            # Handle markdown code blocks
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+
+            # Strip whitespace
+            response_text = response_text.strip()
+
+            # Debug log if response seems problematic
+            if not response_text or not response_text.startswith('['):
+                logger.warning(f"Unexpected LLM response format: {response_text[:200] if response_text else 'EMPTY'}")
+
+            mentions = json.loads(response_text)
+
+            # Validate and clean extractions
+            cleaned_mentions = []
+            for mention in mentions:
+                if not mention.get("theme"):
+                    continue
+                raw_theme = mention["theme"].strip()
+                if not raw_theme:
+                    continue
+                if canonical_theme_key(raw_theme) == UNKNOWN_THEME_KEY:
+                    continue
+
+                # Clean tickers
+                tickers = self._clean_tickers(mention.get("tickers", []))
+                for resolved in self._resolve_company_name_tickers(
+                    mention.get("excerpt", ""),
+                    content_item.title or "",
+                ):
+                    if resolved not in tickers:
+                        tickers.append(resolved)
+
+                cleaned_mentions.append({
+                    "theme": raw_theme,
+                    "tickers": tickers,
+                    "sentiment": mention.get("sentiment", "neutral"),
+                    "confidence": min(1.0, max(0.0, float(mention.get("confidence", 0.5)))),
+                    "excerpt": (mention.get("excerpt", ""))[:500],  # Limit excerpt length
+                })
+
+            _telem_success = True
+            return cleaned_mentions
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse LLM response as JSON: {e}")
+            logger.error(f"Raw response: {response_text[:500] if response_text else 'EMPTY'}")
+            raise ThemeExtractionParseError(f"Failed to parse LLM response: {e}") from e
+        except (
+            ThemeExtractionProviderUnavailableError,
+            ProviderRateLimitServiceError,
+            ProviderQuotaServiceError,
+            LLMError,
+        ) as e:
+            logger.error(f"LLM extraction failed (will retry): {e}")
+            raise  # Re-raise so process_batch() marks extraction_error
+        finally:
+            # Best-effort — never breaks the extraction path. Market scope is
+            # SHARED because language, not market, is the meaningful dimension
+            # for theme extraction.
+            try:
+                from .telemetry import get_telemetry, SHARED_SENTINEL
+                get_telemetry().record_extraction(
+                    SHARED_SENTINEL,
+                    language=_telem_lang,
+                    success=_telem_success,
+                    latency_ms=int(time.time() * 1000) - _telem_start_ms,
+                    provider=self.provider,
+                )
+            except Exception:
+                pass
+
+    def _extract_and_store_mentions(self, content_item: ContentItem) -> int:
+        """
+        Extract and persist mentions for a content item.
+
+        Returns number of theme mentions created.
+        """
+        mentions = self.extract_from_content(content_item)
+
+        mention_count = 0
+        for mention_data in mentions:
+            cluster, decision = self._resolve_cluster_match(mention_data, source_type=content_item.source_type)
+
+            theme_mention = ThemeMention(
+                content_item_id=content_item.id,
+                theme_cluster_id=cluster.id,
+                match_method=decision.method,
+                match_score=decision.score,
+                match_threshold=decision.threshold,
+                threshold_version=decision.threshold_version,
+                match_score_model=decision.score_model,
+                match_score_model_version=decision.score_model_version,
+                match_fallback_reason=decision.fallback_reason,
+                best_alternative_cluster_id=decision.best_alternative_cluster_id,
+                best_alternative_score=decision.best_alternative_score,
+                match_score_margin=decision.score_margin,
+                source_type=content_item.source_type,
+                source_name=content_item.source_name,
+                raw_theme=mention_data["theme"],
+                canonical_theme=self._normalize_theme(mention_data["theme"]),
+                pipeline=self.pipeline,
+                tickers=mention_data["tickers"],
+                ticker_count=len(mention_data["tickers"]),
+                sentiment=mention_data["sentiment"],
+                confidence=mention_data["confidence"],
+                excerpt=mention_data["excerpt"],
+                mentioned_at=content_item.published_at,
+            )
+            self.db.add(theme_mention)
+            mention_count += 1
+
+            self._update_theme_constituents(mention_data, cluster)
+
+            # Auto-classify new L2 themes to L1 parent via centroid similarity
+            if cluster.parent_cluster_id is None and not cluster.is_l1:
+                try:
+                    from .theme_taxonomy_service import ThemeTaxonomyService
+                    taxonomy_svc = ThemeTaxonomyService(self.db, pipeline=self.pipeline)
+                    taxonomy_svc.classify_new_l2_to_l1(cluster)
+                except Exception as exc:
+                    logger.warning(
+                        "L2→L1 auto-classify failed for cluster id=%s (non-fatal): %s",
+                        cluster.id, exc,
+                    )
+                    # Roll back any partial flush to keep session usable
+                    try:
+                        self.db.rollback()
+                    except Exception:
+                        pass
+
+        return mention_count
+
+    def _get_match_threshold_config(self) -> MatchThresholdConfig:
+        config = getattr(self, "match_threshold_config", None)
+        if config is None:
+            # Avoid cross-request mutation by cloning class-level defaults.
+            base = deepcopy(self.MATCH_THRESHOLD_CONFIG)
+            config = replace(
+                base,
+                default_threshold=self._matcher_policy_value("match_default_threshold", base.default_threshold),
+            )
+            self.match_threshold_config = config
+        return config
+
+    def _alias_quality_score(self, alias: ThemeAlias) -> float:
+        """Blend source trust, confidence, and evidence for Stage B auto-attach."""
+        source = (alias.source or "").strip().lower()
+        trust_score = float(self.ALIAS_SOURCE_TRUST.get(source, 0.5))
+        confidence_score = max(0.0, min(1.0, float(alias.confidence or 0.0)))
+        evidence_count = max(1, int(alias.evidence_count or 1))
+        evidence_score = min(1.0, evidence_count / 4.0)
+        score = (0.5 * trust_score) + (0.3 * confidence_score) + (0.2 * evidence_score)
+        return max(0.0, min(1.0, score))
+
+    def _can_auto_attach_alias(self, alias: ThemeAlias) -> bool:
+        """Gate exact alias-key attachment to reduce low-trust alias poisoning."""
+        evidence_count = max(1, int(alias.evidence_count or 1))
+        if evidence_count < self.ALIAS_AUTO_ATTACH_MIN_EVIDENCE:
+            return False
+        return self._alias_quality_score(alias) >= self.ALIAS_AUTO_ATTACH_MIN_SCORE
+
+    def _resolve_threshold_with_overrides(
+        self,
+        *,
+        default: float,
+        pipeline: str,
+        source_type: str | None,
+        pipeline_overrides: dict[str, float],
+        source_type_overrides: dict[str, float],
+        pipeline_source_type_overrides: dict[str, dict[str, float]],
+    ) -> float:
+        normalized_pipeline = (pipeline or "").strip().lower()
+        normalized_source_type = (source_type or "").strip().lower()
+        pipeline_source = pipeline_source_type_overrides.get(normalized_pipeline, {})
+        if normalized_source_type and normalized_source_type in pipeline_source:
+            return float(pipeline_source[normalized_source_type])
+        if normalized_pipeline in pipeline_overrides:
+            return float(pipeline_overrides[normalized_pipeline])
+        if normalized_source_type and normalized_source_type in source_type_overrides:
+            return float(source_type_overrides[normalized_source_type])
+        return float(default)
+
+    def _resolve_fuzzy_thresholds(self, source_type: str | None) -> tuple[float, float, float]:
+        attach_threshold = self._resolve_threshold_with_overrides(
+            default=self.FUZZY_ATTACH_THRESHOLD_DEFAULT,
+            pipeline=self.pipeline,
+            source_type=source_type,
+            pipeline_overrides=self.FUZZY_ATTACH_THRESHOLD_PIPELINE_OVERRIDES,
+            source_type_overrides=self.FUZZY_ATTACH_THRESHOLD_SOURCE_TYPE_OVERRIDES,
+            pipeline_source_type_overrides=self.FUZZY_ATTACH_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES,
+        )
+        review_threshold = self._resolve_threshold_with_overrides(
+            default=self.FUZZY_REVIEW_THRESHOLD_DEFAULT,
+            pipeline=self.pipeline,
+            source_type=source_type,
+            pipeline_overrides=self.FUZZY_REVIEW_THRESHOLD_PIPELINE_OVERRIDES,
+            source_type_overrides=self.FUZZY_REVIEW_THRESHOLD_SOURCE_TYPE_OVERRIDES,
+            pipeline_source_type_overrides=self.FUZZY_REVIEW_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES,
+        )
+        ambiguity_margin = self._resolve_threshold_with_overrides(
+            default=self.FUZZY_AMBIGUITY_MARGIN_DEFAULT,
+            pipeline=self.pipeline,
+            source_type=source_type,
+            pipeline_overrides=self.FUZZY_AMBIGUITY_MARGIN_PIPELINE_OVERRIDES,
+            source_type_overrides=self.FUZZY_AMBIGUITY_MARGIN_SOURCE_TYPE_OVERRIDES,
+            pipeline_source_type_overrides=self.FUZZY_AMBIGUITY_MARGIN_PIPELINE_SOURCE_TYPE_OVERRIDES,
+        )
+        review_threshold = min(review_threshold, attach_threshold)
+        ambiguity_margin = max(0.0, ambiguity_margin)
+        attach_threshold = self._matcher_policy_value("fuzzy_attach_threshold", attach_threshold)
+        review_threshold = self._matcher_policy_value("fuzzy_review_threshold", review_threshold)
+        ambiguity_margin = max(0.0, self._matcher_policy_value("fuzzy_ambiguity_margin", ambiguity_margin))
+        review_threshold = min(review_threshold, attach_threshold)
+        return attach_threshold, review_threshold, ambiguity_margin
+
+    def _normalize_lexical_text(self, text: str) -> str:
+        normalized = re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+        return normalized
+
+    def _fuzzy_similarity(self, left: str, right: str) -> float:
+        if not left or not right:
+            return 0.0
+        return float(SequenceMatcher(a=left, b=right).ratio())
+
+    def _cluster_fuzzy_score(
+        self,
+        *,
+        raw_alias: str,
+        canonical_key: str,
+        canonical_theme: str,
+        cluster: ThemeCluster,
+    ) -> float:
+        query_terms = {
+            self._normalize_lexical_text(raw_alias),
+            self._normalize_lexical_text(canonical_theme),
+            self._normalize_lexical_text(canonical_key.replace("_", " ")),
+        }
+        query_terms = {term for term in query_terms if term}
+        if not query_terms:
+            return 0.0
+
+        variants = {
+            self._normalize_lexical_text(cluster.display_name or ""),
+            self._normalize_lexical_text(cluster.name or ""),
+            self._normalize_lexical_text((cluster.canonical_key or "").replace("_", " ")),
+        }
+        aliases = cluster.aliases if isinstance(cluster.aliases, list) else []
+        variants.update(self._normalize_lexical_text(str(alias)) for alias in aliases)
+        variants = {variant for variant in variants if variant}
+        if not variants:
+            return 0.0
+
+        best = 0.0
+        for query in query_terms:
+            for variant in variants:
+                similarity = self._fuzzy_similarity(query, variant)
+                if similarity > best:
+                    best = similarity
+        return best
+
+    def _resolve_embedding_thresholds(self, source_type: str | None) -> tuple[float, float, float]:
+        attach_threshold = self._resolve_threshold_with_overrides(
+            default=self.EMBEDDING_ATTACH_THRESHOLD_DEFAULT,
+            pipeline=self.pipeline,
+            source_type=source_type,
+            pipeline_overrides=self.EMBEDDING_ATTACH_THRESHOLD_PIPELINE_OVERRIDES,
+            source_type_overrides=self.EMBEDDING_ATTACH_THRESHOLD_SOURCE_TYPE_OVERRIDES,
+            pipeline_source_type_overrides=self.EMBEDDING_ATTACH_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES,
+        )
+        review_threshold = self._resolve_threshold_with_overrides(
+            default=self.EMBEDDING_REVIEW_THRESHOLD_DEFAULT,
+            pipeline=self.pipeline,
+            source_type=source_type,
+            pipeline_overrides=self.EMBEDDING_REVIEW_THRESHOLD_PIPELINE_OVERRIDES,
+            source_type_overrides=self.EMBEDDING_REVIEW_THRESHOLD_SOURCE_TYPE_OVERRIDES,
+            pipeline_source_type_overrides=self.EMBEDDING_REVIEW_THRESHOLD_PIPELINE_SOURCE_TYPE_OVERRIDES,
+        )
+        ambiguity_margin = self._resolve_threshold_with_overrides(
+            default=self.EMBEDDING_AMBIGUITY_MARGIN_DEFAULT,
+            pipeline=self.pipeline,
+            source_type=source_type,
+            pipeline_overrides=self.EMBEDDING_AMBIGUITY_MARGIN_PIPELINE_OVERRIDES,
+            source_type_overrides=self.EMBEDDING_AMBIGUITY_MARGIN_SOURCE_TYPE_OVERRIDES,
+            pipeline_source_type_overrides=self.EMBEDDING_AMBIGUITY_MARGIN_PIPELINE_SOURCE_TYPE_OVERRIDES,
+        )
+        review_threshold = min(review_threshold, attach_threshold)
+        ambiguity_margin = max(0.0, ambiguity_margin)
+        attach_threshold = self._matcher_policy_value("embedding_attach_threshold", attach_threshold)
+        review_threshold = self._matcher_policy_value("embedding_review_threshold", review_threshold)
+        ambiguity_margin = max(0.0, self._matcher_policy_value("embedding_ambiguity_margin", ambiguity_margin))
+        review_threshold = min(review_threshold, attach_threshold)
+        return attach_threshold, review_threshold, ambiguity_margin
+
+    def _get_embedding_encoder(self):
+        return self._get_embedding_engine().get_encoder()
+
+    def _embedding_similarity(self, left: np.ndarray, right: np.ndarray) -> float:
+        return ThemeEmbeddingEngine.cosine_similarity(left, right)
+
+    def _build_embedding_query_text(self, *, raw_alias: str, canonical_theme: str, canonical_key: str) -> str:
+        key_text = canonical_key.replace("_", " ")
+        return " | ".join(part for part in (raw_alias, canonical_theme, key_text) if part)
+
+    def _get_embedding_engine(self) -> ThemeEmbeddingEngine:
+        engine = getattr(self, "_shared_embedding_engine", None)
+        if engine is None or engine.model_name != self.EMBEDDING_MATCH_MODEL:
+            engine = ThemeEmbeddingEngine(self.EMBEDDING_MATCH_MODEL)
+            self._shared_embedding_engine = engine
+        return engine
+
+    def _get_embedding_repo(self) -> ThemeEmbeddingRepository:
+        repo = getattr(self, "_shared_embedding_repo", None)
+        if repo is None:
+            repo = ThemeEmbeddingRepository(self.db)
+            self._shared_embedding_repo = repo
+        return repo
+
+    def _embedding_candidate_pool(
+        self,
+        *,
+        fuzzy_candidates: list[tuple[ThemeCluster, float]],
+        max_candidates: int,
+    ) -> list[ThemeCluster]:
+        seen: set[int] = set()
+        ranked: list[ThemeCluster] = []
+        for candidate, _score in fuzzy_candidates:
+            if candidate.id is None or candidate.id in seen:
+                continue
+            seen.add(candidate.id)
+            ranked.append(candidate)
+            if len(ranked) >= max_candidates:
+                return ranked
+
+        if len(ranked) < max_candidates:
+            fallback_clusters = self.db.query(ThemeCluster).filter(
+                ThemeCluster.pipeline == self.pipeline,
+                ThemeCluster.is_active == True,
+                ThemeCluster.is_l1 == False,
+            ).order_by(
+                ThemeCluster.last_seen_at.desc(),
+                ThemeCluster.id.desc(),
+            ).limit(max_candidates * 2).all()
+            for candidate in fallback_clusters:
+                if candidate.id is None or candidate.id in seen:
+                    continue
+                seen.add(candidate.id)
+                ranked.append(candidate)
+                if len(ranked) >= max_candidates:
+                    break
+        return ranked
+
+    def _candidate_token_filters(self, canonical_key: str, canonical_theme: str, raw_alias: str) -> list[str]:
+        tokens: list[str] = []
+        for source in (
+            canonical_key.replace("_", " "),
+            canonical_theme,
+            raw_alias,
+        ):
+            for token in self._normalize_lexical_text(source).split():
+                if len(token) < self.FUZZY_CANDIDATE_TOKEN_MIN_LENGTH:
+                    continue
+                if token not in tokens:
+                    tokens.append(token)
+                if len(tokens) >= self.FUZZY_CANDIDATE_MAX_TOKEN_FILTERS:
+                    return tokens
+        return tokens
+
+    def _get_fuzzy_candidate_clusters(
+        self,
+        *,
+        canonical_key: str,
+        canonical_theme: str,
+        raw_alias: str,
+    ) -> list[ThemeCluster]:
+        base_query = self.db.query(ThemeCluster).filter(
+            ThemeCluster.pipeline == self.pipeline,
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+        )
+        tokens = self._candidate_token_filters(canonical_key, canonical_theme, raw_alias)
+        if not tokens:
+            return base_query.all()
+
+        narrowed = base_query.filter(
+            or_(*[ThemeCluster.canonical_key.like(f"%{token}%") for token in tokens])
+        ).all()
+        if narrowed:
+            return narrowed
+        return base_query.all()
+
+    def process_content_item(self, content_item: ContentItem) -> int:
+        """
+        Backward-compatible single-item processing API.
+
+        This method retains legacy commit semantics for direct callers. Batch
+        orchestration uses pipeline-state-aware transactional handling instead.
+        """
+        processed, mention_count = self._process_item_transactional(content_item.id)
+        if not processed:
+            logger.info(
+                "Skipped content item %s for pipeline %s due to non-processable state",
+                content_item.id,
+                self.pipeline,
+            )
+            return 0
+
+        logger.info(f"Extracted {mention_count} theme mentions from content item {content_item.id}")
+        return mention_count
+
+    def _load_pipeline_state(self, content_item_id: int) -> Optional[ContentItemPipelineState]:
+        """Load per-pipeline processing state for a content item."""
+        return self.db.query(ContentItemPipelineState).filter(
+            ContentItemPipelineState.content_item_id == content_item_id,
+            ContentItemPipelineState.pipeline == self.pipeline,
+        ).first()
+
+    def _claim_item_for_processing(self, item_id: int) -> bool:
+        """
+        Atomically claim a content item for this pipeline.
+
+        Returns True only when this worker successfully transitions state to
+        in_progress and can safely proceed with extraction.
+        """
+        now = datetime.utcnow()
+        update_count = self.db.query(ContentItemPipelineState).filter(
+            ContentItemPipelineState.content_item_id == item_id,
+            ContentItemPipelineState.pipeline == self.pipeline,
+            ContentItemPipelineState.status.in_(list(self.PROCESSABLE_STATUSES)),
+        ).update(
+            {
+                ContentItemPipelineState.status: "in_progress",
+                ContentItemPipelineState.attempt_count: func.coalesce(ContentItemPipelineState.attempt_count, 0) + 1,
+                ContentItemPipelineState.last_attempt_at: now,
+                ContentItemPipelineState.error_code: None,
+                ContentItemPipelineState.error_message: None,
+            },
+            synchronize_session=False,
+        )
+        if update_count == 1:
+            self.db.commit()
+            return True
+        self.db.rollback()
+
+        existing = self._load_pipeline_state(item_id)
+        if existing:
+            return False
+
+        try:
+            self.db.add(
+                ContentItemPipelineState(
+                    content_item_id=item_id,
+                    pipeline=self.pipeline,
+                    status="in_progress",
+                    attempt_count=1,
+                    last_attempt_at=now,
+                )
+            )
+            self.db.commit()
+            return True
+        except IntegrityError:
+            self.db.rollback()
+            return False
+
+    def _classify_failure_status(self, error: Exception) -> str:
+        """Classify failures into retryable or terminal pipeline-state buckets."""
+        if isinstance(error, ThemeExtractionParseError):
+            return "failed_retryable"
+        if isinstance(error, ThemeExtractionProviderUnavailableError):
+            return "failed_retryable"
+        if isinstance(error, ProviderRateLimitServiceError):
+            return "failed_retryable"
+        if isinstance(error, ProviderQuotaServiceError):
+            return "failed_terminal"
+
+        error_text = str(error).lower()
+        terminal_markers = (
+            "invalid api key",
+            "authentication",
+            "unauthorized",
+            "forbidden",
+            "403",
+            "quota exceeded",
+            "billing",
+            "context length",
+            "request too large",
+            "413",
+        )
+        if any(marker in error_text for marker in terminal_markers):
+            return "failed_terminal"
+        return "failed_retryable"
+
+    def _failure_code(self, error: Exception) -> str:
+        """Best-effort normalized error code for observability."""
+        name = error.__class__.__name__.lower()
+        if isinstance(error, ThemeExtractionParseError):
+            return "llm_response_parse_error"
+        if isinstance(error, ThemeExtractionProviderUnavailableError):
+            return "llm_provider_unavailable"
+        if isinstance(error, LLMQuotaExceededError):
+            return "llm_provider_quota_exhausted"
+        if isinstance(error, ProviderQuotaServiceError):
+            return error.error_code
+        if isinstance(error, ProviderRateLimitServiceError):
+            return error.error_code
+        if isinstance(error, LLMError):
+            return f"llm_{name}"
+        if "json" in name:
+            return "json_decode_error"
+        return name
+
+    def _is_provider_quota_exhausted(self, error: Exception) -> bool:
+        """Detect hard provider quota errors that should abort the current batch."""
+        if isinstance(error, ProviderQuotaServiceError):
+            return True
+        if isinstance(error, LLMQuotaExceededError):
+            return True
+        error_text = str(error).lower()
+        quota_markers = (
+            "tokens per day",
+            "tpd",
+            "quota exceeded",
+            "insufficient_quota",
+            "need more tokens",
+        )
+        return any(marker in error_text for marker in quota_markers)
+
+    def _process_item_transactional(self, item_id: int) -> tuple[bool, int]:
+        """
+        Process one item with transactional state transitions.
+
+        Returns (processed_flag, mention_count). If processed_flag is False,
+        the item was skipped because its pipeline state is not eligible.
+        """
+        item = self.db.query(ContentItem).filter(ContentItem.id == item_id).first()
+        if not item:
+            return False, 0
+
+        if not self._claim_item_for_processing(item_id):
+            return False, 0
+
+        try:
+            mention_count = self._extract_and_store_mentions(item)
+            state = self._load_pipeline_state(item_id)
+            if state is None:
+                self.db.rollback()
+                return False, 0
+
+            processed_at = datetime.utcnow()
+            state.status = "processed"
+            state.processed_at = processed_at
+            state.error_code = None
+            state.error_message = None
+
+            # Compatibility writes (global fields remain populated during cutover)
+            item.is_processed = True
+            item.processed_at = processed_at
+            item.extraction_error = None
+
+            self.db.commit()
+            return True, mention_count
+        except (
+            ThemeExtractionParseError,
+            ThemeExtractionProviderUnavailableError,
+            ProviderRateLimitServiceError,
+            ProviderQuotaServiceError,
+            LLMError,
+            SQLAlchemyError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+        ) as error:
+            self._record_processing_failure(item_id=item_id, error=error)
+            raise
+        except Exception as error:
+            logger.exception(
+                "Unexpected extraction failure while processing content item %s; "
+                "recording failure state to avoid stuck in_progress rows",
+                item_id,
+            )
+            self._record_processing_failure(item_id=item_id, error=error)
+            raise
+
+    def _record_processing_failure(self, item_id: int, error: Exception) -> None:
+        """Persist failure details so pipeline rows do not remain stuck in-progress."""
+        self.db.rollback()
+
+        item_for_failure = self.db.query(ContentItem).filter(ContentItem.id == item_id).first()
+        if item_for_failure is None:
+            return
+
+        failure_state = self._load_pipeline_state(item_id)
+        if failure_state is None:
+            failure_state = ContentItemPipelineState(
+                content_item_id=item_id,
+                pipeline=self.pipeline,
+                status="in_progress",
+                attempt_count=1,
+                last_attempt_at=datetime.utcnow(),
+            )
+            self.db.add(failure_state)
+
+        failure_state.status = self._classify_failure_status(error)
+        failure_state.last_attempt_at = datetime.utcnow()
+        failure_state.error_code = self._failure_code(error)
+        failure_state.error_message = str(error)[:4000]
+        failure_state.processed_at = None
+
+        # Compatibility writes
+        if isinstance(error, ThemeExtractionParseError):
+            item_for_failure.is_processed = False
+            item_for_failure.processed_at = None
+        else:
+            item_for_failure.is_processed = True
+            item_for_failure.processed_at = datetime.utcnow()
+        item_for_failure.extraction_error = str(error)
+
+        self.db.commit()
+
+    def _normalize_theme(self, theme: str) -> str:
+        """
+        Normalize theme name to canonical form
+
+        This helps cluster similar themes:
+        - "AI infrastructure" = "AI Infra" = "AI Infrastructure buildout"
+        - "GLP-1" = "GLP1" = "Weight loss drugs"
+        """
+        key = canonical_theme_key(theme)
+        if key in _LEGACY_THEME_CANONICAL_NAME_MAP:
+            return _LEGACY_THEME_CANONICAL_NAME_MAP[key]
+        return display_theme_name(theme)
+
+    def _get_or_create_cluster(self, mention_data: dict) -> ThemeCluster:
+        """Backward-compatible wrapper returning only the resolved cluster."""
+        cluster, _ = self._resolve_cluster_match(mention_data)
+        return cluster
+
+    def _resolve_cluster_match(
+        self,
+        mention_data: dict,
+        source_type: str | None = None,
+    ) -> tuple[ThemeCluster, MatchDecision]:
+        """Resolve cluster assignment plus a typed decision payload."""
+        raw_alias = (mention_data.get("theme") or "").strip()
+        canonical_key = canonical_theme_key(raw_alias)
+        canonical_theme = self._normalize_theme(raw_alias)
+        alias_repo = SqlThemeAliasRepository(self.db)
+        threshold_config = self._get_match_threshold_config()
+        threshold = threshold_config.resolve_threshold(
+            pipeline=self.pipeline,
+            source_type=source_type,
+        )
+        threshold_version = threshold_config.version
+
+        cluster = None
+        fallback_reason = None
+        method = "create_new_cluster"
+        score = 0.0
+        best_alternative_cluster_id = None
+        best_alternative_score = None
+        blocked_alias_key_for_counter: str | None = None
+        fuzzy_secondary_cluster_id: int | None = None
+        fuzzy_secondary_score: float | None = None
+        score_model: str | None = None
+        score_model_version: str | None = None
+        fuzzy_candidates: list[tuple[ThemeCluster, float]] = []
+
+        # Stage A: pipeline+canonical_key exact matching (indexed, low-latency gate).
+        if cluster is None:
+            cluster = self.db.query(ThemeCluster).filter(
+                ThemeCluster.canonical_key == canonical_key,
+                ThemeCluster.pipeline == self.pipeline,
+                ThemeCluster.is_active == True,
+            ).first()
+            if cluster is not None:
+                method = "exact_canonical_key"
+                score = 1.0
+
+        # Stage B: alias-key exact matching when canonical lookup misses.
+        alias_match: ThemeAlias | None = None
+        if cluster is None and canonical_key != UNKNOWN_THEME_KEY:
+            alias_match = alias_repo.find_exact(pipeline=self.pipeline, alias_key=canonical_key)
+            if alias_match:
+                alias_score = self._alias_quality_score(alias_match)
+                cluster = self.db.query(ThemeCluster).filter(
+                    ThemeCluster.id == alias_match.theme_cluster_id,
+                    ThemeCluster.pipeline == self.pipeline,
+                    ThemeCluster.is_active == True,
+                ).first()
+                if cluster is None:
+                    best_alternative_cluster_id = alias_match.theme_cluster_id
+                    best_alternative_score = alias_score
+                    alias_match.is_active = False
+                    if fallback_reason is None:
+                        fallback_reason = "alias_target_inactive"
+                elif not self._can_auto_attach_alias(alias_match):
+                    best_alternative_cluster_id = alias_match.theme_cluster_id
+                    best_alternative_score = alias_score
+                    blocked_alias_key_for_counter = alias_match.alias_key
+                    cluster = None
+                    if fallback_reason is None:
+                        fallback_reason = "alias_match_below_auto_attach_threshold"
+                else:
+                    method = "exact_alias_key"
+                    score = 1.0
+        if cluster is None:
+            inactive_cluster = self.db.query(ThemeCluster).filter(
+                ThemeCluster.canonical_key == canonical_key,
+                ThemeCluster.pipeline == self.pipeline,
+                ThemeCluster.is_active == False,
+            ).first()
+            if inactive_cluster is not None:
+                inactive_cluster.is_active = True
+                inactive_cluster.last_seen_at = datetime.utcnow()
+                cluster = inactive_cluster
+                method = "exact_canonical_key"
+                score = 1.0
+                if fallback_reason is None:
+                    fallback_reason = "reactivated_inactive_canonical_match"
+        if cluster is None:
+            cluster = self.db.query(ThemeCluster).filter(
+                ThemeCluster.display_name == canonical_theme,
+                ThemeCluster.pipeline == self.pipeline,
+                ThemeCluster.is_active == True,
+            ).first()
+            if cluster is not None:
+                method = "exact_display_name"
+                score = 1.0
+        if cluster is None and canonical_key != UNKNOWN_THEME_KEY:
+            candidate_clusters = self._get_fuzzy_candidate_clusters(
+                canonical_key=canonical_key,
+                canonical_theme=canonical_theme,
+                raw_alias=raw_alias,
+            )
+            for candidate in candidate_clusters:
+                candidate_score = self._cluster_fuzzy_score(
+                    raw_alias=raw_alias,
+                    canonical_key=canonical_key,
+                    canonical_theme=canonical_theme,
+                    cluster=candidate,
+                )
+                if candidate_score > 0.0:
+                    fuzzy_candidates.append((candidate, candidate_score))
+
+            if fuzzy_candidates:
+                fuzzy_candidates.sort(key=lambda item: (item[1], -(item[0].id or 0)), reverse=True)
+                top_cluster, top_score = fuzzy_candidates[0]
+                if len(fuzzy_candidates) > 1:
+                    second_cluster, second_score = fuzzy_candidates[1]
+                    fuzzy_secondary_cluster_id = second_cluster.id
+                    fuzzy_secondary_score = second_score
+                attach_threshold, review_threshold, ambiguity_margin = self._resolve_fuzzy_thresholds(source_type)
+                fuzzy_margin = top_score - (fuzzy_secondary_score or 0.0)
+                if top_score >= attach_threshold and fuzzy_margin >= ambiguity_margin:
+                    cluster = top_cluster
+                    method = "fuzzy_lexical"
+                    score = float(top_score)
+                    threshold = float(attach_threshold)
+                    best_alternative_cluster_id = fuzzy_secondary_cluster_id
+                    best_alternative_score = fuzzy_secondary_score
+                elif top_score >= review_threshold:
+                    best_alternative_cluster_id = top_cluster.id
+                    best_alternative_score = float(top_score)
+                    threshold = float(attach_threshold)
+                    if fuzzy_margin < ambiguity_margin:
+                        fallback_reason = "fuzzy_ambiguous_review"
+                    else:
+                        fallback_reason = "fuzzy_low_confidence_review"
+        if cluster is None and canonical_key != UNKNOWN_THEME_KEY:
+            embedding_pool = self._embedding_candidate_pool(
+                fuzzy_candidates=fuzzy_candidates,
+                max_candidates=self.EMBEDDING_MATCH_MAX_CANDIDATES,
+            )
+            candidate_ids = [candidate.id for candidate in embedding_pool if candidate.id is not None]
+            if candidate_ids:
+                freshness_cutoff = datetime.utcnow() - timedelta(days=self.EMBEDDING_MAX_AGE_DAYS)
+                embedding_repo = self._get_embedding_repo()
+                embeddings_by_cluster = embedding_repo.get_by_cluster_ids(
+                    candidate_ids,
+                    embedding_model=self.EMBEDDING_MATCH_MODEL,
+                    freshness_cutoff=freshness_cutoff,
+                    model_version=self.EMBEDDING_MATCH_POLICY_VERSION,
+                    include_stale=False,
+                )
+                # Preserve Stage D coverage when rollout/migration has not refreshed all embeddings yet.
+                if len(embeddings_by_cluster) < len(candidate_ids):
+                    fallback_embeddings = embedding_repo.get_by_cluster_ids(
+                        candidate_ids,
+                        embedding_model=self.EMBEDDING_MATCH_MODEL,
+                        freshness_cutoff=freshness_cutoff,
+                        model_version=self.EMBEDDING_MATCH_POLICY_VERSION,
+                        include_stale=True,
+                    )
+                    for cluster_id, record in fallback_embeddings.items():
+                        embeddings_by_cluster.setdefault(cluster_id, record)
+                if embeddings_by_cluster:
+                    encoder = self._get_embedding_encoder()
+                    if encoder is not None:
+                        query_text = self._build_embedding_query_text(
+                            raw_alias=raw_alias,
+                            canonical_theme=canonical_theme,
+                            canonical_key=canonical_key,
+                        )
+                        try:
+                            query_vector = np.array(encoder.encode(query_text, convert_to_numpy=True))
+                        except Exception as exc:
+                            logger.warning("Stage D query embedding generation failed: %s", exc)
+                            query_vector = None
+                        if query_vector is not None:
+                            embedding_candidates: list[tuple[ThemeCluster, float]] = []
+                            for candidate in embedding_pool:
+                                embedding_record = embeddings_by_cluster.get(candidate.id)
+                                if embedding_record is None:
+                                    continue
+                                candidate_vector = ThemeEmbeddingEngine.deserialize(embedding_record.embedding)
+                                if candidate_vector is None:
+                                    continue
+                                try:
+                                    similarity = self._embedding_similarity(query_vector, candidate_vector)
+                                except Exception:
+                                    # Keep Stage D best-effort; malformed rows should not fail extraction.
+                                    continue
+                                embedding_candidates.append((candidate, similarity))
+                            if embedding_candidates:
+                                embedding_candidates.sort(
+                                    key=lambda item: (item[1], -(item[0].id or 0)),
+                                    reverse=True,
+                                )
+                                top_cluster, top_score = embedding_candidates[0]
+                                embedding_second_cluster = None
+                                embedding_second_score = None
+                                if len(embedding_candidates) > 1:
+                                    embedding_second_cluster, embedding_second_score = embedding_candidates[1]
+                                attach_threshold, review_threshold, ambiguity_margin = (
+                                    self._resolve_embedding_thresholds(source_type)
+                                )
+                                embedding_margin = top_score - (embedding_second_score or 0.0)
+                                if top_score >= attach_threshold and embedding_margin >= ambiguity_margin:
+                                    cluster = top_cluster
+                                    method = "embedding_similarity"
+                                    score = float(top_score)
+                                    threshold = float(attach_threshold)
+                                    best_alternative_cluster_id = (
+                                        embedding_second_cluster.id if embedding_second_cluster else None
+                                    )
+                                    best_alternative_score = (
+                                        float(embedding_second_score)
+                                        if embedding_second_score is not None
+                                        else None
+                                    )
+                                    score_model = self.EMBEDDING_MATCH_MODEL
+                                    score_model_version = self.EMBEDDING_MATCH_POLICY_VERSION
+                                    threshold_version = self.EMBEDDING_MATCH_POLICY_VERSION
+                                elif top_score >= review_threshold:
+                                    best_alternative_cluster_id = top_cluster.id
+                                    best_alternative_score = float(top_score)
+                                    threshold = float(attach_threshold)
+                                    score_model = self.EMBEDDING_MATCH_MODEL
+                                    score_model_version = self.EMBEDDING_MATCH_POLICY_VERSION
+                                    threshold_version = self.EMBEDDING_MATCH_POLICY_VERSION
+                                    if embedding_margin < ambiguity_margin:
+                                        fallback_reason = "embedding_ambiguous_review"
+                                    else:
+                                        fallback_reason = "embedding_low_confidence_review"
+
+        if not cluster:
+            cluster = ThemeCluster(
+                canonical_key=canonical_key,
+                display_name=canonical_theme,
+                name=canonical_theme,
+                aliases=[mention_data["theme"]],
+                pipeline=self.pipeline,  # Set pipeline from service instance
+                discovery_source="llm_extraction",
+                first_seen_at=datetime.utcnow(),
+                last_seen_at=datetime.utcnow(),
+                is_emerging=True,
+            )
+            set_initial_lifecycle_defaults(cluster)
+            self.db.add(cluster)
+            self.db.flush()  # Get ID
+
+            logger.info(f"Discovered new theme cluster: {canonical_theme} (pipeline={self.pipeline})")
+            method = "create_new_cluster"
+            score = 0.0
+            if fallback_reason is None:
+                fallback_reason = "no_existing_cluster_match"
+
+        else:
+            # Preserve analyst-managed display labels once a cluster exists.
+            if not cluster.display_name:
+                cluster.display_name = canonical_theme
+            if not cluster.name:
+                cluster.name = cluster.display_name
+            cluster.last_seen_at = datetime.utcnow()
+            # Add alias if new
+            if cluster.aliases is None:
+                cluster.aliases = []
+            if raw_alias and raw_alias not in cluster.aliases:
+                cluster.aliases = cluster.aliases + [raw_alias]
+
+        if raw_alias and canonical_key != UNKNOWN_THEME_KEY:
+            if blocked_alias_key_for_counter is not None:
+                alias_repo.record_counter_evidence(
+                    pipeline=self.pipeline,
+                    alias_key=blocked_alias_key_for_counter,
+                    seen_at=datetime.utcnow(),
+                )
+            else:
+                alias_repo.record_observation(
+                    theme_cluster_id=cluster.id,
+                    pipeline=self.pipeline,
+                    alias_text=raw_alias,
+                    source="llm_extraction",
+                    confidence=float(mention_data.get("confidence") or 0.5),
+                    seen_at=datetime.utcnow(),
+                )
+
+        score_margin = None
+        if best_alternative_score is not None:
+            score_margin = float(score) - float(best_alternative_score)
+
+        decision = MatchDecision(
+            selected_cluster_id=cluster.id,
+            method=method,
+            score=float(score),
+            threshold=float(threshold),
+            threshold_version=threshold_version,
+            fallback_reason=fallback_reason,
+            best_alternative_cluster_id=best_alternative_cluster_id,
+            best_alternative_score=best_alternative_score,
+            score_margin=score_margin,
+            score_model=score_model,
+            score_model_version=score_model_version,
+        )
+        return cluster, decision
+
+    def _update_theme_constituents(self, mention_data: dict, cluster: ThemeCluster):
+        """Update theme-to-ticker mapping based on mention"""
+        tickers = sorted({ticker for ticker in mention_data["tickers"] if ticker})
+        if not tickers:
+            return
+
+        existing = {
+            constituent.symbol: constituent
+            for constituent in self.db.query(ThemeConstituent).filter(
+                ThemeConstituent.theme_cluster_id == cluster.id,
+                ThemeConstituent.symbol.in_(tickers),
+            ).all()
+        }
+
+        # Update constituents
+        for ticker in tickers:
+            constituent = existing.get(ticker)
+
+            if not constituent:
+                constituent = ThemeConstituent(
+                    theme_cluster_id=cluster.id,
+                    symbol=ticker,
+                    source="llm_extraction",
+                    confidence=mention_data["confidence"],
+                    mention_count=1,
+                    first_mentioned_at=datetime.utcnow(),
+                    last_mentioned_at=datetime.utcnow(),
+                )
+                self.db.add(constituent)
+            else:
+                constituent.mention_count += 1
+                constituent.last_mentioned_at = datetime.utcnow()
+                # Update confidence (weighted average)
+                constituent.confidence = (
+                    constituent.confidence * 0.8 + mention_data["confidence"] * 0.2
+                )
+
+    def _get_pipeline_source_ids(self) -> list[int]:
+        """Get IDs of content sources assigned to this pipeline."""
+        from ..models.theme import ContentSource
+        pipeline_source_ids = []
+        sources = self.db.query(ContentSource).filter(
+            ContentSource.is_active == True
+        ).all()
+        for source in sources:
+            source_pipelines = source.pipelines or ["technical", "fundamental"]
+            if isinstance(source_pipelines, str):
+                try:
+                    source_pipelines = json.loads(source_pipelines)
+                except Exception:
+                    source_pipelines = ["technical", "fundamental"]
+            if self.pipeline in source_pipelines:
+                pipeline_source_ids.append(source.id)
+        return pipeline_source_ids
+
+    def process_batch(self, limit: int = 50, item_ids: list[int] = None) -> dict:
+        """
+        Process a batch of unprocessed content items
+
+        Filters content items to only those from sources assigned to this pipeline.
+        If item_ids is provided, only processes those specific items (used by reprocessing).
+
+        Returns summary of processing results
+        """
+        pipeline_source_ids = self._get_pipeline_source_ids()
+        state_alias = ContentItemPipelineState
+        query = self.db.query(ContentItem.id).outerjoin(
+            state_alias,
+            and_(
+                state_alias.content_item_id == ContentItem.id,
+                state_alias.pipeline == self.pipeline,
+            ),
+        )
+
+        if pipeline_source_ids:
+            query = query.filter(ContentItem.source_id.in_(pipeline_source_ids))
+
+        if item_ids is not None:
+            query = query.filter(ContentItem.id.in_(item_ids))
+            query = query.filter(
+                or_(
+                    state_alias.id.is_(None),
+                    state_alias.status.in_(list(self.PROCESSABLE_STATUSES)),
+                )
+            )
+        else:
+            query = query.filter(
+                or_(
+                    state_alias.id.is_(None),
+                    state_alias.status.in_(list(self.PROCESSABLE_STATUSES)),
+                )
+            )
+        query = query.order_by(ContentItem.published_at.desc())
+        if item_ids is None:
+            query = query.limit(limit)
+
+        item_id_rows = query.all()
+        process_item_ids = [row[0] for row in item_id_rows]
+
+        results = {
+            "processed": 0,
+            "total_mentions": 0,
+            "errors": 0,
+            "new_themes": [],
+            "pipeline": self.pipeline,
+            "aborted": False,
+            "abort_reason": None,
+        }
+
+        for item_id in process_item_ids:
+            try:
+                processed, mention_count = self._process_item_transactional(item_id)
+                if processed:
+                    results["processed"] += 1
+                    results["total_mentions"] += mention_count
+            except Exception as e:
+                logger.error(f"Error processing item {item_id}: {e}")
+                results["errors"] += 1
+                if self._is_provider_quota_exhausted(e):
+                    results["aborted"] = True
+                    results["abort_reason"] = str(e)
+                    logger.error(
+                        "Aborting extraction batch for pipeline=%s due to provider quota exhaustion.",
+                        self.pipeline,
+                    )
+                    break
+
+        # Get newly discovered themes
+        recent_themes = self.db.query(ThemeCluster).filter(
+            ThemeCluster.first_seen_at >= datetime.utcnow().replace(hour=0, minute=0, second=0),
+            ThemeCluster.pipeline == self.pipeline,
+        ).all()
+        results["new_themes"] = [t.name for t in recent_themes]
+
+        # Auto-update metrics for all themes so rankings are current
+        if results["processed"] > 0:
+            try:
+                from .theme_discovery_service import ThemeDiscoveryService
+                discovery_service = ThemeDiscoveryService(self.db, pipeline=self.pipeline)
+                metrics_result = discovery_service.update_all_theme_metrics()
+                results["metrics_updated"] = metrics_result.get("themes_updated", 0)
+                logger.info(f"Auto-updated metrics for {results['metrics_updated']} themes")
+            except Exception as e:
+                logger.error(f"Error auto-updating theme metrics: {e}")
+                results["metrics_updated"] = 0
+
+        return results
+
+    def reprocess_failed_items(self, limit: int = 500) -> dict:
+        """
+        Reprocess content items that previously failed extraction for this pipeline.
+
+        Finds pipeline-state rows in failed_retryable, resets them to pending,
+        then delegates to process_batch() for retry.
+
+        Returns dict with reprocessing statistics.
+        """
+        from datetime import timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=self.max_age_days)
+        pipeline_source_ids = self._get_pipeline_source_ids()
+        silent_result = self.identify_silent_failures(max_age_days=self.max_age_days)
+        silent_item_ids = silent_result.get("items", [])
+
+        # Find pipeline-scoped retryable failures eligible for retry
+        query = self.db.query(ContentItem).join(
+            ContentItemPipelineState,
+            and_(
+                ContentItemPipelineState.content_item_id == ContentItem.id,
+                ContentItemPipelineState.pipeline == self.pipeline,
+            ),
+        ).filter(
+            ContentItemPipelineState.status == "failed_retryable",
+            ContentItem.published_at >= cutoff_date,
+        )
+        if pipeline_source_ids:
+            query = query.filter(ContentItem.source_id.in_(pipeline_source_ids))
+
+        failed_items = query.order_by(
+            ContentItem.published_at.desc()
+        ).limit(limit).all()
+
+        if not failed_items and not silent_item_ids:
+            logger.info(f"[{self.pipeline}] No failed or silent items to reprocess")
+            return {
+                "reprocessed_count": 0,
+                "processed": 0,
+                "total_mentions": 0,
+                "errors": 0,
+                "pipeline": self.pipeline,
+                "silent_failures_reset": 0,
+            }
+
+        # Reset failed items so process_batch() picks them up
+        item_ids = [item.id for item in failed_items]
+        logger.info(f"[{self.pipeline}] Resetting {len(failed_items)} failed items for reprocessing")
+        for item in failed_items:
+            state = self._load_pipeline_state(item.id)
+            if state is None:
+                continue
+            state.status = "pending"
+            state.error_code = None
+            state.error_message = None
+            state.processed_at = None
+        self.db.commit()
+
+        # Delegate to process_batch() with specific IDs — retries only failed/silent items.
+        retry_ids = list(dict.fromkeys(item_ids + silent_item_ids))
+        result = self.process_batch(limit=limit, item_ids=retry_ids)
+        result["reprocessed_count"] = len(retry_ids)
+        result["silent_failures_reset"] = silent_result.get("reset_count", 0)
+        return result
+
+    def identify_silent_failures(self, max_age_days: int = None, max_attempt_count: int = 1) -> dict:
+        """
+        Identify content items that silently failed extraction in this pipeline.
+
+        These are items with pipeline state marked processed but no mentions for
+        the same pipeline. Resets pipeline state back to pending.
+
+        Returns dict with count and list of reset item IDs.
+        """
+        from datetime import timedelta
+
+        age_days = max_age_days if max_age_days is not None else self.max_age_days
+        cutoff_date = datetime.utcnow() - timedelta(days=age_days)
+        pipeline_source_ids = self._get_pipeline_source_ids()
+
+        # Subquery: content_item_ids that have at least one theme mention in this pipeline
+        mentioned_ids = self.db.query(ThemeMention.content_item_id).filter(
+            ThemeMention.pipeline == self.pipeline
+        ).distinct().subquery()
+
+        # Find items with pipeline state marked processed but with zero mentions in this pipeline
+        query = self.db.query(ContentItem).join(
+            ContentItemPipelineState,
+            and_(
+                ContentItemPipelineState.content_item_id == ContentItem.id,
+                ContentItemPipelineState.pipeline == self.pipeline,
+            ),
+        ).filter(
+            ContentItemPipelineState.status == "processed",
+            func.coalesce(ContentItemPipelineState.attempt_count, 0) <= max_attempt_count,
+            ContentItem.published_at >= cutoff_date,
+            ~ContentItem.id.in_(self.db.query(mentioned_ids.c.content_item_id)),
+        )
+        if pipeline_source_ids:
+            query = query.filter(ContentItem.source_id.in_(pipeline_source_ids))
+
+        silent_failures = query.all()
+
+        if not silent_failures:
+            logger.info(f"[{self.pipeline}] No silent failures found")
+            return {"reset_count": 0, "items": []}
+
+        item_ids = [item.id for item in silent_failures]
+        logger.info(f"[{self.pipeline}] Found {len(silent_failures)} silent failures, resetting for reprocessing")
+
+        for item in silent_failures:
+            state = self._load_pipeline_state(item.id)
+            if state is None:
+                continue
+            state.status = "pending"
+            state.processed_at = None
+        self.db.commit()
+
+        return {"reset_count": len(item_ids), "items": item_ids}
+
+
+class ThemeNormalizationService:
+    """
+    Service for normalizing and clustering themes
+
+    Uses embeddings to find similar themes and merge them
+    """
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def find_similar_themes(self, theme_name: str, threshold: float = 0.8) -> list[ThemeCluster]:
+        """
+        Find existing theme clusters similar to given theme name
+
+        For now uses simple string matching - can be upgraded to use embeddings
+        """
+        # Simple approach: check for substring matches and common words
+        theme_lower = theme_name.lower()
+        theme_words = set(theme_lower.split())
+
+        similar = []
+        all_clusters = self.db.query(ThemeCluster).filter(
+            ThemeCluster.is_active == True,
+            ThemeCluster.is_l1 == False,
+        ).all()
+
+        for cluster in all_clusters:
+            cluster_lower = cluster.name.lower()
+            cluster_words = set(cluster_lower.split())
+
+            # Check for exact substring match
+            if theme_lower in cluster_lower or cluster_lower in theme_lower:
+                similar.append(cluster)
+                continue
+
+            # Check word overlap (Jaccard similarity)
+            if theme_words and cluster_words:
+                intersection = len(theme_words & cluster_words)
+                union = len(theme_words | cluster_words)
+                jaccard = intersection / union
+
+                if jaccard >= threshold:
+                    similar.append(cluster)
+
+        return similar
+
+    def merge_clusters(self, source_id: int, target_id: int):
+        """Merge source cluster into target cluster"""
+        source = self.db.query(ThemeCluster).filter(ThemeCluster.id == source_id).first()
+        target = self.db.query(ThemeCluster).filter(ThemeCluster.id == target_id).first()
+
+        if not source or not target:
+            return
+
+        # Move mentions
+        self.db.query(ThemeMention).filter(
+            ThemeMention.theme_cluster_id == source_id
+        ).update({ThemeMention.theme_cluster_id: target_id})
+
+        # Merge constituents
+        source_constituents = self.db.query(ThemeConstituent).filter(
+            ThemeConstituent.theme_cluster_id == source_id
+        ).all()
+
+        for sc in source_constituents:
+            target_constituent = self.db.query(ThemeConstituent).filter(
+                ThemeConstituent.theme_cluster_id == target_id,
+                ThemeConstituent.symbol == sc.symbol
+            ).first()
+
+            if target_constituent:
+                # Merge counts
+                target_constituent.mention_count += sc.mention_count
+                target_constituent.first_mentioned_at = min(
+                    target_constituent.first_mentioned_at or datetime.utcnow(),
+                    sc.first_mentioned_at or datetime.utcnow()
+                )
+                target_constituent.last_mentioned_at = max(
+                    target_constituent.last_mentioned_at or datetime.min,
+                    sc.last_mentioned_at or datetime.min
+                )
+                self.db.delete(sc)
+            else:
+                sc.theme_cluster_id = target_id
+
+        # Update target aliases
+        if target.aliases is None:
+            target.aliases = []
+        if source.aliases:
+            target.aliases = list(set(target.aliases + source.aliases + [source.name]))
+        else:
+            target.aliases = list(set(target.aliases + [source.name]))
+
+        # Update first seen
+        target.first_seen_at = min(
+            target.first_seen_at or datetime.utcnow(),
+            source.first_seen_at or datetime.utcnow()
+        )
+
+        # Deactivate source
+        source.is_active = False
+
+        self.db.commit()
+        logger.info(f"Merged theme cluster '{source.name}' into '{target.name}'")

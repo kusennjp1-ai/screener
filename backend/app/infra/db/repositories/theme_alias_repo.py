@@ -1,0 +1,161 @@
+"""SQLAlchemy repository for theme alias lookup and quality tracking."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from app.models.theme import ThemeAlias
+from app.services.theme_identity_normalization import UNKNOWN_THEME_KEY, canonical_theme_key
+
+VALID_PIPELINES = {"technical", "fundamental"}
+
+
+class SqlThemeAliasRepository:
+    """Persist and query theme_aliases for exact matching."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def find_exact(self, *, pipeline: str, alias_key: str) -> ThemeAlias | None:
+        return (
+            self._session.query(ThemeAlias)
+            .filter(
+                ThemeAlias.pipeline == pipeline,
+                ThemeAlias.alias_key == alias_key,
+                ThemeAlias.is_active.is_(True),
+            )
+            .first()
+        )
+
+    def list_for_cluster(self, *, theme_cluster_id: int, limit: int = 100) -> list[ThemeAlias]:
+        return (
+            self._session.query(ThemeAlias)
+            .filter(
+                ThemeAlias.theme_cluster_id == theme_cluster_id,
+                ThemeAlias.is_active.is_(True),
+            )
+            .order_by(ThemeAlias.evidence_count.desc(), ThemeAlias.confidence.desc(), ThemeAlias.last_seen_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def record_observation(
+        self,
+        *,
+        theme_cluster_id: int,
+        pipeline: str,
+        alias_text: str,
+        source: str = "llm_extraction",
+        confidence: float = 0.5,
+        seen_at: datetime | None = None,
+    ) -> ThemeAlias:
+        pipeline = (pipeline or "").strip().lower()
+        if pipeline not in VALID_PIPELINES:
+            raise ValueError(f"Invalid pipeline '{pipeline}'. Allowed values: {sorted(VALID_PIPELINES)}")
+        alias_text = (alias_text or "").strip()
+        if not alias_text:
+            raise ValueError("Cannot record alias with empty alias_text")
+
+        alias_key = canonical_theme_key(alias_text)
+        if alias_key == UNKNOWN_THEME_KEY:
+            raise ValueError("Cannot record alias with unknown_theme key")
+
+        when = seen_at or datetime.utcnow()
+        existing = (
+            self._session.query(ThemeAlias)
+            .filter(
+                ThemeAlias.pipeline == pipeline,
+                ThemeAlias.alias_key == alias_key,
+            )
+            .first()
+        )
+
+        if existing is None:
+            row = ThemeAlias(
+                theme_cluster_id=theme_cluster_id,
+                pipeline=pipeline,
+                alias_text=alias_text,
+                alias_key=alias_key,
+                source=source,
+                confidence=max(0.0, min(1.0, confidence)),
+                evidence_count=1,
+                first_seen_at=when,
+                last_seen_at=when,
+                is_active=True,
+            )
+            self._session.add(row)
+            self._session.flush()
+            return row
+
+        was_active = bool(existing.is_active)
+        existing.is_active = True
+        if (not was_active) and existing.theme_cluster_id != theme_cluster_id:
+            existing.theme_cluster_id = theme_cluster_id
+        existing.alias_text = alias_text or existing.alias_text
+        if not existing.source:
+            existing.source = source or "llm_extraction"
+        existing.last_seen_at = when
+        if existing.first_seen_at is None:
+            existing.first_seen_at = when
+        # Smoothed confidence update weighted by historical observations.
+        old_count = max(1, existing.evidence_count or 1)
+        bounded = max(0.0, min(1.0, confidence))
+        existing.confidence = ((existing.confidence * old_count) + bounded) / (old_count + 1)
+        existing.evidence_count = old_count + 1
+        self._session.flush()
+        return existing
+
+    def deactivate(self, *, pipeline: str, alias_key: str) -> bool:
+        row = (
+            self._session.query(ThemeAlias)
+            .filter(
+                ThemeAlias.pipeline == pipeline,
+                ThemeAlias.alias_key == alias_key,
+                ThemeAlias.is_active.is_(True),
+            )
+            .first()
+        )
+        if row is None:
+            return False
+        row.is_active = False
+        self._session.flush()
+        return True
+
+    def record_counter_evidence(
+        self,
+        *,
+        pipeline: str,
+        alias_key: str,
+        seen_at: datetime | None = None,
+    ) -> ThemeAlias | None:
+        """Record contradictory evidence against an existing alias mapping."""
+        pipeline = (pipeline or "").strip().lower()
+        if pipeline not in VALID_PIPELINES:
+            raise ValueError(f"Invalid pipeline '{pipeline}'. Allowed values: {sorted(VALID_PIPELINES)}")
+        alias_key = canonical_theme_key(alias_key)
+        if alias_key == UNKNOWN_THEME_KEY:
+            raise ValueError("Cannot record counter evidence with unknown_theme key")
+
+        row = (
+            self._session.query(ThemeAlias)
+            .filter(
+                ThemeAlias.pipeline == pipeline,
+                ThemeAlias.alias_key == alias_key,
+            )
+            .first()
+        )
+        if row is None:
+            return None
+
+        when = seen_at or datetime.utcnow()
+        if row.first_seen_at is None:
+            row.first_seen_at = when
+        row.last_seen_at = when
+        old_count = max(1, row.evidence_count or 1)
+        # Counter-evidence contributes a 0.0 confidence observation.
+        row.confidence = (float(row.confidence or 0.0) * old_count) / (old_count + 1)
+        row.evidence_count = old_count + 1
+        self._session.flush()
+        return row

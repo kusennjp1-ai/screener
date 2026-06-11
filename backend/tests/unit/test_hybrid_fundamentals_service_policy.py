@@ -1,0 +1,317 @@
+"""Integration tests proving HybridFundamentalsService Phase 3 honours the
+routing policy: non-US symbols must not hit finviz.
+"""
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+from app.domain.providers.data_plan import DATASET_FUNDAMENTALS, PLAN_VERSION
+from app.services.hybrid_fundamentals_service import HybridFundamentalsService
+
+
+def _make_service() -> HybridFundamentalsService:
+    finviz = MagicMock()
+    finviz._rate_limiter = MagicMock()
+    finviz.get_finviz_only_fields.return_value = {"short_float": 0.05}
+    price_cache = MagicMock()
+    price_cache.get_many.return_value = {}
+    price_cache.get_historical_data.return_value = None
+    svc = HybridFundamentalsService(
+        include_finviz=True,
+        finviz_service=finviz,
+        price_cache=price_cache,
+    )
+    # Replace bulk fetcher so we don't hit yfinance in tests.
+    svc.bulk_fetcher = MagicMock()
+    svc.bulk_fetcher.fetch_batch_fundamentals.return_value = {}
+    return svc
+
+
+def _make_cn_data_source() -> MagicMock:
+    data_source = MagicMock()
+    data_source.get_combined_data.side_effect = lambda symbol, market=None: {
+        "fundamentals": {
+            "symbol": symbol,
+            "market": market,
+            "market_cap": 123.0,
+            "data_source": "akshare+baostock",
+        },
+        "growth": {"eps_growth_qq": 12.5},
+        "data_source": "akshare+baostock",
+    }
+    return data_source
+
+
+class TestPhase3PolicyFiltering:
+    def test_single_symbol_hk_suffix_uses_hk_plan_and_skips_finviz(self):
+        svc = _make_service()
+        svc.bulk_fetcher.fetch_batch_fundamentals.return_value = {
+            "0700.HK": {"market_cap": 123.0}
+        }
+
+        result = svc.fetch_fundamentals(
+            "0700.HK",
+            include_technicals=False,
+            include_finviz=True,
+        )
+
+        svc.finviz_service.get_finviz_only_fields.assert_not_called()
+        svc.bulk_fetcher.fetch_batch_fundamentals.assert_called_once()
+        assert result["market_cap"] == 123.0
+        assert result["provider_data_plan"] == {
+            "version": PLAN_VERSION,
+            "dataset": DATASET_FUNDAMENTALS,
+            "market": "HK",
+            "mic": None,
+            "providers": ["yfinance"],
+        }
+
+    def test_non_us_symbols_are_excluded_from_finviz_phase(self):
+        svc = _make_service()
+        symbols = ["AAPL", "0700.HK", "7203.T", "2330.TW"]
+        market_by_symbol = {
+            "AAPL": "US",
+            "0700.HK": "HK",
+            "7203.T": "JP",
+            "2330.TW": "TW",
+        }
+
+        svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=True,
+            market_by_symbol=market_by_symbol,
+        )
+
+        # Only AAPL (US) should have finviz called.
+        called_symbols = [
+            call.args[0] for call in svc.finviz_service.get_finviz_only_fields.call_args_list
+        ]
+        assert called_symbols == ["AAPL"]
+
+    def test_missing_market_defaults_to_us(self):
+        svc = _make_service()
+        symbols = ["AAPL", "MSFT"]
+        # No market_by_symbol provided — legacy behaviour: all treated as US.
+        svc.fetch_fundamentals_batch(
+            symbols, include_technicals=False, include_finviz=True
+        )
+        called_symbols = [
+            call.args[0] for call in svc.finviz_service.get_finviz_only_fields.call_args_list
+        ]
+        assert sorted(called_symbols) == ["AAPL", "MSFT"]
+
+    def test_all_non_us_batch_skips_finviz_entirely(self):
+        svc = _make_service()
+        symbols = ["0700.HK", "7203.T"]
+        market_by_symbol = {"0700.HK": "HK", "7203.T": "JP"}
+
+        svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=True,
+            market_by_symbol=market_by_symbol,
+        )
+
+        svc.finviz_service.get_finviz_only_fields.assert_not_called()
+
+    def test_market_map_is_forwarded_to_bulk_growth_extractor(self):
+        svc = _make_service()
+        symbols = ["0700.HK", "7203.T", "AAPL"]
+        market_by_symbol = {"0700.HK": "HK", "7203.T": "JP", "AAPL": "US"}
+
+        svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=False,
+            market_by_symbol=market_by_symbol,
+        )
+
+        assert svc.bulk_fetcher.fetch_batch_fundamentals.call_count == 1
+        kwargs = svc.bulk_fetcher.fetch_batch_fundamentals.call_args.kwargs
+        assert kwargs.get("market_by_symbol") == market_by_symbol
+
+    def test_cn_symbols_use_cn_provider_path_and_skip_yfinance_batch(self):
+        svc = _make_service()
+        svc._data_source_service = _make_cn_data_source()
+        symbols = ["920118.BJ", "000001.SZ"]
+        market_by_symbol = {"920118.BJ": "CN", "000001.SZ": "CN"}
+
+        result = svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=False,
+            market_by_symbol=market_by_symbol,
+        )
+
+        svc.bulk_fetcher.fetch_batch_fundamentals.assert_not_called()
+        assert svc._data_source_service.get_combined_data.call_count == 2
+        assert result["920118.BJ"]["data_source"] == "akshare+baostock"
+        assert result["920118.BJ"]["eps_growth_qq"] == 12.5
+        assert result["920118.BJ"]["provider_data_plan"] == {
+            "version": PLAN_VERSION,
+            "dataset": DATASET_FUNDAMENTALS,
+            "market": "CN",
+            "mic": "XBSE",
+            "providers": ["akshare", "baostock"],
+        }
+
+    def test_mixed_cn_batch_only_sends_non_cn_symbols_to_yfinance(self):
+        svc = _make_service()
+        svc._data_source_service = _make_cn_data_source()
+        svc.bulk_fetcher.fetch_batch_fundamentals.return_value = {
+            "AAPL": {"market_cap": 456.0}
+        }
+        symbols = ["920118.BJ", "AAPL"]
+        market_by_symbol = {"920118.BJ": "CN", "AAPL": "US"}
+
+        result = svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=False,
+            market_by_symbol=market_by_symbol,
+        )
+
+        svc.bulk_fetcher.fetch_batch_fundamentals.assert_called_once()
+        assert svc.bulk_fetcher.fetch_batch_fundamentals.call_args.args[0] == ["AAPL"]
+        assert result["920118.BJ"]["market"] == "CN"
+        assert result["AAPL"]["market_cap"] == 456.0
+
+    def test_cn_suffix_without_market_map_skips_yfinance_and_finviz(self):
+        svc = _make_service()
+        svc._data_source_service = _make_cn_data_source()
+
+        result = svc.fetch_fundamentals_batch(
+            ["920118.BJ"],
+            include_technicals=False,
+            include_finviz=True,
+            market_by_symbol=None,
+        )
+
+        svc.bulk_fetcher.fetch_batch_fundamentals.assert_not_called()
+        svc.finviz_service.get_finviz_only_fields.assert_not_called()
+        assert result["920118.BJ"]["market"] == "CN"
+
+    def test_progress_callback_reaches_completion_when_finviz_phase_is_empty(self):
+        svc = _make_service()
+        symbols = ["0700.HK", "7203.T"]
+        market_by_symbol = {"0700.HK": "HK", "7203.T": "JP"}
+        progress_calls = []
+
+        svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=True,
+            progress_callback=lambda current, total: progress_calls.append((current, total)),
+            market_by_symbol=market_by_symbol,
+        )
+
+        assert progress_calls
+        assert progress_calls[-1] == (len(symbols), len(symbols))
+
+    def test_batch_results_record_provider_plan_provenance(self):
+        svc = _make_service()
+        svc.bulk_fetcher.fetch_batch_fundamentals.return_value = {
+            "AAPL": {"market_cap": 456.0},
+            "0700.HK": {"market_cap": 123.0},
+        }
+
+        result = svc.fetch_fundamentals_batch(
+            ["AAPL", "0700.HK"],
+            include_technicals=False,
+            include_finviz=False,
+            market_by_symbol={"AAPL": "US", "0700.HK": "HK"},
+        )
+
+        assert result["AAPL"]["provider_data_plan"]["providers"] == [
+            "finviz",
+            "yfinance",
+            "alphavantage",
+        ]
+        assert result["0700.HK"]["provider_data_plan"] == {
+            "version": PLAN_VERSION,
+            "dataset": DATASET_FUNDAMENTALS,
+            "market": "HK",
+            "mic": None,
+            "providers": ["yfinance"],
+        }
+
+    def test_progress_callback_reports_yfinance_batch_progress_without_finviz(self):
+        svc = _make_service()
+        symbols = [f"{index:04d}.HK" for index in range(100)]
+        market_by_symbol = {symbol: "HK" for symbol in symbols}
+        progress_calls = []
+
+        def fake_fetch_batch_fundamentals(batch_symbols, **kwargs):
+            kwargs["progress_callback"](50, 100)
+            kwargs["progress_callback"](100, 100)
+            return {symbol: {"market_cap": 1.0} for symbol in batch_symbols}
+
+        svc.bulk_fetcher.fetch_batch_fundamentals.side_effect = fake_fetch_batch_fundamentals
+
+        svc.fetch_fundamentals_batch(
+            symbols,
+            include_technicals=False,
+            include_finviz=False,
+            progress_callback=lambda current, total: progress_calls.append((current, total)),
+            market_by_symbol=market_by_symbol,
+        )
+
+        assert (15, 100) in progress_calls
+        assert (30, 100) in progress_calls
+        assert progress_calls[-1] == (100, 100)
+
+    def test_progress_callback_uses_integer_nonzero_phase1_checkpoint_for_tiny_batch(self):
+        svc = _make_service()
+        progress_calls = []
+
+        def fake_fetch_batch_fundamentals(batch_symbols, **kwargs):
+            kwargs["progress_callback"](1, 1)
+            return {symbol: {"market_cap": 1.0} for symbol in batch_symbols}
+
+        svc.bulk_fetcher.fetch_batch_fundamentals.side_effect = fake_fetch_batch_fundamentals
+
+        svc.fetch_fundamentals_batch(
+            ["0700.HK"],
+            include_technicals=False,
+            include_finviz=False,
+            progress_callback=lambda current, total: progress_calls.append((current, total)),
+            market_by_symbol={"0700.HK": "HK"},
+        )
+
+        assert progress_calls
+        assert all(isinstance(current, int) for current, _total in progress_calls)
+        assert all(current >= 1 for current, _total in progress_calls)
+
+    def test_parallel_hybrid_forwards_market_map_to_parallel_growth_extractor(self):
+        svc = _make_service()
+        svc.bulk_fetcher.fetch_fundamentals_parallel.return_value = {}
+        symbols = ["0700.HK", "AAPL"]
+        market_by_symbol = {"0700.HK": "HK", "AAPL": "US"}
+
+        svc.fetch_fundamentals_with_parallel_finviz(
+            symbols,
+            include_technicals=False,
+            finviz_workers=1,
+            market_by_symbol=market_by_symbol,
+        )
+
+        assert svc.bulk_fetcher.fetch_fundamentals_parallel.call_count == 1
+        kwargs = svc.bulk_fetcher.fetch_fundamentals_parallel.call_args.kwargs
+        assert kwargs.get("market_by_symbol") == market_by_symbol
+
+    def test_parallel_cn_suffix_without_market_map_skips_yfinance_and_finviz(self):
+        svc = _make_service()
+        svc._data_source_service = _make_cn_data_source()
+        svc.bulk_fetcher.fetch_fundamentals_parallel.return_value = {}
+
+        result = svc.fetch_fundamentals_with_parallel_finviz(
+            ["920118.BJ"],
+            include_technicals=False,
+            finviz_workers=1,
+            market_by_symbol=None,
+        )
+
+        svc.bulk_fetcher.fetch_fundamentals_parallel.assert_not_called()
+        svc.finviz_service.get_finviz_only_fields_batch.assert_not_called()
+        assert result["920118.BJ"]["market"] == "CN"

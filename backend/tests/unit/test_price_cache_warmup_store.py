@@ -1,0 +1,178 @@
+"""Unit tests for PriceCacheWarmupStore payload handling."""
+
+from __future__ import annotations
+
+import json
+from inspect import signature
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock
+
+import pytest
+
+from app.services.cache.price_cache_warmup import (
+    PriceCacheWarmupStore,
+    evaluate_warmup_metadata,
+)
+
+
+class _FakeRedis:
+    def __init__(self, payload: str | None = None):
+        self.payload = payload
+        self.last_set_key = None
+        self.last_set_ttl = None
+        self.last_set_value = None
+
+    def get(self, _key):
+        return self.payload
+
+    def setex(self, key, ttl, value):
+        self.last_set_key = key
+        self.last_set_ttl = ttl
+        self.last_set_value = value
+        self.payload = value
+
+
+def test_get_warmup_metadata_ignores_non_mapping_payload():
+    logger = MagicMock()
+    redis_client = _FakeRedis(payload=json.dumps(["unexpected", "shape"]))
+    store = PriceCacheWarmupStore(
+        logger=logger,
+        redis_client=redis_client,
+        metadata_key="cache:warmup:metadata",
+        heartbeat_key="cache:warmup:heartbeat",
+    )
+
+    assert store.get_warmup_metadata() is None
+    logger.warning.assert_called_once()
+
+
+def test_complete_warmup_heartbeat_preserves_progress_fields():
+    logger = MagicMock()
+    redis_client = _FakeRedis(
+        payload=json.dumps(
+            {
+                "status": "running",
+                "current": 3,
+                "total": 10,
+                "percent": 30.0,
+                "updated_at": "2026-04-08T00:00:00",
+            }
+        )
+    )
+    store = PriceCacheWarmupStore(
+        logger=logger,
+        redis_client=redis_client,
+        metadata_key="cache:warmup:metadata",
+        heartbeat_key="cache:warmup:heartbeat",
+    )
+
+    store.complete_warmup_heartbeat("completed")
+
+    # Bead asia.9.2: heartbeat key is now per-market scoped; with no market
+    # explicitly passed, the key is suffixed with ":shared".
+    assert redis_client.last_set_key == "cache:warmup:heartbeat:shared"
+    assert redis_client.last_set_ttl == 3600
+    saved_payload = json.loads(redis_client.last_set_value)
+    assert saved_payload["status"] == "completed"
+    assert saved_payload["current"] == 3
+    assert saved_payload["total"] == 10
+    assert saved_payload["percent"] == 100.0
+
+
+def test_evaluate_warmup_metadata_reports_partial_progress():
+    readiness = evaluate_warmup_metadata(
+        {
+            "status": "partial",
+            "count": "19",
+            "total": "31",
+            "completed_at": "2026-06-09T08:00:00",
+        },
+        context="same-day breadth run",
+        now=datetime(2026, 6, 9, 9, 0, 0),
+    )
+
+    assert readiness.ready is False
+    assert readiness.count == 19
+    assert readiness.total == 31
+    assert readiness.percent == pytest.approx(61.2903)
+    assert readiness.summary == "partial, 19/31"
+    assert (
+        readiness.reason
+        == "Cache warmup not complete for same-day breadth run (partial, 19/31)"
+    )
+
+
+def test_evaluate_warmup_metadata_does_not_own_workflow_partial_thresholds():
+    assert "allow_partial_min_coverage" not in signature(evaluate_warmup_metadata).parameters
+
+
+def test_evaluate_warmup_metadata_keeps_current_partial_not_ready():
+    readiness = evaluate_warmup_metadata(
+        {
+            "status": "partial",
+            "count": 1081,
+            "total": 1969,
+            "completed_at": "2026-06-09T08:00:00",
+        },
+        context="same-day group ranking run",
+        now=datetime(2026, 6, 9, 9, 0, 0),
+    )
+
+    assert readiness.ready is False
+    assert readiness.status == "partial"
+    assert readiness.metadata_current is True
+    assert not hasattr(readiness, "fresh")
+    assert readiness.percent == pytest.approx(54.901)
+
+
+def test_evaluate_warmup_metadata_rejects_stale_partial_even_above_minimum():
+    readiness = evaluate_warmup_metadata(
+        {
+            "status": "partial",
+            "count": 1081,
+            "total": 1969,
+            "completed_at": "2026-06-08T08:00:00",
+        },
+        context="same-day group ranking run",
+        max_age=timedelta(hours=12),
+        now=datetime(2026, 6, 9, 8, 1, 0),
+    )
+
+    assert readiness.ready is False
+    assert readiness.reason == "Cache warmup metadata is stale for same-day group ranking run"
+
+
+def test_evaluate_warmup_metadata_rejects_stale_completed_metadata():
+    readiness = evaluate_warmup_metadata(
+        {
+            "status": "completed",
+            "count": 31,
+            "total": 31,
+            "completed_at": "2026-06-08T08:00:00",
+        },
+        context="same-day group ranking run",
+        max_age=timedelta(hours=12),
+        now=datetime(2026, 6, 9, 8, 1, 0),
+    )
+
+    assert readiness.ready is False
+    assert readiness.reason == "Cache warmup metadata is stale for same-day group ranking run"
+
+
+def test_evaluate_warmup_metadata_rejects_completed_missing_completed_at():
+    readiness = evaluate_warmup_metadata(
+        {
+            "status": "completed",
+            "count": 31,
+            "total": 31,
+        },
+        context="same-day group ranking run",
+        max_age=timedelta(hours=12),
+        now=datetime(2026, 6, 9, 8, 1, 0),
+    )
+
+    assert readiness.ready is False
+    assert (
+        readiness.reason
+        == "Cache warmup metadata timestamp is missing for same-day group ranking run"
+    )

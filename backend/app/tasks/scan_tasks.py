@@ -1,0 +1,299 @@
+"""
+Celery tasks for bulk stock scanning.
+
+Handles background processing of large-scale stock scans.
+
+User scan execution runs on the dedicated `user_scans` queue and is
+intentionally decoupled from the global `data_fetch` lock used by
+maintenance jobs.
+"""
+import logging
+from typing import List, Dict, Optional
+from datetime import datetime
+from sqlalchemy.orm import Session
+
+from ..celery_app import celery_app
+from ..database import SessionLocal, is_corruption_error, safe_rollback
+from ..models.scan_result import Scan, ScanResult
+from ..config import settings
+from ..utils.parallelism import bounded_symbol_workers
+from .workload_coordination import serialized_market_workload
+
+logger = logging.getLogger(__name__)
+
+
+def cleanup_old_scans(db: Session, universe_key: str, keep_count: int = 3) -> None:
+    from ..services.scan_execution import cleanup_old_scans as _cleanup_old_scans
+
+    _cleanup_old_scans(db, universe_key, keep_count=keep_count)
+
+
+def compute_industry_peer_metrics(db: Session, scan_id: str):
+    """
+    Compute aggregate metrics for each industry group in scan.
+    Called after scan completion.
+
+    Args:
+        db: Database session
+        scan_id: Scan ID
+    """
+    from ..models.industry import IBDGroupPeerCache
+    from sqlalchemy import func
+
+    try:
+        logger.info(f"Computing industry peer metrics for scan {scan_id}...")
+
+        # Query all industry groups in this scan
+        groups = db.query(
+            ScanResult.ibd_industry_group,
+            func.count(ScanResult.symbol).label('total_stocks'),
+            func.avg(ScanResult.rs_rating_1m).label('avg_rs_1m'),
+            func.avg(ScanResult.rs_rating_3m).label('avg_rs_3m'),
+            func.avg(ScanResult.rs_rating_12m).label('avg_rs_12m'),
+            func.avg(ScanResult.minervini_score).label('avg_minervini_score'),
+            func.avg(ScanResult.composite_score).label('avg_composite_score'),
+        ).filter(
+            ScanResult.scan_id == scan_id,
+            ScanResult.ibd_industry_group.isnot(None)
+        ).group_by(
+            ScanResult.ibd_industry_group
+        ).all()
+
+        # Save cache records
+        for group in groups:
+            # Find top performer in this group
+            top = db.query(ScanResult).filter(
+                ScanResult.scan_id == scan_id,
+                ScanResult.ibd_industry_group == group.ibd_industry_group
+            ).order_by(
+                ScanResult.composite_score.desc().nullslast()
+            ).first()
+
+            cache = IBDGroupPeerCache(
+                scan_id=scan_id,
+                industry_group=group.ibd_industry_group,
+                total_stocks=group.total_stocks,
+                avg_rs_1m=group.avg_rs_1m,
+                avg_rs_3m=group.avg_rs_3m,
+                avg_rs_12m=group.avg_rs_12m,
+                avg_minervini_score=group.avg_minervini_score,
+                avg_composite_score=group.avg_composite_score,
+                top_symbol=top.symbol if top else None,
+                top_score=top.composite_score if top else None
+            )
+            db.add(cache)
+
+        db.commit()
+        logger.info(f"Computed peer metrics for {len(groups)} industry groups in scan {scan_id}")
+
+    except Exception as e:
+        if is_corruption_error(e):
+            logger.critical(
+                "DATABASE CORRUPTION in compute_industry_peer_metrics: %s — inspect the "
+                "database and restore from backup or rerun migrations as appropriate",
+                e,
+            )
+        else:
+            logger.error("Error computing peer metrics: %s", e, exc_info=True)
+        safe_rollback(db)
+
+
+def _log_setup_engine_distribution(db: Session, scan_id: str) -> None:
+    """Log setup_engine score distribution for observability."""
+    try:
+        from sqlalchemy import select
+        from app.infra.db.portability import json_number, json_text
+
+        score_expr = json_number(
+            ScanResult.details,
+            ("setup_engine", "setup_score"),
+            bind_or_session=db,
+        )
+        ready_expr = json_text(
+            ScanResult.details,
+            ("setup_engine", "setup_ready"),
+            bind_or_session=db,
+        )
+        scores_rows = db.execute(
+            select(
+                score_expr,
+                ready_expr,
+            ).where(
+                ScanResult.scan_id == scan_id,
+                score_expr.isnot(None),
+            )
+        ).all()
+
+        if not scores_rows:
+            return
+
+        scores = [float(row[0]) for row in scores_rows if row[0] is not None]
+        if not scores:
+            return
+
+        ready_count = sum(1 for row in scores_rows if row[1] in (True, 1, "true", "1"))
+        scores_sorted = sorted(scores)
+        n = len(scores_sorted)
+        median = (
+            scores_sorted[n // 2]
+            if n % 2 == 1
+            else (scores_sorted[n // 2 - 1] + scores_sorted[n // 2]) / 2.0
+        )
+
+        logger.info(
+            "SE score distribution [%s]: n=%d min=%.1f max=%.1f mean=%.1f median=%.1f ready=%d",
+            scan_id, n, min(scores), max(scores),
+            sum(scores) / n, median, ready_count,
+        )
+    except Exception as e:
+        logger.debug("SE distribution telemetry skipped: %s", e)
+
+
+def _run_post_scan_pipeline(scan_id: str, *, warm_chart_cache: bool = True) -> None:
+    """Post-scan: peer metrics, retention cleanup, snapshot publish, optional chart warmup."""
+    db = SessionLocal()
+    try:
+        compute_industry_peer_metrics(db, scan_id)
+        _log_setup_engine_distribution(db, scan_id)
+        scan = db.query(Scan).filter(Scan.scan_id == scan_id).first()
+        if scan and scan.universe_key:
+            cleanup_old_scans(db, scan.universe_key)
+        try:
+            from ..services.ui_snapshot_service import safe_publish_scan_bootstrap
+
+            safe_publish_scan_bootstrap(scan_id)
+            safe_publish_scan_bootstrap()
+        except Exception as e:
+            logger.warning("Scan snapshot publish failed: %s", e)
+        if warm_chart_cache:
+            try:
+                from .cache_tasks import prewarm_chart_cache_for_scan
+
+                prewarm_chart_cache_for_scan.delay(scan_id, top_n=50)
+            except Exception as e:
+                logger.warning("Chart cache warming failed: %s", e)
+    except Exception as e:
+        logger.error("Post-scan pipeline error for %s: %s", scan_id, e, exc_info=True)
+    finally:
+        db.close()
+
+
+def _mark_scan_failed(scan_id: str) -> None:
+    """Best-effort update of the scan row to failed status for wrapper-level errors.
+
+    The use case has its own rollback+failed-status handler for exceptions that
+    occur during execute(); this helper covers the narrow window where the
+    wrapper raises BEFORE execute() is entered (e.g., DB lookup error while
+    resolving trigger_source). Failures here are swallowed — the outer task
+    still re-raises so Celery sees the error.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            scan_row = db.query(Scan).filter(Scan.scan_id == scan_id).first()
+            if scan_row is not None and scan_row.status in {"queued", "running"}:
+                scan_row.status = "failed"
+                db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.warning("Could not mark scan %s failed from wrapper", scan_id, exc_info=True)
+
+
+def _run_bulk_scan_via_use_case(task_instance, scan_id, symbol_list, criteria):
+    """Thin wrapper that delegates to RunBulkScanUseCase (new path).
+
+    All business logic lives in the use case; this function only
+    wires infrastructure adapters (progress, cancellation, UoW).
+    """
+    # Lazy imports to avoid circular dep:
+    # bootstrap -> dispatcher -> scan_tasks -> bootstrap
+    from ..wiring.bootstrap import get_run_bulk_scan_use_case
+    from ..infra.db.uow import SqlUnitOfWork
+    from ..infra.tasks.progress_sink import CeleryProgressSink
+    from ..infra.tasks.cancellation import DbCancellationToken
+    from ..use_cases.scanning.run_bulk_scan import RunBulkScanCommand
+
+    progress = CeleryProgressSink(task_instance)
+    cancel = DbCancellationToken(SessionLocal, scan_id)
+
+    try:
+        # Manual scans run cache-only (no yfinance/Finviz fallback). Bootstrap
+        # and other internal scans *populate* the cache — they must allow live
+        # fetches. This lookup has to live inside the try block so a transient
+        # DB error still runs the cancel-token cleanup and lets the use case
+        # (via its own exception handler) mark the scan failed.
+        db = SessionLocal()
+        try:
+            scan_row = db.query(Scan).filter(Scan.scan_id == scan_id).first()
+            trigger_source = (getattr(scan_row, "trigger_source", None) or "manual").lower()
+        finally:
+            db.close()
+        cache_only = trigger_source == "manual"
+
+        uow = SqlUnitOfWork(SessionLocal)
+        use_case = get_run_bulk_scan_use_case()
+        cmd = RunBulkScanCommand(
+            scan_id=scan_id,
+            symbols=symbol_list,
+            criteria=criteria or {},
+            chunk_size=settings.scan_usecase_chunk_size,
+            correlation_id=task_instance.request.id,
+            cache_only=cache_only,
+            parallel_workers=bounded_symbol_workers(4),
+        )
+        result = use_case.execute(uow, cmd, progress, cancel)
+    except Exception:
+        logger.error("Fatal error in use case scan %s", scan_id, exc_info=True)
+        _mark_scan_failed(scan_id)
+        raise
+    finally:
+        cancel.close()
+
+    if result.status == "completed":
+        try:
+            finalize_scan_artifacts.delay(scan_id)
+        except Exception:
+            logger.warning("Falling back to inline post-scan finalization for %s", scan_id, exc_info=True)
+            _run_post_scan_pipeline(scan_id)
+
+    return {
+        "scan_id": result.scan_id,
+        "completed": result.total_scanned,
+        "passed": result.passed,
+        "failed": result.failed,
+        "status": result.status,
+        "scan_path": "use_case",
+    }
+
+
+@celery_app.task(bind=True, name='app.tasks.scan_tasks.run_bulk_scan')
+@serialized_market_workload("run_bulk_scan")
+def run_bulk_scan(
+    self,
+    scan_id: str,
+    symbol_list: List[str],
+    criteria: dict = None,
+    market: str | None = None,
+):
+    """Scan multiple stocks in background via RunBulkScanUseCase."""
+    return _run_bulk_scan_via_use_case(self, scan_id, symbol_list, criteria)
+
+
+@celery_app.task(name='app.tasks.scan_tasks.finalize_scan_artifacts', queue='celery')
+def finalize_scan_artifacts(scan_id: str):
+    """Finalize scan artifacts on the general queue after the scan worker exits."""
+    _run_post_scan_pipeline(scan_id, warm_chart_cache=True)
+    return {"scan_id": scan_id, "status": "queued_post_scan_finalization"}
+
+
+@celery_app.task(name='app.tasks.scan_tasks.test_celery')
+def test_celery():
+    """
+    Simple test task to verify Celery is working.
+
+    Returns:
+        Success message
+    """
+    logger.info("Test Celery task executed successfully")
+    return {'status': 'success', 'message': 'Celery is working!'}

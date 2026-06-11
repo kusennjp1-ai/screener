@@ -1,0 +1,394 @@
+x-backend-build: &backend-build
+  context: .
+  dockerfile: backend/Dockerfile
+  args:
+    INSTALL_THEME_ML: ${INSTALL_THEME_ML:-false}
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-stockscanner}:${POSTGRES_PASSWORD:-stockscanner}@postgres:5432/${POSTGRES_DB:-stockscanner}
+  POSTGRES_DB: ${POSTGRES_DB:-stockscanner}
+  POSTGRES_USER: ${POSTGRES_USER:-stockscanner}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockscanner}
+  ENABLED_MARKETS: ${ENABLED_MARKETS:-US}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  API_HOST: 0.0.0.0
+  API_PORT: "8000"
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:80,http://frontend}
+  SERVER_AUTH_PASSWORD: ${SERVER_AUTH_PASSWORD:?Set SERVER_AUTH_PASSWORD in your Docker environment}
+  SERVER_AUTH_SESSION_SECRET: ${SERVER_AUTH_SESSION_SECRET:-}
+  SERVER_AUTH_SECURE_COOKIE: ${SERVER_AUTH_SECURE_COOKIE:-false}
+  SERVER_EXPOSE_API_DOCS: ${SERVER_EXPOSE_API_DOCS:-false}
+  HERMES_API_BASE: ${HERMES_API_BASE:-http://hermes:8642/v1}
+  HERMES_API_KEY: ${HERMES_API_KEY:-}
+  HERMES_MODEL: ${HERMES_MODEL:-hermes-agent}
+  HERMES_REQUEST_TIMEOUT_SECONDS: ${HERMES_REQUEST_TIMEOUT_SECONDS:-120}
+  ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+  OPENDART_API_KEY: ${OPENDART_API_KEY:-}
+  ZAI_API_KEY: ${ZAI_API_KEY:-}
+  ZAI_API_KEYS: ${ZAI_API_KEYS:-}
+  ZAI_API_BASE: ${ZAI_API_BASE:-https://api.z.ai/api/paas/v4}
+  MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+  MINIMAX_API_BASE: ${MINIMAX_API_BASE:-https://api.minimax.io/v1}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  GROQ_API_KEYS: ${GROQ_API_KEYS:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  SERPER_API_KEY: ${SERPER_API_KEY:-}
+  X_INGEST_PROVIDER: ${X_INGEST_PROVIDER:-official}
+  TWITTER_BEARER_TOKEN: ${TWITTER_BEARER_TOKEN:-}
+  X_API_MAX_PAGES_PER_SOURCE: ${X_API_MAX_PAGES_PER_SOURCE:-10}
+  X_API_MAX_RESULTS_PER_PAGE: ${X_API_MAX_RESULTS_PER_PAGE:-50}
+  XUI_LIMIT_PER_SOURCE: ${XUI_LIMIT_PER_SOURCE:-50}
+  TWITTER_REQUEST_DELAY: ${TWITTER_REQUEST_DELAY:-5.0}
+  LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-groq}
+  LLM_CHATBOT_MODEL: ${LLM_CHATBOT_MODEL:-}
+  LLM_RESEARCH_MODEL: ${LLM_RESEARCH_MODEL:-}
+  LLM_FALLBACK_ENABLED: ${LLM_FALLBACK_ENABLED:-true}
+
+x-celery-env: &celery-env
+  <<: *app-env
+  TZ: ${CELERY_TIMEZONE:-America/New_York}
+  CELERY_TIMEZONE: ${CELERY_TIMEZONE:-America/New_York}
+
+x-worker-common: &worker-common
+  build: *backend-build
+  environment:
+    <<: *celery-env
+    HOME: /app/data
+  volumes:
+    - ./data:/app/data
+  depends_on:
+    backend:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  stop_grace_period: 30s
+  healthcheck:
+    disable: true
+  restart: unless-stopped
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --raw INFO persistence | tr -d '\\r' | grep -q '^loading:0$'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 120s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-stockscanner}
+      POSTGRES_USER: ${POSTGRES_USER:-stockscanner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockscanner}
+    volumes:
+      - ./docker-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stockscanner} -d ${POSTGRES_DB:-stockscanner}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  hermes:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:latest}
+    platform: ${HERMES_PLATFORM:-linux/amd64}
+    user: "${HERMES_UID:-1000}:${HERMES_GID:-1000}"
+    profiles: ["assistant"]
+    command: ["gateway"]
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "8642"
+      API_SERVER_KEY: ${HERMES_API_KEY:-}
+      HERMES_INFERENCE_PROVIDER: ${HERMES_INFERENCE_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      Z_AI_API_KEY: ${Z_AI_API_KEY:-}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-${MINIMAX_API_BASE:-https://api.minimax.io/v1}}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+    volumes:
+      - "${HERMES_DATA_DIR:-./data/hermes}:/opt/data"
+      - ./integrations/hermes/skills:/opt/external-skills:ro
+    expose:
+      - "8642"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  backend:
+    build: *backend-build
+    environment:
+      <<: *app-env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  celery-general:
+    <<: *worker-common
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=2 --without-mingle --without-gossip -Q celery -n general@%h
+
+  celery-datafetch:
+    <<: *worker-common
+    command: >
+      sh -c 'QUEUES="$$(python scripts/compose_enabled_markets.py queues --markets "$${ENABLED_MARKETS:-US}")" &&
+      exec celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1
+      --without-mingle --without-gossip -Q "$$QUEUES" -n datafetch-global@%h'
+
+  celery-marketjobs-us:
+    <<: *worker-common
+    profiles: ["market-us"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_us -n marketjobs-us@%h
+
+  celery-marketjobs-hk:
+    <<: *worker-common
+    profiles: ["market-hk"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_hk -n marketjobs-hk@%h
+
+  celery-marketjobs-in:
+    <<: *worker-common
+    profiles: ["market-in"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_in -n marketjobs-in@%h
+
+  celery-marketjobs-jp:
+    <<: *worker-common
+    profiles: ["market-jp"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_jp -n marketjobs-jp@%h
+
+  celery-marketjobs-kr:
+    <<: *worker-common
+    profiles: ["market-kr"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_kr -n marketjobs-kr@%h
+
+  celery-marketjobs-tw:
+    <<: *worker-common
+    profiles: ["market-tw"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_tw -n marketjobs-tw@%h
+
+  celery-marketjobs-cn:
+    <<: *worker-common
+    profiles: ["market-cn"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_cn -n marketjobs-cn@%h
+
+  celery-marketjobs-sg:
+    <<: *worker-common
+    profiles: ["market-sg"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_sg -n marketjobs-sg@%h
+
+  celery-marketjobs-ca:
+    <<: *worker-common
+    profiles: ["market-ca"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_ca -n marketjobs-ca@%h
+
+  celery-marketjobs-de:
+    <<: *worker-common
+    profiles: ["market-de"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_de -n marketjobs-de@%h
+
+  celery-marketjobs-au:
+    <<: *worker-common
+    profiles: ["market-au"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_au -n marketjobs-au@%h
+
+  celery-marketjobs-my:
+    <<: *worker-common
+    profiles: ["market-my"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q market_jobs_my -n marketjobs-my@%h
+
+  celery-userscans:
+    <<: *worker-common
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_shared -n userscans-shared@%h
+
+  celery-userscans-us:
+    <<: *worker-common
+    profiles: ["market-us"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_us -n userscans-us@%h
+
+  celery-userscans-hk:
+    <<: *worker-common
+    profiles: ["market-hk"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_hk -n userscans-hk@%h
+
+  celery-userscans-in:
+    <<: *worker-common
+    profiles: ["market-in"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_in -n userscans-in@%h
+
+  celery-userscans-jp:
+    <<: *worker-common
+    profiles: ["market-jp"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_jp -n userscans-jp@%h
+
+  celery-userscans-kr:
+    <<: *worker-common
+    profiles: ["market-kr"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_kr -n userscans-kr@%h
+
+  celery-userscans-tw:
+    <<: *worker-common
+    profiles: ["market-tw"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_tw -n userscans-tw@%h
+
+  celery-userscans-cn:
+    <<: *worker-common
+    profiles: ["market-cn"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_cn -n userscans-cn@%h
+
+  celery-userscans-sg:
+    <<: *worker-common
+    profiles: ["market-sg"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_sg -n userscans-sg@%h
+
+  celery-userscans-ca:
+    <<: *worker-common
+    profiles: ["market-ca"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_ca -n userscans-ca@%h
+
+  celery-userscans-de:
+    <<: *worker-common
+    profiles: ["market-de"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_de -n userscans-de@%h
+
+  celery-userscans-au:
+    <<: *worker-common
+    profiles: ["market-au"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_au -n userscans-au@%h
+
+  celery-userscans-my:
+    <<: *worker-common
+    profiles: ["market-my"]
+    command: celery -A app.celery_app worker --pool=prefork --loglevel=info --concurrency=1 --without-mingle --without-gossip -Q user_scans_my -n userscans-my@%h
+
+  celery-beat:
+    build: *backend-build
+    command: sh -c "rm -f /app/data/celerybeat-schedule && celery -A app.celery_app beat --loglevel=info --schedule=/app/data/celerybeat-schedule"
+    environment:
+      <<: *celery-env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      backend:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    stop_grace_period: 15s
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  db-backup:
+    image: postgres:16-alpine
+    profiles: ["backup"]
+    entrypoint: /bin/sh
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-stockscanner}
+      POSTGRES_DB: ${POSTGRES_DB:-stockscanner}
+      POSTGRES_USER: ${POSTGRES_USER:-stockscanner}
+    command:
+      - -c
+      - |
+        is_valid_backup() {
+          [ -s "$$1" ]
+        } && \
+        prune_backups() {
+          KEEP_PATH="$$1"
+          mkdir -p /app/data/backups
+          find /app/data/backups -maxdepth 1 -type f \
+            \( -name 'stockscanner_*.dump' -o -name '.stockscanner_backup_in_progress.dump' \) \
+            ! -path "$$KEEP_PATH" \
+            -exec rm -f {} +
+        } && \
+        EXISTING_KEEP="" && \
+        for CANDIDATE in $$(ls -1t /app/data/backups/stockscanner_*.dump 2>/dev/null); do \
+          if is_valid_backup "$$CANDIDATE"; then \
+            EXISTING_KEEP="$$CANDIDATE"; \
+            break; \
+          fi; \
+        done && \
+        if [ -n "$$EXISTING_KEEP" ]; then \
+          prune_backups "$$EXISTING_KEEP"; \
+          echo "Retained existing valid backup: $$EXISTING_KEEP"; \
+        fi && \
+        echo "Backup service started. Running every 24h." && \
+        sleep 300 && \
+        while true; do
+          mkdir -p /app/data/backups
+          TMP_DEST="/app/data/backups/.stockscanner_backup_in_progress.dump"
+          DEST="/app/data/backups/stockscanner_$$(date +%Y%m%d_%H%M%S).dump"
+          rm -f "$$TMP_DEST"
+          pg_dump \
+            --host=postgres \
+            --username="$${POSTGRES_USER}" \
+            --dbname="$${POSTGRES_DB}" \
+            --format=custom \
+            --file="$$TMP_DEST" 2>&1
+          if [ $$? -eq 0 ] && is_valid_backup "$$TMP_DEST"; then
+            mv "$$TMP_DEST" "$$DEST"
+            prune_backups "$$DEST"
+            echo "$$(date): Backup OK -> $$DEST ($$(du -h $$DEST | cut -f1)); retained newest valid backup only"
+          else
+            rm -f "$$TMP_DEST"
+            echo "$$(date): Backup FAILED or validation failed"
+          fi
+          sleep 86400
+        done
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/nginx-health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  redis_data:
