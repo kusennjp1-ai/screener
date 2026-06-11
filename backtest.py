@@ -143,16 +143,18 @@ def candidates_at(m, i, mode="breakout"):
 def collect_candidates(data, mode="breakout"):
     """全期間のシグナル候補銘柄の和集合 (ポートフォリオ状態に依存しない)。
     ファンダ履歴の取得対象を事前に決めるためのプレスキャン。"""
+    from collections import Counter
     m = build_matrices(data)
     spy = data["SPY"].reindex(m["closes"].index).ffill()
     step = 1 if mode == "breakout" else EVAL_STEP
-    syms = set()
+    cnt = Counter()
     for i in range(260, len(m["closes"].index)):
         if (i - 260) % step:
             continue
         if env_state(spy, i) == "BUY":
-            syms.update(s for s, _p, _st in candidates_at(m, i, mode))
-    return sorted(syms)
+            cnt.update(s for s, _p, _st in candidates_at(m, i, mode))
+    # シグナル頻度の高い順 — 取得が途中で失敗しても主要銘柄からカバーされる
+    return [s for s, _ in cnt.most_common()]
 
 
 def fetch_eps_history(symbols, sleep=0.3):
@@ -160,21 +162,36 @@ def fetch_eps_history(symbols, sleep=0.3):
     シグナル日時点で判明していたEPSだけを使うための素材 (先読み防止)。"""
     import yfinance as yf
     out = {}
-    fails = 0
+
+    def fetch_one(sym):
+        ed = yf.Ticker(sym).get_earnings_dates(limit=24)
+        if ed is not None and not ed.empty and "Reported EPS" in ed.columns:
+            s = ed["Reported EPS"].dropna()
+            if len(s):
+                out[sym] = sorted(
+                    ((d.date() if hasattr(d, "date") else d, float(v))
+                     for d, v in s.items()), reverse=True)
+
+    failed = []
     for sym in symbols:
         try:
-            ed = yf.Ticker(sym).get_earnings_dates(limit=24)
-            if ed is not None and not ed.empty and "Reported EPS" in ed.columns:
-                s = ed["Reported EPS"].dropna()
-                if len(s):
-                    out[sym] = sorted(
-                        ((d.date() if hasattr(d, "date") else d, float(v))
-                         for d, v in s.items()), reverse=True)
+            fetch_one(sym)
         except Exception:
-            fails += 1
+            failed.append(sym)
         time.sleep(sleep)
+    # レート制限 (429) でまとめて失敗した場合は一呼吸おいて再試行 (頻度上位のみ)
+    if failed:
+        time.sleep(60)
+        still = []
+        for sym in failed[:400]:
+            try:
+                fetch_one(sym)
+            except Exception:
+                still.append(sym)
+            time.sleep(0.8)
+        failed = still + failed[400:]
     log(f"eps history: {len(out)}/{len(symbols)} symbols fetched"
-        + (f", {fails} failed" if fails else ""))
+        + (f", {len(failed)} failed" if failed else ""))
     return out
 
 
@@ -406,7 +423,9 @@ def main():
             # 報告日付きEPS実績を取得する (シグナル日時点の判明分のみ使用)
             cand = collect_candidates(data, mode=args.mode)
             log(f"fund gate: fetching EPS history for {len(cand)} signal candidates")
-            eps_hist = fetch_eps_history(cand[:800])
+            # 価格一括ダウンロード直後はレート枠が枯渇している (run #5で800中794失敗)
+            time.sleep(90)
+            eps_hist = fetch_eps_history(cand[:800], sleep=0.5)
         result = simulate(data, mode=args.mode, eps_hist=eps_hist)
 
     report(result)
