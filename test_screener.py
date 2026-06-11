@@ -1236,7 +1236,7 @@ class Backtest(unittest.TestCase):
 
     def test_target_and_stop_exits(self):
         import backtest as bt
-        res = bt.simulate(self._bull_data())
+        res = bt.simulate(self._bull_data(), mode="zone")
         win_trades = [t for t in res["trades"] if t["sym"] == "WINX"]
         self.assertTrue(any(t["reason"] == "利確+22%" and abs(t["pnl_pct"] - 22) < 1.5
                             for t in win_trades), f"利確が再現されること: {win_trades}")
@@ -1257,7 +1257,7 @@ class Backtest(unittest.TestCase):
         for k in range(4):
             data[f"FIL{k}"] = self._frame(
                 50 * np.cumprod(1 + np.full(days, 0.0001)), idx)
-        res = bt.simulate(data)
+        res = bt.simulate(data, mode="zone")
         self.assertEqual(res["stats"]["トレード数"], 0,
                          "SPYがMA200割れの間は新規買いゼロ")
 
@@ -1284,7 +1284,7 @@ class Backtest(unittest.TestCase):
         data = self._bull_data()
         df = data["WINX"]
         df.iloc[290:, :] = np.nan
-        res = bt.simulate(data)
+        res = bt.simulate(data, mode="zone")
         win = [t for t in res["trades"] if t["sym"] == "WINX"]
         self.assertTrue(any(t["reason"] == "取引停止/廃止" for t in win),
                         f"NaN継続は強制手仕舞いされること: {win}")
@@ -1302,12 +1302,39 @@ class Backtest(unittest.TestCase):
         for k in range(5):
             data[f"FIL{k}"] = self._frame(
                 grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
-        res = bt.simulate(data)
+        res = bt.simulate(data, mode="zone")
         late = [t for t in res["trades"] if t["sym"] == "LATE" and t["reason"] == "末日清算"]
         if late:  # 末日清算が起きたケースでは統計から除外されていること
             s = res["stats"]
             self.assertEqual(s["トレード数"] + s["未完了(末日清算)"], len(res["trades"]))
             self.assertGreaterEqual(s["未完了(末日清算)"], 1)
+
+    def test_breakout_mode_buys_pivot_break(self):
+        # ベース形成→出来高を伴うピボット越えの瞬間だけ買う (Minervini本来の買い方)
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        rise = 50 * np.cumprod(1 + np.full(300, 0.003))            # 上昇トレンド
+        base = np.full(30, rise[-1] * 0.99)                         # 30日のフラットベース
+        bo = rise[-1] * 1.03 * np.cumprod(1 + np.full(days - 330, 0.005))  # ブレイク
+        df = self._frame(np.concatenate([rise, base, bo]), idx)
+        df.iloc[330, df.columns.get_loc("Volume")] = 5e6            # ブレイク日は出来高2.5倍
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx),
+                "BRKX": df}
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                50 * np.cumprod(1 + np.full(days, 0.0002 + k * 1e-5)), idx)
+        res = bt.simulate(data, mode="breakout")
+        brk = [t for t in res["trades"] if t["sym"] == "BRKX"]
+        self.assertTrue(brk, "ブレイクアウトが買われること")
+        self.assertTrue(any(t["reason"] == "利確+22%" for t in brk), f"{brk}")
+
+    def test_breakout_mode_skips_non_breakout(self):
+        # ベース無しの単調上昇はピボット越えの瞬間が発生しない → 買わない
+        import backtest as bt
+        res = bt.simulate(self._bull_data(), mode="breakout")
+        self.assertEqual(res["stats"]["トレード数"] + res["stats"]["未完了(末日清算)"], 0,
+                         "ブレイクの瞬間がない銘柄は買わない")
 
     def test_breakeven_stop_after_gain(self):
         # +12%到達後に反落 → 建値撤退 (利益を損失にしない)
@@ -1322,7 +1349,7 @@ class Backtest(unittest.TestCase):
         for k in range(5):
             data[f"FIL{k}"] = self._frame(
                 grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
-        res = bt.simulate(data)
+        res = bt.simulate(data, mode="zone")
         bev = [t for t in res["trades"] if t["sym"] == "BEVX"]
         self.assertTrue(any(t["reason"] == "建値撤退" and abs(t["pnl_pct"]) < 1
                             for t in bev), f"建値撤退が再現されること: {bev}")

@@ -7,6 +7,10 @@ on:
         description: '検証期間 (年)'
         required: false
         default: '2'
+      mode:
+        description: 'breakout=ピボット越え+出来高確認 / zone=旧ゾーン買い'
+        required: false
+        default: 'breakout'
 
 permissions:
   contents: read
@@ -29,7 +33,10 @@ jobs:
         run: python test_screener.py
 
       - name: Run backtest
-        run: python backtest.py --years "${{ github.event.inputs.years || '2' }}"
+        run: >
+          python backtest.py
+          --years "${{ github.event.inputs.years || '2' }}"
+          --mode "${{ github.event.inputs.mode || 'breakout' }}"
 
       - uses: actions/upload-artifact@v4
         with:

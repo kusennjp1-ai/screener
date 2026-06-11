@@ -61,6 +61,8 @@ def build_matrices(data, bench=("SPY", "QQQ")):
         "base20_5": highs.shift(5).rolling(20).max(),
         "l10": lows.rolling(10).min(),
         "adr20": ((highs / lows.where(lows > 0)) - 1).rolling(20).mean() * 100,
+        "vols": vols,
+        "vol50": vols.rolling(50).mean(),
         "dollar": (vols * closes).rolling(50).mean() / 1e6,
         "absret60": (closes.pct_change(fill_method=None).abs() * 100)
                     .rolling(60).max(),
@@ -84,8 +86,13 @@ def env_state(spy, i):
     return "CAUTION"
 
 
-def candidates_at(m, i):
-    """i日時点のメイン条件該当銘柄をスコア順で返す [(sym, close, pivot, stop), ...]。"""
+def candidates_at(m, i, mode="breakout"):
+    """i日時点の買い候補をスコア順で返す [(sym, close, stop), ...]。
+
+    mode="breakout": Minervini本来の買い方 — ベース上限 (ピボット) を当日
+      出来高1.4倍以上でブレイクした銘柄のみ (前日終値はピボット以下)。
+    mode="zone": 買いゾーン (ピボット+5%以内) に居る銘柄を全て返す旧方式。
+      ブレイクの瞬間を要求しないぶん緩く、忠実度は低い (比較検証用)。"""
     c = m["closes"].iloc[i]
     ma50, ma150, ma200 = m["ma50"].iloc[i], m["ma150"].iloc[i], m["ma200"].iloc[i]
     ma200p = m["ma200"].iloc[i - 22]
@@ -108,6 +115,11 @@ def candidates_at(m, i):
           & (c / ma200 - 1 < 1.2)
           # 買いゾーン: ベース上限+5%以内 (EXT=上放れは追いかけない)
           & (c <= m["base20_5"].iloc[i] * 1.05))
+    if mode == "breakout":
+        base = m["base20_5"].iloc[i]
+        prev_c = m["closes"].iloc[i - 1]
+        ok = (ok & (c > base) & (prev_c <= base)          # 当日ピボット越え
+              & (m["vols"].iloc[i] >= 1.4 * m["vol50"].iloc[i]))  # 出来高確認
     score = (0.45 * rs_pct * 99 + 0.20 * 50
              + 0.20 * (100 - np.minimum(dist_high * 4, 100)))
     out = []
@@ -123,8 +135,12 @@ def candidates_at(m, i):
 
 
 def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
-             be_trigger=BE_TRIGGER, max_hold=MAX_HOLD, eval_step=EVAL_STEP):
-    """日次ウォークフォワード・シミュレーション。"""
+             be_trigger=BE_TRIGGER, max_hold=MAX_HOLD, eval_step=None,
+             mode="breakout"):
+    """日次ウォークフォワード・シミュレーション。
+    breakoutモードはブレイクの瞬間を逃さないようシグナル判定も日次。"""
+    if eval_step is None:
+        eval_step = 1 if mode == "breakout" else EVAL_STEP
     m = build_matrices(data)
     dates = m["closes"].index
     # SPYを銘柄群と同じ日付軸に揃える (位置ズレによる先読みを防ぐ)
@@ -220,7 +236,7 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
                           "市場環境悪化")
         # --- 新規買いシグナルは週次 (翌日寄付で約定)
         elif (i - start) % eval_step == 0 and env == "BUY" and len(positions) < slots:
-            pending = [(sym, stop) for sym, _px, stop in candidates_at(m, i)]
+            pending = [(sym, stop) for sym, _px, stop in candidates_at(m, i, mode)]
         equity_curve.append((str(dates[i].date()), round(equity(i), 0)))
 
     # 末日清算 (未決済分の評価確定 — 統計では「未完了」として別集計)
@@ -230,10 +246,10 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
         c = float(m["closes"].iat[last, col])
         close_pos(sym, last, c if c == c else positions[sym]["last_close"], "末日清算")
 
-    return summarize(trades, equity_curve, capital, spy_c, dates, start)
+    return summarize(trades, equity_curve, capital, spy_c, dates, start, mode)
 
 
-def summarize(trades, equity_curve, capital, spy_c, dates, start):
+def summarize(trades, equity_curve, capital, spy_c, dates, start, mode="breakout"):
     # 勝率・期待値等は「ルール通りに完了した」トレードのみで計算する。
     # 末日清算 (未完了の評価替え) を混ぜると成績が歪む
     closed = [t for t in trades if t["reason"] != "末日清算"]
@@ -251,6 +267,8 @@ def summarize(trades, equity_curve, capital, spy_c, dates, start):
     gross_w = sum(t["pnl_pct"] for t in wins)
     gross_l = abs(sum(t["pnl_pct"] for t in losses))
     stats = {
+        "方式": ("ブレイクアウト型 (ピボット越え+出来高確認)" if mode == "breakout"
+               else "ゾーン型 (買いゾーン内を週次バスケット買い)"),
         "期間": f"{equity_curve[0][0]} 〜 {equity_curve[-1][0]}" if equity_curve else "",
         "トレード数": len(closed),
         "未完了(末日清算)": len(trades) - len(closed),
@@ -287,12 +305,14 @@ def report(result):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=float, default=2.0, help="検証期間 (年)")
+    ap.add_argument("--mode", choices=("breakout", "zone"), default="breakout",
+                    help="breakout=ピボット越え+出来高確認 / zone=旧ゾーン買い (比較用)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
 
     if args.selftest:
         data, _ = synthetic_data(n=40, days=600)
-        result = simulate(data)
+        result = simulate(data, mode=args.mode)
     else:
         universe = get_universe()
         months = int(args.years * 12 + 14)  # ウォームアップ約260営業日分を上乗せ
@@ -300,8 +320,9 @@ def main():
         data = batch_download(symbols, period=f"{months}mo")
         if "SPY" not in data:
             raise RuntimeError("SPY data missing")
-        log(f"backtest: price data for {len(data)} symbols, {args.years} years")
-        result = simulate(data)
+        log(f"backtest: price data for {len(data)} symbols, "
+            f"{args.years} years, mode={args.mode}")
+        result = simulate(data, mode=args.mode)
 
     report(result)
     os.makedirs("data", exist_ok=True)
