@@ -35,8 +35,11 @@ SLOTS = 10            # 最大保有数 (1銘柄=資金の1/SLOTS)
 TARGET = 0.22         # 利確 +22%
 BE_TRIGGER = 0.12     # 建値ストップへの引き上げ閾値 +12%
 MAX_HOLD = 60         # 停滞手仕舞い (営業日)
-EVAL_STEP = 5         # 新規買い判定の間隔 (営業日)
+EVAL_STEP = 5         # 新規買い判定の間隔 (営業日、zoneモードのみ)
 RS_PCT = 0.80         # RS百分位の下限 (RS80相当)
+FAST_GAIN = 0.20      # 大化け候補の判定: この利益率を…
+FAST_WINDOW = 15      # …この営業日数以内に達成したら (≒3週間で+20%)
+FAST_HOLD = 40        # 8週間 (≒40営業日) は+22%利確を保留して保有する
 
 
 def build_matrices(data, bench=("SPY", "QQQ")):
@@ -71,17 +74,19 @@ def build_matrices(data, bench=("SPY", "QQQ")):
 
 
 def env_state(spy, i):
-    """簡易市場環境: BUY / CAUTION / DONT。"""
+    """簡易市場環境: BUY / CAUTION / DONT。
+    BUYは確認済み上昇トレンドのみ: SPY > MA50 > MA200・MA200上向き・分配日4以下。"""
     c = spy["Close"]
     if i < 222:
         return "CAUTION"
     px = float(c.iloc[i])
+    ma50 = float(c.iloc[i - 49:i + 1].mean())
     ma200 = float(c.iloc[i - 199:i + 1].mean())
     ma200_22 = float(c.iloc[i - 221:i - 21].mean())
     if px < ma200:
         return "DONT"
     dd = distribution_days(spy.iloc[:i + 1])
-    if ma200 > ma200_22 and dd <= 5:
+    if px > ma50 > ma200 and ma200 > ma200_22 and dd <= 4:
         return "BUY"
     return "CAUTION"
 
@@ -134,11 +139,63 @@ def candidates_at(m, i, mode="breakout"):
     return [(sym, px, stop) for _, sym, px, stop in out]
 
 
+def collect_candidates(data, mode="breakout"):
+    """全期間のシグナル候補銘柄の和集合 (ポートフォリオ状態に依存しない)。
+    ファンダ履歴の取得対象を事前に決めるためのプレスキャン。"""
+    m = build_matrices(data)
+    spy = data["SPY"].reindex(m["closes"].index).ffill()
+    step = 1 if mode == "breakout" else EVAL_STEP
+    syms = set()
+    for i in range(260, len(m["closes"].index)):
+        if (i - 260) % step:
+            continue
+        if env_state(spy, i) == "BUY":
+            syms.update(s for s, _p, _st in candidates_at(m, i, mode))
+    return sorted(syms)
+
+
+def fetch_eps_history(symbols, sleep=0.3):
+    """報告日付きのReported EPS実績を取得 {sym: [(報告日, EPS), ...] 新しい順}。
+    シグナル日時点で判明していたEPSだけを使うための素材 (先読み防止)。"""
+    import yfinance as yf
+    out = {}
+    fails = 0
+    for sym in symbols:
+        try:
+            ed = yf.Ticker(sym).get_earnings_dates(limit=24)
+            if ed is not None and not ed.empty and "Reported EPS" in ed.columns:
+                s = ed["Reported EPS"].dropna()
+                if len(s):
+                    out[sym] = sorted(
+                        ((d.date() if hasattr(d, "date") else d, float(v))
+                         for d, v in s.items()), reverse=True)
+        except Exception:
+            fails += 1
+        time.sleep(sleep)
+    log(f"eps history: {len(out)}/{len(symbols)} symbols fetched"
+        + (f", {fails} failed" if fails else ""))
+    return out
+
+
+def eps_yoy_asof(hist, asof):
+    """asof日時点で報告済みだった直近四半期EPSのYoY成長率 (%)。
+    4四半期前の実績が必要 — 不足はNone (本番同様、欠損では落とさない)。"""
+    past = [(d, v) for d, v in (hist or []) if d < asof]
+    if len(past) < 5:
+        return None
+    cur, prev = past[0][1], past[4][1]
+    if prev == 0:
+        return None
+    return (cur - prev) / abs(prev) * 100
+
+
 def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
              be_trigger=BE_TRIGGER, max_hold=MAX_HOLD, eval_step=None,
-             mode="breakout"):
+             mode="breakout", eps_hist=None):
     """日次ウォークフォワード・シミュレーション。
-    breakoutモードはブレイクの瞬間を逃さないようシグナル判定も日次。"""
+    breakoutモードはブレイクの瞬間を逃さないようシグナル判定も日次。
+    eps_hist (fetch_eps_historyの結果) を渡すと、シグナル日時点で減益が
+    判明していた銘柄の買いを見送る (本番スクリーナーのファンダゲート相当)。"""
     if eval_step is None:
         eval_step = 1 if mode == "breakout" else EVAL_STEP
     m = build_matrices(data)
@@ -191,7 +248,7 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
             shares = alloc / o
             cash -= shares * o
             positions[sym] = {"entry": o, "stop": stop, "shares": shares,
-                              "entry_i": i, "be_done": False,
+                              "entry_i": i, "be_done": False, "fast": False,
                               "last_close": o, "nan_days": 0}
         pending = []
 
@@ -213,14 +270,21 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
                 continue
             p["nan_days"] = 0
             p["last_close"] = c
+            held = i - p["entry_i"]
+            # 3週間で+20%の急騰銘柄は大化け候補 — 8週間は+22%利確を保留して保有
+            if not p["fast"] and held <= FAST_WINDOW and c >= p["entry"] * (1 + FAST_GAIN):
+                p["fast"] = True
+            in_fast_hold = p["fast"] and held < FAST_HOLD
             tgt = p["entry"] * (1 + target)
             if o == o and o <= p["stop"]:
                 close_pos(sym, i, o, "建値撤退" if p["be_done"] else "損切り(寄付GD)")
             elif l <= p["stop"]:
                 close_pos(sym, i, p["stop"], "建値撤退" if p["be_done"] else "損切り")
-            elif h >= tgt:
+            elif p["fast"] and held >= FAST_HOLD:
+                close_pos(sym, i, c, "8週保有後利確")
+            elif not in_fast_hold and h >= tgt:
                 close_pos(sym, i, tgt, "利確+22%")
-            elif i - p["entry_i"] >= max_hold:
+            elif held >= max_hold:
                 close_pos(sym, i, c, "停滞60日")
             elif not p["be_done"] and c >= p["entry"] * (1 + be_trigger):
                 p["stop"] = max(p["stop"], p["entry"])
@@ -236,7 +300,14 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
                           "市場環境悪化")
         # --- 新規買いシグナルは週次 (翌日寄付で約定)
         elif (i - start) % eval_step == 0 and env == "BUY" and len(positions) < slots:
-            pending = [(sym, stop) for sym, _px, stop in candidates_at(m, i, mode)]
+            pending = []
+            asof = dates[i].date()
+            for sym, _px, stop in candidates_at(m, i, mode):
+                if eps_hist is not None:
+                    g = eps_yoy_asof(eps_hist.get(sym), asof)
+                    if g is not None and g < 0:
+                        continue  # シグナル時点で減益が判明 → 本番同様に見送り
+                pending.append((sym, stop))
         equity_curve.append((str(dates[i].date()), round(equity(i), 0)))
 
     # 末日清算 (未決済分の評価確定 — 統計では「未完了」として別集計)
@@ -246,10 +317,12 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
         c = float(m["closes"].iat[last, col])
         close_pos(sym, last, c if c == c else positions[sym]["last_close"], "末日清算")
 
-    return summarize(trades, equity_curve, capital, spy_c, dates, start, mode)
+    return summarize(trades, equity_curve, capital, spy_c, dates, start, mode,
+                     fund_gated=eps_hist is not None and len(eps_hist) > 0)
 
 
-def summarize(trades, equity_curve, capital, spy_c, dates, start, mode="breakout"):
+def summarize(trades, equity_curve, capital, spy_c, dates, start,
+              mode="breakout", fund_gated=False):
     # 勝率・期待値等は「ルール通りに完了した」トレードのみで計算する。
     # 末日清算 (未完了の評価替え) を混ぜると成績が歪む
     closed = [t for t in trades if t["reason"] != "末日清算"]
@@ -269,6 +342,8 @@ def summarize(trades, equity_curve, capital, spy_c, dates, start, mode="breakout
     stats = {
         "方式": ("ブレイクアウト型 (ピボット越え+出来高確認)" if mode == "breakout"
                else "ゾーン型 (買いゾーン内を週次バスケット買い)"),
+        "ファンダゲート": ("有効 (シグナル日時点のEPS実績で減益を除外)"
+                    if fund_gated else "無効 (技術面のみ)"),
         "期間": f"{equity_curve[0][0]} 〜 {equity_curve[-1][0]}" if equity_curve else "",
         "トレード数": len(closed),
         "未完了(末日清算)": len(trades) - len(closed),
@@ -307,6 +382,8 @@ def main():
     ap.add_argument("--years", type=float, default=2.0, help="検証期間 (年)")
     ap.add_argument("--mode", choices=("breakout", "zone"), default="breakout",
                     help="breakout=ピボット越え+出来高確認 / zone=旧ゾーン買い (比較用)")
+    ap.add_argument("--fund", choices=("on", "off"), default="on",
+                    help="on=シグナル日時点のEPS実績で減益銘柄を除外 (2パス)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
 
@@ -321,8 +398,15 @@ def main():
         if "SPY" not in data:
             raise RuntimeError("SPY data missing")
         log(f"backtest: price data for {len(data)} symbols, "
-            f"{args.years} years, mode={args.mode}")
-        result = simulate(data, mode=args.mode)
+            f"{args.years} years, mode={args.mode}, fund={args.fund}")
+        eps_hist = None
+        if args.fund == "on":
+            # 2パス方式: 全期間のシグナル候補を先に集め、その銘柄だけ
+            # 報告日付きEPS実績を取得する (シグナル日時点の判明分のみ使用)
+            cand = collect_candidates(data, mode=args.mode)
+            log(f"fund gate: fetching EPS history for {len(cand)} signal candidates")
+            eps_hist = fetch_eps_history(cand[:800])
+        result = simulate(data, mode=args.mode, eps_hist=eps_hist)
 
     report(result)
     os.makedirs("data", exist_ok=True)

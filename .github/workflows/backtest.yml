@@ -11,6 +11,10 @@ on:
         description: 'breakout=ピボット越え+出来高確認 / zone=旧ゾーン買い'
         required: false
         default: 'breakout'
+      fund:
+        description: 'on=シグナル日時点のEPS実績で減益を除外'
+        required: false
+        default: 'on'
 
 permissions:
   contents: read
@@ -37,6 +41,7 @@ jobs:
           python backtest.py
           --years "${{ github.event.inputs.years || '2' }}"
           --mode "${{ github.event.inputs.mode || 'breakout' }}"
+          --fund "${{ github.event.inputs.fund || 'on' }}"
 
       - uses: actions/upload-artifact@v4
         with:

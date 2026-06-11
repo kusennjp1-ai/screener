@@ -1336,6 +1336,67 @@ class Backtest(unittest.TestCase):
         self.assertEqual(res["stats"]["トレード数"] + res["stats"]["未完了(末日清算)"], 0,
                          "ブレイクの瞬間がない銘柄は買わない")
 
+    def test_fast_winner_held_8_weeks(self):
+        # 3週間で+20%の急騰銘柄は+22%で売らず8週間保有 (大化けの右裾を切らない)
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        # エントリー後 +2%/日 → 10日で+20%超 → 8週保有で大きく伸ばす
+        data["FAST"] = self._frame(
+            grow([np.full(260, 0.003), np.full(days - 260, 0.02)]), idx)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        res = bt.simulate(data, mode="zone")
+        fast = [t for t in res["trades"] if t["sym"] == "FAST"]
+        self.assertTrue(any(t["reason"] == "8週保有後利確" and t["pnl_pct"] > 40
+                            for t in fast),
+                        f"+22%で切らず8週保有して伸ばすこと: {fast}")
+
+    def test_env_requires_confirmed_uptrend(self):
+        # SPYがMA200上でもMA50割れなら確認済み上昇トレンドではない → 買わない
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        # 長期上昇の後、直近70日はゆるやかな下落 (MA200上・MA50下に位置)
+        spy_px = np.concatenate([400 * np.cumprod(1 + np.full(days - 70, 0.001)),
+                                 400 * np.cumprod(1 + np.full(days - 70, 0.001))[-1]
+                                 * np.cumprod(1 + np.full(70, -0.0012))])
+        spy = self._frame(spy_px, idx)
+        i = days - 1
+        self.assertNotEqual(bt.env_state(spy, i), "BUY",
+                            "MA50割れはconfirmed uptrendではない")
+
+    def test_eps_yoy_asof(self):
+        import backtest as bt
+        d = dt.date
+        hist = [(d(2026, 5, 1), 2.0), (d(2026, 2, 1), 1.8), (d(2025, 11, 1), 1.6),
+                (d(2025, 8, 1), 1.5), (d(2025, 5, 1), 1.0), (d(2025, 2, 1), 0.9)]
+        # 2026-06時点: 直近2.0 vs 4四半期前1.0 → +100%
+        self.assertAlmostEqual(bt.eps_yoy_asof(hist, d(2026, 6, 1)), 100.0)
+        # 2026-03時点: 直近1.8 vs 0.9 → +100% (2026-05の報告はまだ見えない)
+        self.assertAlmostEqual(bt.eps_yoy_asof(hist, d(2026, 3, 1)), 100.0)
+        # 履歴不足はNone
+        self.assertIsNone(bt.eps_yoy_asof(hist[:4], d(2026, 6, 1)))
+        self.assertIsNone(bt.eps_yoy_asof(None, d(2026, 6, 1)))
+
+    def test_eps_gate_blocks_decliner(self):
+        # シグナル日時点で減益が判明している銘柄は買わない (TD型の歴史版)
+        import backtest as bt
+        data = self._bull_data()
+        d0 = dt.date.today() - dt.timedelta(days=900)
+        neg = [(d0 + dt.timedelta(days=91 * k), 1.0 - 0.2 * k) for k in range(8)]
+        neg = sorted(neg, reverse=True)  # 新しいほどEPSが小さい = 減益
+        res = bt.simulate(self._bull_data(), mode="zone",
+                          eps_hist={"WINX": neg, "LOSX": neg})
+        self.assertEqual([t for t in res["trades"] if t["sym"] in ("WINX", "LOSX")],
+                         [], "減益判明銘柄は買わない")
+        # 同条件でゲート無しなら買われている (ゲートが原因であることの対照)
+        res2 = bt.simulate(data, mode="zone")
+        self.assertTrue([t for t in res2["trades"] if t["sym"] == "WINX"])
+
     def test_breakeven_stop_after_gain(self):
         # +12%到達後に反落 → 建値撤退 (利益を損失にしない)
         import backtest as bt
