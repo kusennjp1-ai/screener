@@ -1,7 +1,81 @@
-data/screener_latest.json
-data/screener_prev.json
-data/industry_map.json
-data/industry_map_prev.json
-data/backtest.json
-data/charts/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+backend/venv
+ENV/
+
+# Node modules
+frontend/node_modules
+
+# Build artifacts
+frontend/dist
+frontend/public/static-data/
+
+# Environment variables (keep .example files)
+.env
+.env.docker
+!.env.example
+!.env.docker.example
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.html
+!frontend/index.html
+!docs/*.html
+!data/IBD_industry_group.csv
+!data/hk-deep.csv
+!data/india-deep.csv
+!data/kabutan_themes_en.csv
+!data/taiwan-deep.csv
+!data/sg_sgx_constituents.csv
+!data/my_klse_constituents.csv
+!backend/data/de_dax40_constituents.csv
+*.db
+*.db-shm
+*.db-wal
+!backend/desktop/universe_seed.csv
+!backend/desktop/ibd_industry_seed.csv
+data/.cache/*
+data/db_repair_backup_*/
+data/*.recovered_*
+data/xui-reader/
+data/hermes/
+data/backups/
+docker-data/
+
+# Logs
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude
+.specstory
+
+# Temporary files
+*.tmp
+*.swp
+celerybeat-schedule
+
+# Playwright MCP
+.playwright-mcp/
+
+# Generated agent runtime state
+.superpowers/brainstorm/**/state/**
+
+# bv (beads viewer) local config and caches
+.bv/
+
+
+# Load harness ephemeral output (committed baselines stay; per-run does not)
+backend/tests/load/baselines/current_run.json

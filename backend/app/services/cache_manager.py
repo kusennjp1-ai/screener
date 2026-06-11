@@ -1,0 +1,536 @@
+"""
+Cache Manager for orchestrating all caching operations.
+
+Provides centralized cache coordination, warming, and statistics.
+"""
+import logging
+import time
+from typing import List, Dict, Optional
+from datetime import datetime
+from sqlalchemy.orm import Session
+
+from ..database import SessionLocal
+from .benchmark_cache_service import BenchmarkCacheService
+from .benchmark_registry_service import benchmark_registry
+from .cache.market_cache_policy import market_cache_policy
+from .price_cache_service import PriceCacheService
+from .redis_pool import get_redis_client, is_redis_enabled
+from ..config import settings
+from ..utils.market_hours import is_market_open, format_market_status
+
+logger = logging.getLogger(__name__)
+
+
+class CacheManager:
+    """
+    Centralized cache management and orchestration.
+
+    Coordinates:
+    - Market benchmark caching (BenchmarkCacheService)
+    - Stock price caching (PriceCacheService)
+    - Cache warming operations
+    - Cache statistics and monitoring
+    """
+
+    def __init__(self, db: Optional[Session] = None):
+        """
+        Initialize cache manager.
+
+        Args:
+            db: Database session (optional)
+        """
+        # Use shared connection pool for efficiency
+        self.redis_client = get_redis_client()
+        if self.redis_client:
+            logger.info("Cache manager connected to Redis (using shared pool)")
+        elif is_redis_enabled():
+            logger.warning("Redis connection failed. Cache manager will use fallback mode.")
+        else:
+            logger.info("Redis disabled for this runtime. Cache manager will use fallback mode.")
+
+        # Initialize cache services (they'll use their own pool connections)
+        self.benchmark_cache = BenchmarkCacheService(
+            redis_client=self.redis_client,
+            session_factory=SessionLocal,
+        )
+        self.price_cache = PriceCacheService(
+            redis_client=self.redis_client,
+            session_factory=SessionLocal,
+        )
+
+        self.db = db
+
+    def warm_benchmark_cache(self, period: str = "2y", market: str = "US") -> bool:
+        """
+        Warm market benchmark cache.
+
+        Args:
+            period: Time period to cache
+            market: Market code for benchmark resolution (US, HK, JP, TW)
+
+        Returns:
+            True if successful
+        """
+        try:
+            benchmark_symbol = self.benchmark_cache.get_benchmark_symbol(market)
+            logger.info(f"Warming {market} benchmark cache ({benchmark_symbol}, {period})...")
+            start_time = time.time()
+
+            benchmark_data = self.benchmark_cache.get_benchmark_data(
+                market=market,
+                period=period,
+                force_refresh=False,
+            )
+
+            if benchmark_data is not None and not benchmark_data.empty:
+                elapsed = time.time() - start_time
+                logger.info(f"✓ {market} benchmark cache warmed: {len(benchmark_data)} rows in {elapsed:.2f}s")
+                return True
+            else:
+                logger.warning(f"Failed to warm {market} benchmark cache")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error warming {market} benchmark cache: {e}", exc_info=True)
+            return False
+
+    def warm_price_cache(
+        self,
+        symbols: List[str],
+        period: str = "2y",
+        batch_size: int = 50,
+        rate_limit: float = 1.0,
+        force_refresh: bool = True
+    ) -> Dict:
+        """
+        Warm price cache for multiple symbols using bulk fetching (Phase 2 optimization).
+
+        Uses the shared ``yf.download()`` batch adapter for scheduled price refreshes.
+
+        Args:
+            symbols: List of stock symbols to warm
+            period: Time period to cache
+            batch_size: Symbols per bulk fetch batch (default 50)
+            rate_limit: Seconds to wait between batch requests
+            force_refresh: Force fetch even if cached (default True for warming)
+
+        Returns:
+            Dict with warming statistics
+        """
+        stats = {
+            'total': len(symbols),
+            'successful': 0,
+            'failed': 0,
+            'skipped': 0,
+            'start_time': time.time(),
+            'errors': []
+        }
+
+        logger.info(f"Warming price cache for {len(symbols)} symbols using bulk fetching (batch_size={batch_size})...")
+
+        # PHASE 2: Use bulk fetcher for efficient batch operations
+        from ..services.bulk_data_fetcher import BulkDataFetcher
+        bulk_fetcher = BulkDataFetcher()
+
+        # If not forcing refresh, filter out already-cached symbols
+        symbols_to_fetch = symbols
+        if not force_refresh:
+            symbols_to_fetch = []
+            for symbol in symbols:
+                cache_stats = self.price_cache.get_cache_stats(symbol)
+                if cache_stats['redis_cached']:
+                    logger.debug(f"Skipping {symbol} - already in Redis cache")
+                    stats['skipped'] += 1
+                else:
+                    symbols_to_fetch.append(symbol)
+
+            logger.info(f"After cache check: {len(symbols_to_fetch)} symbols need fetching, {stats['skipped']} already cached")
+
+        if not symbols_to_fetch:
+            logger.info("All symbols already cached")
+            return stats
+
+        # Process in batches using bulk fetcher
+        total_batches = (len(symbols_to_fetch) + batch_size - 1) // batch_size
+        consecutive_backoffs = 0  # Track consecutive rate-limited batches
+
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, len(symbols_to_fetch))
+            batch = symbols_to_fetch[start_idx:end_idx]
+
+            logger.info(f"Batch {batch_num + 1}/{total_batches}: Bulk fetching {len(batch)} symbols...")
+
+            try:
+                bulk_data = bulk_fetcher.fetch_prices_in_batches(
+                    batch,
+                    period=period,
+                )
+
+                batch_to_store = {}
+                batch_failed = 0
+                for symbol, data in bulk_data.items():
+                    if not data.get('has_error') and data.get('price_data') is not None:
+                        price_df = data['price_data']
+                        if price_df is not None and not price_df.empty:
+                            batch_to_store[symbol] = price_df
+                            stats['successful'] += 1
+                            logger.debug(f"✓ {symbol}: Cached {len(price_df)} rows")
+                        else:
+                            stats['failed'] += 1
+                            batch_failed += 1
+                            stats['errors'].append(f"{symbol}: Empty data")
+                            logger.debug(f"✗ {symbol}: Empty data")
+                    else:
+                        stats['failed'] += 1
+                        batch_failed += 1
+                        error_msg = data.get('error', 'No data')
+                        stats['errors'].append(f"{symbol}: {error_msg}")
+                        logger.debug(f"✗ {symbol}: {error_msg}")
+
+                if batch_to_store:
+                    self.price_cache.store_batch_in_cache(
+                        batch_to_store,
+                        also_store_db=True,
+                    )
+
+                # Progress logging
+                logger.info(
+                    f"Batch {batch_num + 1}/{total_batches} completed: "
+                    f"{stats['successful']}/{len(symbols_to_fetch)} successful so far"
+                )
+
+                # Batch-level backoff: if >50% of batch failed, likely rate-limited
+                batch_failure_rate = batch_failed / len(batch) if batch else 0
+                if batch_failure_rate > 0.5:
+                    consecutive_backoffs += 1
+                    backoff_time = min(60 * (2 ** (consecutive_backoffs - 1)), 480)  # 60, 120, 240, 480 max
+                    logger.warning(
+                        f"High failure rate ({batch_failed}/{len(batch)}) in batch {batch_num + 1}. "
+                        f"Backing off {backoff_time}s before next batch."
+                    )
+                    time.sleep(backoff_time)
+                else:
+                    consecutive_backoffs = 0  # Reset on successful batch
+                    # Normal rate limiting between batches (Redis-backed distributed limiter)
+                    if rate_limit > 0 and batch_num < total_batches - 1:
+                        from ..wiring.bootstrap import get_rate_limiter
+
+                        get_rate_limiter().wait("yfinance:batch", min_interval_s=rate_limit)
+
+            except Exception as e:
+                logger.error(f"Error warming batch {batch_num + 1}: {e}", exc_info=True)
+                # Mark all symbols in this batch as failed
+                for symbol in batch:
+                    stats['failed'] += 1
+                    stats['errors'].append(f"{symbol}: Batch error - {str(e)}")
+
+        stats['end_time'] = time.time()
+        stats['duration'] = stats['end_time'] - stats['start_time']
+
+        logger.info(
+            f"✓ Price cache warming complete: "
+            f"{stats['successful']} successful, {stats['failed']} failed, "
+            f"{stats['skipped']} skipped in {stats['duration']:.1f}s"
+        )
+
+        return stats
+
+    def warm_all_caches(
+        self,
+        symbols: List[str],
+        force_refresh: bool = True,
+        benchmark_markets: Optional[List[str]] = None,
+        warm_benchmarks: bool = True,
+    ) -> Dict:
+        """
+        Warm all caches (benchmarks + stock prices).
+
+        Args:
+            symbols: List of stock symbols
+            force_refresh: Force fetch even if cached (default True)
+            benchmark_markets: Optional explicit markets to warm benchmark for
+            warm_benchmarks: Whether benchmark warmup should run in this call
+
+        Returns:
+            Combined statistics with warmed, failed, already_cached counts
+        """
+        logger.info("=" * 60)
+        logger.info("WARMING ALL CACHES")
+        logger.info("=" * 60)
+
+        start_time = time.time()
+
+        # 1. Warm benchmark cache for requested markets
+        benchmark_results: Dict[str, bool] = {}
+        if warm_benchmarks:
+            markets_to_warm = benchmark_markets or ["US"]
+            for market in markets_to_warm:
+                benchmark_results[market] = self.warm_benchmark_cache(market=market)
+
+        # 2. Warm price cache for all symbols
+        price_stats = self.warm_price_cache(
+            symbols,
+            rate_limit=settings.yfinance_batch_rate_limit_interval,
+            force_refresh=force_refresh
+        )
+
+        total_time = time.time() - start_time
+
+        logger.info("=" * 60)
+        logger.info(
+            f"✓ All caches warmed in {total_time:.1f}s"
+        )
+        logger.info("=" * 60)
+
+        # Return summary in format expected by prewarm_scan_cache task
+        return {
+            'warmed': price_stats['successful'],
+            'failed': price_stats['failed'],
+            'already_cached': price_stats['skipped'],
+            'benchmarks_warmed': benchmark_results,
+            'benchmark_warmed': all(benchmark_results.values()) if benchmark_results else False,
+            # Backward compatibility for older consumers expecting this field.
+            'spy_warmed': benchmark_results.get("US", False),
+            'total_time': total_time,
+            'details': price_stats
+        }
+
+    def get_cache_stats(self) -> Dict:
+        """
+        Get comprehensive cache statistics.
+
+        Returns:
+            Dict with cache statistics for benchmarks, prices, and fundamentals
+        """
+        stats = {
+            'redis_connected': self.redis_client is not None,
+            'market_status': format_market_status(),
+            'benchmark_cache': {},
+            # Backward compatibility key expected by existing response schema/clients.
+            'spy_cache': {},
+            'price_cache': {
+                'total_keys': 0,
+                'symbols_cached': 0
+            },
+            'fundamentals_cache': {
+                'total_keys': 0,
+                'symbols_cached': 0
+            },
+            'benchmark_registry': {
+                'version': benchmark_registry.TABLE_VERSION,
+                'table': benchmark_registry.mapping_table(),
+            },
+            'redis_memory': None
+        }
+
+        if not self.redis_client:
+            return stats
+
+        try:
+            # Benchmark cache stats by market
+            benchmark_stats: Dict[str, Dict[str, Optional[int] | bool | str]] = {}
+            for market in benchmark_registry.supported_markets():
+                entry = benchmark_registry.get_entry(market)
+                primary_symbol = entry.primary_symbol
+                fallback_symbol = entry.fallback_symbol
+                key_2y = market_cache_policy.key("benchmark", primary_symbol, market=market, parts=("2y",))
+                key_1y = market_cache_policy.key("benchmark", primary_symbol, market=market, parts=("1y",))
+                fallback_key_2y = (
+                    market_cache_policy.key("benchmark", fallback_symbol, market=market, parts=("2y",))
+                    if fallback_symbol
+                    else None
+                )
+                fallback_key_1y = (
+                    market_cache_policy.key("benchmark", fallback_symbol, market=market, parts=("1y",))
+                    if fallback_symbol
+                    else None
+                )
+                has_2y = self.redis_client.exists(key_2y) > 0
+                has_1y = self.redis_client.exists(key_1y) > 0
+                fallback_has_2y = self.redis_client.exists(fallback_key_2y) > 0 if fallback_key_2y else False
+                fallback_has_1y = self.redis_client.exists(fallback_key_1y) > 0 if fallback_key_1y else False
+                benchmark_stats[market] = {
+                    'symbol': primary_symbol,
+                    'fallback_symbol': fallback_symbol,
+                    '2y_cached': has_2y,
+                    '1y_cached': has_1y,
+                    '2y_ttl': self.redis_client.ttl(key_2y) if has_2y else None,
+                    '1y_ttl': self.redis_client.ttl(key_1y) if has_1y else None,
+                    'fallback_2y_cached': fallback_has_2y,
+                    'fallback_1y_cached': fallback_has_1y,
+                    'fallback_2y_ttl': self.redis_client.ttl(fallback_key_2y) if fallback_has_2y and fallback_key_2y else None,
+                    'fallback_1y_ttl': self.redis_client.ttl(fallback_key_1y) if fallback_has_1y and fallback_key_1y else None,
+                }
+            stats['benchmark_cache'] = benchmark_stats
+            # Backward compatibility for existing consumers.
+            stats['spy_cache'] = benchmark_stats.get("US", {})
+
+            # Price cache stats
+            price_keys = self.redis_client.keys("price:*")
+            stats['price_cache']['total_keys'] = len(price_keys)
+
+            # Count unique price symbols
+            price_symbols = set()
+            for key in price_keys:
+                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                # Extract symbol from "price:US:AAPL:recent" and legacy "price:AAPL:recent".
+                parts = key_str.split(':')
+                if len(parts) >= 4:
+                    price_symbols.add(parts[2])
+                elif len(parts) >= 2:
+                    price_symbols.add(parts[1])
+
+            stats['price_cache']['symbols_cached'] = len(price_symbols)
+
+            # Fundamentals cache stats
+            fundamentals_keys = self.redis_client.keys("fundamentals:*")
+            stats['fundamentals_cache']['total_keys'] = len(fundamentals_keys)
+
+            # Count unique fundamentals symbols
+            fundamentals_symbols = set()
+            for key in fundamentals_keys:
+                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                # Extract symbol from "fundamentals:US:AAPL" and legacy "fundamentals:AAPL".
+                parts = key_str.split(':')
+                if len(parts) >= 3:
+                    fundamentals_symbols.add(parts[2])
+                elif len(parts) >= 2:
+                    fundamentals_symbols.add(parts[1])
+
+            stats['fundamentals_cache']['symbols_cached'] = len(fundamentals_symbols)
+
+            # Redis memory info
+            info = self.redis_client.info('memory')
+            stats['redis_memory'] = {
+                'used_memory_human': info.get('used_memory_human'),
+                'used_memory_peak_human': info.get('used_memory_peak_human'),
+            }
+
+        except Exception as e:
+            logger.warning(f"Error getting cache stats: {e}")
+
+        return stats
+
+    def invalidate_all_caches(self) -> Dict:
+        """
+        Invalidate all caches (use with caution!).
+
+        Returns:
+            Dict with deletion statistics
+        """
+        if not self.redis_client:
+            logger.warning("Redis not available for cache invalidation")
+            return {'deleted': 0}
+
+        try:
+            logger.warning("Invalidating ALL caches...")
+
+            # Get all cache keys
+            benchmark_keys = self.redis_client.keys("benchmark:*")
+            price_keys = self.redis_client.keys("price:*")
+
+            total_keys = len(benchmark_keys) + len(price_keys)
+
+            if total_keys > 0:
+                # Delete all keys
+                if benchmark_keys:
+                    self.redis_client.delete(*benchmark_keys)
+                if price_keys:
+                    self.redis_client.delete(*price_keys)
+
+                logger.warning(f"✓ Invalidated {total_keys} cache keys")
+
+            return {
+                'deleted': total_keys,
+                'benchmark_keys': len(benchmark_keys),
+                'price_keys': len(price_keys)
+            }
+
+        except Exception as e:
+            logger.error(f"Error invalidating caches: {e}", exc_info=True)
+            return {'deleted': 0, 'error': str(e)}
+
+    def cleanup_orphaned_cache_keys(self, active_symbols: set) -> int:
+        """
+        Remove Redis cache entries for symbols no longer in the active universe.
+
+        Compares cached symbols against the active universe set and removes
+        entries for deactivated/delisted symbols to prevent stale data buildup.
+
+        Args:
+            active_symbols: Set of currently active symbol strings
+
+        Returns:
+            Number of orphaned entries removed
+        """
+        if not self.redis_client:
+            logger.warning("Redis not available for orphan cleanup")
+            return 0
+
+        try:
+            cached_symbols = set(self.price_cache.get_all_cached_symbols())
+            orphaned = cached_symbols - active_symbols
+
+            if not orphaned:
+                logger.info("No orphaned cache entries found")
+                return 0
+
+            for symbol in orphaned:
+                self.invalidate_symbol_cache(symbol)
+
+            logger.info(f"Cleaned up {len(orphaned)} orphaned cache entries")
+            return len(orphaned)
+
+        except Exception as e:
+            logger.error(f"Error cleaning up orphaned cache keys: {e}", exc_info=True)
+            return 0
+
+    def invalidate_symbol_cache(self, symbol: str) -> bool:
+        """
+        Invalidate cache for a specific symbol.
+
+        Args:
+            symbol: Stock symbol to invalidate
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.price_cache.invalidate_cache(symbol)
+            logger.info(f"✓ Invalidated cache for {symbol}")
+            return True
+        except Exception as e:
+            logger.error(f"Error invalidating {symbol} cache: {e}")
+            return False
+
+    def get_cache_hit_rate(self, window_minutes: int = 60) -> Optional[float]:
+        """
+        Calculate cache hit rate from Redis stats.
+
+        Args:
+            window_minutes: Time window to analyze
+
+        Returns:
+            Hit rate percentage (0-100) or None if unavailable
+        """
+        if not self.redis_client:
+            return None
+
+        try:
+            info = self.redis_client.info('stats')
+
+            keyspace_hits = info.get('keyspace_hits', 0)
+            keyspace_misses = info.get('keyspace_misses', 0)
+
+            total_requests = keyspace_hits + keyspace_misses
+
+            if total_requests == 0:
+                return None
+
+            hit_rate = (keyspace_hits / total_requests) * 100
+            return round(hit_rate, 2)
+
+        except Exception as e:
+            logger.warning(f"Error calculating hit rate: {e}")
+            return None

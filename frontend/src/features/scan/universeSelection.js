@@ -1,0 +1,93 @@
+import { TEST_SYMBOLS, UNIVERSE_GEOGRAPHIC_MARKETS } from './constants';
+
+function findRuntimeScopeOption(market, scope, universeSelections) {
+  return universeSelections?.scopesByMarket?.[market]?.find((option) => option.value === scope) ?? null;
+}
+
+// Build a typed universe_def payload from the two-step picker state.
+// Returns null when the selection is incomplete (caller should disable submit).
+export function buildUniverseDef(market, scope, universeSelections = null) {
+  if (market === 'TEST') {
+    return { type: 'test', symbols: TEST_SYMBOLS };
+  }
+  if (!market || !scope) {
+    return null;
+  }
+  const runtimeOption = findRuntimeScopeOption(market, scope, universeSelections);
+  if (runtimeOption?.universe_def) {
+    return runtimeOption.universe_def;
+  }
+  if (scope === 'market') {
+    return { type: 'market', market };
+  }
+  if (scope.startsWith('exchange:')) {
+    return { type: 'exchange', market, exchange: scope.slice('exchange:'.length) };
+  }
+  if (scope.startsWith('index:')) {
+    return { type: 'index', index: scope.slice('index:'.length) };
+  }
+  return null;
+}
+
+// Count of stocks matching a (market, scope) selection, derived from the
+// universeStats bootstrap payload. Returns null when data isn't available yet.
+export function getSelectionCount(market, scope, universeStats, universeDef = null) {
+  if (!universeStats) {
+    return null;
+  }
+  if (market === 'TEST') {
+    return TEST_SYMBOLS.length;
+  }
+  if (!market || !scope) {
+    return null;
+  }
+  if (universeDef?.type === 'market') {
+    if (universeDef.listing_tier) {
+      return null;
+    }
+    if (universeDef.mic) {
+      return universeStats.by_exchange?.[universeDef.mic] ?? null;
+    }
+    return universeStats.by_market?.[universeDef.market]?.counts?.active ?? null;
+  }
+  if (universeDef?.type === 'index') {
+    return universeDef.index === 'SP500' ? universeStats.sp500 ?? null : null;
+  }
+  if (scope === 'market') {
+    return universeStats.by_market?.[market]?.counts?.active ?? null;
+  }
+  if (scope.startsWith('exchange:')) {
+    const exchange = scope.slice('exchange:'.length);
+    return universeStats.by_exchange?.[exchange] ?? null;
+  }
+  if (scope === 'index:SP500') {
+    return universeStats.sp500 ?? null;
+  }
+  return null;
+}
+
+// Map a legacy saved-default string (e.g. 'nyse', 'sp500', 'market:hk') to the
+// new (market, scope) picker state. Ambiguous 'all' yields (null, null) so
+// users must explicitly pick a market, matching the bead's design intent.
+export function parseLegacyUniverseDefault(legacy) {
+  if (typeof legacy !== 'string') {
+    return { market: null, scope: null };
+  }
+  const value = legacy.trim().toLowerCase();
+  if (value === 'test') {
+    return { market: 'TEST', scope: null };
+  }
+  if (value === 'nyse' || value === 'nasdaq' || value === 'amex') {
+    return { market: 'US', scope: `exchange:${value.toUpperCase()}` };
+  }
+  if (value === 'sp500') {
+    return { market: 'US', scope: 'index:SP500' };
+  }
+  if (value.startsWith('market:')) {
+    const market = value.slice('market:'.length).toUpperCase();
+    if (UNIVERSE_GEOGRAPHIC_MARKETS.includes(market)) {
+      return { market, scope: 'market' };
+    }
+  }
+  return { market: null, scope: null };
+}

@@ -1,0 +1,1169 @@
+"""Shared test fakes and fixtures for scanning use case tests.
+
+Consolidates all in-memory fake implementations of domain ports.
+Each fake stores real data and returns it — verifying actual behavior,
+not just "was method X called?".
+
+Other test files outside this directory can import these fakes directly::
+
+    from tests.unit.use_cases.conftest import FakeScanRepository, FakeUnitOfWork
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+import pandas as pd
+import pytest
+
+from app.domain.common.errors import EntityNotFoundError
+from app.domain.common.query import FilterSpec, PageSpec, SortSpec
+from app.domain.common.uow import UnitOfWork
+from app.domain.feature_store.models import (
+    FeaturePage,
+    FeatureRow,
+    FeatureRowWrite,
+    FeatureRunDomain,
+    RunStats,
+    RunStatus,
+    RunType,
+    validate_transition,
+)
+from collections.abc import Sequence
+from app.domain.feature_store.ports import FeatureRunRepository, FeatureStoreRepository
+from app.domain.feature_store.quality import DQInputs, DQResult
+from app.domain.scanning.models import (
+    FilterOptions,
+    ProgressEvent,
+    ResultPage,
+    ScanResultItemDomain,
+)
+from app.domain.scanning.ports import (
+    CancellationToken,
+    ProgressSink,
+    ScanRepository,
+    ScanResultRepository,
+    StockDataProvider,
+    TaskDispatcher,
+    UniverseRepository,
+)
+from app.scanners.base_screener import StockData
+
+
+# ---------------------------------------------------------------------------
+# Mutable ORM-like test records
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FakeScan:
+    """Mutable in-memory scan record (mimics SQLAlchemy ORM model).
+
+    Intentionally *not* frozen — use cases mutate the returned object
+    directly (e.g. ``scan.status = "failed"``), matching ORM behaviour.
+    """
+
+    scan_id: str
+    status: str = "queued"
+    screener_types: list[str] | None = None
+    composite_method: str | None = None
+    total_stocks: int | None = None
+    passed_stocks: int | None = None
+    completed_at: Any = None
+    idempotency_key: str | None = None
+    task_id: str | None = None
+    feature_run_id: int | None = None
+    trigger_source: str = "manual"
+    universe: str | None = None
+    universe_key: str | None = None
+    universe_type: str | None = None
+    universe_market: str | None = None
+    universe_exchange: str | None = None
+    universe_index: str | None = None
+    universe_symbols: list[str] | None = None
+    criteria: dict | None = None
+    started_at: Any = None
+
+    def get_universe_definition(self):
+        """Mirror Scan.get_universe_definition() for API list/status tests."""
+        from app.schemas.universe import UniverseDefinition
+
+        return UniverseDefinition.from_scan_fields(
+            universe_type=self.universe_type,
+            universe=self.universe,
+            universe_key=self.universe_key,
+            universe_market=self.universe_market,
+            universe_exchange=self.universe_exchange,
+            universe_index=self.universe_index,
+            universe_symbols=self.universe_symbols,
+        )
+
+
+# Alias kept for backward compatibility with scanning_fakes.py consumers.
+_ScanRecord = FakeScan
+
+
+# ---------------------------------------------------------------------------
+# Fake repositories
+# ---------------------------------------------------------------------------
+
+
+class FakeScanRepository(ScanRepository):
+    """Full-featured in-memory scan repository.
+
+    Supports idempotency key lookup and status transition history tracking,
+    covering the needs of all three scanning use cases.
+    """
+
+    def __init__(self) -> None:
+        self.scans: dict[str, FakeScan] = {}
+        self.rows: list[FakeScan] = []  # insertion-order list (for test_create_scan)
+        self.status_history: list[tuple[str, str]] = []
+
+    def create(self, *, scan_id: str, **fields) -> FakeScan:
+        scan = FakeScan(scan_id=scan_id, **fields)
+        self.scans[scan_id] = scan
+        self.rows.append(scan)
+        return scan
+
+    def get_by_scan_id(self, scan_id: str) -> FakeScan | None:
+        return self.scans.get(scan_id)
+
+    def get_by_idempotency_key(self, key: str) -> FakeScan | None:
+        for s in self.scans.values():
+            if getattr(s, "idempotency_key", None) == key:
+                return s
+        return None
+
+    def get_active_scan(self) -> FakeScan | None:
+        active = [
+            scan for scan in self.rows
+            if getattr(scan, "status", None) in {"queued", "running"}
+        ]
+        if not active:
+            return None
+        return sorted(active, key=lambda scan: scan.started_at or datetime.min, reverse=True)[0]
+
+    def update_status(self, scan_id: str, status: str, **fields) -> None:
+        scan = self.scans.get(scan_id)
+        if scan is None:
+            raise ValueError(f"Cannot update non-existent scan: {scan_id}")
+        scan.status = status
+        for k, v in fields.items():
+            if hasattr(scan, k):
+                setattr(scan, k, v)
+        if status in {"completed", "cancelled"}:
+            scan.completed_at = datetime.now()
+        self.status_history.append((scan_id, status))
+
+    def list_recent(self, limit: int = 20) -> list[FakeScan]:
+        return sorted(
+            self.rows,
+            key=lambda s: s.started_at or datetime.min,
+            reverse=True,
+        )[:limit]
+
+    def delete(self, scan_id: str) -> bool:
+        if scan_id in self.scans:
+            del self.scans[scan_id]
+            return True
+        return False
+
+
+class FakeScanResultRepository(ScanResultRepository):
+    """Configurable in-memory scan result repository.
+
+    By default returns empty results.  Pass ``items`` for query tests
+    or use ``persist_orchestrator_results`` to accumulate data during
+    RunBulkScan tests.
+    """
+
+    def __init__(
+        self,
+        *,
+        items: list[ScanResultItemDomain] | None = None,
+    ) -> None:
+        self._items = items or []
+        self._persisted_results: list[tuple[str, str, dict]] = []
+        self.last_query_args: dict | None = None
+        self.last_get_by_symbol_args: dict | None = None
+        self.last_query_symbols_args: dict | None = None
+        self.last_get_setup_payload_args: dict | None = None
+
+    def bulk_insert(self, rows: list[dict]) -> int:
+        return len(rows)
+
+    def persist_orchestrator_results(
+        self, scan_id: str, results: list[tuple[str, dict]]
+    ) -> int:
+        for symbol, result in results:
+            self._persisted_results.append((scan_id, symbol, result))
+        return len(results)
+
+    def delete_by_scan_id(self, scan_id: str) -> int:
+        before = len(self._persisted_results)
+        self._persisted_results = [
+            (sid, sym, res)
+            for sid, sym, res in self._persisted_results
+            if sid != scan_id
+        ]
+        return before - len(self._persisted_results)
+
+    def count_by_scan_id(self, scan_id: str) -> int:
+        return sum(1 for sid, _, _ in self._persisted_results if sid == scan_id)
+
+    def query(
+        self,
+        scan_id,
+        spec,
+        *,
+        include_sparklines=True,
+        include_setup_payload=True,
+    ):
+        self.last_query_args = {
+            "scan_id": scan_id,
+            "spec": spec,
+            "include_sparklines": include_sparklines,
+            "include_setup_payload": include_setup_payload,
+        }
+        page_items = self._items[spec.page.offset : spec.page.offset + spec.page.limit]
+        return ResultPage(
+            items=tuple(page_items),
+            total=len(self._items),
+            page=spec.page.page,
+            per_page=spec.page.per_page,
+        )
+
+    def query_symbols(self, scan_id, filters, sort, *, page=None):
+        self.last_query_symbols_args = {
+            "scan_id": scan_id,
+            "filters": filters,
+            "sort": sort,
+            "page": page,
+        }
+        symbols = tuple(i.symbol for i in self._items)
+        if page is not None:
+            symbols = symbols[page.offset : page.offset + page.limit]
+        return symbols, len(self._items)
+
+    def query_all(self, scan_id, filters, sort, *, include_sparklines=False):
+        return tuple(self._items)
+
+    def get_filter_options(self, scan_id):
+        return FilterOptions(ibd_industries=(), gics_sectors=(), ratings=())
+
+    def get_by_symbol(
+        self,
+        scan_id: str,
+        symbol: str,
+        *,
+        include_setup_payload: bool = True,
+    ) -> ScanResultItemDomain | None:
+        self.last_get_by_symbol_args = {
+            "scan_id": scan_id,
+            "symbol": symbol,
+            "include_setup_payload": include_setup_payload,
+        }
+        return next((i for i in self._items if i.symbol == symbol), None)
+
+    def get_details_by_symbol(self, scan_id: str, symbol: str) -> dict | None:
+        item = next((i for i in self._items if i.symbol == symbol), None)
+        if item is None:
+            return None
+        # Return a details dict that mirrors what the SQL repo stores.
+        # Tests that need screener breakdowns should populate _details_map.
+        return getattr(self, "_details_map", {}).get(symbol, {
+            "composite_score": item.composite_score,
+            "rating": item.rating,
+            "current_price": item.current_price,
+            "screeners_run": item.screeners_run,
+            "composite_method": item.composite_method,
+            "screeners_passed": item.screeners_passed,
+            "screeners_total": item.screeners_total,
+        })
+
+    def get_setup_payload(self, scan_id: str, symbol: str) -> dict | None:
+        self.last_get_setup_payload_args = {
+            "scan_id": scan_id,
+            "symbol": symbol,
+        }
+        item = next((i for i in self._items if i.symbol == symbol), None)
+        if item is None:
+            return None
+        return {
+            "se_explain": item.extended_fields.get("se_explain"),
+            "se_candidates": item.extended_fields.get("se_candidates"),
+        }
+
+    def get_peers_by_industry(
+        self, scan_id: str, ibd_industry_group: str
+    ) -> tuple[ScanResultItemDomain, ...]:
+        return ()
+
+    def get_peers_by_sector(
+        self, scan_id: str, gics_sector: str
+    ) -> tuple[ScanResultItemDomain, ...]:
+        return ()
+
+
+class FakeUniverseRepository(UniverseRepository):
+    """In-memory universe repository returning a configurable symbol list."""
+
+    def __init__(self, symbols: list[str] | None = None) -> None:
+        self._symbols = symbols or []
+        self.resolve_calls: list[object] = []
+
+    def resolve_symbols(self, universe_def: object) -> list[str]:
+        self.resolve_calls.append(universe_def)
+        return self._symbols
+
+
+# ---------------------------------------------------------------------------
+# Fake infrastructure services
+# ---------------------------------------------------------------------------
+
+
+class FakeTaskDispatcher(TaskDispatcher):
+    """Records all dispatch calls; optionally raises on dispatch."""
+
+    def __init__(
+        self,
+        task_id: str = "fake-task-123",
+        *,
+        should_fail: bool = False,
+    ) -> None:
+        self._task_id = task_id
+        self._should_fail = should_fail
+        self.dispatched: list[tuple[str, list[str], dict]] = []
+
+    def dispatch_scan(
+        self,
+        scan_id: str,
+        symbols: list[str],
+        criteria: dict,
+        *,
+        market: str | None = None,
+    ) -> str:
+        if self._should_fail:
+            raise RuntimeError("Celery is down")
+        self.dispatched.append((scan_id, symbols, criteria))
+        return self._task_id
+
+
+class FakeStockDataProvider(StockDataProvider):
+    """Returns deterministic StockData with synthetic OHLCV data.
+
+    Useful for testing scanner-level code that depends on
+    ``StockDataProvider``, though most use case tests only need
+    ``FakeScanner`` (which sits one layer above).
+    """
+
+    def __init__(
+        self,
+        *,
+        default_price: float = 100.0,
+        price_days: int = 252,
+    ) -> None:
+        self._default_price = default_price
+        self._price_days = price_days
+        self.prepare_calls: list[str] = []
+
+    def prepare_data(
+        self, symbol: str, requirements: object, *, allow_partial: bool = True
+    ) -> StockData:
+        self.prepare_calls.append(symbol)
+        return self._make_stock_data(symbol)
+
+    def prepare_data_bulk(
+        self,
+        symbols: list[str],
+        requirements: object,
+        *,
+        allow_partial: bool = True,
+        batch_only_prices: bool = False,
+        batch_only_fundamentals: bool = False,
+    ) -> dict[str, StockData]:
+        return {s: self.prepare_data(s, requirements) for s in symbols}
+
+    def _make_stock_data(self, symbol: str) -> StockData:
+        dates = pd.date_range(
+            end=datetime.now(), periods=self._price_days, freq="B"
+        )
+        price = self._default_price
+        df = pd.DataFrame(
+            {
+                "Open": price,
+                "High": price * 1.02,
+                "Low": price * 0.98,
+                "Close": price,
+                "Volume": 1_000_000,
+            },
+            index=dates,
+        )
+        return StockData(
+            symbol=symbol,
+            price_data=df,
+            benchmark_data=df.copy(),
+            fundamentals={"market_cap": 1_000_000_000},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Fake workflow collaborators
+# ---------------------------------------------------------------------------
+
+
+class FakeScanner:
+    """Fake StockScanner (satisfies Protocol) with configurable results.
+
+    Default: every symbol passes with score 75.
+    Override per-symbol via ``results`` dict.
+    """
+
+    def __init__(self, results: dict[str, dict] | None = None) -> None:
+        self._results = results or {}
+        self.calls: list[str] = []
+
+    def scan_stock_multi(
+        self,
+        symbol: str,
+        screener_names: list[str],
+        criteria: dict | None = None,
+        composite_method: str = "weighted_average",
+        pre_merged_requirements: object | None = None,
+        pre_fetched_data: object | None = None,
+    ) -> dict:
+        self.calls.append(symbol)
+        return self._results.get(
+            symbol,
+            {
+                "composite_score": 75.0,
+                "rating": "Buy",
+                "passes_template": True,
+                "current_price": 100.0,
+            },
+        )
+
+
+class FakeProgressSink(ProgressSink):
+    """Collects all emitted progress events in a list."""
+
+    def __init__(self) -> None:
+        self.events: list[ProgressEvent] = []
+
+    def emit(self, event: ProgressEvent) -> None:
+        self.events.append(event)
+
+
+class FakeCancellationToken(CancellationToken):
+    """Configurable cancellation: cancels after *cancel_after* checks.
+
+    ``cancel_after=None`` (default) means never cancel.
+    ``cancel_after=1`` cancels on the second call to ``is_cancelled()``.
+    """
+
+    def __init__(self, cancel_after: int | None = None) -> None:
+        self._cancel_after = cancel_after
+        self._checks = 0
+
+    def is_cancelled(self) -> bool:
+        self._checks += 1
+        if self._cancel_after is not None and self._checks > self._cancel_after:
+            return True
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Feature store fake repositories
+# ---------------------------------------------------------------------------
+
+
+class FakeFeatureRunRepository(FeatureRunRepository):
+    """In-memory feature run repository for use case tests."""
+
+    def __init__(self, *, row_counter=None) -> None:
+        self._runs: dict[int, FeatureRunDomain] = {}
+        self._next_id = 1
+        # Map of pointer_key -> run_id, mirroring ``feature_run_pointers``
+        # in the real repo. Populated by ``publish_atomically``; queried by
+        # ``get_latest_published`` and ``find_latest_published_covering``.
+        self._pointers: dict[str, int] = {}
+        # Optional callback: (run_id) -> int for list_runs_with_counts
+        self._row_counter = row_counter
+
+    @property
+    def _pointer_run_id(self) -> int | None:
+        """Backward-compat alias for tests reading the global pointer."""
+        return self._pointers.get("latest_published")
+
+    def start_run(self, as_of_date, run_type, code_version=None,
+                  universe_hash=None, input_hash=None,
+                  config_json=None,
+                  correlation_id=None) -> FeatureRunDomain:
+        run = FeatureRunDomain(
+            id=self._next_id,
+            as_of_date=as_of_date,
+            run_type=run_type if isinstance(run_type, RunType) else RunType(run_type),
+            status=RunStatus.RUNNING,
+            created_at=datetime.now(),
+            completed_at=None,
+            published_at=None,
+            correlation_id=correlation_id,
+            code_version=code_version,
+            universe_hash=universe_hash,
+            input_hash=input_hash,
+            config=config_json,
+        )
+        self._runs[self._next_id] = run
+        self._next_id += 1
+        return run
+
+    def mark_completed(self, run_id, stats, warnings=()) -> FeatureRunDomain:
+        run = self._get_or_raise(run_id)
+        validate_transition(run.status, RunStatus.COMPLETED)
+        updated = FeatureRunDomain(
+            id=run.id, as_of_date=run.as_of_date, run_type=run.run_type,
+            status=RunStatus.COMPLETED, created_at=run.created_at,
+            completed_at=datetime.now(), published_at=None,
+            correlation_id=run.correlation_id,
+            code_version=run.code_version, universe_hash=run.universe_hash,
+            input_hash=run.input_hash, config=run.config,
+            stats=stats, warnings=tuple(warnings),
+        )
+        self._runs[run_id] = updated
+        return updated
+
+    def mark_failed(self, run_id, stats, warnings=()) -> FeatureRunDomain:
+        run = self._get_or_raise(run_id)
+        validate_transition(run.status, RunStatus.FAILED)
+        updated = FeatureRunDomain(
+            id=run.id, as_of_date=run.as_of_date, run_type=run.run_type,
+            status=RunStatus.FAILED, created_at=run.created_at,
+            completed_at=datetime.now(), published_at=None,
+            correlation_id=run.correlation_id,
+            code_version=run.code_version, universe_hash=run.universe_hash,
+            input_hash=run.input_hash, config=run.config,
+            stats=stats, warnings=tuple(warnings),
+        )
+        self._runs[run_id] = updated
+        return updated
+
+    def mark_quarantined(self, run_id, dq_results) -> FeatureRunDomain:
+        run = self._get_or_raise(run_id)
+        validate_transition(run.status, RunStatus.QUARANTINED)
+        updated = FeatureRunDomain(
+            id=run.id, as_of_date=run.as_of_date, run_type=run.run_type,
+            status=RunStatus.QUARANTINED, created_at=run.created_at,
+            completed_at=run.completed_at, published_at=None,
+            correlation_id=run.correlation_id,
+            code_version=run.code_version, universe_hash=run.universe_hash,
+            input_hash=run.input_hash, config=run.config, stats=run.stats,
+            warnings=tuple(r.message for r in dq_results),
+        )
+        self._runs[run_id] = updated
+        return updated
+
+    def publish_atomically(
+        self, run_id, pointer_key: str = "latest_published"
+    ) -> FeatureRunDomain:
+        run = self._get_or_raise(run_id)
+        validate_transition(run.status, RunStatus.PUBLISHED)
+        updated = FeatureRunDomain(
+            id=run.id, as_of_date=run.as_of_date, run_type=run.run_type,
+            status=RunStatus.PUBLISHED, created_at=run.created_at,
+            completed_at=run.completed_at, published_at=datetime.now(),
+            correlation_id=run.correlation_id,
+            code_version=run.code_version, universe_hash=run.universe_hash,
+            input_hash=run.input_hash, config=run.config,
+            stats=run.stats, warnings=run.warnings,
+        )
+        self._runs[run_id] = updated
+        self._pointers[pointer_key] = run_id
+        return updated
+
+    def get_latest_published(
+        self, pointer_key: str = "latest_published"
+    ) -> FeatureRunDomain | None:
+        run_id = self._pointers.get(pointer_key)
+        if run_id is None:
+            return None
+        return self._runs.get(run_id)
+
+    def find_latest_published_exact(
+        self,
+        *,
+        input_hash: str,
+        universe_hash: str,
+        as_of_date=None,
+    ) -> FeatureRunDomain | None:
+        matches = [
+            run for run in self._runs.values()
+            if run.status == RunStatus.PUBLISHED
+            and run.input_hash == input_hash
+            and run.universe_hash == universe_hash
+            and (as_of_date is None or run.as_of_date == as_of_date)
+        ]
+        if not matches:
+            return None
+        matches.sort(
+            key=lambda run: (run.published_at or datetime.min, run.id or 0),
+            reverse=True,
+        )
+        return matches[0]
+
+    def set_run_covered_symbols(self, run_id: int, symbols: Sequence[str]) -> None:
+        """Test helper: register the symbols that have a feature row in the run.
+
+        The real repo counts rows in ``stock_feature_daily``; this fake
+        keeps a parallel mapping so ``find_latest_published_covering``
+        can answer coverage questions without an actual DB.
+
+        Note: matching production semantics, this is the set of symbols
+        with *persisted feature rows* — not the symbols listed in the
+        universe table. Default DQ thresholds permit publishing a run
+        with up to 10% of universe symbols missing rows, so the two sets
+        can legitimately differ.
+        """
+        if not hasattr(self, "_run_universes"):
+            self._run_universes: dict[int, set[str]] = {}
+        self._run_universes[run_id] = {
+            str(s).strip().upper() for s in symbols if str(s).strip()
+        }
+
+    def find_latest_published_covering(
+        self,
+        *,
+        symbols,
+        market: str | None = None,
+    ) -> FeatureRunDomain | None:
+        normalized = sorted({
+            str(s).strip().upper() for s in symbols if str(s).strip()
+        })
+        if not normalized:
+            return None
+
+        universes = getattr(self, "_run_universes", {})
+
+        # Honour the same pointer ordering as the real repo: market-specific
+        # pointer first, then the global pointer. Without this the fake
+        # would silently pick any covering published run regardless of
+        # which market it was published for, and a regression that selects
+        # the wrong run for a market-scoped scan could pass tests.
+        candidate_keys: list[str] = []
+        if market:
+            candidate_keys.append(
+                f"latest_published_market:{str(market).strip().upper()}"
+            )
+        candidate_keys.append("latest_published")
+
+        for key in candidate_keys:
+            run_id = self._pointers.get(key)
+            if run_id is None:
+                continue
+            run = self._runs.get(run_id)
+            if run is None or run.status != RunStatus.PUBLISHED:
+                continue
+            covered = universes.get(run_id)
+            if covered is None:
+                continue
+            if all(symbol in covered for symbol in normalized):
+                return run
+
+        return None
+
+    def get_run(self, run_id) -> FeatureRunDomain:
+        return self._get_or_raise(run_id)
+
+    def list_runs_with_counts(
+        self,
+        *,
+        status=None,
+        date_from=None,
+        date_to=None,
+        limit=50,
+    ) -> Sequence[tuple[FeatureRunDomain, int, bool]]:
+        runs = list(self._runs.values())
+
+        if status is not None:
+            runs = [r for r in runs if r.status == status]
+        if date_from is not None:
+            runs = [r for r in runs if r.as_of_date >= date_from]
+        if date_to is not None:
+            runs = [r for r in runs if r.as_of_date <= date_to]
+
+        # Sort by created_at DESC
+        runs.sort(key=lambda r: r.created_at, reverse=True)
+        runs = runs[:limit]
+
+        result = []
+        for run in runs:
+            count = self._row_counter(run.id) if self._row_counter else 0
+            is_latest = (self._pointer_run_id is not None and run.id == self._pointer_run_id)
+            result.append((run, count, is_latest))
+        return result
+
+    def _get_or_raise(self, run_id: int) -> FeatureRunDomain:
+        run = self._runs.get(run_id)
+        if run is None:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        return run
+
+
+class FakeFeatureStoreRepository(FeatureStoreRepository):
+    """In-memory feature store repository for use case tests."""
+
+    def __init__(self) -> None:
+        self._rows: dict[int, list[FeatureRow]] = {}  # run_id -> rows
+        self._universe: dict[int, list[str]] = {}
+        self._pointer_run_id: int | None = None
+        self.last_query_run_as_scan_results_args: dict | None = None
+        self.last_get_by_symbol_for_run_args: dict | None = None
+        self.last_query_run_symbols_args: dict | None = None
+        self.last_get_setup_payload_for_run_args: dict | None = None
+
+    def upsert_snapshot_rows(self, run_id, rows) -> int:
+        existing = {r.symbol: r for r in self._rows.get(run_id, [])}
+        for row in rows:
+            fr = FeatureRow(
+                run_id=run_id, symbol=row.symbol, as_of_date=row.as_of_date,
+                composite_score=row.composite_score, overall_rating=row.overall_rating,
+                passes_count=row.passes_count, details=row.details,
+            )
+            existing[row.symbol] = fr
+        self._rows[run_id] = list(existing.values())
+        return len(rows)
+
+    def save_run_universe_symbols(self, run_id, symbols) -> None:
+        self._universe[run_id] = list(symbols)
+
+    def count_by_run_id(self, run_id) -> int:
+        return len(self._rows.get(run_id, []))
+
+    def query_latest(self, filters=None, sort=None, page=None) -> FeaturePage:
+        if self._pointer_run_id is None:
+            p = page or PageSpec()
+            return FeaturePage(items=(), total=0, page=p.page, per_page=p.per_page)
+        return self._build_page(self._pointer_run_id, page)
+
+    def query_run(self, run_id, filters=None, sort=None, page=None) -> FeaturePage:
+        # Note: real impl validates via FeatureRun table lookup. This fake
+        # is lenient — returns empty page for unknown run_ids (like scanning
+        # fakes).  Use the real repo + in-memory SQLite for not-found tests.
+        return self._build_page(run_id, page)
+
+    def get_run_dq_inputs(self, run_id: int) -> DQInputs:
+        rows = self._rows.get(run_id, [])
+        universe = self._universe.get(run_id, [])
+        result_symbols = tuple(r.symbol for r in rows)
+        scores = tuple(r.composite_score for r in rows if r.composite_score is not None)
+        ratings = tuple(r.overall_rating for r in rows if r.overall_rating is not None)
+        null_count = sum(1 for r in rows if r.composite_score is None)
+        return DQInputs(
+            expected_row_count=len(universe),
+            actual_row_count=len(rows),
+            null_score_count=null_count,
+            total_row_count=len(rows),
+            scores=scores,
+            ratings=ratings,
+            universe_symbols=tuple(universe),
+            result_symbols=result_symbols,
+        )
+
+    def get_row_by_symbol(self, run_id: int, symbol: str) -> FeatureRow | None:
+        for r in self._rows.get(run_id, []):
+            if r.symbol.upper() == symbol.upper():
+                return r
+        return None
+
+    def get_scores_for_run(
+        self, run_id: int
+    ) -> dict[str, tuple[float | None, int | None]]:
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        return {
+            r.symbol: (r.composite_score, r.overall_rating)
+            for r in self._rows[run_id]
+        }
+
+    def query_run_as_scan_results(
+        self,
+        run_id,
+        spec,
+        *,
+        include_sparklines=True,
+        include_setup_payload=True,
+    ):
+        """Bridge method for dual-source tests."""
+        self.last_query_run_as_scan_results_args = {
+            "run_id": run_id,
+            "spec": spec,
+            "include_sparklines": include_sparklines,
+            "include_setup_payload": include_setup_payload,
+        }
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        rows = self._rows[run_id]
+        items = tuple(
+            _make_scan_result_from_feature_row(r)
+            for r in rows
+        )
+        p = spec.page
+        start = p.offset
+        end = start + p.limit
+        page_items = items[start:end]
+        return ResultPage(
+            items=page_items,
+            total=len(items),
+            page=p.page,
+            per_page=p.per_page,
+        )
+
+    def get_filter_options_for_run(self, run_id):
+        """Bridge method: return distinct filter values for a run."""
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        from app.domain.feature_store.models import INT_TO_RATING
+
+        rows = self._rows[run_id]
+        ratings = set()
+        industries = set()
+        sectors = set()
+        for r in rows:
+            if r.overall_rating is not None and r.overall_rating in INT_TO_RATING:
+                ratings.add(INT_TO_RATING[r.overall_rating])
+            d = r.details or {}
+            if d.get("ibd_industry_group"):
+                industries.add(d["ibd_industry_group"])
+            if d.get("gics_sector"):
+                sectors.add(d["gics_sector"])
+        return FilterOptions(
+            ibd_industries=tuple(sorted(industries)),
+            gics_sectors=tuple(sorted(sectors)),
+            ratings=tuple(sorted(ratings)),
+        )
+
+    def get_by_symbol_for_run(
+        self,
+        run_id,
+        symbol,
+        *,
+        include_sparklines=True,
+        include_setup_payload=True,
+    ):
+        """Bridge method: look up a single symbol in a run."""
+        self.last_get_by_symbol_for_run_args = {
+            "run_id": run_id,
+            "symbol": symbol,
+            "include_sparklines": include_sparklines,
+            "include_setup_payload": include_setup_payload,
+        }
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        for r in self._rows[run_id]:
+            if r.symbol == symbol:
+                return _make_scan_result_from_feature_row(r)
+        return None
+
+    def get_peers_by_industry_for_run(self, run_id, ibd_industry_group):
+        """Bridge method: return peers in the same IBD industry group."""
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        return tuple(
+            _make_scan_result_from_feature_row(r)
+            for r in self._rows[run_id]
+            if (r.details or {}).get("ibd_industry_group") == ibd_industry_group
+        )
+
+    def get_peers_by_sector_for_run(self, run_id, gics_sector):
+        """Bridge method: return peers in the same GICS sector."""
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        return tuple(
+            _make_scan_result_from_feature_row(r)
+            for r in self._rows[run_id]
+            if (r.details or {}).get("gics_sector") == gics_sector
+        )
+
+    def query_all_as_scan_results(self, run_id, filters, sort, *, include_sparklines=False):
+        """Bridge method: return all rows as ScanResultItemDomain (no pagination)."""
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        return tuple(
+            _make_scan_result_from_feature_row(r)
+            for r in self._rows[run_id]
+        )
+
+    def query_run_symbols(self, run_id, filters, sort, page=None):
+        self.last_query_run_symbols_args = {
+            "run_id": run_id,
+            "filters": filters,
+            "sort": sort,
+            "page": page,
+        }
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        symbols = tuple(r.symbol for r in self._rows[run_id])
+        if page is not None:
+            symbols = symbols[page.offset : page.offset + page.limit]
+        return symbols, len(self._rows[run_id])
+
+    def query_run_details(
+        self,
+        run_id,
+        filters=None,
+        *,
+        symbols=None,
+    ):
+        """Bridge method: return ``(symbol, details_json)`` pairs from a run.
+
+        The real repo applies ``FilterSpec`` constraints in SQL; this fake
+        applies a small subset (range filters on either ``composite_score``
+        or JSON fields, plus categorical/boolean) in Python so use case
+        tests can exercise the compile path end-to-end without a DB.
+        """
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+
+        rows = list(self._rows[run_id])
+
+        if symbols is not None:
+            allow = {
+                str(s).strip().upper() for s in symbols if str(s).strip()
+            }
+            rows = [r for r in rows if r.symbol.upper() in allow]
+
+        def _value(row, field: str):
+            if field == "composite_score":
+                return row.composite_score
+            if field == "overall_rating":
+                return row.overall_rating
+            if field == "passes_count":
+                return row.passes_count
+            if field == "symbol":
+                return row.symbol
+            details = row.details or {}
+            return details.get(field) if isinstance(details, dict) else None
+
+        if filters is not None:
+            from app.domain.common.query import FilterMode
+
+            filtered: list = []
+            for row in rows:
+                ok = True
+                for rf in filters.range_filters:
+                    val = _value(row, rf.field)
+                    if val is None:
+                        ok = False
+                        break
+                    try:
+                        numeric = float(val)
+                    except (TypeError, ValueError):
+                        ok = False
+                        break
+                    if rf.min_value is not None and numeric < float(rf.min_value):
+                        ok = False
+                        break
+                    if rf.max_value is not None and numeric > float(rf.max_value):
+                        ok = False
+                        break
+                if not ok:
+                    continue
+                for cf in filters.categorical_filters:
+                    val = _value(row, cf.field)
+                    in_values = val in cf.values
+                    if cf.mode == FilterMode.EXCLUDE:
+                        if in_values:
+                            ok = False
+                            break
+                    else:
+                        if not in_values:
+                            ok = False
+                            break
+                if not ok:
+                    continue
+                for bf in filters.boolean_filters:
+                    val = _value(row, bf.field)
+                    if val is None or bool(val) != bf.value:
+                        ok = False
+                        break
+                if not ok:
+                    continue
+                filtered.append(row)
+            rows = filtered
+
+        return [
+            (row.symbol, dict(row.details) if isinstance(row.details, dict) else {})
+            for row in rows
+        ]
+
+    def get_setup_payload_for_run(self, run_id, symbol):
+        self.last_get_setup_payload_for_run_args = {
+            "run_id": run_id,
+            "symbol": symbol,
+        }
+        if run_id not in self._rows:
+            raise EntityNotFoundError("FeatureRun", run_id)
+        for row in self._rows[run_id]:
+            if row.symbol == symbol:
+                se = (row.details or {}).get("setup_engine", {}) if isinstance(row.details, dict) else {}
+                if not isinstance(se, dict):
+                    se = {}
+                return {
+                    "se_explain": se.get("explain"),
+                    "se_candidates": se.get("candidates"),
+                }
+        return None
+
+    def _build_page(self, run_id: int, page: PageSpec | None) -> FeaturePage:
+        p = page or PageSpec()
+        all_rows = self._rows.get(run_id, [])
+        items = tuple(all_rows[p.offset : p.offset + p.limit])
+        return FeaturePage(items=items, total=len(all_rows), page=p.page, per_page=p.per_page)
+
+
+# ---------------------------------------------------------------------------
+# Fake unit of work
+# ---------------------------------------------------------------------------
+
+
+class FakeUnitOfWork(UnitOfWork):
+    """In-memory UoW wiring up all fake repositories.
+
+    Accepts any repository subclass for maximum test flexibility.
+    """
+
+    def __init__(
+        self,
+        *,
+        scans: ScanRepository | None = None,
+        scan_results: ScanResultRepository | None = None,
+        universe: UniverseRepository | None = None,
+        feature_runs: FeatureRunRepository | None = None,
+        feature_store: FeatureStoreRepository | None = None,
+    ) -> None:
+        self.scans = scans or FakeScanRepository()
+        self.scan_results = scan_results or FakeScanResultRepository()
+        self.universe = universe or FakeUniverseRepository()
+        self.feature_runs = feature_runs or FakeFeatureRunRepository()
+        self.feature_store = feature_store or FakeFeatureStoreRepository()
+        self.committed = 0
+        self.rolled_back = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self.rollback()
+
+    def commit(self):
+        self.committed += 1
+
+    def rollback(self):
+        self.rolled_back += 1
+
+
+# ---------------------------------------------------------------------------
+# Domain object helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_scan_result_from_feature_row(row: FeatureRow) -> ScanResultItemDomain:
+    """Convert a FeatureRow to a ScanResultItemDomain for fake bridge method.
+
+    Propagates all metric/classification fields from details to
+    extended_fields, matching the real SqlFeatureStoreRepository bridge
+    method behaviour.
+    """
+    from app.domain.feature_store.models import INT_TO_RATING
+
+    d = row.details or {}
+    raw_score = row.composite_score
+    clamped = None if raw_score is None else max(0.0, min(100.0, float(raw_score)))
+    rating = INT_TO_RATING.get(row.overall_rating, d.get("rating", "Pass"))
+    extended: dict[str, Any] = {"company_name": f"{row.symbol} Inc"}
+    # Propagate all metric/classification fields (skip keys consumed elsewhere)
+    _SKIP_KEYS = {
+        "screeners_run", "composite_method", "screeners_passed",
+        "screeners_total", "current_price", "rating", "composite_score",
+        "details",
+    }
+    for key, val in d.items():
+        if key not in _SKIP_KEYS:
+            extended[key] = val
+    return ScanResultItemDomain(
+        symbol=row.symbol,
+        composite_score=clamped,
+        rating=rating,
+        current_price=d.get("current_price"),
+        screener_outputs={},
+        screeners_run=d.get("screeners_run", []),
+        composite_method=d.get("composite_method", "weighted_average"),
+        screeners_passed=d.get("screeners_passed", 0),
+        screeners_total=d.get("screeners_total", 0),
+        extended_fields=extended,
+    )
+
+
+def make_domain_item(
+    symbol: str = "AAPL",
+    score: float | None = 85.0,
+    **extra_extended_fields: Any,
+) -> ScanResultItemDomain:
+    """Construct a ``ScanResultItemDomain`` with sensible defaults."""
+    ef: dict[str, Any] = {"company_name": f"{symbol} Inc"}
+    ef.update(extra_extended_fields)
+    return ScanResultItemDomain(
+        symbol=symbol,
+        composite_score=score,
+        rating="Buy",
+        current_price=150.0,
+        screener_outputs={},
+        screeners_run=["minervini"],
+        composite_method="weighted_average",
+        screeners_passed=1,
+        screeners_total=1,
+        extended_fields=ef,
+    )
+
+
+def setup_scan(uow: FakeUnitOfWork, scan_id: str = "scan-123") -> None:
+    """Pre-populate a scan record so the use case doesn't raise NotFound."""
+    uow.scans.create(scan_id=scan_id, status="completed")
+
+
+# ---------------------------------------------------------------------------
+# pytest fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_uow() -> FakeUnitOfWork:
+    return FakeUnitOfWork()
+
+
+@pytest.fixture
+def fake_scanner() -> FakeScanner:
+    return FakeScanner()
+
+
+@pytest.fixture
+def fake_progress() -> FakeProgressSink:
+    return FakeProgressSink()
+
+
+@pytest.fixture
+def fake_cancel() -> FakeCancellationToken:
+    return FakeCancellationToken()
+
+
+@pytest.fixture
+def fake_dispatcher() -> FakeTaskDispatcher:
+    return FakeTaskDispatcher()
+
+
+@pytest.fixture
+def fake_stock_data_provider() -> FakeStockDataProvider:
+    return FakeStockDataProvider()

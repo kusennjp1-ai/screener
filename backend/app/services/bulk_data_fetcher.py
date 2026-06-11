@@ -1,0 +1,1243 @@
+"""
+Bulk data fetcher for Yahoo-first batch price ingestion.
+
+Scheduled/background price ingestion must use batched ``yf.download()`` only.
+Per-symbol Yahoo metadata/history fetches remain legacy fallback tools and are
+not used by the hot-path price refresh jobs.
+
+Canonical price contract ADR:
+docs/learning_loop/adr_ll2_e1_canonical_price_contract_v1.md
+"""
+import logging
+import math
+from collections.abc import Callable
+from typing import TYPE_CHECKING, List, Dict, Optional, Any, NamedTuple
+from threading import RLock
+import yfinance as yf
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+
+from ..config import settings
+from ..domain.providers.price_symbol_support import yahoo_price_no_data_error_for_symbol
+from .growth_cadence_service import compute_cadence_aware_growth
+from .price_fetch_failures import (
+    PriceFetchFailureKind,
+    classify_price_fetch_error,
+    is_no_data_price_failure,
+    is_rate_limit_error,
+    is_retryable_price_failure,
+    normalize_price_fetch_failure_kind,
+)
+
+if TYPE_CHECKING:
+    from .eps_rating_service import EPSRatingService
+    from .rate_limiter import RedisRateLimiter
+
+logger = logging.getLogger(__name__)
+
+
+class _PriceFailureMetric(NamedTuple):
+    provider_signal_count: int
+    transient_failure_rate: float
+
+
+def _finite_or_none(value: Any) -> Any:
+    """Return ``None`` when ``value`` is NaN/inf; otherwise pass through.
+    Yahoo ``.info`` can return ``float('nan')`` for delisted or illiquid
+    tickers, and NaN survives ``is not None`` checks but later breaks FX
+    normalization (``int(nan * rate)`` raises) and JSON serialization."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def _get_yf_session():
+    """Return the process-wide curl_cffi session (or ``None`` to fall back).
+
+    Centralised here so both ``yf.download`` and ``yf.Tickers`` callsites
+    stay in sync. Returns ``None`` when curl_cffi is unavailable or
+    disabled — callers must not pass a ``None`` session to yfinance, so
+    construct kwargs conditionally.
+    """
+    try:
+        from .yf_session import get_session
+        return get_session()
+    except Exception as exc:
+        logger.debug("yf_session import/get failed: %s", exc)
+        return None
+
+
+def _new_yf_tickers(symbols_str: str):
+    """Construct a ``yf.Tickers`` instance, attaching the curl_cffi session
+    when available. yfinance's older versions don't accept ``session`` on
+    Tickers; the try/except keeps us compatible with both."""
+    session = _get_yf_session()
+    if session is not None:
+        try:
+            return yf.Tickers(symbols_str, session=session)
+        except TypeError:
+            # Older yfinance: no session kwarg on Tickers; fall through.
+            pass
+    return yf.Tickers(symbols_str)
+
+
+class BulkDataFetcher:
+    """
+    Fetch data for multiple stocks efficiently using ``yf.download()``.
+    """
+
+    DEFAULT_PRICE_BATCH_SIZE = 100
+    MAX_PRICE_BATCH_SIZE = 200
+    MIN_PRICE_BATCH_SIZE = 25
+    PRICE_BATCH_GROWTH_STEP = 25
+    PRICE_BATCH_SUCCESS_STREAK_TO_GROW = 5
+    PRICE_BATCH_GROWTH_COOLDOWN_BATCHES = 3
+    PRICE_BATCH_RETRY_BACKOFF_SECONDS = (30, 60, 120)
+    _fallback_lock = RLock()
+    _fallback_rate_limiter: "RedisRateLimiter | None" = None
+
+    def __init__(
+        self,
+        *,
+        rate_limiter: "RedisRateLimiter | None" = None,
+        eps_rating_service: "EPSRatingService | None" = None,
+        cn_price_service: Any | None = None,
+        krx_price_service: Any | None = None,
+    ) -> None:
+        # Keep standalone construction safe for tests/scripts while allowing
+        # process-scoped injection from runtime wiring where needed.
+        self._rate_limiter = rate_limiter or self._get_fallback_rate_limiter()
+        self._eps_rating_service = (
+            eps_rating_service or self._build_default_eps_rating_service()
+        )
+        self._cn_price_service = cn_price_service
+        self._krx_price_service = krx_price_service
+
+    @classmethod
+    def _get_fallback_rate_limiter(cls) -> "RedisRateLimiter":
+        with cls._fallback_lock:
+            if cls._fallback_rate_limiter is None:
+                from .rate_limiter import RedisRateLimiter
+
+                cls._fallback_rate_limiter = RedisRateLimiter()
+            return cls._fallback_rate_limiter
+
+    @staticmethod
+    def _build_default_eps_rating_service() -> "EPSRatingService":
+        from .eps_rating_service import EPSRatingService
+
+        return EPSRatingService()
+
+    @staticmethod
+    def _build_error_result(
+        symbol: str,
+        error: str,
+        *,
+        error_kind: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        result = {
+            'symbol': symbol,
+            'price_data': None,
+            'info': None,
+            'fundamentals': None,
+            'has_error': True,
+            'error': error,
+        }
+        if error_kind:
+            result["error_kind"] = error_kind
+        return result
+
+    @staticmethod
+    def _is_rate_limit_error(error: str) -> bool:
+        return is_rate_limit_error(error)
+
+    @staticmethod
+    def _is_permanent_missing_price_error(error: str) -> bool:
+        return is_no_data_price_failure(error)
+
+    @staticmethod
+    def _price_error_kind(error: str) -> Optional[str]:
+        kind = classify_price_fetch_error(error)
+        return kind.value if kind is not None else None
+
+    @staticmethod
+    def _yfinance_download_errors(symbols: List[str]) -> Dict[str, str]:
+        shared = getattr(yf, "shared", None)
+        errors = getattr(shared, "_ERRORS", None)
+        if not isinstance(errors, dict):
+            return {}
+        return {
+            symbol: str(errors[symbol])
+            for symbol in symbols
+            if symbol in errors and errors[symbol]
+        }
+
+    @classmethod
+    def _split_fetchable_price_symbols(
+        cls,
+        symbols: List[str],
+    ) -> tuple[List[str], Dict[str, Dict[str, Any]]]:
+        fetchable: List[str] = []
+        permanent_failures: Dict[str, Dict[str, Any]] = {}
+        for symbol in symbols:
+            error = yahoo_price_no_data_error_for_symbol(symbol)
+            if error is None:
+                fetchable.append(symbol)
+                continue
+            permanent_failures[symbol] = cls._build_error_result(
+                symbol,
+                error,
+                error_kind=PriceFetchFailureKind.NO_PRICE_DATA.value,
+            )
+        return fetchable, permanent_failures
+
+    def _price_failure_metric(
+        self,
+        results: Dict[str, Dict[str, Any]],
+    ) -> _PriceFailureMetric:
+        if not results:
+            return _PriceFailureMetric(
+                provider_signal_count=1,
+                transient_failure_rate=1.0,
+            )
+
+        provider_signal_count = 0
+        transient_failures = 0
+        for data in results.values():
+            error = data.get("error", "")
+            error_kind = normalize_price_fetch_failure_kind(data.get("error_kind"))
+            if not is_retryable_price_failure(kind=error_kind, error=error):
+                continue
+            provider_signal_count += 1
+            if not data.get("has_error"):
+                continue
+            if (
+                (error_kind is not None and error_kind.value in {"rate_limit", "transient"})
+                or self._is_rate_limit_error(error)
+                or "empty" in error.lower()
+            ):
+                transient_failures += 1
+        if provider_signal_count == 0:
+            return _PriceFailureMetric(
+                provider_signal_count=0,
+                transient_failure_rate=0.0,
+            )
+        return _PriceFailureMetric(
+            provider_signal_count=provider_signal_count,
+            transient_failure_rate=transient_failures / provider_signal_count,
+        )
+
+    def fetch_batch_data(
+        self,
+        symbols: List[str],
+        period: str = '2y',
+        include_fundamentals: bool = True,
+        delay_per_ticker: float = 0.0
+    ) -> Dict[str, Dict]:
+        """
+        Deprecated compatibility wrapper for legacy bulk price callers.
+
+        Scheduled/background jobs must not request fundamentals through this path.
+        """
+        if not symbols:
+            return {}
+
+        if include_fundamentals:
+            raise RuntimeError(
+                "Bulk fundamentals fetching through fetch_batch_data() is disabled. "
+                "Use the provider snapshot pipeline or explicit single-symbol fallback."
+            )
+
+        logger.warning(
+            "fetch_batch_data() is deprecated for scheduled price ingestion. "
+            "Delegating to fetch_prices_in_batches() for %d symbols.",
+            len(symbols),
+        )
+        return self.fetch_prices_in_batches(symbols, period=period)
+
+    @staticmethod
+    def _read_fast_info_market_state(
+        ticker: Any,
+    ) -> tuple[Optional[int], Optional[int], Optional[float]]:
+        """Return ``(market_cap, shares, last_price)`` from ``ticker.fast_info``
+        via a second Yahoo endpoint used only as a fallback when ``.info`` is
+        truncated. Each field is parsed independently so a malformed value on
+        one (e.g. NaN market_cap) does not discard valid fallbacks for the
+        others."""
+        if ticker is None:
+            return None, None, None
+        try:
+            fi = getattr(ticker, "fast_info", None)
+        except Exception as exc:
+            logger.debug("fast_info attribute access failed: %s", exc)
+            return None, None, None
+        if fi is None:
+            return None, None, None
+
+        def _coerce_int(attr: str) -> Optional[int]:
+            try:
+                value = getattr(fi, attr, None)
+                if value is None:
+                    return None
+                return int(round(value))
+            except Exception as exc:
+                logger.debug("fast_info.%s read failed: %s", attr, exc)
+                return None
+
+        def _coerce_float(attr: str) -> Optional[float]:
+            try:
+                value = getattr(fi, attr, None)
+                if value is None:
+                    return None
+                result = float(value)
+                if math.isnan(result) or math.isinf(result):
+                    return None
+                return result
+            except Exception as exc:
+                logger.debug("fast_info.%s read failed: %s", attr, exc)
+                return None
+
+        return _coerce_int("market_cap"), _coerce_int("shares"), _coerce_float("last_price")
+
+    def _extract_fundamentals(self, ticker: Any, info: Dict) -> Dict:
+        if info is None:
+            info = {}
+
+        # Reject NaN/inf from .info (common for delisted/illiquid tickers) up
+        # front so they don't bypass the fast_info fallback or later poison
+        # FX normalization when persisted.
+        info_market_cap = _finite_or_none(info.get("marketCap"))
+        info_shares = _finite_or_none(info.get("sharesOutstanding"))
+        info_current_price = _finite_or_none(info.get("currentPrice"))
+        info_price = (
+            info_current_price
+            if info_current_price is not None
+            else _finite_or_none(info.get("regularMarketPrice"))
+        )
+        fast_market_cap = fast_shares = fast_last_price = None
+        if info_market_cap is None or info_shares is None or info_price is None:
+            fast_market_cap, fast_shares, fast_last_price = (
+                self._read_fast_info_market_state(ticker)
+            )
+
+        # Explicit None-coalesce so a legitimate 0 from .info is preserved
+        # instead of falling through to fast_info (or dropping to None and
+        # later skipping the DB write via _assign_if_present).
+        market_cap_value = info_market_cap if info_market_cap is not None else fast_market_cap
+        shares_value = info_shares if info_shares is not None else fast_shares
+        current_price_value = info_price if info_price is not None else fast_last_price
+
+        fundamentals = {
+            # Market data
+            'market_cap': market_cap_value,
+            'enterprise_value': info.get('enterpriseValue'),
+            'shares_outstanding': shares_value,
+            'shares_float': info.get('floatShares'),
+
+            # Valuation metrics
+            'pe_ratio': info.get('trailingPE'),
+            'forward_pe': info.get('forwardPE'),
+            'peg_ratio': info.get('pegRatio'),
+            'price_to_book': info.get('priceToBook'),
+            'price_to_sales': info.get('priceToSalesTrailing12Months'),
+            'ev_sales': info.get('enterpriseToRevenue'),
+            'ev_ebitda': info.get('enterpriseToEbitda'),
+
+            # Profitability metrics
+            'eps_current': info.get('trailingEps'),
+            'forward_eps': info.get('forwardEps'),
+            'roe': self._convert_to_percentage(info.get('returnOnEquity')),
+            'roa': self._convert_to_percentage(info.get('returnOnAssets')),
+            'profit_margin': self._convert_to_percentage(info.get('profitMargins')),
+            'operating_margin': self._convert_to_percentage(info.get('operatingMargins')),
+            'gross_margin': self._convert_to_percentage(info.get('grossMargins')),
+
+            # Growth metrics (as percentages)
+            'revenue_growth': self._convert_to_percentage(info.get('revenueGrowth')),
+            'earnings_growth': self._convert_to_percentage(info.get('earningsGrowth')),
+            'earnings_quarterly_growth': self._convert_to_percentage(info.get('earningsQuarterlyGrowth')),
+
+            # Revenue
+            'revenue_current': info.get('totalRevenue'),
+            'net_income': info.get('netIncomeToCommon'),
+
+            # Dividend metrics
+            'dividend_ttm': info.get('dividendRate'),
+            'dividend_yield': self._convert_to_percentage(info.get('dividendYield')),
+            'payout_ratio': self._convert_to_percentage(info.get('payoutRatio')),
+
+            # Financial health
+            'current_ratio': info.get('currentRatio'),
+            'quick_ratio': info.get('quickRatio'),
+            'debt_to_equity': info.get('debtToEquity'),
+            'total_cash': info.get('totalCash'),
+            'total_debt': info.get('totalDebt'),
+            'free_cashflow': info.get('freeCashflow'),
+            'operating_cashflow': info.get('operatingCashflow'),
+
+            # Ownership (convert to percentage)
+            'institutional_ownership': self._convert_to_percentage(info.get('heldPercentInstitutions')),
+            'insider_ownership': self._convert_to_percentage(info.get('heldPercentInsiders')),
+
+            # Stock info
+            'beta': info.get('beta'),
+            'week_52_high': info.get('fiftyTwoWeekHigh'),
+            'week_52_low': info.get('fiftyTwoWeekLow'),
+            'avg_volume': info.get('averageVolume'),
+            'avg_volume_10d': info.get('averageVolume10days'),
+            'current_price': current_price_value,
+
+            # Company info
+            'sector': info.get('sector'),
+            'industry': info.get('industry'),
+            'employees': info.get('fullTimeEmployees'),
+            'country': info.get('country'),
+
+            # Analyst info
+            'target_price': info.get('targetMeanPrice'),
+            'recommendation': info.get('recommendationKey'),
+
+            # Company description
+            'description_yfinance': info.get('longBusinessSummary'),
+
+            # Mark data source
+            'data_source': 'yfinance',
+            'data_source_timestamp': datetime.utcnow().isoformat(),
+        }
+
+        # Remove None values to save space
+        return {k: v for k, v in fundamentals.items() if v is not None}
+
+    def _convert_to_percentage(self, value: Optional[float]) -> Optional[float]:
+        """Convert decimal to percentage (0.15 -> 15.0)."""
+        if value is None:
+            return None
+        return round(value * 100, 2)
+
+    def _extract_quarterly_growth(
+        self,
+        ticker,
+        *,
+        market: str | None = None,
+    ) -> Dict[str, Optional[float]]:
+        """
+        Extract cadence-aware growth metrics from ticker income statement.
+
+        Args:
+            ticker: yfinance Ticker object
+            market: Optional market code for cadence-aware basis selection.
+
+        Returns:
+            Dict with quarterly growth metrics
+        """
+        try:
+            quarterly_income = ticker.quarterly_income_stmt
+            return compute_cadence_aware_growth(quarterly_income, market=market)
+
+        except Exception as e:
+            logger.debug(f"Error extracting quarterly growth: {e}")
+            return compute_cadence_aware_growth(None, market=market)
+
+    def _extract_eps_rating_data(self, ticker) -> Dict[str, Optional[float]]:
+        """
+        Extract EPS rating data from ticker's annual and quarterly income statements.
+
+        Uses EPSRatingService to calculate:
+        - 5-year CAGR from annual income statement
+        - Q1 and Q2 YoY growth from quarterly income statement
+        - Raw composite score
+
+        Args:
+            ticker: yfinance Ticker object
+
+        Returns:
+            Dict with EPS rating components:
+            {
+                'eps_5yr_cagr': float or None,
+                'eps_q1_yoy': float or None,
+                'eps_q2_yoy': float or None,
+                'eps_raw_score': float or None,
+                'eps_years_available': int
+            }
+        """
+        result = {
+            'eps_5yr_cagr': None,
+            'eps_q1_yoy': None,
+            'eps_q2_yoy': None,
+            'eps_raw_score': None,
+            'eps_years_available': 0
+        }
+
+        try:
+            # Get annual income statement (for 5-year CAGR)
+            annual_income = ticker.income_stmt
+
+            # Get quarterly income statement (for YoY comparisons)
+            quarterly_income = ticker.quarterly_income_stmt
+
+            # Use EPS rating service to calculate all components
+            eps_data = self._eps_rating_service.calculate_eps_rating_data(
+                annual_income,
+                quarterly_income
+            )
+
+            result.update(eps_data)
+            logger.debug(f"Extracted EPS rating data: CAGR={result['eps_5yr_cagr']}, Q1={result['eps_q1_yoy']}, Q2={result['eps_q2_yoy']}")
+
+        except Exception as e:
+            logger.debug(f"Error extracting EPS rating data: {e}")
+
+        return result
+
+    def fetch_batch_prices(
+        self,
+        symbols: List[str],
+        period: str = '2y',
+    ) -> Dict[str, Dict]:
+        """
+        Fetch price data for multiple symbols using yf.download() (single HTTP request).
+
+        This is significantly faster than fetch_batch_data() which calls ticker.history()
+        per symbol with per-ticker delays. yf.download() batches all symbols into one
+        request and returns data for all tickers at once.
+
+        Args:
+            symbols: List of ticker symbols to fetch
+            period: Time period for historical data (default: 2y)
+
+        Returns:
+            Dict mapping symbols to their data:
+            {
+                'AAPL': {
+                    'symbol': 'AAPL',
+                    'price_data': pd.DataFrame,
+                    'info': None,
+                    'fundamentals': None,
+                    'has_error': False
+                },
+                ...
+            }
+        """
+        if not symbols:
+            return {}
+
+        fetch_symbols, results = self._split_fetchable_price_symbols(symbols)
+        if not fetch_symbols:
+            return results
+
+        logger.info(
+            "Batch fetching prices for %d symbols using yf.download()",
+            len(fetch_symbols),
+        )
+
+        try:
+            # yf.download with group_by='ticker' returns MultiIndex columns: (ticker, OHLCV)
+            # threads=False avoids threading issues inside Celery workers
+            # progress=False suppresses the tqdm progress bar
+            download_kwargs = dict(
+                tickers=fetch_symbols,
+                period=period,
+                group_by='ticker',
+                threads=False,
+                progress=False,
+                auto_adjust=False,
+                actions=True,
+            )
+            session = _get_yf_session()
+            if session is not None:
+                download_kwargs["session"] = session
+            raw = yf.download(**download_kwargs)
+            download_errors = self._yfinance_download_errors(fetch_symbols)
+
+            if raw is None or raw.empty:
+                logger.warning("yf.download returned empty DataFrame")
+                for symbol in fetch_symbols:
+                    error = download_errors.get(symbol) or "yf.download returned empty"
+                    results[symbol] = self._build_error_result(
+                        symbol,
+                        error,
+                        error_kind=self._price_error_kind(error),
+                    )
+                return results
+
+            # Single symbol: yf.download returns flat columns (Open, High, etc.)
+            # Multi-symbol: returns MultiIndex columns (AAPL/Open, AAPL/High, etc.)
+            if len(fetch_symbols) == 1:
+                symbol = fetch_symbols[0]
+                df = raw.copy()
+                if df is not None and not df.empty:
+                    results[symbol] = {
+                        'symbol': symbol, 'price_data': df, 'info': None,
+                        'fundamentals': None, 'has_error': False, 'error': None
+                    }
+                else:
+                    error = download_errors.get(symbol) or 'No data returned'
+                    results[symbol] = self._build_error_result(
+                        symbol,
+                        error,
+                        error_kind=self._price_error_kind(error),
+                    )
+            else:
+                # Multi-symbol: split by ticker
+                for symbol in fetch_symbols:
+                    try:
+                        if symbol in raw.columns.get_level_values(0):
+                            df = raw[symbol].copy()
+                            # Drop rows where all values are NaN (symbol had no data for that date)
+                            df = df.dropna(how='all')
+                            if not df.empty:
+                                results[symbol] = {
+                                    'symbol': symbol, 'price_data': df, 'info': None,
+                                    'fundamentals': None, 'has_error': False, 'error': None
+                                }
+                            else:
+                                error = download_errors.get(symbol) or 'No data after filtering NaN rows'
+                                results[symbol] = self._build_error_result(
+                                    symbol,
+                                    error,
+                                    error_kind=self._price_error_kind(error),
+                                )
+                        else:
+                            error = download_errors.get(symbol) or 'Symbol not in download results'
+                            results[symbol] = self._build_error_result(
+                                symbol,
+                                error,
+                                error_kind=self._price_error_kind(error),
+                            )
+                    except Exception as e:
+                        logger.warning(f"Error extracting {symbol} from download: {e}")
+                        error = str(e)
+                        results[symbol] = self._build_error_result(
+                            symbol,
+                            error,
+                            error_kind=self._price_error_kind(error),
+                        )
+
+            success = len([r for r in results.values() if not r['has_error']])
+            failed = len(results) - success
+            logger.info(f"Batch price download: {success} successful, {failed} failed")
+
+            # Add missing symbols as errors
+            for symbol in fetch_symbols:
+                if symbol not in results:
+                    error = download_errors.get(symbol) or 'Missing from results'
+                    results[symbol] = self._build_error_result(
+                        symbol,
+                        error,
+                        error_kind=self._price_error_kind(error),
+                    )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"yf.download batch failed: {e}", exc_info=True)
+            error = f"Batch download error: {str(e)}"
+            failed_results = {
+                symbol: self._build_error_result(
+                    symbol,
+                    error,
+                    error_kind=self._price_error_kind(error),
+                )
+                for symbol in fetch_symbols
+            }
+            return {**results, **failed_results}
+
+    def fetch_prices_in_batches(
+        self,
+        symbols: List[str],
+        period: str = '2y',
+        start_batch_size: Optional[int] = None,
+        market: Optional[str] = None,
+    ) -> Dict[str, Dict]:
+        """Fetch prices for many symbols using market-aware batch routing.
+
+        Background jobs should call this method instead of any per-symbol Yahoo path.
+        Provider order, fallback eligibility, and default batch size come from
+        ``ProviderDataPlanRegistry`` for the ``prices`` dataset.
+
+        When ``market`` is supplied, per-market rate budget keys
+        (``yfinance:hk`` / ``yfinance:batch:hk``) and backoff schedules still
+        apply, while the plan supplies the default batch size.
+        """
+        if not symbols:
+            return {}
+
+        from .provider_adapters.price_plan_executor import PriceProviderPlanExecutor
+
+        return PriceProviderPlanExecutor(self).fetch(
+            symbols,
+            period=period,
+            start_batch_size=start_batch_size,
+            market=market,
+        )
+
+    def _get_cn_price_service(self):
+        if self._cn_price_service is None:
+            from .cn_market_data_service import CnMarketDataService
+
+            self._cn_price_service = CnMarketDataService()
+        return self._cn_price_service
+
+    def _fetch_cn_price_batch(self, symbols: List[str], *, period: str) -> Dict[str, Dict]:
+        from .security_master_service import security_master_resolver
+
+        service = self._get_cn_price_service()
+        results: Dict[str, Dict] = {}
+        for symbol in symbols:
+            try:
+                identity = security_master_resolver.resolve_identity(symbol=symbol, market="CN")
+                price_data = service.daily_ohlcv_dataframe(identity.local_code, period=period)
+                if price_data is None or price_data.empty:
+                    results[symbol] = self._build_error_result(symbol, "CN providers returned empty price data")
+                    continue
+                results[symbol] = {
+                    "symbol": symbol,
+                    "price_data": price_data,
+                    "info": None,
+                    "fundamentals": None,
+                    "has_error": False,
+                    "error": None,
+                    "provider": "akshare",
+                }
+            except Exception as exc:  # pragma: no cover - provider/network variability
+                logger.warning("CN price fetch failed for %s: %s", symbol, exc)
+                results[symbol] = self._build_error_result(
+                    symbol,
+                    f"CN price fetch error: {exc}",
+                )
+        return results
+
+    def _fetch_yfinance_prices_in_batches(
+        self,
+        symbols: List[str],
+        *,
+        period: str,
+        start_batch_size: Optional[int] = None,
+        market: Optional[str] = None,
+    ) -> Dict[str, Dict]:
+        fetch_symbols, combined_results = self._split_fetchable_price_symbols(
+            symbols
+        )
+        if not fetch_symbols:
+            return combined_results
+
+        # Per-market initial batch size from RateBudgetPolicy when caller
+        # didn't pass an explicit ``start_batch_size``.
+        if start_batch_size is None and market is not None:
+            from .rate_budget_policy import get_rate_budget_policy
+            start_batch_size = get_rate_budget_policy().get_batch_size("yfinance", market)
+
+        from .provider_circuit_breaker import get_circuit_breaker
+        breaker = get_circuit_breaker()
+
+        batch_size = max(
+            self.MIN_PRICE_BATCH_SIZE,
+            min(start_batch_size or self.DEFAULT_PRICE_BATCH_SIZE, self.MAX_PRICE_BATCH_SIZE),
+        )
+        success_streak = 0
+        growth_cooldown_remaining = 0
+        batch_start = 0
+        while batch_start < len(fetch_symbols):
+            # Bail out early when the per-market circuit is open — no point
+            # spinning through 30+ second internal retries when we know the
+            # provider is throttling this market.
+            if market is not None and breaker.check("yfinance", market) == "open":
+                logger.warning(
+                    "Yahoo circuit open for market=%s; aborting price fetch "
+                    "(remaining %d/%d symbols)",
+                    market,
+                    len(fetch_symbols) - batch_start,
+                    len(fetch_symbols),
+                )
+                for symbol in fetch_symbols[batch_start:]:
+                    combined_results.setdefault(
+                        symbol,
+                        {**self._build_error_result(symbol, "circuit_open"), "error_kind": "circuit_open"},
+                    )
+                break
+
+            batch_symbols = fetch_symbols[batch_start:batch_start + batch_size]
+            batch_results = self._fetch_price_batch_with_retries(
+                batch_symbols,
+                period=period,
+                initial_batch_size=batch_size,
+                market=market,
+            )
+            combined_results.update(batch_results)
+
+            failure_metric = self._price_failure_metric(batch_results)
+            failure_rate = failure_metric.transient_failure_rate
+            if failure_rate > 0.20:
+                success_streak = 0
+                batch_size = max(self.MIN_PRICE_BATCH_SIZE, batch_size // 2)
+                growth_cooldown_remaining = self.PRICE_BATCH_GROWTH_COOLDOWN_BATCHES
+                # Sustained transient failure → pulse the breaker. Threshold
+                # tripping is done after consecutive batches.
+                breaker.record_429("yfinance", market)
+            elif failure_metric.provider_signal_count > 0:
+                if growth_cooldown_remaining > 0:
+                    growth_cooldown_remaining -= 1
+                if failure_rate < 0.02:
+                    success_streak += 1
+                    breaker.record_success("yfinance", market)
+                    if growth_cooldown_remaining == 0 and success_streak >= self.PRICE_BATCH_SUCCESS_STREAK_TO_GROW:
+                        batch_size = min(
+                            self.MAX_PRICE_BATCH_SIZE,
+                            batch_size + self.PRICE_BATCH_GROWTH_STEP,
+                        )
+                        success_streak = 0
+                else:
+                    success_streak = 0
+
+            if batch_start + len(batch_symbols) < len(fetch_symbols):
+                # Per-market batch interval when market is supplied; falls
+                # back to the legacy global key for shared/unmarked calls.
+                if market is not None:
+                    self._rate_limiter.wait_for_market("yfinance:batch", market)
+                else:
+                    self._rate_limiter.wait(
+                        "yfinance:batch",
+                        min_interval_s=settings.yfinance_batch_rate_limit_interval,
+                    )
+            batch_start += len(batch_symbols)
+
+        return combined_results
+
+    def _get_krx_price_service(self):
+        if self._krx_price_service is None:
+            from .kr_market_data_service import KrxPriceService
+
+            self._krx_price_service = KrxPriceService()
+        return self._krx_price_service
+
+    def _fetch_kr_price_batch(self, symbols: List[str], *, period: str) -> Dict[str, Dict]:
+        from .security_master_service import security_master_resolver
+
+        service = self._get_krx_price_service()
+        results: Dict[str, Dict] = {}
+        for symbol in symbols:
+            try:
+                identity = security_master_resolver.resolve_identity(symbol=symbol, market="KR")
+                price_data = service.daily_ohlcv_dataframe(identity.local_code, period=period)
+                if price_data is None or price_data.empty:
+                    results[symbol] = self._build_error_result(symbol, "KRX returned empty price data")
+                    continue
+                results[symbol] = {
+                    "symbol": symbol,
+                    "price_data": price_data,
+                    "info": None,
+                    "fundamentals": None,
+                    "has_error": False,
+                    "error": None,
+                    "provider": "krx",
+                }
+            except Exception as exc:  # pragma: no cover - provider/network variability
+                logger.warning("KRX price fetch failed for %s: %s", symbol, exc)
+                results[symbol] = self._build_error_result(
+                    symbol,
+                    f"KRX price fetch error: {exc}",
+                )
+        return results
+
+    def _resolve_price_batch_backoff(self, market: Optional[str]) -> tuple[int, ...]:
+        """Return the per-attempt sleep schedule for ``_fetch_price_batch_with_retries``.
+
+        When a market is supplied we derive the schedule from
+        ``RateBudgetPolicy.get_backoff_params`` so India (and other markets
+        with longer Yahoo throttle windows) wait ``60/120/240s`` instead of
+        the legacy ``30/60/120s``. ``market=None`` keeps the legacy schedule
+        for shared/unmarked callers.
+        """
+        if market is None:
+            return self.PRICE_BATCH_RETRY_BACKOFF_SECONDS
+
+        from .rate_budget_policy import get_rate_budget_policy
+
+        params = get_rate_budget_policy().get_backoff_params("yfinance", market)
+        base_s = params.get("base_s", 60)
+        factor = params.get("factor", 2.0)
+        max_s = params.get("max_s", 480)
+        attempts = len(self.PRICE_BATCH_RETRY_BACKOFF_SECONDS)
+        return tuple(
+            min(int(round(base_s * (factor ** attempt))), int(max_s))
+            for attempt in range(attempts)
+        )
+
+    def _fetch_price_batch_with_retries(
+        self,
+        symbols: List[str],
+        *,
+        period: str,
+        initial_batch_size: int,
+        market: Optional[str] = None,
+    ) -> Dict[str, Dict]:
+        """Retry transient batch failures using degraded sub-batches.
+
+        Inter-attempt wait schedule comes from ``RateBudgetPolicy`` when a
+        ``market`` is supplied — IN gets longer backoffs than US — and falls
+        back to the legacy ``PRICE_BATCH_RETRY_BACKOFF_SECONDS`` tuple for
+        callers that don't pass a market.
+        """
+        backoff_schedule = self._resolve_price_batch_backoff(market)
+        current_batch_size = max(
+            self.MIN_PRICE_BATCH_SIZE,
+            min(initial_batch_size, self.MAX_PRICE_BATCH_SIZE),
+        )
+        fetch_symbols, permanent_failures = self._split_fetchable_price_symbols(
+            symbols
+        )
+        if not fetch_symbols:
+            return permanent_failures
+        last_results: Dict[str, Dict] = {
+            **permanent_failures,
+            **{
+                symbol: self._build_error_result(symbol, "Batch not attempted")
+                for symbol in fetch_symbols
+            },
+        }
+
+        for attempt in range(len(backoff_schedule) + 1):
+            fetch_results: Dict[str, Dict] = {}
+            for chunk_start in range(0, len(fetch_symbols), current_batch_size):
+                chunk_symbols = fetch_symbols[chunk_start:chunk_start + current_batch_size]
+                fetch_results.update(self.fetch_batch_prices(chunk_symbols, period=period))
+
+            attempt_results = {**permanent_failures, **fetch_results}
+            last_results = attempt_results
+            failure_metric = self._price_failure_metric(attempt_results)
+            failure_rate = failure_metric.transient_failure_rate
+            if (
+                failure_metric.provider_signal_count == 0
+                or failure_rate <= 0.20
+                or attempt == len(backoff_schedule)
+            ):
+                return attempt_results
+
+            current_batch_size = max(self.MIN_PRICE_BATCH_SIZE, current_batch_size // 2)
+            wait_seconds = backoff_schedule[attempt]
+            logger.warning(
+                "Transient Yahoo batch failure rate %.1f%% for %d symbols (market=%s); "
+                "retrying with batch size %d after %ds (attempt %d/%d)",
+                failure_rate * 100,
+                len(symbols),
+                market or "shared",
+                current_batch_size,
+                wait_seconds,
+                attempt + 1,
+                len(backoff_schedule),
+            )
+            time.sleep(wait_seconds)
+
+        return last_results
+
+    def fetch_batch_with_cache_check(
+        self,
+        symbols: List[str],
+        cached_data: Dict[str, any],
+        period: str = '2y'
+    ) -> Dict[str, Dict]:
+        """
+        Fetch data for symbols, using cached data where available.
+
+        Args:
+            symbols: List of symbols to fetch
+            cached_data: Dict of already cached symbol data
+            period: Time period for historical data
+
+        Returns:
+            Combined dict of cached + freshly fetched data
+        """
+        # Identify which symbols need fetching
+        cache_misses = [s for s in symbols if s not in cached_data or cached_data[s] is None]
+
+        if not cache_misses:
+            logger.info(f"All {len(symbols)} symbols served from cache")
+            return cached_data
+
+        logger.info(
+            f"Cache: {len(symbols) - len(cache_misses)} hits, "
+            f"{len(cache_misses)} misses - fetching {len(cache_misses)} symbols"
+        )
+
+        # Fetch missing symbols in bulk
+        fresh_data = self.fetch_prices_in_batches(cache_misses, period=period)
+
+        # Combine cached and fresh data
+        combined = {**cached_data}
+        combined.update(fresh_data)
+
+        return combined
+
+    def fetch_batch_fundamentals(
+        self,
+        symbols: List[str],
+        batch_size: int | None = None,
+        include_quarterly: bool = True,
+        delay_between_batches: float = 2.0,
+        delay_per_ticker: float = 1.5,
+        market_by_symbol: Optional[Dict[str, str]] = None,
+        market: Optional[str] = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> Dict[str, Dict]:
+        """
+        Fetch fundamentals for multiple symbols efficiently.
+
+        This method is optimized for fundamental data fetching only (no price history),
+        making it much faster for bulk fundamental updates.
+
+        Args:
+            symbols: List of ticker symbols to fetch
+            batch_size: Number of symbols per batch (default 50)
+            include_quarterly: Whether to fetch quarterly growth data (slower but more complete)
+            delay_between_batches: Seconds to wait between batches (default 2.0)
+            delay_per_ticker: Seconds to wait between individual ticker info fetches (default 0.2)
+            market_by_symbol: Optional mapping ``{symbol: market}`` for
+                cadence-aware growth extraction.
+            progress_callback: Optional callback invoked after each yfinance batch
+                as ``(processed_symbols, total_symbols)``.
+
+        Returns:
+            Dict mapping symbols to their fundamental data
+        """
+        if not symbols:
+            return {}
+
+        # Per-market batch sizing + backoff. Policy provides the default when
+        # caller didn't pass an explicit batch_size (None). Explicit values are
+        # honoured as-is, matching the pattern in fetch_prices_in_batches.
+        backoff_base_s = 60
+        backoff_max_s = 480
+        backoff_factor = 2.0
+        if market is not None:
+            from .rate_budget_policy import get_rate_budget_policy
+            _policy = get_rate_budget_policy()
+            if batch_size is None:
+                batch_size = _policy.get_batch_size("yfinance", market)
+            _bp = _policy.get_backoff_params("yfinance", market)
+            backoff_base_s = _bp["base_s"]
+            backoff_max_s = _bp["max_s"]
+            backoff_factor = _bp["factor"]
+
+        logger.info(
+            f"Fetching fundamentals for {len(symbols)} symbols "
+            f"(market={market or 'shared'}, batch_size={batch_size}, "
+            f"delay={delay_per_ticker}s/ticker)"
+        )
+
+        batch_size = batch_size or 50  # default when caller passed None and market=None
+        all_results = {}
+        total_batches = (len(symbols) + batch_size - 1) // batch_size
+        consecutive_backoffs = 0  # Track consecutive rate-limited batches
+
+        # Circuit breaker check is per-batch — when open, skip remaining
+        # batches rather than spinning through dozens of independent retries.
+        from .provider_circuit_breaker import CircuitOpenError, get_circuit_breaker
+        breaker = get_circuit_breaker()
+
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, len(symbols))
+            batch_symbols = symbols[start_idx:end_idx]
+
+            # Short-circuit doomed batches when the per-market breaker is open.
+            if market is not None and breaker.check("yfinance", market) == "open":
+                logger.warning(
+                    "Yahoo circuit open for market=%s; skipping remaining %d batches",
+                    market, total_batches - batch_num,
+                )
+                for symbol in symbols[start_idx:]:
+                    all_results.setdefault(symbol, {
+                        "has_error": True,
+                        "error": "circuit_open",
+                        "error_kind": "circuit_open",
+                    })
+                break
+
+            logger.info(f"Processing batch {batch_num + 1}/{total_batches} ({len(batch_symbols)} symbols)")
+
+            batch_rate_limit_failures = 0
+
+            try:
+                # Use yf.Tickers for efficient batch fetching
+                tickers = _new_yf_tickers(' '.join(batch_symbols))
+
+                for i, symbol in enumerate(batch_symbols):
+                    try:
+                        ticker = tickers.tickers[symbol]
+
+                        # Get info (fundamentals)
+                        info = ticker.info
+                        fundamentals = self._extract_fundamentals(ticker, info)
+
+                        # Optionally get quarterly growth
+                        if include_quarterly:
+                            quarterly = self._extract_quarterly_growth(
+                                ticker,
+                                market=(market_by_symbol or {}).get(symbol) or market,
+                            )
+                            fundamentals.update(quarterly)
+
+                            # Also extract EPS rating data
+                            eps_rating_data = self._extract_eps_rating_data(ticker)
+                            fundamentals.update(eps_rating_data)
+
+                        all_results[symbol] = fundamentals
+
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        logger.warning(f"Error fetching fundamentals for {symbol}: {e}")
+                        all_results[symbol] = {'has_error': True, 'error': str(e)}
+                        if any(ind in error_str for ind in ("rate", "429", "too many", "limit", "throttl")):
+                            batch_rate_limit_failures += 1
+                            if market is not None:
+                                from .rate_budget_policy import get_rate_budget_policy
+                                get_rate_budget_policy().record_429("yfinance", market)
+                            breaker.record_429("yfinance", market)
+
+                    # Rate limit between individual ticker fetches within batch
+                    if i < len(batch_symbols) - 1 and delay_per_ticker > 0:
+                        if market is not None:
+                            self._rate_limiter.wait_for_market("yfinance", market)
+                        else:
+                            self._rate_limiter.wait("yfinance", min_interval_s=delay_per_ticker)
+
+            except Exception as e:
+                logger.error(f"Batch error: {e}")
+                for symbol in batch_symbols:
+                    all_results[symbol] = {'has_error': True, 'error': str(e)}
+
+            if progress_callback:
+                try:
+                    progress_callback(end_idx, len(symbols))
+                except Exception as exc:
+                    logger.warning(
+                        "Ignoring progress callback failure at batch %d/%d: %s",
+                        batch_num + 1,
+                        total_batches,
+                        exc,
+                    )
+
+            # Batch-level backoff: if >50% of batch hit rate limits, back off
+            batch_failure_rate = batch_rate_limit_failures / len(batch_symbols) if batch_symbols else 0
+            if batch_failure_rate > 0.5:
+                consecutive_backoffs += 1
+                backoff_time = min(
+                    backoff_base_s * (backoff_factor ** (consecutive_backoffs - 1)),
+                    backoff_max_s,
+                )
+                logger.warning(
+                    f"Rate limited: {batch_rate_limit_failures}/{len(batch_symbols)} symbols in batch {batch_num + 1}. "
+                    f"Backing off {backoff_time}s before next batch (market={market or 'shared'})."
+                )
+                time.sleep(backoff_time)
+            else:
+                consecutive_backoffs = 0  # Reset on successful batch
+                # Reset the circuit breaker counter so a healthy batch
+                # promptly closes a half-open circuit.
+                if batch_rate_limit_failures == 0:
+                    breaker.record_success("yfinance", market)
+                # Normal rate limit between batches
+                if batch_num < total_batches - 1:
+                    if market is not None:
+                        self._rate_limiter.wait_for_market("yfinance:batch", market)
+                    else:
+                        self._rate_limiter.wait("yfinance:batch", min_interval_s=delay_between_batches)
+
+        success_count = len([r for r in all_results.values() if not r.get('has_error', False)])
+        logger.info(f"Batch fundamentals complete: {success_count}/{len(symbols)} successful")
+
+        return all_results
+
+    def fetch_fundamentals_parallel(
+        self,
+        symbols: List[str],
+        batch_size: int = 50,
+        max_workers: int = 3,
+        include_quarterly: bool = True,
+        delay_per_ticker: float = 1.5,
+        market_by_symbol: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Dict]:
+        """
+        Fetch fundamentals using parallel batch processing.
+
+        Splits symbols into batches and processes batches in parallel
+        using ThreadPoolExecutor for faster throughput.
+
+        Args:
+            symbols: List of ticker symbols
+            batch_size: Symbols per batch
+            max_workers: Number of parallel workers
+            include_quarterly: Whether to include quarterly growth data
+            delay_per_ticker: Seconds between individual ticker fetches (default 0.2)
+            market_by_symbol: Optional mapping ``{symbol: market}`` for
+                cadence-aware growth extraction.
+
+        Returns:
+            Dict mapping symbols to fundamental data
+        """
+        if not symbols:
+            return {}
+
+        # Split into batches
+        batches = [
+            symbols[i:i + batch_size]
+            for i in range(0, len(symbols), batch_size)
+        ]
+
+        logger.info(f"Parallel fetch: {len(symbols)} symbols in {len(batches)} batches with {max_workers} workers")
+
+        all_results = {}
+
+        def fetch_batch(batch_symbols: List[str]) -> Dict[str, Dict]:
+            """Fetch a single batch."""
+            batch_results = {}
+            try:
+                tickers = _new_yf_tickers(' '.join(batch_symbols))
+
+                for i, symbol in enumerate(batch_symbols):
+                    try:
+                        ticker = tickers.tickers[symbol]
+                        info = ticker.info
+                        fundamentals = self._extract_fundamentals(ticker, info)
+
+                        if include_quarterly:
+                            quarterly = self._extract_quarterly_growth(
+                                ticker,
+                                market=(market_by_symbol or {}).get(symbol),
+                            )
+                            fundamentals.update(quarterly)
+
+                            # Also extract EPS rating data
+                            eps_rating_data = self._extract_eps_rating_data(ticker)
+                            fundamentals.update(eps_rating_data)
+
+                        batch_results[symbol] = fundamentals
+
+                    except Exception as e:
+                        logger.debug(f"Error for {symbol}: {e}")
+                        batch_results[symbol] = {'has_error': True}
+
+                    # Rate limit between individual ticker fetches
+                    if i < len(batch_symbols) - 1 and delay_per_ticker > 0:
+                        self._rate_limiter.wait("yfinance", min_interval_s=delay_per_ticker)
+
+            except Exception as e:
+                logger.warning(f"Batch error: {e}")
+                for s in batch_symbols:
+                    batch_results[s] = {'has_error': True}
+
+            return batch_results
+
+        # Execute batches in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(fetch_batch, batch): batch for batch in batches}
+
+            for future in as_completed(futures):
+                batch_result = future.result()
+                all_results.update(batch_result)
+
+        success_count = len([r for r in all_results.values() if not r.get('has_error', False)])
+        logger.info(f"Parallel fetch complete: {success_count}/{len(symbols)} successful")
+
+        return all_results

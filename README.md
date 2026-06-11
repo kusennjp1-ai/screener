@@ -1,163 +1,267 @@
-# RS Screener — Minervini式スクリーナー
+# Stock Screener 🇺🇸 🇨🇳 🇭🇰 🇯🇵 🇰🇷 🇹🇼 🇮🇳 🇩🇪 🇨🇦 🇸🇬 🇲🇾 🇦🇺
 
-Minervini流トレンドテンプレートと市場環境判定を毎営業日自動で実行し、
-スマートフォンで見られる形で配信するスクリーナー。
+A stock screening platform with multi-methodology scans across **US, Hong Kong, India, Japan, Korea, Taiwan, mainland China A-share, Germany, Canada, Singapore, Malaysia, and Australia** markets, AI-assisted research, theme discovery from social and news feeds, and real-time market breadth analysis. The supported deployment path is a single-tenant server stack built around Docker, PostgreSQL, Redis, and nginx.
 
-**アプリURL**: https://kusennjp1-ai.github.io/screener/
+### Scan Workflow Demo
 
-## 仕組み
+![Stock Scanner Demo](docs/gifs/scan-workflow.gif)
 
-```
-GitHub Actions (毎営業日 22:15 UTC = 日本時間 朝7:15)
-  └─ screener.py 実行
-       ├─ ユニバース取得: 米国全上場普通株 約6,000銘柄
-       │    (NASDAQ Trader公式ディレクトリ。ETF/ワラント/優先株/ファンド除外。
-       │     失敗時は S&P500+NDX → 同梱CSV にフォールバック)
-       ├─ 株価取得: yfinance (約15ヶ月日足)
-       ├─ RSレーティング算出 (IBD流 加重リターン百分位 1-99)
-       ├─ レーティング群 (MarketSurge流):
-       │    Composite (1-99) / EPS Rating (1-99) / SMR (A-E)
-       │    Acc/Dis (A-E: 13週出来高加重CLVの百分位) / U/D出来高比 (50日)
-       ├─ ベース自動判定: フラットベース / カップ / カップウィズハンドル
-       │    + 週数・深さ・ベース段階 (第Nステージ、4以降は警告)
-       ├─ トレンドテンプレート8条件 (Stage 2 判定)
-       ├─ Minervini買付適格性審査 (下記 — 「本当に買うか」フィルター)
-       ├─ VCP検出 / EXT判定 (ピボット+5%超の上放れ＝追いかけ禁止)
-       ├─ 市場環境 (IBD流 Market Pulse — 下記)
-       ├─ 業種グループRS (IBD流の細分化: yfinanceの145業種を毎日巡回し
-       │    {銘柄→業種} を data/industry_map.json に蓄積。メンバー3銘柄以上の
-       │    業種ごとに加重リターン中央値→業種間順位→RS 1-99)
-       ├─ セクターRS (SPDR 11セクターETF — 業種未判明銘柄のフォールバック)
-       ├─ data/screener_latest.json 出力
-       └─ 候補銘柄ごとに data/charts/{SYM}.json 出力
-            (日足90本 + 週足52本のOHLCV・MA50/MA10週・RSライン)
-  └─ GitHub Pages へデプロイ (index.html + JSON)
+---
 
-スマホ → Pages のURLを開くだけで最新データを自動取得
-       (ホーム画面に追加すればPWAとしてオフラインでも閲覧可)
-```
+### Static Site Page Tour
 
-## Minervini買付適格性審査
+![Static site page tour — Daily, Scan, Breadth, Groups](docs/gifs/static-site-tour.gif)
 
-RS・高値圏・トレンドテンプレートの条件だけだと、バイナリーイベント
-(治験結果等) で1日で2倍になったバイオ株のような「Minerviniが絶対に
-買わないチャート」が上位に入ってしまう。そのため全銘柄に対して
-「ミネルヴィニはこのチャートを本当に買うか」を審査し、不適格は
-メイン/高値保ち合いの両リストから除外する。
+Static demo: [https://xang1234.github.io/stock-screener/](https://xang1234.github.io/stock-screener/)
 
-**拒否 (リストから除外):**
+The static page is for demo purposes only. It is a read-only daily snapshot with reduced functionality compared with the full application, which includes live workflows such as chatbot, themes pipeline, watchlists, and the full interactive backend.
 
-- 直近60日に **1日+35%以上 または 3日累計+50%以上** の急騰 —
-  出自を問わずイベント。新ベース形成まで見送り
-- 直近60日に **1日+18%以上 または 3日累計+28%以上** の急騰があり、かつ
-  急騰前に上昇トレンドが確立していなかった — イベント主導の値動き。
-  トレンド確立は「株価≥MA50≥MA200・MA200上向き・直近120日で+20%以上」
-  まで要求する (フラット停滞は株価≈MA50≈MA200で素朴なMA比較を素通りするため)。
-  確立したトレンド中の決算ギャップ=NVDA型は正当なので拒否しない
-- 直近120日に **1日+30%以上** のイベント急騰があり、その後も正規ベース
-  (フラット/カップ系) 未形成 — 60日窓を抜けても見送り継続
-- 直近60日に **1日-18% または 3日累計-25%** の急落 — 破損チャート
-- **ADR 8%以上** — wide & loose、ベースとして機能しない
-- **200日線から+120%以上の乖離** — クライマックス圏 (買い場ではなく売り場)
+## Highlights
 
-**減点 (総合Scoreから減算+詳細パネルに警告表示):**
+### Multi-Market Coverage
 
-- ADR 6-8% / 200日線+70-120%乖離 / ±6%日が直近60日に3日以上 /
-  60日内に35%以上の実ドローダウンからベース未形成のV字回復
+Scan and track twelve markets:
 
-価格0以下の不良行はデータ異常として審査から除外する (1行のグリッチで
-健全な主導株を誤拒否しない)。
+- 🇺🇸 **United States** — NYSE, NASDAQ, AMEX, S&P 500
+- 🇭🇰 **Hong Kong** — HSI
+- 🇮🇳 **India** — NSE, BSE
+- 🇯🇵 **Japan** — Nikkei 225
+- 🇰🇷 **Korea** — KOSPI, KOSDAQ
+- 🇹🇼 **Taiwan** — TAIEX
+- 🇨🇳 **Mainland China A-shares** — SSE, SZSE, BJSE
+- 🇩🇪 **Germany** — XETRA, DAX
+- 🇨🇦 **Canada** — TSX, TSXV
+- 🇸🇬 **Singapore** — SGX
+- 🇲🇾 **Malaysia** — Bursa Malaysia (Main + ACE), FBM KLCI
+- 🇦🇺 **Australia** — ASX, S&P/ASX 200
 
-## ファンダメンタルズ適格判定 (SEPA流)
+Each market runs on its own exchange calendar (XNYS / XHKG / XNSE / XTKS / XKRX / XTAI / XSHG / XETR / XTSE / XSES / XKLS / XASX) with independent Celery refresh queues and locks, so US, Asia-Pacific, and Europe can hydrate in parallel without stepping on each other. Switch markets from the scan control bar; mixed-universe results are tagged with per-row colored badges.
 
-技術面の予備候補 (上位約100銘柄) にyfinanceのファンダメンタルズを取得し、
-Minerviniの成長基準で**メインリスト適格**を判定する:
+![Market selector](docs/screenshots/market-selector.jpg)
+*Market picker in the scan control bar — pick US, HK, IN, JP, KR, TW, CN, DE, CA, SG, MY, or AU and scope to an exchange or index*
 
-- **減益 (EPS成長 < 0%) はメイン不適格** — どれだけ技術面が良くても出さない
-- EPS成長 +15%未満は「成長率が前四半期から加速中」のターンアラウンドのみ許容
-- データ欠損は「未確認」としてゲートでは落とさず、スコアで中立扱い
-- 総合Score = **技術62% + ファンダ38%** (EPSランク70%+売上ランク30%、
-  Code 33・SMRボーナス付き)。保ち合いリストは監視用なので減益でも残すが
-  警告を表示する
+![Market badges](docs/screenshots/market-badges.png)
+*Color-coded per-market badges in the Symbol column — US (blue), HK (green), JP (yellow); Taiwan, India, Korea, China, Germany, Canada, Singapore, Malaysia, and Australia follow the same pattern*
 
-## Markets 360相当の指標
+Deep-dive: **[ASIA v2 ADRs & runbooks](docs/asia/README.md)**
 
-| 表示 | 相当機能 | 中身 |
-|------|---------|------|
-| Fab 5 | Fab 5 Pane | トレンド・ファンダ・RS・ベース・市場環境の5点検 (✓/△/✗) |
-| EPSレート / 売上ランク | Earnings/Sales Rankings | 成長率+加速の1-99ランク |
-| VCPスコア | VCP Score | 収縮回数・逓減性・最終収縮の浅さ・VDU・ピボット近接 (0-100) |
-| 買いリスク | Buy Risk Model | EXT・ADR・ストップ距離・直近の傷・決算接近 (A=低〜E=高) |
-| 確認/違反 | Behavior Analytics (MonAlert) | 直近25日の強い挙動 vs 警告挙動のカウント。違反>確認で売り警戒 |
+### Multi-Strategy Screening
 
-## バックテスト (backtest.py)
+Run Minervini, CANSLIM, IPO, Volume Breakthrough, Setup Engine, and Custom scans simultaneously with composite scoring across 80+ configurable filters. Save filter presets and export results to CSV.
 
-スクリーナーと同じ判定を過去の各時点に適用し、出力された価格・ストップで
-ルール通りに売買した場合の成績を検証する (Actionsの「Backtest」を手動実行):
+![Scan Results](docs/screenshots/scan-results.png)
+*Results table with composite scores, RS sparklines, multi-screener ratings, and per-row classification columns — GICS Sector, IBD Industry, market themes, and group rank*
 
-- 市場環境BUY相当の日のみ新規買い、買いゾーン (ピボット+5%以内) のみ
-- 1銘柄=資金の10% (最大10銘柄)、損切り3〜8% (スクリーナーのストップと同式)
-- +12%で建値ストップ / +22%で利確 / 停滞60日で手仕舞い / 市場悪化で全清算
-- 出力: 勝率・期待値・ペイオフレシオ・PF・最大DD・SPY対比 (`data/backtest.json`)
-- 制約: 過去時点のファンダは取得不可のため技術面のみの近似
+### Market Breadth Dashboard
 
-## 市場環境 (IBD流 Market Pulse)
+StockBee-style advance/decline analysis with SPY overlay, daily movers (stocks up/down 4%+), and multi-period trend visualization across quarterly, monthly, and 34-day windows.
 
-SPYとQQQの両指数で以下を毎日評価:
+![Market Breadth](docs/screenshots/breadth-chart.png)
+*Breadth chart with SPY price overlay and daily movers*
 
-- **分配日カウント** — 前日比-0.2%以下かつ出来高増の日 (直近25営業日、
-  その後5%上昇で失効するIBDの5%ルール付き)
-- **フォロースルー日 (FTD)** — 高値から6%以上の調整後、安値からの立ち直り
-  4日目以降に「+1.25%以上かつ出来高増」の日が出れば上昇トレンド確認
-- **新高値/新安値 (NH/NL)** — 52週新高値・新安値の銘柄数
-- **環境スコア (0-100)** — SPYのMA50/200位置・MA200傾き・ブレッドス・分配日
+### IBD Industry Group Rankings
 
-判定:
+197 industry groups ranked by relative strength with top movers identification (1W/1M/3M/6M), historical rank charts, and constituent stock analysis.
 
-- ✅ **確認済み上昇トレンド** (BUY MODE) — スコア65+、分配日3日以下
-- ⚠️ **圧力下の上昇トレンド** (CAUTION) — 分配日4日以上 or スコア40-64
-- 🚫 **調整局面** (DO NOT BUY) — 両指数調整中 or SPYがMA200割れ (FTD未確認)
-  - FTDが確認されれば調整中でも格上げ (底打ちからの新規買い開始シグナル)
+![Group Rankings](docs/screenshots/group-rankings.png)
+*Industry group rankings with movers panel*
 
-## レーティングの読み方 (詳細パネル)
+#### Relative Rotation Graph (RRG)
 
-銘柄をタップすると6種のレーティングが表示される:
+A MarketSmith/Bloomberg-style quadrant view of the same 197-group dataset: every industry group (or GICS-sector roll-up) is plotted by **RS-Ratio** vs **RS-Momentum**, with a weekly tail and direction arrow tracing its path through **Leading → Weakening → Lagging → Improving**. One screen answers *"what's rotating in, what's rolling over."* Filter by name or current rank to focus on the groups you care about, and click any dot to drill into its constituents.
 
-| 表示 | 意味 | 良い値 |
-|---|---|---|
-| Comp | 総合 (RS40% + EPS20% + Acc/Dis15% + セクター10% + 高値比15%) | 90以上 |
-| EPS | 直近2四半期+年次のEPS成長 (1-99) | 80以上 |
-| RS | 株価の相対強度 百分位 (1-99) | 90以上 |
-| SMR | 売上成長・利益率・ROE (A-E) | A / B |
-| A/D | 機関の買い集め/売り抜け (A-E) | A / B |
-| U/D | 上昇日出来高÷下落日出来高 (50日) | 1.5以上 |
+![Relative Rotation Graph](docs/screenshots/rrg-rotation.svg)
+*RRG: industry-group rotation with direction-arrowed weekly tails*
 
-銘柄をタップすると本格チャートを表示: **ローソク足 / IBD風HLCバー** と
-**日足90日 / 週足52週** をボタンで切替 (選択はlocalStorageに保存)。
-出来高バー (陽線/陰線で色分け)・MA50/MA10週 (橙)・RSライン (青、日足のみ)・
-ピボット/ストップ線入り。チャートデータは銘柄ごとの遅延読込で、
-取得失敗時は簡易スパークラインに自動フォールバックする。
-ベース判定 (フラットベース/カップ/カップウィズハンドル、週数・深さ・第Nステージ) も自動表示される。
+### Watchlists with Sparklines
 
-セクタータブは **業種グループRS順位** (細分化145業種、上位60) と
-11セクターETFの2段構成。業種カバレッジは毎日の実行で自動的に蓄積・拡大していく。
+Visual performance tracking with RS and price sparklines (30-day trends), price change bars across 7 time periods, drag-and-drop organization with folders, and full-screen chart navigation.
 
-## 手動実行
+![Watchlist Table](docs/screenshots/watchlist-table.png)
+*Watchlist with sparklines and price change visualization*
 
-GitHub の Actions タブ → 「Daily Screener」 → Run workflow。
+### AI Research Chatbot
 
-## 検証 (Verifier)
+Groq-powered research chat with optional Tavily/Serper web search, persistent conversation history, and tool-augmented investigation.
 
-`test_screener.py` は Minervini のルールから第一原理で構築した既知正解ケースで
-スクリーナーを採点する独立検証スイート。CI で毎回データ生成前のゲートとして実行され、
-失敗した場合はその日のデータ更新を中止する (前日のデータが維持される)。
+![Chatbot](docs/screenshots/chatbot.png)
+*AI chatbot with conversation sidebar and research tools*
+
+### Theme Discovery Pipeline
+
+AI-powered market theme identification from RSS, Twitter/X, and news feeds. Tracks trending vs. emerging themes, monitors constituent stocks, and alerts on momentum shifts.
+
+![Themes](docs/screenshots/themes.png)
+*Theme discovery with rankings and emerging themes panel*
+
+## Get Started
+
+### Docker (Recommended for Servers)
 
 ```bash
-python test_screener.py        # 検証スイート (ネットワーク不要)
-python screener.py --selftest  # 合成データでパイプライン全体を実行
+cp .env.docker.example .env.docker
+# Edit .env.docker:
+#   BACKEND_IMAGE=ghcr.io/<owner>/stockscreenclaude-backend
+#   FRONTEND_IMAGE=ghcr.io/<owner>/stockscreenclaude-frontend
+#   APP_IMAGE_TAG=v1.2.0
+#   SERVER_AUTH_PASSWORD=choose-a-long-random-password
+#   GROQ_API_KEY=...
+ENABLED_MARKETS=US,HK,CN scripts/docker-compose-enabled-markets.sh --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.release.yml pull
+ENABLED_MARKETS=US,HK,CN scripts/docker-compose-enabled-markets.sh --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.release.yml up -d --no-build
+# Open http://localhost
 ```
 
-## 免責
+This path deploys the tagged `v1.2.0` GHCR images instead of building locally. After the stack is up, the UI opens to a first-run bootstrap screen — see [First-Run Bootstrap](#first-run-bootstrap) for the staged pipeline and market selection.
 
-本ツールは情報提供のみを目的とし、投資勧誘ではありません。
-投資判断は自己責任で行ってください。データソース (yfinance) の精度は保証されません。
+For local development or contributor laptops, use the default local compose stack instead:
+
+```bash
+cp .env.docker.example .env
+# Edit .env: set SERVER_AUTH_PASSWORD and add at least one LLM API key (e.g., GROQ_API_KEY)
+scripts/docker-compose-enabled-markets.sh up
+```
+
+Full guide with homelab, VPS, and GHCR deployment options: **[Docker Deployment](docs/INSTALL_DOCKER.md)**
+
+### Starting Only Enabled Market Workers
+
+The default Compose file defines worker services for every supported market, but market-specific workers are behind Compose profiles. Use the helper script to start only the workers for the markets in `ENABLED_MARKETS`:
+
+```bash
+ENABLED_MARKETS=US,HK,CN scripts/docker-compose-enabled-markets.sh up -d
+```
+
+For `ENABLED_MARKETS=US,HK,CN`, Docker starts US/HK/CN market job and user scan workers. IN/JP/KR/TW/DE/CA/SG/MY/AU worker containers are not created. The global data-fetch worker listens only to `data_fetch_shared,data_fetch_us,data_fetch_hk,data_fetch_cn`.
+
+The first-run bootstrap wizard still persists runtime choices in Postgres. Keep the wizard's enabled markets within the deployment `ENABLED_MARKETS` set. To add a market later, update `ENABLED_MARKETS` and recreate the stack:
+
+```bash
+ENABLED_MARKETS=US,HK,CN,TW scripts/docker-compose-enabled-markets.sh up -d
+```
+
+### From Source (Contributors)
+
+See the **[Development Guide](docs/DEVELOPMENT.md)** for full backend + frontend + Celery setup.
+
+## First-Run Bootstrap
+
+On first launch the app boots into a setup screen — no pre-seeded database required. Pick a **primary market** (the one that opens first) and any additional **enabled markets** to hydrate in the background, then click **Start bootstrap**.
+
+> **Bootstrap performance note:** selecting multiple enabled markets starts separate universe, price, fundamentals, breadth, group-rank, and scan work for each market. This can noticeably slow first load and ongoing data updates on smaller hosts or when upstream market-data providers throttle requests. For the fastest first run, start with one primary market and enable additional markets after the workspace is ready.
+
+<img src="docs/screenshots/bootstrap-setup.jpg" alt="Bootstrap setup" width="500" />
+
+*Primary-market dropdown and enabled-markets checkboxes on first launch*
+
+The orchestrator runs a staged Celery pipeline for the primary market:
+
+1. **Universe refresh** — seeds the market's symbol list (S&P 500 / Russell / NDX for US via `refresh_stock_universe`; official exchange feeds for HK / IN / JP / KR / TW / CN / CA / DE / SG / MY / AU via `refresh_official_market_universe`).
+2. **Benchmark + price refresh** — imports the GitHub daily price bundle first, accepts recent stale bundles during bootstrap, then live-fetches only missing/current-session gaps (`7d` top-up for stale symbols, `2y` only for no-history symbols).
+3. **Fundamentals refresh** — quarterly and annual financials.
+4. **Breadth calculation** — StockBee-style advance/decline with gap-fill.
+5. **Group rankings** — IBD-style relative strength across 197 industry groups.
+6. **Feature snapshot** (US only) — daily feature rollup used by the Setup Engine.
+7. **Initial autoscan** — seeds a first scan with the default profile so you land on populated results.
+
+<img src="docs/screenshots/bootstrap-progress.jpg" alt="Bootstrap progress" width="500" />
+
+*Per-stage progress with per-market queue status while the pipeline is running*
+
+The workspace opens as soon as the primary market reaches `ready`. Secondary markets keep hydrating in the background on their own queues (`data_fetch_{us,hk,in,jp,kr,tw,cn,de,ca,sg,my,au}`) so you can start scanning immediately. Scans against a market that's still refreshing return HTTP 409 `market_refresh_active`, and scans against a market whose data is not current yet return the usual stale-data response instead of triggering a first-run block.
+
+State is persisted in `AppSetting` under `runtime.primary_market`, `runtime.enabled_markets`, and `runtime.bootstrap_state` (`not_started` → `running` → `ready`). To re-run the wizard, reset `runtime.bootstrap_state` to `not_started`.
+
+## Configuration
+
+The AI chatbot requires at least one LLM provider API key. Scanning and all other features work without any keys.
+
+| Provider | Env Var | Free Tier | Notes |
+|----------|---------|-----------|-------|
+| Groq | `GROQ_API_KEY` | Yes | Supported default for chatbot and research |
+| Gemini | `GEMINI_API_KEY` | Yes | Supported extraction fallback |
+| Minimax | `MINIMAX_API_KEY` | No | Supported primary theme-extraction provider |
+| Z.AI | `ZAI_API_KEY` | No | Optional alternate provider |
+
+Optional web search keys (`TAVILY_API_KEY`, `SERPER_API_KEY`) enable the chatbot's research mode.
+
+Full reference: **[Environment Variables](docs/ENVIRONMENT.md)**
+
+## Application Pages
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Routine | Market dashboard with Key Markets, Themes, Watchlists, Stockbee tabs |
+| `/scan` | Bulk Scanner | Multi-market scanning (US / HK / IN / JP / KR / TW / CN / DE / CA / SG / MY / AU) with 80+ filters, per-market badges, and CSV export |
+| `/breadth` | Market Breadth | StockBee-style breadth indicators and trends |
+| `/groups` | Group Rankings | IBD industry group rankings with movers |
+| `/themes` | Themes | AI-powered theme discovery with trending/emerging detection |
+| `/chatbot` | Chatbot | Multi-provider AI research assistant with web search |
+| `/stock/:symbol` | Stock Detail | Individual stock analysis with charts and fundamentals |
+
+## Key Capabilities
+
+- **12 supported markets** — US, Hong Kong, India, Japan, Korea, Taiwan, mainland China, Germany, Canada, Singapore, Malaysia, Australia — with per-market exchange calendars, independent refresh queues, and scan-time freshness guards
+- **First-run bootstrap wizard** with live staged progress and background hydration of secondary markets
+- **6 screening methodologies** with composite scoring (Minervini, CANSLIM, IPO, Volume Breakthrough, Setup Engine, Custom)
+- **80+ configurable filters** with saved presets across fundamental, technical, and rating categories
+- **AI chatbot** with Groq-first routing, web search research mode, and persistent conversations
+- **Theme discovery** from RSS, Twitter/X, and news sources with AI clustering and lifecycle tracking
+- **Market breadth** dashboard with StockBee-style indicators and historical trends
+- **197 IBD industry groups** ranked by relative strength with movers and constituent analysis
+- **Watchlists** with RS/price sparklines, multi-period change bars, and drag-and-drop organization
+- **MCP integration** for AI copilot workflows with 12 tools via stdio and Streamable HTTP ([details](docs/MCP_INTEGRATION.md))
+- **TradingView-style charts** with candlestick OHLC and technical overlays
+- **CSV export** for scan results
+- **Dark and light mode** UI
+- **Docker deployment** with PostgreSQL, auto-HTTPS, and GHCR image releases
+
+## Documentation
+
+| Guide | Audience |
+|-------|----------|
+| [Docker Deployment](docs/INSTALL_DOCKER.md) | Server, homelab, VPS users |
+| [Development Guide](docs/DEVELOPMENT.md) | Contributors, developers |
+| [Architecture](docs/ARCHITECTURE.md) | Understanding the system design |
+| [Environment Variables](docs/ENVIRONMENT.md) | Configuration reference |
+| [MCP Integration](docs/MCP_INTEGRATION.md) | AI copilot workflows |
+| [Backend API & Architecture](backend/README.md) | Backend developers |
+| [Frontend Components](frontend/README.md) | Frontend developers |
+| [Contributing](CONTRIBUTING.md) | Getting started as a contributor |
+| [ASIA v2 (HK/JP/TW) ADRs & Runbooks](docs/asia/README.md) | Multi-market operators, auditors |
+
+## Tech Stack
+
+**Backend:** FastAPI, SQLAlchemy, Alembic, Celery, Redis, PostgreSQL
+**Frontend:** React 18, Vite, Material-UI, TanStack Query / Table, Recharts
+**Data:** yfinance, Finviz, Alpha Vantage, SEC EDGAR, official X API (optional)
+
+## Disclaimer
+
+This software is for educational and research purposes only. It is not financial advice. Always do your own research and consult with a licensed financial advisor before making investment decisions.
+
+## License
+
+Released under the [Apache License 2.0](LICENSE).
+
+---
+
+## Bundled: Claude Trading Skills Toolkit
+
+This repository also bundles a clone of
+[tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills)
+under [`trading-skills/`](trading-skills/) (MIT License, see
+`trading-skills/LICENSE`). It is a Claude Skills-based trading workflow
+toolkit (VCP / CANSLIM / PEAD / dividend screeners, trade journaling,
+market regime analysis, and more) that complements this web application:
+
+- **This app (repo root)** — browser-based screening platform (Minervini,
+  CANSLIM, breadth, IBD groups) powered by free yfinance data. Run via
+  Docker (`docker compose`) or publish a read-only daily snapshot to
+  GitHub Pages via the `Static Site` workflow.
+- **`trading-skills/`** — CLI scripts and Claude Code skills for deeper
+  workflow automation (trade planning, journaling, postmortems). Some
+  screener scripts there use the FMP API (free tier available).
+
+The two are independent: the web app does not require any `trading-skills/`
+component to run, and vice versa. See `trading-skills/README.md` for the
+toolkit's own documentation.
