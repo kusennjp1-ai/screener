@@ -1124,5 +1124,245 @@ class Buyability(unittest.TestCase):
                         "品質警告が有望理由の【注意】に表示される")
 
 
+class FundamentalGate(unittest.TestCase):
+    """Minerviniのファンダ基準: 減益銘柄 (TD型) をメイン最有望に出さない。"""
+
+    def test_negative_eps_fails_gate(self):
+        ok, why = sc.fund_gate({"EPS成長%": -61.2, "売上成長%": 6.0})
+        self.assertFalse(ok)
+        self.assertTrue(why)
+
+    def test_low_eps_with_declining_sales_fails(self):
+        ok, _ = sc.fund_gate({"EPS成長%": 8.0, "売上成長%": -5.0})
+        self.assertFalse(ok)
+
+    def test_strong_grower_passes(self):
+        ok, why = sc.fund_gate({"EPS成長%": 40.0, "売上成長%": 20.0})
+        self.assertTrue(ok)
+        self.assertEqual(why, [])
+
+    def test_missing_data_passes_gate(self):
+        ok, _ = sc.fund_gate({"EPS成長%": None, "売上成長%": None})
+        self.assertTrue(ok, "yfinanceの欠損ではメインから消さない (スコア中立のみ)")
+
+    def test_accelerating_turnaround_passes(self):
+        # 低成長でも成長率が加速中のターンアラウンドは許容 (SEPAの例外)
+        ok, _ = sc.fund_gate({"EPS成長%": 10.0, "_eps_q2": -20.0, "売上成長%": 5.0})
+        self.assertTrue(ok)
+
+    def test_low_growth_without_acceleration_fails(self):
+        ok, _ = sc.fund_gate({"EPS成長%": 5.0, "_eps_q2": 30.0, "売上成長%": 5.0})
+        self.assertFalse(ok, "低成長かつ減速はメイン不適格")
+
+    def test_behavior_counts(self):
+        # 強い引け×出来高増の連続 → 確認が違反を上回る
+        up = uptrend()
+        up["Close"] = up["High"] * 0.999  # 毎日高値引け
+        c1, v1 = sc.behavior_counts(up, up["Close"].rolling(50).mean())
+        self.assertGreater(c1, v1)
+        dn = downtrend()
+        dn["Close"] = dn["Low"] * 1.001   # 毎日安値引け
+        c2, v2 = sc.behavior_counts(dn, dn["Close"].rolling(50).mean())
+        self.assertGreater(v2, c2)
+
+    def test_fund_score_ordering(self):
+        hi = sc.fund_score({"EPS成長%": 60.0, "_eps_q2": 40.0, "_annual_g": 50.0,
+                            "売上成長%": 30.0, "_rev_q2": 20.0, "Code33": "✓", "_smr": "A"})
+        mid = sc.fund_score({"EPS成長%": 10.0, "_eps_q2": 5.0, "_annual_g": 8.0,
+                             "売上成長%": 5.0, "_rev_q2": 5.0})
+        lo = sc.fund_score({"EPS成長%": -40.0, "_eps_q2": -20.0, "_annual_g": -30.0,
+                            "売上成長%": -10.0, "_rev_q2": -5.0})
+        none = sc.fund_score({})
+        self.assertGreater(hi, mid)
+        self.assertGreater(none, lo, "欠損は中立 — 明確な悪化より上")
+        self.assertTrue(1 <= lo <= 100)
+
+    def test_final_score_blends_fundamentals(self):
+        m = {"rs": 90, "sec_rs": 80, "dist_high": 3.0, "range10": 4.0, "q_penalty": 0}
+        good = sc.final_score(m, {"EPS成長%": 60.0, "売上成長%": 30.0})
+        bad = sc.final_score(m, {"EPS成長%": -40.0, "売上成長%": -10.0})
+        self.assertGreater(good, bad, "同じ技術面なら高成長銘柄が上に来る")
+        self.assertGreaterEqual(bad, 1)
+
+    def test_run_excludes_negative_eps_from_main(self):
+        data, universe = sc.synthetic_data()
+        orig_fund, orig_sleep = sc.fetch_fundamentals, sc.time.sleep
+        sc.fetch_fundamentals = lambda sym: (
+            {"EPS成長%": -61.2, "売上成長%": 6.0} if sym == "VCPX"
+            else {"EPS成長%": 35.0, "売上成長%": 18.0})
+        sc.time.sleep = lambda s: None
+        try:
+            out = sc.jclean(sc.run(data, universe, skip_fundamentals=False))
+        finally:
+            sc.fetch_fundamentals, sc.time.sleep = orig_fund, orig_sleep
+        self.assertNotIn("VCPX", [r["シンボル"] for r in out["main"]],
+                         "EPS -61%の銘柄 (TD型) はメインに出さない")
+        vrow = next((r for r in out["tight"] if r["シンボル"] == "VCPX"), None)
+        if vrow:
+            self.assertIn("減益", vrow["有望理由"])
+
+    def test_rows_carry_price(self):
+        data, universe = sc.synthetic_data()
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        for r in out["main"] + out["tight"]:
+            self.assertIn("現在値", r)
+            self.assertGreater(r["現在値"], 0)
+
+
+class Backtest(unittest.TestCase):
+    """backtest.py: Minervini売買ルールがその通り再現されるか。"""
+
+    @staticmethod
+    def _frame(close, idx, vol=2e6):
+        close = pd.Series(np.asarray(close, dtype=float), index=idx)
+        return pd.DataFrame({"Open": close, "High": close * 1.005,
+                             "Low": close * 0.995, "Close": close,
+                             "Volume": pd.Series(vol, index=idx)})
+
+    def _bull_data(self, days=600):
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        # WINX: エントリー後 +0.5%/日 → +22%利確に到達する勝ち銘柄
+        data["WINX"] = self._frame(
+            grow([np.full(240, 0.001), np.full(days - 240, 0.005)]), idx)
+        # LOSX: エントリー後に崩れてストップに掛かる負け銘柄
+        data["LOSX"] = self._frame(
+            grow([np.full(280, 0.003), np.full(days - 280, -0.015)]), idx)
+        for k in range(6):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        return data
+
+    def test_target_and_stop_exits(self):
+        import backtest as bt
+        res = bt.simulate(self._bull_data())
+        win_trades = [t for t in res["trades"] if t["sym"] == "WINX"]
+        self.assertTrue(any(t["reason"] == "利確+22%" and abs(t["pnl_pct"] - 22) < 1.5
+                            for t in win_trades), f"利確が再現されること: {win_trades}")
+        los_trades = [t for t in res["trades"] if t["sym"] == "LOSX"]
+        self.assertTrue(any("損切り" in t["reason"] for t in los_trades),
+                        f"損切りが再現されること: {los_trades}")
+        for t in los_trades:
+            self.assertGreaterEqual(t["pnl_pct"], -10, "損失はストップ幅+ギャップ分まで")
+        for k in ("勝率%", "期待値%", "最大ドローダウン%", "合計リターン%", "出口内訳"):
+            self.assertIn(k, res["stats"])
+
+    def test_no_entries_in_bear_market(self):
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, -0.001)), idx)}
+        data["WINX"] = self._frame(50 * np.cumprod(1 + np.full(days, 0.004)), idx)
+        for k in range(4):
+            data[f"FIL{k}"] = self._frame(
+                50 * np.cumprod(1 + np.full(days, 0.0001)), idx)
+        res = bt.simulate(data)
+        self.assertEqual(res["stats"]["トレード数"], 0,
+                         "SPYがMA200割れの間は新規買いゼロ")
+
+    def test_extended_pop_not_bought(self):
+        # Verifier指摘: 旧実装の買いゾーン判定 (当日高値込みのh20) は恒真だった。
+        # 5日で+18.7%のポップ直後 (単日±18%ルールには掛からない) はEXTとして見送る
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        data["POPX"] = self._frame(
+            grow([np.full(280, 0.002), np.full(5, 0.035), np.full(days - 285, 0.0)]), idx)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        m = bt.build_matrices(data)
+        syms = [s for s, _, _ in bt.candidates_at(m, 286)]
+        self.assertNotIn("POPX", syms, "ベース上限+5%超 (EXT) は追いかけない")
+
+    def test_delisted_position_closed(self):
+        # Verifier指摘: 上場廃止 (NaN) 銘柄が建値のまま不死身になっていた
+        import backtest as bt
+        data = self._bull_data()
+        df = data["WINX"]
+        df.iloc[290:, :] = np.nan
+        res = bt.simulate(data)
+        win = [t for t in res["trades"] if t["sym"] == "WINX"]
+        self.assertTrue(any(t["reason"] == "取引停止/廃止" for t in win),
+                        f"NaN継続は強制手仕舞いされること: {win}")
+
+    def test_open_trades_excluded_from_stats(self):
+        # Verifier指摘: 勝率に末日清算 (未完了) が混入していた
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        # 検証期間の終盤にだけ買われ、末日まで持ち越す銘柄 (+22%にも60日にも届かない)
+        data["LATE"] = self._frame(
+            grow([np.full(days - 40, 0.0015), np.full(40, 0.003)]), idx)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        res = bt.simulate(data)
+        late = [t for t in res["trades"] if t["sym"] == "LATE" and t["reason"] == "末日清算"]
+        if late:  # 末日清算が起きたケースでは統計から除外されていること
+            s = res["stats"]
+            self.assertEqual(s["トレード数"] + s["未完了(末日清算)"], len(res["trades"]))
+            self.assertGreaterEqual(s["未完了(末日清算)"], 1)
+
+    def test_breakeven_stop_after_gain(self):
+        # +12%到達後に反落 → 建値撤退 (利益を損失にしない)
+        import backtest as bt
+        days = 600
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        grow = lambda parts: 50 * np.cumprod(1 + np.concatenate(parts))
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        # 上昇+15% → 反落 (利確+22%には届かず建値ストップに掛かる)
+        data["BEVX"] = self._frame(
+            grow([np.full(260, 0.003), np.full(35, 0.004), np.full(days - 295, -0.012)]), idx)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                grow([np.full(days, 0.0002 + k * 1e-5)]), idx)
+        res = bt.simulate(data)
+        bev = [t for t in res["trades"] if t["sym"] == "BEVX"]
+        self.assertTrue(any(t["reason"] == "建値撤退" and abs(t["pnl_pct"]) < 1
+                            for t in bev), f"建値撤退が再現されること: {bev}")
+
+
+class Markets360(unittest.TestCase):
+    """Minervini Markets 360相当の補助指標 (VCPスコア・買いリスク・売上ランク)。"""
+
+    def test_vcp_score_orders_quality(self):
+        good = sc.vcp_score([0.12, 0.07, 0.04], vdu=True, close=99, pivot=100)
+        weak = sc.vcp_score([0.12, 0.11], vdu=False, close=80, pivot=100)
+        none = sc.vcp_score([], vdu=False, close=80, pivot=100)
+        self.assertGreater(good, weak)
+        self.assertGreater(weak, none)
+        self.assertLessEqual(good, 100)
+        self.assertGreaterEqual(none, 0)
+
+    def test_buy_risk_grades(self):
+        low = sc.buy_risk({"ext": False, "adr": 2.0, "risk": 3.0,
+                           "dd60": 5.0, "dist_high": 2.0})
+        high = sc.buy_risk({"ext": True, "adr": 7.0, "risk": 8.0,
+                            "dd60": 30.0, "dist_high": 20.0}, earnings_days=5)
+        self.assertEqual(low, "A")
+        self.assertIn(high, ("D", "E"))
+
+    def test_sales_rating(self):
+        hi = sc.sales_rating(60.0, 30.0)
+        lo = sc.sales_rating(-20.0, -10.0)
+        self.assertGreater(hi, lo)
+        self.assertIsNone(sc.sales_rating(None, None))
+        self.assertTrue(1 <= hi <= 99 and 1 <= lo <= 99)
+
+    def test_rows_carry_new_ratings(self):
+        data, universe = sc.synthetic_data()
+        out = sc.jclean(sc.run(data, universe, skip_fundamentals=True))
+        r = (out["main"] + out["tight"])[0]
+        for k in ("VCPスコア", "買いリスク", "現在値", "売上ランク"):
+            self.assertIn(k, r)
+        self.assertIn(r["買いリスク"], ("A", "B", "C", "D", "E"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

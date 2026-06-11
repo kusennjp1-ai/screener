@@ -75,7 +75,11 @@ ETF_JA = {
 
 MAIN_LIST_SIZE = 20
 TIGHT_LIST_SIZE = 30
-FUNDAMENTALS_LIMIT = 50  # yfinanceへの追加リクエストを抑えるため上位のみ
+MAIN_POOL = 60    # ファンダ取得対象の技術面予備候補 (ここからファンダ適格で絞る)
+TIGHT_POOL = 45
+# 必ず MAIN_POOL + TIGHT_POOL 以上にする。上限が予備候補数を下回ると、
+# ファンダ合成済みスコアと技術のみスコアが同じリスト内で混在してしまう
+FUNDAMENTALS_LIMIT = 105
 
 
 def log(*args):
@@ -272,6 +276,37 @@ def detect_vcp(depths):
     return sig[-1] <= 0.12
 
 
+def behavior_counts(df, ma50_s):
+    """MonAlert風の挙動分析: 直近25営業日の「確認」(機関買いを示す強い挙動) と
+    「違反」(警告挙動) を数える (Markets 360のBehavior Analytics相当)。
+    違反が確認を上回る銘柄は売り警戒シグナル。"""
+    t = df.iloc[-25:]
+    c, o, h, l, v = t["Close"], t["Open"], t["High"], t["Low"], t["Volume"]
+    rng = (h - l).where((h - l) > 0)
+    pos = (c - l) / rng  # 終値の日中レンジ内位置 (上=強い引け)
+    vavg = float(df["Volume"].iloc[-50:].mean())
+    if not vavg == vavg or vavg <= 0:  # NaN/ゼロ出来高ガード
+        vavg = 1.0
+    up = c.diff() > 0
+    dn = c.diff() < 0
+    conf = int(((pos >= 0.67) & up).sum())            # 良い引け
+    conf += int((up & (v > vavg * 1.2)).sum())        # 出来高を伴う上昇
+    viol = int(((pos <= 0.33) & dn).sum())            # 悪い引け
+    viol += int((dn & (v > vavg * 1.2)).sum())        # 出来高を伴う下落
+    ma25 = ma50_s.iloc[-25:]
+    if int((c < ma25).sum()) >= 5:                    # 50日線割れの常態化
+        viol += 2
+    try:
+        big = int(np.nanargmax(v.to_numpy(dtype=float)))  # 最大出来高日の方向
+        if float(c.iloc[big]) >= float(o.iloc[big]):
+            conf += 1
+        else:
+            viol += 2
+    except ValueError:
+        pass
+    return conf, viol
+
+
 def trend_established(c, ma50_s, ma200_s, pos, lookback=120, min_gain=1.20):
     """pos = 急騰の前日のバー位置。その時点で上昇トレンドが確立していたか。
 
@@ -412,6 +447,7 @@ def compute_metrics(df, spy_close):
     ud = up_down_volume(df)
     base = classify_base(df)
     stage = base_stage(h)
+    conf, viol = behavior_counts(df, ma50_s)
 
     return {
         "close": close, "ma200": ma200, "tt": tt,
@@ -422,6 +458,7 @@ def compute_metrics(df, spy_close):
         "pivot": pivot, "stop": stop, "risk": risk, "rr": rr,
         "depth60": depth60,
         "vcp": vcp, "n_contractions": len(depths), "adr": adr,
+        "depths": [round(float(d), 4) for d in depths],
         "max_up60": max_up60, "max_dn60": max_dn60, "n_chop60": n_chop60,
         "up3_60": up3_60, "dn3_60": dn3_60, "up1_120": up1_120,
         "gap_from_base": gap_from_base, "gap3_from_base": gap3_from_base,
@@ -429,6 +466,7 @@ def compute_metrics(df, spy_close):
         "ext": ext, "new_high": new_high, "new_low": new_low,
         "spark": spark, "vols": vols, "ma50px": ma50px,
         "accdis": accdis, "ud": ud, "base": base, "stage": stage,
+        "conf": conf, "viol": viol,
         "wret": weighted_return(c),
     }
 
@@ -691,6 +729,60 @@ def eps_rating(q1_growth, q2_growth, annual_growth):
              + clip(q2_growth, -50, 150) * 0.15
              + clip(annual_growth, -50, 100) * 0.25)
     return int(max(1, min(99, round(score))))
+
+
+def sales_rating(q1_growth, q2_growth):
+    """売上ランク (1-99) 近似: 直近売上成長 + 加速ボーナス (Markets 360のSales Ranking相当)。"""
+    if q1_growth is None and q2_growth is None:
+        return None
+
+    def clip(x, lo, hi):
+        return max(lo, min(hi, x)) if x is not None else 0.0
+
+    score = 30 + clip(q1_growth, -40, 100) * 0.55 + clip(q2_growth, -40, 100) * 0.20
+    if q1_growth is not None and q2_growth is not None and q1_growth > q2_growth:
+        score += 6  # 加速
+    return int(max(1, min(99, round(score))))
+
+
+def fund_gate(fund):
+    """Minerviniのファンダ基準によるメインリスト適格判定。返り値 (ok, 理由list)。
+
+    SEPAは直近四半期EPS+20〜25%以上の成長を要求する。減益銘柄は
+    どれだけ技術面が良くてもメイン最有望に出さない (TD/MSGS問題への対策)。
+    yfinanceの欠損は「未確認」としてゲートでは落とさない (スコアで中立扱い)。"""
+    eps_g = fund.get("EPS成長%")
+    rev_g = fund.get("売上成長%")
+    if eps_g is not None and eps_g < 0:
+        return False, [f"EPS成長{eps_g:+.0f}%と減益 — Minervini基準 (+25%以上) 未達"]
+    if eps_g is not None and eps_g < 15:
+        # 基準未達でも「加速中のターンアラウンド」(成長率が前四半期から上昇) は許容
+        q2 = fund.get("_eps_q2")
+        accelerating = q2 is not None and eps_g > q2
+        if not accelerating:
+            return False, [f"EPS+{eps_g:.0f}%と低成長で加速もなし — 成長基準未達"]
+        if rev_g is not None and rev_g < 0:
+            return False, [f"EPS+{eps_g:.0f}%かつ減収 — 成長基準未達"]
+    return True, []
+
+
+def fund_score(fund):
+    """総合Scoreのファンダ成分 (1-100)。EPSランク70% + 売上ランク30% に
+    Code 33 / SMR のボーナス。未取得は中立45 (明確な悪化より上、好成長より下)。"""
+    eps_r = eps_rating(fund.get("EPS成長%"), fund.get("_eps_q2"), fund.get("_annual_g"))
+    sal_r = sales_rating(fund.get("売上成長%"), fund.get("_rev_q2"))
+    if eps_r is None and sal_r is None:
+        return 45.0
+    parts = [(v, w) for v, w in ((eps_r, 0.7), (sal_r, 0.3)) if v is not None]
+    s = sum(v * w for v, w in parts) / sum(w for _, w in parts)
+    if fund.get("Code33"):
+        s += 6
+    smr = fund.get("_smr")
+    if smr == "A":
+        s += 4
+    elif smr == "B":
+        s += 2
+    return float(max(1, min(100, s)))
 
 
 def smr_rating(rev_growth, margin, roe):
@@ -1077,6 +1169,7 @@ def fetch_fundamentals(sym):
                 eps_hist = [yoy(eps, i) for i in range(3)]
             if rev is not None:
                 rev_g = yoy(rev, 0)
+                res["_rev_q2"] = yoy(rev, 1)  # 売上加速の判定用 (前四半期yoy)
         # EPS Rating用の追加成長指標: 前四半期yoy + 年次EPS成長
         res["_eps_q2"] = eps_hist[1]
         try:
@@ -1189,9 +1282,55 @@ def buyability(m):
     return vetoes, penalty, warns
 
 
-def final_score(m):
-    """総合Score = total_score - 買付適格性の減点 (下限1)。"""
-    return max(1, total_score(m) - m.get("q_penalty", 0))
+def final_score(m, fund=None):
+    """総合Score: 技術62% + ファンダ38% (SEPA流: 技術で絞り、ファンダで序列)
+    から買付適格性の減点を引く (下限1)。fund未取得時は技術のみ。"""
+    tech = total_score(m)
+    s = 0.62 * tech + 0.38 * fund_score(fund) if fund is not None else tech
+    return max(1, int(round(s - m.get("q_penalty", 0))))
+
+
+def vcp_score(depths, vdu, close, pivot):
+    """VCPスコア (0-100): 収縮の回数・逓減性・最終収縮の浅さ・出来高枯渇・
+    ピボット近接を合成 (Markets 360のVCP Score相当)。"""
+    s = 0.0
+    n = len(depths)
+    if n >= 2:
+        s += min(30, 10 * n)
+        shrink = sum(1 for a, b in zip(depths, depths[1:]) if b <= a * 0.8)
+        s += 25 * shrink / (n - 1)
+    if n:
+        last = float(depths[-1]) * 100
+        s += max(0.0, 20 * (1 - min(last, 16) / 16))  # 最終収縮が浅いほど高評価
+    if vdu:
+        s += 15
+    if pivot and close and 0 <= (pivot - close) / pivot <= 0.05:
+        s += 10
+    return int(max(0, min(100, round(s))))
+
+
+def buy_risk(m, earnings_days=None):
+    """買いリスク (A=低〜E=高): 「今この銘柄を買う」行為のリスク評価
+    (Markets 360のBuy Risk Model相当)。EXT・ADR・ストップ距離・直近の傷・
+    高値からの距離・決算接近を加点方式で評価する。"""
+    pts = 0.0
+    if m.get("ext"):
+        pts += 2
+    adr = m.get("adr") or 0
+    if adr >= 6:
+        pts += 1.5
+    elif adr >= 4:
+        pts += 0.5
+    if (m.get("risk") or 0) > 6:
+        pts += 1
+    if (m.get("dd60") or 0) >= 25:
+        pts += 1
+    if (m.get("dist_high") or 0) > 15:
+        pts += 1
+    if earnings_days is not None and 0 <= earnings_days <= 10:
+        pts += 2
+    return ("A" if pts <= 1 else "B" if pts <= 2.5 else
+            "C" if pts <= 4 else "D" if pts <= 5.5 else "E")
 
 
 def build_reason(m, fund):
@@ -1221,6 +1360,13 @@ def build_reason(m, fund):
     eps_g = fund.get("EPS成長%")
     if eps_g is not None and eps_g >= 25:
         good.append(f"EPS成長+{eps_g:.0f}%")
+    if eps_g is not None and eps_g < 0:
+        warn.append(f"EPS成長{eps_g:+.0f}%と減益 — Minervini基準 (+25%以上) 未達")
+    rev_w = fund.get("売上成長%")
+    if rev_w is not None and rev_w < 0:
+        warn.append(f"売上{rev_w:+.0f}%と減収")
+    if (m.get("viol") or 0) > (m.get("conf") or 0):
+        warn.append(f"挙動分析: 違反{m['viol']} > 確認{m['conf']} — 売り圧力優勢の兆候")
     if m["ext"]:
         warn.append("ピボットから5%以上の上放れ（EXT）— 追いかけ買いは避け、押しを待つ")
     if m.get("stage", 0) >= 4:
@@ -1277,9 +1423,15 @@ def make_row(sym, m, fund, mode):
         "ベース週数": binfo.get("weeks", 0),
         "ベース深さ%": binfo.get("depth", 0),
         "ベース段階": m.get("stage", 1),
+        "売上ランク": sales_rating(fund.get("売上成長%"), fund.get("_rev_q2")),
+        "VCPスコア": vcp_score(m.get("depths") or [], m["vdu"], m["close"], m["pivot"]),
+        "買いリスク": buy_risk(m, earnings_days),
+        "確認": m.get("conf"),
+        "違反": m.get("viol"),
         "vols": m["vols"],
         "ma50px": m["ma50px"],
         "シンボル": sym,
+        "現在値": round(m["close"], 2),
         "セクター": m["sector_ja"],
         "セクターRS数値": m["sec_rs"],
         "RS": m["rs"],
@@ -1400,21 +1552,22 @@ def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
         for i, (etf, rs) in enumerate(sorted(sec_rs.items(), key=lambda x: -x[1]))
     ]
 
+    # 技術面の予備候補 (SEPA流: 先に技術で絞り、ファンダで適格判定・序列付け)
     # メイン: Stage2 + RS80+ + 高値圏 + 流動性
-    main_syms = [s for s, m in metrics.items()
-                 if m["stage2"] and m["rs"] >= 80 and m["dist_high"] <= 25
-                 and m["vol_m"] >= 15 and m["close"] >= 12 and not m["veto"]]
-    main_syms.sort(key=lambda s: -metrics[s]["score"])
-    main_syms = main_syms[:MAIN_LIST_SIZE]
+    pre_main = [s for s, m in metrics.items()
+                if m["stage2"] and m["rs"] >= 80 and m["dist_high"] <= 25
+                and m["vol_m"] >= 15 and m["close"] >= 12 and not m["veto"]]
+    pre_main.sort(key=lambda s: -metrics[s]["score"])
+    pre_main = pre_main[:MAIN_POOL]
 
     # 高値保ち合い: Stage2 + 高値から15%以内 + 直近10日の値幅が小さい
-    tight_syms = [s for s, m in metrics.items()
-                  if m["stage2"] and m["dist_high"] <= 15 and m["range10"] <= 7.5
-                  and m["vol_m"] >= 10 and m["close"] >= 12 and not m["veto"]]
-    tight_syms.sort(key=lambda s: -metrics[s]["score"])
-    tight_syms = tight_syms[:TIGHT_LIST_SIZE]
+    pre_tight = [s for s, m in metrics.items()
+                 if m["stage2"] and m["dist_high"] <= 15 and m["range10"] <= 7.5
+                 and m["vol_m"] >= 10 and m["close"] >= 12 and not m["veto"]]
+    pre_tight.sort(key=lambda s: -metrics[s]["score"])
+    pre_tight = pre_tight[:TIGHT_POOL]
 
-    fund_syms = list(dict.fromkeys(main_syms + tight_syms))[:FUNDAMENTALS_LIMIT]
+    fund_syms = list(dict.fromkeys(pre_main + pre_tight))[:FUNDAMENTALS_LIMIT]
     funds = {}
     if not skip_fundamentals:
         log(f"fetching fundamentals for {len(fund_syms)} symbols")
@@ -1437,8 +1590,25 @@ def run(data, universe, skip_fundamentals=False, prev=None, industry_map=None):
                     # 粗いETFセクターRSで上書きしない
                     if sym not in sym_grp:
                         metrics[sym]["sec_rs"] = sec_rs.get(etf, 50)
-                        # SecRSは総合Scoreの20%を占めるため表示の整合性を保つ
-                        metrics[sym]["score"] = final_score(metrics[sym])
+        # ファンダ反映: 合成スコア (技術62%+ファンダ38%) とメイン適格判定。
+        # 減益銘柄はどれだけ技術面が良くてもメインに出さない
+        n_fund_ng = 0
+        for sym, f in funds.items():
+            ok, ng = fund_gate(f)
+            metrics[sym]["fund_ok"] = ok
+            metrics[sym]["fund_ng"] = ng
+            metrics[sym]["score"] = final_score(metrics[sym], f)
+            n_fund_ng += not ok
+        if n_fund_ng:
+            log(f"fundamental gate: {n_fund_ng} symbols excluded from main list")
+
+    main_syms = [s for s in pre_main if metrics[s].get("fund_ok", True)]
+    main_syms.sort(key=lambda s: -metrics[s]["score"])
+    main_syms = main_syms[:MAIN_LIST_SIZE]
+
+    # 保ち合いは監視リストなので減益でも残す (警告表示で判断材料は出す)
+    tight_syms = sorted(pre_tight, key=lambda s: -metrics[s]["score"])
+    tight_syms = tight_syms[:TIGHT_LIST_SIZE]
 
     out = {
         "env": env,

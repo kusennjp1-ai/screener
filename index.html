@@ -475,6 +475,7 @@ function stockRow(r, mode='main') {
             ${extTag}${earnTag}${vcpTag}${rlTag}${vduTag}${bktTag}${c33Tag}
           </div>
           <div style="display:flex;gap:10px;font-size:11px;color:var(--text2);">
+            ${r['現在値'] ? `<span>現在 <b style="color:var(--accent2)">$${n(r['現在値'],'',2)}</b></span>` : ''}
             <span>Pvt <b style="color:var(--text)">$${n(pvt,'',2)}</b></span>
             <span>Stop <b style="color:#ef4444">$${n(stop,'',2)}</b></span>
             <span style="color:${rrColor(rr)}">RR <b>${n(rr,'x')}</b></span>
@@ -505,6 +506,7 @@ function stockRow(r, mode='main') {
             ${extTag}${earnTag}${vcpTag}${rlTag}${vduTag}${bktTag}${typeTag}
           </div>
           <div style="font-size:11px;color:var(--text2);">
+            ${r['現在値'] ? `<span>現在 <b style="color:var(--accent2)">$${n(r['現在値'],'',2)}</b></span><span style="margin-left:10px;"></span>` : ''}
             <span>SecRS <b style="color:${secRsColor(secRs)}">${secRs}</b></span>
             <span style="margin-left:10px;">高値比 <b style="color:var(--text)">${n(hi52,'%')}</b></span>
             <span style="margin-left:10px;">$<b style="color:var(--text)">${n(volM,'M')}</b></span>
@@ -556,8 +558,42 @@ function detailPanel(sym, mode) {
       ${cell('SMR', r['SMR'] || 'N', 'AB'.includes(r['SMR']))}
       ${cell('A/D', r['AccDis'], 'AB'.includes(r['AccDis']))}
       ${cell('U/D', n(r['UD比'],'',1), r['UD比'] >= 1.5)}
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:8px;">
+      ${cell('売上', r['売上ランク'], r['売上ランク'] >= 80)}
+      ${cell('VCPスコア', r['VCPスコア'], r['VCPスコア'] >= 70)}
+      ${cell('買いリスク', r['買いリスク'] || '—', r['買いリスク'] === 'A')}
+      ${cell('業種RS', r['セクターRS数値'], r['セクターRS数値'] >= 80)}
     </div>`;
   }
+
+  // 現在値ヘッダー
+  const priceLine = r['現在値'] ? `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+      <span style="font-size:19px;font-weight:800;">$${n(r['現在値'],'',2)}</span>
+      <span style="font-size:11px;color:var(--text2);">52週高値まで ${n(r['高値比%'],'%')}</span>
+    </div>` : '';
+
+  // Fab 5 — トレンド・ファンダ・RS・ベース・市場環境の5点検 (Markets 360のFab 5 Pane相当)
+  const envSt = (DATA && DATA.env && (DATA.env['status'] || '')) || '';
+  const epsF = r['EPS成長%'];
+  const f5mark = s => s==='ok' ? ['✓','#22c55e'] : s==='mid' ? ['△','#f59e0b']
+                    : s==='bad' ? ['✗','#ef4444'] : ['?','#64748b'];
+  const f5items = [
+    ['トレンド', 'ok'],
+    ['ファンダ', (epsF===null||epsF===undefined) ? 'na' : epsF>=25 ? 'ok' : epsF>=0 ? 'mid' : 'bad'],
+    ['RS', (r['RS']>=90 || r['RSライン52日']==='★') ? 'ok' : r['RS']>=80 ? 'mid' : 'bad'],
+    ['ベース', (r['VCP']==='✓' || (r['ベース'] && r['ベース']!=='保ち合い') || (r['VCPスコア']||0)>=60) ? 'ok'
+             : (r['ベース']==='保ち合い' || (r['収縮回数']||0)>=1) ? 'mid' : 'bad'],
+    ['市場', envSt==='BUY MODE' ? 'ok' : envSt==='CAUTION' ? 'mid' : 'bad'],
+  ];
+  const fab5 = `<div style="display:flex;gap:4px;margin-bottom:2px;">` + f5items.map(it => {
+    const mk = f5mark(it[1]);
+    return `<div style="flex:1;text-align:center;padding:4px 1px;background:var(--surface2);border-radius:6px;">
+      <div style="font-size:13px;font-weight:800;color:${mk[1]};">${mk[0]}</div>
+      <div style="font-size:8px;color:var(--text2);">${it[0]}</div></div>`;
+  }).join('') + `</div>
+  <div style="font-size:9px;color:var(--text2);margin:0 0 8px;">Fab 5 — 5点検: ✓良 / △可 / ✗不可</div>`;
 
   // ベース情報（フラットベース / カップ / カップウィズハンドル + 段階）
   const baseLine = r['ベース']
@@ -621,7 +657,9 @@ function detailPanel(sym, mode) {
 
   return `
     <div class="detail">
+      ${priceLine}
       ${strip}
+      ${fab5}
       <div id="bc-${sym}">${chart}</div>
       ${baseLine}
       ${buyZone}
