@@ -1366,6 +1366,94 @@ class Backtest(unittest.TestCase):
         res2 = bt.simulate(data, mode="breakout")
         self.assertEqual({t["sym"] for t in res2["trades"]}, {"VCPX", "WETX"})
 
+    def _master_frame(self, idx, days, power=True, tail="win"):
+        # 上昇300日 (途中に+9%の急騰日 — power=Trueなら出来高4倍を伴う=決算の足跡、
+        # Falseなら出来高なしの急騰=足跡と見なさない)
+        # → 枯れたフラットベース30日 → 出来高を伴うブレイク → tailで分岐
+        incr = np.full(300, 0.003)
+        incr[290] = 0.09
+        rise = 50 * np.cumprod(1 + incr)
+        top = rise[-1]
+        base = np.full(30, top * 0.99)
+        n = days - 331
+        if tail == "win":
+            after = top * 1.03 * np.cumprod(1 + np.full(n, 0.005))
+        elif tail == "fail":   # ブレイク翌日からピボット下で停滞 (ストップ未満には届かない)
+            after = np.concatenate([[top * 1.01], np.full(n - 1, top * 0.992)])
+        else:                  # fade: +18%まで伸びてから反落
+            up = top * 1.03 * np.cumprod(1 + np.full(18, 0.009))
+            after = np.concatenate([up, up[-1] * np.cumprod(1 + np.full(n - 18, -0.02))])
+        df = self._frame(np.concatenate([rise, base, [top * 1.03], after]), idx)
+        vcol = df.columns.get_loc("Volume")
+        if power:
+            df.iloc[290, vcol] = 8e6
+        df.iloc[320:330, vcol] = 1.0e6
+        df.iloc[330, vcol] = 5e6
+        return df
+
+    def _master_data(self, days=600, **frames):
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        data = {"SPY": self._frame(400 * np.cumprod(1 + np.full(days, 0.0005)), idx)}
+        for name, kw in frames.items():
+            data[name] = self._master_frame(idx, days, **kw)
+        for k in range(5):
+            data[f"FIL{k}"] = self._frame(
+                50 * np.cumprod(1 + np.full(days, 0.0002 + k * 1e-5)), idx)
+        return data
+
+    def test_master_requires_earnings_footprint(self):
+        # masterモード: 決算サプライズの足跡 (+8%×出来高3倍) がない銘柄は見送る
+        import backtest as bt
+        data = self._master_data(EPSX={"power": True}, NOPX={"power": False})
+        syms = {t["sym"] for t in bt.simulate(data, mode="master")["trades"]}
+        self.assertIn("EPSX", syms)
+        self.assertNotIn("NOPX", syms)
+        # vcpモードでは両方買われる (差分は決算足跡ゲートのみ)
+        syms2 = {t["sym"] for t in bt.simulate(data, mode="vcp")["trades"]}
+        self.assertEqual(syms2, {"EPSX", "NOPX"})
+
+    def test_master_exits_failed_breakout(self):
+        # 5日以内にピボット下で引けたら-7%を待たず即撤退 (売りの裁量)
+        import backtest as bt
+        data = self._master_data(FALX={"power": True, "tail": "fail"})
+        t = [t for t in bt.simulate(data, mode="master")["trades"]
+             if t["sym"] == "FALX"][0]
+        self.assertEqual(t["reason"], "ブレイク失敗")
+        self.assertLessEqual(t["days"], 5)
+        self.assertGreater(t["pnl_pct"], -5, "ストップより浅い損失で逃げる")
+
+    def test_master_trails_after_gain(self):
+        # +15%到達後は10日安値トレール — 反落しても利益を残して売る
+        import backtest as bt
+        data = self._master_data(FADX={"power": True, "tail": "fade"})
+        t = [t for t in bt.simulate(data, mode="master")["trades"]
+             if t["sym"] == "FADX"][0]
+        self.assertEqual(t["reason"], "トレール利確")
+        self.assertGreater(t["pnl_pct"], 3, f"利益を残して降りる: {t}")
+
+    def test_peer_strength_groups_by_correlation(self):
+        # 疑似同業 (相関上位20) の強弱を判定できる — 業種文脈の代理
+        import backtest as bt
+        days = 300
+        idx = pd.bdate_range(end=dt.date.today(), periods=days)
+        rng = np.random.default_rng(42)
+        strong = np.concatenate([np.full(220, 0.001), np.full(80, 0.004)])
+        weak = np.concatenate([np.full(220, 0.001), np.full(80, -0.003)])
+        mk = lambda ret: self._frame(
+            50 * np.cumprod(1 + ret + rng.normal(0, 0.0005, days)), idx)
+        data = {"SPY": self._frame(np.full(days, 400.0), idx),
+                "LEAD": mk(strong), "WLED": mk(weak)}
+        for k in range(24):
+            data[f"PA{k}"] = mk(strong)
+            data[f"PB{k}"] = mk(weak)
+        for k in range(70):
+            data[f"FL{k}"] = mk(np.zeros(days))
+        m = bt.build_matrices(data)
+        self.assertGreater(bt.peer_strength(m, 290, "LEAD"), 0.6,
+                           "強い疑似同業クラスタ")
+        self.assertLess(bt.peer_strength(m, 290, "WLED"), 0.5,
+                        "弱い疑似同業クラスタ")
+
     def test_fast_winner_held_8_weeks(self):
         # 3週間で+20%の急騰銘柄は+22%で売らず8週間保有 (大化けの右裾を切らない)
         import backtest as bt

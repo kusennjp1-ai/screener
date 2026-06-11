@@ -8,9 +8,13 @@ on:
         required: false
         default: '2'
       mode:
-        description: 'breakout=ピボット越え+出来高確認 / vcp=+収縮の質とRS90 / zone=旧ゾーン買い'
+        description: 'breakout / vcp / master(=+決算足跡・疑似同業・売り裁量) / zone'
         required: false
         default: 'breakout'
+      check:
+        description: '実在トレード検査 SYM:YYYY-MM-DD,... (省略可)'
+        required: false
+        default: ''
       fund:
         description: 'on=シグナル日時点のEPS実績で減益を除外'
         required: false
@@ -42,6 +46,7 @@ jobs:
           --years "${{ github.event.inputs.years || '2' }}"
           --mode "${{ github.event.inputs.mode || 'breakout' }}"
           --fund "${{ github.event.inputs.fund || 'on' }}"
+          --check "${{ github.event.inputs.check || '' }}"
 
       - uses: actions/upload-artifact@v4
         with:

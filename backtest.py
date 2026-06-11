@@ -81,7 +81,33 @@ def build_matrices(data, bench=("SPY", "QQQ")):
     m["tight10"] = (highs.shift(1).rolling(10).max()
                     / lows.shift(1).rolling(10).min() - 1)
     m["vol10p"] = vols.shift(1).rolling(10).mean()  # 直前10日の出来高 (枯れ判定)
+    # masterモード用: 決算サプライズの足跡 (+8%以上の上昇日が出来高3倍以上) と
+    # シグナル日の引けの強さ (日中レンジ内の終値位置)
+    power = ((closes.pct_change(fill_method=None) >= 0.08)
+             & (vols >= 3 * m["vol50"])).astype(float)
+    m["power70"] = power.rolling(70, min_periods=1).max()
+    rng = (highs - lows)
+    m["clrange"] = (closes - lows).div(rng.where(rng > 0))
     return m
+
+
+def peer_strength(m, i, sym):
+    """業種文脈の代理: 過去126日の日次リターン相関の上位20銘柄 (疑似同業) の
+    63日リターン百分位の平均。過去時点の業種マップが存在しないため、値動きの
+    連動性で同業グループを近似する。判定不能 (小さな宇宙・データ不足) はNone。"""
+    cl = m["closes"]
+    if cl.shape[1] < 100 or i < 130:
+        return None
+    rets = cl.iloc[i - 126:i + 1].pct_change(fill_method=None)
+    r = rets[sym]
+    if r.count() < 60:
+        return None
+    cors = rets.corrwith(r).drop(sym).dropna()
+    if len(cors) < 30:
+        return None
+    peers = cors.nlargest(20).index
+    p63 = (cl.iloc[i] / cl.iloc[i - 63] - 1).rank(pct=True)
+    return float(p63[peers].mean())
 
 
 def env_state(spy, i):
@@ -110,6 +136,9 @@ def candidates_at(m, i, mode="breakout"):
     mode="vcp": breakoutに加えて入口の質を要求 — RS90以上・RSラインが高値圏・
       ベース深さ25%以内・ピボット手前の値幅タイト化・ボラ収縮・出来高の枯れ。
       (Minerviniの勝率を支える銘柄選別のうち株価・出来高で再現可能な部分)
+    mode="master": vcpに加えてテスト不能だった要素の代理ゲート — 決算サプライズ
+      の足跡 (直近70日に+8%×出来高3倍の日)・疑似同業の強さ (相関上位20銘柄の
+      リターン百分位60%以上)・シグナル日の強い引け (レンジ上半分)。
     mode="zone": 買いゾーン (ピボット+5%以内) に居る銘柄を全て返す旧方式。
       ブレイクの瞬間を要求しないぶん緩く、忠実度は低い (比較検証用)。"""
     c = m["closes"].iloc[i]
@@ -134,12 +163,12 @@ def candidates_at(m, i, mode="breakout"):
           & (c / ma200 - 1 < 1.2)
           # 買いゾーン: ベース上限+5%以内 (EXT=上放れは追いかけない)
           & (c <= m["base20_5"].iloc[i] * 1.05))
-    if mode in ("breakout", "vcp"):
+    if mode in ("breakout", "vcp", "master"):
         base = m["base20_5"].iloc[i]
         prev_c = m["closes"].iloc[i - 1]
         ok = (ok & (c > base) & (prev_c <= base)          # 当日ピボット越え
               & (m["vols"].iloc[i] >= 1.4 * m["vol50"].iloc[i]))  # 出来高確認
-    if mode == "vcp":
+    if mode in ("vcp", "master"):
         ok = (ok & (rs_pct >= 0.90)                       # 真のリーダーのみ (RS90)
               # 相対力の文脈: RSラインが52週高値圏 (市場をリードしてブレイク)
               & (m["rs_line"].iloc[i] >= m["rs_line_hi"].iloc[i] * 0.95)
@@ -147,9 +176,16 @@ def candidates_at(m, i, mode="breakout"):
               & ((base - m["l40"].iloc[i]) / base <= 0.25)
               # 収縮の質: ピボット手前10日の値幅がタイト + ボラが40日前より縮小
               & (m["tight10"].iloc[i] <= 0.12)
-              & (m["adr20"].iloc[i] <= m["adr20"].iloc[i - 40])
+              & (m["adr20"].iloc[i] <= m["adr20"].iloc[i - 40] * 1.001)
               # 出来高の枯れ: 直前10日の出来高が50日平均を下回る
               & (m["vol10p"].iloc[i] <= 0.95 * m["vol50"].iloc[i]))
+    if mode == "master":
+        ok = (ok & (m["power70"].iloc[i] >= 1)            # 決算サプライズの足跡
+              & (m["clrange"].iloc[i].fillna(1.0) >= 0.5))  # 強い引け (レンジ上半分)
+        # 疑似同業の強さ (業種文脈の代理) — 残った候補だけ個別に判定
+        keep = [sym for sym in ok.index[ok.fillna(False)]
+                if (ps := peer_strength(m, i, sym)) is None or ps >= 0.60]
+        ok = ok & pd.Series(ok.index.isin(keep), index=ok.index)
     score = (0.45 * rs_pct * 99 + 0.20 * 50
              + 0.20 * (100 - np.minimum(dist_high * 4, 100)))
     out = []
@@ -276,7 +312,7 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
 
     for i in range(start, len(dates)):
         # --- 寄付: 前回シグナルの約定 (引け後のスクリーナーで当日終値では買えない)
-        for sym, stop in pending:
+        for sym, stop, pivot in pending:
             if len(positions) >= slots or sym in positions:
                 continue
             col = m["closes"].columns.get_loc(sym)
@@ -291,6 +327,7 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
             cash -= shares * o
             positions[sym] = {"entry": o, "stop": stop, "shares": shares,
                               "entry_i": i, "be_done": False, "fast": False,
+                              "pivot": pivot, "trail": False,
                               "last_close": o, "nan_days": 0}
         pending = []
 
@@ -318,10 +355,15 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
                 p["fast"] = True
             in_fast_hold = p["fast"] and held < FAST_HOLD
             tgt = p["entry"] * (1 + target)
+            stop_label = ("トレール利確" if p.get("trail")
+                          else "建値撤退" if p["be_done"] else None)
             if o == o and o <= p["stop"]:
-                close_pos(sym, i, o, "建値撤退" if p["be_done"] else "損切り(寄付GD)")
+                close_pos(sym, i, o, stop_label or "損切り(寄付GD)")
             elif l <= p["stop"]:
-                close_pos(sym, i, p["stop"], "建値撤退" if p["be_done"] else "損切り")
+                close_pos(sym, i, p["stop"], stop_label or "損切り")
+            elif mode == "master" and held <= 5 and c < p["pivot"]:
+                # 売りの裁量(1): ブレイクが続かずピボット下で引けたら即撤退
+                close_pos(sym, i, c, "ブレイク失敗")
             elif p["fast"] and held >= FAST_HOLD:
                 close_pos(sym, i, c, "8週保有後利確")
             elif not in_fast_hold and h >= tgt:
@@ -331,6 +373,14 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
             elif not p["be_done"] and c >= p["entry"] * (1 + be_trigger):
                 p["stop"] = max(p["stop"], p["entry"])
                 p["be_done"] = True
+            # 売りの裁量(2): +15%到達後は10日安値でトレール (強さの中で守る)
+            if (sym in positions and mode == "master"
+                    and c >= p["entry"] * 1.15):
+                l10 = float(m["l10"].iat[i, col])
+                if l10 == l10 and l10 > p["stop"]:
+                    p["stop"] = l10
+                    if l10 > p["entry"]:
+                        p["trail"] = True
 
         # --- 市場環境は日次で判定 (悪化時の清算を遅らせない)
         env = env_state(spy, i)
@@ -349,7 +399,8 @@ def simulate(data, capital=1_000_000.0, slots=SLOTS, target=TARGET,
                     g = eps_yoy_asof(eps_hist.get(sym), asof)
                     if g is not None and g < 0:
                         continue  # シグナル時点で減益が判明 → 本番同様に見送り
-                pending.append((sym, stop))
+                pivot = float(m["base20_5"].iat[i, m["closes"].columns.get_loc(sym)])
+                pending.append((sym, stop, pivot))
         equity_curve.append((str(dates[i].date()), round(equity(i), 0)))
 
     # 末日清算 (未決済分の評価確定 — 統計では「未完了」として別集計)
@@ -384,6 +435,7 @@ def summarize(trades, equity_curve, capital, spy_c, dates, start,
     stats = {
         "方式": {"breakout": "ブレイクアウト型 (ピボット越え+出来高確認)",
                "vcp": "VCP型 (ブレイクアウト+収縮の質+RS90+RSライン高値圏)",
+               "master": "マスター型 (VCP+決算足跡+疑似同業+引けの質+売り裁量)",
                "zone": "ゾーン型 (買いゾーン内を週次バスケット買い)"}[mode],
         "ファンダゲート": ("有効 (シグナル日時点のEPS実績で減益を除外)"
                     if fund_gated else "無効 (技術面のみ)"),
@@ -420,12 +472,55 @@ def report(result):
             f"{t['pnl_pct']:+6.1f}% {t['days']:>3}日 {t['reason']}")
 
 
+def run_check(data, spec):
+    """実在トレード (例: Minervini USIC 2021の公開エントリー) との答え合わせ。
+    SYM:YYYY-MM-DD → その日±3営業日に各モードのゲートを通るか。
+    SYM:YYYY → その年に通った日付を列挙 (エントリー日が不明な銘柄用)。"""
+    m = build_matrices(data)
+    dates = m["closes"].index
+    modes = ("breakout", "vcp", "master")
+    for item in spec.split(","):
+        sym, _, ds = item.strip().partition(":")
+        if sym not in m["closes"].columns:
+            log(f"check {sym}: データなし")
+            continue
+        if len(ds) == 4:  # 年指定 → その年のヒット日を列挙
+            hits = {md: [] for md in modes}
+            for i in range(260, len(dates)):
+                if str(dates[i].year) != ds:
+                    continue
+                for md in modes:
+                    if any(s == sym for s, _p, _st in candidates_at(m, i, md)):
+                        hits[md].append(str(dates[i].date()))
+            log(f"check {sym} ({ds}年): " + " / ".join(
+                f"{md}={','.join(h) if (h := hits[md]) else '×'}" for md in modes))
+        else:
+            d = pd.Timestamp(ds)
+            base_i = int(dates.searchsorted(d))
+            res = {}
+            for md in modes:
+                hit = ""
+                for off in range(-3, 4):
+                    j = base_i + off
+                    if 260 <= j < len(dates) and any(
+                            s == sym for s, _p, _st in candidates_at(m, j, md)):
+                        hit = str(dates[j].date())
+                        break
+                res[md] = hit or "×"
+            log(f"check {sym} @{ds}: " + " / ".join(
+                f"{md}={res[md]}" for md in modes))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=float, default=2.0, help="検証期間 (年)")
-    ap.add_argument("--mode", choices=("breakout", "vcp", "zone"), default="breakout",
+    ap.add_argument("--mode", choices=("breakout", "vcp", "master", "zone"),
+                    default="breakout",
                     help="breakout=ピボット越え+出来高確認 / vcp=+収縮の質とRS90 / "
-                         "zone=旧ゾーン買い (比較用)")
+                         "master=+決算足跡・疑似同業・売り裁量 / zone=旧ゾーン買い")
+    ap.add_argument("--check", default="",
+                    help="SYM:YYYY-MM-DD または SYM:YYYY をカンマ区切りで指定し、"
+                         "実在トレードが各モードのゲートを通るか検査")
     ap.add_argument("--fund", choices=("on", "off"), default="on",
                     help="on=シグナル日時点のEPS実績で減益銘柄を除外 (2パス)")
     ap.add_argument("--selftest", action="store_true")
@@ -453,6 +548,8 @@ def main():
             time.sleep(90)
             eps_hist = fetch_eps_history(cand[:800], sleep=0.5)
         result = simulate(data, mode=args.mode, eps_hist=eps_hist)
+        if args.check:
+            run_check(data, args.check)
 
     report(result)
     os.makedirs("data", exist_ok=True)
