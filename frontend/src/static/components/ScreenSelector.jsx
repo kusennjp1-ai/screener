@@ -46,7 +46,7 @@ function ScreenSelector({ screens, activeScreenId, onSelectScreen, matchCounts }
       }}
     >
       <Chip
-        label="All Stocks"
+        label="全銘柄"
         size="small"
         variant={activeScreenId == null ? 'filled' : 'outlined'}
         color={activeScreenId == null ? 'primary' : 'default'}

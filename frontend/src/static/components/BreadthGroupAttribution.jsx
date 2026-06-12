@@ -324,8 +324,8 @@ function GroupRow({ row, maxAbsNet, trendData }) {
         <TableCell sx={{ py: 0, borderBottom: open ? undefined : 'none' }} colSpan={8}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', py: 1, px: 4 }}>
-              <StockList title="Up 4%+" stocks={row.up_stocks} color="success.main" />
-              <StockList title="Down 4%+" stocks={row.down_stocks} color="error.main" />
+              <StockList title="4%超 上昇" stocks={row.up_stocks} color="success.main" />
+              <StockList title="4%超 下落" stocks={row.down_stocks} color="error.main" />
             </Box>
           </Collapse>
         </TableCell>
@@ -438,7 +438,7 @@ function BreadthGroupAttribution({ attribution }) {
   if (!attribution || attribution.available === false) {
     return (
       <Alert severity="info" sx={{ fontSize: '12px' }}>
-        {attribution?.reason || 'Group attribution is not available for this market yet.'}
+        {attribution?.reason || 'この市場ではグループ別の集計はまだ利用できません。'}
       </Alert>
     );
   }
@@ -446,7 +446,7 @@ function BreadthGroupAttribution({ attribution }) {
   if (!selectedDay) {
     return (
       <Alert severity="info" sx={{ fontSize: '12px' }}>
-        No 4%+ movers were attributed for the lookback window.
+        対象期間に4%以上変動した銘柄の集計はありません。
       </Alert>
     );
   }
@@ -478,10 +478,10 @@ function BreadthGroupAttribution({ attribution }) {
         }}
       >
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel id="breadth-attribution-date-label">Session</InputLabel>
+          <InputLabel id="breadth-attribution-date-label">日付</InputLabel>
           <Select
             labelId="breadth-attribution-date-label"
-            label="Session"
+            label="日付"
             value={selectedDay.date}
             onChange={(event) => setSelectedDate(event.target.value)}
           >
@@ -495,17 +495,17 @@ function BreadthGroupAttribution({ attribution }) {
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Chip
             size="small"
-            label={`Up 4%+: ${selectedDay.stocks_up_4pct}`}
+            label={`4%超 上昇: ${selectedDay.stocks_up_4pct}`}
             sx={{ bgcolor: 'rgba(76,175,80,0.16)', color: 'success.main', fontWeight: 600 }}
           />
           <Chip
             size="small"
-            label={`Down 4%+: ${selectedDay.stocks_down_4pct}`}
+            label={`4%超 下落: ${selectedDay.stocks_down_4pct}`}
             sx={{ bgcolor: 'rgba(244,67,54,0.16)', color: 'error.main', fontWeight: 600 }}
           />
           <Chip
             size="small"
-            label={`Groups: ${(selectedDay.groups || []).length}`}
+            label={`グループ数: ${(selectedDay.groups || []).length}`}
             variant="outlined"
           />
         </Box>
@@ -521,13 +521,13 @@ function BreadthGroupAttribution({ attribution }) {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: 32 }} />
-                    {sortableHeader('group', 'IBD Industry Group')}
-                    <TableCell sx={{ width: 96 }}>Split</TableCell>
-                    {sortableHeader('up', 'Up 4%+', 'right')}
-                    {sortableHeader('down', 'Down 4%+', 'right')}
-                    {sortableHeader('net', 'Net', 'right')}
-                    {sortableHeader('total', 'Total', 'right')}
-                    <TableCell sx={{ width: 96 }}>10-day Net</TableCell>
+                    {sortableHeader('group', 'IBD業種グループ')}
+                    <TableCell sx={{ width: 96 }}>内訳</TableCell>
+                    {sortableHeader('up', '4%超 上昇', 'right')}
+                    {sortableHeader('down', '4%超 下落', 'right')}
+                    {sortableHeader('net', '差引', 'right')}
+                    {sortableHeader('total', '合計', 'right')}
+                    <TableCell sx={{ width: 96 }}>10日差引</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>

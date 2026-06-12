@@ -51,10 +51,10 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
     [detail?.stocks],
   );
   const chartsTabLabel = chartsEnabled ? (
-    'Charts'
+    'チャート'
   ) : (
-    <Tooltip title={`Charts available for top ${CHARTS_TOP_N_GROUPS} groups only`} describeChild>
-      <Box component="span">Charts</Box>
+    <Tooltip title={`チャートは上位${CHARTS_TOP_N_GROUPS}グループのみ利用できます`} describeChild>
+      <Box component="span">チャート</Box>
     </Tooltip>
   );
   const chartData = useMemo(() => {
@@ -92,14 +92,14 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">{group}</Typography>
-          <IconButton onClick={onClose} size="small" aria-label="Close group detail">
+          <IconButton onClick={onClose} size="small" aria-label="グループ詳細を閉じる">
             <CloseIcon />
           </IconButton>
         </Box>
       </DialogTitle>
       <DialogContent>
         {!detail ? (
-          <Typography color="text.secondary">No data available</Typography>
+          <Typography color="text.secondary">データがありません</Typography>
         ) : (
           <Box>
             <Tabs
@@ -107,7 +107,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
               onChange={(_, value) => setActiveTab(value)}
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
             >
-              <Tab value="overview" label="Overview" />
+              <Tab value="overview" label="概要" />
               <Tab
                 value="charts"
                 label={chartsTabLabel}
@@ -125,26 +125,26 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
               <Grid item xs={3}>
                 <Box textAlign="center">
                   <Typography variant="h4">{detail.current_rank}</Typography>
-                  <Typography variant="caption" color="text.secondary">Current Rank</Typography>
+                  <Typography variant="caption" color="text.secondary">現在の順位</Typography>
                 </Box>
               </Grid>
               <Grid item xs={3}>
                 <Box textAlign="center">
                   <Typography variant="h4">{detail.current_avg_rs?.toFixed(1)}</Typography>
-                  <Typography variant="caption" color="text.secondary">Avg RS Rating</Typography>
+                  <Typography variant="caption" color="text.secondary">平均RSレーティング</Typography>
                 </Box>
               </Grid>
               <Grid item xs={3}>
                 <Box textAlign="center">
                   <Typography variant="h4">{detail.num_stocks}</Typography>
-                  <Typography variant="caption" color="text.secondary">Stocks</Typography>
+                  <Typography variant="caption" color="text.secondary">銘柄数</Typography>
                 </Box>
               </Grid>
               <Grid item xs={3}>
                 <Box textAlign="center">
                   <Typography variant="body1">{detail.top_symbol || '-'}</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Top Stock (RS: {detail.top_rs_rating?.toFixed(1) || '-'})
+                    代表銘柄（RS: {detail.top_rs_rating?.toFixed(1) || '-'}）
                   </Typography>
                 </Box>
               </Grid>
@@ -153,7 +153,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             {/* Rank History Chart */}
             {chartData.length > 0 && (
               <Box mb={3}>
-                <Typography variant="subtitle2" gutterBottom>Rank History</Typography>
+                <Typography variant="subtitle2" gutterBottom>順位の推移</Typography>
                 <Box sx={{ width: '100%', height: 220, bgcolor: 'background.paper', borderRadius: 1, p: 1 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 25 }}>
@@ -183,7 +183,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                         }}
                         labelStyle={{ color: '#fff' }}
                         itemStyle={{ color: '#fff' }}
-                        formatter={(value) => [`Rank: ${value}`, '']}
+                        formatter={(value) => [`順位: ${value}`, '']}
                         labelFormatter={(label, payload) => payload?.[0]?.payload?.date || label}
                       />
                       <ReferenceLine y={20} stroke="#4caf50" strokeDasharray="3 3" opacity={0.5} />
@@ -196,13 +196,13 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             )}
 
             {/* Rank Changes */}
-            <Typography variant="subtitle2" gutterBottom>Rank Changes</Typography>
+            <Typography variant="subtitle2" gutterBottom>順位の変化</Typography>
             <Grid container spacing={2} mb={3}>
               {[
-                { label: '1 Week', key: 'rank_change_1w' },
-                { label: '1 Month', key: 'rank_change_1m' },
-                { label: '3 Months', key: 'rank_change_3m' },
-                { label: '6 Months', key: 'rank_change_6m' },
+                { label: '1週', key: 'rank_change_1w' },
+                { label: '1ヶ月', key: 'rank_change_1m' },
+                { label: '3ヶ月', key: 'rank_change_3m' },
+                { label: '6ヶ月', key: 'rank_change_6m' },
               ].map(({ label, key }) => (
                 <Grid item xs={3} key={key}>
                   <Box textAlign="center" p={1} bgcolor="action.hover" borderRadius={1}>
@@ -217,16 +217,16 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             {detail.stocks && detail.stocks.length > 0 && (
               <Box mb={2}>
                 <Box sx={{ fontSize: '12px', fontWeight: 600, mb: 0.5 }}>
-                  Constituent Stocks ({detail.stocks.length})
+                  構成銘柄（{detail.stocks.length}）
                 </Box>
                 <TableContainer sx={{ maxHeight: 300 }}>
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Sym</TableCell>
-                        <TableCell align="center" sx={{ p: '2px' }}>Price 30d</TableCell>
-                        <TableCell align="center" sx={{ p: '2px' }}>RS 30d</TableCell>
-                        <TableCell align="right">Price</TableCell>
+                        <TableCell>銘柄</TableCell>
+                        <TableCell align="center" sx={{ p: '2px' }}>株価30日</TableCell>
+                        <TableCell align="center" sx={{ p: '2px' }}>RS 30日</TableCell>
+                        <TableCell align="right">株価</TableCell>
                         <TableCell align="right">RS</TableCell>
                         <TableCell align="right">1M</TableCell>
                         <TableCell align="right">3M</TableCell>
@@ -305,15 +305,15 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             {/* History Table */}
             {detail.history && detail.history.length > 0 && (
               <>
-                <Box sx={{ fontSize: '12px', fontWeight: 600, mb: 0.5 }}>Rank History</Box>
+                <Box sx={{ fontSize: '12px', fontWeight: 600, mb: 0.5 }}>順位の推移</Box>
                 <TableContainer sx={{ maxHeight: 180 }}>
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Date</TableCell>
-                        <TableCell align="right">Rank</TableCell>
-                        <TableCell align="right">Avg RS</TableCell>
-                        <TableCell align="right">Stocks</TableCell>
+                        <TableCell>日付</TableCell>
+                        <TableCell align="right">順位</TableCell>
+                        <TableCell align="right">平均RS</TableCell>
+                        <TableCell align="right">銘柄数</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>

@@ -11,7 +11,7 @@ describe('RRGViewToggle', () => {
       <RRGViewToggle view="table" onView={vi.fn()} scope="groups" onScope={vi.fn()} rrgAvailable={false} />,
     );
 
-    expect(screen.getByRole('button', { name: 'Table' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'テーブル' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'RRG' })).not.toBeInTheDocument();
   });
 

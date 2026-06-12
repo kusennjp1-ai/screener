@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { MemoryRouter } from 'react-router-dom';
 
 import StaticGroupsPage from './StaticGroupsPage';
 
@@ -17,7 +18,9 @@ const renderPage = () => {
   return render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createTheme()}>
-        <StaticGroupsPage />
+        <MemoryRouter>
+          <StaticGroupsPage />
+        </MemoryRouter>
       </ThemeProvider>
     </QueryClientProvider>
   );
@@ -90,10 +93,10 @@ describe('StaticGroupsPage', () => {
   it('renders 1W movers and the 1W rank-change column', async () => {
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'US Group Rankings' })).toBeInTheDocument();
-    expect(screen.getByText('Top Gainers (1W)')).toBeInTheDocument();
-    expect(screen.getByText('Top Losers (1W)')).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: '1W' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'US 業種グループランキング' })).toBeInTheDocument();
+    expect(screen.getByText('上昇グループ（1W）')).toBeInTheDocument();
+    expect(screen.getByText('下落グループ（1W）')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '1週' })).toBeInTheDocument();
     expect(screen.getAllByText('Semiconductors').length).toBeGreaterThan(0);
     expect(screen.getByText('+3')).toBeInTheDocument();
   });
@@ -162,7 +165,7 @@ describe('StaticGroupsPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'US Group Rankings' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'US 業種グループランキング' })).toBeInTheDocument();
     // Switch from the table view to the Relative Rotation Graph.
     fireEvent.click(screen.getByRole('button', { name: 'RRG' }));
     expect(await screen.findByText(/Relative Rotation Graph/)).toBeInTheDocument();

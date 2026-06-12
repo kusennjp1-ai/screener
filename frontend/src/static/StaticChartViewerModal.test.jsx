@@ -121,7 +121,7 @@ describe('StaticChartViewerModal', () => {
       },
     });
 
-    expect(await screen.findByText('Stock 1 of 2', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText('1 / 2 銘柄', {}, { timeout: 10000 })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByTestId('static-candlestick-chart')).toHaveTextContent('NVDA:2');

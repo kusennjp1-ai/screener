@@ -13,24 +13,27 @@ import {
   IconButton,
   useTheme,
 } from '@mui/material';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { ColorModeContext } from '../contexts/ColorModeContext';
 import { useStaticMarket } from './StaticMarketContext';
 import { getStaticSupportedMarkets, resolveStaticMarketEntry, useStaticManifest } from './dataClient';
 import { marketFlag } from './marketFlags';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Daily' },
-  { path: '/scan', label: 'Scan' },
-  { path: '/breadth', label: 'Breadth' },
-  { path: '/groups', label: 'Groups' },
+  { path: '/', label: 'デイリー' },
+  { path: '/scan', label: 'スキャン' },
+  { path: '/breadth', label: '騰落' },
+  { path: '/groups', label: '業種グループ' },
 ];
 
 function StaticLayout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const theme = useTheme();
   const colorMode = useContext(ColorModeContext);
   const manifestQuery = useStaticManifest();
@@ -41,13 +44,33 @@ function StaticLayout({ children }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static" sx={{ minHeight: 48 }}>
-        <Toolbar variant="dense" sx={{ minHeight: 48 }}>
+        <Toolbar variant="dense" sx={{ minHeight: 48, flexWrap: 'wrap', rowGap: 0.5, py: 0.5 }}>
+          <IconButton
+            color="inherit"
+            size="small"
+            onClick={() => navigate(-1)}
+            aria-label="前のページに戻る"
+            title="戻る"
+            sx={{ mr: 0.25 }}
+          >
+            <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            size="small"
+            onClick={() => navigate(1)}
+            aria-label="次のページに進む"
+            title="進む"
+            sx={{ mr: 0.75 }}
+          >
+            <ArrowForwardIosIcon sx={{ fontSize: 16 }} />
+          </IconButton>
           <ShowChartIcon sx={{ mr: 1, fontSize: 20 }} />
           <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>
             STOCK SCANNER DAILY
           </Typography>
           <Chip
-            label="Read-only"
+            label="閲覧専用"
             size="small"
             color="info"
             sx={{ ml: 1.5, height: 22, fontSize: '11px' }}
@@ -114,7 +137,7 @@ function StaticLayout({ children }) {
             sx={{ ml: 0.5 }}
             onClick={colorMode.toggleColorMode}
             color="inherit"
-            title={theme.palette.mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme.palette.mode === 'dark' ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
             size="small"
           >
             {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}

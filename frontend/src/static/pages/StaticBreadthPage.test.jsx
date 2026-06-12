@@ -151,7 +151,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage('/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong Breadth' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
     expect(screen.getByTestId('breadth-chart')).toHaveTextContent('^HSI:1');
   });
 
@@ -256,9 +256,9 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'United States Breadth' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: /by group/i }));
+    fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
 
     expect(await screen.findByText('Computer Software-Database')).toBeInTheDocument();
     expect(screen.getByText('No Group')).toBeInTheDocument();
@@ -273,7 +273,7 @@ describe('StaticBreadthPage', () => {
     // Click Up header → sort by up_count desc: Software (up=2) ahead of No Group (up=1).
     // Click again → asc: No Group (up=1) would lead, but "No Group" is pinned to the
     // bottom regardless of direction, so Software still appears first.
-    const upHeader = screen.getByRole('button', { name: /^Up 4%\+/i });
+    const upHeader = screen.getByRole('button', { name: /^4%超 上昇/i });
     fireEvent.click(upHeader); // desc
     let rowNames = screen
       .getAllByRole('row')
@@ -345,8 +345,8 @@ describe('StaticBreadthPage', () => {
 
     renderPage('/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong Breadth' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /by group/i }));
+    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
     expect(
       await screen.findByText('Group attribution is not yet supported for market HK.')
     ).toBeInTheDocument();
@@ -430,12 +430,12 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'United States Breadth' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /by group/i }));
+    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
 
     // The empty-session message is shown but the date picker remains usable.
     expect(await screen.findByText(/No 4%\+ movers were attributed for 2026-05-15/i)).toBeInTheDocument();
-    const sessionCombobox = screen.getByRole('combobox', { name: /session/i });
+    const sessionCombobox = screen.getByRole('combobox', { name: '日付' });
     fireEvent.mouseDown(sessionCombobox);
     fireEvent.click(await screen.findByRole('option', { name: '2026-05-14' }));
 

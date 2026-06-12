@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -27,21 +28,22 @@ import RRGViewToggle from '../../components/Charts/RRGViewToggle';
 import { useRRGScopeSelection } from '../../components/Charts/useRRGScopeSelection';
 import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
+import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 import { useStaticMarket } from '../StaticMarketContext';
 
-function MoversCard({ title, rows }) {
+function MoversCard({ title, rows, openInfo }) {
   return (
     <Paper elevation={0} sx={{ p: 1.5, height: '100%', border: '1px solid', borderColor: 'divider' }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 0.5 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
         {title}
       </Typography>
       <TableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Group</TableCell>
-              <TableCell align="right">Rank</TableCell>
-              <TableCell align="right">Change</TableCell>
+              <GlossaryHeaderCell glossaryId="ibd_industry_group" openInfo={openInfo} align="left">業種グループ</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="group_rank" openInfo={openInfo} align="right">順位</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="group_rank_change" openInfo={openInfo} align="right">変化</GlossaryHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -61,35 +63,35 @@ function MoversCard({ title, rows }) {
   );
 }
 
-function GroupsTableView({ movers, moversPeriod, rankings, onSelectGroup }) {
+function GroupsTableView({ movers, moversPeriod, rankings, onSelectGroup, openInfo }) {
   return (
     <>
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid item xs={12} md={6}>
-          <MoversCard title={`Top Gainers (${moversPeriod.toUpperCase()})`} rows={movers.gainers} />
+          <MoversCard title={`上昇グループ（${moversPeriod.toUpperCase()}）`} rows={movers.gainers} openInfo={openInfo} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <MoversCard title={`Top Losers (${moversPeriod.toUpperCase()})`} rows={movers.losers} />
+          <MoversCard title={`下落グループ（${moversPeriod.toUpperCase()}）`} rows={movers.losers} openInfo={openInfo} />
         </Grid>
       </Grid>
 
       <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 0.5 }}>
-          Current Rankings
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
+          現在のランキング
         </Typography>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell align="center">Rank</TableCell>
-                <TableCell>Group</TableCell>
-                <TableCell align="center">Avg RS</TableCell>
-                <TableCell align="center">Stocks</TableCell>
-                <TableCell align="right">1W</TableCell>
-                <TableCell align="right">1M</TableCell>
-                <TableCell align="right">3M</TableCell>
-                <TableCell align="right">6M</TableCell>
-                <TableCell>Top Stock</TableCell>
+                <GlossaryHeaderCell glossaryId="group_rank" openInfo={openInfo}>順位</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="ibd_industry_group" openInfo={openInfo} align="left">業種グループ</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_avg_rs" openInfo={openInfo}>平均RS</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_num_stocks" openInfo={openInfo}>銘柄数</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_rank_change_1w" openInfo={openInfo} align="right">1週</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_rank_change_1m" openInfo={openInfo} align="right">1ヶ月</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_rank_change_3m" openInfo={openInfo} align="right">3ヶ月</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_rank_change_6m" openInfo={openInfo} align="right">6ヶ月</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_top_stock" openInfo={openInfo} align="left">代表銘柄</GlossaryHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -144,9 +146,34 @@ function StaticGroupsPage() {
   const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
   const rrgQuery = useStaticGroupsRRG(marketEntry);
   const rrgAvailable = Boolean(marketEntry.assets?.groups_rrg?.path);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [view, setView] = useState('table'); // 'table' | 'rrg'
+  // グループ詳細モーダルと表示モードはURLと同期し、戻る/進むで操作を巻き戻せるようにする
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedGroup = searchParams.get('group');
+  const view = searchParams.get('view') === 'rrg' ? 'rrg' : 'table'; // 'table' | 'rrg'
+  const setSelectedGroup = useCallback((group) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (group) {
+        next.set('group', group);
+      } else {
+        next.delete('group');
+      }
+      return next;
+    }, group ? undefined : { replace: true });
+  }, [setSearchParams]);
+  const setView = useCallback((nextView) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextView === 'rrg') {
+        next.set('view', 'rrg');
+      } else {
+        next.delete('view');
+      }
+      return next;
+    });
+  }, [setSearchParams]);
   const [rrgScope, setRrgScope] = useState('groups'); // 'groups' | 'sectors'
+  const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
   const { availableScopes: availableRrgScopes } = useRRGScopeSelection({
     view,
     scope: rrgScope,
@@ -165,11 +192,11 @@ function StaticGroupsPage() {
   }
 
   if (manifestQuery.isError || groupsQuery.isError) {
-    return <Alert severity="error">Failed to load group rankings.</Alert>;
+    return <Alert severity="error">業種グループランキングの読み込みに失敗しました。</Alert>;
   }
 
   if (!groupsQuery.data?.available) {
-    return <Alert severity="info">{groupsQuery.data?.message || 'No group rankings are available.'}</Alert>;
+    return <Alert severity="info">{groupsQuery.data?.message || '業種グループランキングがありません。'}</Alert>;
   }
 
   const payload = groupsQuery.data.payload || {};
@@ -181,10 +208,10 @@ function StaticGroupsPage() {
   return (
     <Box>
       <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
-        {marketEntry.display_name} Group Rankings
+        {marketEntry.display_name} 業種グループランキング
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
-        Latest ranking date: {payload.rankings?.date || '-'}.
+        最新ランキング日付: {payload.rankings?.date || '-'}
       </Typography>
 
       {rrgAvailable && (
@@ -212,6 +239,7 @@ function StaticGroupsPage() {
           moversPeriod={moversPeriod}
           rankings={rankings}
           onSelectGroup={setSelectedGroup}
+          openInfo={openInfo}
         />
       )}
 
@@ -222,6 +250,7 @@ function StaticGroupsPage() {
         open={!!selectedGroup}
         onClose={() => setSelectedGroup(null)}
       />
+      {metricInfoPopover}
     </Box>
   );
 }

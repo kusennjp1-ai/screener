@@ -108,7 +108,7 @@ describe('ResultsTable — 3axp market / currency / USD toggle', () => {
 
     // Flip to Local
     fireEvent.click(screen.getByTestId('mcap-display-toggle'));
-    expect(screen.getByTestId('mcap-display-toggle').textContent).toContain('Local');
+    expect(screen.getByTestId('mcap-display-toggle').textContent).toContain('現地通貨');
     expect(screen.getByText('MCap (local)')).toBeInTheDocument();
     // Local value uses HK$ prefix for the HKD-denominated market_cap.
     expect(screen.getByText('HK$3.9T')).toBeInTheDocument();
