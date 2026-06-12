@@ -2,15 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Fade,
   IconButton,
   Modal,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import CandlestickChart from '../components/Charts/CandlestickChart';
@@ -28,6 +33,9 @@ function StaticChartViewerModal({
 }) {
   const queryClient = useQueryClient();
   const [visibleRange, setVisibleRange] = useState(null);
+  const theme = useTheme();
+  // モバイルでは縦積みレイアウト（チャート上・指標下）＋画面上の前後ボタンに切り替える
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const entries = useMemo(() => chartIndex?.symbols || [], [chartIndex]);
   const entryBySymbol = useMemo(
@@ -139,7 +147,10 @@ function StaticChartViewerModal({
   const epsRating = stockData?.eps_rating ?? fundamentals?.eps_rating ?? null;
   const groupRank = stockData?.ibd_group_rank ?? null;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
-  const chartHeight = Math.max(viewportHeight - 60, 500);
+  // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
+  const chartHeight = isMobile
+    ? Math.max(Math.round(viewportHeight * 0.55), 300)
+    : Math.max(viewportHeight - 60, 500);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
 
   return (
@@ -163,16 +174,17 @@ function StaticChartViewerModal({
           <Box
             sx={{
               height: 60,
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              px: 3,
+              px: { xs: 1.5, md: 3 },
               borderBottom: 1,
               borderColor: 'divider',
               bgcolor: 'background.default',
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, minWidth: 0, overflow: 'hidden' }}>
               <Typography variant="h5" fontWeight="bold">
                 {currentSymbol || 'Loading...'}
               </Typography>
@@ -264,7 +276,7 @@ function StaticChartViewerModal({
               ) : null}
 
               {stockData ? (
-                <Box sx={{ display: 'flex', gap: 1.5, ml: 1 }}>
+                <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 1.5, ml: 1 }}>
                   {[
                     ['IBD', stockData.ibd_industry_group],
                     ['Sector', stockData.gics_sector],
@@ -297,23 +309,49 @@ function StaticChartViewerModal({
               ) : null}
             </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 } }}>
               {totalCount > 0 ? (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
                   {`${currentIndex + 1} / ${totalCount} 銘柄`}
                 </Typography>
               ) : null}
-              <Chip label="静的データ" size="small" color="info" />
-              <IconButton onClick={onClose} size="large">
+              <Chip label="静的データ" size="small" color="info" sx={{ display: { xs: 'none', md: 'inline-flex' } }} />
+              <IconButton onClick={onClose} size="large" aria-label="チャートを閉じる">
                 <CloseIcon />
               </IconButton>
             </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-            <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              flex: 1,
+              overflow: { xs: 'auto', md: 'hidden' },
+              // モバイルは下部の固定ナビゲーションバーに隠れないよう余白を確保
+              pb: { xs: 8, md: 0 },
+            }}
+          >
+            <Box
+              sx={{
+                order: { xs: 2, md: 1 },
+                width: { xs: '100%', md: 'auto' },
+                flexShrink: 0,
+                height: { xs: 'auto', md: '100%' },
+              }}
+            >
+              <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
+            </Box>
 
-            <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>
+            <Box
+              sx={{
+                order: { xs: 1, md: 2 },
+                flex: { xs: '0 0 auto', md: 1 },
+                width: { xs: '100%', md: 'auto' },
+                overflow: 'hidden',
+                bgcolor: 'background.paper',
+              }}
+            >
               {isError ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight, p: 3 }}>
                   <Alert severity="error">チャートデータの読み込みに失敗しました。</Alert>
@@ -354,12 +392,37 @@ function StaticChartViewerModal({
               borderColor: 'divider',
               display: 'flex',
               justifyContent: 'center',
-              gap: 3,
+              alignItems: 'center',
+              gap: { xs: 1.5, md: 3 },
             }}
           >
-            <Chip icon={<KeyboardIcon />} label="Space: 次の銘柄" size="small" variant="outlined" />
-            <Chip icon={<KeyboardIcon />} label="Shift+Space: 前の銘柄" size="small" variant="outlined" />
-            <Chip icon={<KeyboardIcon />} label="Esc: 閉じる" size="small" variant="outlined" />
+            {totalCount > 1 ? (
+              <>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 14 }} />}
+                  onClick={goPrevious}
+                  sx={{ minWidth: 96 }}
+                >
+                  前の銘柄
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  endIcon={<ArrowForwardIosIcon sx={{ fontSize: 14 }} />}
+                  onClick={goNext}
+                  sx={{ minWidth: 96 }}
+                >
+                  次の銘柄
+                </Button>
+              </>
+            ) : null}
+            <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 3 }}>
+              <Chip icon={<KeyboardIcon />} label="Space: 次の銘柄" size="small" variant="outlined" />
+              <Chip icon={<KeyboardIcon />} label="Shift+Space: 前の銘柄" size="small" variant="outlined" />
+              <Chip icon={<KeyboardIcon />} label="Esc: 閉じる" size="small" variant="outlined" />
+            </Box>
           </Box>
         </Box>
       </Fade>

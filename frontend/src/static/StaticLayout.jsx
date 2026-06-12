@@ -65,15 +65,19 @@ function StaticLayout({ children }) {
           >
             <ArrowForwardIosIcon sx={{ fontSize: 16 }} />
           </IconButton>
-          <ShowChartIcon sx={{ mr: 1, fontSize: 20 }} />
-          <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>
+          <ShowChartIcon sx={{ mr: 1, fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
+          <Typography
+            variant="subtitle1"
+            component="div"
+            sx={{ fontWeight: 600, display: { xs: 'none', sm: 'block' } }}
+          >
             STOCK SCANNER DAILY
           </Typography>
           <Chip
             label="閲覧専用"
             size="small"
             color="info"
-            sx={{ ml: 1.5, height: 22, fontSize: '11px' }}
+            sx={{ ml: { xs: 0.5, sm: 1.5 }, height: 22, fontSize: '11px', display: { xs: 'none', md: 'inline-flex' } }}
           />
           <Box sx={{ ml: 1.5, minWidth: 140 }}>
             <FormControl size="small" fullWidth>
