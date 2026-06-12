@@ -2,14 +2,10 @@ name: Static Site
 
 on:
   schedule:
-    # US/EU/Americas group — 4:10pm ET, after US close. Uses the New York
+    # US group — 4:10pm ET, after US close. Uses the New York
     # timezone so it tracks DST automatically.
     - cron: '10 16 * * 1-6'
       timezone: 'America/New_York'
-    # Asian group — 6:30pm SGT, after all Asian markets close (incl. India,
-    # which closes 3:30pm IST = 6:00pm SGT; the 30-min buffer lets prices
-    # settle). Singapore has no DST, so 6:30pm SGT == 10:30 UTC year-round.
-    - cron: '30 10 * * 1-5'
   workflow_dispatch:
     inputs:
       market_group:
@@ -50,14 +46,11 @@ jobs:
           MARKET_GROUP: ${{ github.event.inputs.market_group }}
         run: |
           ASIA='["HK","IN","JP","KR","TW","CN","SG","MY","AU"]'
-          US='["US","CA","DE"]'
-          ALL='["US","HK","IN","JP","KR","TW","CN","CA","DE","SG","AU","MY"]'
+          US='["US"]'
+          ALL='["US"]'
 
           if [ "$EVENT_NAME" = "schedule" ]; then
-            case "$SCHEDULE" in
-              '30 10 * * 1-5') markets="$ASIA" ;;   # 10:30 UTC = 6:30pm SGT
-              *)               markets="$US" ;;     # 4:10pm ET (America/New_York)
-            esac
+            markets="$US"   # 4:10pm ET (America/New_York), US-only deployment
           else
             case "$MARKET_GROUP" in
               asia) markets="$ASIA" ;;
@@ -649,17 +642,20 @@ jobs:
           cd backend
           python - <<'PY'
           import json
+          import os
           import sys
           from pathlib import Path
 
-          from app.domain.markets import market_registry
-
-          # Every scheduled run builds only one market group; the rest must be
-          # back-filled from a previous run's artifacts. Publishing is all-or-
-          # nothing: refuse to deploy unless every supported market is present
-          # across current + fallback artifacts, so a partial group run (or a
-          # failed fallback download) can never ship an incomplete static site.
-          expected = {code.upper() for code in market_registry.supported_market_codes()}
+          # This deployment publishes a US-only static site. STATIC_SITE_MARKETS
+          # (comma-separated, default "US") lists the markets that must be
+          # present across current + fallback artifacts before publishing, so a
+          # failed build can never ship an incomplete site for the markets we
+          # actually serve.
+          expected = {
+              m.strip().upper()
+              for m in os.environ.get("STATIC_SITE_MARKETS", "US").split(",")
+              if m.strip()
+          }
           present = set()
           for base in (
               "/tmp/static-market-artifacts-current",

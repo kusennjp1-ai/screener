@@ -95,9 +95,10 @@ jobs:
       matrix:
         # When workflow_dispatch.market is set to a specific market, run only
         # that variant; otherwise (scheduled cron, or dispatch with market=all)
-        # run the full matrix. ``github.event.inputs.market`` is null on
-        # scheduled runs, so we coerce to '' before the equality check.
-        market: ${{ fromJSON((github.event.inputs.market || 'all') != 'all' && format('["{0}"]', github.event.inputs.market) || '["US","HK","IN","JP","KR","TW","CN","CA","DE","SG","AU","MY"]') }}
+        # run the US-only default for this deployment.
+        # ``github.event.inputs.market`` is null on scheduled runs, so we
+        # coerce to '' before the equality check.
+        market: ${{ fromJSON((github.event.inputs.market || 'all') != 'all' && format('["{0}"]', github.event.inputs.market) || '["US"]') }}
     services:
       postgres:
         image: postgres:16-alpine
