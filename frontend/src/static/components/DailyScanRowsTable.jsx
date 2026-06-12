@@ -13,6 +13,7 @@ import {
 import PriceSparkline from '../../components/Scan/PriceSparkline';
 import RSSparkline from '../../components/Scan/RSSparkline';
 import TickerCell from '../../components/common/TickerCell';
+import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 import { getGroupRankColor } from '../../utils/colorUtils';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { resolveMarketCapDisplay } from '../../utils/marketCapUtils';
@@ -40,6 +41,7 @@ function DailyScanRowsTable({
   priceSparklineInnerWidth = 86,
   testId,
 }) {
+  const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
   const isChartEnabled = (symbol) => chartEnabledSymbols.has(symbol);
   const handleRowOpen = (symbol) => {
     if (isChartEnabled(symbol)) {
@@ -65,7 +67,7 @@ function DailyScanRowsTable({
         }}
       >
         <Box>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 0.5 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
             {title}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '10px' }}>
@@ -78,16 +80,16 @@ function DailyScanRowsTable({
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell align="center">Symbol</TableCell>
-              <TableCell align="center">Score</TableCell>
-              {showRs ? <TableCell align="center">RS</TableCell> : null}
-              <TableCell align="center">Price</TableCell>
-              <TableCell align="center">MCap</TableCell>
-              {showRating ? <TableCell align="center">Rating</TableCell> : null}
-              <TableCell align="center">Price Trend (30d)</TableCell>
-              <TableCell align="center">RS Trend (30d)</TableCell>
-              <TableCell align="center">IBD Group</TableCell>
-              <TableCell align="center">Grp Rank</TableCell>
+              <GlossaryHeaderCell glossaryId="symbol" openInfo={openInfo}>銘柄</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="daily_score" openInfo={openInfo}>スコア</GlossaryHeaderCell>
+              {showRs ? <GlossaryHeaderCell glossaryId="rs_rating" openInfo={openInfo}>RS</GlossaryHeaderCell> : null}
+              <GlossaryHeaderCell glossaryId="current_price" openInfo={openInfo}>株価</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="market_cap" openInfo={openInfo}>時価総額</GlossaryHeaderCell>
+              {showRating ? <GlossaryHeaderCell glossaryId="rating" openInfo={openInfo}>評価</GlossaryHeaderCell> : null}
+              <GlossaryHeaderCell glossaryId="price_trend_30d" openInfo={openInfo}>株価トレンド（30日）</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="rs_trend_30d" openInfo={openInfo}>RSトレンド（30日）</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="ibd_industry_group" openInfo={openInfo}>IBD業種</GlossaryHeaderCell>
+              <GlossaryHeaderCell glossaryId="ibd_group_rank" openInfo={openInfo}>グループ順位</GlossaryHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -170,6 +172,7 @@ function DailyScanRowsTable({
           </TableBody>
         </Table>
       </TableContainer>
+      {metricInfoPopover}
     </Paper>
   );
 }

@@ -57,7 +57,7 @@ describe('StaticGroupDetailModal', () => {
 
     expect(tabChildren).toHaveLength(2);
     expect(tabChildren.every((child) => child.getAttribute('role') === 'tab')).toBe(true);
-    expect(screen.getByRole('tab', { name: 'Charts' })).toBeDisabled();
+    expect(screen.getByRole('tab', { name: 'チャート' })).toBeDisabled();
   });
 
   it('renders the dialog paper at 95vw with zero margin so it never overflows the viewport', () => {

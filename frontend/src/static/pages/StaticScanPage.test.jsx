@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { MemoryRouter } from 'react-router-dom';
 
 import StaticScanPage from './StaticScanPage';
 
@@ -69,7 +70,9 @@ const renderPage = () => {
   return render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createTheme()}>
-        <StaticScanPage />
+        <MemoryRouter>
+          <StaticScanPage />
+        </MemoryRouter>
       </ThemeProvider>
     </QueryClientProvider>
   );
@@ -167,7 +170,7 @@ describe('StaticScanPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText(/Loading full scan dataset: [01] \/ 2 rows/i)).toBeInTheDocument();
+    expect(await screen.findByText(/全データを読み込み中: [01] \/ 2 件/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('results-table-rows')).toHaveTextContent('NVDA');
     });
@@ -184,7 +187,7 @@ describe('StaticScanPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText(/Loading full scan dataset/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/全データを読み込み中/i)).not.toBeInTheDocument();
       expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
       expect(screen.getByTestId('results-table-total')).toHaveTextContent('2');
       expect(screen.getByTestId('results-table-actions')).toHaveTextContent('actions-visible');
@@ -672,7 +675,7 @@ describe('StaticScanPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'Daily Scan' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'デイリースキャン' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('results-table-actions')).toHaveTextContent('actions-visible');
     });
@@ -754,7 +757,7 @@ describe('StaticScanPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'Daily Scan' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'デイリースキャン' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'resort' }));
     await user.click(screen.getByRole('button', { name: 'open-chart' }));
 
@@ -881,8 +884,8 @@ describe('StaticScanPage', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByText(/Background hydration failed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/バックグラウンドのデータ読み込みに失敗しました/i)).toBeInTheDocument();
     expect(screen.getByTestId('results-table-rows')).toHaveTextContent('NVDA,MSFT,AAPL');
-    expect(screen.getByText(/143 charts/i)).toBeInTheDocument();
+    expect(screen.getByText(/チャート 143 銘柄/i)).toBeInTheDocument();
   });
 });

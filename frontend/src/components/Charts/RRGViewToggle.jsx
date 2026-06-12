@@ -22,7 +22,7 @@ export default function RRGViewToggle({
   return (
     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', ...sx }}>
       <ToggleButtonGroup size="small" exclusive value={viewValue} onChange={(e, v) => v && onView(v)}>
-        <ToggleButton value="table">Table</ToggleButton>
+        <ToggleButton value="table">テーブル</ToggleButton>
         {canShowRRG && <ToggleButton value="rrg">RRG</ToggleButton>}
       </ToggleButtonGroup>
       {showScopeToggle && (

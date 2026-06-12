@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MemoryRouter } from 'react-router-dom';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import StaticHomePage from './StaticHomePage';
 
@@ -66,7 +67,7 @@ const manifest = {
 
 const makeLeadersPresetScreen = (minVolume = 100_000_000) => ({
   id: 'leaders_in_leading_groups',
-  name: 'Leaders in Leading Groups',
+  name: '主導業種グループの主導銘柄',
   short_name: 'Leaders',
   description: 'Strong report-card stocks in top 40 IBD groups',
   tier: 2,
@@ -239,7 +240,7 @@ describe('StaticHomePage', () => {
       },
     ];
 
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     expect(await screen.findByText('VALID')).toBeInTheDocument();
     expect(screen.queryByText('NULLS')).not.toBeInTheDocument();
@@ -256,7 +257,7 @@ describe('StaticHomePage', () => {
     scanChunkPayload.rows[0].price_trend = 1;
     scanChunkPayload.rows[0].price_change_1d = 12.3;
 
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     expect(await screen.findByText('0700.HK')).toBeInTheDocument();
     expect(priceSparklineSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -268,10 +269,10 @@ describe('StaticHomePage', () => {
   });
 
   it('loads top candidates from the static scan bundle, filters by market cap, and keeps chart navigation aligned', async () => {
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     expect(await screen.findByText('0700.HK')).toBeInTheDocument();
-    expect(screen.getAllByText('MCap').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('時価総額').length).toBeGreaterThan(0);
     expect(screen.getByText('$500.0M')).toBeInTheDocument();
     expect(screen.queryByText('HK$3.9T')).not.toBeInTheDocument();
     expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/manifest.json');
@@ -279,7 +280,7 @@ describe('StaticHomePage', () => {
     expect(screen.queryByText('SUMMARYONLY')).not.toBeInTheDocument();
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('combobox', { name: 'Mkt Cap' }));
+    await user.click(screen.getByRole('combobox', { name: '時価総額（下限）' }));
     await user.click(await screen.findByRole('option', { name: '>$1B' }));
 
     await waitFor(() => {
@@ -331,7 +332,7 @@ describe('StaticHomePage', () => {
     ];
     scanManifestPayload.chunks = [];
 
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     expect(await screen.findByText('LOCALPASS')).toBeInTheDocument();
     expect(screen.queryByText('TOOTHIN')).not.toBeInTheDocument();
@@ -358,11 +359,11 @@ describe('StaticHomePage', () => {
     ];
     scanManifestPayload.chunks = [];
 
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     const leadersSection = await screen.findByTestId('leaders-in-leading-groups-section');
     expect(
-      within(leadersSection).getByText('Top 20 by report card: group rank <=40, RS >=80, dollar volume >= 1,300,000.')
+      within(leadersSection).getByText('上位20銘柄: グループ順位40位以内、RS 80以上、売買代金 1,300,000 以上。')
     ).toBeInTheDocument();
     expect(within(leadersSection).getByText('LOCALLEAD')).toBeInTheDocument();
     expect(within(leadersSection).queryByText('THINLEAD')).not.toBeInTheDocument();
@@ -381,11 +382,11 @@ describe('StaticHomePage', () => {
     ];
     scanManifestPayload.chunks = [];
 
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     const leadersSection = await screen.findByTestId('leaders-in-leading-groups-section');
     expect(
-      within(leadersSection).getByText('Top 20 by report card: group rank <=40, RS >=80.')
+      within(leadersSection).getByText('上位20銘柄: グループ順位40位以内、RS 80以上。')
     ).toBeInTheDocument();
     expect(within(leadersSection).queryByText(/dollar volume >=/i)).not.toBeInTheDocument();
     expect(within(leadersSection).getByText('NOFLOOR')).toBeInTheDocument();
@@ -443,11 +444,11 @@ describe('StaticHomePage', () => {
       throw new Error(`Unexpected static path: ${path}`);
     });
 
-    renderWithProviders(<StaticHomePage />);
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    const topCandidatesHeading = await screen.findByText('Top Scan Candidates');
-    const leadersHeading = await screen.findByText('Leaders in Leading Groups');
-    const topGroupsHeading = await screen.findByText('Top 10 Groups');
+    const topCandidatesHeading = await screen.findByText('注目スキャン銘柄 トップ20');
+    const leadersHeading = await screen.findByText('主導業種グループの主導銘柄');
+    const topGroupsHeading = await screen.findByText('業種グループ トップ10');
     expect(
       topCandidatesHeading.compareDocumentPosition(leadersHeading) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();

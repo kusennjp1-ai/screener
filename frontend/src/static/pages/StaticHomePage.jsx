@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -32,6 +33,7 @@ import { applyScanFilterDefaults } from '../../features/scan/defaultFilters';
 import { filterStaticScanRows, sortStaticScanRows } from '../scanClient';
 import DailyScanRowsTable from '../components/DailyScanRowsTable';
 import { buildFiltersFromPreset } from '../hooks/usePresetScreens';
+import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 
 const EMPTY_RESULTS = [];
 const DEFAULT_TOP_RESULTS = 20;
@@ -85,10 +87,21 @@ function StaticHomePage() {
   });
   const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
 
-  const [chartModalOpen, setChartModalOpen] = useState(false);
-  const [selectedChartSymbol, setSelectedChartSymbol] = useState(null);
+  // チャートモーダルはURL（?chart=銘柄）と同期させる。
+  // モーダルを開くと履歴が1つ積まれるため、ブラウザ/アプリの「戻る」で自然に閉じる。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedChartSymbol = searchParams.get('chart');
+  const chartModalOpen = Boolean(selectedChartSymbol);
+  const closeChartModal = useCallback(() => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('chart');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [modalNavigationSymbols, setModalNavigationSymbols] = useState([]);
   const [marketCapMin, setMarketCapMin] = useState('');
+  const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
   const topGroups = homeQuery.data?.top_groups ?? EMPTY_RESULTS;
   const scanDefaultFilters = useMemo(
     () => scanBundleQuery.data?.defaultFilters ?? {},
@@ -137,8 +150,8 @@ function StaticHomePage() {
   );
   const leadingGroupMinVolume = leadingGroupScreen?.filters?.minVolume;
   const leadingGroupSubtitle = leadingGroupMinVolume == null
-    ? 'Top 20 by report card: group rank <=40, RS >=80.'
-    : `Top 20 by report card: group rank <=40, RS >=80, dollar volume >= ${formatNumber(leadingGroupMinVolume)}.`;
+    ? '上位20銘柄: グループ順位40位以内、RS 80以上。'
+    : `上位20銘柄: グループ順位40位以内、RS 80以上、売買代金 ${formatNumber(leadingGroupMinVolume)} 以上。`;
 
   if (manifestQuery.isLoading || homeQuery.isLoading || scanBundleQuery.isLoading) {
     return (
@@ -151,7 +164,7 @@ function StaticHomePage() {
   if (manifestQuery.isError || homeQuery.isError || scanBundleQuery.isError) {
     return (
       <Alert severity="error">
-        Failed to load the daily snapshot.
+        日次スナップショットの読み込みに失敗しました。
       </Alert>
     );
   }
@@ -163,9 +176,12 @@ function StaticHomePage() {
 
   const handleRowClick = (symbol, navigationSymbols) => {
     if (chartEnabledSymbols.has(symbol)) {
-      setSelectedChartSymbol(symbol);
       setModalNavigationSymbols(navigationSymbols);
-      setChartModalOpen(true);
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('chart', symbol);
+        return next;
+      });
     }
   };
 
@@ -183,14 +199,14 @@ function StaticHomePage() {
         }}
       >
         <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px' }}>
-          {flag ? `${flag}  ` : ''}{marketDisplay} Snapshot
+          {flag ? `${flag}  ` : ''}{marketDisplay} スナップショット
         </Typography>
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ fontFamily: 'monospace', fontSize: '11px' }}
         >
-          {`Snapshot ${freshness.scan_as_of_date || '-'} · Breadth ${freshness.breadth_latest_date || '-'} · Groups ${freshness.groups_latest_date || '-'}`}
+          {`スキャン ${freshness.scan_as_of_date || '-'} · 騰落 ${freshness.breadth_latest_date || '-'} · グループ ${freshness.groups_latest_date || '-'}`}
         </Typography>
       </Box>
 
@@ -268,31 +284,31 @@ function StaticHomePage() {
 
       <DailyScanRowsTable
         testId="top-scan-candidates-section"
-        title="Top Scan Candidates"
+        title="注目スキャン銘柄 トップ20"
         subtitle={
           topCandidateFilters.minVolume == null
-            ? 'No default liquidity floor. Click a row for chart details.'
-            : `Dollar volume >= ${formatNumber(topCandidateFilters.minVolume)}. Click a row for chart details.`
+            ? '行をクリックするとチャートが開きます。'
+            : `売買代金 ${formatNumber(topCandidateFilters.minVolume)} 以上。行をクリックするとチャートが開きます。`
         }
         rows={topResults}
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={topNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="No scan candidates match the current filters."
+        emptyMessage="現在の条件に一致する銘柄はありません。"
         showRating
         action={(
           <TextField
             select
             size="small"
-            label="Mkt Cap"
+            label="時価総額（下限）"
             value={marketCapMin}
             onChange={(event) => {
               const nextValue = event.target.value;
               setMarketCapMin(nextValue === '' ? '' : Number(nextValue));
             }}
-            sx={{ minWidth: 140 }}
+            sx={{ minWidth: 150 }}
           >
-            <MenuItem value="">All</MenuItem>
+            <MenuItem value="">指定なし</MenuItem>
             {MARKET_CAP_OPTIONS.map((option) => (
               <MenuItem key={option.value} value={option.value}>
                 {option.label}
@@ -304,31 +320,31 @@ function StaticHomePage() {
 
       <DailyScanRowsTable
         testId="leaders-in-leading-groups-section"
-        title="Leaders in Leading Groups"
+        title="主導業種グループの主導銘柄"
         subtitle={leadingGroupSubtitle}
         rows={leadingGroupRows}
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={leadingGroupNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="No leaders in leading groups match the current snapshot."
+        emptyMessage="現在のスナップショットに該当する主導銘柄はありません。"
         showRs
         priceSparklineWidth={195}
         priceSparklineInnerWidth={150}
       />
 
       <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 0.5 }}>
-          Top 10 Groups
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
+          業種グループ トップ10
         </Typography>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell align="center">Rank</TableCell>
-                <TableCell>Group</TableCell>
-                <TableCell align="right">1W</TableCell>
-                <TableCell align="right">1M</TableCell>
-                <TableCell>Top Stock</TableCell>
+                <GlossaryHeaderCell glossaryId="group_rank" openInfo={openInfo}>順位</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="ibd_industry_group" openInfo={openInfo} align="left">業種グループ</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_rank_change_1w" openInfo={openInfo} align="right">1週</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_rank_change_1m" openInfo={openInfo} align="right">1ヶ月</GlossaryHeaderCell>
+                <GlossaryHeaderCell glossaryId="group_top_stock" openInfo={openInfo} align="left">代表銘柄</GlossaryHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -350,11 +366,12 @@ function StaticHomePage() {
 
       <StaticChartViewerModal
         open={chartModalOpen}
-        onClose={() => setChartModalOpen(false)}
+        onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
         chartIndex={chartIndexQuery.data}
         navigationSymbols={modalNavigationSymbols}
       />
+      {metricInfoPopover}
     </Box>
   );
 }

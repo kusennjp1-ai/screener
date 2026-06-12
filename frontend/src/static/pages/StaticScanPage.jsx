@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -50,8 +51,19 @@ function StaticScanPage() {
   const [perPage, setPerPage] = useState(50);
   const [sortBy, setSortBy] = useState('composite_score');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [chartModalOpen, setChartModalOpen] = useState(false);
-  const [selectedChartSymbol, setSelectedChartSymbol] = useState(null);
+  // チャートモーダルとプリセットスクリーン選択はURLと同期させる。
+  // 履歴に積まれるため、ブラウザの「戻る」でモーダルが閉じ、選択も巻き戻せる。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedChartSymbol = searchParams.get('chart');
+  const chartModalOpen = Boolean(selectedChartSymbol);
+  const screenParam = searchParams.get('screen');
+  const closeChartModal = useCallback(() => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('chart');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [hydrationState, setHydrationState] = useState({
     status: 'idle',
     rows: [],
@@ -184,8 +196,8 @@ function StaticScanPage() {
     hydrationComplete,
   });
 
-  const handleSelectScreen = useCallback((screenId) => {
-    setActiveScreenId(screenId);
+  const applyScreen = useCallback((screenId) => {
+    setActiveScreenId(screenId || null);
     if (!screenId) {
       setFilters(manifestDefaultFilters);
       setSortBy(manifestDefaultSortBy);
@@ -205,6 +217,26 @@ function StaticScanPage() {
     manifestDefaultSortOrder,
     setActiveScreenId,
   ]);
+
+  // URLの ?screen= が変わったら（チップ選択・戻る/進む・直接リンク）選択を適用する
+  useEffect(() => {
+    if (!scanManifestQuery.data) {
+      return;
+    }
+    applyScreen(screenParam);
+  }, [applyScreen, scanManifestQuery.data, screenParam]);
+
+  const handleSelectScreen = useCallback((screenId) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (screenId) {
+        next.set('screen', screenId);
+      } else {
+        next.delete('screen');
+      }
+      return next;
+    });
+  }, [setSearchParams]);
 
   const filterKey = useMemo(() => getStableFilterKey(filters), [filters]);
   useEffect(() => {
@@ -246,8 +278,11 @@ function StaticScanPage() {
     if (!isChartEnabled(symbol)) {
       return;
     }
-    setSelectedChartSymbol(symbol);
-    setChartModalOpen(true);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('chart', symbol);
+      return next;
+    });
   };
   const navigationSymbols = useMemo(() => {
     const orderedRows = hydrationComplete ? sortedRows : pagedRows;
@@ -265,16 +300,16 @@ function StaticScanPage() {
   }
 
   if (manifestQuery.isError || scanManifestQuery.isError) {
-    return <Alert severity="error">Failed to load the static scan dataset.</Alert>;
+    return <Alert severity="error">スキャンデータの読み込みに失敗しました。</Alert>;
   }
 
   return (
     <Box>
       <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
-        Daily Scan
+        デイリースキャン
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
-        Run {scanManifestQuery.data.run_id} as of {scanManifestQuery.data.as_of_date}.
+        基準日 {scanManifestQuery.data.as_of_date}（実行ID: {scanManifestQuery.data.run_id}）
       </Typography>
 
       <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
@@ -283,9 +318,9 @@ function StaticScanPage() {
             {(hydrationComplete ? filteredRows.length : hydrationState.loadedRows).toLocaleString()}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: '10px' }}>
-            of {scanManifestQuery.data.rows_total.toLocaleString()} rows
+            件 / 全 {scanManifestQuery.data.rows_total.toLocaleString()} 件
             {scanManifestQuery.data.charts?.available
-              ? ` · ${(scanManifestQuery.data.charts.symbols_total ?? scanManifestQuery.data.charts.limit).toLocaleString()} charts`
+              ? ` · チャート ${(scanManifestQuery.data.charts.symbols_total ?? scanManifestQuery.data.charts.limit).toLocaleString()} 銘柄`
               : ''}
           </Typography>
         </Box>
@@ -302,20 +337,20 @@ function StaticScanPage() {
 
       {!hydrationComplete && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Loading full scan dataset: {hydrationState.loadedRows.toLocaleString()} /{' '}
-          {scanManifestQuery.data.rows_total.toLocaleString()} rows. Filtering and sorting unlock after hydration completes.
+          全データを読み込み中: {hydrationState.loadedRows.toLocaleString()} /{' '}
+          {scanManifestQuery.data.rows_total.toLocaleString()} 件。読み込み完了後にフィルタと並べ替えが使えるようになります。
         </Alert>
       )}
 
       {hydrationState.status === 'error' && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Background hydration failed. Showing the exported first page only.
+          バックグラウンドのデータ読み込みに失敗しました。先頭ページのみ表示しています。
         </Alert>
       )}
 
       {chartIndexQuery.isError && scanManifestQuery.data.charts?.path ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Static chart payloads failed to load. Scan results remain available without chart modals.
+          チャートデータの読み込みに失敗しました。スキャン結果はチャートなしで利用できます。
         </Alert>
       ) : null}
 
@@ -323,7 +358,16 @@ function StaticScanPage() {
         <FilterPanel
           filters={filters}
           onFilterChange={setFilters}
-          onReset={() => { setFilters(manifestDefaultFilters); setSortBy(manifestDefaultSortBy); setSortOrder(manifestDefaultSortOrder); setActiveScreenId(null); }}
+          onReset={() => {
+            setFilters(manifestDefaultFilters);
+            setSortBy(manifestDefaultSortBy);
+            setSortOrder(manifestDefaultSortOrder);
+            if (screenParam) {
+              handleSelectScreen(null);
+            } else {
+              setActiveScreenId(null);
+            }
+          }}
           filterOptions={normalizeScanFilterOptions(scanManifestQuery.data.filter_options)}
           expanded={showFilters}
           onToggle={() => setShowFilters((previous) => !previous)}
@@ -359,7 +403,7 @@ function StaticScanPage() {
 
       <StaticChartViewerModal
         open={chartModalOpen}
-        onClose={() => setChartModalOpen(false)}
+        onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
         chartIndex={chartIndexQuery.data}
         navigationSymbols={navigationSymbols}

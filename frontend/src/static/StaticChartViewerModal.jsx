@@ -300,10 +300,10 @@ function StaticChartViewerModal({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               {totalCount > 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  Stock {currentIndex + 1} of {totalCount}
+                  {`${currentIndex + 1} / ${totalCount} 銘柄`}
                 </Typography>
               ) : null}
-              <Chip label="Static" size="small" color="info" />
+              <Chip label="静的データ" size="small" color="info" />
               <IconButton onClick={onClose} size="large">
                 <CloseIcon />
               </IconButton>
@@ -316,7 +316,7 @@ function StaticChartViewerModal({
             <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>
               {isError ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight, p: 3 }}>
-                  <Alert severity="error">Failed to load the static chart payload.</Alert>
+                  <Alert severity="error">チャートデータの読み込みに失敗しました。</Alert>
                 </Box>
               ) : isLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight }}>
@@ -357,9 +357,9 @@ function StaticChartViewerModal({
               gap: 3,
             }}
           >
-            <Chip icon={<KeyboardIcon />} label="Space: Next Stock" size="small" variant="outlined" />
-            <Chip icon={<KeyboardIcon />} label="Shift+Space: Previous" size="small" variant="outlined" />
-            <Chip icon={<KeyboardIcon />} label="Esc: Close" size="small" variant="outlined" />
+            <Chip icon={<KeyboardIcon />} label="Space: 次の銘柄" size="small" variant="outlined" />
+            <Chip icon={<KeyboardIcon />} label="Shift+Space: 前の銘柄" size="small" variant="outlined" />
+            <Chip icon={<KeyboardIcon />} label="Esc: 閉じる" size="small" variant="outlined" />
           </Box>
         </Box>
       </Fade>

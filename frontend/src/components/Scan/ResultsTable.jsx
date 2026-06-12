@@ -19,12 +19,15 @@ import {
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RSSparkline from './RSSparkline';
 import PriceSparkline from './PriceSparkline';
 import FieldAvailabilityChip from './FieldAvailabilityChip';
 import MarketBadge from './MarketBadge';
 import MarketThemesList from '../Stock/MarketThemesList';
 import AddToWatchlistMenu from '../common/AddToWatchlistMenu';
+import { useMetricInfoPopover } from '../common/MetricInfoPopover';
+import { hasGlossaryEntry } from '../../constants/metricGlossary';
 import {
   getStageColor,
   getRatingColor,
@@ -520,6 +523,7 @@ function ResultsTable({
   isChartEnabled,
 }) {
   const parentRef = useRef(null);
+  const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
   // MCap column display mode — kept as local state; scan-level persistence
   // can lift this up later if users want it to survive navigation.
   const [mcapDisplay, setMcapDisplay] = useState(MCAP_DISPLAY.USD);
@@ -584,10 +588,10 @@ function ResultsTable({
     <Paper elevation={1}>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', px: 2, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-          Market Cap display:
+          時価総額の表示:
         </Typography>
         <Chip
-          label={mcapDisplay === MCAP_DISPLAY.USD ? 'USD' : 'Local'}
+          label={mcapDisplay === MCAP_DISPLAY.USD ? 'USD' : '現地通貨'}
           size="small"
           variant="outlined"
           onClick={toggleMcapDisplay}
@@ -627,6 +631,16 @@ function ResultsTable({
                   ) : (
                     column.label
                   )}
+                  {hasGlossaryEntry(column.id) ? (
+                    <IconButton
+                      size="small"
+                      onClick={(event) => openInfo(event, column.id)}
+                      aria-label={`${column.label} の説明`}
+                      sx={{ p: 0, ml: 0.25, verticalAlign: 'middle', color: 'inherit', opacity: 0.65 }}
+                    >
+                      <HelpOutlineIcon sx={{ fontSize: 12 }} />
+                    </IconButton>
+                  ) : null}
                 </TableCell>
               ))}
             </TableRow>
@@ -676,6 +690,7 @@ function ResultsTable({
           onPageChange(1); // Reset to first page when changing per-page
         }}
       />
+      {metricInfoPopover}
     </Paper>
   );
 }
