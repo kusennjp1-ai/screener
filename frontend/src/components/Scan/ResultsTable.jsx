@@ -602,8 +602,14 @@ function ResultsTable({
       <TableContainer
         ref={parentRef}
         sx={{
-          maxHeight: 'calc(100vh - 280px)',
+          // dvh はモバイルの URL バー伸縮に追従する動的ビューポート高。未対応
+          // ブラウザ向けに vh をフォールバックとして先に指定する。
+          maxHeight: { xs: 'calc(100vh - 210px)', md: 'calc(100vh - 280px)' },
+          '@supports (height: 100dvh)': {
+            maxHeight: { xs: 'calc(100dvh - 210px)', md: 'calc(100dvh - 280px)' },
+          },
           overflow: 'auto',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <Table stickyHeader size="small" sx={{ minWidth: showActions ? 2673 : 2613 }}>
