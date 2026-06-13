@@ -43,7 +43,17 @@ function StaticLayout({ children }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <AppBar position="static" sx={{ minHeight: 48 }}>
+      <AppBar
+        position="sticky"
+        sx={{
+          minHeight: 48,
+          // ノッチ／ステータスバーと重ならないようセーフエリア分の余白を確保する
+          // （index.html の viewport-fit=cover で端まで広がるため必須）
+          pt: 'env(safe-area-inset-top, 0px)',
+          pl: 'env(safe-area-inset-left, 0px)',
+          pr: 'env(safe-area-inset-right, 0px)',
+        }}
+      >
         <Toolbar variant="dense" sx={{ minHeight: 48, flexWrap: 'wrap', rowGap: 0.5, py: 0.5 }}>
           <IconButton
             color="inherit"

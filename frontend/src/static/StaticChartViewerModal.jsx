@@ -173,12 +173,15 @@ function StaticChartViewerModal({
         >
           <Box
             sx={{
-              height: 60,
+              minHeight: 60,
               flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              px: { xs: 1.5, md: 3 },
+              // セーフエリア（ノッチ／ステータスバー）を避ける
+              pt: 'env(safe-area-inset-top, 0px)',
+              pl: 'calc(env(safe-area-inset-left, 0px) + 12px)',
+              pr: 'calc(env(safe-area-inset-right, 0px) + 12px)',
               borderBottom: 1,
               borderColor: 'divider',
               bgcolor: 'background.default',
@@ -386,7 +389,10 @@ function StaticChartViewerModal({
               bottom: 0,
               left: 0,
               right: 0,
-              p: 1.5,
+              pt: 1.5,
+              px: 1.5,
+              // ホームインジケータ（下部セーフエリア）を避ける
+              pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
               bgcolor: 'background.paper',
               borderTop: 1,
               borderColor: 'divider',
