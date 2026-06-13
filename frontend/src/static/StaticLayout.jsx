@@ -79,37 +79,39 @@ function StaticLayout({ children }) {
             color="info"
             sx={{ ml: { xs: 0.5, sm: 1.5 }, height: 22, fontSize: '11px', display: { xs: 'none', md: 'inline-flex' } }}
           />
-          <Box sx={{ ml: 1.5, minWidth: 140 }}>
-            <FormControl size="small" fullWidth>
-              <Select
-                value={marketEntry.market}
-                onChange={(event) => setSelectedMarket(event.target.value)}
-                displayEmpty
-                sx={{
-                  color: 'inherit',
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  height: 30,
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'rgba(255,255,255,0.35)',
-                  },
-                  '& .MuiSvgIcon-root': {
+          {supportedMarkets.length > 1 ? (
+            <Box sx={{ ml: 1.5, minWidth: 140 }}>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={marketEntry.market}
+                  onChange={(event) => setSelectedMarket(event.target.value)}
+                  displayEmpty
+                  sx={{
                     color: 'inherit',
-                  },
-                }}
-                inputProps={{ 'aria-label': 'Static market selector' }}
-              >
-                {supportedMarkets.map((market) => {
-                  const label = manifestQuery.data?.markets?.[market]?.display_name || market;
-                  const flag = marketFlag(market);
-                  return (
-                    <MenuItem key={market} value={market}>
-                      {flag ? `${flag}  ${label}` : label}
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-            </FormControl>
-          </Box>
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    height: 30,
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255,255,255,0.35)',
+                    },
+                    '& .MuiSvgIcon-root': {
+                      color: 'inherit',
+                    },
+                  }}
+                  inputProps={{ 'aria-label': 'Static market selector' }}
+                >
+                  {supportedMarkets.map((market) => {
+                    const label = manifestQuery.data?.markets?.[market]?.display_name || market;
+                    const flag = marketFlag(market);
+                    return (
+                      <MenuItem key={market} value={market}>
+                        {flag ? `${flag}  ${label}` : label}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            </Box>
+          ) : null}
           <Box sx={{ flexGrow: 1 }} />
           {NAV_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;

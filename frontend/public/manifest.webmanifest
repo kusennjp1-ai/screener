@@ -1,0 +1,26 @@
+{
+  "name": "米国株スクリーナー",
+  "short_name": "株スクリーナー",
+  "description": "Minervini / CANSLIM / 騰落 / 業種グループの日次スナップショット",
+  "lang": "ja",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0c11",
+  "theme_color": "#1976d2",
+  "icons": [
+    {
+      "src": "fire.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "fire.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}

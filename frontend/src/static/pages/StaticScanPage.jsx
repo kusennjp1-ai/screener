@@ -7,6 +7,8 @@ import {
   CircularProgress,
   Paper,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import FilterPanel from '../../components/Scan/FilterPanel';
 import ResultsTable from '../../components/Scan/ResultsTable';
@@ -45,8 +47,11 @@ function StaticScanPage() {
   });
   const chartIndexQuery = useStaticChartIndex(scanManifestQuery.data?.charts?.path);
 
+  const theme = useTheme();
+  // モバイルでは初期状態でフィルタを折りたたみ、結果テーブルをすぐ見られるようにする
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [filters, setFilters] = useState(buildDefaultScanFilters);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(!isMobile);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [sortBy, setSortBy] = useState('composite_score');
