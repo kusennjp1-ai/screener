@@ -32,6 +32,7 @@ RANGE_FILTER_TO_FIELD: dict[str, str] = {
     "price": "current_price",
     "adrPercent": "adr_percent",
     "epsGrowth": "eps_growth_qq",
+    "epsGrowthYy": "eps_growth_yy",
     "salesGrowth": "sales_growth_qq",
     "vcpScore": "vcp_score",
     "vcpPivot": "vcp_pivot",
@@ -86,13 +87,15 @@ PRESET_SCREENS: list[dict] = [
         "id": "minervini",
         "name": "Minervini Trend Template",
         "short_name": "Minervini",
-        "description": "Stage 2 uptrend stocks passing the 8-point trend template",
+        "description": "Stage 2 uptrend stocks passing the strict 8-point trend template",
         "tier": 1,
+        # Gate on the strict boolean Trend Template (all 8 conditions ANDed in
+        # the scanner: price>50>150>200, 50>150>200, 200MA rising >=1mo, >=30%
+        # above 52w low, within 25% of 52w high, RS>=70, Stage 2). This replaces
+        # the old soft gate (minerviniScore>=70 + stage/MA/RS) which let stocks
+        # far below their highs slip through.
         "filters": {
-            "minerviniScore": {"min": 70, "max": None},
-            "stage": 2,
-            "maAlignment": True,
-            "rsRating": {"min": 70, "max": None},
+            "passesTemplate": True,
         },
         "sort_by": "minervini_score",
         "sort_order": "desc",
@@ -101,12 +104,19 @@ PRESET_SCREENS: list[dict] = [
         "id": "canslim",
         "name": "CANSLIM",
         "short_name": "CANSLIM",
-        "description": "William O'Neil growth screen: strong earnings, RS, and institutional demand",
+        "description": "William O'Neil growth screen: current & annual EPS >=25%, near 52w high, RS leader",
         "tier": 1,
+        # Enforce the core O'Neil components as hard gates (not just a soft
+        # score): C = current quarterly EPS >=25%, A = annual (Y/Y) EPS >=25%,
+        # L = RS >=80, N = within 15% of the 52-week high. week_52_high_distance
+        # is the % BELOW the high as a NEGATIVE number, so ">= -15" means within
+        # 15% of the high. (S/supply-demand stays enforced inside the scanner.)
         "filters": {
             "canslimScore": {"min": 70, "max": None},
             "epsGrowth": {"min": 25, "max": None},
+            "epsGrowthYy": {"min": 25, "max": None},
             "rsRating": {"min": 80, "max": None},
+            "week52HighDistance": {"min": -15, "max": None},
         },
         "sort_by": "canslim_score",
         "sort_order": "desc",
@@ -115,11 +125,15 @@ PRESET_SCREENS: list[dict] = [
         "id": "vcp",
         "name": "VCP Setups",
         "short_name": "VCP",
-        "description": "Volatility contraction patterns with Minervini trend confirmation",
+        "description": "Volatility contraction patterns inside a passing Stage 2 trend template",
         "tier": 1,
+        # A VCP is only meaningful inside a Stage 2 uptrend near the highs, so
+        # require the strict Trend Template to pass in addition to the VCP
+        # pattern. Replaces the old soft "minerviniScore>=50" which admitted
+        # consolidations in downtrends / far below the highs.
         "filters": {
             "vcpDetected": True,
-            "minerviniScore": {"min": 50, "max": None},
+            "passesTemplate": True,
         },
         "sort_by": "vcp_score",
         "sort_order": "desc",

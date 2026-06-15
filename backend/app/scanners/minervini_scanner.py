@@ -416,6 +416,7 @@ class MinerviniScanner(BaseStockScreener):
                 "stage": stage_result["stage"],
                 "stage_name": stage_result["stage_name"],
                 "ma_alignment": ma_analysis["meets_all_criteria"],
+                "passes_template": score_result["passes_template"],
                 "ma_50": float(ma_50),
                 "ma_150": float(ma_150),
                 "ma_200": float(ma_200),
@@ -497,10 +498,10 @@ class MinerviniScanner(BaseStockScreener):
         Returns:
             Rating string
         """
-        # Check if passes template (strict criteria)
-        rs_rating = details.get("rs_rating", 0)
-        stage = details.get("stage", 0)
-        passes_template = score >= 70 and rs_rating >= 70 and stage == 2
+        # Use the strict Minervini Trend Template flag computed in
+        # _calculate_minervini_score (all 8 conditions ANDed), so the
+        # "Buy"/"Strong Buy" ratings only apply to genuine template passers.
+        passes_template = bool(details.get("passes_template", False))
 
         if passes_template:
             if score >= 85:
@@ -643,8 +644,26 @@ class MinerviniScanner(BaseStockScreener):
             # If VCP not calculated, redistribute points proportionally
             score = (score / 80) * 100  # Scale up to 100
 
-        # Determine if passes template (score >= 70)
-        passes_template = score >= 70 and rs_rating >= 70 and stage == 2
+        # Determine if passes the strict Minervini Trend Template.
+        #
+        # This is the canonical 8-point template expressed as a strict boolean
+        # AND of every condition — NOT a soft score threshold. Previously this
+        # was `score >= 70 and rs_rating >= 70 and stage == 2`, which let stocks
+        # far below their 52-week high (and without the full MA stack) "pass".
+        #
+        #   - rs_rating >= 70                 (relative strength leader)
+        #   - stage == 2                      (Stage 2 advancing)
+        #   - ma_analysis meets_all_criteria  (price>50>150>200, 50>150>200,
+        #                                      200-day MA rising >= 1 month)
+        #   - >= 30% above the 52-week low
+        #   - within 25% of the 52-week high
+        passes_template = bool(
+            rs_rating >= 70
+            and stage == 2
+            and ma_analysis["meets_all_criteria"]
+            and position_52w["meets_low_criteria"]
+            and position_52w["meets_high_criteria"]
+        )
 
         return {
             "score": round(score, 2),

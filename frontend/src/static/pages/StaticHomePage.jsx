@@ -110,6 +110,10 @@ function StaticHomePage() {
   const topCandidateFilters = useMemo(
     () => applyScanFilterDefaults({
       ...scanDefaultFilters,
+      // Quality gate: only show stocks that pass the strict Minervini Trend
+      // Template, so the headline list reflects the definition rather than
+      // just the highest composite scores across all stocks.
+      passesTemplate: true,
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
     }),
     [marketCapMin, scanDefaultFilters]
@@ -284,11 +288,11 @@ function StaticHomePage() {
 
       <DailyScanRowsTable
         testId="top-scan-candidates-section"
-        title="注目スキャン銘柄 トップ20"
+        title="ミネルヴィニ合格 注目銘柄 トップ20"
         subtitle={
           topCandidateFilters.minVolume == null
-            ? '行をクリックするとチャートが開きます。'
-            : `売買代金 ${formatNumber(topCandidateFilters.minVolume)} 以上。行をクリックするとチャートが開きます。`
+            ? 'ミネルヴィニのトレンドテンプレート合格銘柄を合成スコア順に表示。行をクリックするとチャートが開きます。'
+            : `トレンドテンプレート合格＋売買代金 ${formatNumber(topCandidateFilters.minVolume)} 以上。行をクリックするとチャートが開きます。`
         }
         rows={topResults}
         chartEnabledSymbols={chartEnabledSymbols}

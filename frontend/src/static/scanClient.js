@@ -19,6 +19,7 @@ const RANGE_FILTER_TO_FIELD = {
   price: 'current_price',
   adrPercent: 'adr_percent',
   epsGrowth: 'eps_growth_qq',
+  epsGrowthYy: 'eps_growth_yy',
   salesGrowth: 'sales_growth_qq',
   vcpScore: 'vcp_score',
   vcpPivot: 'vcp_pivot',
