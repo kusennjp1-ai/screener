@@ -48,10 +48,13 @@ function CandlestickChart({
   compact = false,
   hideTimeframeToggle = false,
   interactive = true,
+  pivotPrice = null,
+  pivotLabel = 'Pivot',
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const candlestickSeriesRef = useRef(null);
+  const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
   const volumeSeriesRef = useRef(null);
   const ema10SeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
@@ -381,6 +384,38 @@ function CandlestickChart({
     }
     // Otherwise, don't touch the zoom - let user adjust freely
   }, [chartData, visibleRange]);
+
+  // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
+  // candlestick series. This is the key actionable level for VCP / Minervini
+  // breakouts. Recreated whenever the pivot or the underlying series changes.
+  useEffect(() => {
+    const series = candlestickSeriesRef.current;
+    if (!series) return undefined;
+
+    if (pivotLineRef.current) {
+      try { series.removePriceLine(pivotLineRef.current); } catch { /* series recreated */ }
+      pivotLineRef.current = null;
+    }
+
+    if (pivotPrice != null && Number.isFinite(pivotPrice) && pivotPrice > 0) {
+      pivotLineRef.current = series.createPriceLine({
+        price: pivotPrice,
+        color: '#ff9800',
+        lineWidth: 2,
+        lineStyle: 2, // dashed
+        axisLabelVisible: true,
+        title: pivotLabel,
+      });
+    }
+
+    return () => {
+      const current = candlestickSeriesRef.current;
+      if (pivotLineRef.current && current) {
+        try { current.removePriceLine(pivotLineRef.current); } catch { /* series recreated */ }
+        pivotLineRef.current = null;
+      }
+    };
+  }, [pivotPrice, pivotLabel, chartData]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
