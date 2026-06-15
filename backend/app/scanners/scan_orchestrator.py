@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 LISTING_ONLY_MIN_BARS = 30
 FULL_SCAN_MIN_BARS = 252
+# Trailing trading days that make up a 52-week window (~252 sessions/year).
+TRADING_DAYS_52W = 252
 IPO_BONUS_MIN_SCORE = 60.0
 IPO_BONUS_MAX = 15.0
 _DEFAULT_SCREENER_MIN_BARS = 100
@@ -87,6 +89,13 @@ def _build_precomputed_scan_context(stock_data: StockData) -> PrecomputedScanCon
         benchmark_close_chrono = stock_data.benchmark_data["Close"].reset_index(drop=True)
         benchmark_close_rev = benchmark_close_chrono[::-1].reset_index(drop=True)
 
+    # 52-week window for high/low must be the trailing ~252 trading days, NOT
+    # the full loaded history (Minervini requests price_period="2y", so the raw
+    # series spans ~500 bars). Using the whole series understates the 52-week
+    # low (and overstates the 52-week high), which let stocks that have actually
+    # broken down recently still satisfy "30% above the 52-week low".
+    close_rev_52w = close_rev.iloc[:TRADING_DAYS_52W] if not close_rev.empty else close_rev
+
     ma_50_series = close_chrono.rolling(window=50, min_periods=50).mean()
     ma_150_series = close_chrono.rolling(window=150, min_periods=150).mean()
     ma_200_series = close_chrono.rolling(window=200, min_periods=200).mean()
@@ -124,8 +133,8 @@ def _build_precomputed_scan_context(stock_data: StockData) -> PrecomputedScanCon
         ema_10=_series_last_float(ema_10_series),
         ema_20=_series_last_float(ema_20_series),
         ema_50=_series_last_float(ema_50_series),
-        high_52w=float(close_rev.max()) if not close_rev.empty else None,
-        low_52w=float(close_rev.min()) if not close_rev.empty else None,
+        high_52w=float(close_rev_52w.max()) if not close_rev_52w.empty else None,
+        low_52w=float(close_rev_52w.min()) if not close_rev_52w.empty else None,
         rs_ratings=rs_ratings,
     )
 

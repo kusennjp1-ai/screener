@@ -25,6 +25,9 @@ from .criteria.relative_strength import RelativeStrengthCalculator
 
 logger = logging.getLogger(__name__)
 
+# Trailing trading days that make up a 52-week window (~252 sessions/year).
+TRADING_DAYS_52W = 252
+
 
 @register_screener
 class CANSLIMScanner(BaseStockScreener):
@@ -331,7 +334,11 @@ class CANSLIMScanner(BaseStockScreener):
         - 10-15% from high: 8 points
         - >15% from high: proportional (0-5 points)
         """
-        high_52w = float(prices.max())
+        # Restrict to the trailing ~252 trading days. ``prices`` is
+        # most-recent-first and spans ~2 years (price_period="2y"), so
+        # ``prices.max()`` over the whole series would compare against a 2-year
+        # high rather than the 52-week high O'Neil's "N" criterion calls for.
+        high_52w = float(prices.iloc[:TRADING_DAYS_52W].max())
         from_high_pct = ((high_52w - current_price) / high_52w) * 100
 
         # Calculate points

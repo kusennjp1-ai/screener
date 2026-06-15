@@ -21,7 +21,11 @@ from app.scanners.base_screener import (
     ScreenerResult,
     StockData,
 )
-from app.scanners.scan_orchestrator import ScanOrchestrator
+from app.scanners.scan_orchestrator import (
+    ScanOrchestrator,
+    TRADING_DAYS_52W,
+    _build_precomputed_scan_context,
+)
 from app.scanners.screener_registry import ScreenerRegistry
 
 
@@ -632,3 +636,54 @@ class TestScanOrchestratorDataFlow:
 
         assert provider.prepare_data_called is False
         assert result["composite_score"] == 75.0
+
+
+class TestPrecomputed52WeekWindow:
+    """The precomputed 52-week high/low must come from the trailing ~252
+    sessions only, never the full loaded history. Minervini requests
+    price_period="2y" (~500 bars), so taking the max/min of the whole series
+    understates the 52-week low and lets recently-broken stocks still clear
+    "30% above the 52-week low"."""
+
+    def _two_year_stock(self) -> StockData:
+        # ~500 sessions: ran 100 -> 200 in the first year, then declined to a
+        # true 52-week low of 150 and bounced to 165. Whole-series low is 100;
+        # trailing-252 low is 150.
+        import numpy as np
+
+        seg1 = np.linspace(100, 200, 250)   # older than 52 weeks
+        seg2 = np.linspace(200, 150, 230)    # within the last 52 weeks
+        seg3 = np.linspace(150, 165, 20)     # recent bounce
+        closes = np.concatenate([seg1, seg2, seg3])
+        dates = pd.date_range(end="2026-01-15", periods=len(closes), freq="B")
+        df = pd.DataFrame(
+            {
+                "Open": closes,
+                "High": closes,
+                "Low": closes,
+                "Close": closes,
+                "Volume": 1_000_000,
+            },
+            index=dates,
+        )
+        return StockData(symbol="DECLINER", price_data=df, benchmark_data=df.copy())
+
+    def test_52w_high_low_use_trailing_window_not_full_history(self):
+        ctx = _build_precomputed_scan_context(self._two_year_stock())
+
+        assert ctx is not None
+        # Trailing 252 sessions: low ~150 (NOT the 2-year low of 100),
+        # high 200.
+        assert ctx.low_52w == pytest.approx(150.0, abs=0.5)
+        assert ctx.high_52w == pytest.approx(200.0, abs=0.5)
+        # Guard against regressing to the whole-series minimum.
+        assert ctx.low_52w > 140.0
+
+    def test_window_matches_explicit_trailing_slice(self):
+        stock = self._two_year_stock()
+        ctx = _build_precomputed_scan_context(stock)
+        closes = stock.price_data["Close"].reset_index(drop=True)
+        trailing = closes.iloc[-TRADING_DAYS_52W:]
+
+        assert ctx.high_52w == pytest.approx(float(trailing.max()))
+        assert ctx.low_52w == pytest.approx(float(trailing.min()))
