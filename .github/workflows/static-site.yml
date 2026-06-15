@@ -6,6 +6,12 @@ on:
     # timezone so it tracks DST automatically.
     - cron: '10 16 * * 1-6'
       timezone: 'America/New_York'
+    # UTC safety net. GitHub frequently delays or silently drops scheduled
+    # runs under load, which would leave a day with no fresh scan. 23:30 UTC is
+    # comfortably after the US close year-round (20:00 UTC in EDT, 21:00 UTC in
+    # EST) and ~3h after the primary trigger, so it re-runs the day only if the
+    # primary run never fired (no overlap with the ~1.5h primary build).
+    - cron: '30 23 * * 1-6'
   workflow_dispatch:
     inputs:
       market_group:
