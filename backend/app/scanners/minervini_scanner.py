@@ -28,6 +28,9 @@ from .criteria.beta_calculator import BetaCalculator
 
 logger = logging.getLogger(__name__)
 
+# Trailing trading days that make up a 52-week window (~252 sessions/year).
+TRADING_DAYS_52W = 252
+
 
 @register_screener
 class MinerviniScanner(BaseStockScreener):
@@ -308,16 +311,21 @@ class MinerviniScanner(BaseStockScreener):
                 else spy_prices_chrono[::-1].reset_index(drop=True)
             )
 
-            # 52-week range
+            # 52-week range — restrict to the trailing ~252 trading days. The
+            # raw series spans ~2 years (price_period="2y"), so using the whole
+            # series would understate the 52-week low and let recently-broken
+            # stocks still clear "30% above the 52-week low". ``prices`` is
+            # most-recent-first, so ``iloc[:252]`` is the last 52 weeks.
+            prices_52w = prices.iloc[:TRADING_DAYS_52W]
             high_52w = (
                 float(precomputed.high_52w)
                 if precomputed is not None and precomputed.high_52w is not None
-                else float(prices.max())
+                else float(prices_52w.max())
             )
             low_52w = (
                 float(precomputed.low_52w)
                 if precomputed is not None and precomputed.low_52w is not None
-                else float(prices.min())
+                else float(prices_52w.min())
             )
 
             # 1. Calculate RS Ratings (weighted + individual periods)
