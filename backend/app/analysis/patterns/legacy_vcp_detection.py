@@ -469,12 +469,15 @@ class VCPDetector:
             atr_score * 0.15
         )
 
-        # VCP detected if score >= 65 and key criteria met
-        # Relaxed from 70 to 65 to catch more valid patterns
+        # VCP requires a genuine volatility AND volume contraction near the
+        # highs. Volume drying up is a defining VCP characteristic, so it is
+        # now mandatory (previously a stock with no volume contraction could
+        # still be flagged as a VCP from depth/tightness alone).
         vcp_detected = (
             vcp_score >= 65 and
             contracting_depth and
-            tight_near_highs
+            tight_near_highs and
+            contracting_volume
         )
 
         return {

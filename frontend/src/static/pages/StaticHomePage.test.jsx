@@ -142,6 +142,7 @@ describe('StaticHomePage', () => {
         {
           symbol: 'NVDA',
           company_name: 'NVIDIA Corporation',
+          passes_template: true,
           composite_score: 98.0,
           current_price: 100,
           rating: 'Strong Buy',
@@ -162,6 +163,7 @@ describe('StaticHomePage', () => {
         {
           symbol: '0700.HK',
           company_name: 'Tencent Holdings',
+          passes_template: true,
           composite_score: 99.0,
           current_price: 25,
           rating: 'Buy',
@@ -175,6 +177,7 @@ describe('StaticHomePage', () => {
         {
           symbol: 'AAPL',
           company_name: 'Apple Inc.',
+          passes_template: true,
           composite_score: 97.0,
           current_price: 200,
           rating: 'Buy',
@@ -308,6 +311,7 @@ describe('StaticHomePage', () => {
       {
         symbol: 'LOCALPASS',
         company_name: 'Local Liquid',
+        passes_template: true,
         composite_score: 88.0,
         current_price: 12,
         rating: 'Buy',
@@ -320,6 +324,7 @@ describe('StaticHomePage', () => {
       {
         symbol: 'TOOTHIN',
         company_name: 'Too Thin',
+        passes_template: true,
         composite_score: 99.0,
         current_price: 8,
         rating: 'Buy',
@@ -446,7 +451,7 @@ describe('StaticHomePage', () => {
 
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    const topCandidatesHeading = await screen.findByText('注目スキャン銘柄 トップ20');
+    const topCandidatesHeading = await screen.findByText('ミネルヴィニ合格 注目銘柄 トップ20');
     const leadersHeading = await screen.findByText('主導業種グループの主導銘柄');
     const topGroupsHeading = await screen.findByText('業種グループ トップ10');
     expect(

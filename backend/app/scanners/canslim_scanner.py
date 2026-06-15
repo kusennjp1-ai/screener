@@ -313,7 +313,9 @@ class CANSLIMScanner(BaseStockScreener):
             "max_points": 15,
             "eps_growth_yy": round(eps_yy, 2) if eps_yy else 0,
             "consistent_growth": consistent,
-            "passes": consistent,
+            # O'Neil's "A" requires strong annual growth; pass only at >=25%
+            # (not the softer >=15% "consistent" bar used for partial points).
+            "passes": eps_yy >= 25,
             "reason": f"EPS Y/Y growth: {eps_yy:.1f}%"
         }
 
@@ -546,11 +548,21 @@ class CANSLIMScanner(BaseStockScreener):
             i_result["points"]    # 15
         )
 
-        # Determine if passes (score >= 70 AND key criteria met)
-        passes = (
-            score >= 70 and
-            c_result["passes"] and  # Must have strong current earnings
-            l_result["passes"]       # Must be a leader (RS >= 80)
+        # Strict O'Neil checklist: the core growth + momentum components must
+        # ALL pass, not just the soft score plus C and L. (I/institutional is
+        # left out of the hard gate because ownership data is frequently missing
+        # for US names and would wipe otherwise-valid results; it still scores.)
+        #   C = current quarterly EPS >= 25%
+        #   A = annual (Y/Y) EPS >= 25%
+        #   N = within 15% of the 52-week high
+        #   S = up/down volume ratio >= 1.3
+        #   L = RS rating >= 80
+        passes = bool(
+            c_result["passes"] and
+            a_result["passes"] and
+            n_result["passes"] and
+            s_result["passes"] and
+            l_result["passes"]
         )
 
         return {

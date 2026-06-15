@@ -96,3 +96,67 @@ def test_noop_scalar_and_range_filters_match_like_frontend():
         row,
         {"compositeScore": {"min": None, "max": None}},
     ) is True
+
+
+def _preset(screen_id):
+    return next(screen for screen in PRESET_SCREENS if screen["id"] == screen_id)
+
+
+def test_minervini_preset_gates_on_strict_template_flag():
+    """The Minervini preset must gate on the strict boolean trend-template flag
+    (passes_template), not the old soft minerviniScore>=70 threshold, so stocks
+    far below their highs / without the full MA stack are excluded."""
+    screen = _preset("minervini")
+
+    assert screen["filters"] == {"passesTemplate": True}
+    assert _matches_preset_filters(
+        {"symbol": "PASS", "passes_template": True}, screen["filters"]
+    ) is True
+    # A high composite/minervini score is no longer enough on its own.
+    assert _matches_preset_filters(
+        {"symbol": "SOFT", "passes_template": False, "minervini_score": 95},
+        screen["filters"],
+    ) is False
+
+
+def test_canslim_preset_enforces_annual_eps_and_new_high():
+    """CANSLIM must hard-gate annual EPS (A) and new-high proximity (N), not
+    only the soft score plus quarterly EPS and RS."""
+    screen = _preset("canslim")
+    filters = screen["filters"]
+
+    assert filters["epsGrowthYy"] == {"min": 25, "max": None}
+    # week_52_high_distance is % BELOW the high (negative); >= -15 == within 15%.
+    assert filters["week52HighDistance"] == {"min": -15, "max": None}
+
+    near_high_grower = {
+        "symbol": "OK",
+        "canslim_score": 80,
+        "eps_growth_qq": 30,
+        "eps_growth_yy": 30,
+        "rs_rating": 85,
+        "week_52_high_distance": -5,
+    }
+    assert _matches_preset_filters(near_high_grower, filters) is True
+    assert _matches_preset_filters(
+        {**near_high_grower, "eps_growth_yy": 10}, filters
+    ) is False  # weak annual earnings
+    assert _matches_preset_filters(
+        {**near_high_grower, "week_52_high_distance": -40}, filters
+    ) is False  # far below the 52-week high
+
+
+def test_vcp_preset_requires_passing_trend_template():
+    """A VCP only counts inside a passing Stage 2 trend template."""
+    screen = _preset("vcp")
+    filters = screen["filters"]
+
+    assert filters["vcpDetected"] is True
+    assert filters["passesTemplate"] is True
+    assert _matches_preset_filters(
+        {"symbol": "OK", "vcp_detected": True, "passes_template": True}, filters
+    ) is True
+    assert _matches_preset_filters(
+        {"symbol": "NOTREND", "vcp_detected": True, "passes_template": False},
+        filters,
+    ) is False
