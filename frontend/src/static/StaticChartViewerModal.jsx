@@ -146,6 +146,11 @@ function StaticChartViewerModal({
   const adrValue = stockData?.adr_percent ?? fundamentals?.adr_percent ?? null;
   const epsRating = stockData?.eps_rating ?? fundamentals?.eps_rating ?? null;
   const groupRank = stockData?.ibd_group_rank ?? null;
+  // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
+  const pivotPrice = stockData?.vcp_pivot ?? stockData?.se_pivot_price ?? null;
+  const pivotLabel = stockData?.vcp_pivot != null ? 'VCP Pivot' : 'Pivot';
+  const stage = stockData?.stage ?? null;
+  const vcpDetected = stockData?.vcp_detected === true;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
   const chartHeight = isMobile
@@ -278,6 +283,50 @@ function StaticChartViewerModal({
                 </Box>
               ) : null}
 
+              {stage != null ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Box
+                    sx={{
+                      borderRadius: 1,
+                      px: 1.5,
+                      py: 0.5,
+                      textAlign: 'center',
+                      minWidth: 36,
+                      bgcolor: stage === 2 ? 'success.main' : 'grey.600',
+                    }}
+                  >
+                    <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
+                      {stage}
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                    Stage
+                  </Typography>
+                </Box>
+              ) : null}
+
+              {vcpDetected ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Box
+                    sx={{
+                      borderRadius: 1,
+                      px: 1.5,
+                      py: 0.5,
+                      textAlign: 'center',
+                      minWidth: 36,
+                      bgcolor: 'success.main',
+                    }}
+                  >
+                    <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
+                      ✓
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                    VCP
+                  </Typography>
+                </Box>
+              ) : null}
+
               {stockData ? (
                 <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 1.5, ml: 1 }}>
                   {[
@@ -374,6 +423,8 @@ function StaticChartViewerModal({
                   rsLineData={chartPayload?.rs_line || null}
                   blueDots={chartPayload?.blue_dots || null}
                   dataUpdatedAtOverride={dataUpdatedAtOverride}
+                  pivotPrice={pivotPrice}
+                  pivotLabel={pivotLabel}
                 />
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight }}>
