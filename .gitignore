@@ -31,6 +31,7 @@ frontend/public/static-data/
 !frontend/index.html
 !docs/*.html
 !data/IBD_industry_group.csv
+!data/minervini_trade_ideas.csv
 !data/hk-deep.csv
 !data/india-deep.csv
 !data/kabutan_themes_en.csv
