@@ -87,23 +87,26 @@ PRESET_SCREENS: list[dict] = [
         "id": "minervini",
         "name": "Minervini Trend Template",
         "short_name": "Minervini",
-        "description": "Stage 2 leaders passing the trend template, RS>=80 and within 15% of the 52-week high",
+        "description": "Stage 2 market leaders: trend template, RS>=90 and within 10% of the 52-week high",
         "tier": 1,
         # Gate on the strict boolean Trend Template (all 8 conditions ANDed in
         # the scanner: price>50>150>200, 50>150>200, 200MA rising >=1mo, >=30%
         # above 52w low, within 25% of 52w high, RS>=70, Stage 2), then tighten
-        # toward Minervini's actual selectivity so the screen stays an elite
-        # short-list rather than every textbook-minimum pass:
-        #   - rsRating >= 80      (his stated preference: "RS>=70, preferably 80+")
-        #   - within 15% of high  (tighter than the 25% template floor)
-        # Both are validated against his USIC winners (each on-date pass had
-        # RS 88-100 and sat within 13% of new highs), so the tightening keeps the
-        # real leaders while cutting the long tail. week_52_high_distance is the
-        # % BELOW the high (negative), so ">= -15" == within 15%.
+        # hard toward an *elite leader* short-list — every textbook-minimum pass
+        # (and even RS>=80 / within-15%) still ran to many hundreds in a broad
+        # rally:
+        #   - rsRating >= 90      (top decile of relative strength — true leaders)
+        #   - within 10% of high  (buyable range near a breakout, not extended
+        #                          bases 10-25% down)
+        # RS is the discriminating lever (most stocks sit near their highs in a
+        # rally, so the high-distance filter cuts less). Validated against
+        # Minervini's own buys: his entries clustered at RS ~90+ within a few %
+        # of new highs. week_52_high_distance is the % BELOW the high (negative),
+        # so ">= -10" == within 10%.
         "filters": {
             "passesTemplate": True,
-            "rsRating": {"min": 80, "max": None},
-            "week52HighDistance": {"min": -15, "max": None},
+            "rsRating": {"min": 90, "max": None},
+            "week52HighDistance": {"min": -10, "max": None},
         },
         "sort_by": "minervini_score",
         "sort_order": "desc",

@@ -22,6 +22,14 @@ on:
         description: 'Trading days after the buy date to scan'
         type: string
         default: '15'
+      strict_rs:
+        description: 'RS floor for the "strict" catch-rate (app preset uses 90)'
+        type: string
+        default: '90'
+      strict_from_high:
+        description: 'Max % below the 52w high for "strict", negative (app preset uses -10)'
+        type: string
+        default: '-10'
 
 jobs:
   backtest:
@@ -50,6 +58,8 @@ jobs:
             --since "${{ github.event.inputs.since }}" \
             --window-before "${{ github.event.inputs.window_before }}" \
             --window-after "${{ github.event.inputs.window_after }}" \
+            --strict-rs "${{ github.event.inputs.strict_rs }}" \
+            --strict-from-high "${{ github.event.inputs.strict_from_high }}" \
             --markdown "$RUNNER_TEMP/backtest-report.md"
 
       - name: Publish report to job summary

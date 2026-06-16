@@ -44,8 +44,10 @@ from app.scanners.minervini_scanner import MinerviniScanner
 BENCHMARK = "SPY"
 HISTORY_PAD_CALENDAR_DAYS = 820  # ~2.2y before the idea date (covers the 200-day MA)
 MIN_BARS = 240
-STRICT_RS_MIN = 80
-STRICT_FROM_HIGH_MIN = -15.0  # within 15% of the 52-week high (distance is negative)
+# Defaults mirror the app's Minervini preset; override with --strict-rs /
+# --strict-from-high to calibrate other settings against Minervini's real picks.
+STRICT_RS_MIN = 90
+STRICT_FROM_HIGH_MIN = -10.0  # within 10% of the 52-week high (distance is negative)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CSV = _REPO_ROOT / "data" / "minervini_trade_ideas.csv"
@@ -242,7 +244,8 @@ def render_markdown(results, window_before, window_after, since, until) -> str:
         f"{sum(r.template_win for r in stocks_data)} / {len(stocks_data)} "
         f"({_pct(sum(r.template_win for r in stocks_data), len(stocks_data))}); "
         f"on the exact date {_pct(sum(r.template_on for r in stocks_data), len(stocks_data))}\n"
-        f"- **Strict preset (RS>=80, within 15% of high) — caught within window:** "
+        f"- **Strict preset (RS>={int(STRICT_RS_MIN)}, within {abs(int(STRICT_FROM_HIGH_MIN))}% of high) "
+        f"— caught within window:** "
         f"{sum(r.strict_win for r in stocks_data)} / {len(stocks_data)} "
         f"({_pct(sum(r.strict_win for r in stocks_data), len(stocks_data))}); "
         f"on the exact date {_pct(sum(r.strict_on for r in stocks_data), len(stocks_data))}\n"
@@ -281,7 +284,10 @@ def render_markdown(results, window_before, window_after, since, until) -> str:
 
     # Strict-only drops (caught by template but the tightening dropped them).
     drops = [r for r in stocks_data if r.template_win and not r.strict_win]
-    L.append(f"\n## Dropped by the RS>=80 / within-15% tightening ({len(drops)})\n")
+    L.append(
+        f"\n## Dropped by the RS>={int(STRICT_RS_MIN)} / within-{abs(int(STRICT_FROM_HIGH_MIN))}% "
+        f"tightening ({len(drops)})\n"
+    )
     L.append("Picks the template caught but the stricter preset excluded — the cost of selectivity:\n")
     if drops:
         L.append("| Ticker | Date |")
@@ -295,6 +301,7 @@ def render_markdown(results, window_before, window_after, since, until) -> str:
 
 
 def main() -> int:
+    global STRICT_RS_MIN, STRICT_FROM_HIGH_MIN
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", type=str, default=str(DEFAULT_CSV))
     parser.add_argument("--since", type=str, default="2017-01-01", help="only ideas on/after this date (YYYY-MM-DD)")
@@ -302,8 +309,16 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--window-before", type=int, default=5)
     parser.add_argument("--window-after", type=int, default=15)
+    parser.add_argument("--strict-rs", type=float, default=STRICT_RS_MIN,
+                        help="RS floor for the 'strict' catch-rate (default mirrors the app preset)")
+    parser.add_argument("--strict-from-high", type=float, default=STRICT_FROM_HIGH_MIN,
+                        help="max %% below the 52w high for 'strict', as a negative number (e.g. -10)")
     parser.add_argument("--markdown", type=str, default=None)
     args = parser.parse_args()
+
+    # Let the CLI calibrate the strict thresholds against Minervini's real picks.
+    STRICT_RS_MIN = args.strict_rs
+    STRICT_FROM_HIGH_MIN = args.strict_from_high
 
     ideas = _load_trade_ideas(Path(args.csv), args.since, args.until, args.limit)
     if not ideas:
