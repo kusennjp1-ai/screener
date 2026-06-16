@@ -83,8 +83,15 @@ class WeinsteinstageAnalyzer:
         if len(prices) < lookback:
             return "unknown"
 
-        # Simple linear regression to determine trend
-        recent_prices = prices.iloc[:lookback].values
+        # Simple linear regression to determine trend.
+        # ``prices`` is most-recent-first (see docstring), so the recent window
+        # must be reversed to chronological order before fitting — otherwise the
+        # regression slope is sign-inverted and a genuine uptrend reads as a
+        # downtrend. That inversion was demoting real Stage-2 leaders (strong RS,
+        # full MA stack, at/near new highs) to Stage 3 and excluding them from
+        # the trend template. ``_detect_swing_pattern`` already reverses; this
+        # makes ``calculate_price_trend`` consistent with it.
+        recent_prices = prices.iloc[:lookback].values[::-1]
         x = np.arange(len(recent_prices))
 
         try:
