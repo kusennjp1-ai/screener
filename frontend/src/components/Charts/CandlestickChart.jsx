@@ -1,6 +1,7 @@
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
+import { VcpBoxPrimitive } from './vcpBoxPrimitive';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchPriceHistory, fetchRSLine, priceHistoryKeys, PRICE_HISTORY_STALE_TIME } from '../../api/priceHistory';
 import { rsBandForRange } from './rsBand';
@@ -50,12 +51,13 @@ function CandlestickChart({
   interactive = true,
   pivotPrice = null,
   pivotLabel = 'Pivot',
-  minerviniInfo = null,
+  vcpBoxes = null,
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const candlestickSeriesRef = useRef(null);
   const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
+  const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
   const volumeSeriesRef = useRef(null);
   const ema10SeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
@@ -464,6 +466,32 @@ function CandlestickChart({
     };
   }, [pivotPrice, pivotLabel, chartData]);
 
+  // Draw VCP consolidation boxes over the candles (full chart only). The
+  // primitive follows pan/zoom on its own; we only (re)create it when the
+  // series is rebuilt or the boxes change. Wrapped so a charting aid can never
+  // break the chart.
+  useEffect(() => {
+    const series = candlestickSeriesRef.current;
+    if (!series || compact) return undefined;
+    const boxes = Array.isArray(vcpBoxes) ? vcpBoxes : [];
+    try {
+      if (!vcpBoxPrimitiveRef.current) {
+        vcpBoxPrimitiveRef.current = new VcpBoxPrimitive(boxes);
+        series.attachPrimitive(vcpBoxPrimitiveRef.current);
+      } else {
+        vcpBoxPrimitiveRef.current.setBoxes(boxes);
+      }
+    } catch { /* primitive unsupported / series recreated — ignore */ }
+
+    return () => {
+      const current = candlestickSeriesRef.current;
+      if (vcpBoxPrimitiveRef.current && current) {
+        try { current.detachPrimitive(vcpBoxPrimitiveRef.current); } catch { /* already gone */ }
+      }
+      vcpBoxPrimitiveRef.current = null;
+    };
+  }, [vcpBoxes, chartData, compact]);
+
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
   // otherwise so stale points never linger under weekly candles.
@@ -502,8 +530,12 @@ function CandlestickChart({
 
     // RS shown -> compress price to a 0.66 floor (bottom 0.34) so [0.66, 0.78] is
     // an always-empty strip the RS band lives in; hidden -> full height (0.78).
+    // Top margin leaves headroom under the OHLC legend / timeframe toggle so the
+    // most recent candles (a leader near new highs sits at the top-right) are
+    // never hidden behind those corner overlays.
     const candleBottom = rsStripShown ? 0.34 : 0.22;
-    candle.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: candleBottom } });
+    const candleTop = compact ? 0.05 : 0.14;
+    candle.priceScale().applyOptions({ scaleMargins: { top: candleTop, bottom: candleBottom } });
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   }, [rsStripShown, symbol, height, isDarkMode, compact]);
 
@@ -654,86 +686,6 @@ function CandlestickChart({
             >
               {legendData.changePercent >= 0 ? '+' : ''}{legendData.changePercent.toFixed(2)}%
             </span>
-          )}
-        </Box>
-      )}
-
-      {/* Moving-average legend + Minervini trend-template readout. Pinned
-          top-left under the OHLC legend so "necessary info" rides on the chart
-          itself. Hidden in compact grid tiles. */}
-      {!compact && !showLoading && !showError && !showNoData && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 44,
-            left: 10,
-            zIndex: 10,
-            bgcolor: 'rgba(30, 30, 30, 0.82)',
-            borderRadius: 1,
-            px: 1,
-            py: 0.5,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 0.5,
-            maxWidth: 'calc(100% - 20px)',
-            pointerEvents: 'none',
-          }}
-        >
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, fontFamily: 'monospace', fontSize: '0.62rem' }}>
-            {[
-              ['EMA10', '#4CF64D'],
-              ['EMA20', '#87FBFB'],
-              ['EMA50', '#38CD07'],
-              ['SMA50', '#FFD54F'],
-              ['SMA150', '#FF8A65'],
-              ['SMA200', '#BA68C8'],
-            ].map(([label, color]) => (
-              <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-                <Box sx={{ width: 12, height: 2, bgcolor: color, borderRadius: 1 }} />
-                <span style={{ color: '#cfcfcf' }}>{label}</span>
-              </Box>
-            ))}
-          </Box>
-
-          {minerviniInfo && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, fontFamily: 'monospace', fontSize: '0.66rem' }}>
-              {minerviniInfo.passesTemplate != null && (
-                <span style={{ color: minerviniInfo.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: 700 }}>
-                  {minerviniInfo.passesTemplate ? '✓ トレンドテンプレート合格' : '✗ テンプレート不合格'}
-                </span>
-              )}
-              {minerviniInfo.rsRating != null && (
-                <span style={{ color: minerviniInfo.rsRating >= 70 ? '#4CF64D' : '#bbb' }}>
-                  RS {Math.round(minerviniInfo.rsRating)}
-                </span>
-              )}
-              {minerviniInfo.stage != null && (
-                <span style={{ color: minerviniInfo.stage === 2 ? '#4CF64D' : '#bbb' }}>
-                  Stage {minerviniInfo.stage}
-                </span>
-              )}
-              {minerviniInfo.maStackOk != null && (
-                <span style={{ color: minerviniInfo.maStackOk ? '#4CF64D' : '#E619CD' }}>
-                  MA{minerviniInfo.maStackOk ? '✓' : '✗'}
-                </span>
-              )}
-              {minerviniInfo.aboveLowPct != null && (
-                <span style={{ color: minerviniInfo.aboveLowPct >= 30 ? '#4CF64D' : '#bbb' }}>
-                  52WL +{Math.round(minerviniInfo.aboveLowPct)}%
-                </span>
-              )}
-              {minerviniInfo.fromHighPct != null && (
-                <span style={{ color: minerviniInfo.fromHighPct >= -25 ? '#4CF64D' : '#bbb' }}>
-                  52WH {Math.round(minerviniInfo.fromHighPct)}%
-                </span>
-              )}
-              {minerviniInfo.pivot != null && (
-                <span style={{ color: '#FFA726' }}>Pivot {Number(minerviniInfo.pivot).toFixed(2)}</span>
-              )}
-              {minerviniInfo.vcpDetected && (
-                <span style={{ color: '#4CF64D' }}>VCP✓</span>
-              )}
-            </Box>
           )}
         </Box>
       )}

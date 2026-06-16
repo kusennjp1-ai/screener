@@ -17,6 +17,7 @@ from urllib.parse import quote
 import pandas as pd
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.analysis.patterns.legacy_vcp_detection import VCPDetector
 from app.analysis.patterns.rs_line import blue_dot_series, compute_rs_line
 from app.domain.common.query import FilterSpec, SortOrder, SortSpec
 from app.domain.markets.catalog import get_market_catalog
@@ -60,8 +61,19 @@ CHART_BUNDLE_SCHEMA_VERSION = "static-charts-v1"
 SCAN_CHUNK_SIZE = 1000
 STATIC_CHART_LIMIT = 200
 STATIC_CHART_PERIOD = "6mo"
-STATIC_CHART_PERIOD_DAYS = 180
+# Bars shipped per chart. ~15 months of calendar days (~310 trading days) so the
+# Minervini 150/200-day SMA stack actually renders across the recent window the
+# chart opens on (a 200-day SMA needs ~200 prior bars) and recent VCP bases have
+# context. The chart still *opens* on the most recent ~6 months (see
+# CandlestickChart's default window); the extra history is there to scroll back
+# to and to anchor the long MAs.
+STATIC_CHART_PERIOD_DAYS = 450
 STATIC_CHART_LOOKUP_BATCH_SIZE = 250
+# ETFs/ETNs are carried in the universe (for RS/benchmark/theme uses) but they
+# are not stocks, so they must not pollute the stock-methodology screens
+# (Minervini / CANSLIM / VCP) — broad funds trivially satisfy a trend template
+# and were inflating the result counts. Drop them from the published scan rows.
+EXCLUDED_SCAN_INDUSTRY_GROUPS = frozenset({"Finance-ETF / ETN"})
 # Default minVolume thresholds are expressed in local-currency daily dollar
 # volume (avg_volume × current_price), not share count — the ``volume`` field
 # on each scan row is sourced from ``avg_dollar_volume`` in the local listing
@@ -681,6 +693,13 @@ class StaticSiteExportService:
         chunk_dir.mkdir(parents=True, exist_ok=True)
 
         serialized_rows = [self._serialize_scan_row(row) for row in rows]
+        # Exclude ETFs/ETNs — this is a stock screener; funds are not valid
+        # Minervini/CANSLIM/VCP candidates and were inflating the counts.
+        serialized_rows = [
+            row
+            for row in serialized_rows
+            if row.get("ibd_industry_group") not in EXCLUDED_SCAN_INDUSTRY_GROUPS
+        ]
         self._annotate_percentile_ranks(serialized_rows)
         serialized_rows = self._sort_static_scan_rows(serialized_rows)
         resolved_default_filters = self.resolve_static_default_filters(market)
@@ -784,6 +803,7 @@ class StaticSiteExportService:
                     "benchmark_symbol": benchmark_symbol,
                     "stock_data": stock_data,
                     "fundamentals": fundamentals_value,
+                    "vcp_boxes": self._compute_vcp_boxes(price_df),
                 },
             )
             entries.append({"symbol": symbol, "rank": rank, "path": rel_path.as_posix()})
@@ -2002,6 +2022,43 @@ class StaticSiteExportService:
         ]
         blue_dots = [ts.strftime("%Y-%m-%d") for ts in blue_window.index]
         return rs_line, blue_dots
+
+    def _compute_vcp_boxes(self, price_df, max_boxes: int = 2) -> list[dict[str, Any]]:
+        """Recent VCP consolidation base(s) as drawable boxes.
+
+        Returns up to ``max_boxes`` of the most recent contraction bases as
+        ``{start, end, high, low}`` (dates are chronological edges). The chart
+        renders these as shaded rectangles so the base/footprint is visible.
+        Computed on the full fetched history; the frontend clamps any edge that
+        falls outside the visible window.
+        """
+        if price_df is None or getattr(price_df, "empty", True) or "Close" not in price_df.columns:
+            return []
+        try:
+            close_rev = price_df["Close"][::-1].reset_index(drop=True)
+            dates_rev = list(price_df.index[::-1])
+            bases = VCPDetector().find_consolidation_bases(close_rev)
+        except Exception:  # noqa: BLE001 - charting aid must never break the export
+            return []
+
+        boxes: list[dict[str, Any]] = []
+        for base in bases[:max_boxes]:
+            try:
+                start_idx = int(base["start_idx"])  # more-recent peak (lower index)
+                end_idx = int(base["end_idx"])       # older peak (higher index)
+                if not (0 <= start_idx < len(dates_rev)) or not (0 <= end_idx < len(dates_rev)):
+                    continue
+                boxes.append(
+                    {
+                        "start": dates_rev[end_idx].strftime("%Y-%m-%d"),
+                        "end": dates_rev[start_idx].strftime("%Y-%m-%d"),
+                        "high": round(float(base["high_price"]), 2),
+                        "low": round(float(base["low_price"]), 2),
+                    }
+                )
+            except (KeyError, ValueError, TypeError):
+                continue
+        return boxes
 
     def _serialize_chart_bars(self, data) -> list[dict[str, Any]]:
         if data is None or getattr(data, "empty", True):
