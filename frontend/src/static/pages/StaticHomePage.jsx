@@ -110,10 +110,13 @@ function StaticHomePage() {
   const topCandidateFilters = useMemo(
     () => applyScanFilterDefaults({
       ...scanDefaultFilters,
-      // Quality gate: only show stocks that pass the strict Minervini Trend
-      // Template, so the headline list reflects the definition rather than
-      // just the highest composite scores across all stocks.
+      // Quality gate: pass the strict Minervini Trend Template AND the tighter
+      // "elite leader" thresholds (RS>=80, within 15% of the 52w high) the
+      // Minervini preset uses, so the headline list is a true short-list rather
+      // than every textbook-minimum pass.
       passesTemplate: true,
+      rsRating: { min: 80, max: null },
+      week52HighDistance: { min: -15, max: null },
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
     }),
     [marketCapMin, scanDefaultFilters]

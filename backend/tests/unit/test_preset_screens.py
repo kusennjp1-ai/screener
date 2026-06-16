@@ -103,19 +103,35 @@ def _preset(screen_id):
 
 
 def test_minervini_preset_gates_on_strict_template_flag():
-    """The Minervini preset must gate on the strict boolean trend-template flag
-    (passes_template), not the old soft minerviniScore>=70 threshold, so stocks
-    far below their highs / without the full MA stack are excluded."""
+    """The Minervini preset gates on the strict boolean trend-template flag
+    (passes_template) AND tightens toward Minervini's selectivity (RS>=80,
+    within 15% of the 52-week high), so it is an elite short-list rather than
+    every textbook-minimum pass."""
     screen = _preset("minervini")
 
-    assert screen["filters"] == {"passesTemplate": True}
-    assert _matches_preset_filters(
-        {"symbol": "PASS", "passes_template": True}, screen["filters"]
-    ) is True
+    assert screen["filters"]["passesTemplate"] is True
+    assert screen["filters"]["rsRating"] == {"min": 80, "max": None}
+    assert screen["filters"]["week52HighDistance"] == {"min": -15, "max": None}
+
+    leader = {
+        "symbol": "PASS",
+        "passes_template": True,
+        "rs_rating": 92,
+        "week_52_high_distance": -6,
+    }
+    assert _matches_preset_filters(leader, screen["filters"]) is True
     # A high composite/minervini score is no longer enough on its own.
     assert _matches_preset_filters(
         {"symbol": "SOFT", "passes_template": False, "minervini_score": 95},
         screen["filters"],
+    ) is False
+    # Passes the template but a weaker leader (RS 74) -> excluded now.
+    assert _matches_preset_filters(
+        {**leader, "rs_rating": 74}, screen["filters"]
+    ) is False
+    # Passes the template but extended far below the highs -> excluded.
+    assert _matches_preset_filters(
+        {**leader, "week_52_high_distance": -22}, screen["filters"]
     ) is False
 
 
