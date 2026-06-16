@@ -25,6 +25,28 @@ export const calculateEMA = (data, period) => {
 };
 
 /**
+ * Calculate SMA (Simple Moving Average). Used for the Minervini trend-template
+ * stack (50 / 150 / 200-day). Returns one point per bar once the window fills.
+ */
+export const calculateSMA = (data, period) => {
+  if (!data || data.length < period) return [];
+
+  const smaData = [];
+  let windowSum = 0;
+  for (let i = 0; i < data.length; i++) {
+    windowSum += data[i].close;
+    if (i >= period) {
+      windowSum -= data[i - period].close;
+    }
+    if (i >= period - 1) {
+      smaData.push({ time: data[i].date, value: windowSum / period });
+    }
+  }
+
+  return smaData;
+};
+
+/**
  * Aggregate daily data to weekly
  */
 export const aggregateToWeekly = (dailyData) => {
@@ -78,7 +100,11 @@ export const aggregateToWeekly = (dailyData) => {
  */
 export const transformToCandlestickData = (apiData, timeframe = 'daily') => {
   if (!apiData || apiData.length === 0) {
-    return { candlesticks: [], volume: [], ema10: [], ema20: [], ema50: [] };
+    return {
+      candlesticks: [], volume: [],
+      ema10: [], ema20: [], ema50: [],
+      sma50: [], sma150: [], sma200: [],
+    };
   }
 
   // Aggregate to weekly if needed
@@ -105,10 +131,15 @@ export const transformToCandlestickData = (apiData, timeframe = 'daily') => {
     });
   });
 
-  // Calculate EMAs
+  // Calculate EMAs (short-term entry guides)
   const ema10 = calculateEMA(processedData, 10);
   const ema20 = calculateEMA(processedData, 20);
   const ema50 = calculateEMA(processedData, 50);
 
-  return { candlesticks, volume, ema10, ema20, ema50 };
+  // Calculate the Minervini trend-template SMA stack (50 / 150 / 200-day).
+  const sma50 = calculateSMA(processedData, 50);
+  const sma150 = calculateSMA(processedData, 150);
+  const sma200 = calculateSMA(processedData, 200);
+
+  return { candlesticks, volume, ema10, ema20, ema50, sma50, sma150, sma200 };
 };

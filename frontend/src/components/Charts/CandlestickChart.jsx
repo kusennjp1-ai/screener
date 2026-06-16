@@ -1,4 +1,4 @@
-import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -50,6 +50,7 @@ function CandlestickChart({
   interactive = true,
   pivotPrice = null,
   pivotLabel = 'Pivot',
+  minerviniInfo = null,
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -59,6 +60,9 @@ function CandlestickChart({
   const ema10SeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
   const ema50SeriesRef = useRef(null);
+  const sma50SeriesRef = useRef(null); // Minervini trend-template stack
+  const sma150SeriesRef = useRef(null);
+  const sma200SeriesRef = useRef(null);
   const rsLineSeriesRef = useRef(null); // RS line (stock / benchmark) overlay
   const rsMarkersRef = useRef(null); // Blue-dot markers primitive on the RS line
   const prevSymbolRef = useRef(null); // Track previous symbol
@@ -184,6 +188,9 @@ function CandlestickChart({
       ema10Series,
       ema20Series,
       ema50Series,
+      sma50Series,
+      sma150Series,
+      sma200Series,
       rsLineSeries,
       rsMarkers,
     } = createPriceChartSeries(chartContainerRef.current, {
@@ -198,6 +205,9 @@ function CandlestickChart({
     ema10SeriesRef.current = ema10Series;
     ema20SeriesRef.current = ema20Series;
     ema50SeriesRef.current = ema50Series;
+    sma50SeriesRef.current = sma50Series;
+    sma150SeriesRef.current = sma150Series;
+    sma200SeriesRef.current = sma200Series;
     rsLineSeriesRef.current = rsLineSeries;
     rsMarkersRef.current = rsMarkers;
 
@@ -253,6 +263,9 @@ function CandlestickChart({
       ema10SeriesRef.current = null;
       ema20SeriesRef.current = null;
       ema50SeriesRef.current = null;
+      sma50SeriesRef.current = null;
+      sma150SeriesRef.current = null;
+      sma200SeriesRef.current = null;
       rsLineSeriesRef.current = null;
       rsMarkersRef.current = null;
     };
@@ -305,6 +318,21 @@ function CandlestickChart({
     };
   }, [onVisibleRangeChange, symbol]);
 
+  // Default the visible window to a readable recent span (~6 months daily)
+  // instead of fitting all ~2 years of bars, so the recent base/VCP is legible
+  // without a manual zoom. Leaves a small right pad so the latest candle and the
+  // pivot axis label aren't flush against the price scale.
+  const setDefaultVisibleWindow = useCallback((barCount) => {
+    const timeScale = chartRef.current?.timeScale();
+    if (!timeScale || !barCount) return;
+    const visibleBars = effectiveTimeframe === 'weekly' ? 80 : 130;
+    if (barCount > visibleBars) {
+      timeScale.setVisibleLogicalRange({ from: barCount - visibleBars, to: barCount + 2 });
+    } else {
+      timeScale.fitContent();
+    }
+  }, [effectiveTimeframe]);
+
   // Update chart data when data changes
   useEffect(() => {
     if (!chartData || !chartRef.current) {
@@ -332,6 +360,19 @@ function CandlestickChart({
 
     if (ema50SeriesRef.current && chartData.ema50.length > 0) {
       ema50SeriesRef.current.setData(chartData.ema50);
+    }
+
+    // Minervini SMA 50/150/200 stack — full chart only; compact grid tiles stay
+    // clean with just the short EMAs. Always call setData (even with []) so the
+    // stack clears when switching to a symbol with too little history.
+    if (sma50SeriesRef.current) {
+      sma50SeriesRef.current.setData(compact ? [] : (chartData.sma50 || []));
+    }
+    if (sma150SeriesRef.current) {
+      sma150SeriesRef.current.setData(compact ? [] : (chartData.sma150 || []));
+    }
+    if (sma200SeriesRef.current) {
+      sma200SeriesRef.current.setData(compact ? [] : (chartData.sma200 || []));
     }
 
     // Build previous close map for % change calculation
@@ -374,16 +415,22 @@ function CandlestickChart({
           }
         }, 0);
       } else {
-        // No saved range - fit content
-        chartRef.current.timeScale().fitContent();
+        // No saved range - default to a readable recent window
+        setDefaultVisibleWindow(chartData.candlesticks.length);
       }
     } else if (isFirstDataLoadRef.current) {
-      // First load - fit content
+      // First load - default to a readable recent window. Static bundles ship
+      // ~2 years of bars; fitContent() would squeeze the recent base/VCP into a
+      // sliver and force a manual zoom, so focus on the most recent months and
+      // let the user scroll back for context.
       isFirstDataLoadRef.current = false;
-      chartRef.current.timeScale().fitContent();
+      setDefaultVisibleWindow(chartData.candlesticks.length);
     }
     // Otherwise, don't touch the zoom - let user adjust freely
-  }, [chartData, visibleRange]);
+  // setDefaultVisibleWindow is stable (defined below from refs); excluded to
+  // keep this effect keyed only on data/range changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartData, visibleRange, effectiveTimeframe]);
 
   // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
   // candlestick series. This is the key actionable level for VCP / Minervini
@@ -607,6 +654,86 @@ function CandlestickChart({
             >
               {legendData.changePercent >= 0 ? '+' : ''}{legendData.changePercent.toFixed(2)}%
             </span>
+          )}
+        </Box>
+      )}
+
+      {/* Moving-average legend + Minervini trend-template readout. Pinned
+          top-left under the OHLC legend so "necessary info" rides on the chart
+          itself. Hidden in compact grid tiles. */}
+      {!compact && !showLoading && !showError && !showNoData && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 44,
+            left: 10,
+            zIndex: 10,
+            bgcolor: 'rgba(30, 30, 30, 0.82)',
+            borderRadius: 1,
+            px: 1,
+            py: 0.5,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.5,
+            maxWidth: 'calc(100% - 20px)',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, fontFamily: 'monospace', fontSize: '0.62rem' }}>
+            {[
+              ['EMA10', '#4CF64D'],
+              ['EMA20', '#87FBFB'],
+              ['EMA50', '#38CD07'],
+              ['SMA50', '#FFD54F'],
+              ['SMA150', '#FF8A65'],
+              ['SMA200', '#BA68C8'],
+            ].map(([label, color]) => (
+              <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                <Box sx={{ width: 12, height: 2, bgcolor: color, borderRadius: 1 }} />
+                <span style={{ color: '#cfcfcf' }}>{label}</span>
+              </Box>
+            ))}
+          </Box>
+
+          {minerviniInfo && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, fontFamily: 'monospace', fontSize: '0.66rem' }}>
+              {minerviniInfo.passesTemplate != null && (
+                <span style={{ color: minerviniInfo.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: 700 }}>
+                  {minerviniInfo.passesTemplate ? '✓ トレンドテンプレート合格' : '✗ テンプレート不合格'}
+                </span>
+              )}
+              {minerviniInfo.rsRating != null && (
+                <span style={{ color: minerviniInfo.rsRating >= 70 ? '#4CF64D' : '#bbb' }}>
+                  RS {Math.round(minerviniInfo.rsRating)}
+                </span>
+              )}
+              {minerviniInfo.stage != null && (
+                <span style={{ color: minerviniInfo.stage === 2 ? '#4CF64D' : '#bbb' }}>
+                  Stage {minerviniInfo.stage}
+                </span>
+              )}
+              {minerviniInfo.maStackOk != null && (
+                <span style={{ color: minerviniInfo.maStackOk ? '#4CF64D' : '#E619CD' }}>
+                  MA{minerviniInfo.maStackOk ? '✓' : '✗'}
+                </span>
+              )}
+              {minerviniInfo.aboveLowPct != null && (
+                <span style={{ color: minerviniInfo.aboveLowPct >= 30 ? '#4CF64D' : '#bbb' }}>
+                  52WL +{Math.round(minerviniInfo.aboveLowPct)}%
+                </span>
+              )}
+              {minerviniInfo.fromHighPct != null && (
+                <span style={{ color: minerviniInfo.fromHighPct >= -25 ? '#4CF64D' : '#bbb' }}>
+                  52WH {Math.round(minerviniInfo.fromHighPct)}%
+                </span>
+              )}
+              {minerviniInfo.pivot != null && (
+                <span style={{ color: '#FFA726' }}>Pivot {Number(minerviniInfo.pivot).toFixed(2)}</span>
+              )}
+              {minerviniInfo.vcpDetected && (
+                <span style={{ color: '#4CF64D' }}>VCP✓</span>
+              )}
+            </Box>
           )}
         </Box>
       )}

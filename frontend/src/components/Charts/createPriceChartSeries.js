@@ -55,10 +55,18 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
 
-  // EMA 10 / 20 / 50 — share the price ('right') scale.
+  // EMA 10 / 20 / 50 — short-term entry guides. Share the price ('right') scale.
   const ema10Series = chart.addSeries(LineSeries, { color: '#4CF64D', lineWidth: 2, priceScaleId: 'right' });
   const ema20Series = chart.addSeries(LineSeries, { color: '#87FBFB', lineWidth: 2, priceScaleId: 'right' });
   const ema50Series = chart.addSeries(LineSeries, { color: '#38CD07', lineWidth: 2, priceScaleId: 'right' });
+
+  // Minervini trend-template SMA stack (50 / 150 / 200-day). Thinner, warmer
+  // tones, distinct from the EMAs so the long-term trend stack reads clearly:
+  // price should sit above 50 > 150 > 200 with a rising 200-day line. Populated
+  // only in the full (non-compact) chart.
+  const sma50Series = chart.addSeries(LineSeries, { color: '#FFD54F', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma150Series = chart.addSeries(LineSeries, { color: '#FF8A65', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma200Series = chart.addSeries(LineSeries, { color: '#BA68C8', lineWidth: 2, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
   // RS line on its own hidden overlay scale (orange — distinct from the EMAs). It
   // sits in a band below the candles; blue-dot markers attach to it. The band is
@@ -80,6 +88,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     ema10Series,
     ema20Series,
     ema50Series,
+    sma50Series,
+    sma150Series,
+    sma200Series,
     rsLineSeries,
     rsMarkers,
   };
