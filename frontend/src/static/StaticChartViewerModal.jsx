@@ -24,6 +24,76 @@ import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
 
+const CHART_INFO_STRIP_HEIGHT = 34;
+
+// MA colours must match createPriceChartSeries.js.
+const MA_LEGEND = [
+  ['EMA10', '#4CF64D'],
+  ['EMA20', '#87FBFB'],
+  ['EMA50', '#38CD07'],
+  ['SMA50', '#FFD54F'],
+  ['SMA150', '#FF8A65'],
+  ['SMA200', '#BA68C8'],
+];
+
+// Single-line strip rendered ABOVE the chart: MA legend + Minervini trend-template
+// readout. Kept out of the plotting area so it never hides recent candles.
+function ChartInfoStrip({ minerviniInfo }) {
+  const i = minerviniInfo || {};
+  return (
+    <Box
+      sx={{
+        height: CHART_INFO_STRIP_HEIGHT,
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 1,
+        borderBottom: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.default',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        fontFamily: 'monospace',
+        fontSize: '0.66rem',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+        {MA_LEGEND.map(([label, color]) => (
+          <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+            <Box sx={{ width: 12, height: 2, bgcolor: color, borderRadius: 1 }} />
+            <span style={{ color: '#cfcfcf' }}>{label}</span>
+          </Box>
+        ))}
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
+        {i.passesTemplate != null && (
+          <span style={{ color: i.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: 700 }}>
+            {i.passesTemplate ? '✓ テンプレート合格' : '✗ テンプレート不合格'}
+          </span>
+        )}
+        {i.rsRating != null && (
+          <span style={{ color: i.rsRating >= 70 ? '#4CF64D' : '#bbb' }}>RS {Math.round(i.rsRating)}</span>
+        )}
+        {i.stage != null && (
+          <span style={{ color: i.stage === 2 ? '#4CF64D' : '#bbb' }}>Stage {i.stage}</span>
+        )}
+        {i.maStackOk != null && (
+          <span style={{ color: i.maStackOk ? '#4CF64D' : '#E619CD' }}>MA{i.maStackOk ? '✓' : '✗'}</span>
+        )}
+        {i.aboveLowPct != null && (
+          <span style={{ color: i.aboveLowPct >= 30 ? '#4CF64D' : '#bbb' }}>52WL +{Math.round(i.aboveLowPct)}%</span>
+        )}
+        {i.fromHighPct != null && (
+          <span style={{ color: i.fromHighPct >= -25 ? '#4CF64D' : '#bbb' }}>52WH {Math.round(i.fromHighPct)}%</span>
+        )}
+        {i.pivot != null && <span style={{ color: '#FFA726' }}>Pivot {Number(i.pivot).toFixed(2)}</span>}
+        {i.vcpDetected && <span style={{ color: '#4CF64D' }}>VCP✓</span>}
+      </Box>
+    </Box>
+  );
+}
+
 function StaticChartViewerModal({
   open,
   onClose,
@@ -427,20 +497,29 @@ function StaticChartViewerModal({
                   <CircularProgress size={56} />
                 </Box>
               ) : currentSymbol ? (
-                <CandlestickChart
-                  symbol={currentSymbol}
-                  period="6mo"
-                  height={chartHeight}
-                  visibleRange={visibleRange}
-                  onVisibleRangeChange={setVisibleRange}
-                  priceData={chartPayload?.bars || []}
-                  rsLineData={chartPayload?.rs_line || null}
-                  blueDots={chartPayload?.blue_dots || null}
-                  dataUpdatedAtOverride={dataUpdatedAtOverride}
-                  pivotPrice={pivotPrice}
-                  pivotLabel={pivotLabel}
-                  minerviniInfo={minerviniInfo}
-                />
+                <Box sx={{ display: 'flex', flexDirection: 'column', height: chartHeight }}>
+                  {/* Info strip ABOVE the chart so the moving-average legend and
+                      Minervini readout never cover the candles (a leader near
+                      new highs prints at the top-right). One line, scrolls
+                      horizontally on narrow screens. */}
+                  <ChartInfoStrip minerviniInfo={minerviniInfo} />
+                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                    <CandlestickChart
+                      symbol={currentSymbol}
+                      period="6mo"
+                      height={Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT, 240)}
+                      visibleRange={visibleRange}
+                      onVisibleRangeChange={setVisibleRange}
+                      priceData={chartPayload?.bars || []}
+                      rsLineData={chartPayload?.rs_line || null}
+                      blueDots={chartPayload?.blue_dots || null}
+                      dataUpdatedAtOverride={dataUpdatedAtOverride}
+                      pivotPrice={pivotPrice}
+                      pivotLabel={pivotLabel}
+                      vcpBoxes={chartPayload?.vcp_boxes || null}
+                    />
+                  </Box>
+                </Box>
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight }}>
                   <CircularProgress size={56} />
