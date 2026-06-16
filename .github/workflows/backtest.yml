@@ -1,0 +1,65 @@
+name: Minervini Backtest
+
+# Replays the current strict Minervini trend-template screener against a list of
+# known winners (Minervini's USIC buys) as of their buy dates, to measure how
+# many our screening conditions would have flagged at/near the same time.
+#
+# Needs outbound Yahoo Finance access (yfinance), which the sandboxed app
+# container does not have — hence running it here. Manual trigger only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      window_before:
+        description: 'Trading days before the buy date to scan'
+        type: string
+        default: '5'
+      window_after:
+        description: 'Trading days after the buy date to scan'
+        type: string
+        default: '20'
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    env:
+      # The scanner package imports DB config at import time but the backtest
+      # never queries the database; a dummy URL keeps create_engine lazy/offline.
+      DATABASE_URL: postgresql://user:pass@localhost:5432/unused
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run Minervini winners backtest
+        working-directory: backend
+        run: |
+          python -m scripts.backtest_minervini_winners \
+            --window-before "${{ github.event.inputs.window_before }}" \
+            --window-after "${{ github.event.inputs.window_after }}" \
+            --markdown "$RUNNER_TEMP/backtest-report.md"
+
+      - name: Publish report to job summary
+        if: ${{ always() }}
+        run: |
+          if [ -f "$RUNNER_TEMP/backtest-report.md" ]; then
+            cat "$RUNNER_TEMP/backtest-report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Backtest produced no report (see logs)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: minervini-backtest-report
+          path: ${{ runner.temp }}/backtest-report.md
+          if-no-files-found: ignore

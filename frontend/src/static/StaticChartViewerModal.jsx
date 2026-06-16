@@ -151,6 +151,20 @@ function StaticChartViewerModal({
   const pivotLabel = stockData?.vcp_pivot != null ? 'VCP Pivot' : 'Pivot';
   const stage = stockData?.stage ?? null;
   const vcpDetected = stockData?.vcp_detected === true;
+  // Minervini trend-template readout drawn on the chart itself.
+  const minerviniInfo = useMemo(() => {
+    if (!stockData) return null;
+    return {
+      passesTemplate: stockData.passes_template ?? null,
+      rsRating: stockData.rs_rating ?? null,
+      stage: stockData.stage ?? null,
+      maStackOk: stockData.ma_alignment ?? null,
+      aboveLowPct: stockData.week_52_low_distance ?? null,
+      fromHighPct: stockData.week_52_high_distance ?? null,
+      pivot: pivotPrice,
+      vcpDetected,
+    };
+  }, [stockData, pivotPrice, vcpDetected]);
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
   const chartHeight = isMobile
@@ -425,6 +439,7 @@ function StaticChartViewerModal({
                   dataUpdatedAtOverride={dataUpdatedAtOverride}
                   pivotPrice={pivotPrice}
                   pivotLabel={pivotLabel}
+                  minerviniInfo={minerviniInfo}
                 />
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight }}>
