@@ -10,6 +10,10 @@ name: Minervini Backtest
 on:
   workflow_dispatch:
     inputs:
+      since:
+        description: 'Only backtest Minervini ideas on/after this date (YYYY-MM-DD). Older tickers are often delisted on Yahoo.'
+        type: string
+        default: '2017-01-01'
       window_before:
         description: 'Trading days before the buy date to scan'
         type: string
@@ -17,7 +21,7 @@ on:
       window_after:
         description: 'Trading days after the buy date to scan'
         type: string
-        default: '20'
+        default: '15'
 
 jobs:
   backtest:
@@ -43,6 +47,7 @@ jobs:
         working-directory: backend
         run: |
           python -m scripts.backtest_minervini_winners \
+            --since "${{ github.event.inputs.since }}" \
             --window-before "${{ github.event.inputs.window_before }}" \
             --window-after "${{ github.event.inputs.window_after }}" \
             --markdown "$RUNNER_TEMP/backtest-report.md"
