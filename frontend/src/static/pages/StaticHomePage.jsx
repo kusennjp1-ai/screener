@@ -110,13 +110,12 @@ function StaticHomePage() {
   const topCandidateFilters = useMemo(
     () => applyScanFilterDefaults({
       ...scanDefaultFilters,
-      // Quality gate: pass the strict Minervini Trend Template AND the tighter
-      // "elite leader" thresholds (RS>=80, within 15% of the 52w high) the
-      // Minervini preset uses, so the headline list is a true short-list rather
-      // than every textbook-minimum pass.
+      // Quality gate: pass the strict Minervini Trend Template AND the elite
+      // leader thresholds (RS>=90, within 10% of the 52w high) the Minervini
+      // preset uses, so the headline list is a tight leader short-list.
       passesTemplate: true,
-      rsRating: { min: 80, max: null },
-      week52HighDistance: { min: -15, max: null },
+      rsRating: { min: 90, max: null },
+      week52HighDistance: { min: -10, max: null },
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
     }),
     [marketCapMin, scanDefaultFilters]
