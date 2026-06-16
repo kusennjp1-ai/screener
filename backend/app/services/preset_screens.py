@@ -87,15 +87,23 @@ PRESET_SCREENS: list[dict] = [
         "id": "minervini",
         "name": "Minervini Trend Template",
         "short_name": "Minervini",
-        "description": "Stage 2 uptrend stocks passing the strict 8-point trend template",
+        "description": "Stage 2 leaders passing the trend template, RS>=80 and within 15% of the 52-week high",
         "tier": 1,
         # Gate on the strict boolean Trend Template (all 8 conditions ANDed in
         # the scanner: price>50>150>200, 50>150>200, 200MA rising >=1mo, >=30%
-        # above 52w low, within 25% of 52w high, RS>=70, Stage 2). This replaces
-        # the old soft gate (minerviniScore>=70 + stage/MA/RS) which let stocks
-        # far below their highs slip through.
+        # above 52w low, within 25% of 52w high, RS>=70, Stage 2), then tighten
+        # toward Minervini's actual selectivity so the screen stays an elite
+        # short-list rather than every textbook-minimum pass:
+        #   - rsRating >= 80      (his stated preference: "RS>=70, preferably 80+")
+        #   - within 15% of high  (tighter than the 25% template floor)
+        # Both are validated against his USIC winners (each on-date pass had
+        # RS 88-100 and sat within 13% of new highs), so the tightening keeps the
+        # real leaders while cutting the long tail. week_52_high_distance is the
+        # % BELOW the high (negative), so ">= -15" == within 15%.
         "filters": {
             "passesTemplate": True,
+            "rsRating": {"min": 80, "max": None},
+            "week52HighDistance": {"min": -15, "max": None},
         },
         "sort_by": "minervini_score",
         "sort_order": "desc",
