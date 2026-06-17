@@ -53,7 +53,14 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=40)
     parser.add_argument("--user-agent", type=str, default="screener-research code33 (research@example.com)")
     parser.add_argument("--markdown", type=str, default=None)
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Require net-margin acceleration too (literal Code 33). Default is the "
+        "relaxed EPS+sales screen used live in the static build.",
+    )
     args = parser.parse_args()
+    require_margin = args.strict
 
     tickers = list(dict.fromkeys(args.tickers))
     if args.from_trade_ideas:
@@ -69,7 +76,7 @@ def main() -> int:
     for i, ticker in enumerate(tickers, 1):
         print(f"[{i}/{len(tickers)}] {ticker} ...", file=sys.stderr)
         try:
-            res = client.code33(ticker)
+            res = client.code33(ticker, require_margin=require_margin)
         except Exception as exc:  # noqa: BLE001
             rows.append((ticker, "ERR", "-", "-", "-", str(exc)[:60]))
             continue
@@ -87,10 +94,16 @@ def main() -> int:
             res.reason,
         ))
 
+    mode_label = (
+        "diluted EPS, sales, and net margin"
+        if require_margin
+        else "diluted EPS and sales"
+    )
     lines = ["# Code 33 (EDGAR) check\n"]
     lines.append(
+        f"Mode: **{'strict' if require_margin else 'relaxed (live)'}**. "
         f"Evaluated {len(tickers)} tickers; **{passes}** pass Code 33 "
-        f"(3 consecutive quarters of rising YoY growth in diluted EPS, sales, and net margin). "
+        f"(3 consecutive quarters of rising YoY growth in {mode_label}). "
         f"{evaluated} had enough EDGAR history to judge.\n"
     )
     lines.append("| Ticker | Code 33 | EPS YoY (recent→older) | Sales YoY | Margin YoY | Note |")

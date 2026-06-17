@@ -568,6 +568,77 @@ def test_export_scan_bundle_chunks_large_result_sets(service_and_session_factory
     assert [row["symbol"] for row in second_chunk["rows"]] == ["SYM3", "SYM4"]
 
 
+def test_stamp_code33_flags_disabled_defaults_false_without_network(
+    service_and_session_factory, monkeypatch
+):
+    """When the env flag is off, code33 is stamped False on every row and no
+    EDGAR client is constructed (no network)."""
+    service, _session_factory = service_and_session_factory
+    monkeypatch.delenv("STATIC_SITE_CODE33", raising=False)
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("SecEdgarClient must not be constructed when disabled")
+
+    monkeypatch.setattr(
+        "app.services.sec_edgar_financials.SecEdgarClient", _boom
+    )
+    rows = [
+        {"symbol": "NVDA", "passes_template": True},
+        {"symbol": "SNOW", "passes_template": False},
+    ]
+    service._stamp_code33_flags(rows, market="US")  # noqa: SLF001
+    assert rows[0]["code33"] is False
+    assert rows[1]["code33"] is False
+
+
+def test_stamp_code33_flags_us_stamps_passes_template_candidates(
+    service_and_session_factory, monkeypatch
+):
+    """With the flag enabled and a stubbed EDGAR client, only passes_template
+    rows are looked up and the True results are stamped onto the rows."""
+    service, _session_factory = service_and_session_factory
+    monkeypatch.setenv("STATIC_SITE_CODE33", "1")
+
+    looked_up: list[list[str]] = []
+
+    class _StubClient:
+        def code33_map(self, tickers, *, require_margin=False):
+            looked_up.append(list(tickers))
+            assert require_margin is False
+            return {"NVDA": True, "AAPL": False}
+
+    monkeypatch.setattr(
+        "app.services.sec_edgar_financials.SecEdgarClient", _StubClient
+    )
+    rows = [
+        {"symbol": "NVDA", "passes_template": True},
+        {"symbol": "AAPL", "passes_template": True},
+        {"symbol": "SNOW", "passes_template": False},  # not looked up
+    ]
+    service._stamp_code33_flags(rows, market="US")  # noqa: SLF001
+
+    assert looked_up == [["NVDA", "AAPL"]]
+    assert rows[0]["code33"] is True
+    assert rows[1]["code33"] is False
+    assert rows[2]["code33"] is False
+
+
+def test_stamp_code33_flags_skips_non_us_market(service_and_session_factory, monkeypatch):
+    """EDGAR is US-only; non-US markets default code33 False without a lookup."""
+    service, _session_factory = service_and_session_factory
+    monkeypatch.setenv("STATIC_SITE_CODE33", "1")
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("SecEdgarClient must not be constructed for non-US markets")
+
+    monkeypatch.setattr(
+        "app.services.sec_edgar_financials.SecEdgarClient", _boom
+    )
+    rows = [{"symbol": "0700.HK", "passes_template": True}]
+    service._stamp_code33_flags(rows, market="HK")  # noqa: SLF001
+    assert rows[0]["code33"] is False
+
+
 def test_resolve_static_default_filters_returns_per_market_threshold():
     resolve = StaticSiteExportService.resolve_static_default_filters
     assert resolve("US") == {"minVolume": 100_000_000}

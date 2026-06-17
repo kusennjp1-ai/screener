@@ -112,12 +112,13 @@ function StaticHomePage() {
       ...scanDefaultFilters,
       // Quality gate: pass the strict Minervini Trend Template AND the elite
       // leader thresholds the Minervini preset uses (RS>=90, within 10% of the
-      // 52w high, top-half IBD group), so the headline list is a tight
-      // leaders-in-leading-groups short-list.
+      // 52w high, top-half IBD group, Code 33 earnings acceleration), so the
+      // headline list is a tight leaders-in-leading-groups short-list.
       passesTemplate: true,
       rsRating: { min: 90, max: null },
       week52HighDistance: { min: -10, max: null },
       ibdGroupRank: { min: null, max: 98 },
+      code33: true,
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
     }),
     [marketCapMin, scanDefaultFilters]

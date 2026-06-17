@@ -113,6 +113,7 @@ def test_minervini_preset_gates_on_strict_template_flag():
     assert screen["filters"]["rsRating"] == {"min": 90, "max": None}
     assert screen["filters"]["week52HighDistance"] == {"min": -10, "max": None}
     assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 98}
+    assert screen["filters"]["code33"] is True
 
     leader = {
         "symbol": "PASS",
@@ -120,6 +121,7 @@ def test_minervini_preset_gates_on_strict_template_flag():
         "rs_rating": 93,
         "week_52_high_distance": -6,
         "ibd_group_rank": 25,
+        "code33": True,
     }
     assert _matches_preset_filters(leader, screen["filters"]) is True
     # A high composite/minervini score is no longer enough on its own.
@@ -138,6 +140,11 @@ def test_minervini_preset_gates_on_strict_template_flag():
     # Passes the template but sits in a bottom-half IBD group -> excluded.
     assert _matches_preset_filters(
         {**leader, "ibd_group_rank": 150}, screen["filters"]
+    ) is False
+    # Passes the template and the leader thresholds but Code 33 earnings
+    # acceleration does not hold -> excluded.
+    assert _matches_preset_filters(
+        {**leader, "code33": False}, screen["filters"]
     ) is False
 
 

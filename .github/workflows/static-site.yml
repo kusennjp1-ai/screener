@@ -278,6 +278,12 @@ jobs:
 
       - name: Export market static data bundle
         id: export-market
+        env:
+          # Compute Code 33 (relaxed Minervini earnings acceleration) live from
+          # SEC EDGAR XBRL for US passes_template candidates. EDGAR is US-only
+          # and needs outbound data.sec.gov access, available here. Non-US
+          # markets ignore this flag.
+          STATIC_SITE_CODE33: "1"
         run: |
           cd backend
           set +e

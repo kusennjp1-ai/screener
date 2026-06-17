@@ -70,6 +70,7 @@ BOOLEAN_FILTER_TO_FIELD: dict[str, str] = {
     "passesTemplate": "passes_template",
     "pocketPivot": "pocket_pivot",
     "powerTrend": "power_trend",
+    "code33": "code33",
 }
 
 # Filters whose value is a list of accepted strings (membership test).
@@ -87,7 +88,7 @@ PRESET_SCREENS: list[dict] = [
         "id": "minervini",
         "name": "Minervini Trend Template",
         "short_name": "Minervini",
-        "description": "Stage 2 leaders in leading groups: trend template, RS>=90, within 10% of high, top-half IBD group",
+        "description": "Stage 2 leaders in leading groups: trend template, RS>=90, within 10% of high, top-half IBD group, Code 33 earnings acceleration",
         "tier": 1,
         # Gate on the strict boolean Trend Template (all 8 conditions ANDed in
         # the scanner: price>50>150>200, 50>150>200, 200MA rising >=1mo, >=30%
@@ -104,11 +105,19 @@ PRESET_SCREENS: list[dict] = [
         # RS is the discriminating lever (most stocks sit near their highs in a
         # rally, so the high-distance filter cuts less). week_52_high_distance is
         # the % BELOW the high (negative), so ">= -10" == within 10%.
+        #   - code33 == True       (relaxed Minervini "Code 33": diluted EPS AND
+        #                           sales YoY growth accelerating for 3 straight
+        #                           quarters — computed live from SEC EDGAR XBRL
+        #                           for US filers. The literal definition also
+        #                           gates net-margin acceleration, which almost
+        #                           nothing satisfies 3 quarters running, so the
+        #                           margin leg is dropped here.)
         "filters": {
             "passesTemplate": True,
             "rsRating": {"min": 90, "max": None},
             "week52HighDistance": {"min": -10, "max": None},
             "ibdGroupRank": {"min": None, "max": 98},
+            "code33": True,
         },
         "sort_by": "minervini_score",
         "sort_order": "desc",

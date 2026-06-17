@@ -74,6 +74,15 @@ STATIC_CHART_LOOKUP_BATCH_SIZE = 250
 # (Minervini / CANSLIM / VCP) — broad funds trivially satisfy a trend template
 # and were inflating the result counts. Drop them from the published scan rows.
 EXCLUDED_SCAN_INDUSTRY_GROUPS = frozenset({"Finance-ETF / ETN"})
+# Code 33 (Minervini earnings-acceleration) is computed live from SEC EDGAR
+# XBRL company facts, which is US-only and needs outbound data.sec.gov access.
+# That is available in the Static Site CI build but not in the app sandbox or
+# unit tests, so the stamping is gated on this env flag (set in the workflow).
+# When disabled the field is still emitted (all False) so the frontend filter
+# and the Minervini preset resolve cleanly. We use the relaxed screen
+# (EPS + sales YoY acceleration, margin not gated) per product decision.
+CODE33_ENV_FLAG = "STATIC_SITE_CODE33"
+CODE33_MARKET = "US"
 # Default minVolume thresholds are expressed in local-currency daily dollar
 # volume (avg_volume × current_price), not share count — the ``volume`` field
 # on each scan row is sourced from ``avg_dollar_volume`` in the local listing
@@ -701,6 +710,7 @@ class StaticSiteExportService:
             if row.get("ibd_industry_group") not in EXCLUDED_SCAN_INDUSTRY_GROUPS
         ]
         self._annotate_percentile_ranks(serialized_rows)
+        self._stamp_code33_flags(serialized_rows, market=market)
         serialized_rows = self._sort_static_scan_rows(serialized_rows)
         resolved_default_filters = self.resolve_static_default_filters(market)
         resolved_preset_screens = resolve_preset_screens_for_defaults(
@@ -1887,6 +1897,58 @@ class StaticSiteExportService:
             }
         )
         return item
+
+    @staticmethod
+    def _code33_enabled() -> bool:
+        import os
+
+        return os.environ.get(CODE33_ENV_FLAG, "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _stamp_code33_flags(self, rows: list[dict[str, Any]], *, market: str | None) -> None:
+        """Stamp ``code33`` (relaxed Minervini earnings acceleration) onto rows.
+
+        The field is always written (default ``False``) so the static client's
+        boolean filter and the Minervini preset resolve even when the live EDGAR
+        lookup is skipped. It is only computed for the US market — EDGAR XBRL
+        company facts are US filers only — and only when ``STATIC_SITE_CODE33``
+        is enabled (CI build), since it needs outbound data.sec.gov access.
+
+        Only ``passes_template`` candidates are looked up: Code 33 is a
+        refinement on the Minervini trend-template set, so evaluating the whole
+        universe would waste thousands of EDGAR requests on names the preset
+        already drops. A per-symbol fetch failure simply leaves that row False.
+        """
+        for row in rows:
+            row.setdefault("code33", False)
+
+        if (market or "").upper() != CODE33_MARKET or not self._code33_enabled():
+            return
+
+        candidates = [
+            row["symbol"]
+            for row in rows
+            if row.get("symbol") and row.get("passes_template")
+        ]
+        if not candidates:
+            return
+
+        from app.services.sec_edgar_financials import SecEdgarClient
+
+        try:
+            flags = SecEdgarClient().code33_map(candidates, require_margin=False)
+        except Exception:  # noqa: BLE001 - EDGAR outage must not abort the export
+            logger.warning("Code 33 EDGAR lookup failed; leaving all rows code33=False", exc_info=True)
+            return
+
+        passed = 0
+        for row in rows:
+            symbol = row.get("symbol")
+            if symbol and flags.get(symbol.upper()):
+                row["code33"] = True
+                passed += 1
+        logger.info(
+            "Code 33 stamped %d/%d passes_template US candidates", passed, len(candidates)
+        )
 
     @staticmethod
     def _annotate_percentile_ranks(rows: list[dict[str, Any]]) -> None:
