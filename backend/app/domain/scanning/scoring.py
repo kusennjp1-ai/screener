@@ -31,6 +31,7 @@ forced into PASS, so the rollout doesn't regress existing results.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
 from .models import CompositeMethod, RatingCategory, ScreenerOutputDomain
@@ -235,6 +236,187 @@ def apply_quality_policy(
     return QualityAdjustment(rating=rating, reason=None)
 
 
+# ---------------------------------------------------------------------------
+# Execution state (quality vs execution split)
+# ---------------------------------------------------------------------------
+#
+# The composite score above measures *pattern quality* (how good the setup is).
+# It says nothing about *where price is relative to a buyable pivot* — so a
+# textbook base that has already run 30% past its pivot scores just as high as
+# one sitting at the pivot. ``compute_execution_state`` adds that second,
+# orthogonal axis: a pure decision tree that classifies *executability* from
+# price vs the pivot / SMA50 / SMA200 / recent contraction low + breakout
+# volume. ``apply_execution_cap`` then lets the execution state cap the final
+# rating (an Overextended name cannot rate Strong Buy no matter how clean the
+# pattern), mirroring how ``apply_quality_policy`` caps on data completeness.
+#
+# This function is pure and per-symbol: the orchestrator's existing per-symbol
+# loop calls it once per stock, so a bad/missing input for one name yields
+# ``UNKNOWN`` (a no-op pass-through in the cap) rather than aborting the scan.
+
+
+class ExecutionState(str, Enum):
+    """Where price sits relative to a buyable pivot — the execution axis.
+
+    Ordered worst→best for documentation; the cap table below encodes the
+    rating ceiling each state imposes.
+    """
+
+    INVALID = "invalid"                      # not a Stage-2 structure
+    DAMAGED = "damaged"                       # lost the 50-day / undercut the base
+    OVEREXTENDED = "overextended"             # way past the pivot / SMA200
+    EXTENDED = "extended"                     # 5-10% past the pivot
+    EARLY_POST_BREAKOUT = "early_post_breakout"  # 3-5% past, or 0-3% unconfirmed
+    BREAKOUT = "breakout"                     # 0-3% past pivot + volume confirmed
+    PRE_BREAKOUT = "pre_breakout"             # at/below pivot — the ideal entry
+    UNKNOWN = "unknown"                       # inputs missing — do not penalise
+
+
+# --- Decision-tree thresholds (centralised + tunable) ----------------------
+EXEC_VOLUME_CONFIRM_RATIO: float = 1.5
+"""Breakout needs today's volume >= this multiple of the 50-day average."""
+
+EXEC_OVEREXTENDED_PIVOT_PCT: float = 10.0
+"""Price more than this % above the pivot is Overextended."""
+
+EXEC_EXTENDED_PIVOT_PCT: float = 5.0
+"""Price 5-10% above the pivot is Extended."""
+
+EXEC_EARLY_POST_PIVOT_PCT: float = 3.0
+"""Price 3-5% above the pivot is Early-post-breakout."""
+
+EXEC_OVEREXTENDED_SMA200_PCT: float = 100.0
+"""Price more than this % above the SMA200 is Overextended even without a
+pivot read. NOTE: this default (+100% above the 200-day) is a first pass —
+it is the one number in the tree the spec left open, so confirm/tune it."""
+
+
+def compute_execution_state(
+    *,
+    price: Optional[float],
+    sma50: Optional[float],
+    sma200: Optional[float],
+    pivot: Optional[float],
+    contraction_low: Optional[float],
+    volume_ratio: Optional[float],
+    overextended_sma200_pct: float = EXEC_OVEREXTENDED_SMA200_PCT,
+) -> ExecutionState:
+    """Classify one stock's execution state via a top-down decision tree.
+
+    Top-down, first-match-wins (priority matters — Invalid/Damaged are checked
+    before the pivot bands so a broken base is never reported as a Breakout):
+
+    1. **Invalid**      — ``price < SMA50 < SMA200`` (bearish stack; not Stage 2).
+    2. **Damaged**      — below the 50-day, or undercut the recent contraction low.
+    3. **Overextended** — > ``overextended_sma200_pct``% above the SMA200, or
+                          > 10% above the pivot.
+    4. **Extended**     — 5-10% above the pivot.
+    5. **Early-post**   — 3-5% above the pivot, or 0-3% above with volume NOT
+                          confirmed (< 1.5x average).
+    6. **Breakout**     — 0-3% above the pivot WITH volume confirmed (>= 1.5x).
+    7. **Pre-breakout** — at or below the pivot (the ideal entry zone).
+
+    ``pivot`` distance uses ``(price - pivot) / pivot`` so price *above* the
+    pivot is positive. Missing core inputs (price/SMA50/SMA200) → ``UNKNOWN``.
+    """
+    if price is None or sma50 is None or sma200 is None:
+        return ExecutionState.UNKNOWN
+
+    # 1. Invalid — bearish MA stack with price beneath it.
+    if price < sma50 < sma200:
+        return ExecutionState.INVALID
+
+    # 2. Damaged — lost the 50-day, or undercut the last contraction low.
+    if price < sma50:
+        return ExecutionState.DAMAGED
+    if contraction_low is not None and price < contraction_low:
+        return ExecutionState.DAMAGED
+
+    # 3a. Overextended — parabolic vs the 200-day even without a pivot read.
+    if sma200 > 0:
+        above_sma200_pct = (price - sma200) / sma200 * 100.0
+        if above_sma200_pct > overextended_sma200_pct:
+            return ExecutionState.OVEREXTENDED
+
+    # 3b-7. Pivot-relative bands (need a usable pivot).
+    if pivot is not None and pivot > 0:
+        above_pivot_pct = (price - pivot) / pivot * 100.0
+        if above_pivot_pct > EXEC_OVEREXTENDED_PIVOT_PCT:
+            return ExecutionState.OVEREXTENDED
+        if above_pivot_pct > EXEC_EXTENDED_PIVOT_PCT:
+            return ExecutionState.EXTENDED
+        if above_pivot_pct > EXEC_EARLY_POST_PIVOT_PCT:
+            return ExecutionState.EARLY_POST_BREAKOUT
+        if above_pivot_pct >= 0.0:
+            if volume_ratio is not None and volume_ratio >= EXEC_VOLUME_CONFIRM_RATIO:
+                return ExecutionState.BREAKOUT
+            return ExecutionState.EARLY_POST_BREAKOUT
+        return ExecutionState.PRE_BREAKOUT
+
+    # Structure intact and not overextended, but no pivot to break yet: there is
+    # no actionable breakout band, so this is a pre-breakout (base-building) name.
+    return ExecutionState.PRE_BREAKOUT
+
+
+# --- State Cap: execution state imposes a rating ceiling -------------------
+# Maps each state to the HIGHEST rating it may hold (``None`` = uncapped).
+# DEFAULT mapping (confirm before wiring): the three "capped" tiers below the
+# uncapped Strong-Buy top are Strong=Buy, Developing=Watch, Weak=Pass.
+EXECUTION_STATE_CAP: dict[ExecutionState, Optional[RatingCategory]] = {
+    ExecutionState.PRE_BREAKOUT: None,                       # uncapped
+    ExecutionState.BREAKOUT: None,                           # uncapped
+    ExecutionState.EARLY_POST_BREAKOUT: RatingCategory.BUY,   # "Strong"
+    ExecutionState.EXTENDED: RatingCategory.WATCH,            # "Developing"
+    ExecutionState.OVEREXTENDED: RatingCategory.PASS,         # "Weak"
+    ExecutionState.DAMAGED: RatingCategory.PASS,
+    ExecutionState.INVALID: RatingCategory.PASS,
+    ExecutionState.UNKNOWN: None,                            # don't penalise
+}
+
+_RATING_RANK: dict[RatingCategory, int] = {
+    RatingCategory.PASS: 0,
+    RatingCategory.WATCH: 1,
+    RatingCategory.BUY: 2,
+    RatingCategory.STRONG_BUY: 3,
+}
+
+
+@dataclass(frozen=True)
+class ExecutionCap:
+    """Result of capping a rating by execution state.
+
+    - ``rating``: the post-cap rating (== input when no cap applied).
+    - ``capped``: whether the cap actually lowered the rating.
+    - ``reason``: human-readable explanation when capped, else ``None``.
+    """
+
+    rating: RatingCategory
+    capped: bool
+    reason: Optional[str]
+
+
+def apply_execution_cap(
+    rating: RatingCategory,
+    execution_state: ExecutionState,
+) -> ExecutionCap:
+    """Cap ``rating`` at the ceiling its ``execution_state`` allows.
+
+    Only ever *lowers* a rating: a state whose ceiling is at or above the
+    incoming rating is a pass-through. Quality (the composite score and the
+    rating it produced) is never mutated — only the final displayed rating is
+    capped, with the reason recorded so the dashboard can explain the downgrade.
+    Applied *after* :func:`apply_quality_policy`.
+    """
+    cap = EXECUTION_STATE_CAP.get(execution_state)
+    if cap is None or _RATING_RANK[rating] <= _RATING_RANK[cap]:
+        return ExecutionCap(rating=rating, capped=False, reason=None)
+    return ExecutionCap(
+        rating=cap,
+        capped=True,
+        reason=f"execution_state {execution_state.value} caps rating at {cap.value}",
+    )
+
+
 __all__ = [
     "STRONG_BUY_THRESHOLD",
     "BUY_THRESHOLD",
@@ -245,4 +427,14 @@ __all__ = [
     "calculate_composite_score",
     "calculate_overall_rating",
     "apply_quality_policy",
+    "ExecutionState",
+    "ExecutionCap",
+    "EXECUTION_STATE_CAP",
+    "EXEC_VOLUME_CONFIRM_RATIO",
+    "EXEC_OVEREXTENDED_PIVOT_PCT",
+    "EXEC_EXTENDED_PIVOT_PCT",
+    "EXEC_EARLY_POST_PIVOT_PCT",
+    "EXEC_OVEREXTENDED_SMA200_PCT",
+    "compute_execution_state",
+    "apply_execution_cap",
 ]

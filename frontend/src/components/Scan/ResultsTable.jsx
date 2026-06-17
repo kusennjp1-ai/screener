@@ -15,7 +15,21 @@ import {
   Box,
   CircularProgress,
   IconButton,
+  Tooltip,
 } from '@mui/material';
+
+// Human-readable labels for the execution-state axis (where price sits relative
+// to a buyable pivot). Shown under the rating so an extended/overextended leader
+// reads as "great pattern, not a buyable entry now".
+const EXECUTION_STATE_LABELS = {
+  pre_breakout: 'Pre-breakout',
+  breakout: 'Breakout',
+  early_post_breakout: 'Early post',
+  extended: 'Extended',
+  overextended: 'Overextended',
+  damaged: 'Damaged',
+  invalid: 'Invalid',
+};
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
@@ -470,6 +484,23 @@ const VirtualTableRow = memo(function VirtualTableRow({
           color={getRatingColor(row.rating)}
           size="small"
         />
+        {row.execution_state && row.execution_state !== 'unknown' && (
+          <Tooltip title={row.execution_cap_reason || ''} arrow disableHoverListener={!row.execution_cap_reason}>
+            <Typography
+              variant="caption"
+              sx={{
+                display: 'block',
+                mt: 0.25,
+                fontSize: 10,
+                lineHeight: 1.2,
+                whiteSpace: 'nowrap',
+                color: row.execution_cap_applied ? 'warning.main' : 'text.secondary',
+              }}
+            >
+              {EXECUTION_STATE_LABELS[row.execution_state] || row.execution_state}
+            </Typography>
+          </Tooltip>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -494,6 +525,8 @@ const VirtualTableRow = memo(function VirtualTableRow({
          prevProps.row.composite_reason === nextProps.row.composite_reason &&
          (prevProps.row.market_themes || []).join('|') === (nextProps.row.market_themes || []).join('|') &&
          prevProps.row.rating === nextProps.row.rating &&
+         prevProps.row.execution_state === nextProps.row.execution_state &&
+         prevProps.row.execution_cap_applied === nextProps.row.execution_cap_applied &&
          prevProps.mcapDisplay === nextProps.mcapDisplay &&
          prevProps.showActions === nextProps.showActions &&
          prevProps.showWatchlistMenu === nextProps.showWatchlistMenu &&

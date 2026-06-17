@@ -1898,6 +1898,9 @@ class StaticSiteExportService:
                 "ema_50_distance": extended.get("ema_50_distance"),
                 "week_52_high_distance": extended.get("week_52_high_distance"),
                 "week_52_low_distance": extended.get("week_52_low_distance"),
+                "execution_state": extended.get("execution_state"),
+                "execution_cap_applied": extended.get("execution_cap_applied"),
+                "execution_cap_reason": extended.get("execution_cap_reason"),
             }
         )
         return item

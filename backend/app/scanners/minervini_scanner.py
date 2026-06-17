@@ -435,6 +435,7 @@ class MinerviniScanner(BaseStockScreener):
                 "vcp_detected": vcp_result["vcp_detected"] if vcp_result else None,
                 "vcp_score": vcp_result["vcp_score"] if vcp_result else None,
                 "vcp_pivot": vcp_result.get("pivot_info", {}).get("pivot") if vcp_result else None,
+                "vcp_base_low": vcp_result.get("recent_base_low") if vcp_result else None,
                 "vcp_ready_for_breakout": vcp_result.get("pivot_info", {}).get("ready_for_breakout") if vcp_result else None,
                 "vcp_contraction_ratio": vcp_result.get("contraction_ratio") if vcp_result else None,
                 "vcp_atr_score": vcp_result.get("atr_score") if vcp_result else None,

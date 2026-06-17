@@ -27,6 +27,7 @@ from app.scanners.scan_orchestrator import (
     _build_precomputed_scan_context,
 )
 from app.scanners.screener_registry import ScreenerRegistry
+from app.domain.scanning.scoring import ExecutionState
 
 
 # ── Fakes ───────────────────────────────────────────────────────────
@@ -687,3 +688,83 @@ class TestPrecomputed52WeekWindow:
 
         assert ctx.high_52w == pytest.approx(float(trailing.max()))
         assert ctx.low_52w == pytest.approx(float(trailing.min()))
+
+
+def _make_minervini_like(details: dict, score: float = 90.0, passes: bool = True):
+    """A fake screener registered under the name 'minervini' that returns the
+    given details blob — used to drive the orchestrator's execution-state read."""
+
+    class FakeMinervini(BaseStockScreener):
+        @property
+        def screener_name(self) -> str:
+            return "minervini"
+
+        def get_data_requirements(self, criteria=None) -> DataRequirements:
+            return DataRequirements()
+
+        def scan_stock(self, symbol, data, criteria=None) -> ScreenerResult:
+            return ScreenerResult(
+                score=score,
+                passes=passes,
+                rating="Strong Buy" if passes else "Pass",
+                breakdown={"score": score},
+                details=dict(details),
+                screener_name="minervini",
+            )
+
+        def calculate_rating(self, score, details) -> str:
+            return "Strong Buy" if score >= 80 else "Pass"
+
+    FakeMinervini.__name__ = "FakeScreener_minervini"
+    FakeMinervini.__qualname__ = "FakeScreener_minervini"
+    return FakeMinervini
+
+
+class TestScanOrchestratorExecutionState:
+    def test_result_carries_execution_state_fields(self):
+        # No minervini screener -> inputs missing -> UNKNOWN, a no-op cap.
+        orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
+        result = orch.scan_stock_multi("TEST", ["alpha"], composite_method="weighted_average")
+        assert result["execution_state"] == "unknown"
+        assert result["execution_cap_applied"] is False
+        assert "execution_cap_reason" in result
+
+    def test_compute_execution_state_reads_minervini_details(self):
+        # close=100, pivot=100 (0% above), volume 2.0x -> confirmed Breakout.
+        orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
+        stock = _make_stock_data("TEST")
+        results = {
+            "minervini": ScreenerResult(
+                score=90.0, passes=True, rating="Strong Buy", breakdown={},
+                details={"ma_50": 90.0, "ma_200": 70.0, "vcp_pivot": 100.0,
+                         "vcp_base_low": 92.0, "volume_surge": 2.0},
+                screener_name="minervini",
+            )
+        }
+        assert orch._compute_execution_state(stock, results) is ExecutionState.BREAKOUT  # noqa: SLF001
+
+    def test_compute_execution_state_unknown_without_minervini(self):
+        orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
+        stock = _make_stock_data("TEST")
+        assert orch._compute_execution_state(stock, {}) is ExecutionState.UNKNOWN  # noqa: SLF001
+
+    def test_overextended_minervini_caps_rating_to_pass_but_keeps_score(self):
+        # Quality is elite (score 90 -> Strong Buy) but price is 25% above the
+        # pivot (100 vs pivot 80) -> Overextended -> rating capped to Pass while
+        # the composite/quality score is left untouched.
+        cls = _make_minervini_like(
+            {"ma_50": 90.0, "ma_200": 70.0, "vcp_pivot": 80.0,
+             "vcp_base_low": 75.0, "volume_surge": 1.0}
+        )
+        # >= FULL_SCAN_MIN_BARS so the single minervini screener runs a full scan.
+        stock = _make_stock_data("TEST", n_days=300)
+        provider = FakeDataProvider({"TEST": stock})
+        registry = ScreenerRegistry()
+        registry.register(cls)
+        orch = ScanOrchestrator(data_provider=provider, registry=registry)
+
+        result = orch.scan_stock_multi("TEST", ["minervini"], composite_method="weighted_average")
+        assert result["composite_score"] == 90.0          # quality unchanged
+        assert result["execution_state"] == "overextended"
+        assert result["execution_cap_applied"] is True
+        assert result["rating"] == "Pass"                  # capped from Strong Buy
