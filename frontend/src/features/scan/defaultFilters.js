@@ -40,6 +40,7 @@ export const buildDefaultScanFilters = () => ({
   vcpReady: null,
   maAlignment: null,
   passesTemplate: null,
+  code33: null,
   pocketPivot: null,
   powerTrend: null,
   perfDay: { min: null, max: null },

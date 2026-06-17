@@ -39,6 +39,7 @@ from app.services.preset_screens import (
     PRESET_SCREENS,
     get_preset_chart_symbols,
     resolve_preset_screens_for_defaults,
+    _matches_preset_filters,
 )
 from app.services.static_groups_rrg_export import (
     StaticGroupsRRGUnavailableError,
@@ -716,6 +717,9 @@ class StaticSiteExportService:
         resolved_preset_screens = resolve_preset_screens_for_defaults(
             PRESET_SCREENS,
             resolved_default_filters,
+        )
+        self._annotate_preset_match_counts(
+            resolved_preset_screens, serialized_rows, market=market
         )
         default_filtered_rows = self._apply_static_default_filters(
             serialized_rows, default_filters=resolved_default_filters
@@ -1946,8 +1950,44 @@ class StaticSiteExportService:
             if symbol and flags.get(symbol.upper()):
                 row["code33"] = True
                 passed += 1
-        logger.info(
-            "Code 33 stamped %d/%d passes_template US candidates", passed, len(candidates)
+        # print() (not logger.info) so the count is visible in the static-build
+        # CI logs — the export script's logging config does not surface
+        # app.services INFO records to stdout.
+        print(
+            f"[static-code33] stamped {passed}/{len(candidates)} passes_template US candidates "
+            f"as Code 33 (relaxed: EPS+sales YoY acceleration).",
+            flush=True,
+        )
+
+    @staticmethod
+    def _annotate_preset_match_counts(
+        resolved_preset_screens: list[dict[str, Any]],
+        serialized_rows: list[dict[str, Any]],
+        *,
+        market: str | None = None,
+    ) -> None:
+        """Stamp ``match_count`` onto each resolved preset screen, in place.
+
+        Counts rows matching the screen's resolved filters over the full
+        (ETF-excluded) row set — exactly what the static client's preset badge
+        computes via ``filterStaticScanRows(allRows, presetFilters)`` — so the
+        manifest number equals the "(15)" the UI shows. Also printed to the
+        static-build CI log so the headline counts (Minervini etc.) are visible
+        per run without scraping the deployed site, and a zero count is caught
+        immediately.
+        """
+        for screen in resolved_preset_screens:
+            filters = screen.get("filters") or {}
+            screen["match_count"] = sum(
+                1 for row in serialized_rows if _matches_preset_filters(row, filters)
+            )
+        summary = ", ".join(
+            f"{screen.get('id')}={screen['match_count']}"
+            for screen in resolved_preset_screens
+        )
+        print(
+            f"[static-presets:{market or '?'}] match counts over {len(serialized_rows)} rows: {summary}",
+            flush=True,
         )
 
     @staticmethod

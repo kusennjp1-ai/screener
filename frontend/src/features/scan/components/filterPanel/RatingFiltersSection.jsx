@@ -211,6 +211,13 @@ function RatingFiltersSection({
             onChange={(value) => updateFilter('passesTemplate', value)}
           />
         </Grid>
+        <Grid item xs={6} sm={3} md={1}>
+          <CompactCheckbox
+            label="Code 33"
+            value={filters.code33}
+            onChange={(value) => updateFilter('code33', value)}
+          />
+        </Grid>
       </Grid>
     </FilterSection>
   );

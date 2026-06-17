@@ -639,6 +639,27 @@ def test_stamp_code33_flags_skips_non_us_market(service_and_session_factory, mon
     assert rows[0]["code33"] is False
 
 
+def test_annotate_preset_match_counts_matches_preset_filters():
+    """Each resolved screen gets a match_count equal to the number of rows that
+    satisfy its filters — the same number the static UI's preset badge shows."""
+    screens = [
+        {"id": "minervini", "filters": {"passesTemplate": True, "code33": True}},
+        {"id": "loose", "filters": {"passesTemplate": True}},
+        {"id": "none", "filters": {"passesTemplate": False}},
+    ]
+    rows = [
+        {"symbol": "A", "passes_template": True, "code33": True},
+        {"symbol": "B", "passes_template": True, "code33": False},
+        {"symbol": "C", "passes_template": True},  # code33 absent -> falsey
+        {"symbol": "D", "passes_template": False, "code33": True},
+    ]
+    StaticSiteExportService._annotate_preset_match_counts(screens, rows, market="US")  # noqa: SLF001
+    by_id = {s["id"]: s["match_count"] for s in screens}
+    assert by_id["minervini"] == 1  # only A
+    assert by_id["loose"] == 3      # A, B, C
+    assert by_id["none"] == 1       # only D
+
+
 def test_resolve_static_default_filters_returns_per_market_threshold():
     resolve = StaticSiteExportService.resolve_static_default_filters
     assert resolve("US") == {"minVolume": 100_000_000}
