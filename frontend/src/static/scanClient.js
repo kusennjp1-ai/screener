@@ -51,6 +51,7 @@ const BOOLEAN_FILTER_TO_FIELD = {
   passesTemplate: 'passes_template',
   pocketPivot: 'pocket_pivot',
   powerTrend: 'power_trend',
+  code33: 'code33',
 };
 
 const RATING_SORT_ORDER = {

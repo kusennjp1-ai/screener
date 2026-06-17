@@ -95,6 +95,20 @@ describe('static scan client', () => {
     expect(filtered).toEqual([rows[0]]);
   });
 
+  it('filters on the code33 boolean flag', () => {
+    const code33Rows = [
+      { ...rows[0], symbol: 'ACCEL', code33: true },
+      { ...rows[1], symbol: 'NO_ACCEL', code33: false },
+      { ...rows[2], symbol: 'MISSING' }, // code33 absent -> treated as false
+    ];
+    const filters = buildDefaultScanFilters();
+    filters.code33 = true;
+
+    const filtered = filterStaticScanRows(code33Rows, filters);
+
+    expect(filtered.map((row) => row.symbol)).toEqual(['ACCEL']);
+  });
+
   it('applies the static default dollar-volume filter contract', () => {
     const filters = applyScanFilterDefaults({ minVolume: 100_000_000 });
 

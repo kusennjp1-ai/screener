@@ -151,12 +151,20 @@ class Code33Result:
     quarters: list[str] = field(default_factory=list)
 
 
-def compute_code33_from_facts(facts: dict[str, Any]) -> Code33Result:
-    """Evaluate Code 33 from a parsed EDGAR companyfacts dict."""
+def compute_code33_from_facts(facts: dict[str, Any], *, require_margin: bool = True) -> Code33Result:
+    """Evaluate Code 33 from a parsed EDGAR companyfacts dict.
+
+    Literal Code 33 (``require_margin=True``) needs diluted EPS, sales, AND net
+    margin all accelerating in YoY growth for three consecutive quarters — in
+    practice almost no company satisfies the margin leg three quarters running.
+    ``require_margin=False`` is the relaxed screen used live: EPS and sales YoY
+    growth accelerating for three quarters (margin is still computed and
+    reported, just not gated on).
+    """
     eps = quarterly_series(facts, EPS_TAGS, is_eps=True)
     rev = quarterly_series(facts, REVENUE_TAGS, is_eps=False)
     ni = quarterly_series(facts, NET_INCOME_TAGS, is_eps=False)
-    if not eps or not rev or not ni:
+    if not eps or not rev or (require_margin and not ni):
         return Code33Result(False, "missing EPS/revenue/net-income series")
 
     # Margin per quarter where both revenue and net income exist (revenue > 0).
@@ -166,8 +174,11 @@ def compute_code33_from_facts(facts: dict[str, Any]) -> Code33Result:
         if n is not None and r and r > 0:
             margin[key] = n / r
 
-    # The three most recent quarters that have all metrics + a year-ago quarter.
-    recent = _ordered_quarters(set(eps) & set(rev) & set(margin))
+    # The three most recent quarters with the metrics we gate on + a year-ago one.
+    comparable = set(eps) & set(rev)
+    if require_margin:
+        comparable &= set(margin)
+    recent = _ordered_quarters(comparable)
     if len(recent) < 3:
         return Code33Result(False, "fewer than 3 comparable quarters")
 
@@ -180,11 +191,12 @@ def compute_code33_from_facts(facts: dict[str, Any]) -> Code33Result:
         g_eps = _yoy_growth(eps.get(quarter.key), eps.get(prior_key))
         g_rev = _yoy_growth(rev.get(quarter.key), rev.get(prior_key))
         g_mar = _yoy_growth(margin.get(quarter.key), margin.get(prior_key))
-        if g_eps is None or g_rev is None or g_mar is None:
+        # Margin YoY is informational unless gated on.
+        if g_eps is None or g_rev is None or (require_margin and g_mar is None):
             return Code33Result(False, f"missing/invalid YoY base at FY{quarter.fy} Q{quarter.q}")
         eps_yoy.append(g_eps)
         sales_yoy.append(g_rev)
-        margin_yoy.append(g_mar)
+        margin_yoy.append(g_mar if g_mar is not None else float("nan"))
         labels.append(f"FY{quarter.fy}Q{quarter.q}")
 
     # recent[:3] is most-recent-first, so accelerating == strictly decreasing as
@@ -192,10 +204,14 @@ def compute_code33_from_facts(facts: dict[str, Any]) -> Code33Result:
     def _accelerating(series: list[float]) -> bool:
         return series[0] > series[1] > series[2]
 
-    passes = _accelerating(eps_yoy) and _accelerating(sales_yoy) and _accelerating(margin_yoy)
+    legs = [_accelerating(eps_yoy), _accelerating(sales_yoy)]
+    if require_margin:
+        legs.append(_accelerating(margin_yoy))
+    passes = all(legs)
+    metric_label = "EPS, sales, and net margin" if require_margin else "EPS and sales"
     return Code33Result(
         passes=passes,
-        reason="ok" if passes else "not accelerating in all three metrics",
+        reason="ok" if passes else f"not accelerating in {metric_label}",
         eps_yoy=eps_yoy,
         sales_yoy=sales_yoy,
         margin_yoy=margin_yoy,
@@ -251,8 +267,23 @@ class SecEdgarClient:
         except Exception:  # noqa: BLE001 - missing/withdrawn filers are not fatal
             return None
 
-    def code33(self, ticker: str) -> Code33Result:
+    def code33(self, ticker: str, *, require_margin: bool = True) -> Code33Result:
         facts = self.company_facts(ticker)
         if not facts:
             return Code33Result(False, "no EDGAR facts")
-        return compute_code33_from_facts(facts)
+        return compute_code33_from_facts(facts, require_margin=require_margin)
+
+    def code33_map(self, tickers: list[str], *, require_margin: bool = False) -> dict[str, bool]:
+        """{ticker: passes} for many tickers. Missing/withdrawn filers -> False.
+
+        Pre-warms the CIK map once, then fetches each company's facts. Used to
+        stamp ``code33`` onto US scan rows during the static build (EDGAR is
+        US-only). Never raises — a fetch failure just yields False for that name.
+        """
+        out: dict[str, bool] = {}
+        for ticker in tickers:
+            try:
+                out[ticker.upper()] = self.code33(ticker, require_margin=require_margin).passes
+            except Exception:  # noqa: BLE001 - one bad symbol must not abort the batch
+                out[ticker.upper()] = False
+        return out

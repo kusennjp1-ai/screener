@@ -72,6 +72,16 @@ def test_code33_fails_when_one_metric_flat():
     assert result.passes is False
 
 
+def test_relaxed_code33_ignores_margin():
+    # EPS + sales accelerate, but net income is flat so margin does NOT rise.
+    # Literal Code 33 fails; the relaxed (EPS+sales) screen passes.
+    flat_ni = {(2024, 1): 10.0, (2024, 2): 10.0, (2024, 3): 10.0,
+               (2025, 1): 11.0, (2025, 2): 11.0, (2025, 3): 11.0}
+    facts = _facts(_EPS, _REV, flat_ni)
+    assert compute_code33_from_facts(facts, require_margin=True).passes is False
+    assert compute_code33_from_facts(facts, require_margin=False).passes is True
+
+
 def test_code33_fails_when_decelerating():
     # EPS YoY decelerating (+60/+30/+10 from recent to old is required; reverse it).
     dec_eps = {(2024, 1): 1.0, (2024, 2): 1.0, (2024, 3): 1.0,
