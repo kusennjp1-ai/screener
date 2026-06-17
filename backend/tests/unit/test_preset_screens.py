@@ -148,6 +148,40 @@ def test_minervini_preset_gates_on_strict_template_flag():
     ) is False
 
 
+def test_minervini_vcp_preset_is_minervini_subset_requiring_a_vcp():
+    """The 'Minervini + VCP' premium preset gates on the same elite Minervini
+    legs PLUS a detected VCP base, so it is a strict subset of the Minervini
+    short-list (a buyable pivot rather than an extended leader)."""
+    screen = _preset("minervini_vcp")
+    minervini = _preset("minervini")
+
+    # It carries every Minervini leg...
+    for key, value in minervini["filters"].items():
+        assert screen["filters"][key] == value
+    # ...plus the VCP requirement, and ranks by base quality.
+    assert screen["filters"]["vcpDetected"] is True
+    assert screen["sort_by"] == "vcp_score"
+
+    leader_in_base = {
+        "symbol": "BASE",
+        "passes_template": True,
+        "rs_rating": 93,
+        "week_52_high_distance": -6,
+        "ibd_group_rank": 25,
+        "code33": True,
+        "vcp_detected": True,
+    }
+    assert _matches_preset_filters(leader_in_base, screen["filters"]) is True
+    # A Minervini leader that is NOT in a VCP base is excluded here (it still
+    # shows in the plain Minervini list).
+    assert _matches_preset_filters(
+        {**leader_in_base, "vcp_detected": False}, screen["filters"]
+    ) is False
+    assert _matches_preset_filters(
+        {**leader_in_base, "vcp_detected": True, "code33": False}, screen["filters"]
+    ) is False
+
+
 def test_canslim_preset_enforces_annual_eps_and_new_high():
     """CANSLIM must hard-gate annual EPS (A) and new-high proximity (N), not
     only the soft score plus quarterly EPS and RS."""
