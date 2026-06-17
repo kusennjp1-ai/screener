@@ -871,6 +871,11 @@ def _map_row_to_domain(
     extended["unavailable_screeners"] = details.get("unavailable_screeners")
     extended["composite_reason"] = details.get("composite_reason")
     extended["ipo_bonus"] = details.get("ipo_bonus")
+    # Execution-state axis (mirrors the feature-store path so both stay in
+    # schema parity); read from the stored orchestrator details blob.
+    extended["execution_state"] = details.get("execution_state")
+    extended["execution_cap_applied"] = details.get("execution_cap_applied")
+    extended["execution_cap_reason"] = details.get("execution_cap_reason")
     if include_setup_payload:
         extended["se_explain"] = se_data.get("explain")
         extended["se_candidates"] = se_data.get("candidates")
