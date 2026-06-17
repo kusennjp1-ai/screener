@@ -809,6 +809,9 @@ def _map_feature_to_scan_result(
         "ema_50_distance": d.get("ema_50_distance"),
         "week_52_high_distance": d.get("from_52w_high_pct"),
         "week_52_low_distance": d.get("above_52w_low_pct"),
+        "execution_state": d.get("execution_state"),
+        "execution_cap_applied": d.get("execution_cap_applied"),
+        "execution_cap_reason": d.get("execution_cap_reason"),
     }
 
     # Setup Engine fields (extracted from details JSON blob)

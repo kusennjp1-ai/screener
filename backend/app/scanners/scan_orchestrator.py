@@ -25,9 +25,12 @@ from .screener_registry import ScreenerRegistry
 from app.config import settings
 from app.domain.scanning.models import CompositeMethod, ScreenerOutputDomain
 from app.domain.scanning.scoring import (
+    ExecutionState,
+    apply_execution_cap,
     apply_quality_policy,
     calculate_composite_score,
     calculate_overall_rating,
+    compute_execution_state,
 )
 from app.domain.scanning.ports import StockDataProvider
 
@@ -553,7 +556,16 @@ class ScanOrchestrator:
                     "field_completeness_score"
                 )
             adjustment = apply_quality_policy(rating_category, completeness)
-            overall_rating = adjustment.rating.value
+
+            # 7c. Execution state + State Cap. Classify where price sits relative
+            #     to a buyable pivot (pure decision tree), then let that state cap
+            #     the quality-adjusted rating: a textbook base that has already
+            #     run past its pivot cannot rate Strong Buy. The composite/quality
+            #     score is never mutated — only the final rating is capped, with
+            #     the reason recorded so the dashboard can explain the downgrade.
+            execution_state = self._compute_execution_state(stock_data, screener_results)
+            execution_cap = apply_execution_cap(adjustment.rating, execution_state)
+            overall_rating = execution_cap.rating.value
 
             # 8. Combine results
             combined_result = self._combine_results(
@@ -578,6 +590,9 @@ class ScanOrchestrator:
                 composite_reason=composite_reason,
                 quality_downgrade_reason=adjustment.reason,
                 field_completeness_score=completeness,
+                execution_state=execution_state.value,
+                execution_cap_applied=execution_cap.capped,
+                execution_cap_reason=execution_cap.reason,
             )
             if data_status == "insufficient_history":
                 for key, value in _partial_history_metrics(stock_data).items():
@@ -588,6 +603,38 @@ class ScanOrchestrator:
         except Exception as e:
             logger.error(f"Error orchestrating scan for {symbol}: {e}")
             return self._error_result(symbol, str(e))
+
+    def _compute_execution_state(
+        self,
+        stock_data: StockData,
+        screener_results: Dict[str, ScreenerResult],
+    ) -> ExecutionState:
+        """Classify one stock's execution state from the Minervini details.
+
+        Pulls the inputs the decision tree needs (price, SMA50/200, VCP pivot,
+        recent contraction low, breakout volume ratio) from the already-computed
+        Minervini screener output. Defensive by design: any missing input or
+        unexpected error yields ``ExecutionState.UNKNOWN`` (a no-op in the cap),
+        so one bad symbol never aborts the per-symbol scan loop.
+        """
+        try:
+            minervini = screener_results.get("minervini")
+            details = (minervini.details or {}) if minervini is not None else {}
+            return compute_execution_state(
+                price=stock_data.get_current_price(),
+                sma50=details.get("ma_50"),
+                sma200=details.get("ma_200"),
+                pivot=details.get("vcp_pivot"),
+                contraction_low=details.get("vcp_base_low"),
+                volume_ratio=details.get("volume_surge"),
+            )
+        except Exception:  # noqa: BLE001 - classification must never abort a scan
+            logger.warning(
+                "execution-state classification failed for %s; defaulting to UNKNOWN",
+                getattr(stock_data, "symbol", "?"),
+                exc_info=True,
+            )
+            return ExecutionState.UNKNOWN
 
     def _combine_results(
         self,
@@ -607,6 +654,9 @@ class ScanOrchestrator:
         composite_reason: str | None = None,
         quality_downgrade_reason: Optional[str] = None,
         field_completeness_score: Optional[int] = None,
+        execution_state: Optional[str] = None,
+        execution_cap_applied: bool = False,
+        execution_cap_reason: Optional[str] = None,
     ) -> Dict:
         """
         Combine all screener results into a single result dict.
@@ -671,6 +721,9 @@ class ScanOrchestrator:
             "symbol": symbol,
             "composite_score": round(composite_score, 2),
             "rating": overall_rating,
+            "execution_state": execution_state,
+            "execution_cap_applied": execution_cap_applied,
+            "execution_cap_reason": execution_cap_reason,
             "current_price": current_price,
 
             # Individual screener scores

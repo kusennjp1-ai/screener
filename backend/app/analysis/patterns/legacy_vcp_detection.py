@@ -437,6 +437,7 @@ class VCPDetector:
                 "tight_near_highs": False,
                 "atr_score": 0,
                 "pivot_info": self.find_pivot_point(bases, current_price),
+                "recent_base_low": round(bases[0]["low_price"], 2) if bases else None,
                 "details": "Insufficient consolidation bases",
             }
 
@@ -494,6 +495,7 @@ class VCPDetector:
             "atr_score": round(atr_score, 2),
             "atr_contraction_ratio": round(atr_ratio, 2),
             "pivot_info": pivot_info,
+            "recent_base_low": round(bases[0]["low_price"], 2) if bases else None,
             "bases_depth": [round(b["depth_pct"], 2) for b in bases],
             "current_price": current_price,
             "recent_high": recent_high,
