@@ -1,0 +1,54 @@
+name: Minervini Pick Validation
+
+# Loops over a set of tickers (default: the live Minervini preset short-list)
+# and scores each against the trend template (live MinerviniScanner on Yahoo
+# prices) + Code 33 (EDGAR EPS/sales YoY acceleration), emitting a per-ticker
+# scorecard + verdict. Needs outbound Yahoo Finance + data.sec.gov (available
+# here, not in the app sandbox). Manual only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: 'Space-separated tickers to validate (blank = live preset short-list)'
+        type: string
+        default: ''
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/unused
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run Minervini pick validation
+        working-directory: backend
+        run: |
+          python -m scripts.validate_minervini_picks ${{ github.event.inputs.tickers }} \
+            --markdown "$RUNNER_TEMP/minervini-validation.md"
+
+      - name: Publish report to job summary
+        if: ${{ always() }}
+        run: |
+          if [ -f "$RUNNER_TEMP/minervini-validation.md" ]; then
+            cat "$RUNNER_TEMP/minervini-validation.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: minervini-validation
+          path: ${{ runner.temp }}/minervini-validation.md
+          if-no-files-found: ignore
