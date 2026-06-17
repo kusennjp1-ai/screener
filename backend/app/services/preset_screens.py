@@ -123,6 +123,33 @@ PRESET_SCREENS: list[dict] = [
         "sort_order": "desc",
     },
     {
+        "id": "minervini_vcp",
+        "name": "Minervini + VCP",
+        "short_name": "Minervini VCP",
+        "description": "The Minervini elite short-list further narrowed to names currently forming a VCP (volatility-contraction base) — a buyable low-risk pivot rather than an extended, post-breakout leader",
+        "tier": 1,
+        # The premium subset of the Minervini screen: same elite legs (trend
+        # template, RS>=90, within 10% of high, top-half IBD group, Code 33
+        # earnings acceleration) AND a detected VCP base. The plain Minervini
+        # list catches Stage-2 leaders regardless of *where* in the move they
+        # are — many are extended well above the 50-day (already broke out and
+        # ran), which is not a low-risk Minervini entry. Requiring vcpDetected
+        # surfaces the ones tightening into a fresh base at a proper pivot. This
+        # can legitimately be a very small set (often 0) when the leaders have
+        # already broken out; that emptiness is itself the signal. Sorted by VCP
+        # score so the tightest, highest-quality bases rank first.
+        "filters": {
+            "passesTemplate": True,
+            "rsRating": {"min": 90, "max": None},
+            "week52HighDistance": {"min": -10, "max": None},
+            "ibdGroupRank": {"min": None, "max": 98},
+            "code33": True,
+            "vcpDetected": True,
+        },
+        "sort_by": "vcp_score",
+        "sort_order": "desc",
+    },
+    {
         "id": "canslim",
         "name": "CANSLIM",
         "short_name": "CANSLIM",
