@@ -111,11 +111,13 @@ function StaticHomePage() {
     () => applyScanFilterDefaults({
       ...scanDefaultFilters,
       // Quality gate: pass the strict Minervini Trend Template AND the elite
-      // leader thresholds (RS>=90, within 10% of the 52w high) the Minervini
-      // preset uses, so the headline list is a tight leader short-list.
+      // leader thresholds the Minervini preset uses (RS>=90, within 10% of the
+      // 52w high, top-half IBD group), so the headline list is a tight
+      // leaders-in-leading-groups short-list.
       passesTemplate: true,
       rsRating: { min: 90, max: null },
       week52HighDistance: { min: -10, max: null },
+      ibdGroupRank: { min: null, max: 98 },
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
     }),
     [marketCapMin, scanDefaultFilters]

@@ -87,7 +87,7 @@ PRESET_SCREENS: list[dict] = [
         "id": "minervini",
         "name": "Minervini Trend Template",
         "short_name": "Minervini",
-        "description": "Stage 2 market leaders: trend template, RS>=90 and within 10% of the 52-week high",
+        "description": "Stage 2 leaders in leading groups: trend template, RS>=90, within 10% of high, top-half IBD group",
         "tier": 1,
         # Gate on the strict boolean Trend Template (all 8 conditions ANDed in
         # the scanner: price>50>150>200, 50>150>200, 200MA rising >=1mo, >=30%
@@ -95,18 +95,20 @@ PRESET_SCREENS: list[dict] = [
         # hard toward an *elite leader* short-list — every textbook-minimum pass
         # (and even RS>=80 / within-15%) still ran to many hundreds in a broad
         # rally:
-        #   - rsRating >= 90      (top decile of relative strength — true leaders)
-        #   - within 10% of high  (buyable range near a breakout, not extended
-        #                          bases 10-25% down)
+        #   - rsRating >= 90       (top decile of relative strength — true leaders)
+        #   - within 10% of high   (buyable range near a breakout, not extended
+        #                           bases 10-25% down)
+        #   - ibdGroupRank <= 98   ("leaders in leading groups" — drop the bottom
+        #                           half of the 197 IBD industry groups; Minervini
+        #                           buys leaders OF strong groups)
         # RS is the discriminating lever (most stocks sit near their highs in a
-        # rally, so the high-distance filter cuts less). Validated against
-        # Minervini's own buys: his entries clustered at RS ~90+ within a few %
-        # of new highs. week_52_high_distance is the % BELOW the high (negative),
-        # so ">= -10" == within 10%.
+        # rally, so the high-distance filter cuts less). week_52_high_distance is
+        # the % BELOW the high (negative), so ">= -10" == within 10%.
         "filters": {
             "passesTemplate": True,
             "rsRating": {"min": 90, "max": None},
             "week52HighDistance": {"min": -10, "max": None},
+            "ibdGroupRank": {"min": None, "max": 98},
         },
         "sort_by": "minervini_score",
         "sort_order": "desc",

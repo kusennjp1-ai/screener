@@ -105,19 +105,21 @@ def _preset(screen_id):
 def test_minervini_preset_gates_on_strict_template_flag():
     """The Minervini preset gates on the strict boolean trend-template flag
     (passes_template) AND the elite-leader thresholds (RS>=90, within 10% of the
-    52-week high), so it is a tight leader short-list rather than every
-    textbook-minimum pass."""
+    52-week high, top-half IBD group), so it is a tight leaders-in-leading-groups
+    short-list rather than every textbook-minimum pass."""
     screen = _preset("minervini")
 
     assert screen["filters"]["passesTemplate"] is True
     assert screen["filters"]["rsRating"] == {"min": 90, "max": None}
     assert screen["filters"]["week52HighDistance"] == {"min": -10, "max": None}
+    assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 98}
 
     leader = {
         "symbol": "PASS",
         "passes_template": True,
         "rs_rating": 93,
         "week_52_high_distance": -6,
+        "ibd_group_rank": 25,
     }
     assert _matches_preset_filters(leader, screen["filters"]) is True
     # A high composite/minervini score is no longer enough on its own.
@@ -132,6 +134,10 @@ def test_minervini_preset_gates_on_strict_template_flag():
     # Passes the template but extended >10% below the highs -> excluded.
     assert _matches_preset_filters(
         {**leader, "week_52_high_distance": -14}, screen["filters"]
+    ) is False
+    # Passes the template but sits in a bottom-half IBD group -> excluded.
+    assert _matches_preset_filters(
+        {**leader, "ibd_group_rank": 150}, screen["filters"]
     ) is False
 
 
