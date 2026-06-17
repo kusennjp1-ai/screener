@@ -8,6 +8,7 @@ const BOOLEAN_RESET_KEYS = new Set([
   'vcpReady',
   'maAlignment',
   'passesTemplate',
+  'code33',
   'seSetupReady',
   'seRsLineNewHigh',
   'seRsLineBlueDot',
@@ -187,6 +188,9 @@ export function buildActiveFilters(filters) {
   }
   if (filters.passesTemplate != null) {
     active.push({ key: 'passesTemplate', label: `Passes: ${filters.passesTemplate ? 'Yes' : 'No'}` });
+  }
+  if (filters.code33 != null) {
+    active.push({ key: 'code33', label: `Code 33: ${filters.code33 ? 'Yes' : 'No'}` });
   }
   if (filters.seSetupReady != null) {
     active.push({ key: 'seSetupReady', label: `SE Ready: ${filters.seSetupReady ? 'Yes' : 'No'}` });

@@ -65,5 +65,5 @@ export const RATING_KEYS = [
   'customScore', 'volBreakthroughScore',
   'seSetupScore', 'seDistanceToPivot', 'seBbSqueeze', 'seVolumeVs50d',
   'seUpDownVolume', 'sePatternPrimary', 'seSetupReady', 'seRsLineNewHigh', 'seRsLineBlueDot',
-  'vcpScore', 'vcpDetected', 'vcpReady', 'passesTemplate',
+  'vcpScore', 'vcpDetected', 'vcpReady', 'passesTemplate', 'code33',
 ];
