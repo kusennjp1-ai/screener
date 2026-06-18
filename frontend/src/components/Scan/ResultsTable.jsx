@@ -30,6 +30,32 @@ const EXECUTION_STATE_LABELS = {
   damaged: 'Damaged',
   invalid: 'Invalid',
 };
+
+// MM360 band state -> existing palette token (no new colors): buy/low/strong =
+// green, neutral/medium/transition = amber, sell/high/weak = red.
+const BAND_GREEN = new Set(['buy', 'low', 'strong']);
+const BAND_RED = new Set(['sell', 'high', 'weak']);
+const BAND_AMBER = new Set(['neutral', 'medium', 'transition']);
+const bandColor = (state) => {
+  if (BAND_GREEN.has(state)) return 'success.main';
+  if (BAND_RED.has(state)) return 'error.main';
+  if (BAND_AMBER.has(state)) return 'warning.main';
+  return 'text.disabled';
+};
+
+function BandDotCell({ state, tooltip }) {
+  return (
+    <TableCell align="center" sx={{ width: 40, minWidth: 40 }}>
+      {state ? (
+        <Tooltip title={tooltip} arrow>
+          <Box sx={{ width: 13, height: 13, borderRadius: '50%', bgcolor: bandColor(state), mx: 'auto' }} />
+        </Tooltip>
+      ) : (
+        <Typography variant="caption" sx={{ color: 'text.disabled' }}>-</Typography>
+      )}
+    </TableCell>
+  );
+}
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
@@ -121,6 +147,9 @@ const columns = [
   { id: 'vcp_ready_for_breakout', label: 'Rdy', sortable: false, width: 35 },
   { id: 'passes_template', label: 'Pass', sortable: false, width: 40 },
   { id: 'rating', label: 'Rate', sortable: false, width: 80 },
+  { id: 'pressure_state', label: 'Prs', sortable: false, width: 40 },
+  { id: 'buy_risk_state', label: 'Risk', sortable: false, width: 40 },
+  { id: 'tpr_state', label: 'TPR', sortable: false, width: 40 },
 ];
 
 const getStatusChipProps = (row) => {
@@ -502,6 +531,19 @@ const VirtualTableRow = memo(function VirtualTableRow({
           </Tooltip>
         )}
       </TableCell>
+
+      <BandDotCell
+        state={row.pressure_state}
+        tooltip={`Pressure: ${row.pressure_state ?? '-'}${row.pressure_value != null ? ` (${row.pressure_value})` : ''}`}
+      />
+      <BandDotCell
+        state={row.buy_risk_state}
+        tooltip={`Buy Risk: ${row.buy_risk_state ?? '-'}${row.buy_risk_atr != null ? ` (${row.buy_risk_atr} ATR)` : ''}`}
+      />
+      <BandDotCell
+        state={row.tpr_state}
+        tooltip={`TPR: ${row.tpr_state ?? '-'}${row.tpr_score != null ? ` (${row.tpr_score}/${row.tpr_max ?? 7})` : ''}`}
+      />
     </TableRow>
   );
 }, (prevProps, nextProps) => {
@@ -527,6 +569,9 @@ const VirtualTableRow = memo(function VirtualTableRow({
          prevProps.row.rating === nextProps.row.rating &&
          prevProps.row.execution_state === nextProps.row.execution_state &&
          prevProps.row.execution_cap_applied === nextProps.row.execution_cap_applied &&
+         prevProps.row.pressure_state === nextProps.row.pressure_state &&
+         prevProps.row.buy_risk_state === nextProps.row.buy_risk_state &&
+         prevProps.row.tpr_state === nextProps.row.tpr_state &&
          prevProps.mcapDisplay === nextProps.mcapDisplay &&
          prevProps.showActions === nextProps.showActions &&
          prevProps.showWatchlistMenu === nextProps.showWatchlistMenu &&
