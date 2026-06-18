@@ -2757,3 +2757,39 @@ def test_compute_buy_points_is_robust_and_well_formed(service_and_session_factor
         assert set(a.keys()) == {"time", "type", "price"}
         assert a["type"] in valid
         assert isinstance(a["price"], float)
+
+
+def test_earnings_line_points_are_price_scaled_and_well_formed(service_and_session_factory):
+    """The earnings line is a fair-value line in price units, fitted to price.
+
+    Given a daily price series and quarterly EPS, it returns ``[{time, value}]``
+    where ``value`` lives in the price range (TTM EPS x median(close/TTM)) and is
+    restricted to bars with positive TTM EPS.
+    """
+    import numpy as np
+    service, _ = service_and_session_factory
+
+    n = 500
+    idx = pd.date_range("2024-01-01", periods=n, freq="B")
+    close = np.linspace(20.0, 120.0, n)
+    df = pd.DataFrame(
+        {"Open": close, "High": close + 1, "Low": close - 1, "Close": close,
+         "Volume": np.full(n, 1_000_000.0)},
+        index=idx,
+    )
+    # Eight quarters of growing EPS spanning the window (oldest-first).
+    q_dates = pd.date_range("2023-12-31", periods=8, freq="QE")
+    pairs = [(d.strftime("%Y-%m-%d"), 0.4 + 0.1 * i) for i, d in enumerate(q_dates)]
+
+    pts = service._earnings_line_points(df, pairs)  # noqa: SLF001
+    assert isinstance(pts, list) and len(pts) > 0
+    for p in pts:
+        assert set(p.keys()) == {"time", "value"}
+        assert isinstance(p["value"], float)
+    # The fitted line should sit in the same order of magnitude as price.
+    values = [p["value"] for p in pts]
+    assert min(values) > 0
+    assert max(values) <= close.max() * 3  # price-scaled, not raw $/share EPS
+
+    # Fewer than two TTM anchors -> empty (cannot fit a baseline).
+    assert service._earnings_line_points(df, pairs[:3]) == []  # noqa: SLF001

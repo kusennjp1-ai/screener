@@ -21,6 +21,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import CandlestickChart from '../components/Charts/CandlestickChart';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
+import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
@@ -35,31 +36,11 @@ const MA_LEGEND = [
   ['SMA50', '#FFD54F'],
   ['SMA150', '#FF8A65'],
   ['SMA200', '#BA68C8'],
+  ['収益', '#2EAD5B'],
 ];
 
 // Single-line strip rendered ABOVE the chart: MA legend + Minervini trend-template
 // readout. Kept out of the plotting area so it never hides recent candles.
-// Execution state -> short label + color (mirrors the scan table). Pre-breakout
-// / Breakout are buyable (green); Early-post amber; Extended/Overextended/
-// Damaged/Invalid red.
-const EXECUTION_STATE_LABEL = {
-  pre_breakout: 'Pre-breakout',
-  breakout: 'Breakout',
-  early_post_breakout: 'Early post',
-  extended: 'Extended',
-  overextended: 'Overextended',
-  damaged: 'Damaged',
-  invalid: 'Invalid',
-};
-const EXECUTION_STATE_COLOR = {
-  pre_breakout: '#4CF64D',
-  breakout: '#4CF64D',
-  early_post_breakout: '#FFB300',
-  extended: '#E619CD',
-  overextended: '#E619CD',
-  damaged: '#E619CD',
-  invalid: '#E619CD',
-};
 
 // Tap-to-explain legend for the three MM360 bands.
 const BAND_EXPLANATIONS = [
@@ -344,14 +325,28 @@ function StaticChartViewerModal({
               bgcolor: 'background.default',
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, minWidth: 0, overflow: 'hidden' }}>
-              <Typography variant="h5" fontWeight="bold">
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: { xs: 1, md: 2 },
+                minWidth: 0,
+                // モバイルではバッジをクリップせず横スクロールで全部見られるようにする
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                py: 0.5,
+                '&::-webkit-scrollbar': { display: 'none' },
+                scrollbarWidth: 'none',
+              }}
+            >
+              <Typography variant="h5" fontWeight="bold" sx={{ flexShrink: 0, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
                 {currentSymbol || 'Loading...'}
               </Typography>
               {isLoading ? <CircularProgress size={18} /> : null}
 
               {stockData?.ibd_industry_group ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                   <Box
                     sx={{
                       borderRadius: 1,
@@ -377,7 +372,7 @@ function StaticChartViewerModal({
               ) : null}
 
               {adrValue != null ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                   <Box
                     sx={{
                       borderRadius: 1,
@@ -406,7 +401,7 @@ function StaticChartViewerModal({
               ) : null}
 
               {epsRating != null ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                   <Box
                     sx={{
                       borderRadius: 1,
@@ -436,7 +431,7 @@ function StaticChartViewerModal({
               ) : null}
 
               {stage != null ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                   <Box
                     sx={{
                       borderRadius: 1,
@@ -458,7 +453,7 @@ function StaticChartViewerModal({
               ) : null}
 
               {vcpDetected ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                   <Box
                     sx={{
                       borderRadius: 1,

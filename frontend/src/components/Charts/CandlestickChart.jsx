@@ -3,6 +3,7 @@ import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, To
 import { createPriceChartSeries } from './createPriceChartSeries';
 import { VcpBoxPrimitive } from './vcpBoxPrimitive';
 import { BandStripPrimitive } from './bandStripPrimitive';
+import { BuyPointPrimitive } from './buyPointPrimitive';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchPriceHistory, fetchRSLine, priceHistoryKeys, PRICE_HISTORY_STALE_TIME } from '../../api/priceHistory';
 import { rsBandForRange } from './rsBand';
@@ -37,15 +38,6 @@ const debounce = (fn, ms) => {
  * @param {boolean} props.hideTimeframeToggle - When true, hides only the Daily/Weekly toggle (other overlays stay) and forces the daily timeframe
  * @param {boolean} props.interactive - When false, disables time-axis pan/zoom (mouse wheel, drag, pinch) until re-enabled
  */
-// Buy-point annotation styling (approximate MM360 mapping). Buy Point / SEPA
-// mark the breakout below the bar; Buy Ready / Buy Alert mark the run-up above.
-const BUY_POINT_MARKERS = {
-  buy_point: { position: 'belowBar', color: '#2196f3', shape: 'arrowUp', text: 'Buy Point' },
-  sepa_buy_point: { position: 'belowBar', color: '#4CF64D', shape: 'arrowUp', text: 'SEPA' },
-  buy_ready: { position: 'aboveBar', color: '#FFD54F', shape: 'circle', text: 'Buy Ready' },
-  buy_alert: { position: 'aboveBar', color: '#FFB300', shape: 'circle', text: 'Buy Alert' },
-};
-
 function CandlestickChart({
   symbol,
   period = '6mo',
@@ -73,7 +65,8 @@ function CandlestickChart({
   const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
   const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
   const bandStripPrimitiveRef = useRef(null); // MM360 color-band strips overlay
-  const candleMarkersRef = useRef(null); // Buy-point annotations on the candles
+  const buyPointPrimitiveRef = useRef(null); // Buy-point chips connected to the band row
+  const candleMarkersRef = useRef(null); // (legacy marker holder; buy points now use a primitive)
   const volumeSeriesRef = useRef(null);
   const avgVolumeSeriesRef = useRef(null); // ~50-day average-volume line
   const ema10SeriesRef = useRef(null);
@@ -565,20 +558,42 @@ function CandlestickChart({
     };
   }, [bands, chartData, compact]);
 
-  // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) on the
-  // candles. Markers must be time-sorted (the backend already sorts them).
+  // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) drawn as
+  // compact chips in a row under the top band strips, each connected by a thin
+  // vertical line down to its pivot price — so labels never overlap the candles.
+  // Re-aligns on pan/zoom because the primitive recomputes coordinates on every
+  // redraw. Wrapped so a charting aid can never break the chart.
   useEffect(() => {
-    const markers = candleMarkersRef.current;
-    if (!markers || compact) return;
+    const series = candlestickSeriesRef.current;
+    if (!series || compact) return undefined;
     const list = Array.isArray(buyPoints) ? buyPoints : [];
-    const mapped = list
-      .filter((b) => b && b.time && BUY_POINT_MARKERS[b.type])
-      .map((b) => ({ time: b.time, ...BUY_POINT_MARKERS[b.type] }));
-    try { markers.setMarkers(mapped); } catch { /* series recreated — ignore */ }
+    const barTimes = Array.isArray(chartData?.candlesticks)
+      ? chartData.candlesticks.map((c) => c.time)
+      : [];
+    try {
+      if (list.length > 0 && barTimes.length >= 2) {
+        if (!buyPointPrimitiveRef.current) {
+          buyPointPrimitiveRef.current = new BuyPointPrimitive(list, barTimes);
+          series.attachPrimitive(buyPointPrimitiveRef.current);
+        } else {
+          buyPointPrimitiveRef.current.setData(list, barTimes);
+        }
+      } else if (buyPointPrimitiveRef.current) {
+        buyPointPrimitiveRef.current.setData([], barTimes);
+      }
+    } catch { /* primitive unsupported / series recreated — ignore */ }
+
+    return () => {
+      const current = candlestickSeriesRef.current;
+      if (buyPointPrimitiveRef.current && current) {
+        try { current.detachPrimitive(buyPointPrimitiveRef.current); } catch { /* already gone */ }
+      }
+      buyPointPrimitiveRef.current = null;
+    };
   }, [buyPoints, chartData, compact]);
 
-  // Quarterly EPS line (own hidden scale; stepped). Date-anchored so it stays
-  // aligned under zoom/scale changes.
+  // Earnings line (収益ライン): smooth green fair-value line on the price scale.
+  // Date-anchored so it stays aligned under zoom/scale changes.
   useEffect(() => {
     const series = epsLineSeriesRef.current;
     if (!series) return;
@@ -640,7 +655,14 @@ function CandlestickChart({
     // most recent candles (a leader near new highs sits at the top-right) are
     // never hidden behind those corner overlays.
     const candleBottom = rsStripShown ? 0.34 : 0.22;
-    const candleTop = compact ? 0.05 : 0.14;
+    // Reserve a fixed pixel band at the top for the MM360 color strips (~23px)
+    // and the buy-point chip rows (~30px) so neither the candle highs nor the
+    // price-scale value tag collide with them — critical on short mobile charts
+    // where a flat 14% would leave too few pixels. Compact tiles draw no strips.
+    const TOP_RESERVED_PX = 64;
+    const candleTop = compact
+      ? 0.05
+      : Math.min(0.4, Math.max(0.14, TOP_RESERVED_PX / Math.max(height, 1)));
     candle.priceScale().applyOptions({ scaleMargins: { top: candleTop, bottom: candleBottom } });
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   }, [rsStripShown, symbol, height, isDarkMode, compact]);

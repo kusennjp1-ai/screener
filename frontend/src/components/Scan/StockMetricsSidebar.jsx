@@ -14,6 +14,7 @@ import {
 } from '../../utils/colorUtils';
 import { formatPercent, formatRatio, formatPatternName, getScoreColor } from '../../utils/formatUtils';
 import { resolveMarketCapDisplay } from '../../utils/marketCapUtils';
+import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../Charts/executionState';
 
 // Alias for this component's usage (uses hex colors)
 const getGrowthColor = getGrowthColorHex;
@@ -216,13 +217,33 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
         <Typography variant="body2" fontWeight="medium" sx={{ flex: 1, lineHeight: 1.3 }}>
           {stockData.company_name || stockData.symbol}
         </Typography>
-        {stockData.rating && (
-          <Chip
-            label={stockData.rating}
-            color={getRatingColor(stockData.rating)}
-            size="small"
-            sx={{ fontSize: '0.7rem', height: 22 }}
-          />
+        {(stockData.rating || (stockData.execution_state && stockData.execution_state !== 'unknown')) && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5, flexShrink: 0 }}>
+            {stockData.rating && (
+              <Chip
+                label={stockData.rating}
+                color={getRatingColor(stockData.rating)}
+                size="small"
+                sx={{ fontSize: '0.7rem', height: 22 }}
+              />
+            )}
+            {/* Execution state directly under the rating ("break out" etc.), so the
+                setup stage reads alongside the Pass/Buy rating. */}
+            {stockData.execution_state && stockData.execution_state !== 'unknown' && (
+              <Chip
+                label={EXECUTION_STATE_LABEL[stockData.execution_state] || stockData.execution_state}
+                size="small"
+                variant="outlined"
+                sx={{
+                  fontSize: '0.65rem',
+                  height: 20,
+                  fontWeight: 700,
+                  color: EXECUTION_STATE_COLOR[stockData.execution_state] || 'text.secondary',
+                  borderColor: EXECUTION_STATE_COLOR[stockData.execution_state] || 'divider',
+                }}
+              />
+            )}
+          </Box>
         )}
       </Box>
 
