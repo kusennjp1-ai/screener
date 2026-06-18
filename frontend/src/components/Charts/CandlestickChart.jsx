@@ -45,6 +45,7 @@ function CandlestickChart({
   onVisibleRangeChange = null,
   priceData = null,
   rsLineData = null,
+  rsRatingValue = null,
   blueDots = null,
   dataUpdatedAtOverride = null,
   compact = false,
@@ -62,6 +63,7 @@ function CandlestickChart({
   const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
   const bandStripPrimitiveRef = useRef(null); // MM360 color-band strips overlay
   const volumeSeriesRef = useRef(null);
+  const avgVolumeSeriesRef = useRef(null); // ~50-day average-volume line
   const ema10SeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
   const ema50SeriesRef = useRef(null);
@@ -189,6 +191,7 @@ function CandlestickChart({
     const {
       chart,
       volumeSeries,
+      avgVolumeSeries,
       candlestickSeries,
       ema10Series,
       ema20Series,
@@ -206,6 +209,7 @@ function CandlestickChart({
     });
     chartRef.current = chart;
     volumeSeriesRef.current = volumeSeries;
+    avgVolumeSeriesRef.current = avgVolumeSeries;
     candlestickSeriesRef.current = candlestickSeries;
     ema10SeriesRef.current = ema10Series;
     ema20SeriesRef.current = ema20Series;
@@ -265,6 +269,7 @@ function CandlestickChart({
       }
       candlestickSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      avgVolumeSeriesRef.current = null;
       ema10SeriesRef.current = null;
       ema20SeriesRef.current = null;
       ema50SeriesRef.current = null;
@@ -347,6 +352,22 @@ function CandlestickChart({
     // Update volume data
     if (volumeSeriesRef.current && chartData.volume.length > 0) {
       volumeSeriesRef.current.setData(chartData.volume);
+    }
+
+    // ~50-day average-volume line (Minervini-style). Trailing simple average of
+    // the volume series, aligned to the same time axis / volume scale.
+    if (avgVolumeSeriesRef.current && chartData.volume.length > 0) {
+      const AVG_WINDOW = 50;
+      const vol = chartData.volume;
+      const avg = [];
+      let running = 0;
+      for (let i = 0; i < vol.length; i += 1) {
+        running += vol[i].value;
+        if (i >= AVG_WINDOW) running -= vol[i - AVG_WINDOW].value;
+        const denom = Math.min(i + 1, AVG_WINDOW);
+        if (i >= AVG_WINDOW - 1) avg.push({ time: vol[i].time, value: running / denom });
+      }
+      avgVolumeSeriesRef.current.setData(avg);
     }
 
     // Update candlestick data
@@ -546,8 +567,18 @@ function CandlestickChart({
     const markerList = (rsData.blue_dots || [])
       .filter((t) => timesInSeries.has(t))
       .map((t) => ({ time: t, position: 'inBar', color: '#2196f3', shape: 'circle' }));
+    // Latest RS rating labelled at the head (right edge) of the RS line.
+    if (rsRatingValue != null && points.length > 0) {
+      markerList.push({
+        time: points[points.length - 1].time,
+        position: 'aboveBar',
+        color: '#FFA726',
+        shape: 'circle',
+        text: `RS ${Math.round(rsRatingValue)}`,
+      });
+    }
     if (markers) markers.setMarkers(markerList);
-  }, [rsData, rsStripShown]);
+  }, [rsData, rsStripShown, rsRatingValue]);
 
   // RS strip layout: when the RS line is shown, compress price to a 0.66 floor
   // so the [0.66, 0.78] band below it is always empty (the RS scale floats in

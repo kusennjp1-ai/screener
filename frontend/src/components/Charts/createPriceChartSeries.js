@@ -44,6 +44,16 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   });
   volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
 
+  // Average-volume line (Minervini-style ~50-day avg) on the same volume scale,
+  // so above/below-average volume reads at a glance. Data set by the component.
+  const avgVolumeSeries = chart.addSeries(LineSeries, {
+    color: '#FFD54F',
+    lineWidth: 1,
+    priceScaleId: 'volume',
+    lastValueVisible: false,
+    priceLineVisible: false,
+  });
+
   // Candlesticks. Neutral scaleMargins; reapplied by the RS strip layout effect.
   const candlestickSeries = chart.addSeries(CandlestickSeries, {
     upColor: '#2196f3',
@@ -84,6 +94,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   return {
     chart,
     volumeSeries,
+    avgVolumeSeries,
     candlestickSeries,
     ema10Series,
     ema20Series,

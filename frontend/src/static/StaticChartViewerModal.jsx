@@ -38,6 +38,28 @@ const MA_LEGEND = [
 
 // Single-line strip rendered ABOVE the chart: MA legend + Minervini trend-template
 // readout. Kept out of the plotting area so it never hides recent candles.
+// Execution state -> short label + color (mirrors the scan table). Pre-breakout
+// / Breakout are buyable (green); Early-post amber; Extended/Overextended/
+// Damaged/Invalid red.
+const EXECUTION_STATE_LABEL = {
+  pre_breakout: 'Pre-breakout',
+  breakout: 'Breakout',
+  early_post_breakout: 'Early post',
+  extended: 'Extended',
+  overextended: 'Overextended',
+  damaged: 'Damaged',
+  invalid: 'Invalid',
+};
+const EXECUTION_STATE_COLOR = {
+  pre_breakout: '#4CF64D',
+  breakout: '#4CF64D',
+  early_post_breakout: '#FFB300',
+  extended: '#E619CD',
+  overextended: '#E619CD',
+  damaged: '#E619CD',
+  invalid: '#E619CD',
+};
+
 function ChartInfoStrip({ minerviniInfo }) {
   const i = minerviniInfo || {};
   return (
@@ -89,6 +111,11 @@ function ChartInfoStrip({ minerviniInfo }) {
         )}
         {i.pivot != null && <span style={{ color: '#FFA726' }}>Pivot {Number(i.pivot).toFixed(2)}</span>}
         {i.vcpDetected && <span style={{ color: '#4CF64D' }}>VCP✓</span>}
+        {i.executionState && i.executionState !== 'unknown' && (
+          <span style={{ color: EXECUTION_STATE_COLOR[i.executionState] || '#bbb', fontWeight: 700 }}>
+            {EXECUTION_STATE_LABEL[i.executionState] || i.executionState}
+          </span>
+        )}
       </Box>
     </Box>
   );
@@ -233,6 +260,7 @@ function StaticChartViewerModal({
       fromHighPct: stockData.week_52_high_distance ?? null,
       pivot: pivotPrice,
       vcpDetected,
+      executionState: stockData.execution_state ?? null,
     };
   }, [stockData, pivotPrice, vcpDetected]);
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
@@ -512,6 +540,7 @@ function StaticChartViewerModal({
                       onVisibleRangeChange={setVisibleRange}
                       priceData={chartPayload?.bars || []}
                       rsLineData={chartPayload?.rs_line || null}
+                      rsRatingValue={stockData?.rs_rating ?? null}
                       blueDots={chartPayload?.blue_dots || null}
                       dataUpdatedAtOverride={dataUpdatedAtOverride}
                       pivotPrice={pivotPrice}
