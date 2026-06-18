@@ -2,6 +2,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } fr
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
 import { VcpBoxPrimitive } from './vcpBoxPrimitive';
+import { BandStripPrimitive } from './bandStripPrimitive';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchPriceHistory, fetchRSLine, priceHistoryKeys, PRICE_HISTORY_STALE_TIME } from '../../api/priceHistory';
 import { rsBandForRange } from './rsBand';
@@ -52,12 +53,14 @@ function CandlestickChart({
   pivotPrice = null,
   pivotLabel = 'Pivot',
   vcpBoxes = null,
+  bands = null,
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const candlestickSeriesRef = useRef(null);
   const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
   const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
+  const bandStripPrimitiveRef = useRef(null); // MM360 color-band strips overlay
   const volumeSeriesRef = useRef(null);
   const ema10SeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
@@ -491,6 +494,36 @@ function CandlestickChart({
       vcpBoxPrimitiveRef.current = null;
     };
   }, [vcpBoxes, chartData, compact]);
+
+  // MM360 color-band strips (Pressure / Buy Risk / TPR) across the top of the
+  // price pane, time-aligned to the candles. Re-aligns on pan/zoom because the
+  // primitive recomputes coordinates on every chart redraw.
+  useEffect(() => {
+    const series = candlestickSeriesRef.current;
+    if (!series || compact) return undefined;
+    const hasBands = bands && (bands.pressure_history || bands.buy_risk_history || bands.tpr_history);
+    const barTimes = Array.isArray(chartData?.candlesticks)
+      ? chartData.candlesticks.map((c) => c.time)
+      : [];
+    try {
+      if (hasBands && barTimes.length >= 2) {
+        if (!bandStripPrimitiveRef.current) {
+          bandStripPrimitiveRef.current = new BandStripPrimitive(bands, barTimes);
+          series.attachPrimitive(bandStripPrimitiveRef.current);
+        } else {
+          bandStripPrimitiveRef.current.setData(bands, barTimes);
+        }
+      }
+    } catch { /* primitive unsupported / series recreated — ignore */ }
+
+    return () => {
+      const current = candlestickSeriesRef.current;
+      if (bandStripPrimitiveRef.current && current) {
+        try { current.detachPrimitive(bandStripPrimitiveRef.current); } catch { /* already gone */ }
+      }
+      bandStripPrimitiveRef.current = null;
+    };
+  }, [bands, chartData, compact]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
