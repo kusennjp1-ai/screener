@@ -37,6 +37,15 @@ const debounce = (fn, ms) => {
  * @param {boolean} props.hideTimeframeToggle - When true, hides only the Daily/Weekly toggle (other overlays stay) and forces the daily timeframe
  * @param {boolean} props.interactive - When false, disables time-axis pan/zoom (mouse wheel, drag, pinch) until re-enabled
  */
+// Buy-point annotation styling (approximate MM360 mapping). Buy Point / SEPA
+// mark the breakout below the bar; Buy Ready / Buy Alert mark the run-up above.
+const BUY_POINT_MARKERS = {
+  buy_point: { position: 'belowBar', color: '#2196f3', shape: 'arrowUp', text: 'Buy Point' },
+  sepa_buy_point: { position: 'belowBar', color: '#4CF64D', shape: 'arrowUp', text: 'SEPA' },
+  buy_ready: { position: 'aboveBar', color: '#FFD54F', shape: 'circle', text: 'Buy Ready' },
+  buy_alert: { position: 'aboveBar', color: '#FFB300', shape: 'circle', text: 'Buy Alert' },
+};
+
 function CandlestickChart({
   symbol,
   period = '6mo',
@@ -45,6 +54,8 @@ function CandlestickChart({
   onVisibleRangeChange = null,
   priceData = null,
   rsLineData = null,
+  rsRatingValue = null,
+  epsLine = null,
   blueDots = null,
   dataUpdatedAtOverride = null,
   compact = false,
@@ -54,6 +65,7 @@ function CandlestickChart({
   pivotLabel = 'Pivot',
   vcpBoxes = null,
   bands = null,
+  buyPoints = null,
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -61,7 +73,9 @@ function CandlestickChart({
   const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
   const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
   const bandStripPrimitiveRef = useRef(null); // MM360 color-band strips overlay
+  const candleMarkersRef = useRef(null); // Buy-point annotations on the candles
   const volumeSeriesRef = useRef(null);
+  const avgVolumeSeriesRef = useRef(null); // ~50-day average-volume line
   const ema10SeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
   const ema50SeriesRef = useRef(null);
@@ -69,6 +83,7 @@ function CandlestickChart({
   const sma150SeriesRef = useRef(null);
   const sma200SeriesRef = useRef(null);
   const rsLineSeriesRef = useRef(null); // RS line (stock / benchmark) overlay
+  const epsLineSeriesRef = useRef(null); // Quarterly EPS line overlay
   const rsMarkersRef = useRef(null); // Blue-dot markers primitive on the RS line
   const prevSymbolRef = useRef(null); // Track previous symbol
   const shouldRestoreRangeRef = useRef(false); // Flag to restore range on next data update
@@ -189,7 +204,9 @@ function CandlestickChart({
     const {
       chart,
       volumeSeries,
+      avgVolumeSeries,
       candlestickSeries,
+      candleMarkers,
       ema10Series,
       ema20Series,
       ema50Series,
@@ -198,6 +215,7 @@ function CandlestickChart({
       sma200Series,
       rsLineSeries,
       rsMarkers,
+      epsLineSeries,
     } = createPriceChartSeries(chartContainerRef.current, {
       width: chartWidth,
       height: chartHeight,
@@ -206,7 +224,9 @@ function CandlestickChart({
     });
     chartRef.current = chart;
     volumeSeriesRef.current = volumeSeries;
+    avgVolumeSeriesRef.current = avgVolumeSeries;
     candlestickSeriesRef.current = candlestickSeries;
+    candleMarkersRef.current = candleMarkers;
     ema10SeriesRef.current = ema10Series;
     ema20SeriesRef.current = ema20Series;
     ema50SeriesRef.current = ema50Series;
@@ -215,6 +235,7 @@ function CandlestickChart({
     sma200SeriesRef.current = sma200Series;
     rsLineSeriesRef.current = rsLineSeries;
     rsMarkersRef.current = rsMarkers;
+    epsLineSeriesRef.current = epsLineSeries;
 
     // Subscribe to crosshair move for OHLC legend (skip in compact mode — legend is hidden)
     if (!compact) chart.subscribeCrosshairMove((param) => {
@@ -264,7 +285,9 @@ function CandlestickChart({
         chartRef.current = null;
       }
       candlestickSeriesRef.current = null;
+      candleMarkersRef.current = null;
       volumeSeriesRef.current = null;
+      avgVolumeSeriesRef.current = null;
       ema10SeriesRef.current = null;
       ema20SeriesRef.current = null;
       ema50SeriesRef.current = null;
@@ -272,6 +295,7 @@ function CandlestickChart({
       sma150SeriesRef.current = null;
       sma200SeriesRef.current = null;
       rsLineSeriesRef.current = null;
+      epsLineSeriesRef.current = null;
       rsMarkersRef.current = null;
     };
     // `interactive` is intentionally not in the deps: it's only used as the
@@ -347,6 +371,22 @@ function CandlestickChart({
     // Update volume data
     if (volumeSeriesRef.current && chartData.volume.length > 0) {
       volumeSeriesRef.current.setData(chartData.volume);
+    }
+
+    // ~50-day average-volume line (Minervini-style). Trailing simple average of
+    // the volume series, aligned to the same time axis / volume scale.
+    if (avgVolumeSeriesRef.current && chartData.volume.length > 0) {
+      const AVG_WINDOW = 50;
+      const vol = chartData.volume;
+      const avg = [];
+      let running = 0;
+      for (let i = 0; i < vol.length; i += 1) {
+        running += vol[i].value;
+        if (i >= AVG_WINDOW) running -= vol[i - AVG_WINDOW].value;
+        const denom = Math.min(i + 1, AVG_WINDOW);
+        if (i >= AVG_WINDOW - 1) avg.push({ time: vol[i].time, value: running / denom });
+      }
+      avgVolumeSeriesRef.current.setData(avg);
     }
 
     // Update candlestick data
@@ -525,6 +565,29 @@ function CandlestickChart({
     };
   }, [bands, chartData, compact]);
 
+  // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) on the
+  // candles. Markers must be time-sorted (the backend already sorts them).
+  useEffect(() => {
+    const markers = candleMarkersRef.current;
+    if (!markers || compact) return;
+    const list = Array.isArray(buyPoints) ? buyPoints : [];
+    const mapped = list
+      .filter((b) => b && b.time && BUY_POINT_MARKERS[b.type])
+      .map((b) => ({ time: b.time, ...BUY_POINT_MARKERS[b.type] }));
+    try { markers.setMarkers(mapped); } catch { /* series recreated — ignore */ }
+  }, [buyPoints, chartData, compact]);
+
+  // Quarterly EPS line (own hidden scale; stepped). Date-anchored so it stays
+  // aligned under zoom/scale changes.
+  useEffect(() => {
+    const series = epsLineSeriesRef.current;
+    if (!series) return;
+    const pts = Array.isArray(epsLine) ? epsLine : [];
+    try {
+      series.setData(pts.map((p) => ({ time: p.time, value: p.value })));
+    } catch { /* series recreated — ignore */ }
+  }, [epsLine, chartData, compact]);
+
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
   // otherwise so stale points never linger under weekly candles.
@@ -546,8 +609,18 @@ function CandlestickChart({
     const markerList = (rsData.blue_dots || [])
       .filter((t) => timesInSeries.has(t))
       .map((t) => ({ time: t, position: 'inBar', color: '#2196f3', shape: 'circle' }));
+    // Latest RS rating labelled at the head (right edge) of the RS line.
+    if (rsRatingValue != null && points.length > 0) {
+      markerList.push({
+        time: points[points.length - 1].time,
+        position: 'aboveBar',
+        color: '#FFA726',
+        shape: 'circle',
+        text: `RS ${Math.round(rsRatingValue)}`,
+      });
+    }
     if (markers) markers.setMarkers(markerList);
-  }, [rsData, rsStripShown]);
+  }, [rsData, rsStripShown, rsRatingValue]);
 
   // RS strip layout: when the RS line is shown, compress price to a 0.66 floor
   // so the [0.66, 0.78] band below it is always empty (the RS scale floats in

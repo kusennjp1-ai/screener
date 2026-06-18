@@ -129,6 +129,28 @@ def quarterly_series(facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
     return quarterly
 
 
+def dated_quarterly_eps(facts: dict[str, Any], tags: Iterable[str] = EPS_TAGS) -> list[tuple[str, float]]:
+    """``[(end_date, diluted_eps), ...]`` for quarterly EPS, oldest-first.
+
+    Uses the *end date* of each 3-month (quarterly) diluted-EPS entry so the
+    series can be plotted on a time axis (for a MarketSurge-style EPS line).
+    Most-recent filing wins on duplicate periods (restatements). Annual 10-K
+    EPS (12-month) is excluded — only dated quarterly points are returned.
+    """
+    fact = _first_tag(facts, tags)
+    entries = _select_unit_entries(fact)
+    by_date: dict[str, float] = {}
+    for e in sorted(entries, key=lambda x: x.get("filed", "")):
+        val = e.get("val")
+        start, end = e.get("start"), e.get("end")
+        if val is None or not start or not end:
+            continue
+        dur = _days(start, end)
+        if dur is not None and _QUARTER_MIN_DAYS <= dur <= _QUARTER_MAX_DAYS:
+            by_date[end] = float(val)
+    return sorted(by_date.items())
+
+
 def _ordered_quarters(keys: Iterable[tuple[int, int]]) -> list[Quarter]:
     return [Quarter(fy, q) for (fy, q) in sorted(keys, reverse=True)]
 

@@ -117,3 +117,19 @@ def test_quarterly_series_picks_first_available_tag():
     )
     series = quarterly_series(facts, EPS_TAGS, is_eps=True)
     assert series[(2025, 3)] == 1.6
+
+
+def test_dated_quarterly_eps_returns_quarter_end_dates_excluding_annual():
+    from app.services.sec_edgar_financials import dated_quarterly_eps
+    facts = _facts(_EPS, _REV, _NI)
+    # add an annual (12-month) EPS entry that must be excluded from the dated line
+    facts["facts"]["us-gaap"]["EarningsPerShareDiluted"]["units"]["USD/shares"].append(
+        {"start": "2025-01-01", "end": "2025-12-31", "val": 9.9, "fy": 2025, "fp": "FY",
+         "form": "10-K", "filed": "2026-02-15"}
+    )
+    out = dated_quarterly_eps(facts)
+    assert all(isinstance(d, str) and isinstance(v, float) for d, v in out)
+    assert ("2025-09-30", 1.6) in out          # a quarterly point
+    assert all(d != "2025-12-31" for d, _ in out)  # annual excluded
+    # chronological
+    assert [d for d, _ in out] == sorted(d for d, _ in out)

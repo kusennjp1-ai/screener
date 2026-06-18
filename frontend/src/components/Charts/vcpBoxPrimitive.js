@@ -26,11 +26,16 @@ class VcpBoxRenderer {
         const bottom = Math.round(Math.max(r.y1, r.y2) * vr);
         const w = Math.max(right - left, 1);
         const h = Math.max(bottom - top, 1);
-        ctx.fillStyle = 'rgba(255, 152, 0, 0.10)';
+        // Clean, understated base outline: faint fill + thin dashed amber edge,
+        // so it reads as the base footprint rather than a heavy orange box.
+        ctx.fillStyle = 'rgba(255, 152, 0, 0.05)';
         ctx.fillRect(left, top, w, h);
-        ctx.strokeStyle = 'rgba(255, 152, 0, 0.65)';
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 167, 38, 0.45)';
         ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
         ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
+        ctx.restore();
       }
     });
   }

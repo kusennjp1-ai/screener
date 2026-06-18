@@ -44,6 +44,16 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   });
   volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
 
+  // Average-volume line (Minervini-style ~50-day avg) on the same volume scale,
+  // so above/below-average volume reads at a glance. Data set by the component.
+  const avgVolumeSeries = chart.addSeries(LineSeries, {
+    color: '#FFD54F',
+    lineWidth: 1,
+    priceScaleId: 'volume',
+    lastValueVisible: false,
+    priceLineVisible: false,
+  });
+
   // Candlesticks. Neutral scaleMargins; reapplied by the RS strip layout effect.
   const candlestickSeries = chart.addSeries(CandlestickSeries, {
     upColor: '#2196f3',
@@ -54,6 +64,8 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     priceScaleId: 'right',
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
+  // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) attach here.
+  const candleMarkers = createSeriesMarkers(candlestickSeries, []);
 
   // EMA 10 / 20 / 50 — short-term entry guides. Share the price ('right') scale.
   // Thin (1px) so six overlaid moving averages stay legible over the candles.
@@ -81,10 +93,25 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   rsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.66, bottom: 0.22 }, visible: false });
   const rsMarkers = createSeriesMarkers(rsLineSeries, []);
 
+  // Quarterly EPS line (MarketSurge-style) on its own hidden scale so its $/share
+  // values don't distort the price axis; stepped (lineType 1) since EPS is
+  // quarterly. Overlays the price area to show the earnings trend vs price.
+  const epsLineSeries = chart.addSeries(LineSeries, {
+    color: '#26C6DA',
+    lineWidth: 2,
+    lineType: 1,
+    priceScaleId: 'eps',
+    lastValueVisible: true,
+    priceLineVisible: false,
+  });
+  epsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.06, bottom: 0.32 }, visible: false });
+
   return {
     chart,
     volumeSeries,
+    avgVolumeSeries,
     candlestickSeries,
+    candleMarkers,
     ema10Series,
     ema20Series,
     ema50Series,
@@ -93,5 +120,6 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     sma200Series,
     rsLineSeries,
     rsMarkers,
+    epsLineSeries,
   };
 }
