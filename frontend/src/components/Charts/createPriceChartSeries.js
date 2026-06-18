@@ -68,17 +68,19 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   const candleMarkers = createSeriesMarkers(candlestickSeries, []);
 
   // EMA 10 / 20 / 50 — short-term entry guides. Share the price ('right') scale.
-  // Thin (1px) so six overlaid moving averages stay legible over the candles.
-  const ema10Series = chart.addSeries(LineSeries, { color: '#4CF64D', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const ema20Series = chart.addSeries(LineSeries, { color: '#87FBFB', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const ema50Series = chart.addSeries(LineSeries, { color: '#38CD07', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  // Thin (1px). Distinct hues (gray / cyan / yellow) so the MAs don't cluster in
+  // one color family and stay clear of the green earnings line and amber RS line.
+  const ema10Series = chart.addSeries(LineSeries, { color: '#E0E0E0', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema20Series = chart.addSeries(LineSeries, { color: '#4DD0E1', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema50Series = chart.addSeries(LineSeries, { color: '#FFEE58', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
-  // Minervini trend-template SMA stack (50 / 150 / 200-day). Warmer tones,
-  // distinct from the EMAs so the long-term trend stack reads clearly: price
-  // should sit above 50 > 150 > 200 with a rising 200-day line. Full chart only.
-  const sma50Series = chart.addSeries(LineSeries, { color: '#FFD54F', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const sma150Series = chart.addSeries(LineSeries, { color: '#FF8A65', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const sma200Series = chart.addSeries(LineSeries, { color: '#BA68C8', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  // Minervini trend-template SMA stack (50 / 150 / 200-day). Purple → pink → red,
+  // a distinct family from the EMAs so the long-term trend stack reads clearly:
+  // price should sit above 50 > 150 > 200 with a rising 200-day line. Avoids the
+  // orange pivot line and amber RS line. Full chart only.
+  const sma50Series = chart.addSeries(LineSeries, { color: '#BA68C8', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma150Series = chart.addSeries(LineSeries, { color: '#F06292', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma200Series = chart.addSeries(LineSeries, { color: '#FF5252', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
   // RS line on its own hidden overlay scale (orange — distinct from the EMAs). It
   // sits in a band below the candles; blue-dot markers attach to it. The band is
@@ -98,7 +100,10 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // stock reads cheap (price below the green line) or rich (price above it) at a
   // glance. Backend ships it pre-scaled by the stock's own median valuation
   // multiple, so it sits naturally in the price range. Green, smooth (not
-  // stepped), 2px. Shares price autoscaling so the gap to price is meaningful.
+  // stepped). `autoscaleInfoProvider: () => null` keeps it OUT of the price
+  // axis autoscale, so an early low-EPS tail can't blow the axis out and squash
+  // the candles into a sliver — the candles/MAs set the scale; the line draws
+  // within it (clipping only in extreme over/under-valuation).
   const epsLineSeries = chart.addSeries(LineSeries, {
     color: '#2EAD5B',
     lineWidth: 2,
@@ -106,6 +111,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     lastValueVisible: false,
     priceLineVisible: false,
     crosshairMarkerVisible: false,
+    autoscaleInfoProvider: () => null,
   });
 
   return {

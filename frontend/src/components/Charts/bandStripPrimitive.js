@@ -20,10 +20,14 @@ const BAND_FILL = {
   sell: 'rgba(239, 83, 80, 0.85)', high: 'rgba(239, 83, 80, 0.85)', weak: 'rgba(239, 83, 80, 0.85)',
 };
 
-const STRIP_TOP = 2;   // px from the top of the pane
+const DEFAULT_STRIP_TOP = 2;   // px from the top of the pane (overridable per instance)
 const STRIP_H = 6;     // px per strip
 const STRIP_GAP = 1;   // px between strips
 const STRIP_ORDER = ['pressure_history', 'buy_risk_history', 'tpr_history'];
+
+// Total vertical span of the three strips — used by the buy-point primitive to
+// stack its chips directly beneath the band row.
+export const BANDS_BLOCK_HEIGHT = STRIP_ORDER.length * (STRIP_H + STRIP_GAP);
 
 class BandStripRenderer {
   constructor(rects) {
@@ -54,7 +58,8 @@ class BandStripPaneView {
   }
 
   update() {
-    const { _chart: chart, _bands: bands, _barTimes: barTimes } = this._source;
+    const { _chart: chart, _bands: bands, _barTimes: barTimes, _topOffset: topOffset } = this._source;
+    const STRIP_TOP = Number.isFinite(topOffset) ? topOffset : DEFAULT_STRIP_TOP;
     this._rects = [];
     if (!chart || !bands || !Array.isArray(barTimes) || barTimes.length < 2) return;
     const timeScale = chart.timeScale();
@@ -104,9 +109,10 @@ class BandStripPaneView {
 }
 
 export class BandStripPrimitive {
-  constructor(bands = null, barTimes = []) {
+  constructor(bands = null, barTimes = [], topOffset = DEFAULT_STRIP_TOP) {
     this._bands = bands;
     this._barTimes = barTimes;
+    this._topOffset = topOffset;
     this._chart = null;
     this._series = null;
     this._requestUpdate = null;
@@ -134,9 +140,10 @@ export class BandStripPrimitive {
     return this._paneViews;
   }
 
-  setData(bands, barTimes) {
+  setData(bands, barTimes, topOffset) {
     this._bands = bands || null;
     this._barTimes = Array.isArray(barTimes) ? barTimes : [];
+    if (Number.isFinite(topOffset)) this._topOffset = topOffset;
     this.updateAllViews();
     if (this._requestUpdate) this._requestUpdate();
   }

@@ -14,6 +14,8 @@
 // Robust by design: points whose time falls outside the viewport are dropped,
 // and anything unexpected is skipped — this never throws into the chart.
 
+import { BANDS_BLOCK_HEIGHT } from './bandStripPrimitive';
+
 const BUY_POINT_STYLE = {
   buy_point: { color: '#2196f3', label: 'Buy Pt' },
   sepa_buy_point: { color: '#4CF64D', label: 'SEPA' },
@@ -21,16 +23,17 @@ const BUY_POINT_STYLE = {
   buy_alert: { color: '#FFB300', label: 'Alert' },
 };
 
-// Layout (CSS px). The band strips occupy ~2..23px at the top of the pane
-// (see bandStripPrimitive); labels start just below that. Two rows max, so
-// clustered breakouts stagger instead of overprinting.
-const ROW0_Y = 26;
+// Layout (CSS px). Chips sit just below the color-band strips (whose top is
+// `bandsTop`, passed in so it tracks the band row on mobile vs desktop). Two
+// rows max, so clustered breakouts stagger instead of overprinting.
+const BANDS_GAP = 4;   // px between the band row and the first chip row
 const ROW_H = 13;
 const ROW_GAP = 2;
 const LABEL_PAD_X = 4;
 const CHAR_W = 5.6; // approx px/char at the 10px label font
 const FONT_PX = 10;
 const MAX_ROWS = 2;
+const DEFAULT_BANDS_TOP = 2;
 
 class BuyPointRenderer {
   constructor(ops) {
@@ -96,12 +99,13 @@ class BuyPointPaneView {
   }
 
   update() {
-    const { _chart: chart, _series: series, _points: points, _barTimes: barTimes } = this._source;
+    const { _chart: chart, _series: series, _points: points, _barTimes: barTimes, _bandsTop: bandsTop } = this._source;
     this._ops = [];
     if (!chart || !series || !Array.isArray(points) || points.length === 0) return;
     if (!Array.isArray(barTimes) || barTimes.length === 0) return;
     const timeScale = chart.timeScale();
     const width = timeScale.width();
+    const row0Y = (Number.isFinite(bandsTop) ? bandsTop : DEFAULT_BANDS_TOP) + BANDS_BLOCK_HEIGHT + BANDS_GAP;
 
     const placed = [];
     for (const p of points) {
@@ -123,7 +127,7 @@ class BuyPointPaneView {
       let row = 0;
       while (row < MAX_ROWS - 1 && left < rowRight[row] + 2) row += 1;
       rowRight[row] = left + c.w;
-      const top = ROW0_Y + row * (ROW_H + ROW_GAP);
+      const top = row0Y + row * (ROW_H + ROW_GAP);
 
       const priceY = c.price != null ? series.priceToCoordinate(c.price) : null;
       const chipBottom = top + ROW_H;
@@ -147,9 +151,10 @@ class BuyPointPaneView {
 }
 
 export class BuyPointPrimitive {
-  constructor(points = [], barTimes = []) {
+  constructor(points = [], barTimes = [], bandsTop = DEFAULT_BANDS_TOP) {
     this._points = points;
     this._barTimes = barTimes;
+    this._bandsTop = bandsTop;
     this._chart = null;
     this._series = null;
     this._requestUpdate = null;
@@ -177,9 +182,10 @@ export class BuyPointPrimitive {
     return this._paneViews;
   }
 
-  setData(points, barTimes) {
+  setData(points, barTimes, bandsTop) {
     this._points = Array.isArray(points) ? points : [];
     this._barTimes = Array.isArray(barTimes) ? barTimes : [];
+    if (Number.isFinite(bandsTop)) this._bandsTop = bandsTop;
     this.updateAllViews();
     if (this._requestUpdate) this._requestUpdate();
   }
