@@ -818,6 +818,7 @@ class StaticSiteExportService:
                     "stock_data": stock_data,
                     "fundamentals": fundamentals_value,
                     "vcp_boxes": self._compute_vcp_boxes(price_df),
+                    "bands": self._compute_chart_bands(price_df, benchmark_df),
                 },
             )
             entries.append({"symbol": symbol, "rank": rank, "path": rel_path.as_posix()})
@@ -1901,6 +1902,13 @@ class StaticSiteExportService:
                 "execution_state": extended.get("execution_state"),
                 "execution_cap_applied": extended.get("execution_cap_applied"),
                 "execution_cap_reason": extended.get("execution_cap_reason"),
+                "pressure_state": extended.get("pressure_state"),
+                "pressure_value": extended.get("pressure_value"),
+                "buy_risk_state": extended.get("buy_risk_state"),
+                "buy_risk_atr": extended.get("buy_risk_atr"),
+                "tpr_state": extended.get("tpr_state"),
+                "tpr_score": extended.get("tpr_score"),
+                "tpr_max": extended.get("tpr_max"),
             }
         )
         return item
@@ -2127,6 +2135,32 @@ class StaticSiteExportService:
         ]
         blue_dots = [ts.strftime("%Y-%m-%d") for ts in blue_window.index]
         return rs_line, blue_dots
+
+    def _compute_chart_bands(self, price_df, benchmark_df) -> dict[str, Any]:
+        """MM360 band states + per-bar history for one chart payload.
+
+        Computes Pressure / Buy Risk / TPR with ``with_history=True`` so the
+        chart can render the three horizontal color strips. The history arrays
+        end at the latest bar; the frontend right-aligns them to the chart's
+        time axis. Reuses the already-fetched benchmark for the TPR RS leg.
+        Defensive: any failure yields ``{}`` so the chart simply omits bands.
+        """
+        if price_df is None or getattr(price_df, "empty", True) or "Close" not in price_df.columns:
+            return {}
+        try:
+            from app.services.minervini_bands import calculate_bands
+
+            benchmark_close = None
+            if (
+                benchmark_df is not None
+                and not getattr(benchmark_df, "empty", True)
+                and "Close" in benchmark_df.columns
+            ):
+                benchmark_close = benchmark_df["Close"]
+            return calculate_bands(price_df, benchmark_close=benchmark_close, with_history=True)
+        except Exception:  # noqa: BLE001 - bands are optional chart decoration
+            logger.warning("chart band computation failed", exc_info=True)
+            return {}
 
     def _compute_vcp_boxes(self, price_df, max_boxes: int = 2) -> list[dict[str, Any]]:
         """Recent VCP consolidation base(s) as drawable boxes.

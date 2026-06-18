@@ -812,6 +812,14 @@ def _map_feature_to_scan_result(
         "execution_state": d.get("execution_state"),
         "execution_cap_applied": d.get("execution_cap_applied"),
         "execution_cap_reason": d.get("execution_cap_reason"),
+        # MM360 band states (Pressure / Buy Risk / TPR)
+        "pressure_state": d.get("pressure_state"),
+        "pressure_value": d.get("pressure_value"),
+        "buy_risk_state": d.get("buy_risk_state"),
+        "buy_risk_atr": d.get("buy_risk_atr"),
+        "tpr_state": d.get("tpr_state"),
+        "tpr_score": d.get("tpr_score"),
+        "tpr_max": d.get("tpr_max"),
     }
 
     # Setup Engine fields (extracted from details JSON blob)
