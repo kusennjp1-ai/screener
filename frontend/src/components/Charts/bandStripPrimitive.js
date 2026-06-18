@@ -59,6 +59,17 @@ class BandStripPaneView {
     if (!chart || !bands || !Array.isArray(barTimes) || barTimes.length < 2) return;
     const timeScale = chart.timeScale();
 
+    // Dark backdrop behind the strips so the band reads as its own distinct row
+    // across the top of the pane instead of blending into the candles.
+    const totalH = STRIP_ORDER.length * (STRIP_H + STRIP_GAP);
+    this._rects.push({
+      x1: 0,
+      x2: timeScale.width(),
+      y1: STRIP_TOP - 1,
+      y2: STRIP_TOP + totalH + 1,
+      color: 'rgba(10, 12, 16, 0.62)',
+    });
+
     // Approximate one bar's pixel width from the visible spacing, used to extend
     // the final bar of each strip (which has no "next" bar to bound it).
     const firstX = timeScale.timeToCoordinate(barTimes[0]);
