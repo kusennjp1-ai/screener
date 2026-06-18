@@ -2174,18 +2174,26 @@ class StaticSiteExportService:
         return client
 
     def _compute_eps_line(self, symbol, price_df) -> list[dict[str, Any]]:
-        """MarketSurge-style quarterly EPS line points for one chart.
+        """Redford/MarketSurge-style "earnings line" (収益ライン) for one chart.
 
-        Date-anchored ``[{time, value}]`` of diluted quarterly EPS from SEC
-        EDGAR (US filers), within the chart's date range, with the last quarter
-        extended to the latest bar so the line spans to the right edge. Each
-        point carries a real date so the line stays fixed/aligned under zoom.
-        Gated on the same EDGAR-enabled flag as Code 33 (CI builds); returns
-        ``[]`` otherwise or for non-US / missing filers. Never raises.
+        A smooth fair-value line in **price units**, plotted on the same scale
+        as the candles so the stock reads as cheap (price below the line) or
+        rich (price above it) at a glance. Built from SEC EDGAR trailing-twelve-
+        month (TTM) diluted EPS, scaled by the stock's own historical valuation
+        multiple ``M = median(close / TTM_EPS)`` so the line lives in the price
+        range and captures that ticker's "normal" valuation (its 癖). Returns
+        date-anchored ``[{time, value}]`` within the chart's display window, or
+        ``[]`` when EPS data is unavailable or TTM EPS is never positive.
+
+        Data note: with only EDGAR history available (no forward analyst
+        estimates), this is a *trailing* fair-value line. ``M`` and the TTM
+        window are documented, tunable approximations of MM360's proprietary
+        line. Gated on the EDGAR-enabled flag (Code 33 CI builds); US filers
+        only. Never raises — a charting aid must not break the export.
         """
         if not self._code33_enabled():
             return []
-        if price_df is None or getattr(price_df, "empty", True):
+        if price_df is None or getattr(price_df, "empty", True) or "Close" not in price_df.columns:
             return []
         try:
             from app.services.sec_edgar_financials import dated_quarterly_eps
@@ -2194,19 +2202,63 @@ class StaticSiteExportService:
             if not facts:
                 return []
             pairs = dated_quarterly_eps(facts)
-            if not pairs:
+            if len(pairs) < 4:
                 return []
-            start_str = (price_df.index[0] - pd.Timedelta(days=120)).strftime("%Y-%m-%d")
-            pts = [{"time": d, "value": round(v, 4)} for d, v in pairs if d >= start_str]
-            if not pts:
-                return []
-            last_bar = price_df.index[-1].strftime("%Y-%m-%d")
-            if pts[-1]["time"] < last_bar:
-                pts.append({"time": last_bar, "value": pts[-1]["value"]})
-            return pts
+            return self._earnings_line_points(price_df, pairs)
         except Exception:  # noqa: BLE001 - charting aid must never break the export
-            logger.warning("EPS-line computation failed for %s", symbol, exc_info=True)
+            logger.warning("earnings-line computation failed for %s", symbol, exc_info=True)
             return []
+
+    def _earnings_line_points(
+        self, price_df, pairs, *, ttm_window_days: int = 400
+    ) -> list[dict[str, Any]]:
+        """Fair-value earnings-line points from quarterly EPS + price.
+
+        ``pairs`` is ``[(YYYY-MM-DD, quarterly_diluted_eps), ...]`` oldest-first.
+        Builds TTM EPS at each quarter end (sum of the 4 most recent quarters
+        within ``ttm_window_days``), linearly interpolates TTM onto the daily
+        price index, fits ``M = median(close / TTM_EPS)`` over positive-TTM bars,
+        and returns ``[{time, value}]`` = ``TTM_EPS_daily * M`` restricted to the
+        chart's display window and to bars where TTM EPS is positive.
+        """
+        import numpy as np
+
+        dates = [pd.Timestamp(d) for d, _ in pairs]
+        eps = [float(v) for _, v in pairs]
+
+        # TTM EPS at each quarter end with 4 consecutive quarters inside the window.
+        ttm_x: list[float] = []
+        ttm_y: list[float] = []
+        for i in range(3, len(pairs)):
+            if (dates[i] - dates[i - 3]).days > ttm_window_days:
+                continue
+            ttm_x.append(float(dates[i].value))
+            ttm_y.append(float(sum(eps[i - 3 : i + 1])))
+        if len(ttm_x) < 2:
+            return []
+
+        px_index = price_df.index
+        x_px = np.array([pd.Timestamp(d).value for d in px_index], dtype="float64")
+        ttm_daily = np.interp(x_px, np.array(ttm_x), np.array(ttm_y))  # flat-held at the ends
+
+        close = price_df["Close"].to_numpy(dtype="float64")
+        if close.shape[0] != ttm_daily.shape[0]:
+            return []
+        pos = (ttm_daily > 0) & np.isfinite(close) & (close > 0)
+        if not pos.any():
+            return []
+        multiple = float(np.median(close[pos] / ttm_daily[pos]))
+        if not np.isfinite(multiple) or multiple <= 0:
+            return []
+
+        cutoff = self._static_chart_cutoff(px_index)
+        line = ttm_daily * multiple
+        pts: list[dict[str, Any]] = []
+        for ts, val, ok in zip(px_index, line, pos):
+            if not ok or ts < cutoff:
+                continue
+            pts.append({"time": ts.strftime("%Y-%m-%d"), "value": round(float(val), 2)})
+        return pts
 
     def _compute_buy_points(self, price_df, max_points: int = 3) -> list[dict[str, Any]]:
         """Approximate MM360-style historical buy-point annotations.

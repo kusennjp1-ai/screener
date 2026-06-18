@@ -93,18 +93,20 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   rsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.66, bottom: 0.22 }, visible: false });
   const rsMarkers = createSeriesMarkers(rsLineSeries, []);
 
-  // Quarterly EPS line (MarketSurge-style) on its own hidden scale so its $/share
-  // values don't distort the price axis; stepped (lineType 1) since EPS is
-  // quarterly. Overlays the price area to show the earnings trend vs price.
+  // Earnings line (収益ライン / Redford-MarketSurge style): a smooth fair-value
+  // line in PRICE units, on the same 'right' price scale as the candles so the
+  // stock reads cheap (price below the green line) or rich (price above it) at a
+  // glance. Backend ships it pre-scaled by the stock's own median valuation
+  // multiple, so it sits naturally in the price range. Green, smooth (not
+  // stepped), 2px. Shares price autoscaling so the gap to price is meaningful.
   const epsLineSeries = chart.addSeries(LineSeries, {
-    color: '#26C6DA',
+    color: '#2EAD5B',
     lineWidth: 2,
-    lineType: 1,
-    priceScaleId: 'eps',
-    lastValueVisible: true,
+    priceScaleId: 'right',
+    lastValueVisible: false,
     priceLineVisible: false,
+    crosshairMarkerVisible: false,
   });
-  epsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.06, bottom: 0.32 }, visible: false });
 
   return {
     chart,
