@@ -300,7 +300,11 @@ class TestParityWithOrchestrator:
             for name, score, passes in screener_configs
         }
         domain_score = calculate_composite_score(outputs, method)
-        domain_rating = calculate_overall_rating(domain_score, outputs)
+        # The orchestrator derives the rating from the BEST-FIT (max) screener
+        # score, not the composite, so mirror that here. composite_score itself
+        # is unchanged, so the score-parity assertions still hold.
+        rating_basis = max((o.score for o in outputs.values()), default=domain_score)
+        domain_rating = calculate_overall_rating(rating_basis, outputs)
 
         return (
             orch_result["composite_score"],

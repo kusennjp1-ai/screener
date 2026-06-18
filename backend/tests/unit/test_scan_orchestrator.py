@@ -238,7 +238,7 @@ class TestScanOrchestratorRating:
         assert result["rating"] == "Strong Buy"
 
     def test_rating_downgrade_low_pass_rate(self):
-        """Score in Buy range (70-80) but < half pass → downgraded to Watch."""
+        """Best-fit score in Strong-Buy range but < half pass → one tier down."""
         orch, _, _ = _build_orchestrator([
             ("alpha", 95.0, True),
             ("beta", 70.0, False),
@@ -248,9 +248,28 @@ class TestScanOrchestratorRating:
             "TEST", ["alpha", "beta", "gamma"], composite_method="weighted_average"
         )
 
-        # Average: (95 + 70 + 70) / 3 ≈ 78.33 → base = "Buy" (70-80 range)
-        # 1 of 3 passed = less than half → downgrade to "Watch"
-        assert result["rating"] == "Watch"
+        # Rating basis is the BEST-FIT score (max = 95 -> Strong Buy base), not
+        # the diluted average (78.3). 1 of 3 passed = less than half -> one tier
+        # down -> "Buy". (Composite_score still reflects the average.)
+        assert result["rating"] == "Buy"
+        assert result["composite_score"] == round((95 + 70 + 70) / 3, 2)
+
+    def test_single_methodology_winner_rates_on_best_fit_not_average(self):
+        """A name that strongly fits ONE methodology but scores low on the others
+        rates on its best fit (not the diluted average that previously sank such
+        names to Pass)."""
+        orch, _, _ = _build_orchestrator([
+            ("alpha", 88.0, True),   # the one strong, passing methodology
+            ("beta", 20.0, False),
+            ("gamma", 15.0, False),
+        ])
+        result = orch.scan_stock_multi(
+            "TEST", ["alpha", "beta", "gamma"], composite_method="weighted_average"
+        )
+        # Average ~41 would have been "Pass"; best-fit 88 -> Strong Buy base,
+        # downgraded one tier for the low pass-rate -> "Buy".
+        assert result["composite_score"] == round((88 + 20 + 15) / 3, 2)
+        assert result["rating"] == "Buy"
 
     def test_rating_pass_when_none_pass(self):
         """No screeners pass → 'Pass' regardless of score."""

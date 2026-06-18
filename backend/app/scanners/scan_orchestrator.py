@@ -544,8 +544,20 @@ class ScanOrchestrator:
                     composite_score = min(100.0, composite_score + ipo_bonus)
                     composite_reason = "ipo_uplift"
 
-            # 7. Determine overall rating
-            rating_category = calculate_overall_rating(composite_score, domain_outputs)
+            # 7. Determine overall rating. The rating is derived from the stock's
+            #     BEST-FIT methodology score (the max across screeners), not the
+            #     diluted weighted-average composite: a name that strongly fits one
+            #     methodology (e.g. a textbook Minervini setup that isn't a CANSLIM
+            #     grower) is a strong setup and should rate accordingly, so the
+            #     execution State Cap then has a real rating to demote when price is
+            #     extended. composite_score is left untouched for display/sorting.
+            rating_basis_score = max(
+                (o.score for o in domain_outputs.values()),
+                default=composite_score,
+            )
+            if ipo_bonus > 0:
+                rating_basis_score = min(100.0, rating_basis_score + ipo_bonus)
+            rating_category = calculate_overall_rating(rating_basis_score, domain_outputs)
 
             # 7b. Apply quality-aware fallback (T4): low completeness scores
             #     downgrade or exclude the rating. Tie-break behaviour is
