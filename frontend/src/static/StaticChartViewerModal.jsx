@@ -30,12 +30,12 @@ const CHART_INFO_STRIP_HEIGHT = 34;
 
 // MA colours must match createPriceChartSeries.js.
 const MA_LEGEND = [
-  ['EMA10', '#4CF64D'],
-  ['EMA20', '#87FBFB'],
-  ['EMA50', '#38CD07'],
-  ['SMA50', '#FFD54F'],
-  ['SMA150', '#FF8A65'],
-  ['SMA200', '#BA68C8'],
+  ['EMA10', '#E0E0E0'],
+  ['EMA20', '#4DD0E1'],
+  ['EMA50', '#FFEE58'],
+  ['SMA50', '#BA68C8'],
+  ['SMA150', '#F06292'],
+  ['SMA200', '#FF5252'],
   ['収益', '#2EAD5B'],
 ];
 
@@ -580,6 +580,8 @@ function StaticChartViewerModal({
                       epsLine={chartPayload?.eps_line || null}
                       blueDots={chartPayload?.blue_dots || null}
                       dataUpdatedAtOverride={dataUpdatedAtOverride}
+                      hideOhlcLegend={isMobile}
+                      hideTimeframeToggle={isMobile}
                       pivotPrice={pivotPrice}
                       pivotLabel={pivotLabel}
                       vcpBoxes={chartPayload?.vcp_boxes || null}

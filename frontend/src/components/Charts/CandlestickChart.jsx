@@ -52,6 +52,7 @@ function CandlestickChart({
   dataUpdatedAtOverride = null,
   compact = false,
   hideTimeframeToggle = false,
+  hideOhlcLegend = false,
   interactive = true,
   pivotPrice = null,
   pivotLabel = 'Pivot',
@@ -90,6 +91,15 @@ function CandlestickChart({
   const [rsBandTop, setRsBandTop] = useState(0.66); // top margin of the live RS band
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+
+  // Where the top color-band row starts (px from the pane top). When the OHLC
+  // legend or the timeframe toggle float at the top, push the bands (and the
+  // buy-point chips below them) under those overlays so nothing collides; with
+  // both hidden (mobile) the bands ride near the very top. The candle area
+  // reserves enough room beneath the chips so highs never reach them.
+  const topOverlaysPresent = !compact && (!hideOhlcLegend || !hideTimeframeToggle);
+  const bandTopOffset = topOverlaysPresent ? 46 : 6;
+  const bandReservePx = bandTopOffset + 60;
 
   const queryClient = useQueryClient();
 
@@ -541,10 +551,10 @@ function CandlestickChart({
     try {
       if (hasBands && barTimes.length >= 2) {
         if (!bandStripPrimitiveRef.current) {
-          bandStripPrimitiveRef.current = new BandStripPrimitive(bands, barTimes);
+          bandStripPrimitiveRef.current = new BandStripPrimitive(bands, barTimes, bandTopOffset);
           series.attachPrimitive(bandStripPrimitiveRef.current);
         } else {
-          bandStripPrimitiveRef.current.setData(bands, barTimes);
+          bandStripPrimitiveRef.current.setData(bands, barTimes, bandTopOffset);
         }
       }
     } catch { /* primitive unsupported / series recreated — ignore */ }
@@ -556,7 +566,7 @@ function CandlestickChart({
       }
       bandStripPrimitiveRef.current = null;
     };
-  }, [bands, chartData, compact]);
+  }, [bands, chartData, compact, bandTopOffset]);
 
   // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) drawn as
   // compact chips in a row under the top band strips, each connected by a thin
@@ -573,13 +583,13 @@ function CandlestickChart({
     try {
       if (list.length > 0 && barTimes.length >= 2) {
         if (!buyPointPrimitiveRef.current) {
-          buyPointPrimitiveRef.current = new BuyPointPrimitive(list, barTimes);
+          buyPointPrimitiveRef.current = new BuyPointPrimitive(list, barTimes, bandTopOffset);
           series.attachPrimitive(buyPointPrimitiveRef.current);
         } else {
-          buyPointPrimitiveRef.current.setData(list, barTimes);
+          buyPointPrimitiveRef.current.setData(list, barTimes, bandTopOffset);
         }
       } else if (buyPointPrimitiveRef.current) {
-        buyPointPrimitiveRef.current.setData([], barTimes);
+        buyPointPrimitiveRef.current.setData([], barTimes, bandTopOffset);
       }
     } catch { /* primitive unsupported / series recreated — ignore */ }
 
@@ -590,7 +600,7 @@ function CandlestickChart({
       }
       buyPointPrimitiveRef.current = null;
     };
-  }, [buyPoints, chartData, compact]);
+  }, [buyPoints, chartData, compact, bandTopOffset]);
 
   // Earnings line (収益ライン): smooth green fair-value line on the price scale.
   // Date-anchored so it stays aligned under zoom/scale changes.
@@ -655,17 +665,17 @@ function CandlestickChart({
     // most recent candles (a leader near new highs sits at the top-right) are
     // never hidden behind those corner overlays.
     const candleBottom = rsStripShown ? 0.34 : 0.22;
-    // Reserve a fixed pixel band at the top for the MM360 color strips (~23px)
-    // and the buy-point chip rows (~30px) so neither the candle highs nor the
-    // price-scale value tag collide with them — critical on short mobile charts
-    // where a flat 14% would leave too few pixels. Compact tiles draw no strips.
-    const TOP_RESERVED_PX = 64;
+    // Reserve a pixel band at the top for any top overlays (OHLC legend /
+    // toggle), the MM360 color strips, and the buy-point chip rows so neither
+    // the candle highs nor the price-scale value tag collide with them —
+    // critical on short mobile charts where a flat 14% leaves too few pixels.
+    // `bandReservePx` tracks the band top offset. Compact tiles draw no strips.
     const candleTop = compact
       ? 0.05
-      : Math.min(0.4, Math.max(0.14, TOP_RESERVED_PX / Math.max(height, 1)));
+      : Math.min(0.45, Math.max(0.14, bandReservePx / Math.max(height, 1)));
     candle.priceScale().applyOptions({ scaleMargins: { top: candleTop, bottom: candleBottom } });
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-  }, [rsStripShown, symbol, height, isDarkMode, compact]);
+  }, [rsStripShown, symbol, height, isDarkMode, compact, bandReservePx]);
 
   // Dynamic RS band: size the RS overlay scale so the line fills the empty space
   // below the candles without overlapping them. Recomputes on data change and on
@@ -775,8 +785,9 @@ function CandlestickChart({
         </Box>
       )}
 
-      {/* OHLC Legend - show when hovering over chart */}
-      {!compact && !showLoading && !showError && !showNoData && legendData && (
+      {/* OHLC Legend - show when hovering over chart. Hidden on mobile
+          (hideOhlcLegend) where it would otherwise sit over the top band row. */}
+      {!compact && !hideOhlcLegend && !showLoading && !showError && !showNoData && legendData && (
         <Box
           sx={{
             position: 'absolute',
