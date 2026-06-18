@@ -93,6 +93,19 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   rsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.66, bottom: 0.22 }, visible: false });
   const rsMarkers = createSeriesMarkers(rsLineSeries, []);
 
+  // Quarterly EPS line (MarketSurge-style) on its own hidden scale so its $/share
+  // values don't distort the price axis; stepped (lineType 1) since EPS is
+  // quarterly. Overlays the price area to show the earnings trend vs price.
+  const epsLineSeries = chart.addSeries(LineSeries, {
+    color: '#26C6DA',
+    lineWidth: 2,
+    lineType: 1,
+    priceScaleId: 'eps',
+    lastValueVisible: true,
+    priceLineVisible: false,
+  });
+  epsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.06, bottom: 0.32 }, visible: false });
+
   return {
     chart,
     volumeSeries,
@@ -107,5 +120,6 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     sma200Series,
     rsLineSeries,
     rsMarkers,
+    epsLineSeries,
   };
 }

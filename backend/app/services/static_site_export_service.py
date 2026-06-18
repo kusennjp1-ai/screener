@@ -819,6 +819,7 @@ class StaticSiteExportService:
                     "fundamentals": fundamentals_value,
                     "vcp_boxes": self._compute_vcp_boxes(price_df),
                     "buy_points": self._compute_buy_points(price_df),
+                    "eps_line": self._compute_eps_line(symbol, price_df),
                     "bands": self._compute_chart_bands(price_df, benchmark_df),
                 },
             )
@@ -2162,6 +2163,50 @@ class StaticSiteExportService:
         except Exception:  # noqa: BLE001 - bands are optional chart decoration
             logger.warning("chart band computation failed", exc_info=True)
             return {}
+
+    def _get_edgar_client(self):
+        client = getattr(self, "_edgar_client", None)
+        if client is None:
+            from app.services.sec_edgar_financials import SecEdgarClient
+
+            client = SecEdgarClient()
+            self._edgar_client = client
+        return client
+
+    def _compute_eps_line(self, symbol, price_df) -> list[dict[str, Any]]:
+        """MarketSurge-style quarterly EPS line points for one chart.
+
+        Date-anchored ``[{time, value}]`` of diluted quarterly EPS from SEC
+        EDGAR (US filers), within the chart's date range, with the last quarter
+        extended to the latest bar so the line spans to the right edge. Each
+        point carries a real date so the line stays fixed/aligned under zoom.
+        Gated on the same EDGAR-enabled flag as Code 33 (CI builds); returns
+        ``[]`` otherwise or for non-US / missing filers. Never raises.
+        """
+        if not self._code33_enabled():
+            return []
+        if price_df is None or getattr(price_df, "empty", True):
+            return []
+        try:
+            from app.services.sec_edgar_financials import dated_quarterly_eps
+
+            facts = self._get_edgar_client().company_facts(symbol)
+            if not facts:
+                return []
+            pairs = dated_quarterly_eps(facts)
+            if not pairs:
+                return []
+            start_str = (price_df.index[0] - pd.Timedelta(days=120)).strftime("%Y-%m-%d")
+            pts = [{"time": d, "value": round(v, 4)} for d, v in pairs if d >= start_str]
+            if not pts:
+                return []
+            last_bar = price_df.index[-1].strftime("%Y-%m-%d")
+            if pts[-1]["time"] < last_bar:
+                pts.append({"time": last_bar, "value": pts[-1]["value"]})
+            return pts
+        except Exception:  # noqa: BLE001 - charting aid must never break the export
+            logger.warning("EPS-line computation failed for %s", symbol, exc_info=True)
+            return []
 
     def _compute_buy_points(self, price_df, max_points: int = 3) -> list[dict[str, Any]]:
         """Approximate MM360-style historical buy-point annotations.

@@ -582,6 +582,7 @@ function StaticChartViewerModal({
                       priceData={chartPayload?.bars || []}
                       rsLineData={chartPayload?.rs_line || null}
                       rsRatingValue={stockData?.rs_rating ?? null}
+                      epsLine={chartPayload?.eps_line || null}
                       blueDots={chartPayload?.blue_dots || null}
                       dataUpdatedAtOverride={dataUpdatedAtOverride}
                       pivotPrice={pivotPrice}

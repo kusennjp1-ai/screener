@@ -55,6 +55,7 @@ function CandlestickChart({
   priceData = null,
   rsLineData = null,
   rsRatingValue = null,
+  epsLine = null,
   blueDots = null,
   dataUpdatedAtOverride = null,
   compact = false,
@@ -82,6 +83,7 @@ function CandlestickChart({
   const sma150SeriesRef = useRef(null);
   const sma200SeriesRef = useRef(null);
   const rsLineSeriesRef = useRef(null); // RS line (stock / benchmark) overlay
+  const epsLineSeriesRef = useRef(null); // Quarterly EPS line overlay
   const rsMarkersRef = useRef(null); // Blue-dot markers primitive on the RS line
   const prevSymbolRef = useRef(null); // Track previous symbol
   const shouldRestoreRangeRef = useRef(false); // Flag to restore range on next data update
@@ -213,6 +215,7 @@ function CandlestickChart({
       sma200Series,
       rsLineSeries,
       rsMarkers,
+      epsLineSeries,
     } = createPriceChartSeries(chartContainerRef.current, {
       width: chartWidth,
       height: chartHeight,
@@ -232,6 +235,7 @@ function CandlestickChart({
     sma200SeriesRef.current = sma200Series;
     rsLineSeriesRef.current = rsLineSeries;
     rsMarkersRef.current = rsMarkers;
+    epsLineSeriesRef.current = epsLineSeries;
 
     // Subscribe to crosshair move for OHLC legend (skip in compact mode — legend is hidden)
     if (!compact) chart.subscribeCrosshairMove((param) => {
@@ -291,6 +295,7 @@ function CandlestickChart({
       sma150SeriesRef.current = null;
       sma200SeriesRef.current = null;
       rsLineSeriesRef.current = null;
+      epsLineSeriesRef.current = null;
       rsMarkersRef.current = null;
     };
     // `interactive` is intentionally not in the deps: it's only used as the
@@ -571,6 +576,17 @@ function CandlestickChart({
       .map((b) => ({ time: b.time, ...BUY_POINT_MARKERS[b.type] }));
     try { markers.setMarkers(mapped); } catch { /* series recreated — ignore */ }
   }, [buyPoints, chartData, compact]);
+
+  // Quarterly EPS line (own hidden scale; stepped). Date-anchored so it stays
+  // aligned under zoom/scale changes.
+  useEffect(() => {
+    const series = epsLineSeriesRef.current;
+    if (!series) return;
+    const pts = Array.isArray(epsLine) ? epsLine : [];
+    try {
+      series.setData(pts.map((p) => ({ time: p.time, value: p.value })));
+    } catch { /* series recreated — ignore */ }
+  }, [epsLine, chartData, compact]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
