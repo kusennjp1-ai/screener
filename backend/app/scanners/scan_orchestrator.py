@@ -33,6 +33,7 @@ from app.domain.scanning.scoring import (
     compute_execution_state,
 )
 from app.domain.scanning.ports import StockDataProvider
+from app.services.minervini_bands import calculate_bands
 
 logger = logging.getLogger(__name__)
 
@@ -567,6 +568,12 @@ class ScanOrchestrator:
             execution_cap = apply_execution_cap(adjustment.rating, execution_state)
             overall_rating = execution_cap.rating.value
 
+            # 7d. Minervini Markets 360-style band STATES (Pressure / Buy Risk /
+            #     TPR). Lightweight (no per-bar history here) — the per-bar
+            #     history for the chart strips is produced in the static chart
+            #     export. Reuses the already-fetched benchmark; never raises.
+            band_states = self._compute_band_states(stock_data)
+
             # 8. Combine results
             combined_result = self._combine_results(
                 symbol,
@@ -593,6 +600,7 @@ class ScanOrchestrator:
                 execution_state=execution_state.value,
                 execution_cap_applied=execution_cap.capped,
                 execution_cap_reason=execution_cap.reason,
+                band_states=band_states,
             )
             if data_status == "insufficient_history":
                 for key, value in _partial_history_metrics(stock_data).items():
@@ -636,6 +644,32 @@ class ScanOrchestrator:
             )
             return ExecutionState.UNKNOWN
 
+    def _compute_band_states(self, stock_data: StockData) -> Dict[str, object]:
+        """Compute the MM360 band *states* for one stock (no per-bar history).
+
+        Reuses the benchmark already attached to ``stock_data`` (no new fetch);
+        when absent, TPR falls back to its 7-condition form. Defensive: any
+        failure yields an empty dict so the band is simply omitted for that
+        symbol and the scan loop continues.
+        """
+        try:
+            benchmark_close = None
+            bench = getattr(stock_data, "benchmark_data", None)
+            if bench is not None and not bench.empty and "Close" in bench.columns:
+                benchmark_close = bench["Close"]
+            return calculate_bands(
+                stock_data.price_data,
+                benchmark_close=benchmark_close,
+                with_history=False,
+            )
+        except Exception:  # noqa: BLE001 - band computation must never abort a scan
+            logger.warning(
+                "band-state computation failed for %s; omitting bands",
+                getattr(stock_data, "symbol", "?"),
+                exc_info=True,
+            )
+            return {}
+
     def _combine_results(
         self,
         symbol: str,
@@ -657,6 +691,7 @@ class ScanOrchestrator:
         execution_state: Optional[str] = None,
         execution_cap_applied: bool = False,
         execution_cap_reason: Optional[str] = None,
+        band_states: Optional[Dict[str, object]] = None,
     ) -> Dict:
         """
         Combine all screener results into a single result dict.
@@ -724,6 +759,9 @@ class ScanOrchestrator:
             "execution_state": execution_state,
             "execution_cap_applied": execution_cap_applied,
             "execution_cap_reason": execution_cap_reason,
+            # MM360 band states (Pressure / Buy Risk / TPR); empty dict when
+            # unavailable so the keys simply don't appear for that row.
+            **(band_states or {}),
             "current_price": current_price,
 
             # Individual screener scores

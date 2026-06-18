@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
+from app.services.minervini_bands import calculate_bands
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,12 +33,21 @@ class TechnicalCalculatorService:
     def __init__(self):
         pass
 
-    def calculate_all(self, price_data: pd.DataFrame) -> Dict[str, Optional[float]]:
+    def calculate_all(
+        self,
+        price_data: pd.DataFrame,
+        benchmark_close: Optional[pd.Series] = None,
+        with_band_history: bool = False,
+    ) -> Dict[str, Optional[float]]:
         """
         Calculate all technical indicators from price data.
 
         Args:
             price_data: DataFrame with OHLCV data (Date index, Open/High/Low/Close/Volume columns)
+            benchmark_close: optional benchmark Close series (e.g. SPY) used for
+                the relative-strength condition in the TPR band.
+            with_band_history: also emit per-bar *_history lists for the
+                Minervini color bands (Pressure / Buy Risk / TPR).
 
         Returns:
             Dict with calculated technical indicators
@@ -91,6 +102,17 @@ class TechnicalCalculatorService:
             avg_vol = price_data['Volume'].tail(50).mean()
             if avg_vol > 0:
                 result['relative_volume'] = round(current_volume / avg_vol, 2)
+
+        # Minervini Markets 360-style color bands (Pressure / Buy Risk / TPR)
+        try:
+            bands = calculate_bands(
+                price_data,
+                benchmark_close=benchmark_close,
+                with_history=with_band_history,
+            )
+            result.update(bands)
+        except Exception as e:
+            logger.debug(f"Error calculating Minervini bands: {e}")
 
         return result
 

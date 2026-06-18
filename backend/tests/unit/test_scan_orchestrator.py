@@ -768,3 +768,15 @@ class TestScanOrchestratorExecutionState:
         assert result["execution_state"] == "overextended"
         assert result["execution_cap_applied"] is True
         assert result["rating"] == "Pass"                  # capped from Strong Buy
+
+
+class TestScanOrchestratorBands:
+    def test_scan_result_carries_band_states(self):
+        # Bands are computed from stock_data price+benchmark (not from any
+        # screener), so even a single non-minervini screener yields them.
+        orch, _, _ = _build_orchestrator([("alpha", 75.0, True)], n_days=260)
+        result = orch.scan_stock_multi("TEST", ["alpha"], composite_method="weighted_average")
+        assert result["pressure_state"] in {"buy", "sell", "neutral"}
+        assert result["buy_risk_state"] in {"low", "medium", "high"}
+        assert result["tpr_state"] in {"strong", "transition", "weak"}
+        assert "tpr_score" in result and "tpr_max" in result
