@@ -64,6 +64,8 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     priceScaleId: 'right',
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
+  // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) attach here.
+  const candleMarkers = createSeriesMarkers(candlestickSeries, []);
 
   // EMA 10 / 20 / 50 — short-term entry guides. Share the price ('right') scale.
   // Thin (1px) so six overlaid moving averages stay legible over the candles.
@@ -96,6 +98,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     volumeSeries,
     avgVolumeSeries,
     candlestickSeries,
+    candleMarkers,
     ema10Series,
     ema20Series,
     ema50Series,

@@ -818,6 +818,7 @@ class StaticSiteExportService:
                     "stock_data": stock_data,
                     "fundamentals": fundamentals_value,
                     "vcp_boxes": self._compute_vcp_boxes(price_df),
+                    "buy_points": self._compute_buy_points(price_df),
                     "bands": self._compute_chart_bands(price_df, benchmark_df),
                 },
             )
@@ -2161,6 +2162,106 @@ class StaticSiteExportService:
         except Exception:  # noqa: BLE001 - bands are optional chart decoration
             logger.warning("chart band computation failed", exc_info=True)
             return {}
+
+    def _compute_buy_points(self, price_df, max_points: int = 3) -> list[dict[str, Any]]:
+        """Approximate MM360-style historical buy-point annotations.
+
+        For each recent VCP consolidation base, find the breakout bar (Close
+        crossing above the base's pivot high) and emit:
+          * ``buy_point`` — the breakout, or ``sepa_buy_point`` when it happens
+            in a Stage-2 context (above a rising 50>150>200 stack) on volume,
+          * ``buy_ready`` — the last bar in the base within 3% below the pivot,
+          * ``buy_alert`` — an earlier bar 3-8% below the pivot.
+
+        Returns ``[{time, type, price}]`` (dates chronological). MM360's exact
+        logic is proprietary; thresholds here are tunable approximations. Never
+        raises — a charting aid must not break the export.
+        """
+        if price_df is None or getattr(price_df, "empty", True) or "Close" not in price_df.columns:
+            return []
+        try:
+            close = price_df["Close"].reset_index(drop=True)
+            high = price_df["High"].reset_index(drop=True) if "High" in price_df.columns else close
+            vol = price_df["Volume"].reset_index(drop=True) if "Volume" in price_df.columns else None
+            dates = list(price_df.index)
+            n = len(close)
+            if n < 60:
+                return []
+            sma50 = close.rolling(50).mean()
+            sma150 = close.rolling(150).mean()
+            sma200 = close.rolling(200).mean()
+            avgvol = vol.rolling(50).mean() if vol is not None else None
+
+            close_rev = close[::-1].reset_index(drop=True)
+            bases = VCPDetector().find_consolidation_bases(close_rev)
+
+            anns: list[dict[str, Any]] = []
+            seen_breakouts: set[int] = set()
+            for base in bases:
+                pivot = float(base["high_price"])
+                base_recent = (n - 1) - int(base["start_idx"])  # chronological recent edge
+                if pivot <= 0 or not (0 <= base_recent < n):
+                    continue
+                breakout = None
+                for i in range(base_recent + 1, n):
+                    if float(close.iloc[i]) > pivot and float(close.iloc[i - 1]) <= pivot:
+                        breakout = i
+                        break
+                if breakout is None or breakout in seen_breakouts:
+                    continue
+                seen_breakouts.add(breakout)
+                i = breakout
+
+                def _ok(s):
+                    return not pd.isna(s.iloc[i])
+
+                stage2 = (
+                    _ok(sma50) and _ok(sma150) and _ok(sma200)
+                    and float(close.iloc[i]) > float(sma50.iloc[i]) > float(sma150.iloc[i]) > float(sma200.iloc[i])
+                )
+                vol_ok = (
+                    avgvol is not None and not pd.isna(avgvol.iloc[i]) and float(avgvol.iloc[i]) > 0
+                    and float(vol.iloc[i]) >= 1.5 * float(avgvol.iloc[i])
+                )
+                anns.append({
+                    "idx": i,
+                    "type": "sepa_buy_point" if (stage2 and vol_ok) else "buy_point",
+                    "price": round(pivot, 2),
+                })
+                # Buy Ready: last bar before the breakout within 3% below the pivot.
+                lo = max(base_recent - 10, 0)
+                for j in range(i - 1, lo - 1, -1):
+                    cj = float(close.iloc[j])
+                    if cj <= pivot and (pivot - cj) / pivot <= 0.03:
+                        anns.append({"idx": j, "type": "buy_ready", "price": round(pivot, 2)})
+                        break
+                # Buy Alert: an earlier bar 3-8% below the pivot.
+                for k in range(i - 1, lo - 1, -1):
+                    ck = float(close.iloc[k])
+                    if ck <= pivot and 0.03 < (pivot - ck) / pivot <= 0.08:
+                        anns.append({"idx": k, "type": "buy_alert", "price": round(pivot, 2)})
+                        break
+
+            # Keep the most recent ``max_points`` breakouts (+ their ready/alert).
+            breakout_idxs = sorted(
+                (a["idx"] for a in anns if a["type"] in ("buy_point", "sepa_buy_point")),
+                reverse=True,
+            )[:max_points]
+            keep_floor = min(breakout_idxs) - 15 if breakout_idxs else 0
+            out = [
+                {
+                    "time": dates[a["idx"]].strftime("%Y-%m-%d"),
+                    "type": a["type"],
+                    "price": a["price"],
+                }
+                for a in anns
+                if a["idx"] >= keep_floor
+            ]
+            out.sort(key=lambda a: a["time"])
+            return out
+        except Exception:  # noqa: BLE001 - charting aid must never break the export
+            logger.warning("buy-point computation failed", exc_info=True)
+            return []
 
     def _compute_vcp_boxes(self, price_df, max_boxes: int = 2) -> list[dict[str, Any]]:
         """Recent VCP consolidation base(s) as drawable boxes.

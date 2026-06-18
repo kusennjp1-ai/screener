@@ -2727,3 +2727,33 @@ def test_apply_group_rank_changes_from_table_swallows_lookup_errors(
         )
 
     assert all(rankings[0][f"rank_change_{period}"] is None for period in ("1w", "1m", "3m", "6m"))
+
+
+def test_compute_buy_points_is_robust_and_well_formed(service_and_session_factory):
+    """The buy-point detector never throws and returns well-formed annotations."""
+    import numpy as np
+    service, _ = service_and_session_factory
+
+    # Too-short / empty inputs -> [].
+    assert service._compute_buy_points(None) == []  # noqa: SLF001
+    assert service._compute_buy_points(pd.DataFrame()) == []  # noqa: SLF001
+    short = pd.DataFrame({"Open": [1, 2], "High": [1, 2], "Low": [1, 2], "Close": [1, 2], "Volume": [1, 1]})
+    assert service._compute_buy_points(short) == []  # noqa: SLF001
+
+    # A rising series with consolidations + breakouts.
+    n = 320
+    idx = pd.date_range("2024-01-01", periods=n, freq="B")
+    rng = np.random.default_rng(0)
+    base = np.linspace(50, 140, n) + rng.normal(0, 1.0, n)
+    df = pd.DataFrame(
+        {"Open": base, "High": base + 1.0, "Low": base - 1.0, "Close": base,
+         "Volume": rng.integers(8e5, 2e6, n).astype(float)},
+        index=idx,
+    )
+    out = service._compute_buy_points(df)  # noqa: SLF001
+    assert isinstance(out, list)
+    valid = {"buy_point", "sepa_buy_point", "buy_ready", "buy_alert"}
+    for a in out:
+        assert set(a.keys()) == {"time", "type", "price"}
+        assert a["type"] in valid
+        assert isinstance(a["price"], float)

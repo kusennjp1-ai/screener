@@ -37,6 +37,15 @@ const debounce = (fn, ms) => {
  * @param {boolean} props.hideTimeframeToggle - When true, hides only the Daily/Weekly toggle (other overlays stay) and forces the daily timeframe
  * @param {boolean} props.interactive - When false, disables time-axis pan/zoom (mouse wheel, drag, pinch) until re-enabled
  */
+// Buy-point annotation styling (approximate MM360 mapping). Buy Point / SEPA
+// mark the breakout below the bar; Buy Ready / Buy Alert mark the run-up above.
+const BUY_POINT_MARKERS = {
+  buy_point: { position: 'belowBar', color: '#2196f3', shape: 'arrowUp', text: 'Buy Point' },
+  sepa_buy_point: { position: 'belowBar', color: '#4CF64D', shape: 'arrowUp', text: 'SEPA' },
+  buy_ready: { position: 'aboveBar', color: '#FFD54F', shape: 'circle', text: 'Buy Ready' },
+  buy_alert: { position: 'aboveBar', color: '#FFB300', shape: 'circle', text: 'Buy Alert' },
+};
+
 function CandlestickChart({
   symbol,
   period = '6mo',
@@ -55,6 +64,7 @@ function CandlestickChart({
   pivotLabel = 'Pivot',
   vcpBoxes = null,
   bands = null,
+  buyPoints = null,
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -62,6 +72,7 @@ function CandlestickChart({
   const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
   const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
   const bandStripPrimitiveRef = useRef(null); // MM360 color-band strips overlay
+  const candleMarkersRef = useRef(null); // Buy-point annotations on the candles
   const volumeSeriesRef = useRef(null);
   const avgVolumeSeriesRef = useRef(null); // ~50-day average-volume line
   const ema10SeriesRef = useRef(null);
@@ -193,6 +204,7 @@ function CandlestickChart({
       volumeSeries,
       avgVolumeSeries,
       candlestickSeries,
+      candleMarkers,
       ema10Series,
       ema20Series,
       ema50Series,
@@ -211,6 +223,7 @@ function CandlestickChart({
     volumeSeriesRef.current = volumeSeries;
     avgVolumeSeriesRef.current = avgVolumeSeries;
     candlestickSeriesRef.current = candlestickSeries;
+    candleMarkersRef.current = candleMarkers;
     ema10SeriesRef.current = ema10Series;
     ema20SeriesRef.current = ema20Series;
     ema50SeriesRef.current = ema50Series;
@@ -268,6 +281,7 @@ function CandlestickChart({
         chartRef.current = null;
       }
       candlestickSeriesRef.current = null;
+      candleMarkersRef.current = null;
       volumeSeriesRef.current = null;
       avgVolumeSeriesRef.current = null;
       ema10SeriesRef.current = null;
@@ -545,6 +559,18 @@ function CandlestickChart({
       bandStripPrimitiveRef.current = null;
     };
   }, [bands, chartData, compact]);
+
+  // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) on the
+  // candles. Markers must be time-sorted (the backend already sorts them).
+  useEffect(() => {
+    const markers = candleMarkersRef.current;
+    if (!markers || compact) return;
+    const list = Array.isArray(buyPoints) ? buyPoints : [];
+    const mapped = list
+      .filter((b) => b && b.time && BUY_POINT_MARKERS[b.type])
+      .map((b) => ({ time: b.time, ...BUY_POINT_MARKERS[b.type] }));
+    try { markers.setMarkers(mapped); } catch { /* series recreated — ignore */ }
+  }, [buyPoints, chartData, compact]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared

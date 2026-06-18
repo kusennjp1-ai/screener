@@ -547,6 +547,7 @@ function StaticChartViewerModal({
                       pivotLabel={pivotLabel}
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                       bands={chartPayload?.bands || null}
+                      buyPoints={chartPayload?.buy_points || null}
                     />
                   </Box>
                 </Box>
