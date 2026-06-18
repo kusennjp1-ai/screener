@@ -2263,7 +2263,7 @@ class StaticSiteExportService:
             logger.warning("buy-point computation failed", exc_info=True)
             return []
 
-    def _compute_vcp_boxes(self, price_df, max_boxes: int = 2) -> list[dict[str, Any]]:
+    def _compute_vcp_boxes(self, price_df, max_boxes: int = 1) -> list[dict[str, Any]]:
         """Recent VCP consolidation base(s) as drawable boxes.
 
         Returns up to ``max_boxes`` of the most recent contraction bases as

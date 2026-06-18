@@ -8,6 +8,7 @@ import {
   Fade,
   IconButton,
   Modal,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -59,6 +60,45 @@ const EXECUTION_STATE_COLOR = {
   damaged: '#E619CD',
   invalid: '#E619CD',
 };
+
+// Tap-to-explain legend for the three MM360 bands.
+const BAND_EXPLANATIONS = [
+  ['Pressure', '買い圧力 vs 売り圧力。蓄積/分散（AD）ラインの傾きで判定。緑=買い優勢、黄=中立、赤=売り優勢。'],
+  ['Buy Risk', '今買うことのリスク。50日線からの乖離をATRで正規化し、VCP収縮で低下、50日線割れで高に。緑=低（押し目）、黄=中、赤=高（過伸び）。'],
+  ['TPR', 'トレンドテンプレートの充足度（最大8条件、ベンチマーク無しは7条件）。緑=強、黄=移行、赤=弱。'],
+];
+
+function BandLegend() {
+  return (
+    <Box
+      sx={{
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1,
+        py: 0.5,
+        borderBottom: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.default',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>バンド:</Typography>
+      {BAND_EXPLANATIONS.map(([label, desc]) => (
+        <Tooltip key={label} title={desc} arrow enterTouchDelay={0} leaveTouchDelay={6000}>
+          <Chip
+            label={label}
+            size="small"
+            variant="outlined"
+            sx={{ height: 20, fontSize: 11, cursor: 'pointer' }}
+          />
+        </Tooltip>
+      ))}
+    </Box>
+  );
+}
 
 function ChartInfoStrip({ minerviniInfo }) {
   const i = minerviniInfo || {};
@@ -531,6 +571,7 @@ function StaticChartViewerModal({
                       new highs prints at the top-right). One line, scrolls
                       horizontally on narrow screens. */}
                   <ChartInfoStrip minerviniInfo={minerviniInfo} />
+                  <BandLegend />
                   <Box sx={{ flex: 1, minHeight: 0 }}>
                     <CandlestickChart
                       symbol={currentSymbol}
