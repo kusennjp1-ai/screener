@@ -489,15 +489,21 @@ class VCPDetector:
             atr_score * 0.15
         )
 
-        # VCP requires a genuine volatility AND volume contraction near the
-        # highs. Volume drying up is a defining VCP characteristic, so it is
-        # now mandatory (previously a stock with no volume contraction could
-        # still be flagged as a VCP from depth/tightness alone).
+        # Gate calibrated against Mark Minervini's own ~900 referenced trades
+        # (scripts/calibrate_vcp.py): require the structural VCP shape — a
+        # tightening sequence of pullbacks (contracting_depth) finishing tight
+        # near the highs (tight_near_highs) — with a composite score above the
+        # median quality of his real setups (~49), so >= 55. Volume drying up is
+        # a defining VCP trait and feeds the score (25% weight), but is NOT a
+        # hard veto: keeping it mandatory rejected ~half of Minervini's actual
+        # VCP entries (volume is noisy and his mention date isn't always the
+        # exact pivot bar). Lowering 65 -> 55 and dropping the volume veto lifts
+        # recall on his real trades from 0% to ~35% while still requiring the
+        # core contraction-near-highs structure.
         vcp_detected = (
-            vcp_score >= 65 and
+            vcp_score >= 55 and
             contracting_depth and
-            tight_near_highs and
-            contracting_volume
+            tight_near_highs
         )
 
         return {
