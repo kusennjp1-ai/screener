@@ -1,0 +1,41 @@
+name: VCP Calibration
+
+# Runs the VCP detector against Mark Minervini's real, publicly-referenced trade
+# ideas (calibration/minervini_trade_ideas.csv) and reports the detector's
+# recall on those ground-truth setups plus how much each threshold relaxation
+# recovers — so the production VCP gate can be tuned with data, not guesswork.
+# Needs outbound Yahoo Finance (available here, not the app sandbox). Manual only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      since_year:
+        description: 'Only evaluate setups from this year onward (older tickers often delisted / unfetchable)'
+        type: string
+        default: '2016'
+      limit:
+        description: 'Max number of setups to evaluate'
+        type: string
+        default: '400'
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/unused
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run VCP calibration
+        working-directory: backend
+        run: python -m scripts.calibrate_vcp --since-year "${{ github.event.inputs.since_year }}" --limit "${{ github.event.inputs.limit }}" --markdown "$RUNNER_TEMP/vcp.md"
+      - name: Publish to job summary
+        if: ${{ always() }}
+        run: '[ -f "$RUNNER_TEMP/vcp.md" ] && cat "$RUNNER_TEMP/vcp.md" >> "$GITHUB_STEP_SUMMARY" || true'
