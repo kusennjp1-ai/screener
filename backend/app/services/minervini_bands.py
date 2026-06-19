@@ -45,6 +45,11 @@ PRESSURE_LOOKBACK = 50        # bars used to judge net demand
 PRESSURE_SLOPE_BARS = 10      # bars used to measure the AD-line slope
 PRESSURE_NEUTRAL_EPS = 0.0    # |normalised slope| below this -> "neutral"
 
+# Per-bar history length for the chart band strips. All three bands share this so
+# their colored strips span the SAME chart window — otherwise the shortest band
+# (Pressure was 50) leaves the rest of the strip row an uncolored black gap.
+BAND_HISTORY_BARS = 252
+
 BUYRISK_MA = 50               # extension is measured from this SMA
 BUYRISK_LOW_ATR = 4.0         # < this many ATRs above MA -> low risk
 BUYRISK_HIGH_ATR = 8.0        # > this many ATRs above MA -> high risk
@@ -106,7 +111,9 @@ def compute_pressure(
     }
 
     if with_history:
-        hist = slope_series.tail(lookback)
+        # Span the full chart window (not the 50-bar state lookback) so the
+        # Pressure strip is colored across the same range as the other bands.
+        hist = slope_series.tail(BAND_HISTORY_BARS)
         out["pressure_history"] = [
             ("buy" if v > PRESSURE_NEUTRAL_EPS else "sell" if v < -PRESSURE_NEUTRAL_EPS else "neutral")
             for v in hist.fillna(0.0)
@@ -184,7 +191,7 @@ def compute_buy_risk(
     if with_history:
         below = close < sma
         hist = []
-        for d, b in zip(atr_distance_series.tail(252), below.tail(252)):
+        for d, b in zip(atr_distance_series.tail(BAND_HISTORY_BARS), below.tail(BAND_HISTORY_BARS)):
             if b or pd.isna(d):
                 hist.append("high")
             else:
@@ -271,7 +278,7 @@ def compute_tpr(
 
     if with_history:
         hist = []
-        for i in range(max(0, len(close) - 252), len(close)):
+        for i in range(max(0, len(close) - BAND_HISTORY_BARS), len(close)):
             s = score_at(i)  # history uses the 7 price/MA conditions only
             hist.append("strong" if s >= 7 else "transition" if s >= 5 else "weak")
         out["tpr_history"] = hist

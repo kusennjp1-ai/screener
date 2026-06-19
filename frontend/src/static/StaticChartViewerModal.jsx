@@ -22,6 +22,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import CandlestickChart from '../components/Charts/CandlestickChart';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
+import GlossaryLabel from '../components/common/GlossaryLabel';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
@@ -116,25 +117,43 @@ function ChartInfoStrip({ minerviniInfo }) {
           </span>
         )}
         {i.rsRating != null && (
-          <span style={{ color: i.rsRating >= 70 ? '#4CF64D' : '#bbb' }}>RS {Math.round(i.rsRating)}</span>
+          <span style={{ color: i.rsRating >= 70 ? '#4CF64D' : '#bbb' }}>
+            <GlossaryLabel term="rs_rating">RS</GlossaryLabel> {Math.round(i.rsRating)}
+          </span>
         )}
         {i.stage != null && (
-          <span style={{ color: i.stage === 2 ? '#4CF64D' : '#bbb' }}>Stage {i.stage}</span>
+          <span style={{ color: i.stage === 2 ? '#4CF64D' : '#bbb' }}>
+            <GlossaryLabel term="stage">Stage</GlossaryLabel> {i.stage}
+          </span>
         )}
         {i.maStackOk != null && (
-          <span style={{ color: i.maStackOk ? '#4CF64D' : '#E619CD' }}>MA{i.maStackOk ? '✓' : '✗'}</span>
+          <span style={{ color: i.maStackOk ? '#4CF64D' : '#E619CD' }}>
+            <GlossaryLabel term="ma_stack">MA</GlossaryLabel>{i.maStackOk ? '✓' : '✗'}
+          </span>
         )}
         {i.aboveLowPct != null && (
-          <span style={{ color: i.aboveLowPct >= 30 ? '#4CF64D' : '#bbb' }}>52WL +{Math.round(i.aboveLowPct)}%</span>
+          <span style={{ color: i.aboveLowPct >= 30 ? '#4CF64D' : '#bbb' }}>
+            <GlossaryLabel term="week_52_low">52WL</GlossaryLabel> +{Math.round(i.aboveLowPct)}%
+          </span>
         )}
         {i.fromHighPct != null && (
-          <span style={{ color: i.fromHighPct >= -25 ? '#4CF64D' : '#bbb' }}>52WH {Math.round(i.fromHighPct)}%</span>
+          <span style={{ color: i.fromHighPct >= -25 ? '#4CF64D' : '#bbb' }}>
+            <GlossaryLabel term="week_52_high">52WH</GlossaryLabel> {Math.round(i.fromHighPct)}%
+          </span>
         )}
-        {i.pivot != null && <span style={{ color: '#FFA726' }}>Pivot {Number(i.pivot).toFixed(2)}</span>}
-        {i.vcpDetected && <span style={{ color: '#4CF64D' }}>VCP✓</span>}
+        {i.pivot != null && (
+          <span style={{ color: '#FFA726' }}>
+            <GlossaryLabel term="pivot">Pivot</GlossaryLabel> {Number(i.pivot).toFixed(2)}
+          </span>
+        )}
+        {i.vcpDetected && (
+          <span style={{ color: '#4CF64D' }}><GlossaryLabel term="vcp">VCP</GlossaryLabel>✓</span>
+        )}
         {i.executionState && i.executionState !== 'unknown' && (
           <span style={{ color: EXECUTION_STATE_COLOR[i.executionState] || '#bbb', fontWeight: 700 }}>
-            {EXECUTION_STATE_LABEL[i.executionState] || i.executionState}
+            <GlossaryLabel term={i.executionState} kind="execution">
+              {EXECUTION_STATE_LABEL[i.executionState] || i.executionState}
+            </GlossaryLabel>
           </span>
         )}
       </Box>
@@ -366,7 +385,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    Grp Rnk
+                    <GlossaryLabel term="grp_rank">Grp Rnk</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -395,7 +414,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    ADR
+                    <GlossaryLabel term="adr">ADR</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -425,7 +444,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    EPS Rtg
+                    <GlossaryLabel term="eps_rating">EPS Rtg</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -447,7 +466,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    Stage
+                    <GlossaryLabel term="stage">Stage</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -469,7 +488,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    VCP
+                    <GlossaryLabel term="vcp">VCP</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
