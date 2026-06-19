@@ -182,6 +182,34 @@ def test_minervini_vcp_preset_is_minervini_subset_requiring_a_vcp():
     ) is False
 
 
+def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
+    """The 'Minervini USIC-style' preset encodes the DNA of his real championship
+    entries: a passing template, tight to the 52w high (within 5%), strong
+    6-month momentum (>=25%), and a moderate ADR — ranked by momentum."""
+    screen = _preset("minervini_usic")
+
+    assert screen["filters"]["passesTemplate"] is True
+    assert screen["filters"]["week52HighDistance"] == {"min": -5, "max": None}
+    assert screen["filters"]["perf6m"] == {"min": 25, "max": None}
+    assert screen["filters"]["adrPercent"] == {"min": 2.5, "max": 6.0}
+    assert screen["sort_by"] == "perf_6m"
+
+    usic_style = {
+        "symbol": "RUN",
+        "passes_template": True,
+        "week_52_high_distance": -2.0,  # tight to the high
+        "perf_6m": 60.0,                # strong prior momentum
+        "adr_percent": 3.8,
+    }
+    assert _matches_preset_filters(usic_style, screen["filters"]) is True
+    # A template-passer with weak momentum is excluded (the distinguishing leg).
+    assert _matches_preset_filters({**usic_style, "perf_6m": 5.0}, screen["filters"]) is False
+    # Too far below the highs is excluded.
+    assert _matches_preset_filters({**usic_style, "week_52_high_distance": -12.0}, screen["filters"]) is False
+    # Too low / too high ADR is excluded.
+    assert _matches_preset_filters({**usic_style, "adr_percent": 1.0}, screen["filters"]) is False
+
+
 def test_canslim_preset_enforces_annual_eps_and_new_high():
     """CANSLIM must hard-gate annual EPS (A) and new-high proximity (N), not
     only the soft score plus quarterly EPS and RS."""
