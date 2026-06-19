@@ -29,8 +29,8 @@ class VCPDetector:
 
     def __init__(
         self,
-        min_bases: int = 3,
-        max_bases: int = 5,
+        min_bases: int = 2,
+        max_bases: int = 4,
         lookback_days: int = 150
     ):
         """
@@ -179,8 +179,11 @@ class VCPDetector:
         total_pairs = len(depths) - 1
         contraction_ratio = decreasing_count / total_pairs if total_pairs > 0 else 0
 
-        # Consider contracting if at least 75% of successive pullbacks are shallower
-        contracting = contraction_ratio >= 0.75
+        # Consider contracting if a majority (>=60%) of successive pullbacks are
+        # shallower. (Was 0.75 — over 4 recent bases that demands 3/3 strictly
+        # tightening, which is rare with real, noisy pullbacks; 0.6 tolerates one
+        # non-contracting step while still requiring an overall tightening shape.)
+        contracting = contraction_ratio >= 0.6
 
         # Calculate contraction score (0-100)
         if contracting:
@@ -228,33 +231,47 @@ class VCPDetector:
         if len(bases) < self.min_bases or volumes is None:
             return False, 0.0
 
-        # Calculate average volume for each base
+        # Average volume during each base (its segment between the two peaks).
+        # Use the SAME slice as the price base: start_idx is the more-recent peak
+        # (lower index), end_idx the older peak (higher index). The old code sliced
+        # iloc[end_idx:start_idx+1] (high->low) which is ALWAYS an empty range, so
+        # base_volumes stayed empty and the gate returned False for every stock —
+        # the real reason "volume drying up" passed 0% of setups.
         base_volumes = []
         for base in bases:
-            start = base["end_idx"]
-            end = base["start_idx"] + 1
-            segment_vol = volumes.iloc[start:end]
+            lo = base["start_idx"]      # more-recent peak (lower index)
+            hi = base["end_idx"] + 1    # older peak (higher index)
+            segment_vol = volumes.iloc[lo:hi]
 
             if len(segment_vol) > 0:
-                avg_vol = segment_vol.mean()
-                base_volumes.append(avg_vol)
+                base_volumes.append(segment_vol.mean())
 
         if len(base_volumes) < self.min_bases:
             return False, 0.0
 
-        # Check if volume is decreasing
-        volume_decreasing = all(
-            base_volumes[i] > base_volumes[i + 1]
-            for i in range(len(base_volumes) - 1)
+        # VCP volume "dries up" as the base builds: the oldest contraction carries
+        # the most volume, the most recent the least. Bases are most-recent-first,
+        # so reverse to oldest-first and count how many successive contractions see
+        # LOWER average volume — mirroring the depth-contraction check. (The old
+        # code tested most-recent-first with all()-monotonic, i.e. the WRONG
+        # direction AND no tolerance, so it flagged ~0% of real VCPs.) Volume is
+        # noisier than price, so the bar is a simple majority of steps.
+        vols = list(reversed(base_volumes))  # oldest -> newest
+        decreasing_count = sum(
+            1 for i in range(len(vols) - 1) if vols[i] > vols[i + 1]
         )
+        total_pairs = len(vols) - 1
+        volume_ratio = decreasing_count / total_pairs if total_pairs > 0 else 0.0
+        volume_decreasing = volume_ratio >= 0.6
 
         # Calculate volume contraction score
         if volume_decreasing:
             ratios = [
-                base_volumes[i + 1] / base_volumes[i]
-                for i in range(len(base_volumes) - 1)
+                vols[i + 1] / vols[i]
+                for i in range(len(vols) - 1)
+                if vols[i] > 0
             ]
-            avg_ratio = np.mean(ratios)
+            avg_ratio = np.mean(ratios) if ratios else 1.0
 
             # Ideal: each base has 20-40% less volume than previous
             if 0.5 <= avg_ratio <= 0.8:
@@ -263,8 +280,10 @@ class VCPDetector:
                 score = 70
             else:
                 score = 50
+            if volume_ratio == 1.0:
+                score = min(100.0, score + 10)
         else:
-            score = 0
+            score = volume_ratio * 40  # partial credit for near-contracting volume
 
         return volume_decreasing, score
 
@@ -470,15 +489,21 @@ class VCPDetector:
             atr_score * 0.15
         )
 
-        # VCP requires a genuine volatility AND volume contraction near the
-        # highs. Volume drying up is a defining VCP characteristic, so it is
-        # now mandatory (previously a stock with no volume contraction could
-        # still be flagged as a VCP from depth/tightness alone).
+        # Gate calibrated against Mark Minervini's own ~900 referenced trades
+        # (scripts/calibrate_vcp.py): require the structural VCP shape — a
+        # tightening sequence of pullbacks (contracting_depth) finishing tight
+        # near the highs (tight_near_highs) — with a composite score above the
+        # median quality of his real setups (~49), so >= 55. Volume drying up is
+        # a defining VCP trait and feeds the score (25% weight), but is NOT a
+        # hard veto: keeping it mandatory rejected ~half of Minervini's actual
+        # VCP entries (volume is noisy and his mention date isn't always the
+        # exact pivot bar). Lowering 65 -> 55 and dropping the volume veto lifts
+        # recall on his real trades from 0% to ~35% while still requiring the
+        # core contraction-near-highs structure.
         vcp_detected = (
-            vcp_score >= 65 and
+            vcp_score >= 55 and
             contracting_depth and
-            tight_near_highs and
-            contracting_volume
+            tight_near_highs
         )
 
         return {

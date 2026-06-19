@@ -160,11 +160,11 @@ def main() -> int:
     lines.append("| gate | recall |")
     lines.append("|---|---|")
     variants = [
-        ("current (bases>=3, score>=65, vol required)", dict(min_bases=3, min_score=65, require_volume=True)),
-        ("bases>=2", dict(min_bases=2, min_score=65, require_volume=True)),
-        ("bases>=2, score>=55", dict(min_bases=2, min_score=55, require_volume=True)),
-        ("bases>=2, score>=55, vol optional", dict(min_bases=2, min_score=55, require_volume=False)),
+        ("production (bases>=2, score>=55, depth+tight, vol in score)", dict(min_bases=2, min_score=55, require_volume=False)),
+        ("legacy (bases>=3, score>=65, vol required)", dict(min_bases=3, min_score=65, require_volume=True)),
+        ("bases>=2, score>=55, vol required", dict(min_bases=2, min_score=55, require_volume=True)),
         ("bases>=2, score>=50, vol optional", dict(min_bases=2, min_score=50, require_volume=False)),
+        ("bases>=2, score>=45, vol optional", dict(min_bases=2, min_score=45, require_volume=False)),
     ]
     for label, kw in variants:
         hit = sum(1 for r in records if _gate(r, **kw))
