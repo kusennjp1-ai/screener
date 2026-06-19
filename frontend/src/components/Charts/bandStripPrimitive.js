@@ -65,10 +65,22 @@ class BandStripPaneView {
     const timeScale = chart.timeScale();
 
     // Dark backdrop behind the strips so the band reads as its own distinct row
-    // across the top of the pane instead of blending into the candles.
+    // across the top of the pane instead of blending into the candles. Span it
+    // only across the range the strips actually cover (a shorter history must not
+    // leave an uncolored black gap to its left).
     const totalH = STRIP_ORDER.length * (STRIP_H + STRIP_GAP);
+    let minStart = barTimes.length;
+    for (const key of STRIP_ORDER) {
+      const h = bands[key];
+      if (Array.isArray(h) && h.length > 0) {
+        minStart = Math.min(minStart, Math.max(0, barTimes.length - h.length));
+      }
+    }
+    const backdropLeftRaw =
+      minStart < barTimes.length ? timeScale.timeToCoordinate(barTimes[minStart]) : null;
+    const backdropLeft = backdropLeftRaw != null ? Math.max(0, backdropLeftRaw) : 0;
     this._rects.push({
-      x1: 0,
+      x1: backdropLeft,
       x2: timeScale.width(),
       y1: STRIP_TOP - 1,
       y2: STRIP_TOP + totalH + 1,

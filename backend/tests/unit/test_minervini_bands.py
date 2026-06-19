@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from app.services.minervini_bands import (
-    PRESSURE_LOOKBACK,
+    BAND_HISTORY_BARS,
     calculate_bands,
     compute_buy_risk,
     compute_pressure,
@@ -110,13 +110,15 @@ def test_pressure_sell_when_closing_near_lows():
 def test_history_arrays_have_valid_labels_and_lengths():
     bands = calculate_bands(_strong_uptrend(), benchmark_close=_benchmark(), with_history=True)
 
-    assert len(bands["pressure_history"]) == PRESSURE_LOOKBACK
+    # All three band strips share BAND_HISTORY_BARS so they span the same chart
+    # window (Pressure used to be only PRESSURE_LOOKBACK=50, leaving a black gap).
+    assert len(bands["pressure_history"]) == BAND_HISTORY_BARS
     assert set(bands["pressure_history"]) <= _PRESSURE_LABELS
 
-    assert len(bands["buy_risk_history"]) == 252
+    assert len(bands["buy_risk_history"]) == BAND_HISTORY_BARS
     assert set(bands["buy_risk_history"]) <= _RISK_LABELS
 
-    assert len(bands["tpr_history"]) == 252
+    assert len(bands["tpr_history"]) == BAND_HISTORY_BARS
     assert set(bands["tpr_history"]) <= _TPR_LABELS
 
 
