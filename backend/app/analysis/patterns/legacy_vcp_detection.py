@@ -29,8 +29,8 @@ class VCPDetector:
 
     def __init__(
         self,
-        min_bases: int = 3,
-        max_bases: int = 5,
+        min_bases: int = 2,
+        max_bases: int = 4,
         lookback_days: int = 150
     ):
         """
@@ -228,7 +228,7 @@ class VCPDetector:
         if len(bases) < self.min_bases or volumes is None:
             return False, 0.0
 
-        # Calculate average volume for each base
+        # Average volume during each base (its segment between the two peaks).
         base_volumes = []
         for base in bases:
             start = base["end_idx"]
@@ -242,19 +242,29 @@ class VCPDetector:
         if len(base_volumes) < self.min_bases:
             return False, 0.0
 
-        # Check if volume is decreasing
-        volume_decreasing = all(
-            base_volumes[i] > base_volumes[i + 1]
-            for i in range(len(base_volumes) - 1)
+        # VCP volume "dries up" as the base builds: the oldest contraction carries
+        # the most volume, the most recent the least. Bases are most-recent-first,
+        # so reverse to oldest-first and count how many successive contractions see
+        # LOWER average volume — mirroring the depth-contraction check. (The old
+        # code tested most-recent-first with all()-monotonic, i.e. the WRONG
+        # direction AND no tolerance, so it flagged ~0% of real VCPs.) Volume is
+        # noisier than price, so the bar is a simple majority of steps.
+        vols = list(reversed(base_volumes))  # oldest -> newest
+        decreasing_count = sum(
+            1 for i in range(len(vols) - 1) if vols[i] > vols[i + 1]
         )
+        total_pairs = len(vols) - 1
+        volume_ratio = decreasing_count / total_pairs if total_pairs > 0 else 0.0
+        volume_decreasing = volume_ratio >= 0.6
 
         # Calculate volume contraction score
         if volume_decreasing:
             ratios = [
-                base_volumes[i + 1] / base_volumes[i]
-                for i in range(len(base_volumes) - 1)
+                vols[i + 1] / vols[i]
+                for i in range(len(vols) - 1)
+                if vols[i] > 0
             ]
-            avg_ratio = np.mean(ratios)
+            avg_ratio = np.mean(ratios) if ratios else 1.0
 
             # Ideal: each base has 20-40% less volume than previous
             if 0.5 <= avg_ratio <= 0.8:
@@ -263,8 +273,10 @@ class VCPDetector:
                 score = 70
             else:
                 score = 50
+            if volume_ratio == 1.0:
+                score = min(100.0, score + 10)
         else:
-            score = 0
+            score = volume_ratio * 40  # partial credit for near-contracting volume
 
         return volume_decreasing, score
 
