@@ -179,8 +179,11 @@ class VCPDetector:
         total_pairs = len(depths) - 1
         contraction_ratio = decreasing_count / total_pairs if total_pairs > 0 else 0
 
-        # Consider contracting if at least 75% of successive pullbacks are shallower
-        contracting = contraction_ratio >= 0.75
+        # Consider contracting if a majority (>=60%) of successive pullbacks are
+        # shallower. (Was 0.75 — over 4 recent bases that demands 3/3 strictly
+        # tightening, which is rare with real, noisy pullbacks; 0.6 tolerates one
+        # non-contracting step while still requiring an overall tightening shape.)
+        contracting = contraction_ratio >= 0.6
 
         # Calculate contraction score (0-100)
         if contracting:
@@ -229,15 +232,19 @@ class VCPDetector:
             return False, 0.0
 
         # Average volume during each base (its segment between the two peaks).
+        # Use the SAME slice as the price base: start_idx is the more-recent peak
+        # (lower index), end_idx the older peak (higher index). The old code sliced
+        # iloc[end_idx:start_idx+1] (high->low) which is ALWAYS an empty range, so
+        # base_volumes stayed empty and the gate returned False for every stock —
+        # the real reason "volume drying up" passed 0% of setups.
         base_volumes = []
         for base in bases:
-            start = base["end_idx"]
-            end = base["start_idx"] + 1
-            segment_vol = volumes.iloc[start:end]
+            lo = base["start_idx"]      # more-recent peak (lower index)
+            hi = base["end_idx"] + 1    # older peak (higher index)
+            segment_vol = volumes.iloc[lo:hi]
 
             if len(segment_vol) > 0:
-                avg_vol = segment_vol.mean()
-                base_volumes.append(avg_vol)
+                base_volumes.append(segment_vol.mean())
 
         if len(base_volumes) < self.min_bases:
             return False, 0.0
