@@ -150,6 +150,28 @@ PRESET_SCREENS: list[dict] = [
         "sort_order": "desc",
     },
     {
+        "id": "minervini_usic",
+        "name": "Minervini USIC-style",
+        "short_name": "USIC",
+        "description": "Calibrated to Mark Minervini's real US Investing Championship entries: a passing trend template, tight to the 52-week high (within 5%), with strong 6-month momentum (>=25%) and a moderate ADR — the statistical DNA of his actual buys.",
+        "tier": 1,
+        # Derived by analysing ~900 of his USIC / publicly-referenced entries
+        # (scripts/analyze_minervini_entries.py): 100% sat above the 200-DMA, 90%
+        # in a full 50>150>200 stack, a median of just -2.5% from the 52-week
+        # high (73% within 5%), a median +42% six-month return (p25 +22%), and
+        # ADR clustered ~2.5-6%. The distinguishing leg vs the plain Minervini
+        # screen is the strong PRIOR MOMENTUM: he buys leaders that have already
+        # run hard and sit tight to new highs — not names merely 30% off the low.
+        "filters": {
+            "passesTemplate": True,
+            "week52HighDistance": {"min": -5, "max": None},
+            "perf6m": {"min": 25, "max": None},
+            "adrPercent": {"min": 2.5, "max": 6.0},
+        },
+        "sort_by": "perf_6m",
+        "sort_order": "desc",
+    },
+    {
         "id": "canslim",
         "name": "CANSLIM",
         "short_name": "CANSLIM",
