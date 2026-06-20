@@ -2214,47 +2214,27 @@ class StaticSiteExportService:
     ) -> list[dict[str, Any]]:
         """Fair-value earnings-line points from quarterly EPS + price.
 
-        ``pairs`` is ``[(YYYY-MM-DD, quarterly_diluted_eps), ...]`` oldest-first.
-        Builds TTM EPS at each quarter end (sum of the 4 most recent quarters
-        within ``ttm_window_days``), linearly interpolates TTM onto the daily
-        price index, fits ``M = median(close / TTM_EPS)`` over positive-TTM bars,
-        and returns ``[{time, value}]`` = ``TTM_EPS_daily * M`` restricted to the
-        chart's display window and to bars where TTM EPS is positive.
+        Delegates the maths to ``earnings_line.compute_earnings_line`` (shared
+        with the diagnostic harness): TTM diluted EPS, geometrically interpolated
+        between quarter ends and projected past the last report with the recent
+        EPS growth, scaled by ``median(close / TTM_EPS)`` and lightly smoothed —
+        so it reads like an IBD/MarketSurge earnings line rather than a jumpy,
+        flat-tailed step line. Restricted to the chart's display window and to
+        bars where TTM EPS is positive.
         """
-        import numpy as np
-
-        dates = [pd.Timestamp(d) for d, _ in pairs]
-        eps = [float(v) for _, v in pairs]
-
-        # TTM EPS at each quarter end with 4 consecutive quarters inside the window.
-        ttm_x: list[float] = []
-        ttm_y: list[float] = []
-        for i in range(3, len(pairs)):
-            if (dates[i] - dates[i - 3]).days > ttm_window_days:
-                continue
-            ttm_x.append(float(dates[i].value))
-            ttm_y.append(float(sum(eps[i - 3 : i + 1])))
-        if len(ttm_x) < 2:
-            return []
+        from app.services.earnings_line import compute_earnings_line
 
         px_index = price_df.index
-        x_px = np.array([pd.Timestamp(d).value for d in px_index], dtype="float64")
-        ttm_daily = np.interp(x_px, np.array(ttm_x), np.array(ttm_y))  # flat-held at the ends
-
-        close = price_df["Close"].to_numpy(dtype="float64")
-        if close.shape[0] != ttm_daily.shape[0]:
-            return []
-        pos = (ttm_daily > 0) & np.isfinite(close) & (close > 0)
-        if not pos.any():
-            return []
-        multiple = float(np.median(close[pos] / ttm_daily[pos]))
-        if not np.isfinite(multiple) or multiple <= 0:
+        result = compute_earnings_line(
+            px_index, price_df["Close"].to_numpy(dtype="float64"), pairs,
+            ttm_window_days=ttm_window_days,
+        )
+        if result is None:
             return []
 
         cutoff = self._static_chart_cutoff(px_index)
-        line = ttm_daily * multiple
         pts: list[dict[str, Any]] = []
-        for ts, val, ok in zip(px_index, line, pos):
+        for ts, val, ok in zip(px_index, result["line"], result["pos"]):
             if not ok or ts < cutoff:
                 continue
             pts.append({"time": ts.strftime("%Y-%m-%d"), "value": round(float(val), 2)})
