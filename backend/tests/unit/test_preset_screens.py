@@ -189,6 +189,7 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
     screen = _preset("minervini_usic")
 
     assert screen["filters"]["passesTemplate"] is True
+    assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 40}
     assert screen["filters"]["week52HighDistance"] == {"min": -5, "max": None}
     assert screen["filters"]["perf6m"] == {"min": 25, "max": None}
     assert screen["filters"]["adrPercent"] == {"min": 2.5, "max": 6.0}
@@ -197,6 +198,7 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
     usic_style = {
         "symbol": "RUN",
         "passes_template": True,
+        "ibd_group_rank": 12,           # leading group
         "week_52_high_distance": -2.0,  # tight to the high
         "perf_6m": 60.0,                # strong prior momentum
         "adr_percent": 3.8,
@@ -208,6 +210,8 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
     assert _matches_preset_filters({**usic_style, "week_52_high_distance": -12.0}, screen["filters"]) is False
     # Too low / too high ADR is excluded.
     assert _matches_preset_filters({**usic_style, "adr_percent": 1.0}, screen["filters"]) is False
+    # Outside a leading industry group is excluded (Minervini's group-strength leg).
+    assert _matches_preset_filters({**usic_style, "ibd_group_rank": 120}, screen["filters"]) is False
 
 
 def test_canslim_preset_enforces_annual_eps_and_new_high():

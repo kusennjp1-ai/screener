@@ -1,0 +1,36 @@
+name: Earnings Line Check
+
+# Dumps our earnings line (収益ライン) vs price for given tickers (default NBIS
+# SNDK) so it can be compared to an IBD / MarketSurge chart: the fitted P/E
+# multiple, price-vs-line (rich/cheap), and sampled points. Needs SEC EDGAR +
+# Yahoo Finance (available here, not the app sandbox). Manual only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: 'Space-separated tickers'
+        type: string
+        default: 'NBIS SNDK'
+
+jobs:
+  earnings:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/unused
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run earnings-line check
+        working-directory: backend
+        run: python -m scripts.check_earnings_line ${{ github.event.inputs.tickers }} --markdown "$RUNNER_TEMP/eln.md"
+      - name: Publish to job summary
+        if: ${{ always() }}
+        run: '[ -f "$RUNNER_TEMP/eln.md" ] && cat "$RUNNER_TEMP/eln.md" >> "$GITHUB_STEP_SUMMARY" || true'
