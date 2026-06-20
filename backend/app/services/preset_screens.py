@@ -197,6 +197,26 @@ PRESET_SCREENS: list[dict] = [
         "sort_order": "desc",
     },
     {
+        "id": "ibd_composite",
+        "name": "IBD Composite Leaders",
+        "short_name": "IBD 85-85",
+        "description": "IBD-style leadership board: top EPS Rating (>=85) and top RS Rating (>=85) in a leading industry group — the components of IBD's Composite Rating that we compute — so the strongest growth leaders can be followed daily like an IBD 85-85 / top-stocks list. Ranked by relative strength.",
+        "tier": 1,
+        # IBD's Composite Rating blends EPS Rating, RS Rating, SMR, Acc/Dist and
+        # Group RS (EPS and RS weighted most heavily). We surface the three we
+        # compute — EPS Rating, RS Rating and industry-group strength — as the
+        # well-known "85-85" leadership screen (RS>=85 AND EPS>=85) inside a
+        # leading group, ranked by relative strength. SMR / Acc-Dist are not yet
+        # computed, so this is a documented proxy for the full Composite Rating.
+        "filters": {
+            "epsRating": {"min": 85, "max": None},
+            "rsRating": {"min": 85, "max": None},
+            "ibdGroupRank": {"min": None, "max": 80},
+        },
+        "sort_by": "rs_rating",
+        "sort_order": "desc",
+    },
+    {
         "id": "vcp",
         "name": "VCP Setups",
         "short_name": "VCP",

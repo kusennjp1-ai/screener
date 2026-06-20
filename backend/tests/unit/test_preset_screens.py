@@ -214,6 +214,26 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
     assert _matches_preset_filters({**usic_style, "ibd_group_rank": 120}, screen["filters"]) is False
 
 
+def test_ibd_composite_preset_gates_on_eps_rs_and_group():
+    """The IBD Composite Leaders preset is the '85-85' leadership screen (RS>=85
+    AND EPS>=85) inside a leading industry group, ranked by relative strength —
+    a proxy for IBD's Composite Rating from the components we compute."""
+    screen = _preset("ibd_composite")
+    assert screen["filters"]["epsRating"] == {"min": 85, "max": None}
+    assert screen["filters"]["rsRating"] == {"min": 85, "max": None}
+    assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 80}
+    assert screen["sort_by"] == "rs_rating"
+
+    leader = {"symbol": "LEAD", "eps_rating": 92, "rs_rating": 95, "ibd_group_rank": 15}
+    assert _matches_preset_filters(leader, screen["filters"]) is True
+    # Strong price but weak earnings rating is excluded (not a composite leader).
+    assert _matches_preset_filters({**leader, "eps_rating": 60}, screen["filters"]) is False
+    # Weak relative strength is excluded.
+    assert _matches_preset_filters({**leader, "rs_rating": 70}, screen["filters"]) is False
+    # Laggard industry group is excluded.
+    assert _matches_preset_filters({**leader, "ibd_group_rank": 150}, screen["filters"]) is False
+
+
 def test_canslim_preset_enforces_annual_eps_and_new_high():
     """CANSLIM must hard-gate annual EPS (A) and new-high proximity (N), not
     only the soft score plus quarterly EPS and RS."""
