@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+from app.services.earnings_line import compute_earnings_line
 from app.services.sec_edgar_financials import SecEdgarClient, dated_quarterly_eps
 
 HISTORY_DAYS = 820
@@ -45,27 +46,18 @@ def _price(symbol: str):
 
 
 def _earnings_line(price_df, pairs, *, ttm_window_days: int = TTM_WINDOW_DAYS):
-    """Mirror of _earnings_line_points; returns (line_series, multiple, ttm_daily)."""
-    dates = [pd.Timestamp(d) for d, _ in pairs]
-    eps = [float(v) for _, v in pairs]
-    ttm_x, ttm_y = [], []
-    for i in range(3, len(pairs)):
-        if (dates[i] - dates[i - 3]).days > ttm_window_days:
-            continue
-        ttm_x.append(float(dates[i].value))
-        ttm_y.append(float(sum(eps[i - 3 : i + 1])))
-    if len(ttm_x) < 2:
+    """Wrap the shared production helper; returns (line_series, multiple, ttm_series)."""
+    res = compute_earnings_line(
+        price_df.index, price_df["Close"].to_numpy(dtype="float64"), pairs,
+        ttm_window_days=ttm_window_days,
+    )
+    if res is None:
         return None, None, None
-    x_px = np.array([pd.Timestamp(d).value for d in price_df.index], dtype="float64")
-    ttm_daily = np.interp(x_px, np.array(ttm_x), np.array(ttm_y))
-    close = price_df["Close"].to_numpy(dtype="float64")
-    pos = (ttm_daily > 0) & np.isfinite(close) & (close > 0)
-    if not pos.any():
-        return None, None, None
-    multiple = float(np.median(close[pos] / ttm_daily[pos]))
-    line = ttm_daily * multiple
-    line[~pos] = np.nan
-    return pd.Series(line, index=price_df.index), multiple, pd.Series(ttm_daily, index=price_df.index)
+    return (
+        pd.Series(res["line"], index=price_df.index),
+        res["multiple"],
+        pd.Series(res["ttm_daily"], index=price_df.index),
+    )
 
 
 def main() -> int:
