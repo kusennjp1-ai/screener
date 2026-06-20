@@ -1,0 +1,60 @@
+name: USIC Returns Backtest
+
+# Forward-return backtest of Minervini's USIC-style entries WITH stop discipline:
+# buy at the entry-day close, apply a hard stop-loss, hold to a max horizon
+# (optionally exit on a 50-DMA break), and report win rate / returns WITH vs
+# WITHOUT the stop and against SPY. Needs Yahoo Finance (available here, not the
+# app sandbox). Manual only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      since_year:
+        description: 'Only backtest entries from this year onward'
+        type: string
+        default: '2016'
+      limit:
+        description: 'Max entries to simulate'
+        type: string
+        default: '400'
+      stop:
+        description: 'Hard stop-loss %'
+        type: string
+        default: '8'
+      horizon:
+        description: 'Max holding (trading days)'
+        type: string
+        default: '126'
+      trend_exit:
+        description: "Also exit on a 50-DMA close break (true/false)"
+        type: string
+        default: 'false'
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/unused
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run USIC returns backtest
+        working-directory: backend
+        run: |
+          python -m scripts.backtest_usic_returns \
+            --since-year "${{ github.event.inputs.since_year }}" \
+            --limit "${{ github.event.inputs.limit }}" \
+            --stop "${{ github.event.inputs.stop }}" \
+            --horizon "${{ github.event.inputs.horizon }}" \
+            $([ "${{ github.event.inputs.trend_exit }}" = "true" ] && echo --trend-exit) \
+            --markdown "$RUNNER_TEMP/bt.md"
+      - name: Publish to job summary
+        if: ${{ always() }}
+        run: '[ -f "$RUNNER_TEMP/bt.md" ] && cat "$RUNNER_TEMP/bt.md" >> "$GITHUB_STEP_SUMMARY" || true'

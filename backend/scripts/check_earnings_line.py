@@ -45,6 +45,21 @@ def _price(symbol: str):
     return df.dropna()
 
 
+def _forward_eps(symbol: str) -> dict:
+    """What forward-EPS data yfinance exposes for this ticker (for feasibility)."""
+    import yfinance as yf
+
+    out: dict = {}
+    try:
+        info = yf.Ticker(symbol).get_info()
+        for k in ("trailingEps", "forwardEps", "forwardPE", "trailingPE"):
+            if info.get(k) is not None:
+                out[k] = info.get(k)
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = str(exc)[:60]
+    return out
+
+
 def _earnings_line(price_df, pairs, *, ttm_window_days: int = TTM_WINDOW_DAYS):
     """Wrap the shared production helper; returns (line_series, multiple, ttm_series)."""
     res = compute_earnings_line(
@@ -77,13 +92,17 @@ def main() -> int:
             facts = client.company_facts(t)
         except Exception as exc:  # noqa: BLE001
             print(f"  ! EDGAR failed for {t}: {exc}", file=sys.stderr)
+        # Forward EPS availability (yfinance) — to decide if a forward-based line
+        # (IBD-style) is feasible, esp. for names with negative TTM (e.g. NBIS).
+        fwd = _forward_eps(t)
         if px is None or not facts:
-            lines.append(f"## {t}\n\n_missing price or EDGAR facts_\n")
+            lines.append(f"## {t}\n\n_missing price or EDGAR facts_  (yf forward: {fwd})\n")
             continue
         pairs = dated_quarterly_eps(facts)
         line, mult, ttm = _earnings_line(px, pairs)
         if line is None:
-            lines.append(f"## {t}\n\n_could not fit earnings line (insufficient positive TTM EPS)_\n")
+            lines.append(f"## {t}\n\n_could not fit TTM line (insufficient positive TTM EPS)_  "
+                         f"— yfinance forward EPS: **{fwd}**\n")
             continue
         last_price = float(px["Close"].iloc[-1])
         last_line = float(line.dropna().iloc[-1]) if line.dropna().size else float("nan")
@@ -93,6 +112,7 @@ def main() -> int:
         samp = line.dropna()
         idxs = np.linspace(0, len(samp) - 1, min(6, len(samp))).astype(int) if len(samp) else []
         lines.append(f"## {t}\n")
+        lines.append(f"- yfinance forward EPS: {fwd}")
         lines.append(f"- fitted multiple M = median(close/TTM_EPS) = **{round(mult,1)}**")
         lines.append(f"- latest: price **{round(last_price,2)}** vs line **{round(last_line,2)}** "
                      f"-> ratio **{round(ratio,2)}** = **{verdict}**")
