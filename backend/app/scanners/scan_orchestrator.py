@@ -18,6 +18,7 @@ from .base_screener import (
 )
 from .criteria.adr_calculator import ADRCalculator
 from .criteria.price_sparkline import PriceSparklineCalculator
+from .criteria.accumulation_distribution import AccumulationDistributionCalculator
 from .criteria.relative_strength import RelativeStrengthCalculator
 from .criteria.rs_sparkline import RSSparklineCalculator
 from .screener_registry import ScreenerRegistry
@@ -254,6 +255,7 @@ def _partial_history_metrics(stock_data: StockData) -> dict[str, object]:
         "rs_sparkline_data": None,
         "rs_trend": None,
         "adr_percent": None,
+        "acc_dis_rating": None,
     }
 
     if close_chrono is not None:
@@ -306,6 +308,11 @@ def _partial_history_metrics(stock_data: StockData) -> dict[str, object]:
             price_data,
             period=20,
             min_valid_rows=20,
+        )
+        # Accumulation/Distribution gauges ~13 weeks of net institutional
+        # buying vs selling; it feeds the Composite Rating.
+        metrics["acc_dis_rating"] = AccumulationDistributionCalculator().calculate_acc_dis_score(
+            price_data
         )
 
     return metrics
@@ -959,6 +966,10 @@ class ScanOrchestrator:
         if stock_data.fundamentals and stock_data.fundamentals.get("eps_rating") is not None:
             result["eps_rating"] = stock_data.fundamentals["eps_rating"]
 
+        # Extract SMR Rating from fundamentals if available
+        if stock_data.fundamentals and stock_data.fundamentals.get("smr_rating") is not None:
+            result["smr_rating"] = stock_data.fundamentals["smr_rating"]
+
         # Extract IPO date from fundamentals if available
         if stock_data.fundamentals and stock_data.fundamentals.get("ipo_date"):
             result["ipo_date"] = stock_data.fundamentals["ipo_date"]
@@ -1063,6 +1074,8 @@ class ScanOrchestrator:
                 result["market_cap_usd"] = stock_data.fundamentals["market_cap_usd"]
             if stock_data.fundamentals.get("eps_rating") is not None:
                 result["eps_rating"] = stock_data.fundamentals["eps_rating"]
+            if stock_data.fundamentals.get("smr_rating") is not None:
+                result["smr_rating"] = stock_data.fundamentals["smr_rating"]
             if stock_data.fundamentals.get("ipo_date"):
                 result["ipo_date"] = stock_data.fundamentals["ipo_date"]
             if stock_data.fundamentals.get("sector"):

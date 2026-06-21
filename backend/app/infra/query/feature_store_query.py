@@ -72,6 +72,9 @@ _JSON_FIELD_MAP: dict[str, tuple[str, ...]] = {
     "peg_ratio": ("peg_ratio",),
     "peg": ("peg_ratio",),
     "eps_rating": ("eps_rating",),
+    "smr_rating": ("smr_rating",),
+    "acc_dis_rating": ("acc_dis_rating",),
+    "composite_rating": ("composite_rating",),
     # Classification
     "ibd_industry_group": ("ibd_industry_group",),
     "ibd_group_rank": ("ibd_group_rank",),

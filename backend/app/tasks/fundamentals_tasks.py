@@ -1478,3 +1478,89 @@ def calculate_eps_rating_percentiles(self):
 
     finally:
         db.close()
+
+
+@celery_app.task(bind=True, name='app.tasks.fundamentals_tasks.calculate_smr_ratings')
+def calculate_smr_ratings(self):
+    """Calculate SMR Ratings (Sales+Margins+ROE, 0-99) across the universe.
+
+    Mirrors ``calculate_eps_rating_percentiles``: SMR is a cross-sectional
+    percentile blend, so it must be computed over the whole universe and written
+    back to ``stock_fundamentals.smr_rating`` (and existing ``scan_results``)
+    before scans/feature runs read it. Sales growth prefers the quarter-over-
+    quarter figure, falling back to YoY / revenue growth when QoQ is absent.
+
+    Returns calculation statistics.
+    """
+    logger.info("=" * 60)
+    logger.info("TASK: Calculate SMR Ratings")
+    logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 60)
+
+    from ..models.stock import StockFundamental
+    from ..models.scan_result import ScanResult
+    from ..services.smr_rating_service import SMRRatingService
+
+    db = SessionLocal()
+    start_time = time.time()
+
+    try:
+        fundamentals = db.query(StockFundamental).all()
+
+        components: dict[str, dict[str, float | None]] = {}
+        for f in fundamentals:
+            sales_growth = f.sales_growth_qq
+            if sales_growth is None:
+                sales_growth = f.sales_growth_yy
+            if sales_growth is None:
+                sales_growth = f.revenue_growth
+            components[f.symbol] = {
+                "sales_growth": sales_growth,
+                "profit_margin": f.profit_margin,
+                "roe": f.roe,
+            }
+
+        ratings = SMRRatingService().calculate_ratings(components)
+        logger.info(f"Calculated SMR ratings for {len(ratings)} stocks")
+
+        updated_count = 0
+        batch_size = 100
+        symbols_to_update = list(ratings.keys())
+
+        for i in range(0, len(symbols_to_update), batch_size):
+            batch = symbols_to_update[i:i + batch_size]
+            for symbol in batch:
+                db.query(StockFundamental).filter(
+                    StockFundamental.symbol == symbol
+                ).update({'smr_rating': ratings[symbol]}, synchronize_session=False)
+                db.query(ScanResult).filter(
+                    ScanResult.symbol == symbol
+                ).update({'smr_rating': ratings[symbol]}, synchronize_session=False)
+                updated_count += 1
+            db.commit()
+
+        # Invalidate Redis cache so the next read picks up fresh SMR ratings.
+        cache = get_fundamentals_cache()
+        for symbol in symbols_to_update:
+            try:
+                cache.invalidate_cache(symbol)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(f"Failed to invalidate cache for {symbol}: {exc}")
+
+        duration = time.time() - start_time
+        logger.info(f"SMR Ratings complete: {updated_count} stocks in {duration:.2f}s")
+        return {
+            'total_stocks': len(fundamentals),
+            'stocks_rated': len(ratings),
+            'stocks_updated': updated_count,
+            'duration_seconds': round(duration, 2),
+            'timestamp': datetime.now().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Error calculating SMR ratings: {e}", exc_info=True)
+        db.rollback()
+        return {'error': str(e), 'timestamp': datetime.now().isoformat()}
+
+    finally:
+        db.close()

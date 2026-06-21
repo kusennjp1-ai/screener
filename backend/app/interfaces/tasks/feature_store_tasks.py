@@ -429,6 +429,70 @@ def _enrich_feature_run_with_ibd_metadata(
         db.close()
 
 
+def _enrich_feature_run_with_composite_rating(
+    *,
+    feature_run_id: int,
+    session_factory=None,
+) -> dict[str, int]:
+    """Assign an IBD-style Composite Rating to every row of a feature run.
+
+    Composite Rating blends EPS, RS, industry-group strength, SMR and Acc/Dis
+    into a 1-99 percentile, so it can only be computed once those components are
+    present on the run's rows. It must therefore run *after*
+    ``_enrich_feature_run_with_ibd_metadata`` (which backfills
+    ``ibd_group_rank``). The result is written into each row's ``details_json``
+    as ``composite_rating`` so it serializes alongside the other ratings.
+    """
+    from app.database import SessionLocal
+    from app.infra.db.models.feature_store import StockFeatureDaily
+    from app.services.composite_rating_service import CompositeRatingService
+
+    session_factory = session_factory or SessionLocal
+    db = session_factory()
+    try:
+        rows = (
+            db.query(StockFeatureDaily)
+            .filter(StockFeatureDaily.run_id == feature_run_id)
+            .all()
+        )
+        if not rows:
+            return {"run_id": feature_run_id, "total_rows": 0, "updated_rows": 0}
+
+        components: dict[str, dict[str, float | None]] = {}
+        for row in rows:
+            details = row.details_json or {}
+            components[row.symbol] = {
+                "eps_rating": details.get("eps_rating"),
+                "rs_rating": details.get("rs_rating"),
+                "ibd_group_rank": details.get("ibd_group_rank"),
+                "smr_rating": details.get("smr_rating"),
+                "acc_dis_rating": details.get("acc_dis_rating"),
+            }
+
+        ratings = CompositeRatingService().calculate_ratings(components)
+
+        updated_rows = 0
+        for row in rows:
+            new_rating = ratings.get(row.symbol)
+            details = dict(row.details_json or {})
+            if details.get("composite_rating") != new_rating:
+                details["composite_rating"] = new_rating
+                row.details_json = details
+                updated_rows += 1
+        db.commit()
+        return {
+            "run_id": feature_run_id,
+            "total_rows": len(rows),
+            "updated_rows": updated_rows,
+            "rated_rows": len(ratings),
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def _feature_run_market(run) -> str | None:
     config = getattr(run, "config_json", None) or {}
     if not isinstance(config, dict):

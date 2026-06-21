@@ -34,6 +34,11 @@ def _stub_eps_rating_percentiles(monkeypatch):
         "calculate_eps_rating_percentiles",
         SimpleNamespace(run=lambda: {"task": "eps_rating_percentiles"}),
     )
+    monkeypatch.setattr(
+        fundamentals_tasks,
+        "calculate_smr_ratings",
+        SimpleNamespace(run=lambda: {"task": "smr_ratings"}),
+    )
 
 
 def test_static_export_markets_match_market_registry():

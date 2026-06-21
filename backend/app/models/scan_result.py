@@ -144,6 +144,11 @@ class ScanResult(Base):
     # EPS Rating (IBD-style 0-99 percentile)
     eps_rating = Column(Integer, index=True)  # EPS Rating for filtering
 
+    # IBD-style ratings that complete the Composite Rating blend
+    smr_rating = Column(Integer, index=True)        # Sales+Margins+ROE (0-99)
+    acc_dis_rating = Column(Integer, index=True)    # Accumulation/Distribution (0-99)
+    composite_rating = Column(Integer, index=True)  # Composite Rating (1-99)
+
     # Industry classifications (Phase 4: Industry Groups & Peers)
     ibd_industry_group = Column(String(100), index=True)  # IBD industry group
     ibd_group_rank = Column(Integer, index=True)  # IBD group rank (1=best)

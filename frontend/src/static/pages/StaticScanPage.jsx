@@ -269,9 +269,20 @@ function StaticScanPage() {
     ),
     [activeScreenId, filteredRows, hydrationComplete, sortBy, sortOrder]
   );
+  const activeScreenLimit = useMemo(() => {
+    if (!activeScreenId) return null;
+    const screen = presetScreens?.find((s) => s.id === activeScreenId);
+    return screen?.limit ?? null;
+  }, [activeScreenId, presetScreens]);
+  // Capped screens (e.g. "IBD 50") show only the top-N after sorting, so the
+  // list reads like the editorial leaderboard rather than every match.
+  const cappedRows = useMemo(
+    () => (activeScreenLimit ? sortedRows.slice(0, activeScreenLimit) : sortedRows),
+    [activeScreenLimit, sortedRows]
+  );
   const pagedRows = useMemo(
-    () => (hydrationComplete ? paginateStaticScanRows(sortedRows, page, perPage) : filteredRows),
-    [filteredRows, hydrationComplete, page, perPage, sortedRows]
+    () => (hydrationComplete ? paginateStaticScanRows(cappedRows, page, perPage) : filteredRows),
+    [cappedRows, filteredRows, hydrationComplete, page, perPage]
   );
   const chartsAvailable = chartEnabledSymbols.size > 0;
   const isChartEnabled = useCallback(
@@ -290,11 +301,11 @@ function StaticScanPage() {
     });
   };
   const navigationSymbols = useMemo(() => {
-    const orderedRows = hydrationComplete ? sortedRows : pagedRows;
+    const orderedRows = hydrationComplete ? cappedRows : pagedRows;
     return orderedRows
       .map((row) => row.symbol)
       .filter((symbol) => chartEnabledSymbols.has(symbol));
-  }, [chartEnabledSymbols, hydrationComplete, pagedRows, sortedRows]);
+  }, [cappedRows, chartEnabledSymbols, hydrationComplete, pagedRows]);
 
   if (manifestQuery.isLoading || scanManifestQuery.isLoading) {
     return (
@@ -320,7 +331,7 @@ function StaticScanPage() {
       <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
         <Box display="flex" alignItems="baseline" gap={1.5}>
           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-            {(hydrationComplete ? filteredRows.length : hydrationState.loadedRows).toLocaleString()}
+            {(hydrationComplete ? cappedRows.length : hydrationState.loadedRows).toLocaleString()}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: '10px' }}>
             件 / 全 {scanManifestQuery.data.rows_total.toLocaleString()} 件
@@ -383,7 +394,7 @@ function StaticScanPage() {
 
       <ResultsTable
         results={pagedRows}
-        total={hydrationComplete ? sortedRows.length : pagedRows.length}
+        total={hydrationComplete ? cappedRows.length : pagedRows.length}
         page={hydrationComplete ? page : 1}
         perPage={perPage}
         sortBy={sortBy}
