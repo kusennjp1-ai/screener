@@ -50,11 +50,14 @@ def group_strength_from_rank(group_rank: float | int | None) -> Optional[float]:
     return (MAX_GROUP_RANK - rank) / (MAX_GROUP_RANK - 1) * 99.0
 
 
-def _raw_score(components: Mapping[str, float | None]) -> Optional[float]:
+def _raw_score(
+    components: Mapping[str, float | None],
+    weights: Mapping[str, float] = COMPONENT_WEIGHTS,
+) -> Optional[float]:
     """Weighted blend of a stock's available components, renormalised."""
     weighted_sum = 0.0
     weight_total = 0.0
-    for name, weight in COMPONENT_WEIGHTS.items():
+    for name, weight in weights.items():
         value = components.get(name)
         if value is None or not np.isfinite(value):
             continue
@@ -67,6 +70,14 @@ def _raw_score(components: Mapping[str, float | None]) -> Optional[float]:
 
 class CompositeRatingService:
     """Compute universe-wide Composite Ratings (1-99) from component ratings."""
+
+    def __init__(self, weights: Mapping[str, float] | None = None):
+        """Args:
+            weights: Optional override for the component blend (same keys as
+                ``COMPONENT_WEIGHTS``). Used by the calibration harness to sweep
+                weightings; defaults to the production blend.
+        """
+        self.weights = dict(weights) if weights else dict(COMPONENT_WEIGHTS)
 
     def calculate_ratings(
         self,
@@ -93,7 +104,7 @@ class CompositeRatingService:
                 "smr_rating": values.get("smr_rating"),
                 "acc_dis_rating": values.get("acc_dis_rating"),
             }
-            raw = _raw_score(components)
+            raw = _raw_score(components, self.weights)
             if raw is not None:
                 raw_scores[symbol] = raw
 
