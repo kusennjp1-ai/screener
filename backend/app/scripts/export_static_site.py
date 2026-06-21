@@ -340,7 +340,10 @@ def _run_daily_refresh(
         _enrich_feature_run_with_ibd_metadata,
         build_daily_snapshot,
     )
-    from app.tasks.fundamentals_tasks import refresh_all_fundamentals
+    from app.tasks.fundamentals_tasks import (
+        calculate_eps_rating_percentiles,
+        refresh_all_fundamentals,
+    )
     from app.tasks.universe_tasks import refresh_stock_universe
 
     warnings: list[str] = []
@@ -389,6 +392,18 @@ def _run_daily_refresh(
             if market is not None
             else price_refresh_results
         )
+
+        # EPS Rating is a 0-99 percentile rank across the universe, so it can
+        # only be assigned once every stock's eps_raw_score is loaded — the
+        # weekly reference bundle import (and the live fundamentals refresh)
+        # persists eps_raw_score but leaves eps_rating NULL. The percentile
+        # pass is normally chained as a Celery task after a fundamentals
+        # refresh, but the static export runs without a live worker, so we
+        # invoke it synchronously here. Without this, eps_rating stays NULL on
+        # every exported row and EPS-gated screens (e.g. the "IBD 85-85"
+        # leadership board, epsRating>=85) match zero stocks. Must run before
+        # build_daily_snapshot so the feature rows pick up the fresh ratings.
+        results["eps_rating_percentiles"] = calculate_eps_rating_percentiles.run()
 
         feature_snapshots: dict[str, Any] = {}
         for selected_market in selected_markets:
