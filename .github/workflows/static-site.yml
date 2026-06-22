@@ -311,6 +311,17 @@ jobs:
           fi
           echo "has_artifact=true" >> "$GITHUB_OUTPUT"
 
+      - name: Measure IBD-50 overlap (US)
+        # Weekly calibration loop: compare the freshly-built US Composite-Rating
+        # leadership list against IBD's published leaders (data/ibd_reference/)
+        # and write the overlap to the job summary. Read-only and
+        # continue-on-error so it can never affect the published build.
+        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' }}
+        continue-on-error: true
+        run: |
+          cd backend
+          python -m app.scripts.ibd_overlap_report_from_db --market US --calibrate
+
       - name: Upload market diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
