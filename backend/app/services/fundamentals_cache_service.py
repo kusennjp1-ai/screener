@@ -83,6 +83,7 @@ class FundamentalsCacheService:
     MAX_AGE_DAYS = 7  # Max age before data is considered stale
     REQUIRED_SCAN_KEYS = (
         "eps_rating",
+        "smr_rating",
         "ipo_date",
         "first_trade_date",
         "sector",
@@ -435,6 +436,7 @@ class FundamentalsCacheService:
                 "eps_q2_yoy": record.eps_q2_yoy,
                 "eps_raw_score": record.eps_raw_score,
                 "eps_rating": record.eps_rating,
+                "smr_rating": record.smr_rating,
                 "eps_years_available": record.eps_years_available,
                 # Data source tracking
                 "data_source": record.data_source,
@@ -962,6 +964,7 @@ class FundamentalsCacheService:
                 existing_record.eps_q2_yoy = data.get("eps_q2_yoy")
                 existing_record.eps_raw_score = data.get("eps_raw_score")
                 existing_record.eps_rating = data.get("eps_rating")
+                existing_record.smr_rating = data.get("smr_rating")
                 existing_record.eps_years_available = data.get("eps_years_available")
 
                 # Metadata
@@ -1092,6 +1095,7 @@ class FundamentalsCacheService:
                     eps_q2_yoy=data.get("eps_q2_yoy"),
                     eps_raw_score=data.get("eps_raw_score"),
                     eps_rating=data.get("eps_rating"),
+                    smr_rating=data.get("smr_rating"),
                     eps_years_available=data.get("eps_years_available"),
                     # Metadata
                     data_source=data_source,
@@ -1350,6 +1354,7 @@ class FundamentalsCacheService:
                     "eps_q2_yoy": record.eps_q2_yoy,
                     "eps_raw_score": record.eps_raw_score,
                     "eps_rating": record.eps_rating,
+                    "smr_rating": record.smr_rating,
                     "eps_years_available": record.eps_years_available,
                     # Data source tracking
                     "data_source": record.data_source,

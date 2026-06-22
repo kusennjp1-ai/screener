@@ -20,6 +20,27 @@ from app.domain.markets import market_registry
 from app.interfaces.tasks import feature_store_tasks
 
 
+@pytest.fixture(autouse=True)
+def _stub_eps_rating_percentiles(monkeypatch):
+    """Neutralize the universe-wide EPS Rating percentile pass by default.
+
+    ``_run_daily_refresh`` now invokes ``calculate_eps_rating_percentiles`` so
+    EPS-gated screens are populated; the real task opens its own DB session, so
+    tests that don't care about it get a harmless stub. Tests asserting on the
+    pass override this with their own tracking double.
+    """
+    monkeypatch.setattr(
+        fundamentals_tasks,
+        "calculate_eps_rating_percentiles",
+        SimpleNamespace(run=lambda: {"task": "eps_rating_percentiles"}),
+    )
+    monkeypatch.setattr(
+        fundamentals_tasks,
+        "calculate_smr_ratings",
+        SimpleNamespace(run=lambda: {"task": "smr_ratings"}),
+    )
+
+
 def test_static_export_markets_match_market_registry():
     assert export_script.STATIC_EXPORT_MARKETS == market_registry.supported_market_codes()
 
@@ -157,6 +178,61 @@ def test_run_daily_refresh_bootstraps_universe_before_other_tasks(monkeypatch):
         "pointer_key": "latest_published",
         "run_id": 77,
     }
+
+
+def test_run_daily_refresh_computes_eps_rating_before_snapshots(monkeypatch):
+    """EPS Rating is a universe-wide percentile that the weekly bundle import
+    leaves NULL (it persists only eps_raw_score). The static export must assign
+    eps_rating — otherwise EPS-gated screens such as the "IBD 85-85" leadership
+    board (epsRating>=85) match zero stocks — and it must do so before the
+    feature snapshots that serialize each row's eps_rating are built."""
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        universe_tasks,
+        "refresh_stock_universe",
+        SimpleNamespace(run=lambda **kwargs: calls.append("universe_refresh") or {"task": "universe_refresh"}),
+    )
+    monkeypatch.setattr(
+        fundamentals_tasks,
+        "refresh_all_fundamentals",
+        SimpleNamespace(run=lambda **kwargs: calls.append("fundamentals_refresh") or {"task": "fundamentals_refresh"}),
+    )
+    monkeypatch.setattr(
+        fundamentals_tasks,
+        "calculate_eps_rating_percentiles",
+        SimpleNamespace(run=lambda: calls.append("eps_rating_percentiles") or {"stocks_updated": 5}),
+    )
+    monkeypatch.setattr(
+        feature_store_tasks,
+        "build_daily_snapshot",
+        SimpleNamespace(run=lambda **kwargs: calls.append("feature_snapshot") or {"run_id": 77, "kwargs": kwargs}),
+    )
+    monkeypatch.setattr(
+        export_script,
+        "_refresh_static_daily_prices",
+        lambda *, as_of_date, market=None: calls.append("price_refresh") or {"task": "price_refresh", "market": market, "as_of_date": as_of_date.isoformat()},
+    )
+    monkeypatch.setattr(
+        export_script,
+        "_resolve_latest_completed_trading_date",
+        lambda _market: date(2026, 4, 2),
+    )
+    monkeypatch.setattr(
+        export_script.IBDIndustryService,
+        "load_from_csv",
+        lambda db, csv_path=None: 10105,
+    )
+    monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
+
+    results, warnings = export_script._run_daily_refresh(market="US")  # noqa: SLF001 - intentional unit test coverage
+
+    assert warnings == []
+    assert "eps_rating_percentiles" in calls, "EPS Rating percentile pass must run during the static export"
+    assert calls.index("eps_rating_percentiles") < calls.index("feature_snapshot"), (
+        "EPS Rating must be assigned before feature snapshots serialize eps_rating"
+    )
+    assert results["eps_rating_percentiles"] == {"stocks_updated": 5}
 
 
 def test_run_daily_refresh_uses_resolved_tracked_ibd_csv_path(monkeypatch, tmp_path):

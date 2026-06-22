@@ -1,0 +1,11 @@
+{
+  "as_of_date": "YYYY-MM-DD",
+  "list_type": "ibd50",
+  "market": "US",
+  "source": "IBD 50 weekly (investors.com) — replace with the actual week",
+  "constituents": [
+    {"symbol": "TICKER1", "composite": 99, "eps": 99, "rs": 97, "smr": "A", "acc_dis": "B", "group_rank": 12},
+    {"symbol": "TICKER2"},
+    "TICKER3"
+  ]
+}

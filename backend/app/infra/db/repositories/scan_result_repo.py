@@ -197,6 +197,9 @@ def _map_orchestrator_result(scan_id: str, symbol: str, raw: dict) -> dict:
     r["peg_ratio"] = raw.get("peg_ratio")
     r["adr_percent"] = raw.get("adr_percent")
     r["eps_rating"] = raw.get("eps_rating")
+    r["smr_rating"] = raw.get("smr_rating")
+    r["acc_dis_rating"] = raw.get("acc_dis_rating")
+    r["composite_rating"] = raw.get("composite_rating")
     r["ipo_date"] = raw.get("ipo_date")
 
     # Beta / Beta-Adjusted RS
@@ -304,6 +307,7 @@ class SqlScanResultRepository(ScanResultRepository):
             self._session.query(
                 StockFundamental.symbol,
                 StockFundamental.eps_rating,
+                StockFundamental.smr_rating,
                 StockFundamental.ipo_date,
                 StockFundamental.sector,
                 StockFundamental.industry,
@@ -314,6 +318,7 @@ class SqlScanResultRepository(ScanResultRepository):
         for row in fundamentals_rows:
             d = enrichment.setdefault(row.symbol, {})
             d["eps_rating"] = row.eps_rating
+            d["smr_rating"] = row.smr_rating
             d["ipo_date"] = row.ipo_date
             d["sector"] = row.sector
             d["industry"] = row.industry
@@ -493,6 +498,9 @@ class SqlScanResultRepository(ScanResultRepository):
 
         if enriched.get("eps_rating") is None and meta.get("eps_rating") is not None:
             enriched["eps_rating"] = meta["eps_rating"]
+
+        if enriched.get("smr_rating") is None and meta.get("smr_rating") is not None:
+            enriched["smr_rating"] = meta["smr_rating"]
 
         if not enriched.get("ipo_date"):
             if meta.get("ipo_date"):
@@ -803,6 +811,9 @@ def _map_row_to_domain(
         "sales_growth_yy": result.sales_growth_yy,
         "peg_ratio": result.peg_ratio,
         "eps_rating": result.eps_rating,
+        "smr_rating": details.get("smr_rating"),
+        "acc_dis_rating": details.get("acc_dis_rating"),
+        "composite_rating": details.get("composite_rating"),
         "ibd_industry_group": result.ibd_industry_group,
         "ibd_group_rank": result.ibd_group_rank,
         "market_themes": normalize_string_list(details.get("market_themes")),

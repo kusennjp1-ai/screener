@@ -152,6 +152,9 @@ class StockFundamental(Base):
     eps_rating = Column(Integer)          # 0-99 percentile rank
     eps_years_available = Column(Integer) # Data completeness tracking (1-5)
 
+    # SMR Rating (IBD-style Sales+Margins+ROE 0-99 percentile)
+    smr_rating = Column(Integer)          # 0-99 percentile rank
+
     # Data source tracking
     data_source = Column(String(20))
     data_source_timestamp = Column(DateTime(timezone=True))

@@ -28,6 +28,9 @@ RANGE_FILTER_TO_FIELD: dict[str, str] = {
     "rs3m": "rs_rating_3m",
     "rs12m": "rs_rating_12m",
     "epsRating": "eps_rating",
+    "smrRating": "smr_rating",
+    "accDisRating": "acc_dis_rating",
+    "compositeRating": "composite_rating",
     "ibdGroupRank": "ibd_group_rank",
     "price": "current_price",
     "adrPercent": "adr_percent",
@@ -215,6 +218,31 @@ PRESET_SCREENS: list[dict] = [
         },
         "sort_by": "rs_rating",
         "sort_order": "desc",
+    },
+    {
+        "id": "ibd50",
+        "name": "IBD 50",
+        "short_name": "IBD 50",
+        "description": (
+            "An IBD-50-style leadership list: the ~50 strongest growth leaders by "
+            "Composite Rating, which blends EPS, RS, industry-group strength, SMR "
+            "(sales/margins/ROE) and Acc/Dis (institutional flow). Gated to top "
+            "Composite (>=95) and RS (>=85) names in a leading group (rank <=60) "
+            "trading within 15% of their 52-week high, then capped to the top 50. "
+            "A documented proxy for IBD's editorial IBD 50, refreshed daily."
+        ),
+        "tier": 1,
+        "filters": {
+            "compositeRating": {"min": 95, "max": None},
+            "rsRating": {"min": 85, "max": None},
+            "ibdGroupRank": {"min": None, "max": 60},
+            "week52HighDistance": {"min": -15, "max": None},
+        },
+        "sort_by": "composite_rating",
+        "sort_order": "desc",
+        # IBD's published list holds ~50 names; cap to the strongest 50 by
+        # Composite Rating so the screen reads like the editorial leaderboard.
+        "limit": 50,
     },
     {
         "id": "vcp",
@@ -681,7 +709,9 @@ def get_preset_chart_symbols(
                 return (0, 0)
             return (1, value if d else -value)
 
-        top_rows = heapq.nlargest(top_n, matching, key=sort_key)
+        preset_limit = preset.get("limit")
+        effective_n = min(top_n, preset_limit) if preset_limit else top_n
+        top_rows = heapq.nlargest(effective_n, matching, key=sort_key)
         for row in top_rows:
             sym = row.get("symbol")
             if sym:

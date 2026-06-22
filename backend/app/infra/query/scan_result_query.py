@@ -53,6 +53,9 @@ _COLUMN_MAP: dict[str, Any] = {
     "peg": ScanResult.peg_ratio,  # alias
     "adr_percent": ScanResult.adr_percent,
     "eps_rating": ScanResult.eps_rating,
+    "smr_rating": ScanResult.smr_rating,
+    "acc_dis_rating": ScanResult.acc_dis_rating,
+    "composite_rating": ScanResult.composite_rating,
     "ibd_industry_group": ScanResult.ibd_industry_group,
     "ibd_group_rank": ScanResult.ibd_group_rank,
     "gics_sector": ScanResult.gics_sector,

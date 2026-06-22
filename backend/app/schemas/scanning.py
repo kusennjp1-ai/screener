@@ -164,6 +164,11 @@ class ScanResultItem(BaseModel):
     # EPS Rating (IBD-style 0-99 percentile)
     eps_rating: Optional[int] = None
 
+    # SMR / Acc-Dis / Composite Ratings (IBD-style)
+    smr_rating: Optional[int] = None
+    acc_dis_rating: Optional[int] = None
+    composite_rating: Optional[int] = None
+
     # Industry classifications
     ibd_industry_group: Optional[str] = None
     ibd_group_rank: Optional[int] = None
@@ -308,6 +313,10 @@ class ScanResultItem(BaseModel):
             peg_ratio=ef.get("peg_ratio"),
             # EPS Rating
             eps_rating=ef.get("eps_rating"),
+            # SMR / Acc-Dis / Composite Ratings (IBD-style)
+            smr_rating=ef.get("smr_rating"),
+            acc_dis_rating=ef.get("acc_dis_rating"),
+            composite_rating=ef.get("composite_rating"),
             # Industry classifications
             ibd_industry_group=ef.get("ibd_industry_group"),
             ibd_group_rank=ef.get("ibd_group_rank"),

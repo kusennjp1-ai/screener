@@ -337,10 +337,15 @@ def _run_daily_refresh(
     hydrate_published_snapshot: bool = False,
 ) -> tuple[dict[str, Any], list[str]]:
     from app.interfaces.tasks.feature_store_tasks import (
+        _enrich_feature_run_with_composite_rating,
         _enrich_feature_run_with_ibd_metadata,
         build_daily_snapshot,
     )
-    from app.tasks.fundamentals_tasks import refresh_all_fundamentals
+    from app.tasks.fundamentals_tasks import (
+        calculate_eps_rating_percentiles,
+        calculate_smr_ratings,
+        refresh_all_fundamentals,
+    )
     from app.tasks.universe_tasks import refresh_stock_universe
 
     warnings: list[str] = []
@@ -389,6 +394,21 @@ def _run_daily_refresh(
             if market is not None
             else price_refresh_results
         )
+
+        # EPS Rating is a 0-99 percentile rank across the universe, so it can
+        # only be assigned once every stock's eps_raw_score is loaded — the
+        # weekly reference bundle import (and the live fundamentals refresh)
+        # persists eps_raw_score but leaves eps_rating NULL. The percentile
+        # pass is normally chained as a Celery task after a fundamentals
+        # refresh, but the static export runs without a live worker, so we
+        # invoke it synchronously here. Without this, eps_rating stays NULL on
+        # every exported row and EPS-gated screens (e.g. the "IBD 85-85"
+        # leadership board, epsRating>=85) match zero stocks. Must run before
+        # build_daily_snapshot so the feature rows pick up the fresh ratings.
+        results["eps_rating_percentiles"] = calculate_eps_rating_percentiles.run()
+        # SMR Rating (Sales+Margins+ROE) is likewise a universe-wide percentile
+        # and feeds the Composite Rating; assign it before feature rows are built.
+        results["smr_ratings"] = calculate_smr_ratings.run()
 
         feature_snapshots: dict[str, Any] = {}
         for selected_market in selected_markets:
@@ -468,6 +488,36 @@ def _run_daily_refresh(
                 ranking_date=as_of_by_market[selected_market],
             )
         results["ibd_metadata_refresh"] = ibd_metadata_refresh
+
+        # Composite Rating must run last: it blends EPS, RS, the just-backfilled
+        # ibd_group_rank, SMR and Acc/Dis into a 1-99 percentile that powers the
+        # IBD-50 leadership screen. Guarded so a composite failure can never
+        # block the daily build of the underlying ratings.
+        composite_refresh: dict[str, Any] = {}
+        for selected_market in selected_markets:
+            snapshot = feature_snapshots.get(selected_market, {})
+            feature_run_id = snapshot.get("run_id") or snapshot.get("existing_run_id")
+            if not _snapshot_publishable(snapshot) or feature_run_id is None:
+                composite_refresh[selected_market] = {
+                    "status": "skipped",
+                    "market": selected_market,
+                    "reason": "snapshot_not_ready" if feature_run_id is None else "not_publishable",
+                }
+                continue
+            try:
+                composite_refresh[selected_market] = _enrich_feature_run_with_composite_rating(
+                    feature_run_id=feature_run_id,
+                )
+            except Exception as exc:  # pragma: no cover - defensive pipeline guard
+                composite_refresh[selected_market] = {
+                    "status": "errored",
+                    "market": selected_market,
+                    "error": str(exc),
+                }
+                warnings.append(
+                    f"Composite Rating enrichment failed for {selected_market}: {exc}"
+                )
+        results["composite_rating_refresh"] = composite_refresh
 
         for snapshot_market, snapshot in feature_snapshots.items():
             if snapshot_market == STATIC_DEFAULT_MARKET:
