@@ -322,6 +322,16 @@ jobs:
           cd backend
           python -m app.scripts.ibd_overlap_report_from_db --market US --calibrate
 
+      - name: Diagnose IBD-50 reference (US)
+        # Per-name diagnosis: for each IBD leader, show the screener's ratings
+        # and which IBD-50 gate (if any) excludes it — so low overlap can be
+        # traced to gates vs missing data vs ranking. Read-only / non-blocking.
+        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' }}
+        continue-on-error: true
+        run: |
+          cd backend
+          python -m app.scripts.ibd_diagnose_reference --market US
+
       - name: Upload market diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
