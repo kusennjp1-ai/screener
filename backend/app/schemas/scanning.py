@@ -168,6 +168,7 @@ class ScanResultItem(BaseModel):
     smr_rating: Optional[int] = None
     acc_dis_rating: Optional[int] = None
     composite_rating: Optional[int] = None
+    composite_rating_score: Optional[float] = None
 
     # Industry classifications
     ibd_industry_group: Optional[str] = None
@@ -317,6 +318,7 @@ class ScanResultItem(BaseModel):
             smr_rating=ef.get("smr_rating"),
             acc_dis_rating=ef.get("acc_dis_rating"),
             composite_rating=ef.get("composite_rating"),
+            composite_rating_score=ef.get("composite_rating_score"),
             # Industry classifications
             ibd_industry_group=ef.get("ibd_industry_group"),
             ibd_group_rank=ef.get("ibd_group_rank"),

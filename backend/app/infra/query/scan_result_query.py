@@ -93,6 +93,8 @@ _COLUMN_MAP: dict[str, Any] = {
 # JSON details paths for fields stored in the details blob.
 # Maps domain field name to nested path segments.
 _JSON_FIELD_MAP: dict[str, tuple[str, ...]] = {
+    # Raw Composite blend (full-resolution tie-break for composite_rating)
+    "composite_rating_score": ("composite_rating_score",),
     # VCP
     "vcp_score": ("vcp_score",),
     "vcp_pivot": ("vcp_pivot",),

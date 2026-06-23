@@ -75,6 +75,7 @@ _JSON_FIELD_MAP: dict[str, tuple[str, ...]] = {
     "smr_rating": ("smr_rating",),
     "acc_dis_rating": ("acc_dis_rating",),
     "composite_rating": ("composite_rating",),
+    "composite_rating_score": ("composite_rating_score",),
     # Classification
     "ibd_industry_group": ("ibd_industry_group",),
     "ibd_group_rank": ("ibd_group_rank",),

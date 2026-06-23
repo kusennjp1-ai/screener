@@ -78,5 +78,21 @@ def test_ratings_are_within_1_to_99():
     assert all(1 <= score <= 99 for score in ratings.values())
 
 
+def test_with_scores_rating_matches_calculate_ratings_and_exposes_raw():
+    rows = {
+        f"C{i}": {"eps_rating": i * 9, "rs_rating": i * 9, "ibd_group_rank": 1 + i,
+                  "smr_rating": i * 9, "acc_dis_rating": i * 9}
+        for i in range(11)
+    }
+    svc = CompositeRatingService()
+    ratings = svc.calculate_ratings(rows)
+    scored = svc.calculate_with_scores(rows)
+    assert {s: e["rating"] for s, e in scored.items()} == ratings
+    # Raw scores have full resolution and order the same way as the components.
+    raw = svc.raw_scores(rows)
+    assert raw["C10"] > raw["C0"]
+    assert all(isinstance(e["score"], float) for e in scored.values())
+
+
 def test_empty_universe():
     assert CompositeRatingService().calculate_ratings({}) == {}

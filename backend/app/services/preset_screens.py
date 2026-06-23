@@ -232,16 +232,22 @@ PRESET_SCREENS: list[dict] = [
             "A documented proxy for IBD's editorial IBD 50, refreshed daily."
         ),
         "tier": 1,
+        # Gates tuned against IBD's published list (see data/ibd_reference/ and
+        # the calibration harness): IBD includes leaders from lower-ranked groups
+        # and some lower-Composite names, so group<=120 and Composite>=90 recover
+        # them. Ranked by the raw Composite blend (composite_rating_score), not
+        # the 1-99 rating, because the rating saturates at 99 across the whole
+        # leadership tier and would make the top-50 cut arbitrary.
         "filters": {
-            "compositeRating": {"min": 95, "max": None},
+            "compositeRating": {"min": 90, "max": None},
             "rsRating": {"min": 85, "max": None},
-            "ibdGroupRank": {"min": None, "max": 60},
+            "ibdGroupRank": {"min": None, "max": 120},
             "week52HighDistance": {"min": -15, "max": None},
         },
-        "sort_by": "composite_rating",
+        "sort_by": "composite_rating_score",
         "sort_order": "desc",
         # IBD's published list holds ~50 names; cap to the strongest 50 by
-        # Composite Rating so the screen reads like the editorial leaderboard.
+        # Composite blend so the screen reads like the editorial leaderboard.
         "limit": 50,
     },
     {
