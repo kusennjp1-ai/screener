@@ -814,6 +814,7 @@ def _map_row_to_domain(
         "smr_rating": details.get("smr_rating"),
         "acc_dis_rating": details.get("acc_dis_rating"),
         "composite_rating": details.get("composite_rating"),
+        "composite_rating_score": details.get("composite_rating_score"),
         "ibd_industry_group": result.ibd_industry_group,
         "ibd_group_rank": result.ibd_group_rank,
         "market_themes": normalize_string_list(details.get("market_themes")),
