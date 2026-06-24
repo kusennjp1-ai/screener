@@ -56,6 +56,16 @@ def test_select_leaders_ranks_and_caps():
     assert leaders == [f"L{i}" for i in range(10)]
 
 
+def test_select_leaders_breaks_ties_by_raw_score():
+    # Two gate-passing leaders; the one with the stronger raw Composite blend
+    # wins the single slot even though both would saturate the 1-99 rating.
+    rows = [
+        _row("WEAKER", eps=90, rs=90, group=5, smr=90, acc=90),
+        _row("STRONG", eps=99, rs=99, group=5, smr=99, acc=99),
+    ]
+    assert select_leaders(rows, gates=_OPEN, limit=1) == ["STRONG"]
+
+
 def test_gates_exclude_weak_and_extended_names():
     gates = Gates(composite_min=0, rs_min=85, group_max=60, high_dist_min=-15.0)
     rows = [

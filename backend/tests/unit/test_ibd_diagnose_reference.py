@@ -20,9 +20,9 @@ def test_gate_failures_passes_a_clean_leader():
 
 def test_gate_failures_flags_each_failing_gate():
     row = {
-        "composite_rating": 80,   # < 95
+        "composite_rating": 80,   # < 90
         "rs_rating": 70,          # < 85
-        "ibd_group_rank": 120,    # > 60
+        "ibd_group_rank": 150,    # > 120
         "week_52_high_distance": -40,  # < -15
     }
     fails = _gate_failures(row, Gates())
@@ -36,7 +36,7 @@ def test_gate_failures_treats_missing_composite_as_fail_but_missing_highdist_as_
     row = {"composite_rating": None, "rs_rating": 99, "ibd_group_rank": 5,
            "week_52_high_distance": None}
     fails = _gate_failures(row, Gates())
-    assert fails == ["composite<95"]  # only composite fails; absent hi-dist is lenient
+    assert fails == ["composite<90"]  # only composite fails; absent hi-dist is lenient
 
 
 def test_nearest_reference_picks_closest_within_gap():

@@ -783,6 +783,7 @@ def _map_feature_to_scan_result(
         "smr_rating": d.get("smr_rating"),
         "acc_dis_rating": d.get("acc_dis_rating"),
         "composite_rating": d.get("composite_rating"),
+        "composite_rating_score": d.get("composite_rating_score"),
         "ibd_industry_group": d.get("ibd_industry_group"),
         "ibd_group_rank": d.get("ibd_group_rank"),
         "market_themes": normalize_string_list(d.get("market_themes")),

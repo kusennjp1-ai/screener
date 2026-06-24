@@ -469,14 +469,23 @@ def _enrich_feature_run_with_composite_rating(
                 "acc_dis_rating": details.get("acc_dis_rating"),
             }
 
-        ratings = CompositeRatingService().calculate_ratings(components)
+        scored = CompositeRatingService().calculate_with_scores(components)
 
         updated_rows = 0
         for row in rows:
-            new_rating = ratings.get(row.symbol)
+            entry = scored.get(row.symbol)
+            new_rating = entry["rating"] if entry else None
+            # Raw blend score (full resolution) breaks composite_rating ties
+            # when selecting the top-N IBD-50 list, since the 1-99 rating
+            # saturates at 99 across the whole leadership tier.
+            new_score = round(entry["score"], 4) if entry else None
             details = dict(row.details_json or {})
-            if details.get("composite_rating") != new_rating:
+            if (
+                details.get("composite_rating") != new_rating
+                or details.get("composite_rating_score") != new_score
+            ):
                 details["composite_rating"] = new_rating
+                details["composite_rating_score"] = new_score
                 row.details_json = details
                 updated_rows += 1
         db.commit()

@@ -92,10 +92,19 @@ class CompositeRatingService:
                 Components may be None; a symbol with no usable component is
                 omitted.
         """
-        if not rows:
-            return {}
+        return {sym: r["rating"] for sym, r in self.calculate_with_scores(rows).items()}
 
-        raw_scores: dict[str, float] = {}
+    def raw_scores(
+        self,
+        rows: Mapping[str, Mapping[str, float | None]],
+    ) -> dict[str, float]:
+        """Return {symbol: raw weighted-blend score} (full float resolution).
+
+        The 1-99 ``composite_rating`` saturates — the top ~1% of a large
+        universe all land on 99 — so the raw blend is the meaningful key for
+        breaking ties when selecting a top-N leadership list.
+        """
+        scores: dict[str, float] = {}
         for symbol, values in rows.items():
             components = {
                 "eps_rating": values.get("eps_rating"),
@@ -106,19 +115,30 @@ class CompositeRatingService:
             }
             raw = _raw_score(components, self.weights)
             if raw is not None:
-                raw_scores[symbol] = raw
+                scores[symbol] = raw
+        return scores
 
+    def calculate_with_scores(
+        self,
+        rows: Mapping[str, Mapping[str, float | None]],
+    ) -> dict[str, dict[str, float]]:
+        """Return {symbol: {"rating": int 1-99, "score": raw float}}."""
+        if not rows:
+            return {}
+
+        raw_scores = self.raw_scores(rows)
         if not raw_scores:
             return {}
 
         symbols = list(raw_scores.keys())
         scores = np.array([raw_scores[s] for s in symbols], dtype="float64")
         n = len(scores)
-        ratings: dict[str, int] = {}
+        result: dict[str, dict[str, float]] = {}
         for i, symbol in enumerate(symbols):
             below = float(np.sum(scores < scores[i]))
             equal = float(np.sum(scores == scores[i]))
             percentile = (below + 0.5 * (equal - 1)) / n * 100
             # IBD's Composite Rating is reported on a 1-99 scale.
-            ratings[symbol] = max(1, min(99, int(round(percentile))))
-        return ratings
+            rating = max(1, min(99, int(round(percentile))))
+            result[symbol] = {"rating": rating, "score": raw_scores[symbol]}
+        return result

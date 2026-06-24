@@ -771,6 +771,18 @@ class ScanOrchestrator:
         current_price = stock_data.get_current_price()
 
         # Build combined result
+        # Accumulation/Distribution feeds the Composite Rating. The partial-
+        # history path computes it in _partial_history_metrics, but the main
+        # full-scan result is assembled here, so compute it directly from the
+        # OHLCV frame — otherwise acc_dis_rating is NULL for every full-history
+        # stock and the Composite blend silently drops its institutional-flow
+        # component.
+        acc_dis_rating = None
+        if stock_data.price_data is not None and not getattr(stock_data.price_data, "empty", True):
+            acc_dis_rating = AccumulationDistributionCalculator().calculate_acc_dis_score(
+                stock_data.price_data
+            )
+
         result = {
             "symbol": symbol,
             "composite_score": round(composite_score, 2),
@@ -782,6 +794,7 @@ class ScanOrchestrator:
             # unavailable so the keys simply don't appear for that row.
             **(band_states or {}),
             "current_price": current_price,
+            "acc_dis_rating": acc_dis_rating,
 
             # Individual screener scores
             **individual_scores,

@@ -37,11 +37,15 @@ from app.services.composite_rating_service import (
 
 @dataclass(frozen=True)
 class Gates:
-    """Threshold gates applied before ranking by Composite Rating."""
+    """Threshold gates applied before ranking by Composite Rating.
 
-    composite_min: float = 95.0
+    Defaults mirror the production ``ibd50`` preset (tuned against IBD's
+    published list — recall-leaning).
+    """
+
+    composite_min: float = 90.0
     rs_min: float = 85.0
-    group_max: float = 60.0
+    group_max: float = 120.0
     high_dist_min: float = -15.0  # within 15% of the 52-week high
 
     def passes(self, row: Mapping[str, float | None], composite: int | None) -> bool:
@@ -89,14 +93,17 @@ def select_leaders(
         for row in feature_rows
         if row.get("symbol")
     }
-    composites = CompositeRatingService(weights).calculate_ratings(components)
+    scored = CompositeRatingService(weights).calculate_with_scores(components)
 
     by_symbol = {row["symbol"]: row for row in feature_rows if row.get("symbol")}
-    eligible = [
-        (symbol, composites.get(symbol))
-        for symbol in by_symbol
-        if gates.passes(by_symbol[symbol], composites.get(symbol))
-    ]
+    eligible = []
+    for symbol in by_symbol:
+        entry = scored.get(symbol)
+        rating = entry["rating"] if entry else None
+        if gates.passes(by_symbol[symbol], rating):
+            eligible.append((symbol, entry["score"]))
+    # Rank by the raw blend score (full resolution) so saturated 1-99 ratings
+    # don't make the top-N cut arbitrary — mirrors the production preset.
     eligible.sort(key=lambda item: item[1], reverse=True)
     return [symbol for symbol, _ in eligible[:limit]]
 
@@ -197,9 +204,9 @@ def default_weight_grid() -> list[dict[str, float]]:
 def default_gate_grid() -> list[Gates]:
     """A small grid of gate thresholds to sweep."""
     grid: list[Gates] = []
-    for composite_min in (90, 93, 95, 97):
+    for composite_min in (85, 90, 93, 95):
         for rs_min in (80, 85, 90):
-            for group_max in (40, 60, 100):
+            for group_max in (60, 120, 150, 197):
                 grid.append(
                     Gates(
                         composite_min=composite_min,
