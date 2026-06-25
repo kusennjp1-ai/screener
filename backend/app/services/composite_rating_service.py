@@ -29,13 +29,16 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# EPS and RS dominate, matching IBD's emphasis on earnings and price strength.
+# RS-weighted blend: IBD's published leaders include many lower-EPS momentum
+# names, so price relative strength (RS) and recent institutional flow (Acc/Dis)
+# carry more weight than earnings here — calibrated against the IBD-50 reference
+# (data/ibd_reference/) for recall against IBD's actual list.
 COMPONENT_WEIGHTS: dict[str, float] = {
-    "eps_rating": 0.32,
-    "rs_rating": 0.32,
-    "group_strength": 0.16,
-    "smr_rating": 0.10,
-    "acc_dis_rating": 0.10,
+    "eps_rating": 0.18,
+    "rs_rating": 0.38,
+    "group_strength": 0.12,
+    "smr_rating": 0.14,
+    "acc_dis_rating": 0.18,
 }
 
 # IBD's group universe is ~197 industry groups (rank 1 = strongest).

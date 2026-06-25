@@ -176,28 +176,33 @@ def _normalize(weights: Mapping[str, float]) -> dict[str, float]:
 
 
 def default_weight_grid() -> list[dict[str, float]]:
-    """A small grid of EPS/RS-heavy Composite weightings to sweep."""
+    """A grid of Composite weightings, sweeping EPS and RS independently.
+
+    Explores the RS-dominant / low-EPS region (IBD's published leaders include
+    many lower-EPS momentum names) as well as balanced blends, varying how the
+    remainder splits across group / SMR / Acc-Dis.
+    """
     grid: list[dict[str, float]] = []
-    # Vary the EPS+RS share and how the remainder splits across group/SMR/Acc.
-    for eps_rs in (0.30, 0.35, 0.40):  # weight for EACH of EPS and RS
-        for group in (0.10, 0.16, 0.22):
-            remainder = 1.0 - 2 * eps_rs - group
-            if remainder <= 0:
-                continue
-            for smr_share in (0.4, 0.5, 0.6):
-                smr = remainder * smr_share
-                acc = remainder - smr
-                grid.append(
-                    _normalize(
-                        {
-                            "eps_rating": eps_rs,
-                            "rs_rating": eps_rs,
-                            "group_strength": group,
-                            "smr_rating": smr,
-                            "acc_dis_rating": acc,
-                        }
+    for eps in (0.12, 0.20, 0.30):
+        for rs in (0.25, 0.35, 0.45):
+            for group in (0.08, 0.14):
+                remainder = 1.0 - eps - rs - group
+                if remainder <= 0:
+                    continue
+                for acc_share in (0.4, 0.6, 0.8):  # Acc-Dis share of the remainder
+                    acc = remainder * acc_share
+                    smr = remainder - acc
+                    grid.append(
+                        _normalize(
+                            {
+                                "eps_rating": eps,
+                                "rs_rating": rs,
+                                "group_strength": group,
+                                "smr_rating": smr,
+                                "acc_dis_rating": acc,
+                            }
+                        )
                     )
-                )
     return grid
 
 
