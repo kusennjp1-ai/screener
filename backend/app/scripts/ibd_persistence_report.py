@@ -19,6 +19,7 @@ from pathlib import Path
 
 from app.services.ibd_persistence import (
     evaluate_persistence,
+    evaluate_recency,
     matrix_from_rows,
     rank_stability,
 )
@@ -75,6 +76,30 @@ def main() -> int:
     for n in (10, 15, 20):
         r = evaluate_persistence(weeks, top_n=n)["mean"]
         print(f"  top-{n}: recall={r['recall']:.3f} precision={r['precision']:.3f}")
+
+    print(
+        "\nRecency model — predict top-30 from a decayed blend of recent weeks "
+        "(captures re-entries, no screener features):"
+    )
+    best = None
+    for lookback in (1, 2, 3, 4):
+        for decay in (0.3, 0.5, 0.7):
+            r = evaluate_recency(
+                weeks, lookback=lookback, decay=decay, rank_weighted=True
+            )["mean"]
+            if best is None or r["recall"] > best[2]:
+                best = (lookback, decay, r["recall"], r["precision"])
+    for lookback in (2, 3):
+        r = evaluate_recency(weeks, lookback=lookback, decay=0.5, rank_weighted=True)["mean"]
+        print(
+            f"  lookback={lookback} decay=0.5: recall={r['recall']:.3f} "
+            f"precision={r['precision']:.3f} f1={r['f1']:.3f}"
+        )
+    if best:
+        print(
+            f"  BEST: lookback={best[0]} decay={best[1]} -> "
+            f"recall={best[2]:.3f} precision={best[3]:.3f}"
+        )
 
     return 0
 

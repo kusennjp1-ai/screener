@@ -150,3 +150,72 @@ def matrix_from_rows(
     if newest_first:
         weeks = list(reversed(weeks))
     return weeks
+
+
+def recency_scores(
+    prior_weeks: Sequence[Sequence[str]],
+    *,
+    decay: float = 0.6,
+    rank_weighted: bool = True,
+) -> dict[str, float]:
+    """Score tickers by recent-and-high-ranked appearances across prior weeks.
+
+    Args:
+        prior_weeks: ranked ticker lists ordered MOST-RECENT-FIRST
+            (``prior_weeks[0]`` = last week).
+        decay: geometric weight on older weeks (week k back counts ``decay**k``).
+        rank_weighted: also weight by rank within a week (rank 1 counts most).
+
+    A name that sat near the top of the list for several recent weeks scores
+    highest; a name that appeared once, low, several weeks ago scores least.
+    """
+    scores: dict[str, float] = {}
+    for k, lst in enumerate(prior_weeks):
+        week_weight = decay ** k
+        n = len([t for t in lst if t and t.strip() and t.strip() != "?"]) or 1
+        rank = 0
+        for ticker in lst:
+            t = ticker.strip().upper()
+            if not t or t == "?":
+                continue
+            rank += 1
+            rank_factor = (n - rank + 1) / n if rank_weighted else 1.0
+            scores[t] = scores.get(t, 0.0) + week_weight * rank_factor
+    return scores
+
+
+def predict_top_n(scores: Mapping[str, float], n: int) -> list[str]:
+    """Top-N tickers by score (ties broken alphabetically for determinism)."""
+    return [
+        t for t, _ in sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))[:n]
+    ]
+
+
+def evaluate_recency(
+    weeks: Sequence[tuple[str, Sequence[str]]],
+    *,
+    lookback: int = 3,
+    decay: float = 0.6,
+    rank_weighted: bool = True,
+    top_n: int = 30,
+) -> dict[str, object]:
+    """Predict each week's top-N from a recency-weighted blend of prior weeks.
+
+    Unlike the 1-week carry-forward, this captures names that cycle in and out of
+    the list (recent re-entries) using the IBD-30's own history as the feature —
+    no screener backfill required.
+    """
+    steps: list[dict[str, object]] = []
+    for t in range(1, len(weeks)):
+        prior = [weeks[t - 1 - k][1] for k in range(min(lookback, t))]
+        scores = recency_scores(prior, decay=decay, rank_weighted=rank_weighted)
+        predicted = predict_top_n(scores, top_n)
+        metrics = carry_forward_metrics(predicted, weeks[t][1])
+        steps.append({"week": weeks[t][0], **metrics})
+
+    mean: dict[str, float] = {}
+    if steps:
+        for key in ("recall", "precision", "jaccard", "f1"):
+            mean[key] = round(sum(float(s[key]) for s in steps) / len(steps), 4)
+    return {"steps": steps, "mean": mean, "n_steps": len(steps)}
+
