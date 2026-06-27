@@ -23,6 +23,42 @@ const runtimeActivity = {
 
 const r = (v, d = 2) => { const f = 10 ** d; return Math.round(v * f) / f; };
 
+// Derive the three MM360 color bands from the bar series, mirroring the backend
+// intent so the rendered strips are GREEN while the stock advances (above a
+// rising 50-MA, accumulating) and RED while it bases/declines — i.e. the colors
+// line up with the price at each point in time, as in the reference images.
+function computeBands(bars) {
+  const n = bars.length;
+  const close = bars.map((b) => b.close);
+  const sma = (p, i) => {
+    if (i < p - 1) return null;
+    let s = 0;
+    for (let k = i - p + 1; k <= i; k++) s += close[k];
+    return s / p;
+  };
+  const P = []; const B = []; const T = [];
+  for (let i = 0; i < n; i++) {
+    const s50 = sma(50, i);
+    const s150 = sma(150, i);
+    const ref = i >= 10 ? close[i - 10] : close[0];
+    P.push(close[i] > ref ? 'buy' : close[i] < ref ? 'sell' : 'neutral');
+    if (s50 == null) {
+      T.push('transition'); B.push('medium');
+    } else {
+      const s50prev = sma(50, Math.max(0, i - 20));
+      const rising = s50prev != null && s50 > s50prev;
+      if (close[i] > s50 && rising && (s150 == null || s50 > s150)) T.push('strong');
+      else if (close[i] < s50 && !rising) T.push('weak');
+      else T.push('transition');
+      const ext = close[i] / s50 - 1;
+      if (close[i] < s50 || ext > 0.15) B.push('high');
+      else if (ext < 0.05) B.push('low');
+      else B.push('medium');
+    }
+  }
+  return { pressure_history: P, buy_risk_history: B, tpr_history: T };
+}
+
 // Build a realistic payload from a per-ticker spec. `shape(t)` maps t∈[0,1] to a
 // close price so each ticker traces its reference chart (recovery, base-and-rip,
 // or downtrend); band/ signal/ ratings come straight from the spec.
@@ -44,7 +80,6 @@ function buildPayload(spec) {
     rpr.push({ time: date, value: r(rprStart + (rprTarget - rprStart) * t + Math.sin(i / 7) * 3, 1) });
   }
   const n = bars.length;
-  const hist = (states) => Array.from({ length: Math.min(n, 252) }, (_, k) => states[Math.floor((k / 252) * states.length) % states.length]);
   const lastDate = bars[n - 1].date;
   const pivot = bars[n - 6].close * 0.94;
   return {
@@ -66,7 +101,7 @@ function buildPayload(spec) {
       spy_overlay: spy, rpr_pane: rpr,
       rs_line: bars.map((b, i) => ({ time: b.date, value: r(0.7 + (i / n) * spec.rsSlope, 4) })),
       blue_dots: [bars[n - 18].date],
-      bands: { pressure_history: hist(spec.bands.p), buy_risk_history: hist(spec.bands.b), tpr_history: hist(spec.bands.t) },
+      bands: computeBands(bars),
       buy_points: spec.buyPoints
         ? [
             { time: bars[n - 28].date, type: 'buy_alert', price: r(pivot) },
@@ -101,7 +136,6 @@ const TICKERS = {
     quote: { last: 1208.54, bid: 1207.83, ask: 1209.24, change: 1.41, change_pct: 0.12, volume: 3_970_000 },
     ratings: { er: 90, sr: 96, rpr: 87, tpr: 'B', esr: 97, vcp_pct: 13.7, vrr_pct: 54, dist_20dma_pct: 8.1 },
     trend_stage: { stage: 2, label: 'Stage 2 — Advancing', active: true }, pressure: 'buy', buy_risk: 'low', tpr_state: 'strong', tpr_score: 7, monalert: 0,
-    bands: { p: ['sell', 'sell', 'buy', 'buy', 'buy'], b: ['high', 'medium', 'low', 'low', 'low'], t: ['weak', 'transition', 'strong', 'strong'] },
     buyPoints: 'sepa_buy_point', vcp: true, news: 3, signal: 'triple_barrel', signalLabel: 'Triple Barrel Behavioral Analytic Buy Signal', stop: 1079,
     quarters: [
       { label: '2025 Q2', estimate: false, eps_actual: 6.31, eps_prior: 3.92, eps_growth: 61, sales_actual: 15.6e9, sales_prior: 11.3e9, sales_growth: 38 },
@@ -116,7 +150,6 @@ const TICKERS = {
     quote: { last: 439.98, bid: 439.49, ask: 440.29, change: 0.80, change_pct: 0.18, volume: 8_430_000 },
     ratings: { er: 56, sr: 82, rpr: 99, tpr: 'A', esr: 74, vcp_pct: 0.6, vrr_pct: -11, dist_20dma_pct: 28 },
     trend_stage: { stage: 2, label: 'Stage 2 — Advancing', active: true }, pressure: 'buy', buy_risk: 'low', tpr_state: 'strong', tpr_score: 8, monalert: 0,
-    bands: { p: ['sell', 'sell', 'buy', 'buy'], b: ['high', 'medium', 'low', 'low'], t: ['weak', 'transition', 'strong', 'strong'] },
     buyPoints: 'sepa_buy_point', vcp: true, news: 0, signal: 'sepa_buy_point', signalLabel: 'SEPA Buy Point', stop: 200.80,
     quarters: [
       { label: '2025 Q3', estimate: false, eps_actual: 0.39, eps_prior: 0.21, eps_growth: 86, sales_actual: 1.1e9, sales_prior: 0.84e9, sales_growth: 31 },
@@ -129,7 +162,6 @@ const TICKERS = {
     quote: { last: 36.20, bid: 36.18, ask: 36.22, change: -0.80, change_pct: -2.16, volume: 33_160_000 },
     ratings: { er: null, sr: null, rpr: 14, tpr: 'E', esr: null, vcp_pct: 9.4, vrr_pct: -8, dist_20dma_pct: -6.2 },
     trend_stage: { stage: 4, label: 'Stage 4 — Declining', active: false }, pressure: 'sell', buy_risk: 'high', tpr_state: 'weak', tpr_score: 1, monalert: 0,
-    bands: { p: ['buy', 'sell', 'sell', 'sell'], b: ['low', 'high', 'high', 'high'], t: ['strong', 'weak', 'weak', 'weak'] },
     buyPoints: null, vcp: false, news: 0, signal: null, signalLabel: null, stop: null,
     quarters: [],
   },
