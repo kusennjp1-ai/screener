@@ -126,7 +126,15 @@ function buildPayload(spec) {
   };
 }
 
-const RECOVERY = (t) => 760 + 480 * (t * t) - 120 * Math.sin(t * Math.PI);
+// LLY daily, tracing the real path in IMG_2058: an Oct-2025 peak (~1200), a
+// choppy decline into an early-May-2026 bottom (~850, t≈0.62), then a sharp
+// recovery to new highs (~1191). Used to compare our bands to the real chart on
+// the SAME price action.
+const RECOVERY = (t) => {
+  const decline = 1200 - (1200 - 850) * (t / 0.62) + 40 * Math.sin(t * 7);
+  const recover = 850 + (1208 - 850) * Math.pow((t - 0.62) / 0.38, 1.25);
+  return t < 0.62 ? decline : recover;
+};
 const BASE_AND_RIP = (t) => (t < 0.62 ? 120 + 30 * Math.sin(t * 6) : 120 + 760 * Math.pow((t - 0.62) / 0.38, 1.8));
 const DOWNTREND = (t) => 70 - 36 * Math.pow(t, 0.8) + 4 * Math.sin(t * 7);
 
