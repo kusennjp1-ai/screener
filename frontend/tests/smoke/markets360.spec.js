@@ -1,9 +1,15 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync, existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 // Visual + structural smoke for the standalone Markets 360 view. The whole API
 // surface is mocked (no backend/DB), so this renders the page with payloads
 // shaped to match the reference Markets 360 screenshots and captures a
 // per-ticker screenshot for pixel review.
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REAL_LLY_FIXTURE = join(HERE, 'fixtures', 'lly_real.json');
 
 test.use({ viewport: { width: 1512, height: 982 } });
 
@@ -222,4 +228,28 @@ test('IBIT reproduces the reference (downtrend, RPR 14, no signal)', async ({ pa
   await expect(page.getByText('Buying Now!')).toHaveCount(0); // no active signal
   await page.waitForTimeout(1400);
   await page.screenshot({ path: 'tests/smoke/__screenshots__/markets360-ibit.png' });
+});
+
+// REAL DATA: render our actual calculate_bands output on real LLY/SPY OHLCV
+// (exported by scripts/markets360_export_real_lly.py) so the bands can be
+// compared 1:1 with the real MM360 screenshot for the same window.
+test('LLY real-data render (our bands on real OHLCV)', async ({ page }) => {
+  test.skip(!existsSync(REAL_LLY_FIXTURE), 'run scripts/markets360_export_real_lly.py first');
+  const payload = JSON.parse(readFileSync(REAL_LLY_FIXTURE, 'utf-8'));
+  await page.route('**/*', async (route, request) => {
+    const path = new URL(request.url()).pathname.replace(/^\/api/, '');
+    const method = request.method();
+    if (!path.startsWith('/v1/')) return route.continue();
+    if (path === '/v1/app-capabilities' && method === 'GET') return jsonResponse(route, capabilities);
+    if (path === '/v1/runtime/activity' && method === 'GET') return jsonResponse(route, runtimeActivity);
+    if (path === '/v1/strategy-profiles' && method === 'GET') return jsonResponse(route, { profiles: [], active: 'minervini' });
+    if (path === '/v1/strategy-profiles/default' && method === 'GET') return jsonResponse(route, { profile: 'minervini' });
+    if (path === '/v1/markets360/LLY' && method === 'GET') return jsonResponse(route, payload);
+    return jsonResponse(route, {});
+  });
+  await page.goto('/markets360/LLY');
+  await expect(page.getByText('Eli Lilly & Co.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Minervini Pressure')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: 'tests/smoke/__screenshots__/markets360-lly-real.png' });
 });

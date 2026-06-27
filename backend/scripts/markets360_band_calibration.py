@@ -162,9 +162,19 @@ def mean_coarse(s: Dict[str, Dict[str, float]]) -> float:
 # Price loading
 # --------------------------------------------------------------------------- #
 def _read_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df.columns = [c.capitalize() for c in df.columns]
+    """Read a daily OHLCV CSV. Handles both a plain ``Date,Open,High,Low,Close,
+    Volume`` file and yfinance's 3-row multi-header export (Price/Ticker/Date)."""
+    head = pd.read_csv(path, nrows=1)
+    if list(head.columns)[:1] == ["Price"]:
+        # yfinance: row0 = field names (first col 'Price'), rows 1-2 = Ticker/Date meta.
+        df = pd.read_csv(path, skiprows=[1, 2]).rename(columns={"Price": "Date"})
+    else:
+        df = pd.read_csv(path)
+        df.columns = [c.capitalize() for c in df.columns]
     df["Date"] = pd.to_datetime(df["Date"])
+    for col in ("Open", "High", "Low", "Close", "Volume"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     return df.set_index("Date").sort_index()
 
 
@@ -252,7 +262,8 @@ def main() -> int:
     ap.add_argument("--lly-csv", default=os.environ.get("MARKETS360_LLY_CSV"))
     ap.add_argument("--spy-csv", default=os.environ.get("MARKETS360_SPY_CSV"))
     ap.add_argument("--buckets", type=int, default=60)
-    ap.add_argument("--skip-left", type=int, default=12, help="ignore the leftmost buckets (label overlap zone)")
+    ap.add_argument("--skip-left", type=int, default=18, help="ignore the leftmost buckets (label overlap zone)")
+    ap.add_argument("--display-bars", type=int, default=186, help="trailing bars = the chart's visible window")
     ap.add_argument("--calibrate", action="store_true")
     args = ap.parse_args()
 
@@ -260,7 +271,7 @@ def main() -> int:
     lly, spy, src = load_prices(args.lly_csv, args.spy_csv)
     print(f"price source: {src}  (skip_left={args.skip_left} buckets to avoid label overlap)\n")
 
-    display_bars = DISPLAY_BARS if src == 'approx' else None
+    display_bars = args.display_bars
     base = our_bands(lly, spy, {}, args.buckets, display_bars)
     s = score(real, base, args.skip_left)
     for band in real:
