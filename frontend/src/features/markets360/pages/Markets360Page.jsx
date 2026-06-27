@@ -39,7 +39,7 @@ function LegendOverlay({ data, timeframe, hover }) {
   const c = (v) => (v == null ? '–' : Number(v).toFixed(2));
 
   return (
-    <Box sx={{ position: 'absolute', top: 8, left: 12, zIndex: 4, pointerEvents: 'none' }}>
+    <Box sx={{ position: 'absolute', top: 54, left: 12, zIndex: 4, pointerEvents: 'none' }}>
       <Typography sx={{ color: '#e6e8ec', fontSize: 15, fontWeight: 700 }}>
         {data?.symbol} · {data?.name} · {timeframe === 'weekly' ? '1W' : '1D'} · {data?.exchange}
       </Typography>
