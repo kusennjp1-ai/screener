@@ -1,0 +1,229 @@
+"""
+Markets 360 — buy-signal engine.
+
+Reproduces the staged buy annotations and the "Buying Now!" card seen on a
+Minervini Markets 360 chart. MM360's exact trigger logic is proprietary; this
+is a documented, self-contained approximation grounded in Minervini's public
+SEPA® methodology:
+
+  * ``buy_alert``  — price is approaching a VCP pivot from 3–8% below: a base is
+    setting up but has not triggered.
+  * ``buy_ready``  — price is within 3% under the pivot with volume drying up:
+    the breakout is imminent.
+  * ``sepa_buy_point`` — a Stage-2 breakout through the pivot on expanding
+    volume (the classic SEPA pivot buy).
+  * ``triple_barrel`` — the strongest, "Buying Now!" state: three *independent*
+    confirmations fire on the same bar:
+        1. Trend barrel    — Trend Template strong (price > 50 > 150 > 200, rising).
+        2. Pressure barrel — accumulation pressure is positive (AD-line rising).
+        3. Breakout barrel — a fresh pivot breakout on volume with low buy-risk.
+
+The card carries a protective ``stop`` estimated Minervini-style: the breakout
+base low, floored at a max tolerable loss from the trigger price.
+
+Everything is defensive — a charting aid must never raise.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Dict, List, Optional
+
+import numpy as np
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+# How recent (in bars) the latest breakout must be for the card to read
+# "Buying Now!" rather than a historical annotation.
+ACTIVE_WINDOW_BARS = 5
+
+# Max tolerable loss from the trigger when the base low would imply a wider stop.
+MAX_STOP_LOSS_PCT = 0.10
+
+# Volume expansion multiple that qualifies a breakout bar.
+BREAKOUT_VOL_MULT = 1.4
+
+
+def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high, low, close = df["High"], df["Low"], df["Close"]
+    tr = pd.concat(
+        [high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()],
+        axis=1,
+    ).max(axis=1)
+    return tr.ewm(span=period, adjust=False).mean()
+
+
+def compute_buy_signal(
+    price_data: pd.DataFrame,
+    *,
+    buy_points: Optional[List[Dict]] = None,
+    pressure_state: Optional[str] = None,
+    tpr_state: Optional[str] = None,
+    buy_risk_state: Optional[str] = None,
+    author: str = "Mark Minervini",
+) -> Dict[str, object]:
+    """Decide the current buy-signal card from the latest bar context.
+
+    Args:
+        price_data: OHLCV DataFrame (DatetimeIndex; Open/High/Low/Close/Volume).
+        buy_points: the chart's computed ``[{time,type,price}]`` annotations.
+            The most recent breakout drives the card.
+        pressure_state / tpr_state / buy_risk_state: current band states, reused
+            so the engine and the bands agree.
+        author: attribution shown on the card.
+
+    Returns a dict shaped for the schema's ``signal`` block; ``active`` is False
+    when no fresh trigger is present.
+    """
+    inactive = {"active": False, "type": None, "label": None}
+    if price_data is None or getattr(price_data, "empty", True) or len(price_data) < 60:
+        return inactive
+    if "Close" not in price_data.columns:
+        return inactive
+
+    try:
+        close = price_data["Close"]
+        last_close = float(close.iloc[-1])
+        last_date = price_data.index[-1]
+
+        # The freshest breakout annotation, if any, anchors the card.
+        latest_breakout = _latest_breakout(price_data, buy_points)
+
+        # Three independent confirmation "barrels" on the latest bar.
+        trend_ok = tpr_state == "strong"
+        pressure_ok = pressure_state == "buy"
+        breakout_ok, trigger_price, base_low = _breakout_now(price_data)
+        risk_ok = buy_risk_state in ("low", "medium")
+
+        barrels = {
+            "trend": bool(trend_ok),
+            "pressure": bool(pressure_ok),
+            "breakout": bool(breakout_ok and risk_ok),
+        }
+        barrels_passed = sum(barrels.values())
+
+        # Pick the strongest applicable state.
+        if barrels_passed == 3:
+            sig_type = "triple_barrel"
+            label = "Triple Barrel Behavioral Analytic Buy Signal"
+        elif latest_breakout and _is_recent(latest_breakout["idx"], len(close)):
+            sig_type = latest_breakout["type"]
+            label = (
+                "SEPA Buy Point"
+                if sig_type == "sepa_buy_point"
+                else "Buy Point"
+                if sig_type == "buy_point"
+                else "Buy Ready"
+                if sig_type == "buy_ready"
+                else "Buy Alert"
+            )
+        else:
+            return {**inactive, "barrels": barrels, "barrels_passed": barrels_passed}
+
+        # Active only when the trigger is fresh.
+        active = sig_type == "triple_barrel" or (
+            latest_breakout is not None and _is_recent(latest_breakout["idx"], len(close))
+        )
+
+        trigger = trigger_price or (latest_breakout["price"] if latest_breakout else last_close)
+        stop = _estimate_stop(price_data, trigger=trigger, base_low=base_low or (
+            latest_breakout.get("base_low") if latest_breakout else None
+        ))
+
+        return {
+            "active": bool(active),
+            "type": sig_type,
+            "label": label,
+            "headline": "Buying Now!" if active else "Watch",
+            "author": author,
+            "as_of": last_date.strftime("%Y-%m-%dT%H:%M:%S") if hasattr(last_date, "strftime") else None,
+            "trigger_price": round(float(trigger), 2) if trigger else None,
+            "stop": round(float(stop), 2) if stop is not None else None,
+            "risk_pct": (
+                round((trigger - stop) / trigger * 100.0, 1)
+                if (trigger and stop and trigger > 0)
+                else None
+            ),
+            "barrels": barrels,
+            "barrels_passed": barrels_passed,
+        }
+    except Exception:  # noqa: BLE001 - signal card must never break the payload
+        logger.warning("buy-signal computation failed", exc_info=True)
+        return inactive
+
+
+def _latest_breakout(price_data: pd.DataFrame, buy_points: Optional[List[Dict]]) -> Optional[Dict]:
+    """Resolve the most recent breakout annotation to a bar index + price."""
+    if not buy_points:
+        return None
+    breakout_types = ("triple_barrel", "sepa_buy_point", "buy_point", "buy_ready", "buy_alert")
+    date_to_idx = {ts.strftime("%Y-%m-%d"): i for i, ts in enumerate(price_data.index)}
+    best: Optional[Dict] = None
+    for bp in buy_points:
+        if bp.get("type") not in breakout_types:
+            continue
+        idx = date_to_idx.get(bp.get("time"))
+        if idx is None:
+            continue
+        if best is None or idx > best["idx"]:
+            best = {"idx": idx, "type": bp["type"], "price": bp.get("price"), "time": bp.get("time")}
+    return best
+
+
+def _is_recent(idx: int, n: int) -> bool:
+    return (n - 1 - idx) <= ACTIVE_WINDOW_BARS
+
+
+def _breakout_now(price_data: pd.DataFrame) -> tuple[bool, Optional[float], Optional[float]]:
+    """Did a fresh pivot breakout fire within the active window?
+
+    A breakout = close clearing the prior ~30-bar consolidation high on volume
+    expansion, with the bar before still under that pivot. Returns
+    ``(ok, pivot_price, base_low)``.
+    """
+    if len(price_data) < 40:
+        return (False, None, None)
+    close = price_data["Close"]
+    high = price_data["High"]
+    vol = price_data["Volume"] if "Volume" in price_data.columns else None
+    avgvol = vol.rolling(50).mean() if vol is not None else None
+
+    n = len(close)
+    for i in range(n - 1, max(n - 1 - ACTIVE_WINDOW_BARS, 0) - 1, -1):
+        if i < 31:
+            continue
+        pivot = float(high.iloc[i - 30:i].max())
+        base_low = float(price_data["Low"].iloc[i - 30:i].min())
+        crossed = float(close.iloc[i]) > pivot and float(close.iloc[i - 1]) <= pivot
+        vol_ok = (
+            avgvol is not None
+            and not pd.isna(avgvol.iloc[i])
+            and float(avgvol.iloc[i]) > 0
+            and float(vol.iloc[i]) >= BREAKOUT_VOL_MULT * float(avgvol.iloc[i])
+        )
+        if crossed and vol_ok:
+            return (True, pivot, base_low)
+    return (False, None, None)
+
+
+def _estimate_stop(
+    price_data: pd.DataFrame, *, trigger: Optional[float], base_low: Optional[float]
+) -> Optional[float]:
+    """Minervini-style protective stop: the base low, floored at a max loss.
+
+    Prefer the breakout base's low (a logical violation point). If that would
+    risk more than ``MAX_STOP_LOSS_PCT`` from the trigger, tighten to that cap.
+    Falls back to ~1.5 ATR under the trigger when no base low is available.
+    """
+    if trigger is None or trigger <= 0:
+        return None
+    floor = trigger * (1.0 - MAX_STOP_LOSS_PCT)
+    if base_low is not None and base_low > 0:
+        return max(float(base_low), floor)
+    try:
+        atr = float(_atr(price_data).iloc[-1])
+        if np.isfinite(atr) and atr > 0:
+            return max(trigger - 1.5 * atr, floor)
+    except Exception:  # noqa: BLE001
+        pass
+    return floor
