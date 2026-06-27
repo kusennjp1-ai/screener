@@ -80,3 +80,6 @@ celerybeat-schedule
 
 # Load harness ephemeral output (committed baselines stay; per-run does not)
 backend/tests/load/baselines/current_run.json
+
+# Markets 360 band-calibration fixtures (real public OHLCV used by tests)
+!backend/tests/fixtures/markets360/*.csv

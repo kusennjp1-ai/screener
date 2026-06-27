@@ -51,7 +51,12 @@ PRESSURE_NEUTRAL_EPS = 0.0    # |normalised slope| below this -> "neutral"
 BAND_HISTORY_BARS = 252
 
 BUYRISK_MA = 50               # extension is measured from this SMA
-BUYRISK_LOW_ATR = 4.0         # < this many ATRs above MA -> low risk
+# Calibrated against 6 real Markets 360 charts (LLY/FTNT/CYRX/IBB/QQQ/MRVL):
+# their Buy Risk reads "low" (green) for strong uptrends extended up to ~6 ATRs
+# above the 50DMA, not 4 — a 4.0 cutoff flipped extended leaders to amber too
+# early. Raising the low-risk band to 6.0 lifted right-edge state agreement with
+# the real charts from 67% to 83%. See scripts/markets360_band_calibration.py.
+BUYRISK_LOW_ATR = 6.0         # < this many ATRs above MA -> low risk
 BUYRISK_HIGH_ATR = 8.0        # > this many ATRs above MA -> high risk
 VCP_TIGHT_PCT = 5.0           # range-contraction% under this = "tight" base
 

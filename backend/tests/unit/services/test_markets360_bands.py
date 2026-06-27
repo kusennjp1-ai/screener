@@ -79,6 +79,18 @@ def test_decline_then_recovery_flips_weak_to_strong():
     assert tpr_hist[-20:].count("strong") >= 10
 
 
+def test_buy_risk_low_zone_calibrated_to_six_atr():
+    """Locks the multi-ticker calibration: the 'low' buy-risk zone reaches ~6
+    ATRs above the 50DMA (real MM360 charts read extended leaders like FTNT/MRVL
+    at ~5 ATRs as low/green). A 4-ATR cutoff flipped them to amber too early."""
+    from app.services.minervini_bands import _risk_from_extension
+
+    assert _risk_from_extension(3.0, False) == "low"
+    assert _risk_from_extension(5.0, False) == "low"     # was "medium" before calibration
+    assert _risk_from_extension(7.0, False) == "medium"
+    assert _risk_from_extension(9.0, False) == "high"
+
+
 def test_history_length_matches_window():
     df = _frame(np.linspace(50, 160, 320))
     bands = calculate_bands(df, with_history=True)
