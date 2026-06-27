@@ -25,25 +25,35 @@ from markets360_band_calibration import _read_csv  # noqa: E402  (sibling script
 FIX = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "markets360"
 
 # Band colors read off the right edge of each reference screenshot (P/B/T;
-# '?' = unreadable/uncertain), and the as-of date the screenshot ends on
-# (None = the CSV's last bar). Twelve daily tickers spanning uptrends, pullbacks,
-# tops and a downtrend/crash (COIN, QURE).
+# '?' = unreadable/uncertain), and the as-of date the screenshot ends on.
+# IMPORTANT: the as-of must be the bar the SCREENSHOT actually ends on, not the
+# CSV's last bar. Most captures are intraday of the CSV's final bar (asof=None is
+# correct: LLY/FTNT/CYRX), but two were taken earlier — QQQ ends 2026-06-15 and
+# IBB ends 2026-06-23. An earlier audit wrongly anchored QQQ to the CSV tail
+# (06-26), where our bands happen to read RGA and matched; at the true 06-15 edge
+# our bands read GGG, so the match is only Buy Risk. Always verify the screenshot
+# close+%change against the CSV before trusting an anchor.
 #
 # Findings across these 12, after calibrating all three bands to the real charts:
 #   * Buy Risk  12/12 (100%) — BUYRISK_LOW_ATR 4->6 (clean monotone threshold).
-#   * TPR       10/10 (100%) — perfect-template-but-rolling-over demotion isolates
-#     QQQ (+19% history flips, under cap).
-#   * Pressure  10/11 (91%) — crash + distribution sell-overrides catch GEV/QURE
-#     (+7% history flips). Only CYRX (a high-and-tight stall, not distribution)
-#     remains; fixing it needs a stall rule that floods green leaders -> rejected.
-#   * Overall   32/33 (97%), up from 29/33 (88%) pre-Pressure/TPR calibration.
-# An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15),
-# the Buy Risk plateau, and that these are the only safe gains.
+#   * TPR        9/10 (90%) — rolling-over demotion handles the tops; the miss is
+#     QQQ, where a 3-day V-bounce off an early-June distribution reads strong for
+#     us but MM360 still holds amber (transition) pending confirmation.
+#   * Pressure   9/11 (82%) — crash + distribution sell-overrides catch GEV/QURE.
+#     Two misses: CYRX (a high-and-tight stall, not distribution) and QQQ (same
+#     V-bounce — MM360 keeps Pressure red after a -4.8% volume day; our crash gate
+#     is -6% and the bounce closes <5% off the high so distribution doesn't fire).
+#     Closing either needs a rule that floods green on legitimate leaders -> held.
+#   * Overall   30/33 (91%). The headline regime calls (uptrend/top/downtrend/
+#     crash) all match; the residual is MM360 being more conservative than us on a
+#     sharp recovery bar.
+# An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15)
+# and the Buy Risk plateau. The QQQ/IBB anchor-date correction came afterward.
 REFERENCE = {
-    "FTNT": {"real": "GGG", "asof": None},
-    "CYRX": {"real": "RGG", "asof": None},
-    "IBB": {"real": "GGG", "asof": None},
-    "QQQ": {"real": "RGA", "asof": None},
+    "FTNT": {"real": "GGG", "asof": None},      # intraday capture of the last CSV bar
+    "CYRX": {"real": "RGG", "asof": None},      # intraday capture of the last CSV bar
+    "IBB": {"real": "GGG", "asof": "2026-06-23"},  # screenshot ends 06-23 (C~178), not the CSV's 06-26
+    "QQQ": {"real": "RGA", "asof": "2026-06-15"},   # screenshot ends 06-15 (C 743 V-bounce), not 06-26
     "MRVL": {"real": "GGG", "asof": "2026-04-10"},  # older screenshot
     "LLY": {"real": "GG?", "asof": None},           # TPR read uncertain (label overlap)
     "AA": {"real": "GGG", "asof": "2026-03-02"},

@@ -37,14 +37,20 @@ def _f(v):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--lly", required=True)
+    ap.add_argument("--lly", required=True, help="symbol OHLCV csv (kept name for back-compat)")
     ap.add_argument("--spy", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--display-bars", type=int, default=DISPLAY_BARS)
+    ap.add_argument("--symbol", default="LLY")
+    ap.add_argument("--name", default="Eli Lilly & Co.")
+    ap.add_argument("--exchange", default="XNYS")
+    ap.add_argument("--asof", default=None, help="end the display window at this date (YYYY-MM-DD)")
     args = ap.parse_args()
 
     lly = _read_csv(args.lly)
     spy = _read_csv(args.spy)
+    if args.asof:
+        lly = lly[lly.index <= pd.Timestamp(args.asof)]
     n = args.display_bars
 
     # Bands computed on the FULL series (valid MAs), histories trimmed to window.
@@ -69,18 +75,20 @@ def main() -> int:
 
     last = float(close.iloc[-1]); prev = float(close.iloc[-2])
     payload = {
-        "symbol": "LLY", "name": "Eli Lilly & Co.", "exchange": "XNYS", "market": "US",
+        "symbol": args.symbol, "name": args.name, "exchange": args.exchange, "market": "US",
         "as_of": bars[-1]["date"],
         "quote": {"last": round(last, 2), "bid": None, "ask": None,
                   "change": round(last - prev, 2), "change_pct": round((last - prev) / prev * 100, 2),
                   "volume": int(lly["Volume"].iloc[-1])},
         "ratings": {
             # Computed from real price/benchmark where we can; ER/SR/ESR need
-            # fundamentals (not in the CSV) so we carry the chart's printed values.
-            "er": 90, "sr": 96,
+            # fundamentals (not in the CSV), carried as the chart's printed values
+            # for LLY only (null for other symbols rather than mislabel them).
+            "er": 90 if args.symbol == "LLY" else None,
+            "sr": 96 if args.symbol == "LLY" else None,
             "rpr": ratings.compute_rpr(close, spy["Close"]),
             "tpr": ratings.tpr_letter(bands.get("tpr_score"), bands.get("tpr_max")),
-            "esr": 97,
+            "esr": 97 if args.symbol == "LLY" else None,
             "vcp_pct": _f(ratings.compute_vcp_pct(lly)),
             "vrr_pct": _f(ratings.compute_vrr(lly["Volume"])),
             "dist_20dma_pct": _f(ratings.compute_dist_20dma(close)),
