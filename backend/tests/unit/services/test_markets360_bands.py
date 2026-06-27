@@ -91,6 +91,39 @@ def test_buy_risk_low_zone_calibrated_to_six_atr():
     assert _risk_from_extension(9.0, False) == "high"
 
 
+def test_pressure_crash_override_forces_sell():
+    """A capitulation bar (<=-6% on >=2x avg volume) reads sell even if the
+    smooth AD-line slope is still positive from the prior advance."""
+    close = np.concatenate([np.linspace(50, 100, 80), [93.0]])  # uptrend then -7% day
+    df = _frame(close)
+    df.loc[df.index[-1], "Volume"] = 5_000_000  # >= 2x the 1M baseline
+    assert calculate_bands(df)["pressure_state"] == "sell"
+
+
+def test_pressure_distribution_override_forces_sell():
+    """A cluster of down-on-volume bars >=5% off the recent high reads sell."""
+    close = np.concatenate([np.linspace(50, 100, 70), [99, 97, 95, 94, 93, 92]])
+    df = _frame(close)
+    df.iloc[-6:, df.columns.get_loc("Volume")] = 3_000_000  # elevated down-volume
+    assert calculate_bands(df)["pressure_state"] == "sell"
+
+
+def test_pressure_stays_buy_in_clean_uptrend():
+    """The overrides must NOT fire on a steady advance (no crash, not off highs)."""
+    df = _frame(np.linspace(50, 160, 120))
+    assert calculate_bands(df)["pressure_state"] == "buy"
+
+
+def test_tpr_demotes_strong_to_transition_on_rollover():
+    """A full-template name materially fading from highs (5-bar <=-3%, 10-bar
+    <=-1%) reads transition, not strong; one sitting at highs stays strong."""
+    rolling = np.concatenate([np.linspace(50, 200, 294), [200, 196, 193, 190, 187, 185]])
+    assert calculate_bands(_frame(rolling))["tpr_state"] == "transition"
+
+    at_highs = np.linspace(50, 200, 300)
+    assert calculate_bands(_frame(at_highs))["tpr_state"] == "strong"
+
+
 def test_history_length_matches_window():
     df = _frame(np.linspace(50, 160, 320))
     bands = calculate_bands(df, with_history=True)

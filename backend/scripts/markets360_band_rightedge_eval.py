@@ -29,15 +29,16 @@ FIX = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "markets360"
 # (None = the CSV's last bar). Twelve daily tickers spanning uptrends, pullbacks,
 # tops and a downtrend/crash (COIN, QURE).
 #
-# Findings across these 12 (run before/after the BUYRISK_LOW_ATR 4->6 change):
-#   * Buy Risk  12/12 (100%) after the calibration — a clean monotone threshold
-#     bias, safely fixed.
-#   * TPR        9/10 (90%)  — one borderline transition/strong call; no bias.
-#   * Pressure   8/11 (73%) — misses are pullback/crash bars (CYRX/GEV/QURE)
-#     where MM360 flips red faster than our AD-line slope. Adding a short-term
-#     momentum sell-trigger lifts this to ~10/12 BUT ~doubles the band's color-
-#     flip count (un-MM360-like choppiness), so Pressure is deliberately left on
-#     the smooth AD-line slope. The smoothness/reactivity trade-off is inherent.
+# Findings across these 12, after calibrating all three bands to the real charts:
+#   * Buy Risk  12/12 (100%) — BUYRISK_LOW_ATR 4->6 (clean monotone threshold).
+#   * TPR       10/10 (100%) — perfect-template-but-rolling-over demotion isolates
+#     QQQ (+19% history flips, under cap).
+#   * Pressure  10/11 (91%) — crash + distribution sell-overrides catch GEV/QURE
+#     (+7% history flips). Only CYRX (a high-and-tight stall, not distribution)
+#     remains; fixing it needs a stall rule that floods green leaders -> rejected.
+#   * Overall   32/33 (97%), up from 29/33 (88%) pre-Pressure/TPR calibration.
+# An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15),
+# the Buy Risk plateau, and that these are the only safe gains.
 REFERENCE = {
     "FTNT": {"real": "GGG", "asof": None},
     "CYRX": {"real": "RGG", "asof": None},
@@ -49,7 +50,7 @@ REFERENCE = {
     "COIN": {"real": "RRR", "asof": "2026-02-06"},   # downtrend
     "GEV": {"real": "RGG", "asof": "2026-02-05"},    # top pullback (-5.78% day)
     "PRAX": {"real": "GGG", "asof": "2026-01-14"},
-    "QURE": {"real": "RR?", "asof": "2025-11-03"},   # parabolic crash (-13% day)
+    "QURE": {"real": "RR?", "asof": "2025-11-05"},   # parabolic top, -14% day (close ~26)
     "MSFT": {"real": "?GG", "asof": "2025-10-28"},   # Pressure read uncertain (chop->breakout)
 }
 STATE_TO_COLOR = {

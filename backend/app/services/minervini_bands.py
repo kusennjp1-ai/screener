@@ -63,6 +63,27 @@ VCP_TIGHT_PCT = 5.0           # range-contraction% under this = "tight" base
 TPR_STRONG = 8                # >= this many conditions -> strong
 TPR_TRANSITION = 5            # >= this many conditions -> transition (else weak)
 
+# Pressure sell-overrides, calibrated against real MM360 charts (the smooth
+# AD-line slope is too slow to flag fresh distribution/capitulation):
+#  - crash bar: a day return at/under CRASH_RET on >= CRASH_VOL_MULT x avg volume
+#    (catches a -49% QURE-style crash the 10-bar slope still reads positive).
+#  - distribution cluster off highs: >= DIST_MIN down-on-volume bars within
+#    DIST_BARS AND price >= DIST_OFF_HIGH off the window high (catches a GEV-style
+#    pullback). Only fires on genuine selling, so it adds little band chop.
+PRESSURE_CRASH_RET = -0.06
+PRESSURE_CRASH_VOL_MULT = 2.0
+PRESSURE_DIST_BARS = 10
+PRESSURE_DIST_MIN = 2
+PRESSURE_DIST_OFF_HIGH = 0.05
+
+# TPR demotion: a perfect-template bar that is meaningfully rolling over
+# (5-bar return <= -3% AND 10-bar return <= -1%) reads "transition", not
+# "strong" — calibrated to real MM360 (e.g. QQQ fading from highs at a full
+# template). Thresholds are deliberately material (not any down-tick) so the
+# band strip stays smooth rather than flickering on every shallow dip.
+TPR_DEMOTE_R5 = -0.03
+TPR_DEMOTE_R10 = -0.01
+
 
 # ---------------------------------------------------------------------------
 # Band 1: Pressure
@@ -82,13 +103,33 @@ def _ad_line(price_data: pd.DataFrame) -> pd.Series:
     return mfv.cumsum()
 
 
+def _pressure_sell_override(price_data: pd.DataFrame) -> pd.Series:
+    """Per-bar mask forcing "sell" on crash / fresh-distribution bars."""
+    close = price_data["Close"]
+    high = price_data["High"]
+    vol = price_data["Volume"]
+    ret = close.pct_change()
+    avgvol = vol.rolling(BUYRISK_MA).mean()
+
+    crash = (ret <= PRESSURE_CRASH_RET) & (vol >= PRESSURE_CRASH_VOL_MULT * avgvol)
+
+    down_on_vol = (ret < 0) & (vol > avgvol)
+    dist_count = down_on_vol.rolling(PRESSURE_DIST_BARS).sum()
+    win_high = high.rolling(PRESSURE_DIST_BARS).max()
+    off_high = (win_high - close) / win_high >= PRESSURE_DIST_OFF_HIGH
+    distribution = (dist_count >= PRESSURE_DIST_MIN) & off_high
+
+    return (crash | distribution).fillna(False)
+
+
 def compute_pressure(
     price_data: pd.DataFrame,
     lookback: int = PRESSURE_LOOKBACK,
     slope_bars: int = PRESSURE_SLOPE_BARS,
     with_history: bool = False,
 ) -> Dict[str, object]:
-    """Net buying vs selling pressure from the AD-line slope."""
+    """Net buying vs selling pressure from the AD-line slope, with sell-overrides
+    for crash / fresh-distribution bars (calibrated to real MM360)."""
     if len(price_data) < lookback + slope_bars:
         return {"pressure_state": None, "pressure_value": None}
 
@@ -102,13 +143,18 @@ def compute_pressure(
 
     slope_series = (ad - ad.shift(slope_bars)) / (slope_bars * vol_norm)
     slope_now = float(slope_series.iloc[-1])
+    override = _pressure_sell_override(price_data)
 
-    if slope_now > PRESSURE_NEUTRAL_EPS:
-        state = "buy"
-    elif slope_now < -PRESSURE_NEUTRAL_EPS:
-        state = "sell"
-    else:
-        state = "neutral"
+    def _state(slope: float, forced: bool) -> str:
+        if forced:
+            return "sell"
+        if slope > PRESSURE_NEUTRAL_EPS:
+            return "buy"
+        if slope < -PRESSURE_NEUTRAL_EPS:
+            return "sell"
+        return "neutral"
+
+    state = _state(slope_now, bool(override.iloc[-1]))
 
     out: Dict[str, object] = {
         "pressure_state": state,
@@ -118,10 +164,10 @@ def compute_pressure(
     if with_history:
         # Span the full chart window (not the 50-bar state lookback) so the
         # Pressure strip is colored across the same range as the other bands.
-        hist = slope_series.tail(BAND_HISTORY_BARS)
+        hist = slope_series.tail(BAND_HISTORY_BARS).fillna(0.0)
+        ov = override.tail(BAND_HISTORY_BARS).tolist()
         out["pressure_history"] = [
-            ("buy" if v > PRESSURE_NEUTRAL_EPS else "sell" if v < -PRESSURE_NEUTRAL_EPS else "neutral")
-            for v in hist.fillna(0.0)
+            _state(float(v), bool(ov[i])) for i, v in enumerate(hist)
         ]
     return out
 
@@ -260,6 +306,16 @@ def compute_tpr(
         n = sum(bool(x) for x in conds)
         return n
 
+    def _rolling_over(i: int) -> bool:
+        """A perfect-template bar fading from highs: a material 5- and 10-bar
+        pullback (thresholds keep the strip smooth, not flickery)."""
+        if i - 10 < 0:
+            return False
+        p5, p10 = close.iloc[i - 5], close.iloc[i - 10]
+        if p5 <= 0 or p10 <= 0:
+            return False
+        return (close.iloc[i] / p5 - 1) <= TPR_DEMOTE_R5 and (close.iloc[i] / p10 - 1) <= TPR_DEMOTE_R10
+
     # 8th condition (RS) is evaluated only for the current bar (benchmark-based).
     base_now = score_at(len(close) - 1)
     rs_ok = _relative_strength_ok(close, benchmark_close)
@@ -275,6 +331,9 @@ def compute_tpr(
     else:
         state = "weak"
 
+    if state == "strong" and score_now >= max_score and _rolling_over(len(close) - 1):
+        state = "transition"
+
     out: Dict[str, object] = {
         "tpr_state": state,
         "tpr_score": score_now,
@@ -285,7 +344,10 @@ def compute_tpr(
         hist = []
         for i in range(max(0, len(close) - BAND_HISTORY_BARS), len(close)):
             s = score_at(i)  # history uses the 7 price/MA conditions only
-            hist.append("strong" if s >= 7 else "transition" if s >= 5 else "weak")
+            st = "strong" if s >= 7 else "transition" if s >= 5 else "weak"
+            if st == "strong" and _rolling_over(i):
+                st = "transition"
+            hist.append(st)
         out["tpr_history"] = hist
     return out
 
