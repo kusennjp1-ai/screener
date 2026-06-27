@@ -76,6 +76,7 @@ export default function Markets360Chart({
   height = 560,
   visibility = {},
   onLegend = null,
+  monalertNet = null,
 }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -88,11 +89,13 @@ export default function Markets360Chart({
   const maRefs = useRef({});
   const markersRef = useRef(null);
 
-  // Overlay geometry: right inset (price-scale width) + buy-point chip x's.
-  const [overlay, setOverlay] = useState({ rightInset: 64, chips: [] });
+  // Overlay geometry: right inset (price-scale width), buy-point chip x's, and
+  // VCP box rectangles (time x + price y, anchored to the candle series).
+  const [overlay, setOverlay] = useState({ rightInset: 64, chips: [], vcp: [] });
 
   const recomputeOverlay = useCallback(() => {
     const chart = chartRef.current;
+    const candle = candleRef.current;
     if (!chart || !payload) return;
     let rightInset = 64;
     try { rightInset = chart.priceScale('right').width() || 64; } catch { /* default */ }
@@ -103,7 +106,19 @@ export default function Markets360Chart({
       try { x = ts.timeToCoordinate(bp.time); } catch { x = null; }
       if (x != null) chips.push({ x, type: bp.type, price: bp.price });
     }
-    setOverlay({ rightInset, chips });
+    const vcp = [];
+    for (const box of payload.vcp_boxes || []) {
+      try {
+        const x1 = ts.timeToCoordinate(box.start);
+        const x2 = ts.timeToCoordinate(box.end);
+        const yHigh = candle?.priceToCoordinate(box.high);
+        const yLow = candle?.priceToCoordinate(box.low);
+        if (x1 != null && x2 != null && yHigh != null && yLow != null) {
+          vcp.push({ x1, x2, yTop: Math.min(yHigh, yLow), yBottom: Math.max(yHigh, yLow) });
+        }
+      } catch { /* skip unplottable box */ }
+    }
+    setOverlay({ rightInset, chips, vcp });
   }, [payload]);
 
   // Build chart once.
@@ -236,6 +251,26 @@ export default function Markets360Chart({
   const bands = payload?.bands || {};
   const BAND_TOP = 6;
   const ROW_H = 14;
+  const bandBlockH = BAND_ROWS.length * ROW_H;
+  const monalertHist = payload?.monalert || [];
+  const news = payload?.news_markers || [];
+
+  // MonAlert net line across the band block, normalized to its own min/max.
+  const monalertPath = (() => {
+    if (!Array.isArray(monalertHist) || monalertHist.length < 2) return null;
+    const vals = monalertHist.map((p) => p.value);
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    const span = hi - lo || 1;
+    const w = 100; // percent-based viewBox
+    return monalertHist
+      .map((p, i) => {
+        const x = (i / (monalertHist.length - 1)) * w;
+        const y = bandBlockH - ((p.value - lo) / span) * bandBlockH;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(' ');
+  })();
 
   return (
     <div style={{ position: 'relative', width: '100%', height }}>
@@ -252,11 +287,32 @@ export default function Markets360Chart({
         />
       ))}
 
+      {/* MonAlert net line drawn over the band block + right-edge value badge. */}
+      {monalertPath && (
+        <svg
+          viewBox={`0 0 100 ${bandBlockH}`}
+          preserveAspectRatio="none"
+          style={{ position: 'absolute', top: BAND_TOP, left: 0, right: overlay.rightInset, height: bandBlockH, width: 'auto', zIndex: 3, pointerEvents: 'none' }}
+        >
+          <path d={monalertPath} fill="none" stroke="#5ec8ff" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
+        </svg>
+      )}
+      {monalertNet != null && (
+        <div style={{ position: 'absolute', top: BAND_TOP + bandBlockH - 18, right: overlay.rightInset + 2, background: '#2962ff', color: '#fff', fontSize: 11, fontWeight: 800, borderRadius: 3, padding: '0 5px', zIndex: 4, pointerEvents: 'none' }}>
+          {monalertNet}
+        </div>
+      )}
+
+      {/* VCP consolidation box (price-anchored rectangle). */}
+      {overlay.vcp.map((b, i) => (
+        <div key={i} style={{ position: 'absolute', left: b.x1, top: b.yTop, width: Math.max(b.x2 - b.x1, 2), height: Math.max(b.yBottom - b.yTop, 2), border: '1px dashed rgba(224,165,46,0.8)', background: 'rgba(224,165,46,0.06)', zIndex: 2, pointerEvents: 'none' }} />
+      ))}
+
       {/* Staged buy-point chips, anchored at their bar's x just below the bands. */}
       {overlay.chips.map((c, i) => {
         const cfg = CHIP[c.type] || CHIP.buy_point;
         return (
-          <div key={i} style={{ position: 'absolute', top: BAND_TOP + BAND_ROWS.length * ROW_H + 4, left: c.x, transform: 'translateX(-50%)', pointerEvents: 'none', textAlign: 'center', zIndex: 3 }}>
+          <div key={i} style={{ position: 'absolute', top: BAND_TOP + bandBlockH + 4, left: c.x, transform: 'translateX(-50%)', pointerEvents: 'none', textAlign: 'center', zIndex: 3 }}>
             <div style={{ background: cfg.bg, color: '#fff', fontSize: 10, fontWeight: 800, borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
               {cfg.text}
             </div>
@@ -264,6 +320,22 @@ export default function Markets360Chart({
           </div>
         );
       })}
+
+      {/* News Count pane: a labelled row of evenly-spaced dots near the bottom. */}
+      <div style={{ position: 'absolute', bottom: 26, left: 0, right: overlay.rightInset, height: 14, display: 'flex', alignItems: 'center', zIndex: 3, pointerEvents: 'none' }}>
+        <span style={{ fontSize: 11, color: '#9aa0aa', marginRight: 8, textShadow: '0 1px 2px #000' }}>
+          News Count <b style={{ color: '#d1d4dc' }}>{news.length}</b>
+        </span>
+        <div style={{ position: 'relative', flex: 1, height: 6 }}>
+          {news.map((nDate, i) => {
+            const idx = (payload?.bars || []).findIndex((b) => b.date === nDate);
+            const total = (payload?.bars || []).length || 1;
+            const left = idx >= 0 ? (idx / (total - 1)) * 100 : null;
+            if (left == null) return null;
+            return <span key={i} style={{ position: 'absolute', left: `${left}%`, width: 4, height: 4, borderRadius: '50%', background: '#3aa0ff' }} />;
+          })}
+        </div>
+      </div>
     </div>
   );
 }

@@ -93,6 +93,8 @@ class Markets360Service:
             "rpr_pane": chart_overlays.serialize_rpr_pane(price_df, benchmark_df, window_days),
             "earnings_markers": chart_overlays.earnings_markers(earnings_dates, price_df, window_days),
             "monalert": ratings.compute_monalert_net(price_df).get("monalert_history", []),
+            # No news feed is wired yet; the pane renders an empty 0-count row.
+            "news_markers": [],
         }
         rs_line, blue_dots = chart_overlays.serialize_rs_line(price_df, benchmark_df, window_days)
         chart["rs_line"] = rs_line

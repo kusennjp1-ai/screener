@@ -69,7 +69,14 @@ function LegendOverlay({ data, timeframe, hover }) {
           );
         })}
         {data?.chart?.benchmark_symbol && (
-          <Typography sx={{ fontSize: 12, color: '#9598a1', fontWeight: 600 }}>{data.chart.benchmark_symbol}</Typography>
+          <Typography sx={{ fontSize: 12, color: '#9598a1', fontWeight: 600 }}>
+            {data.chart.benchmark_symbol}
+            {(() => {
+              const ov = data?.chart?.spy_overlay;
+              const v = ov && ov.length ? ov[ov.length - 1].value : null;
+              return v != null ? `  ${Number(v).toFixed(2)}` : '';
+            })()}
+          </Typography>
         )}
       </Box>
     </Box>
@@ -123,7 +130,7 @@ export default function Markets360Page() {
         {chartPayload && (
           <>
             <LegendOverlay data={data} timeframe={timeframe} hover={hover} />
-            <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} />
+            <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} />
             <BuyingNowCard signal={data?.signal} />
           </>
         )}
