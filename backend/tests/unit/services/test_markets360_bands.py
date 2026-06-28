@@ -168,6 +168,20 @@ def test_breakout_to_new_high_flips_pressure_buy_fast():
     assert calculate_bands(df)["pressure_state"] == "buy"
 
 
+def test_buy_risk_pullback_in_uptrend_is_not_high():
+    """A dip under the 50DMA while the broader trend is intact (price still well
+    above the 200DMA) is a low-extension entry, not "high" risk — MM360 paints
+    those pullbacks green. Only a broken trend (under the 200DMA too) is high."""
+    rise = np.linspace(50, 130, 260)
+    pull = np.linspace(130, 118, 14)   # under the 50DMA, far above the 200DMA
+    df = _frame(np.concatenate([rise, pull]))
+    bands = calculate_bands(df, with_history=True)
+    assert bands["buy_risk_state"] in ("low", "medium")
+    # but a name under BOTH MAs is a broken trend -> high
+    down = _frame(np.linspace(160, 70, 320))
+    assert calculate_bands(down)["buy_risk_state"] == "high"
+
+
 def test_history_length_matches_window():
     df = _frame(np.linspace(50, 160, 320))
     bands = calculate_bands(df, with_history=True)

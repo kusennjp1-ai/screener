@@ -36,25 +36,31 @@ FIX = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "markets360"
 #
 # This is a RIGHT-EDGE (single most-recent bar) metric — it says nothing about
 # how well the *whole* strip matches. The full-strip per-bar agreement is far
-# lower (~49%) because the regime boundaries come from our estimated formulas, not
-# MM360's proprietary ones. What the smoothing layer (minervini_bands debounce)
-# fixes is the band's SMOOTHNESS: our raw bands flipped ~2-3x more often than the
-# real charts; after smoothing the flip density matches (~10 per band per window),
-# so the strip reads as MM360-style blocks instead of bar-to-bar chop.
+# lower because the regime boundaries come from our estimated formulas, not
+# MM360's proprietary ones. To measure the strip honestly we pixel-aligned the
+# IBB screenshot exactly (month-label x-anchors -> x = 14.56*baridx, residual
+# <1px) and read the real band color above every bar (see scripts/markets360_
+# band_calibration.py). That trustworthy ground truth drove two changes:
+#   - debounce smoothing: raw bands flipped ~2-3x more than the real charts;
+#     smoothing brings the flip density onto theirs (~10/band/window).
+#   - Buy Risk downtrend-gating: forcing "high" on every dip under the 50DMA
+#     over-reddened healthy pullbacks. Gating it on a broken trend (under the
+#     200DMA too) lifted IBB's full-strip Buy Risk agreement 58% -> 80%.
 #
-# Findings across these 12 (with the debounce smoothing on):
-#   * Buy Risk  12/12 (100%) — BUYRISK_LOW_ATR 4->6 (clean monotone threshold).
+# Findings across these 12 (with smoothing + downtrend-gated Buy Risk on):
+#   * Buy Risk  11/12 (92%) — downtrend-gating; the one regression is QURE, a
+#     parabolic blow-off above both MAs where the old below-50DMA rule reddened
+#     it only incidentally. Full-strip agreement rose materially (IBB 58->80%).
 #   * TPR        8/10 (80%) — rolling-over demotion handles the tops; QQQ's
 #     V-bounce correctly reads transition. Residual lag at IBB/MSFT right edges.
 #   * Pressure   9/11 (82%) — crash/distribution sell + breakout buy overrides
 #     flip hard through the smoothing. QQQ now matches (RGA); misses are AA/PRAX.
-#   * Overall   29/33 (88%) with smoothing, vs 30/33 raw — smoothing trades ~1
-#     right-edge call for matching the real charts' block structure. The headline
-#     regime calls (uptrend/top/downtrend/crash) all match; the residual is the
-#     inherent lag of a smoothed state vs a freshly-turned bar.
-# An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15)
-# and the Buy Risk plateau. The QQQ/IBB anchor-date correction and the band
-# smoothing came afterward.
+#   * Overall   28/33 (85%). Right-edge is essentially saturated here — local
+#     Pressure/TPR tweaks only reshuffle which ticker matches (overfitting), so
+#     these two bands are left at our estimate of MM360's proprietary formulas.
+# An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15).
+# The QQQ/IBB anchor-date correction, band smoothing, and the date-aligned
+# full-strip Buy Risk fix came afterward.
 REFERENCE = {
     "FTNT": {"real": "GGG", "asof": None},      # intraday capture of the last CSV bar
     "CYRX": {"real": "RGG", "asof": None},      # intraday capture of the last CSV bar

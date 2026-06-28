@@ -312,21 +312,34 @@ def compute_buy_risk(
 
     close = price_data["Close"]
     sma = close.rolling(ma).mean()
+    sma200 = close.rolling(200).mean()
     atr = _atr(price_data).replace(0, np.nan)
     atr_distance_series = (close - sma) / atr  # how many ATRs above the MA
 
     last_dist = float(atr_distance_series.iloc[-1])
     is_tight = (_vcp_contraction_pct(price_data) or 999.0) < VCP_TIGHT_PCT
     below = close < sma
+    # Only a *broken* trend (below the 200DMA too) makes being under the 50DMA
+    # "high risk". A pullback under the 50DMA inside an intact Stage-2 uptrend is
+    # LOW buy risk (a low-extension entry), not high — MM360 paints those green,
+    # so forcing "high" on every dip under the 50DMA over-reddened the band on
+    # healthy pullbacks (verified bar-by-bar against the real IBB strip).
+    broken = close < sma200
 
-    # Raw per-bar risk over the chart window (below the 50DMA = broken, high
-    # risk), then debounce so a one-bar dip under the MA does not flicker the band.
+    # Raw per-bar risk over the chart window, then debounce so a one-bar dip does
+    # not flicker the band.
     raw = []
-    for d, b in zip(atr_distance_series.tail(BAND_HISTORY_BARS), below.tail(BAND_HISTORY_BARS)):
-        if bool(b) or pd.isna(d):
+    for d, b, br in zip(
+        atr_distance_series.tail(BAND_HISTORY_BARS),
+        below.tail(BAND_HISTORY_BARS),
+        broken.tail(BAND_HISTORY_BARS),
+    ):
+        if pd.isna(d):
             raw.append("high")
+        elif bool(b) and bool(br):
+            raw.append("high")                              # below 50DMA in a broken trend
         else:
-            raw.append(_risk_from_extension(float(d), is_tight))
+            raw.append(_risk_from_extension(float(d), is_tight))  # else extension-driven
     smoothed = _debounce(raw, None, confirm_bars)
 
     out: Dict[str, object] = {

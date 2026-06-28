@@ -256,6 +256,84 @@ def calibrate(real, lly, spy, n_buckets, skip_left, display_bars):
 
 
 # --------------------------------------------------------------------------- #
+# Date-aligned full-strip ground truth.
+#
+# The bucket-resample comparison above is approximate (it assumes both strips
+# span the same window). For a TRUSTWORTHY per-bar number we anchor the image's
+# x-axis to dates exactly: TradingView spaces bars uniformly, so the pixel-x of
+# each month label is linear in the bar's index. Fitting that line (for IBB the
+# residual is <1px: x = 14.56*baridx - 10926) gives an exact bar->x map, so we
+# can read the real band color directly above each bar and compare it to ours on
+# the SAME date. This is the measurement behind the Buy Risk downtrend-gating fix
+# (IBB full-strip Buy Risk 58% -> 80%).
+#
+# X_ANCHORS: (bar_index_in_csv, pixel_x) pairs read off the month gridlabels.
+IBB_IMAGE = "/root/.claude/uploads/fcde633b-a038-5ae9-872c-05978f147147/e4366e61-IMG_2061.jpeg"
+IBB_X_ANCHORS = [(772, 314), (791, 591), (813, 912), (834, 1217), (854, 1508)]
+
+
+def date_aligned_agreement(image: str, csv: str, spy_csv: str, asof: str,
+                           x_anchors) -> Dict[str, str]:
+    """Per-bar band agreement using exact month-anchored x->date alignment.
+
+    Returns {band: "ok/total = pct%"} for Pressure/BuyRisk/TPR over the visible
+    window. Requires the screenshot file (not committed) plus the OHLCV CSV.
+    """
+    from PIL import Image
+    import app.services.minervini_bands as mb
+
+    pos = np.array([a[0] for a in x_anchors], dtype=float)
+    xp = np.array([a[1] for a in x_anchors], dtype=float)
+    a, b = np.polyfit(pos, xp, 1)  # x = a*baridx + b
+
+    im = Image.open(image).convert("RGB")
+    W, H = im.size
+    px = im.load()
+    xs = list(range(int(W * 0.25), int(W * 0.90), 5))
+    thr = 0.5 * len(xs)
+    yc = [y for y in range(0, int(H * 0.32))
+          if sum(1 for x in xs if _classify(*px[x, y]) in "RGA") > thr]
+    ytop, ybot = yc[0], yc[-1]
+    h = (ybot - ytop) / 3.0
+    rows = [[int(ytop + h * (k + 0.35)), int(ytop + h * (k + 0.5)), int(ytop + h * (k + 0.65))]
+            for k in range(3)]
+
+    def colat(x, rr):
+        c = {"R": 0, "G": 0, "A": 0}
+        for dx in (-2, 0, 2):
+            for y in rr:
+                kk = _classify(*px[x + dx, y])
+                if kk in c:
+                    c[kk] += 1
+        return max(c, key=c.get) if max(c.values()) > 0 else "."
+
+    full = _read_csv(csv)
+    df = full[full.index <= pd.Timestamp(asof)]
+    spy = _read_csv(spy_csv)
+    m = {"buy": "G", "low": "G", "strong": "G", "neutral": "A", "medium": "A",
+         "transition": "A", "sell": "R", "high": "R", "weak": "R"}
+    ph = mb.compute_pressure(df, with_history=True)["pressure_history"]
+    bh = mb.compute_buy_risk(df, with_history=True)["buy_risk_history"]
+    th = mb.compute_tpr(df, benchmark_close=spy["Close"], with_history=True)["tpr_history"]
+    dts = df.index[-len(ph):]
+    ours = {d: (m[ph[i]], m[bh[i]], m[th[i]]) for i, d in enumerate(dts)}
+
+    res = {"P": [0, 0], "B": [0, 0], "T": [0, 0]}
+    for p in range(len(full)):
+        d = full.index[p]
+        x = int(round(a * p + b))
+        if x < int(W * 0.06) or x > int(W * 0.96) or d not in ours:
+            continue
+        real = (colat(x, rows[0]), colat(x, rows[1]), colat(x, rows[2]))
+        for i, k in enumerate("PBT"):
+            if real[i] == ".":
+                continue
+            res[k][1] += 1
+            res[k][0] += (real[i] == ours[d][i])
+    return {k: f"{v[0]}/{v[1]} = {round(v[0] / max(v[1], 1) * 100)}%" for k, v in res.items()}
+
+
+# --------------------------------------------------------------------------- #
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", default="/root/.claude/uploads/fcde633b-a038-5ae9-872c-05978f147147/37dba2f2-IMG_2058.jpeg")
@@ -265,7 +343,19 @@ def main() -> int:
     ap.add_argument("--skip-left", type=int, default=18, help="ignore the leftmost buckets (label overlap zone)")
     ap.add_argument("--display-bars", type=int, default=186, help="trailing bars = the chart's visible window")
     ap.add_argument("--calibrate", action="store_true")
+    ap.add_argument("--date-aligned-ibb", action="store_true",
+                    help="exact month-anchored per-bar IBB agreement (needs the IBB screenshot + CSV)")
     args = ap.parse_args()
+
+    if args.date_aligned_ibb:
+        fix = os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures", "markets360")
+        agree = date_aligned_agreement(
+            IBB_IMAGE, os.path.join(fix, "ibb.csv"), os.path.join(fix, "spy.csv"),
+            "2026-06-23", IBB_X_ANCHORS)
+        print("IBB date-aligned per-bar agreement:")
+        for k, v in agree.items():
+            print(f"  {k}: {v}")
+        return 0
 
     real = extract_image_bands(args.image, n_buckets=args.buckets)
     lly, spy, src = load_prices(args.lly_csv, args.spy_csv)
