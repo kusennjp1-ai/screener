@@ -76,6 +76,15 @@ PRESSURE_DIST_BARS = 10
 PRESSURE_DIST_MIN = 2
 PRESSURE_DIST_OFF_HIGH = 0.05
 
+# Pressure buy-override (the accumulation counterpart to the sell-overrides): a
+# break to a fresh high on up-volume is confirmed accumulation and flips the band
+# green immediately, the same way MM360 turns Pressure green when a leader clears
+# to new highs. Without it the smoothing would lag a sharp recovery — a stock
+# breaking to new highs right after a shakeout would read red for several more
+# bars (seen on LLY/IBB/AA breakouts).
+PRESSURE_BREAKOUT_HIGH_BARS = 60
+PRESSURE_BREAKOUT_RET = 0.0
+
 # TPR demotion: a perfect-template bar that is meaningfully rolling over
 # (5-bar return <= -3% AND 10-bar return <= -1%) reads "transition", not
 # "strong" — calibrated to real MM360 (e.g. QQQ fading from highs at a full
@@ -83,6 +92,69 @@ PRESSURE_DIST_OFF_HIGH = 0.05
 # band strip stays smooth rather than flickering on every shallow dip.
 TPR_DEMOTE_R5 = -0.03
 TPR_DEMOTE_R10 = -0.01
+
+# ---------------------------------------------------------------------------
+# Band smoothing (hysteresis / debounce)
+# ---------------------------------------------------------------------------
+# MM360's bands are *persistent regime* indicators: they paint long, smooth
+# blocks (one stretch of red, then one stretch of green), not a bar-by-bar
+# re-classification. Our raw per-bar signals (AD-slope sign, ATR-extension
+# threshold crossings, trend-template score) flip far more often, so without
+# smoothing the strips look choppy next to the real charts.
+#
+# A new raw state must persist for CONFIRM bars in a row before the *displayed*
+# state flips to it. The deliberate fast-transition rules (Pressure crash /
+# distribution, TPR roll-over) bypass the delay and flip immediately, because
+# MM360 also reacts to genuine selling without lag.
+#
+# CONFIRM is calibrated to the SMOOTHNESS of the real charts. Counting band color
+# changes ("flips") across the visible window on five real screenshots
+# (QQQ/FTNT/CYRX/IBB/LLY) gives a mean of ~10 flips per band per ~186 bars. Our
+# raw (unsmoothed) bands flip ~26/21/16 times; the CONFIRM values below bring our
+# flip density onto the real charts' (P10.8/B9.0/T8.4 vs the real P10.2/B10.0/
+# T9.8), which removes the bar-to-bar chop without over-lagging fresh transitions.
+# A grid search held right-edge state agreement at 29/33 across this range, so the
+# values are picked to match the real flip density rather than to chase the
+# right-edge metric. See scripts/markets360_band_rightedge_eval.py.
+PRESSURE_CONFIRM_BARS = 6
+BUYRISK_CONFIRM_BARS = 3
+TPR_CONFIRM_BARS = 3
+
+
+def _debounce(raw: List[str], hard: Optional[List[bool]], confirm: int) -> List[str]:
+    """Causal hysteresis over a categorical state sequence (oldest -> newest).
+
+    The displayed state only changes after a new raw state appears ``confirm``
+    bars in a row. ``hard[i]`` (when supplied) forces the displayed state to the
+    raw state at bar ``i`` immediately, bypassing the confirmation delay — used
+    for deliberate fast transitions (crash/distribution/roll-over). Being causal
+    (each bar depends only on earlier bars) the last element is a valid live
+    badge with no look-ahead.
+    """
+    if not raw:
+        return []
+    if confirm <= 1:
+        return list(raw)
+    out: List[str] = []
+    cur = raw[0]
+    pending: Optional[str] = None
+    count = 0
+    for i, s in enumerate(raw):
+        if hard is not None and hard[i]:
+            cur = s
+            pending, count = None, 0
+        elif s == cur:
+            pending, count = None, 0
+        else:
+            if s == pending:
+                count += 1
+            else:
+                pending, count = s, 1
+            if count >= confirm:
+                cur = s
+                pending, count = None, 0
+        out.append(cur)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -122,14 +194,27 @@ def _pressure_sell_override(price_data: pd.DataFrame) -> pd.Series:
     return (crash | distribution).fillna(False)
 
 
+def _pressure_buy_override(price_data: pd.DataFrame) -> pd.Series:
+    """Per-bar mask forcing "buy" on a breakout to a fresh high on up-volume."""
+    close = price_data["Close"]
+    vol = price_data["Volume"]
+    ret = close.pct_change()
+    avgvol = vol.rolling(BUYRISK_MA).mean()
+    new_high = close >= close.rolling(PRESSURE_BREAKOUT_HIGH_BARS).max()
+    breakout = new_high & (ret > PRESSURE_BREAKOUT_RET) & (vol > avgvol)
+    return breakout.fillna(False)
+
+
 def compute_pressure(
     price_data: pd.DataFrame,
     lookback: int = PRESSURE_LOOKBACK,
     slope_bars: int = PRESSURE_SLOPE_BARS,
     with_history: bool = False,
+    confirm_bars: int = PRESSURE_CONFIRM_BARS,
 ) -> Dict[str, object]:
     """Net buying vs selling pressure from the AD-line slope, with sell-overrides
-    for crash / fresh-distribution bars (calibrated to real MM360)."""
+    for crash / fresh-distribution bars and hysteresis so the band paints smooth
+    regime blocks like the real MM360 chart (calibrated to it)."""
     if len(price_data) < lookback + slope_bars:
         return {"pressure_state": None, "pressure_value": None}
 
@@ -143,32 +228,37 @@ def compute_pressure(
 
     slope_series = (ad - ad.shift(slope_bars)) / (slope_bars * vol_norm)
     slope_now = float(slope_series.iloc[-1])
-    override = _pressure_sell_override(price_data)
+    sell_ov = _pressure_sell_override(price_data)
+    buy_ov = _pressure_buy_override(price_data)
 
-    def _state(slope: float, forced: bool) -> str:
-        if forced:
-            return "sell"
+    def _raw(slope: float) -> str:
         if slope > PRESSURE_NEUTRAL_EPS:
             return "buy"
         if slope < -PRESSURE_NEUTRAL_EPS:
             return "sell"
         return "neutral"
 
-    state = _state(slope_now, bool(override.iloc[-1]))
+    # Build the raw per-bar sequence over the chart window, then debounce it.
+    # Crash/distribution force "sell" and a fresh-high breakout forces "buy";
+    # both flip the band hard (no confirmation delay). Sell wins a tie.
+    win = slope_series.tail(BAND_HISTORY_BARS).fillna(0.0)
+    sell = sell_ov.tail(BAND_HISTORY_BARS).tolist()
+    buy = buy_ov.tail(BAND_HISTORY_BARS).tolist()
+    raw = [_raw(float(v)) for v in win]
+    hard = [False] * len(raw)
+    for i in range(len(raw)):
+        if sell[i]:
+            raw[i], hard[i] = "sell", True
+        elif buy[i]:
+            raw[i], hard[i] = "buy", True
+    smoothed = _debounce(raw, hard, confirm_bars)
 
     out: Dict[str, object] = {
-        "pressure_state": state,
+        "pressure_state": smoothed[-1],
         "pressure_value": round(slope_now, 4),
     }
-
     if with_history:
-        # Span the full chart window (not the 50-bar state lookback) so the
-        # Pressure strip is colored across the same range as the other bands.
-        hist = slope_series.tail(BAND_HISTORY_BARS).fillna(0.0)
-        ov = override.tail(BAND_HISTORY_BARS).tolist()
-        out["pressure_history"] = [
-            _state(float(v), bool(ov[i])) for i, v in enumerate(hist)
-        ]
+        out["pressure_history"] = smoothed
     return out
 
 
@@ -213,8 +303,10 @@ def compute_buy_risk(
     price_data: pd.DataFrame,
     ma: int = BUYRISK_MA,
     with_history: bool = False,
+    confirm_bars: int = BUYRISK_CONFIRM_BARS,
 ) -> Dict[str, object]:
-    """How risky it is to buy now: extension from MA, ATR-normalised, VCP-aware."""
+    """How risky it is to buy now: extension from MA, ATR-normalised, VCP-aware,
+    debounced so the band paints smooth blocks like the real MM360 chart."""
     if len(price_data) < ma + 1:
         return {"buy_risk_state": None, "buy_risk_atr": None}
 
@@ -223,62 +315,50 @@ def compute_buy_risk(
     atr = _atr(price_data).replace(0, np.nan)
     atr_distance_series = (close - sma) / atr  # how many ATRs above the MA
 
-    last_close = float(close.iloc[-1])
-    last_sma = float(sma.iloc[-1])
     last_dist = float(atr_distance_series.iloc[-1])
     is_tight = (_vcp_contraction_pct(price_data) or 999.0) < VCP_TIGHT_PCT
+    below = close < sma
 
-    # Below the 50DMA = broken / no-buy zone, always high risk.
-    if last_close < last_sma:
-        state = "high"
-    else:
-        state = _risk_from_extension(last_dist, is_tight)
+    # Raw per-bar risk over the chart window (below the 50DMA = broken, high
+    # risk), then debounce so a one-bar dip under the MA does not flicker the band.
+    raw = []
+    for d, b in zip(atr_distance_series.tail(BAND_HISTORY_BARS), below.tail(BAND_HISTORY_BARS)):
+        if bool(b) or pd.isna(d):
+            raw.append("high")
+        else:
+            raw.append(_risk_from_extension(float(d), is_tight))
+    smoothed = _debounce(raw, None, confirm_bars)
 
     out: Dict[str, object] = {
-        "buy_risk_state": state,
+        "buy_risk_state": smoothed[-1],
         "buy_risk_atr": round(last_dist, 2),
     }
-
     if with_history:
-        below = close < sma
-        hist = []
-        for d, b in zip(atr_distance_series.tail(BAND_HISTORY_BARS), below.tail(BAND_HISTORY_BARS)):
-            if b or pd.isna(d):
-                hist.append("high")
-            else:
-                hist.append(_risk_from_extension(float(d), is_tight))
-        out["buy_risk_history"] = hist
+        out["buy_risk_history"] = smoothed
     return out
 
 
 # ---------------------------------------------------------------------------
 # Band 3: TPR (Trend Template phase)
 # ---------------------------------------------------------------------------
-def _relative_strength_ok(
-    close: pd.Series,
-    benchmark_close: Optional[pd.Series],
-    lookback: int = 252,
-) -> Optional[bool]:
-    """RS condition: stock's lookback return beats the benchmark's, and the
-    RS line is rising. Returns None if no benchmark supplied."""
-    if benchmark_close is None or len(benchmark_close) < lookback + 1:
-        return None
-    bench = benchmark_close.reindex(close.index).ffill()
-    rs_line = close / bench
-    if len(rs_line.dropna()) < lookback + 1:
-        return None
-    rs_now = rs_line.iloc[-1]
-    rs_past = rs_line.iloc[-(lookback)]
-    rs_ma = rs_line.rolling(50).mean().iloc[-1]
-    return bool(rs_now > rs_past and rs_now > rs_ma)
+def _tpr_state_from_score(score: int, max_score: int) -> str:
+    strong_thr = TPR_STRONG if max_score == 8 else TPR_STRONG - 1
+    if score >= strong_thr:
+        return "strong"
+    if score >= TPR_TRANSITION:
+        return "transition"
+    return "weak"
 
 
 def compute_tpr(
     price_data: pd.DataFrame,
     benchmark_close: Optional[pd.Series] = None,
     with_history: bool = False,
+    confirm_bars: int = TPR_CONFIRM_BARS,
 ) -> Dict[str, object]:
-    """Score the 8-point Trend Template; map the count to a phase color."""
+    """Score the 8-point Trend Template per bar; map the count to a phase color,
+    debounced so the band paints smooth regime blocks like the real MM360 chart.
+    Roll-over demotion flips hard (no delay), matching MM360's quick fade."""
     if len(price_data) < 200:
         return {"tpr_state": None, "tpr_score": None}
 
@@ -303,8 +383,7 @@ def compute_tpr(
             c >= lo52.iloc[i] * 1.30,                      # 6 >=30% above 52w low
             c <= hi52.iloc[i] and c >= hi52.iloc[i] * 0.75,  # 7 within 25% of 52w high
         ]
-        n = sum(bool(x) for x in conds)
-        return n
+        return sum(bool(x) for x in conds)
 
     def _rolling_over(i: int) -> bool:
         """A perfect-template bar fading from highs: a material 5- and 10-bar
@@ -316,39 +395,43 @@ def compute_tpr(
             return False
         return (close.iloc[i] / p5 - 1) <= TPR_DEMOTE_R5 and (close.iloc[i] / p10 - 1) <= TPR_DEMOTE_R10
 
-    # 8th condition (RS) is evaluated only for the current bar (benchmark-based).
-    base_now = score_at(len(close) - 1)
-    rs_ok = _relative_strength_ok(close, benchmark_close)
-    score_now = base_now + (1 if rs_ok else 0)
-    max_score = 8 if rs_ok is not None else 7
+    # 8th condition (RS) as a per-bar series so the band history and the live
+    # badge use identical logic (previously RS was current-bar only).
+    rs_series = None
+    if benchmark_close is not None and len(benchmark_close) >= 252 + 1:
+        bench = benchmark_close.reindex(close.index).ffill()
+        rs_line = close / bench
+        if len(rs_line.dropna()) >= 252 + 1:
+            rs_series = (rs_line > rs_line.shift(252)) & (rs_line > rs_line.rolling(50).mean())
+    max_score = 8 if rs_series is not None else 7
 
-    if score_now >= TPR_STRONG and max_score == 8:
-        state = "strong"
-    elif score_now >= (TPR_STRONG - 1) and max_score == 7:
-        state = "strong"
-    elif score_now >= TPR_TRANSITION:
-        state = "transition"
-    else:
-        state = "weak"
+    def full_score(i: int) -> int:
+        s = score_at(i)
+        if rs_series is not None and bool(rs_series.iloc[i]):
+            s += 1
+        return s
 
-    if state == "strong" and score_now >= max_score and _rolling_over(len(close) - 1):
-        state = "transition"
+    n = len(close)
+    start = max(0, n - BAND_HISTORY_BARS)
+    raw: List[str] = []
+    hard: List[bool] = []
+    for i in range(start, n):
+        score_i = full_score(i)
+        st = _tpr_state_from_score(score_i, max_score)
+        roll = st == "strong" and score_i >= max_score and _rolling_over(i)
+        if roll:
+            st = "transition"
+        raw.append(st)
+        hard.append(roll)
+    smoothed = _debounce(raw, hard, confirm_bars)
 
     out: Dict[str, object] = {
-        "tpr_state": state,
-        "tpr_score": score_now,
+        "tpr_state": smoothed[-1],
+        "tpr_score": full_score(n - 1),
         "tpr_max": max_score,
     }
-
     if with_history:
-        hist = []
-        for i in range(max(0, len(close) - BAND_HISTORY_BARS), len(close)):
-            s = score_at(i)  # history uses the 7 price/MA conditions only
-            st = "strong" if s >= 7 else "transition" if s >= 5 else "weak"
-            if st == "strong" and _rolling_over(i):
-                st = "transition"
-            hist.append(st)
-        out["tpr_history"] = hist
+        out["tpr_history"] = smoothed
     return out
 
 

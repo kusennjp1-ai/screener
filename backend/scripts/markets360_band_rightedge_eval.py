@@ -34,21 +34,27 @@ FIX = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "markets360"
 # our bands read GGG, so the match is only Buy Risk. Always verify the screenshot
 # close+%change against the CSV before trusting an anchor.
 #
-# Findings across these 12, after calibrating all three bands to the real charts:
+# This is a RIGHT-EDGE (single most-recent bar) metric — it says nothing about
+# how well the *whole* strip matches. The full-strip per-bar agreement is far
+# lower (~49%) because the regime boundaries come from our estimated formulas, not
+# MM360's proprietary ones. What the smoothing layer (minervini_bands debounce)
+# fixes is the band's SMOOTHNESS: our raw bands flipped ~2-3x more often than the
+# real charts; after smoothing the flip density matches (~10 per band per window),
+# so the strip reads as MM360-style blocks instead of bar-to-bar chop.
+#
+# Findings across these 12 (with the debounce smoothing on):
 #   * Buy Risk  12/12 (100%) — BUYRISK_LOW_ATR 4->6 (clean monotone threshold).
-#   * TPR        9/10 (90%) — rolling-over demotion handles the tops; the miss is
-#     QQQ, where a 3-day V-bounce off an early-June distribution reads strong for
-#     us but MM360 still holds amber (transition) pending confirmation.
-#   * Pressure   9/11 (82%) — crash + distribution sell-overrides catch GEV/QURE.
-#     Two misses: CYRX (a high-and-tight stall, not distribution) and QQQ (same
-#     V-bounce — MM360 keeps Pressure red after a -4.8% volume day; our crash gate
-#     is -6% and the bounce closes <5% off the high so distribution doesn't fire).
-#     Closing either needs a rule that floods green on legitimate leaders -> held.
-#   * Overall   30/33 (91%). The headline regime calls (uptrend/top/downtrend/
-#     crash) all match; the residual is MM360 being more conservative than us on a
-#     sharp recovery bar.
+#   * TPR        8/10 (80%) — rolling-over demotion handles the tops; QQQ's
+#     V-bounce correctly reads transition. Residual lag at IBB/MSFT right edges.
+#   * Pressure   9/11 (82%) — crash/distribution sell + breakout buy overrides
+#     flip hard through the smoothing. QQQ now matches (RGA); misses are AA/PRAX.
+#   * Overall   29/33 (88%) with smoothing, vs 30/33 raw — smoothing trades ~1
+#     right-edge call for matching the real charts' block structure. The headline
+#     regime calls (uptrend/top/downtrend/crash) all match; the residual is the
+#     inherent lag of a smoothed state vs a freshly-turned bar.
 # An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15)
-# and the Buy Risk plateau. The QQQ/IBB anchor-date correction came afterward.
+# and the Buy Risk plateau. The QQQ/IBB anchor-date correction and the band
+# smoothing came afterward.
 REFERENCE = {
     "FTNT": {"real": "GGG", "asof": None},      # intraday capture of the last CSV bar
     "CYRX": {"real": "RGG", "asof": None},      # intraday capture of the last CSV bar

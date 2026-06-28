@@ -124,6 +124,50 @@ def test_tpr_demotes_strong_to_transition_on_rollover():
     assert calculate_bands(_frame(at_highs))["tpr_state"] == "strong"
 
 
+def _flips(seq):
+    return sum(1 for i in range(1, len(seq)) if seq[i] != seq[i - 1])
+
+
+def test_smoothing_paints_blocks_not_chop():
+    """The hysteresis layer must remove bar-to-bar chop: on a noisy series the
+    debounced band history flips far fewer times than the raw (confirm=1) one.
+    This is what makes the strip read as smooth MM360-style regime blocks."""
+    from app.services.minervini_bands import (
+        compute_pressure,
+        compute_buy_risk,
+        compute_tpr,
+    )
+
+    rng = np.random.RandomState(0)
+    t = np.arange(360)
+    # Choppy sideways tape: a gentle drift with oscillation + noise so the raw
+    # per-bar signals cross their thresholds repeatedly.
+    close = 100 + t * 0.05 + np.sin(t * 0.6) * 7 + rng.randn(360) * 2.5
+    df = _frame(close)
+
+    for fn, key in (
+        (compute_pressure, "pressure_history"),
+        (compute_buy_risk, "buy_risk_history"),
+        (compute_tpr, "tpr_history"),
+    ):
+        raw = fn(df, with_history=True, confirm_bars=1)[key]
+        smooth = fn(df, with_history=True)[key]
+        assert _flips(smooth) < _flips(raw), f"{key} not smoothed"
+
+
+def test_breakout_to_new_high_flips_pressure_buy_fast():
+    """A break to fresh highs on up-volume flips Pressure green immediately,
+    even right after a shakeout fired the distribution sell-override — the band
+    must not lag a genuine breakout (matches MM360)."""
+    up = np.linspace(50, 100, 80)
+    pull = np.array([97.0, 94, 92, 90, 89])         # off-highs distribution
+    breakout = np.array([95.0, 99, 103])            # reclaim + new high
+    df = _frame(np.concatenate([up, pull, breakout]))
+    df.iloc[80:85, df.columns.get_loc("Volume")] = 2_000_000   # down-volume
+    df.iloc[-1, df.columns.get_loc("Volume")] = 3_000_000      # breakout volume
+    assert calculate_bands(df)["pressure_state"] == "buy"
+
+
 def test_history_length_matches_window():
     df = _frame(np.linspace(50, 160, 320))
     bands = calculate_bands(df, with_history=True)
