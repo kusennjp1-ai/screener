@@ -61,6 +61,7 @@ def resolve_symbols(
     db: Session,
     universe_def: Any,
     limit: Optional[int] = None,
+    exclude_etfs: bool = False,
 ) -> List[str]:
     """
     Resolve a UniverseDefinition to a list of stock symbols.
@@ -69,6 +70,9 @@ def resolve_symbols(
         db: Database session
         universe_def: Typed or normalized universe definition
         limit: Optional max number of symbols to return
+        exclude_etfs: Drop ETFs/ETNs/funds from broad-market resolutions
+            (ALL/MARKET/EXCHANGE/INDEX). Explicit CUSTOM/TEST symbol lists are
+            left untouched — the caller chose those symbols.
 
     Returns:
         List of uppercase stock symbol strings
@@ -78,7 +82,8 @@ def resolve_symbols(
 
     if t == UniverseType.ALL:
         return get_stock_universe_service().get_active_symbols(
-            db, market=None, exchange=None, sp500_only=False, limit=limit
+            db, market=None, exchange=None, sp500_only=False, limit=limit,
+            exclude_etfs=exclude_etfs,
         )
 
     elif t == UniverseType.MARKET:
@@ -87,6 +92,7 @@ def resolve_symbols(
             "exchange": universe_def.mic,
             "sp500_only": False,
             "limit": limit,
+            "exclude_etfs": exclude_etfs,
         }
         if universe_def.listing_tier is not None:
             kwargs["listing_tier"] = universe_def.listing_tier
@@ -99,6 +105,7 @@ def resolve_symbols(
             exchange=universe_def.exchange.value,
             sp500_only=False,
             limit=limit,
+            exclude_etfs=exclude_etfs,
         )
 
     elif t == UniverseType.INDEX:
@@ -111,6 +118,7 @@ def resolve_symbols(
             exchange=None,
             index_name=universe_def.index.value,
             limit=limit,
+            exclude_etfs=exclude_etfs,
         )
 
     elif t in (UniverseType.CUSTOM, UniverseType.TEST):

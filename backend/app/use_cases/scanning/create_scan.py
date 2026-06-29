@@ -121,6 +121,10 @@ class CreateScanCommand:
     composite_method: str = "weighted_average"
     criteria: dict | None = None
 
+    # Drop ETFs/ETNs/funds from broad-market universes (ALL/MARKET/EXCHANGE/INDEX).
+    # Explicit CUSTOM/TEST symbol lists are never filtered.
+    exclude_etfs: bool = False
+
     # Idempotency
     idempotency_key: str | None = None
 
@@ -348,7 +352,7 @@ class CreateScanUseCase:
                 self._raise_active_scan_conflict(active_scan)
 
             # ── Resolve universe symbols ─────────────────────────────
-            symbols = uow.universe.resolve_symbols(cmd.universe_def)
+            symbols = uow.universe.resolve_symbols(cmd.universe_def, exclude_etfs=cmd.exclude_etfs)
             if not symbols:
                 raise ValidationError(
                     f"No symbols found for universe '{cmd.universe_label}'. "

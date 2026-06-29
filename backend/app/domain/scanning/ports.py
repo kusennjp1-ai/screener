@@ -214,7 +214,7 @@ class UniverseRepository(abc.ABC):
     """Resolve which symbols belong to a universe."""
 
     @abc.abstractmethod
-    def resolve_symbols(self, universe_def: object) -> list[str]:
+    def resolve_symbols(self, universe_def: object, exclude_etfs: bool = False) -> list[str]:
         ...
 
 

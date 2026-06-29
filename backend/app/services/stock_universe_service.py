@@ -2440,7 +2440,8 @@ class StockUniverseService:
         min_market_cap: Optional[float] = None,
         sp500_only: bool = False,
         index_name: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        exclude_etfs: bool = False,
     ) -> List[str]:
         """
         Get list of active symbols for scanning.
@@ -2468,6 +2469,11 @@ class StockUniverseService:
             query = db.query(StockUniverse.symbol).filter(
                 StockUniverse.active_filter()
             )
+
+            if exclude_etfs:
+                # is_etf is NOT NULL with a server default of false, so this also
+                # keeps rows written before the column existed (back-filled false).
+                query = query.filter(StockUniverse.is_etf.is_(False))
 
             resolved_index = index_name.upper() if index_name else None
             if sp500_only:
