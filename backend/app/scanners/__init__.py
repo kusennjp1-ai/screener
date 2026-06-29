@@ -18,6 +18,7 @@ from .ipo_scanner import IPOScanner
 from .custom_scanner import CustomScanner
 from .volume_breakthrough_scanner import VolumeBreakthroughScanner
 from .setup_engine_screener import SetupEngineScanner
+from .markets360_scanner import Markets360Scanner
 
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     'CustomScanner',
     'VolumeBreakthroughScanner',
     'SetupEngineScanner',
+    'Markets360Scanner',
 ]
