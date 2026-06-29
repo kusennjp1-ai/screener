@@ -40,24 +40,32 @@ FIX = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "markets360"
 # MM360's proprietary ones. To measure the strip honestly we pixel-aligned the
 # IBB screenshot exactly (month-label x-anchors -> x = 14.56*baridx, residual
 # <1px) and read the real band color above every bar (see scripts/markets360_
-# band_calibration.py). That trustworthy ground truth drove two changes:
+# band_calibration.py --date-aligned-ibb). That ground truth drove three changes:
 #   - debounce smoothing: raw bands flipped ~2-3x more than the real charts;
-#     smoothing brings the flip density onto theirs (~10/band/window).
+#     smoothing brings the flip density onto theirs.
 #   - Buy Risk downtrend-gating: forcing "high" on every dip under the 50DMA
 #     over-reddened healthy pullbacks. Gating it on a broken trend (under the
-#     200DMA too) lifted IBB's full-strip Buy Risk agreement 58% -> 80%.
+#     200DMA too) lifted IBB's full-strip Buy Risk agreement 58% -> 82%.
+#   - Pressure phase de-lag: a lag scan (shift OURS by k bars; agreement peaked
+#     at lag -5) showed CONFIRM=6 turned the band ~5 bars LATE — flip-count
+#     matched but PHASE did not. Dropping to CONFIRM=3 removed the lag, lifting
+#     IBB full-strip Pressure 55% -> 75%. Lesson: tune CONFIRM to per-bar
+#     agreement, not to flip density.
 #
-# Findings across these 12 (with smoothing + downtrend-gated Buy Risk on):
-#   * Buy Risk  11/12 (92%) — downtrend-gating; the one regression is QURE, a
-#     parabolic blow-off above both MAs where the old below-50DMA rule reddened
-#     it only incidentally. Full-strip agreement rose materially (IBB 58->80%).
-#   * TPR        8/10 (80%) — rolling-over demotion handles the tops; QQQ's
-#     V-bounce correctly reads transition. Residual lag at IBB/MSFT right edges.
-#   * Pressure   9/11 (82%) — crash/distribution sell + breakout buy overrides
-#     flip hard through the smoothing. QQQ now matches (RGA); misses are AA/PRAX.
-#   * Overall   28/33 (85%). Right-edge is essentially saturated here — local
-#     Pressure/TPR tweaks only reshuffle which ticker matches (overfitting), so
-#     these two bands are left at our estimate of MM360's proprietary formulas.
+# Findings across these 12 (right-edge), with the date-aligned IBB full strip:
+#   * Buy Risk  11/12 right-edge; full strip 82%. The one right-edge regression
+#     is QURE, a parabolic blow-off where the old below-50DMA rule reddened it
+#     only incidentally.
+#   * Pressure   9/11 right-edge; full strip 75% (was 55% before de-lagging).
+#     The residual ~25% is structural: our AD-slope is an estimate of MM360's
+#     proprietary money-flow, so the regime boundaries land a few bars apart.
+#   * TPR        8/10 right-edge; full strip ~46% (and noisy — the RPR line
+#     overlays the TPR row in the screenshot). Its smoothing/agreement trade-off
+#     is genuinely per-ticker; CONFIRM=3 keeps QQQ's V-bounce reading transition.
+#   * Overall    28/33 right-edge. Two systematic, generalizable errors were found
+#     and fixed here (Buy Risk semantics, Pressure phase) — reverse-engineering
+#     was NOT at its limit. What remains is the structural gap between our
+#     estimated indicators and MM360's proprietary formulas.
 # An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15).
 # The QQQ/IBB anchor-date correction, band smoothing, and the date-aligned
 # full-strip Buy Risk fix came afterward.

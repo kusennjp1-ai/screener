@@ -107,16 +107,19 @@ TPR_DEMOTE_R10 = -0.01
 # distribution, TPR roll-over) bypass the delay and flip immediately, because
 # MM360 also reacts to genuine selling without lag.
 #
-# CONFIRM is calibrated to the SMOOTHNESS of the real charts. Counting band color
-# changes ("flips") across the visible window on five real screenshots
-# (QQQ/FTNT/CYRX/IBB/LLY) gives a mean of ~10 flips per band per ~186 bars. Our
-# raw (unsmoothed) bands flip ~26/21/16 times; the CONFIRM values below bring our
-# flip density onto the real charts' (P10.8/B9.0/T8.4 vs the real P10.2/B10.0/
-# T9.8), which removes the bar-to-bar chop without over-lagging fresh transitions.
-# A grid search held right-edge state agreement at 29/33 across this range, so the
-# values are picked to match the real flip density rather than to chase the
-# right-edge metric. See scripts/markets360_band_rightedge_eval.py.
-PRESSURE_CONFIRM_BARS = 6
+# CONFIRM is calibrated against the date-aligned IBB ground truth (the real band
+# color read above every bar — see scripts/markets360_band_calibration.py
+# --date-aligned-ibb), NOT against flip-count alone. Flip-count only measures
+# smoothness AMPLITUDE; it misses PHASE. A high CONFIRM debounces so hard that the
+# band turns several bars LATE: at CONFIRM=6 our Pressure lagged the real chart by
+# ~5 bars and per-bar agreement fell to 55%, even though the flip density matched.
+# Dropping to CONFIRM=3 removes that lag (agreement 55% -> 75%, flips 14 ~ the real
+# 14) while still smoothing the raw 26-flip chop. So CONFIRM trades two failure
+# modes: too low = choppy, too high = laggy; it is tuned to the per-bar-agreement
+# optimum, not the smoothness optimum. TPR is held at 3 (its smoothing/agreement
+# trade-off is genuinely per-ticker, and 3 keeps both visual smoothness and the
+# QQQ V-bounce reading transition).
+PRESSURE_CONFIRM_BARS = 3
 BUYRISK_CONFIRM_BARS = 3
 TPR_CONFIRM_BARS = 3
 
