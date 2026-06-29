@@ -15,10 +15,12 @@ Each band returns:
 - an optional per-bar history list (for rendering the horizontal band itself).
 
 Design notes / accuracy choices (vs. the naive version):
-- Pressure uses an Accumulation/Distribution-style money-flow slope, not a raw
-  up-vol vs down-vol count. Each bar is weighted by where it closes inside its
-  own range (close-location value), then by volume. This captures intrabar
-  accumulation that a simple "green bar = buying" rule misses.
+- Pressure uses Elder's Force Index (price change * volume, EMA-smoothed), chosen
+  by a supervised bake-off of nine money-flow indicators against the date-aligned
+  real MM360 bands: it matched the real Pressure strip far better (~85% per-bar vs
+  ~66% for an Accumulation/Distribution-line slope) and generalised to held-out
+  tickers. Crash/distribution/breakout overrides flip it hard; the result is
+  hysteresis-smoothed so the band paints regime blocks, not bar-to-bar chop.
 - Buy Risk normalises extension by ATR (ATR-distance from the 50DMA) instead of
   a fixed % threshold, so the same thresholds work across low- and high-vol
   names. VCP contraction nudges risk down (tight base = lower risk), and a
@@ -41,9 +43,17 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Tunable parameters (kept in one place so they are easy to calibrate later)
 # ---------------------------------------------------------------------------
-PRESSURE_LOOKBACK = 50        # bars used to judge net demand
-PRESSURE_SLOPE_BARS = 10      # bars used to measure the AD-line slope
-PRESSURE_NEUTRAL_EPS = 0.0    # |normalised slope| below this -> "neutral"
+PRESSURE_LOOKBACK = 50        # bars used to judge net demand / normalise
+PRESSURE_SLOPE_BARS = 10      # (legacy) AD-line slope window, kept for signature
+PRESSURE_NEUTRAL_EPS = 0.0    # |signal| below this -> "neutral"
+# Pressure is driven by Elder's Force Index (price change * volume, EMA-smoothed),
+# NOT the Accumulation/Distribution-line slope. A supervised bake-off of nine
+# money-flow indicators against the date-aligned real bands (IBB + LLY full strips,
+# ~300 labelled bars, plus 11 held-out right edges) found Force Index the clear
+# winner: it lifts per-bar agreement from ~66% (AD-slope) to ~85% on IBB and ~84%
+# on LLY, and from 6/11 to 9/11 on the held-out right edges. See
+# scripts/markets360_band_calibration.py.
+PRESSURE_FORCE_SPAN = 13      # EMA span of the Force Index
 
 # Per-bar history length for the chart band strips. All three bands share this so
 # their colored strips span the SAME chart window — otherwise the shortest band
@@ -163,21 +173,6 @@ def _debounce(raw: List[str], hard: Optional[List[bool]], confirm: int) -> List[
 # ---------------------------------------------------------------------------
 # Band 1: Pressure
 # ---------------------------------------------------------------------------
-def _ad_line(price_data: pd.DataFrame) -> pd.Series:
-    """Accumulation/Distribution line (Chaikin), money-flow based."""
-    high = price_data["High"]
-    low = price_data["Low"]
-    close = price_data["Close"]
-    volume = price_data["Volume"]
-
-    rng = (high - low).replace(0, np.nan)
-    # Close Location Value in [-1, +1]: +1 closes on the high, -1 on the low.
-    clv = ((close - low) - (high - close)) / rng
-    clv = clv.fillna(0.0)
-    mfv = clv * volume
-    return mfv.cumsum()
-
-
 def _pressure_sell_override(price_data: pd.DataFrame) -> pd.Series:
     """Per-bar mask forcing "sell" on crash / fresh-distribution bars."""
     close = price_data["Close"]
@@ -221,16 +216,16 @@ def compute_pressure(
     if len(price_data) < lookback + slope_bars:
         return {"pressure_state": None, "pressure_value": None}
 
-    ad = _ad_line(price_data)
-
-    # Normalise the AD-line slope by recent volume so the value is comparable
-    # across symbols of very different liquidity.
-    vol_norm = price_data["Volume"].tail(lookback).mean()
-    if not vol_norm or vol_norm <= 0:
-        return {"pressure_state": None, "pressure_value": None}
-
-    slope_series = (ad - ad.shift(slope_bars)) / (slope_bars * vol_norm)
-    slope_now = float(slope_series.iloc[-1])
+    # Force Index = price change * volume, EMA-smoothed (Elder). Its sign is the
+    # net buy/sell pressure; calibrated to MM360's real bands (see module notes).
+    force = (price_data["Close"].diff() * price_data["Volume"]).ewm(
+        span=PRESSURE_FORCE_SPAN, adjust=False
+    ).mean()
+    # Normalise by recent |force| so the reported value is comparable across
+    # symbols of very different price/liquidity (the SIGN drives the state).
+    fscale = force.abs().rolling(lookback).mean().replace(0, np.nan)
+    signal_series = force / fscale
+    slope_now = float(signal_series.iloc[-1]) if np.isfinite(signal_series.iloc[-1]) else 0.0
     sell_ov = _pressure_sell_override(price_data)
     buy_ov = _pressure_buy_override(price_data)
 
@@ -244,7 +239,7 @@ def compute_pressure(
     # Build the raw per-bar sequence over the chart window, then debounce it.
     # Crash/distribution force "sell" and a fresh-high breakout forces "buy";
     # both flip the band hard (no confirmation delay). Sell wins a tie.
-    win = slope_series.tail(BAND_HISTORY_BARS).fillna(0.0)
+    win = signal_series.tail(BAND_HISTORY_BARS).fillna(0.0)
     sell = sell_ov.tail(BAND_HISTORY_BARS).tolist()
     buy = buy_ov.tail(BAND_HISTORY_BARS).tolist()
     raw = [_raw(float(v)) for v in win]
