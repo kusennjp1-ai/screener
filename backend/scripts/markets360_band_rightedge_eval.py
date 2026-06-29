@@ -65,14 +65,18 @@ FIX = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "markets360"
 #     only incidentally.
 #   * Pressure   9/11 right-edge; full strip 85% IBB / 87% LLY (was ~66% with the
 #     AD-slope, then 75% after de-lagging, then 85% after the Force Index swap).
-#   * TPR        8/10 right-edge; full strip ~46% (and noisy — the RPR line
-#     overlays the TPR row in the screenshot). Its smoothing/agreement trade-off
-#     is genuinely per-ticker; CONFIRM=3 keeps QQQ's V-bounce reading transition.
-#     TPR is the next candidate for the same indicator-level reverse-engineering.
-#   * Overall    28/33 right-edge. Three systematic, generalizable improvements
-#     were found here (Buy Risk semantics, Pressure phase, Pressure indicator) —
-#     reverse-engineering was NOT at its limit; the AD-slope was just the wrong
-#     indicator. Pressure full-strip nearly doubled its error-closing (66% -> 85%).
+#   * TPR        10/10 right-edge; full strip 58% IBB / 61% LLY (was ~46%/44%).
+#     A clean re-extraction (full-band mode, RPR-line removed) showed the gap was
+#     real, not noise: the confusion was a heavy bias to amber (real weak/strong
+#     borderline bars read transition). Fix: the static 7-cond score saturates a
+#     wide 5-6 middle that MM360 splits by trend DIRECTION (advancing->strong,
+#     declining->weak). Adding that tiebreak lifted full strip ~50% -> ~60% and
+#     right-edge 8/10 -> 10/10. Decisive strong-vs-weak agreement is ~75-78%; the
+#     residual is the inherently fuzzy transition boundary (a judgment zone).
+#   * Overall    30/33 right-edge. Four systematic, generalizable improvements were
+#     found here (Buy Risk semantics, Pressure phase, Pressure indicator swap, TPR
+#     direction) — reverse-engineering was NOT at its limit. Per-bar full-strip
+#     agreement: Pressure 66->85%, Buy Risk 58->82%, TPR 46->58% (IBB).
 # An adversarial audit (5 agents) confirmed the labels (PIL re-extraction 15/15).
 # The QQQ/IBB anchor-date correction, band smoothing, and the date-aligned
 # full-strip Buy Risk fix came afterward.

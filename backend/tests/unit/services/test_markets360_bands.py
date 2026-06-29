@@ -124,6 +124,25 @@ def test_tpr_demotes_strong_to_transition_on_rollover():
     assert calculate_bands(_frame(at_highs))["tpr_state"] == "strong"
 
 
+def test_tpr_direction_splits_the_borderline():
+    """A mediocre trend-template score (the 5-6 'transition' zone) is resolved by
+    direction: advancing reads strong, declining reads weak — matching MM360,
+    which does not park borderline bars in amber the way a static score does."""
+    from app.services.minervini_bands import compute_tpr
+
+    # Long climb to a high base, then a shallow, slow drift down that keeps the
+    # template score in the borderline band while price slips under a rolling-over
+    # 50DMA -> should read weak, not transition.
+    climb = np.linspace(40, 150, 240)
+    drift = np.linspace(150, 132, 60)
+    df = _frame(np.concatenate([climb, drift]))
+    assert compute_tpr(df, with_history=True)["tpr_state"] == "weak"
+
+    # A steady advance stays strong.
+    up = _frame(np.linspace(40, 150, 300))
+    assert compute_tpr(up, with_history=True)["tpr_state"] == "strong"
+
+
 def _flips(seq):
     return sum(1 for i in range(1, len(seq)) if seq[i] != seq[i - 1])
 

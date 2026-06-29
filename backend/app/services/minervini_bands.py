@@ -70,8 +70,6 @@ BUYRISK_LOW_ATR = 6.0         # < this many ATRs above MA -> low risk
 BUYRISK_HIGH_ATR = 8.0        # > this many ATRs above MA -> high risk
 VCP_TIGHT_PCT = 5.0           # range-contraction% under this = "tight" base
 
-TPR_STRONG = 8                # >= this many conditions -> strong
-TPR_TRANSITION = 5            # >= this many conditions -> transition (else weak)
 
 # Pressure sell-overrides, calibrated against real MM360 charts (the smooth
 # AD-line slope is too slow to flag fresh distribution/capitulation):
@@ -102,6 +100,18 @@ PRESSURE_BREAKOUT_RET = 0.0
 # band strip stays smooth rather than flickering on every shallow dip.
 TPR_DEMOTE_R5 = -0.03
 TPR_DEMOTE_R10 = -0.01
+
+# TPR color level. The static trend-template score (0-7) saturates a wide "middle"
+# (5-6) that MM360 actually splits between strong and weak by TREND DIRECTION: the
+# same mediocre score reads strong while advancing and weak while declining. A
+# bake-off against the date-aligned real bands (IBB+LLY, ~300 bars) showed adding
+# this direction tiebreak to the borderline lifts per-bar TPR agreement from ~50%
+# to ~60% (decisive strong-vs-weak agreement ~75-78%) — the residual is the
+# inherently fuzzy transition boundary. Direction = price vs the 50DMA and the
+# 50DMA's own slope over TPR_DIR_SLOPE_BARS.
+TPR_STRONG_RAW = 7            # raw 7-cond score >= this -> strong
+TPR_WEAK_RAW = 4             # raw 7-cond score <= this -> weak (else direction-resolved)
+TPR_DIR_SLOPE_BARS = 20
 
 # ---------------------------------------------------------------------------
 # Band smoothing (hysteresis / debounce)
@@ -352,15 +362,6 @@ def compute_buy_risk(
 # ---------------------------------------------------------------------------
 # Band 3: TPR (Trend Template phase)
 # ---------------------------------------------------------------------------
-def _tpr_state_from_score(score: int, max_score: int) -> str:
-    strong_thr = TPR_STRONG if max_score == 8 else TPR_STRONG - 1
-    if score >= strong_thr:
-        return "strong"
-    if score >= TPR_TRANSITION:
-        return "transition"
-    return "weak"
-
-
 def compute_tpr(
     price_data: pd.DataFrame,
     benchmark_close: Optional[pd.Series] = None,
@@ -396,6 +397,23 @@ def compute_tpr(
         ]
         return sum(bool(x) for x in conds)
 
+    sma50_slope = sma50 - sma50.shift(TPR_DIR_SLOPE_BARS)
+
+    def _color_from_score(i: int, s7: int) -> str:
+        """7-cond template level, with trend direction splitting the borderline
+        (5-6) zone between strong and weak (see TPR color notes)."""
+        if s7 >= TPR_STRONG_RAW:
+            return "strong"
+        if s7 <= TPR_WEAK_RAW:
+            return "weak"
+        above = close.iloc[i] > sma50.iloc[i]
+        rising = sma50_slope.iloc[i] > 0
+        if above and rising:
+            return "strong"
+        if (not above) and (not rising):
+            return "weak"
+        return "transition"
+
     def _rolling_over(i: int) -> bool:
         """A perfect-template bar fading from highs: a material 5- and 10-bar
         pullback (thresholds keep the strip smooth, not flickery)."""
@@ -427,9 +445,9 @@ def compute_tpr(
     raw: List[str] = []
     hard: List[bool] = []
     for i in range(start, n):
-        score_i = full_score(i)
-        st = _tpr_state_from_score(score_i, max_score)
-        roll = st == "strong" and score_i >= max_score and _rolling_over(i)
+        s7 = score_at(i)                       # 7-cond level drives the COLOR
+        st = _color_from_score(i, s7)
+        roll = st == "strong" and s7 >= TPR_STRONG_RAW and _rolling_over(i)
         if roll:
             st = "transition"
         raw.append(st)
