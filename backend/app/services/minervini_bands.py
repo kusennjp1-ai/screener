@@ -112,6 +112,12 @@ TPR_DEMOTE_R10 = -0.01
 TPR_STRONG_RAW = 7            # raw 7-cond score >= this -> strong
 TPR_WEAK_RAW = 4             # raw 7-cond score <= this -> weak (else direction-resolved)
 TPR_DIR_SLOPE_BARS = 20
+# A borderline bar only reads strong if it is also within this fraction of its
+# 52-week high. MM360 keeps TPR weak through bounces during a post-top decline
+# (price back above a rising 50DMA but still well off the highs); without the
+# proximity gate those bounces read strong too early (the main real-weak/ours-
+# strong error on LLY's Oct-2025 top).
+TPR_STRONG_NEAR_HIGH = 0.93
 
 # ---------------------------------------------------------------------------
 # Band smoothing (hysteresis / debounce)
@@ -408,7 +414,8 @@ def compute_tpr(
             return "weak"
         above = close.iloc[i] > sma50.iloc[i]
         rising = sma50_slope.iloc[i] > 0
-        if above and rising:
+        near_high = close.iloc[i] >= hi52.iloc[i] * TPR_STRONG_NEAR_HIGH
+        if above and rising and near_high:
             return "strong"
         if (not above) and (not rising):
             return "weak"
