@@ -207,3 +207,23 @@ def test_history_length_matches_window():
     # All three strips span the same trailing window so the row has no black gap.
     assert len(bands["pressure_history"]) == len(bands["buy_risk_history"]) == len(bands["tpr_history"])
     assert len(bands["tpr_history"]) <= 252
+
+
+def test_weekly_timeframe_produces_valid_bands():
+    """The WEEKLY config computes all three bands on resampled weekly bars with
+    week-scaled periods (10/30/40-week MAs, 52-week high/low) — a sustained daily
+    uptrend resampled to weekly reads as a healthy weekly Stage-2 trend."""
+    from app.services.minervini_bands import to_weekly, WEEKLY
+
+    df = _frame(np.linspace(40, 180, 780))   # ~3y daily -> ~156 weekly bars
+    weekly = to_weekly(df)
+    assert 100 < len(weekly) < len(df)
+    assert list(weekly.columns) == ["Open", "High", "Low", "Close", "Volume"]
+
+    bands = calculate_bands(weekly, with_history=True, cfg=WEEKLY)
+    assert bands["tpr_state"] == "strong"            # clean uptrend
+    assert bands["pressure_state"] == "buy"
+    assert bands["buy_risk_state"] in ("low", "medium")
+    assert len(bands["tpr_history"]) <= WEEKLY.history_bars
+    # daily config left untouched: the same daily frame still computes daily bands.
+    assert calculate_bands(df, with_history=True)["tpr_state"] == "strong"
