@@ -28,6 +28,7 @@ class ScreenerName(str, Enum):
     CUSTOM = "custom"
     VOLUME_BREAKTHROUGH = "volume_breakthrough"
     SETUP_ENGINE = "setup_engine"
+    MARKETS360 = "markets360"
 
 
 class CompositeMethod(str, Enum):

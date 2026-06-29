@@ -81,6 +81,8 @@ export default function ScanControlBar({
   onScreenerToggle,
   includeVcp,
   onIncludeVcpChange,
+  excludeEtfs = false,
+  onExcludeEtfsChange,
   compositeMethod,
   onCompositeMethodChange,
   createScanPending,
@@ -227,6 +229,19 @@ export default function ScanControlBar({
             />
           }
           label={<Box sx={{ fontSize: '11px' }}>VCP</Box>}
+          sx={{ mr: 0 }}
+        />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={excludeEtfs}
+              onChange={(event) => onExcludeEtfsChange?.(event.target.checked)}
+              disabled={controlsDisabled}
+              size="small"
+            />
+          }
+          label={<Box sx={{ fontSize: '11px' }}>Ex-ETF</Box>}
           sx={{ mr: 0 }}
         />
 

@@ -5,6 +5,7 @@ export const DEFAULT_SCAN_DEFAULTS = {
   universe: null,
   screeners: ['minervini', 'canslim', 'ipo', 'custom', 'volume_breakthrough', 'setup_engine'],
   composite_method: 'weighted_average',
+  exclude_etfs: false,
   criteria: {
     include_vcp: true,
     custom_filters: {

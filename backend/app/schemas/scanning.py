@@ -39,11 +39,15 @@ class ScanCreateRequest(BaseModel):
     # Multi-screener fields
     screeners: List[str] = Field(
         default=["minervini"],
-        description="Screeners to run: minervini, canslim, ipo, custom, volume_breakthrough, setup_engine",
+        description="Screeners to run: minervini, canslim, ipo, custom, volume_breakthrough, setup_engine, markets360",
     )
     composite_method: str = Field(
         default="weighted_average",
         description="How to combine scores: weighted_average, maximum, minimum",
+    )
+    exclude_etfs: bool = Field(
+        default=False,
+        description="Drop ETFs/ETNs/funds from broad universes (ALL/MARKET/EXCHANGE/INDEX). Ignored for CUSTOM/TEST symbol lists.",
     )
 
     # Idempotency

@@ -77,6 +77,7 @@ function ScanPage() {
   const [includeVcp, setIncludeVcp] = useState(DEFAULT_SCAN_DEFAULTS.criteria.include_vcp);
   const [selectedScreeners, setSelectedScreeners] = useState(DEFAULT_SCAN_DEFAULTS.screeners);
   const [compositeMethod, setCompositeMethod] = useState(DEFAULT_SCAN_DEFAULTS.composite_method);
+  const [excludeEtfs, setExcludeEtfs] = useState(DEFAULT_SCAN_DEFAULTS.exclude_etfs);
   const [customFilters, setCustomFilters] = useState(DEFAULT_SCAN_DEFAULTS.criteria.custom_filters);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
@@ -112,6 +113,7 @@ function ScanPage() {
     setIncludeVcp(nextDefaults.criteria?.include_vcp ?? DEFAULT_SCAN_DEFAULTS.criteria.include_vcp);
     setSelectedScreeners(nextDefaults.screeners ?? DEFAULT_SCAN_DEFAULTS.screeners);
     setCompositeMethod(nextDefaults.composite_method ?? DEFAULT_SCAN_DEFAULTS.composite_method);
+    setExcludeEtfs(nextDefaults.exclude_etfs ?? DEFAULT_SCAN_DEFAULTS.exclude_etfs);
     setCustomFilters(nextDefaults.criteria?.custom_filters ?? DEFAULT_SCAN_DEFAULTS.criteria.custom_filters);
     scanDefaultsAppliedRef.current = profileKey;
   }, [activeProfileDetail, runtimeReady, scanDefaults, universeSelections]);
@@ -406,6 +408,7 @@ function ScanPage() {
       universe_def: universeDef,
       screeners: selectedScreeners,
       composite_method: compositeMethod,
+      exclude_etfs: excludeEtfs,
       criteria,
     });
   };
@@ -579,6 +582,8 @@ function ScanPage() {
         onScreenerToggle={handleScreenerToggle}
         includeVcp={includeVcp}
         onIncludeVcpChange={setIncludeVcp}
+        excludeEtfs={excludeEtfs}
+        onExcludeEtfsChange={setExcludeEtfs}
         compositeMethod={compositeMethod}
         onCompositeMethodChange={setCompositeMethod}
         createScanPending={createScanMutation.isPending}
