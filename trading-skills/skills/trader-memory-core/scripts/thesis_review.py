@@ -75,6 +75,97 @@ def compute_mae_mfe(thesis: dict, price_adapter: Any | None = None) -> dict[str,
     return result
 
 
+# -- Position exhaustion -------------------------------------------------------
+
+DEFAULT_EXHAUSTION_DAYS = 28          # ~4 trading weeks
+EXHAUSTION_WARNING_LEAD_DAYS = 7      # 'warning' starts this many days before
+
+
+def position_exhaustion(
+    thesis: dict,
+    as_of: str | None = None,
+    current_price: float | None = None,
+    exhaustion_days: int | None = None,
+) -> dict[str, Any]:
+    """Flag positions held too long without resolving (Minervini's time stop).
+
+    A setup that stalls ~4-5 weeks past entry without reaching its target is
+    exhausted; surfacing it removes a systematic blind spot. This NEVER exits a
+    position — it informs the trader, who decides (exit, tighten to breakeven, or
+    require a fresh catalyst to extend).
+
+    Args:
+        thesis: a thesis dict; only ACTIVE / PARTIALLY_CLOSED with an entry date
+            are evaluated.
+        as_of: YYYY-MM-DD (default: today UTC).
+        current_price: latest price, for progress-to-target; optional.
+        exhaustion_days: override the window; defaults to the thesis's
+            exit.time_stop_days when set, else DEFAULT_EXHAUSTION_DAYS.
+
+    Returns: {applicable, hold_duration_days, days_to_exhaustion,
+    exhaustion_status (active/warning/critical/None), progression_to_target_pct,
+    exhaustion_days, recommended_action}.
+    """
+    out: dict[str, Any] = {
+        "applicable": False, "hold_duration_days": None, "days_to_exhaustion": None,
+        "exhaustion_status": None, "progression_to_target_pct": None,
+        "exhaustion_days": None, "recommended_action": "none",
+    }
+    if thesis.get("status") not in ("ACTIVE", "PARTIALLY_CLOSED"):
+        return out
+    entry = thesis.get("entry", {}) or {}
+    entry_date = entry.get("actual_date")
+    if not entry_date:
+        return out
+
+    window = exhaustion_days
+    if window is None:
+        window = (thesis.get("exit", {}) or {}).get("time_stop_days") or DEFAULT_EXHAUSTION_DAYS
+    window = int(window)
+
+    as_of_dt = (
+        datetime.strptime(as_of[:10], "%Y-%m-%d")
+        if as_of
+        else datetime.utcnow()
+    )
+    try:
+        entry_dt = datetime.strptime(entry_date[:10], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return out
+    hold = (as_of_dt - entry_dt).days
+    if hold < 0:
+        return out
+
+    out["applicable"] = True
+    out["hold_duration_days"] = hold
+    out["exhaustion_days"] = window
+    out["days_to_exhaustion"] = max(0, window - hold)
+
+    if hold >= window:
+        status = "critical"
+    elif hold >= window - EXHAUSTION_WARNING_LEAD_DAYS:
+        status = "warning"
+    else:
+        status = "active"
+    out["exhaustion_status"] = status
+
+    # Progress toward the profit target, if we can compute it.
+    entry_price = entry.get("actual_price")
+    target = entry.get("target_price") or (thesis.get("exit", {}) or {}).get("take_profit")
+    if current_price is not None and entry_price and target and target != entry_price:
+        out["progression_to_target_pct"] = round(
+            (current_price - entry_price) / (target - entry_price) * 100, 1
+        )
+
+    # A stalled, exhausted position with little progress is the clearest sell tell.
+    if status == "critical":
+        prog = out["progression_to_target_pct"]
+        out["recommended_action"] = "exit" if (prog is None or prog < 50) else "tighten_stop"
+    elif status == "warning":
+        out["recommended_action"] = "tighten_stop"
+    return out
+
+
 # -- Postmortem ----------------------------------------------------------------
 
 
@@ -261,6 +352,24 @@ def summary_stats(state_dir: str) -> dict:
     return result
 
 
+def list_exhaustion_alerts(state_dir: str, as_of: str | None = None) -> list[dict]:
+    """All ACTIVE / PARTIALLY_CLOSED theses whose hold has reached the warning or
+    critical exhaustion window — the time-stop watch list."""
+    state_path = Path(state_dir)
+    alerts: list[dict] = []
+    for status in ("ACTIVE", "PARTIALLY_CLOSED"):
+        for entry in thesis_store.query(state_path, status=status):
+            thesis = thesis_store.get(state_path, entry["thesis_id"])
+            ex = position_exhaustion(thesis, as_of=as_of)
+            if ex["exhaustion_status"] in ("warning", "critical"):
+                alerts.append({
+                    "thesis_id": entry["thesis_id"],
+                    "ticker": thesis.get("ticker"),
+                    **ex,
+                })
+    return alerts
+
+
 # -- CLI -----------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -284,6 +393,10 @@ if __name__ == "__main__":
     # summary
     sub.add_parser("summary", help="Show summary statistics")
 
+    # exhaustion
+    ex_p = sub.add_parser("exhaustion", help="List positions in the time-stop warning/critical window")
+    ex_p.add_argument("--as-of", default=None)
+
     args = parser.parse_args()
 
     if args.command == "review-due":
@@ -296,5 +409,8 @@ if __name__ == "__main__":
     elif args.command == "summary":
         s = summary_stats(args.state_dir)
         print(json.dumps(s, indent=2))
+    elif args.command == "exhaustion":
+        alerts = list_exhaustion_alerts(args.state_dir, args.as_of)
+        print(json.dumps(alerts, indent=2))
     else:
         parser.print_help()
