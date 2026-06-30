@@ -22,6 +22,7 @@ import pandas as pd
 from app.services.minervini_bands import calculate_bands, to_weekly, DAILY, WEEKLY
 from app.services.markets360 import ratings
 from app.services.markets360.vcp_footprint import compute_vcp_footprint
+from app.services.markets360.risk import compute_risk_plan
 from app.services.market_regime import assess_market_regime
 
 from .base_screener import (
@@ -144,6 +145,10 @@ class Markets360Scanner(BaseStockScreener):
         # is too short for the legacy base finder, so footprint is daily-only.
         vcp = compute_vcp_footprint(price) if timeframe != "weekly" else dict()
 
+        # Minervini's other half: the stop defines the size. Plan entry/stop/
+        # targets/position-size off the price structure and the VCP pivot.
+        risk_plan = compute_risk_plan(price, pivot=vcp.get("pivot"))
+
         details = {
             "timeframe": timeframe,
             "pressure_state": pressure,
@@ -158,6 +163,7 @@ class Markets360Scanner(BaseStockScreener):
             "near_pivot": bool(vcp.get("near_pivot")),
             "ready_for_breakout": bool(vcp.get("ready_for_breakout")),
             "pivot": vcp.get("pivot"),
+            "risk_plan": risk_plan,
             "dist_20dma_pct": ratings.compute_dist_20dma(close),
             "last_close": round(float(close.iloc[-1]), 2),
             "buyable_now": buyable_now,
