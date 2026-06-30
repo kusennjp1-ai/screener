@@ -220,6 +220,51 @@ def _load_fixtures() -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
     return data, spy
 
 
+def _ohlcv_from_close(close: np.ndarray, rng: np.random.Generator, idx: pd.DatetimeIndex) -> pd.DataFrame:
+    """Build an OHLCV frame from a close path, shaped exactly like the scanner's
+    StockData / the project fixtures (Open/High/Low/Close/Volume, DatetimeIndex)."""
+    close = np.asarray(close, dtype="float64")
+    open_ = np.concatenate([[close[0]], close[:-1]])
+    intraday = np.abs(rng.normal(0.0, 0.012, len(close)))
+    high = np.maximum(open_, close) * (1.0 + intraday)
+    low = np.minimum(open_, close) * (1.0 - intraday)
+    base_vol = rng.uniform(3e5, 5e6)
+    vol = base_vol * (1.0 + np.abs(rng.normal(0.0, 0.4, len(close))))
+    return pd.DataFrame(
+        {"Open": open_, "High": high, "Low": low, "Close": close, "Volume": vol}, index=idx
+    )
+
+
+def make_synthetic_universe(
+    n_symbols: int = 400, n_days: int = 900, seed: int = 7
+) -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
+    """A large, diverse synthetic universe that MIMICS the screener's data
+    structure (real fetch is egress-blocked here). Each name = market beta +
+    a persistent latent momentum regime (AR(1)) + idiosyncratic noise. The
+    momentum persistence is the factor RS actually exploits — recent trailing
+    strength carries forward — so different recency-weight configs genuinely
+    differ in how well they capture it. NOT real market data; a structurally
+    faithful stand-in so the calibration can run at universe scale."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2021-01-04", periods=n_days)
+    mkt_ret = rng.normal(0.0003, 0.009, n_days)              # benchmark factor
+    spy = _ohlcv_from_close(300.0 * np.cumprod(1.0 + mkt_ret), rng, idx)
+
+    data: Dict[str, pd.DataFrame] = {}
+    for i in range(n_symbols):
+        beta = rng.uniform(0.5, 1.7)
+        phi = rng.uniform(0.95, 0.99)                        # momentum persistence
+        shock = rng.normal(0.0, rng.uniform(0.0004, 0.0018), n_days)
+        mom = np.zeros(n_days)
+        for t in range(1, n_days):
+            mom[t] = phi * mom[t - 1] + shock[t]
+        idio = rng.normal(0.0, rng.uniform(0.010, 0.026), n_days)
+        ret = beta * mkt_ret + mom + idio
+        close = rng.uniform(12.0, 140.0) * np.cumprod(1.0 + ret)
+        data[f"S{i:04d}"] = _ohlcv_from_close(close, rng, idx)
+    return data, spy
+
+
 def _load_db(market: str = "US") -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
     """Production source: resolve the US universe EX-ETF and load cached OHLCV.
 
@@ -255,13 +300,20 @@ def _load_db(market: str = "US") -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=("fixtures", "db"), default="fixtures")
+    ap.add_argument("--source", choices=("fixtures", "db", "synthetic"), default="fixtures")
     ap.add_argument("--top-frac", type=float, default=0.30)
     ap.add_argument("--asof-count", type=int, default=8)
     ap.add_argument("--market", default="US")
+    ap.add_argument("--n-symbols", type=int, default=400, help="synthetic universe size")
+    ap.add_argument("--seed", type=int, default=7, help="synthetic RNG seed")
     args = ap.parse_args()
 
-    data, spy = _load_db(args.market) if args.source == "db" else _load_fixtures()
+    if args.source == "db":
+        data, spy = _load_db(args.market)
+    elif args.source == "synthetic":
+        data, spy = make_synthetic_universe(n_symbols=args.n_symbols, seed=args.seed)
+    else:
+        data, spy = _load_fixtures()
     if not data:
         raise SystemExit("Empty universe — nothing to calibrate.")
 
@@ -281,6 +333,12 @@ def main() -> int:
         print("\n  CAVEAT: fixtures are a tiny, hand-picked, non-representative set —")
         print("  this run PROVES the pipeline end-to-end; the real verdict comes from")
         print("  --source db on the full US universe ex-ETF in production.")
+    elif args.source == "synthetic":
+        print(f"\n  NOTE: synthetic universe ({len(data)} names, momentum-structured) — a")
+        print("  structurally faithful stand-in (real fetch is egress-blocked here). It")
+        print("  exercises the calibration at scale; the verdict reflects the generator's")
+        print("  momentum dynamics, NOT live markets. Run --source db in production for the")
+        print("  real-market answer.")
     return 0
 
 

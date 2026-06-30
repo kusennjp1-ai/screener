@@ -13,6 +13,7 @@ from calibrate_rs_weights import (  # noqa: E402
     decide,
     evaluate_config,
     flag_leaders,
+    make_synthetic_universe,
     rs_score,
 )
 
@@ -99,3 +100,24 @@ def test_evaluate_config_shape():
     assert set(out.keys()) == set(HORIZONS)
     for h in HORIZONS:
         assert "n" in out[h] and "sharpe" in out[h]
+
+
+def test_synthetic_universe_shape_and_structure():
+    data, spy = make_synthetic_universe(n_symbols=20, n_days=400, seed=3)
+    assert len(data) == 20
+    for df in (spy, *data.values()):
+        assert list(df.columns) == ["Open", "High", "Low", "Close", "Volume"]
+        assert len(df) == 400
+        assert (df["High"] >= df["Low"]).all()
+        assert (df["Close"] > 0).all()
+        assert (df["Volume"] > 0).all()
+
+
+def test_synthetic_universe_is_deterministic():
+    a, sa = make_synthetic_universe(n_symbols=10, n_days=300, seed=42)
+    b, sb = make_synthetic_universe(n_symbols=10, n_days=300, seed=42)
+    assert sa["Close"].equals(sb["Close"])
+    assert a["S0000"]["Close"].equals(b["S0000"]["Close"])
+    # different seed -> different data
+    c, _ = make_synthetic_universe(n_symbols=10, n_days=300, seed=99)
+    assert not a["S0000"]["Close"].equals(c["S0000"]["Close"])
