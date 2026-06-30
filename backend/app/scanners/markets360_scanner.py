@@ -23,6 +23,7 @@ from app.services.minervini_bands import calculate_bands, to_weekly, DAILY, WEEK
 from app.services.markets360 import ratings
 from app.services.markets360.vcp_footprint import compute_vcp_footprint
 from app.services.markets360.risk import compute_risk_plan
+from app.services.markets360.rs_line import compute_rs_line_signals
 from app.services.market_regime import assess_market_regime
 
 from .base_screener import (
@@ -149,6 +150,9 @@ class Markets360Scanner(BaseStockScreener):
         # targets/position-size off the price structure and the VCP pivot.
         risk_plan = compute_risk_plan(price, pivot=vcp.get("pivot"))
 
+        # RS line at new high (often before price) — Minervini's leadership tell.
+        rs_line = compute_rs_line_signals(close, benchmark_close)
+
         details = {
             "timeframe": timeframe,
             "pressure_state": pressure,
@@ -164,6 +168,9 @@ class Markets360Scanner(BaseStockScreener):
             "ready_for_breakout": bool(vcp.get("ready_for_breakout")),
             "pivot": vcp.get("pivot"),
             "risk_plan": risk_plan,
+            "rs_line": rs_line,
+            "rs_new_high": bool(rs_line.get("rs_new_high")),
+            "rs_line_blue_dot": bool(rs_line.get("rs_line_blue_dot")),
             "dist_20dma_pct": ratings.compute_dist_20dma(close),
             "last_close": round(float(close.iloc[-1]), 2),
             "buyable_now": buyable_now,
