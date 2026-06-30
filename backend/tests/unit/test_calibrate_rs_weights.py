@@ -121,3 +121,14 @@ def test_synthetic_universe_is_deterministic():
     # different seed -> different data
     c, _ = make_synthetic_universe(n_symbols=10, n_days=300, seed=99)
     assert not a["S0000"]["Close"].equals(c["S0000"]["Close"])
+
+
+def test_load_csv_dir_reads_real_ohlcv_files():
+    from pathlib import Path
+    from calibrate_rs_weights import _load_csv_dir
+    fix = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "markets360"
+    data, spy = _load_csv_dir(str(fix), benchmark="spy")
+    assert "LLY" in data and "FTNT" in data
+    assert "spy" not in {k.lower() for k in data}      # benchmark excluded from universe
+    assert {"Open", "High", "Low", "Close", "Volume"} <= set(spy.columns)
+    assert all(len(df) >= 300 for df in data.values())

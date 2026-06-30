@@ -265,6 +265,44 @@ def make_synthetic_universe(
     return data, spy
 
 
+def _load_csv_dir(data_dir: str, benchmark: str = "spy") -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
+    """Ingest REAL OHLCV the user dropped into a directory — the legitimate,
+    no-egress data path. Reads every ``*.csv`` (one per symbol) via the same
+    reader the project fixtures use (auto-detects yfinance's multi-header export
+    and a plain ``Date,Open,High,Low,Close,Volume`` file). One file must be the
+    benchmark (default ``spy.csv``). Drop files from any machine where the fetch
+    works; nothing here touches the network."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from markets360_band_calibration import _read_csv
+
+    d = Path(data_dir)
+    if not d.is_dir():
+        raise SystemExit(f"--data-dir not found: {data_dir}")
+    files = {p.stem.lower(): p for p in sorted(d.glob("*.csv"))}
+    bench_key = benchmark.lower()
+    if bench_key not in files:
+        raise SystemExit(f"benchmark '{benchmark}.csv' not found in {data_dir} "
+                         f"(have: {sorted(files)[:10]}...)")
+    spy = _read_csv(str(files.pop(bench_key)))
+    data: Dict[str, pd.DataFrame] = {}
+    skipped = 0
+    for sym, path in files.items():
+        try:
+            df = _read_csv(str(path))
+        except Exception:
+            skipped += 1
+            continue
+        if df is not None and "Close" in df.columns and len(df) >= 300:
+            data[sym.upper()] = df
+        else:
+            skipped += 1
+    if not data:
+        raise SystemExit("No usable symbol CSVs (need >= 300 rows of OHLCV each).")
+    if skipped:
+        print(f"  (skipped {skipped} unusable/short files)")
+    return data, spy
+
+
 def _load_db(market: str = "US") -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
     """Production source: resolve the US universe EX-ETF and load cached OHLCV.
 
@@ -300,18 +338,24 @@ def _load_db(market: str = "US") -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=("fixtures", "db", "synthetic"), default="fixtures")
+    ap.add_argument("--source", choices=("fixtures", "db", "synthetic", "csv"), default="fixtures")
     ap.add_argument("--top-frac", type=float, default=0.30)
     ap.add_argument("--asof-count", type=int, default=8)
     ap.add_argument("--market", default="US")
     ap.add_argument("--n-symbols", type=int, default=400, help="synthetic universe size")
     ap.add_argument("--seed", type=int, default=7, help="synthetic RNG seed")
+    ap.add_argument("--data-dir", default=None, help="dir of per-symbol OHLCV CSVs (--source csv)")
+    ap.add_argument("--benchmark", default="spy", help="benchmark CSV stem in --data-dir")
     args = ap.parse_args()
 
     if args.source == "db":
         data, spy = _load_db(args.market)
     elif args.source == "synthetic":
         data, spy = make_synthetic_universe(n_symbols=args.n_symbols, seed=args.seed)
+    elif args.source == "csv":
+        if not args.data_dir:
+            raise SystemExit("--source csv requires --data-dir <path to OHLCV CSVs>")
+        data, spy = _load_csv_dir(args.data_dir, args.benchmark)
     else:
         data, spy = _load_fixtures()
     if not data:
