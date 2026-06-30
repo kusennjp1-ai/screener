@@ -20,6 +20,14 @@ class RelativeStrengthCalculator:
     - Compare stock performance vs benchmark (SPY) over multiple periods
     - Weight recent performance more heavily
     - Assign percentile rank (0-100) vs universe
+
+    Authenticity note: the IBD/Minervini RS rating is a *percentile rank vs the
+    universe*. That requires a cross-sectional snapshot, so it is only produced
+    when ``universe_performances`` is supplied; otherwise these methods fall back
+    to a fixed 50 + rel_perf*100 scaling (NOT a percentile) and log a warning so
+    the divergence is visible. Ranking is market-scoped: the universe is
+    partitioned by market upstream (DataPreparationLayer), so US names are never
+    ranked against international ones.
     """
 
     # Time periods in trading days and their weights
@@ -150,7 +158,13 @@ class RelativeStrengthCalculator:
             )
             rs_rating = percentile
         else:
-            # Without universe, use a simple scaling
+            # Without universe, use a simple scaling (NOT a percentile rank).
+            logger.warning(
+                "RS rating for %s computed without universe data; result uses "
+                "fixed 50 + rel_perf*100 scaling, not an authentic Minervini/IBD "
+                "percentile rank. Pass universe_performances to percentile-rank.",
+                stock_symbol,
+            )
             # Positive performance > 0 gets score 50-100, negative gets 0-50
             if rel_performance >= 0:
                 rs_rating = min(100, 50 + (rel_performance * 100))
@@ -226,7 +240,13 @@ class RelativeStrengthCalculator:
             )
             rs_rating = percentile
         else:
-            # Without universe, use simple scaling
+            # Without universe, use simple scaling (NOT a percentile rank).
+            logger.warning(
+                "Period-%d RS computed without universe data; result uses fixed "
+                "50 + rel_perf*100 scaling, not an authentic Minervini/IBD "
+                "percentile rank. Pass universe_performances to percentile-rank.",
+                period,
+            )
             # Positive performance > 0 gets score 50-100, negative gets 0-50
             if rel_performance >= 0:
                 rs_rating = min(100, 50 + (rel_performance * 100))

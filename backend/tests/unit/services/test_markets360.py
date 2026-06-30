@@ -45,6 +45,24 @@ class TestRatings:
         assert low is not None and high is not None
         assert high > low
 
+    def test_rpr_percentile_mode_vs_curve_fallback(self):
+        # a clear leader: rising stock vs a flat benchmark over the year
+        n = 300
+        idx = pd.bdate_range("2023-01-02", periods=n)
+        stock = pd.Series(np.linspace(20, 90, n), index=idx)
+        bench = pd.Series(np.linspace(100, 103, n), index=idx)
+        # curve fallback (no universe) still returns a leader-grade chip
+        curve = ratings.compute_rpr(stock, bench)
+        assert curve is not None and curve >= 70
+        # percentile mode: rank against a universe where most names lag -> ~top
+        universe = [-30.0, -10.0, 0.0, 5.0, 12.0, 18.0]  # this stock outperforms all
+        pct = ratings.compute_rpr(stock, bench, universe_performances=universe)
+        assert pct == 100
+        # against a universe of strong outperformers -> a low percentile
+        strong = [200.0, 220.0, 240.0, 260.0]
+        low = ratings.compute_rpr(stock, bench, universe_performances=strong)
+        assert low == 0
+
     def test_curve_clamps_and_interpolates(self):
         pts = [(-60, 1), (0, 55), (80, 99)]
         assert ratings._curve(-200, pts) == 1

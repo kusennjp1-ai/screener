@@ -76,7 +76,20 @@ def _pct_return(close: pd.Series, lookback: int) -> Optional[float]:
 RPR_WEIGHTS = ((63, 0.40), (126, 0.20), (189, 0.20), (252, 0.20))
 
 
-def compute_rpr(close: pd.Series, benchmark_close: Optional[pd.Series]) -> Optional[int]:
+def compute_rpr(
+    close: pd.Series,
+    benchmark_close: Optional[pd.Series],
+    universe_performances: Optional[Sequence[float]] = None,
+) -> Optional[int]:
+    """Relative Price Rating (0-99).
+
+    When ``universe_performances`` (the recency-weighted relative-outperformance
+    of every stock in the same-market universe) is supplied, RPR is an authentic
+    Minervini-style **percentile rank** of this stock's outperformance against
+    it. When None (the standalone single-symbol Markets 360 view), it falls back
+    to a calibrated monotonic curve so a stock can still be scored without a
+    cross-sectional snapshot.
+    """
     if close is None or len(close) < 70:
         return None
     bench = None
@@ -100,7 +113,15 @@ def compute_rpr(close: pd.Series, benchmark_close: Optional[pd.Series]) -> Optio
         return None
     score = weighted / wsum  # relative outperformance %, recency-weighted
 
-    # Calibrated so market performers land near 70-75 and strong leaders 90+.
+    # Authentic Minervini/IBD: percentile-rank against the (same-market) universe.
+    if universe_performances:
+        vals = [float(p) for p in universe_performances if p is not None and np.isfinite(p)]
+        if vals:
+            better = sum(1 for p in vals if p < score)
+            return int(round(better / len(vals) * 100))
+
+    # Fallback (single-symbol view): calibrated so market performers land near
+    # 70-75 and strong leaders 90+.
     return _curve(
         score,
         [(-60, 1), (-30, 10), (-10, 30), (0, 55), (10, 72), (25, 85), (45, 93), (80, 99)],
