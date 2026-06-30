@@ -21,6 +21,7 @@ import pandas as pd
 
 from app.services.minervini_bands import calculate_bands, to_weekly, DAILY, WEEKLY
 from app.services.markets360 import ratings
+from app.services.market_regime import assess_market_regime
 
 from .base_screener import (
     BaseStockScreener,
@@ -116,7 +117,7 @@ class Markets360Scanner(BaseStockScreener):
         )
 
         # A buyable SEPA leader: Stage-2 trend, leader-grade RS, accumulation,
-        # and not extended.
+        # and not extended. This is the WATCHLIST condition (stock-level setup).
         passes = (
             tpr == "strong"
             and rpr is not None
@@ -124,6 +125,17 @@ class Markets360Scanner(BaseStockScreener):
             and pressure in ("buy", "neutral")
             and buy_risk in ("low", "medium")
         )
+
+        # Minervini's first rule: only pull the trigger when the GENERAL MARKET is
+        # in a confirmed uptrend. The benchmark IS the market, so assess its regime
+        # (always from daily index data, even on a weekly stock scan) and gate
+        # "buyable now" by it — the watchlist (passes) is unchanged.
+        regime = assess_market_regime(data.benchmark_data)
+        market_ok = regime.get("regime") in ("confirmed_uptrend", "uptrend_under_pressure")
+        # Unknown regime (no benchmark) does not block — fall back to setup only.
+        if regime.get("regime") is None:
+            market_ok = True
+        buyable_now = bool(passes and market_ok)
 
         details = {
             "timeframe": timeframe,
@@ -135,6 +147,11 @@ class Markets360Scanner(BaseStockScreener):
             "vcp_pct": ratings.compute_vcp_pct(price),
             "dist_20dma_pct": ratings.compute_dist_20dma(close),
             "last_close": round(float(close.iloc[-1]), 2),
+            "buyable_now": buyable_now,
+            "market_regime": regime.get("regime"),
+            "market_health": regime.get("health"),
+            "market_exposure_pct": regime.get("exposure_pct"),
+            "market_distribution_days": regime.get("distribution_days"),
         }
         return ScreenerResult(
             score=max(0.0, min(100.0, score)),
@@ -148,13 +165,12 @@ class Markets360Scanner(BaseStockScreener):
     def calculate_rating(self, score: float, details: Dict) -> str:
         if details.get("tpr_state") is None:
             return "Insufficient Data"
-        if score >= 85:
-            return "Strong Buy"
-        if score >= 70:
-            return "Buy"
-        if score >= 55:
+        rating = "Strong Buy" if score >= 85 else "Buy" if score >= 70 else "Watch" if score >= 55 else "Pass"
+        # Market-timing cap: never say "Buy"/"Strong Buy" when the general market is
+        # not in an uptrend — a perfect setup in a correction is a Watch, not a buy.
+        if rating in ("Strong Buy", "Buy") and details.get("buyable_now") is False:
             return "Watch"
-        return "Pass"
+        return rating
 
     def _insufficient(self, symbol: str) -> ScreenerResult:
         return ScreenerResult(

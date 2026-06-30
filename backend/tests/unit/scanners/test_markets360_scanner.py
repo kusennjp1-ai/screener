@@ -36,6 +36,28 @@ def test_scanner_passes_a_stage2_leader():
     assert 0 <= res.score <= 100
 
 
+def test_market_regime_caps_a_leader_in_a_bad_market():
+    """Same Stage-2 leader: in a confirmed-uptrend market it is buyable (Buy/Strong
+    Buy); in a downtrending market the setup still passes (watchlist) but the rating
+    is capped to Watch and buyable_now is False — Minervini's market-timing rule."""
+    n = 540
+    stock = _frame(np.linspace(20, 130, n))
+    healthy = _frame(np.linspace(300, 460, n))      # market in its own Stage 2
+    broken = _frame(np.linspace(460, 300, n))       # market downtrend
+
+    up = Markets360Scanner().scan_stock(
+        "LEAD", StockData(symbol="LEAD", price_data=stock, benchmark_data=healthy, market="US"))
+    down = Markets360Scanner().scan_stock(
+        "LEAD", StockData(symbol="LEAD", price_data=stock, benchmark_data=broken, market="US"))
+
+    assert up.passes is True and down.passes is True            # watchlist unchanged
+    assert up.details["buyable_now"] is True
+    assert down.details["buyable_now"] is False
+    assert up.rating in ("Strong Buy", "Buy")
+    assert down.rating == "Watch"                                # capped by market timing
+    assert down.details["market_regime"] == "downtrend"
+
+
 def test_scanner_rejects_a_downtrend():
     n = 540
     stock = _frame(np.linspace(130, 40, n))            # broken downtrend
