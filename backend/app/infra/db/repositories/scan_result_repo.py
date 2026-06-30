@@ -905,6 +905,10 @@ def _map_row_to_domain(
     extended["market_above_50dma"] = details.get("market_above_50dma")
     extended["market_above_200dma"] = details.get("market_above_200dma")
     extended["market_50_above_200dma"] = details.get("market_50_above_200dma")
+    # Rating-basis explainability
+    extended["rating_basis_score"] = details.get("rating_basis_score")
+    extended["rating_basis_screener"] = details.get("rating_basis_screener")
+    extended["rating_explanation"] = details.get("rating_explanation")
     if include_setup_payload:
         extended["se_explain"] = se_data.get("explain")
         extended["se_candidates"] = se_data.get("candidates")

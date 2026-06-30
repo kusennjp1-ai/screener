@@ -26,7 +26,7 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-RS_HIGH_LOOKBACK = 252     # ~52 weeks of new-high ground
+RS_HIGH_LOOKBACK = 252     # 252 trading days = 52-week lookback, the Minervini/IBD frame
 RS_NEW_HIGH_TOL = 0.005    # within 0.5% of the high counts as "at new high"
 RS_SLOPE_BARS = 21         # ~1 month slope window
 PRICE_HIGH_TOL = 0.02      # price "at new high" if within 2% of its 252-bar high

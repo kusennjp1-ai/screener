@@ -34,7 +34,9 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 # How recent (in bars) the latest breakout must be for the card to read
-# "Buying Now!" rather than a historical annotation.
+# "Buying Now!" rather than a historical annotation. 5 sessions ≈ one trading
+# week: a pivot breakout is "actionable now" only in the days right after it
+# fires — past that the entry is extended and the card reverts to a watch state.
 ACTIVE_WINDOW_BARS = 5
 
 # Max tolerable loss from the trigger when the base low would imply a wider stop.

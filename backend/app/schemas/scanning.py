@@ -241,6 +241,11 @@ class ScanResultItem(BaseModel):
     market_above_200dma: Optional[bool] = None
     market_50_above_200dma: Optional[bool] = None
 
+    # Rating-basis explainability — why the rating is what it is.
+    rating_basis_score: Optional[float] = None
+    rating_basis_screener: Optional[str] = None
+    rating_explanation: Optional[str] = None
+
     @field_validator("price_sparkline_data", "rs_sparkline_data", mode="before")
     @classmethod
     def _validate_sparkline(cls, value: Any) -> Optional[List[float]]:
@@ -382,6 +387,10 @@ class ScanResultItem(BaseModel):
             market_above_50dma=ef.get("market_above_50dma"),
             market_above_200dma=ef.get("market_above_200dma"),
             market_50_above_200dma=ef.get("market_50_above_200dma"),
+            # Rating-basis explainability
+            rating_basis_score=ef.get("rating_basis_score"),
+            rating_basis_screener=ef.get("rating_basis_screener"),
+            rating_explanation=ef.get("rating_explanation"),
         )
 
 

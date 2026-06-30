@@ -58,6 +58,23 @@ def test_from_domain_surfaces_regime_fields():
     assert item.market_50_above_200dma is True
 
 
+def test_rating_basis_explainability_surfaces():
+    domain = ScanResultItemDomain(
+        symbol="AAA", composite_score=68.0, rating="Watch", current_price=10.0,
+        screener_outputs={}, screeners_run=["minervini", "canslim"],
+        composite_method="weighted_average", screeners_passed=1, screeners_total=2,
+        extended_fields={
+            "rating_basis_score": 85.0,
+            "rating_basis_screener": "minervini",
+            "rating_explanation": "Rating Watch from best-fit minervini score 85",
+        },
+    )
+    item = ScanResultItem.from_domain(domain)
+    assert item.rating_basis_score == 85.0
+    assert item.rating_basis_screener == "minervini"
+    assert "best-fit minervini" in item.rating_explanation
+
+
 def test_regime_absent_is_none_not_error():
     domain = ScanResultItemDomain(
         symbol="BBB", composite_score=10.0, rating="Pass", current_price=1.0,
