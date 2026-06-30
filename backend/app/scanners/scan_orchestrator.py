@@ -35,6 +35,7 @@ from app.domain.scanning.scoring import (
 )
 from app.domain.scanning.ports import StockDataProvider
 from app.services.minervini_bands import calculate_bands
+from app.services.market_regime import assess_market_regime
 
 logger = logging.getLogger(__name__)
 
@@ -593,6 +594,10 @@ class ScanOrchestrator:
             #     export. Reuses the already-fetched benchmark; never raises.
             band_states = self._compute_band_states(stock_data)
 
+            # 7e. General-market regime (Minervini's first rule). Computed from
+            #     the benchmark; identical across the scan, attached to each row.
+            market_regime = self._assess_regime(stock_data)
+
             # 8. Combine results
             combined_result = self._combine_results(
                 symbol,
@@ -620,6 +625,7 @@ class ScanOrchestrator:
                 execution_cap_applied=execution_cap.capped,
                 execution_cap_reason=execution_cap.reason,
                 band_states=band_states,
+                market_regime=market_regime,
             )
             if data_status == "insufficient_history":
                 for key, value in _partial_history_metrics(stock_data).items():
@@ -689,6 +695,37 @@ class ScanOrchestrator:
             )
             return {}
 
+    def _assess_regime(self, stock_data: StockData) -> Dict[str, object]:
+        """Assess the general-market regime from the benchmark attached to this
+        stock (Minervini's first rule: only buy in a confirmed uptrend, and scale
+        exposure to market health). The benchmark is identical across a scan, so
+        every row carries the same regime — cheap (one rolling mean) and lets the
+        UI show a single regime banner + suggested exposure. Returns a flat,
+        ``market_``-prefixed subset; empty dict on any failure (never aborts a
+        scan), mirroring ``_compute_band_states``.
+        """
+        try:
+            bench = getattr(stock_data, "benchmark_data", None)
+            regime = assess_market_regime(bench)
+            if regime.get("regime") is None:
+                return {}
+            return {
+                "market_regime": regime.get("regime"),
+                "market_health": regime.get("health"),
+                "market_exposure_pct": regime.get("exposure_pct"),
+                "market_distribution_days": regime.get("distribution_days"),
+                "market_above_50dma": regime.get("above_50dma"),
+                "market_above_200dma": regime.get("above_200dma"),
+                "market_50_above_200dma": regime.get("fifty_above_200"),
+            }
+        except Exception:  # noqa: BLE001 - regime must never abort a scan
+            logger.warning(
+                "market-regime assessment failed for %s; omitting regime",
+                getattr(stock_data, "symbol", "?"),
+                exc_info=True,
+            )
+            return {}
+
     def _combine_results(
         self,
         symbol: str,
@@ -711,6 +748,7 @@ class ScanOrchestrator:
         execution_cap_applied: bool = False,
         execution_cap_reason: Optional[str] = None,
         band_states: Optional[Dict[str, object]] = None,
+        market_regime: Optional[Dict[str, object]] = None,
     ) -> Dict:
         """
         Combine all screener results into a single result dict.
@@ -793,6 +831,9 @@ class ScanOrchestrator:
             # MM360 band states (Pressure / Buy Risk / TPR); empty dict when
             # unavailable so the keys simply don't appear for that row.
             **(band_states or {}),
+            # General-market regime (market_regime/health/exposure/...); empty
+            # dict when no benchmark so the keys simply don't appear.
+            **(market_regime or {}),
             "current_price": current_price,
             "acc_dis_rating": acc_dis_rating,
 

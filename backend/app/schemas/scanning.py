@@ -230,6 +230,17 @@ class ScanResultItem(BaseModel):
     composite_reason: Optional[str] = None
     ipo_bonus: Optional[float] = None
 
+    # General-market regime (Minervini's first rule: trade with the market).
+    # Computed once from the benchmark and attached to every row so the UI can
+    # show a regime banner and scale suggested exposure. Same value across a scan.
+    market_regime: Optional[str] = None        # confirmed_uptrend / uptrend_under_pressure / correction / downtrend
+    market_health: Optional[float] = None       # 0-100
+    market_exposure_pct: Optional[int] = None   # 0-100 suggested equity exposure
+    market_distribution_days: Optional[int] = None
+    market_above_50dma: Optional[bool] = None
+    market_above_200dma: Optional[bool] = None
+    market_50_above_200dma: Optional[bool] = None
+
     @field_validator("price_sparkline_data", "rs_sparkline_data", mode="before")
     @classmethod
     def _validate_sparkline(cls, value: Any) -> Optional[List[float]]:
@@ -363,6 +374,14 @@ class ScanResultItem(BaseModel):
             unavailable_screeners=normalize_string_list(ef.get("unavailable_screeners")),
             composite_reason=ef.get("composite_reason"),
             ipo_bonus=ef.get("ipo_bonus"),
+            # General-market regime (same value across a scan)
+            market_regime=ef.get("market_regime"),
+            market_health=ef.get("market_health"),
+            market_exposure_pct=ef.get("market_exposure_pct"),
+            market_distribution_days=ef.get("market_distribution_days"),
+            market_above_50dma=ef.get("market_above_50dma"),
+            market_above_200dma=ef.get("market_above_200dma"),
+            market_50_above_200dma=ef.get("market_50_above_200dma"),
         )
 
 

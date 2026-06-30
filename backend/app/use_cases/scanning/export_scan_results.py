@@ -131,6 +131,11 @@ _CSV_COLUMNS: list[tuple[str, Any]] = [
     ("Beta-Adj RS 12M", lambda item: item.extended_fields.get("beta_adj_rs_12m")),
     # Other
     ("IPO Date", lambda item: item.extended_fields.get("ipo_date")),
+    # General-market regime (Minervini's first rule; same across a scan)
+    ("Market Regime", lambda item: item.extended_fields.get("market_regime")),
+    ("Market Health", lambda item: item.extended_fields.get("market_health")),
+    ("Market Exposure %", lambda item: item.extended_fields.get("market_exposure_pct")),
+    ("Market Distribution Days", lambda item: item.extended_fields.get("market_distribution_days")),
     ("Screeners Run", lambda item: item.screeners_run),
     # Data-availability transparency (T8.7). Column holds both "unavailable"
     # and "computed" (fallback-synthesized) entries, so the header is

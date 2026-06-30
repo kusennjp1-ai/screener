@@ -896,6 +896,15 @@ def _map_row_to_domain(
     extended["tpr_state"] = details.get("tpr_state")
     extended["tpr_score"] = details.get("tpr_score")
     extended["tpr_max"] = details.get("tpr_max")
+    # General-market regime (Minervini's first rule); identical across a scan,
+    # read from the stored orchestrator details blob like the band states above.
+    extended["market_regime"] = details.get("market_regime")
+    extended["market_health"] = details.get("market_health")
+    extended["market_exposure_pct"] = details.get("market_exposure_pct")
+    extended["market_distribution_days"] = details.get("market_distribution_days")
+    extended["market_above_50dma"] = details.get("market_above_50dma")
+    extended["market_above_200dma"] = details.get("market_above_200dma")
+    extended["market_50_above_200dma"] = details.get("market_50_above_200dma")
     if include_setup_payload:
         extended["se_explain"] = se_data.get("explain")
         extended["se_candidates"] = se_data.get("candidates")

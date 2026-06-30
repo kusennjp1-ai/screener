@@ -107,7 +107,7 @@ class TestSetupEngineFieldCoverage:
 
     def test_se_field_count(self):
         se_fields = [k for k in _JSON_FIELD_MAP if k.startswith("se_")]
-        assert len(se_fields) == 27
+        assert len(se_fields) == 28
 
     @pytest.mark.parametrize("field", SE_NUMERIC_FIELDS)
     def test_numeric_se_field_in_sort_numeric(self, field):
