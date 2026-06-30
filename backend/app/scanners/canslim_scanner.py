@@ -11,6 +11,7 @@ Implements the CANSLIM screening strategy:
 - M: Market Direction (skip - scan-level)
 """
 import logging
+from datetime import date, datetime
 from typing import Dict, Optional
 import pandas as pd
 
@@ -27,6 +28,29 @@ logger = logging.getLogger(__name__)
 
 # Trailing trading days that make up a 52-week window (~252 sessions/year).
 TRADING_DAYS_52W = 252
+
+# Earnings-proximity rule ("Code 33" — don't hold into a binary). Minervini/O'Neil
+# avoid buying just before a report: a gap on the print can blow through any stop.
+EARNINGS_BLACKOUT_DAYS = 5      # 0-5 days out: hard avoid (score 0, fail)
+EARNINGS_PENALTY_DAYS = 14      # 6-14 days out: elevated gap risk -> soft penalty
+EARNINGS_PENALTY_POINTS = 15.0
+
+
+def _coerce_date(value: object) -> Optional[date]:
+    """Best-effort parse of a next-earnings value (date/datetime/Timestamp/ISO
+    string / epoch seconds) to a ``date``; None when unparseable."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        if isinstance(value, (int, float)):
+            return datetime.utcfromtimestamp(float(value)).date()
+        return pd.to_datetime(value).date()
+    except Exception:
+        return None
 
 
 @register_screener
@@ -167,6 +191,16 @@ class CANSLIMScanner(BaseStockScreener):
                 c_result, a_result, n_result, s_result, l_result, i_result
             )
 
+            # Earnings-proximity gate (Code-33): never buy into a binary report.
+            earnings = self._check_earnings_proximity(fundamentals)
+            final_score = score_result["score"]
+            final_passes = score_result["passes"]
+            if earnings["blackout"]:
+                final_score = 0.0
+                final_passes = False
+            elif earnings["penalty"]:
+                final_score = max(0.0, final_score - earnings["penalty"])
+
             # Build breakdown
             breakdown = {
                 "current_earnings": c_result["points"],
@@ -198,6 +232,9 @@ class CANSLIMScanner(BaseStockScreener):
                 "rs_rating_3m": rs_ratings.get("rs_rating_3m"),
                 "rs_rating_12m": rs_ratings.get("rs_rating_12m"),
                 "institutional_ownership": i_result.get("ownership_pct"),
+                "days_to_next_earnings": earnings["days_to_next_earnings"],
+                "earnings_blackout_window": earnings["blackout"],
+                "earnings_gate_reason": earnings["reason"],
                 "full_analysis": {
                     "C_current_earnings": c_result,
                     "A_annual_earnings": a_result,
@@ -209,12 +246,12 @@ class CANSLIMScanner(BaseStockScreener):
                 }
             }
 
-            # Calculate rating
-            rating = self.calculate_rating(score_result["score"], details)
+            # Calculate rating (on the earnings-gated score)
+            rating = self.calculate_rating(final_score, details)
 
             return ScreenerResult(
-                score=score_result["score"],
-                passes=score_result["passes"],
+                score=final_score,
+                passes=final_passes,
                 rating=rating,
                 breakdown=breakdown,
                 details=details,
@@ -530,6 +567,41 @@ class CANSLIMScanner(BaseStockScreener):
             "passes": 40 <= ownership_pct <= 80,
             "reason": f"Institutional ownership: {ownership_pct:.1f}%"
         }
+
+    def _check_earnings_proximity(
+        self, fundamentals: Optional[Dict], today: Optional[date] = None
+    ) -> Dict:
+        """Days to the next earnings report and the avoidance verdict.
+
+        Permissive: when no ``next_earnings_date`` is available (common — it isn't
+        always plumbed), returns a no-op so the stock is unaffected. Otherwise:
+          - 0-5 days out  -> blackout (hard avoid: score 0, fail)
+          - 6-14 days out -> penalty (elevated gap risk)
+        Past-dated values are treated as 'no upcoming report' (no-op)."""
+        out = {
+            "days_to_next_earnings": None, "blackout": False,
+            "penalty": 0.0, "reason": None,
+        }
+        if not fundamentals:
+            return out
+        nxt = _coerce_date(
+            fundamentals.get("next_earnings_date")
+            or fundamentals.get("earnings_date")
+        )
+        if nxt is None:
+            return out
+        today = today or date.today()
+        days = (nxt - today).days
+        if days < 0:
+            return out  # stale/last report — not an upcoming binary
+        out["days_to_next_earnings"] = days
+        if days <= EARNINGS_BLACKOUT_DAYS:
+            out["blackout"] = True
+            out["reason"] = f"pre-earnings blackout ({days}d to report; Code-33 rule)"
+        elif days <= EARNINGS_PENALTY_DAYS:
+            out["penalty"] = EARNINGS_PENALTY_POINTS
+            out["reason"] = f"earnings in {days}d — elevated gap risk"
+        return out
 
     def _calculate_canslim_score(
         self,

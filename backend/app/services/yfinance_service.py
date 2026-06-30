@@ -240,6 +240,10 @@ class YFinanceService:
                 "description_yfinance": info.get("longBusinessSummary"),
                 # IPO date - yfinance provides this as milliseconds timestamp
                 "first_trade_date_ms": info.get("firstTradeDateMilliseconds"),
+                # Next earnings date (epoch seconds) -> ISO, for the CANSLIM
+                # earnings-proximity gate. Best-effort: yfinance exposes the
+                # forward estimate as earningsTimestampStart; None when absent.
+                "next_earnings_date": self._next_earnings_iso(info),
             }
 
             # Calculate EPS Rating components from income statements
@@ -250,6 +254,23 @@ class YFinanceService:
 
         except Exception as e:
             logger.error(f"Error fetching fundamentals for {symbol}: {e}")
+            return None
+
+    @staticmethod
+    def _next_earnings_iso(info: Dict[str, Any]) -> Optional[str]:
+        """Forward earnings date from yfinance ``info`` as a YYYY-MM-DD string.
+
+        Prefers ``earningsTimestampStart`` (the next-report estimate) and falls
+        back to ``earningsTimestamp``; both are epoch seconds. Returns None when
+        absent or unparseable — the CANSLIM gate is permissive on None."""
+        from datetime import datetime, timezone
+
+        ts = info.get("earningsTimestampStart") or info.get("earningsTimestamp")
+        if ts is None:
+            return None
+        try:
+            return datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m-%d")
+        except (TypeError, ValueError, OSError):
             return None
 
     def _extract_eps_rating_data(self, ticker) -> Dict[str, Optional[float]]:
