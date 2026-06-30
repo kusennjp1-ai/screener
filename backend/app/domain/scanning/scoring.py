@@ -147,6 +147,13 @@ def calculate_overall_rating(
 # ---------------------------------------------------------------------------
 # Quality-aware fallback (T4)
 # ---------------------------------------------------------------------------
+#
+# CALIBRATION NOTE: the two thresholds below (and the execution-state caps) are
+# hand-set first-pass values, not empirically validated. Per the audit roadmap
+# they must NOT be retuned by intuition — that risks overfitting. Validate them
+# with scripts/validate_forward_returns.py on real screener output (stratify by
+# completeness band, compare forward Sharpe/return), and only then adjust, citing
+# the stats. Until that runs on production data, keep the defaults.
 
 QUALITY_EXCLUSION_THRESHOLD: int = 30
 """Below this ``field_completeness_score``, force rating to PASS.

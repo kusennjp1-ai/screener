@@ -44,3 +44,14 @@ def test_insufficient_data_guarded():
     r = a.check_200ma_trend(100.0, 0.0)
     assert r["trending_up"] is False
     assert r["status"] == "insufficient_data"
+
+
+# -- W3.2: RS period weights are configurable --------------------------------
+def test_rs_periods_default_and_override():
+    from app.scanners.criteria.relative_strength import RelativeStrengthCalculator
+    default = RelativeStrengthCalculator()
+    assert default.PERIODS[63] == 0.40
+    custom = RelativeStrengthCalculator(periods={63: 0.5, 252: 0.5})
+    assert custom.PERIODS == {63: 0.5, 252: 0.5}
+    # overriding the instance must not mutate the class default
+    assert RelativeStrengthCalculator().PERIODS[63] == 0.40

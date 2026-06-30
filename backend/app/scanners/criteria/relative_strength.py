@@ -30,7 +30,12 @@ class RelativeStrengthCalculator:
     ranked against international ones.
     """
 
-    # Time periods in trading days and their weights
+    # Default time periods in trading days and their weights (recency-tilted,
+    # IBD-style). These are CALIBRATION constants — whether 40/20/20/20 actually
+    # predicts forward outperformance is an empirical question to be answered with
+    # scripts/validate_forward_returns.py on real screener output, NOT by intuition
+    # (overfit risk). Until that runs, keep the default; they are now overridable
+    # via the constructor so a data-driven retune needs no code change.
     PERIODS = {
         63: 0.40,   # Last quarter (3 months): 40% weight
         126: 0.20,  # 2nd quarter: 20% weight
@@ -38,14 +43,19 @@ class RelativeStrengthCalculator:
         252: 0.20,  # Full year: 20% weight
     }
 
-    def __init__(self, benchmark: str = "SPY"):
+    def __init__(self, benchmark: str = "SPY", periods: Optional[Dict[int, float]] = None):
         """
         Initialize RS calculator.
 
         Args:
             benchmark: Benchmark ticker symbol (default: SPY)
+            periods: Optional {lookback_days: weight} override for the recency
+                weighting. Defaults to the class PERIODS. Supplying this lets a
+                forward-return-validated configuration be injected without editing
+                code (see the calibration note on PERIODS).
         """
         self.benchmark = benchmark
+        self.PERIODS = dict(periods) if periods else dict(self.PERIODS)
 
     def calculate_return(self, prices: pd.Series, period: int) -> Optional[float]:
         """
