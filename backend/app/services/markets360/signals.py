@@ -175,7 +175,13 @@ def compute_buy_signal(
         # Three independent confirmation "barrels" on the latest bar.
         trend_ok = tpr_state == "strong"
         pressure_ok = pressure_state == "buy"
-        breakout_ok, trigger_price, base_low = _breakout_now(price_data)
+        # Anchor the breakout to the VCP contraction high when the chart has a
+        # fresh VCP-detected pivot (Minervini buys the pivot out of the base, not
+        # a detached 30-bar high). Falls back to the 30-bar pivot when no VCP.
+        vcp_pivot = None
+        if latest_breakout is not None and _is_recent(latest_breakout["idx"], len(close)):
+            vcp_pivot = latest_breakout.get("price")
+        breakout_ok, trigger_price, base_low = _breakout_now(price_data, vcp_pivot=vcp_pivot)
         risk_ok = buy_risk_state in ("low", "medium")
 
         barrels = {
@@ -269,12 +275,15 @@ def _is_recent(idx: int, n: int) -> bool:
     return (n - 1 - idx) <= ACTIVE_WINDOW_BARS
 
 
-def _breakout_now(price_data: pd.DataFrame) -> tuple[bool, Optional[float], Optional[float]]:
+def _breakout_now(
+    price_data: pd.DataFrame, vcp_pivot: Optional[float] = None
+) -> tuple[bool, Optional[float], Optional[float]]:
     """Did a fresh pivot breakout fire within the active window?
 
-    A breakout = close clearing the prior ~30-bar consolidation high on volume
-    expansion, with the bar before still under that pivot. Returns
-    ``(ok, pivot_price, base_low)``.
+    A breakout = close clearing the pivot on volume expansion, with the bar
+    before still under it. The pivot is the VCP contraction high (``vcp_pivot``)
+    when supplied — Minervini's actual buy point — otherwise the prior ~30-bar
+    consolidation high. Returns ``(ok, pivot_price, base_low)``.
     """
     if len(price_data) < 40:
         return (False, None, None)
@@ -287,7 +296,8 @@ def _breakout_now(price_data: pd.DataFrame) -> tuple[bool, Optional[float], Opti
     for i in range(n - 1, max(n - 1 - ACTIVE_WINDOW_BARS, 0) - 1, -1):
         if i < 31:
             continue
-        pivot = float(high.iloc[i - 30:i].max())
+        # VCP-anchored pivot when available; else the 30-bar consolidation high.
+        pivot = float(vcp_pivot) if (vcp_pivot is not None and vcp_pivot > 0) else float(high.iloc[i - 30:i].max())
         base_low = float(price_data["Low"].iloc[i - 30:i].min())
         crossed = float(close.iloc[i]) > pivot and float(close.iloc[i - 1]) <= pivot
         vol_ok = (

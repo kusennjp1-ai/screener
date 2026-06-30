@@ -161,6 +161,28 @@ class TestBuySignal:
         )
         assert sig["type"] != "triple_barrel"
 
+    def test_breakout_anchors_to_vcp_pivot_when_supplied(self):
+        """When the chart hands a fresh VCP pivot, the breakout barrel fires on
+        THAT pivot (Minervini's buy point), not the detached 30-bar high — the
+        trigger price equals the VCP pivot."""
+        df = self._frame()
+        # craft the last bar to cross a VCP pivot of 150 (below the 30-bar high)
+        df.loc[df.index[-2], "Close"] = 149.0
+        df.loc[df.index[-1], "Close"] = 151.0
+        df.loc[df.index[-1], "High"] = 152.0
+        df.loc[df.index[-1], "Volume"] = 5_000_000
+        last_date = df.index[-1].strftime("%Y-%m-%d")
+        sig = compute_buy_signal(
+            df,
+            buy_points=[{"time": last_date, "type": "sepa_buy_point", "price": 150.0,
+                         "base_low": 140.0}],
+            pressure_state="buy", tpr_state="strong", buy_risk_state="low",
+        )
+        assert sig["barrels"]["breakout"] is True
+        assert sig["trigger_price"] == 150.0          # the VCP pivot, not the 30-bar high
+        # stop uses the VCP base low threaded from the annotation
+        assert sig["stop"] is not None and sig["stop"] <= 150.0
+
 
 class TestFiftyDmaBreakdown:
     @staticmethod
