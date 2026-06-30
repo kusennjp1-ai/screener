@@ -21,6 +21,7 @@ import pandas as pd
 
 from app.services.minervini_bands import calculate_bands, to_weekly, DAILY, WEEKLY
 from app.services.markets360 import ratings
+from app.services.markets360.vcp_footprint import compute_vcp_footprint
 from app.services.market_regime import assess_market_regime
 
 from .base_screener import (
@@ -137,6 +138,12 @@ class Markets360Scanner(BaseStockScreener):
             market_ok = True
         buyable_now = bool(passes and market_ok)
 
+        # Minervini's structural buy setup: a real VCP footprint (tightening
+        # pullbacks, volume drying up) coiling under a pivot. The crude vcp_pct
+        # chip stays for the chart; this is the actionable footprint. Weekly data
+        # is too short for the legacy base finder, so footprint is daily-only.
+        vcp = compute_vcp_footprint(price) if timeframe != "weekly" else dict()
+
         details = {
             "timeframe": timeframe,
             "pressure_state": pressure,
@@ -145,6 +152,12 @@ class Markets360Scanner(BaseStockScreener):
             "tpr_letter": ratings.tpr_letter(bands.get("tpr_score"), bands.get("tpr_max")),
             "rpr": rpr,
             "vcp_pct": ratings.compute_vcp_pct(price),
+            "vcp": vcp,
+            "vcp_detected": bool(vcp.get("detected")),
+            "vcp_score": vcp.get("score"),
+            "near_pivot": bool(vcp.get("near_pivot")),
+            "ready_for_breakout": bool(vcp.get("ready_for_breakout")),
+            "pivot": vcp.get("pivot"),
             "dist_20dma_pct": ratings.compute_dist_20dma(close),
             "last_close": round(float(close.iloc[-1]), 2),
             "buyable_now": buyable_now,
