@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from app.services.markets360.vcp_footprint import compute_vcp_footprint, _EMPTY
+from app.services.markets360.ratings import compute_vcp_score, compute_vcp_pct
 
 _FIX = Path(__file__).resolve().parents[2] / "fixtures" / "markets360"
 
@@ -67,6 +68,25 @@ def test_well_formed_on_real_fixtures():
         if fp["detected"]:
             assert fp["tight_near_highs"] is True, name
             assert fp["num_contractions"] >= 2, name
+
+
+def test_compute_vcp_score_is_real_detector_quality():
+    """compute_vcp_score returns the VCPDetector 0-100 quality (or None), which is
+    a *different* thing from compute_vcp_pct's recent-range tightness metric."""
+    for name in ("ftnt.csv", "lly.csv", "cyrx.csv"):
+        df = _read_fixture(name)
+        score = compute_vcp_score(df)
+        rng = compute_vcp_pct(df)
+        if score is not None:
+            assert 0.0 <= score <= 100.0, name
+        # the range metric is unchanged (a percent, not a 0-100 quality score)
+        assert rng is None or rng >= 0.0
+
+
+def test_compute_vcp_score_safe_on_short_data():
+    assert compute_vcp_score(None) is None
+    short = _read_fixture("ftnt.csv").head(10)
+    assert compute_vcp_score(short) is None
 
 
 def test_contractions_are_oldest_to_newest():

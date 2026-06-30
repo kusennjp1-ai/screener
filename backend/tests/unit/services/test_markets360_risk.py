@@ -2,7 +2,12 @@
 import numpy as np
 import pandas as pd
 
-from app.services.markets360.risk import compute_risk_plan, MAX_LOSS_PCT, ACCOUNT_RISK_PCT
+from app.services.markets360.risk import (
+    compute_risk_plan,
+    r_multiple_targets,
+    MAX_LOSS_PCT,
+    ACCOUNT_RISK_PCT,
+)
 
 
 def _frame(close: np.ndarray) -> pd.DataFrame:
@@ -72,3 +77,17 @@ def test_targets_are_r_multiples_of_risk():
 def test_pivot_entry_is_used_when_supplied():
     plan = compute_risk_plan(_frame(np.linspace(20, 100, 260)), pivot=105.0)
     assert plan["entry"] == 105.0
+
+
+def test_r_multiple_targets_formula():
+    t = r_multiple_targets(100.0, 92.0)            # risk = 8, stop_pct = 8%
+    by_r = {x["r_multiple"]: x for x in t}
+    assert by_r[2.0]["price"] == 116.0             # 100 + 2*8
+    assert by_r[3.0]["price"] == 124.0             # 100 + 3*8
+    assert by_r[2.0]["gain_pct"] == 16.0           # 2 * 8%
+
+
+def test_r_multiple_targets_empty_when_risk_nonpositive():
+    assert r_multiple_targets(100.0, 100.0) == []  # stop at entry -> no targets
+    assert r_multiple_targets(100.0, 110.0) == []  # stop above entry
+    assert r_multiple_targets(None, 90.0) == []

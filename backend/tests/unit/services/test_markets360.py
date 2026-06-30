@@ -148,6 +148,11 @@ class TestBuySignal:
         # Stop is below the trigger, within the max-loss floor.
         assert sig["stop"] is not None and sig["stop"] < sig["trigger_price"]
         assert 0 < sig["risk_pct"] <= 10.1
+        # SEPA reward:risk — 2R/3R targets surfaced and consistent with entry/stop.
+        risk = sig["trigger_price"] - sig["stop"]
+        assert abs(sig["target_price_2r"] - (sig["trigger_price"] + 2 * risk)) < 0.05
+        assert abs(sig["target_price_3r"] - (sig["trigger_price"] + 3 * risk)) < 0.05
+        assert {t["r_multiple"] for t in sig["targets"]} == {2.0, 3.0}
 
     def test_partial_barrels_not_triple(self):
         df = self._frame()

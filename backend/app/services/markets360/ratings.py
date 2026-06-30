@@ -246,8 +246,12 @@ def compute_dist_20dma(close: pd.Series, window: int = 20) -> Optional[float]:
 
 
 # ---------------------------------------------------------------------------
-# VCP% — tightness of the most recent contraction (signed %, smaller = tighter)
+# VCP% — tightness of the most recent N bars (signed %, smaller = tighter)
 # ---------------------------------------------------------------------------
+# NOTE: this is a *recent-range* tightness metric — (high-low)/close over the
+# last ``window`` bars — NOT a VCP pattern detector. It says nothing about a
+# contraction sequence or volume dry-up. For authentic VCP quality (the multi-
+# contraction footprint Minervini describes) use ``compute_vcp_score`` below.
 def compute_vcp_pct(price_data: pd.DataFrame, window: int = 10) -> Optional[float]:
     if price_data is None or len(price_data) < window or "High" not in price_data.columns:
         return None
@@ -258,6 +262,37 @@ def compute_vcp_pct(price_data: pd.DataFrame, window: int = 10) -> Optional[floa
     if last <= 0:
         return None
     return round((hi - lo) / last * 100.0, 1)
+
+
+# ---------------------------------------------------------------------------
+# VCP score — authentic Minervini VCP pattern quality (0-100)
+# ---------------------------------------------------------------------------
+# Unlike compute_vcp_pct (a single recent-range read), this delegates to the
+# Minervini-calibrated ``VCPDetector`` which validates the real footprint:
+# 2-4 progressively tighter pullbacks, volume drying up, price coiled near the
+# highs — composite depth(35%)/volume(25%)/tightness(25%)/ATR(15%). Returns the
+# 0-100 quality score (None on insufficient data); never raises.
+def compute_vcp_score(price_data: pd.DataFrame) -> Optional[float]:
+    if (
+        price_data is None
+        or "Close" not in getattr(price_data, "columns", [])
+        or len(price_data) < 30
+    ):
+        return None
+    try:
+        from app.analysis.patterns.legacy_vcp_detection import VCPDetector
+
+        prices = price_data["Close"].iloc[::-1].reset_index(drop=True)
+        volumes = (
+            price_data["Volume"].iloc[::-1].reset_index(drop=True)
+            if "Volume" in price_data.columns
+            else None
+        )
+        result = VCPDetector().detect_vcp(prices, volumes)
+        score = result.get("vcp_score")
+        return round(float(score), 1) if score is not None else None
+    except Exception:  # pragma: no cover - chip must never break the payload
+        return None
 
 
 # ---------------------------------------------------------------------------

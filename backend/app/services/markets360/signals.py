@@ -40,8 +40,10 @@ ACTIVE_WINDOW_BARS = 5
 # Max tolerable loss from the trigger when the base low would imply a wider stop.
 MAX_STOP_LOSS_PCT = 0.10
 
-# Volume expansion multiple that qualifies a breakout bar.
-BREAKOUT_VOL_MULT = 1.4
+# Volume expansion multiple that qualifies a breakout bar. Minervini/IBD confirm
+# a breakout on volume ~40-50% above average; the canonical line is 1.5x. Kept in
+# lockstep with chart.py's overlay threshold so the card and the chart agree.
+BREAKOUT_VOL_MULT = 1.5
 
 
 def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -130,6 +132,12 @@ def compute_buy_signal(
             latest_breakout.get("base_low") if latest_breakout else None
         ))
 
+        # Reward:risk targets (2R/3R) off the card's own trigger/stop — SEPA
+        # demands a defined R-multiple at entry. Single source of truth in risk.py.
+        from app.services.markets360.risk import r_multiple_targets
+
+        targets = r_multiple_targets(trigger, stop) if (trigger and stop is not None) else []
+
         return {
             "active": bool(active),
             "type": sig_type,
@@ -144,6 +152,9 @@ def compute_buy_signal(
                 if (trigger and stop and trigger > 0)
                 else None
             ),
+            "targets": targets,
+            "target_price_2r": next((t["price"] for t in targets if t["r_multiple"] == 2.0), None),
+            "target_price_3r": next((t["price"] for t in targets if t["r_multiple"] == 3.0), None),
             "barrels": barrels,
             "barrels_passed": barrels_passed,
         }
@@ -166,7 +177,10 @@ def _latest_breakout(price_data: pd.DataFrame, buy_points: Optional[List[Dict]])
         if idx is None:
             continue
         if best is None or idx > best["idx"]:
-            best = {"idx": idx, "type": bp["type"], "price": bp.get("price"), "time": bp.get("time")}
+            best = {
+                "idx": idx, "type": bp["type"], "price": bp.get("price"),
+                "time": bp.get("time"), "base_low": bp.get("base_low"),
+            }
     return best
 
 

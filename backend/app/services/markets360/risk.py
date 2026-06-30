@@ -44,6 +44,29 @@ def _f(v: object) -> Optional[float]:
     return f if np.isfinite(f) else None
 
 
+def r_multiple_targets(entry: float, stop: float, multiples=TARGET_R_MULTIPLES):
+    """Profit objectives at fixed reward:risk multiples off one entry/stop.
+
+    The single source of truth for R-multiple targets — reused by both the risk
+    plan and the buy-signal card so they never drift. Returns ``[]`` when the
+    risk is non-positive (stop at/above entry)."""
+    e, s = _f(entry), _f(stop)
+    if e is None or s is None:
+        return []
+    risk = e - s
+    if risk <= 0:
+        return []
+    stop_pct = risk / e * 100.0 if e > 0 else 0.0
+    return [
+        {
+            "r_multiple": r,
+            "price": round(e + r * risk, 2),
+            "gain_pct": round(r * stop_pct, 1),
+        }
+        for r in multiples
+    ]
+
+
 def _recent_swing_low(price_data: pd.DataFrame, lookback: int = 15) -> Optional[float]:
     """The right-side base low — the lowest Low over the last ``lookback`` bars,
     the natural place to hide a stop just beneath."""
@@ -93,14 +116,7 @@ def compute_risk_plan(
         return empty
     stop_pct = risk_per_share / entry * 100.0
 
-    targets = [
-        {
-            "r_multiple": r,
-            "price": round(entry + r * risk_per_share, 2),
-            "gain_pct": round(r * stop_pct, 1),
-        }
-        for r in TARGET_R_MULTIPLES
-    ]
+    targets = r_multiple_targets(entry, stop_loss)
     # Position size so a stop-out costs exactly account_risk_pct of equity:
     #   size%_of_capital = account_risk% / stop%   (capped at 100%)
     position_size_pct = round(min(100.0, account_risk_pct / (stop_pct / 100.0)), 1)

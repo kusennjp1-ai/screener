@@ -110,6 +110,7 @@ class Markets360Service:
             "tpr": ratings.tpr_letter(bands.get("tpr_score"), bands.get("tpr_max")),
             "esr": ratings.compute_esr(fundamentals, quarterly_eps_growth),
             "vcp_pct": ratings.compute_vcp_pct(price_df),
+            "vcp_score": ratings.compute_vcp_score(price_df),
             "vrr_pct": ratings.compute_vrr(price_df["Volume"]) if "Volume" in price_df.columns else None,
             "dist_20dma_pct": ratings.compute_dist_20dma(price_df["Close"]),
         }

@@ -222,12 +222,14 @@ def compute_buy_points(df: pd.DataFrame, days: int, max_points: int = 3) -> List
             for j in range(i - 1, lo - 1, -1):
                 cj = float(close.iloc[j])
                 if cj <= pivot and (pivot - cj) / pivot <= 0.03:
-                    anns.append({"idx": j, "type": "buy_ready", "price": round(pivot, 2)})
+                    anns.append({"idx": j, "type": "buy_ready", "price": round(pivot, 2),
+                                 "base_low": round(base_low, 2) if np.isfinite(base_low) else None})
                     break
             for k in range(i - 1, lo - 1, -1):
                 ck = float(close.iloc[k])
                 if ck <= pivot and 0.03 < (pivot - ck) / pivot <= 0.08:
-                    anns.append({"idx": k, "type": "buy_alert", "price": round(pivot, 2)})
+                    anns.append({"idx": k, "type": "buy_alert", "price": round(pivot, 2),
+                                 "base_low": round(base_low, 2) if np.isfinite(base_low) else None})
                     break
 
         breakout_idxs = sorted(
