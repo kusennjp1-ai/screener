@@ -46,6 +46,87 @@ MAX_STOP_LOSS_PCT = 0.10
 BREAKOUT_VOL_MULT = 1.5
 
 
+# 50-DMA breakdown sell signal: a close below the 50-DMA on volume expansion is
+# Minervini's primary trend-invalidation tell once a name is extended in Stage 2.
+BREAKDOWN_VOL_MULT = 1.3
+# Don't cry "exit" on a fresh position breaking down on an isolated bar — give a
+# new buy room (Minervini's "the first pullback to the 50-DMA is normal").
+MIN_HOLD_FOR_EXIT_BARS = 5
+
+
+def detect_50dma_breakdown(
+    price_data: pd.DataFrame,
+    *,
+    entry_price: Optional[float] = None,
+    position_days_open: int = 0,
+) -> Dict[str, object]:
+    """Detect a Minervini 50-DMA trend-invalidation breakdown.
+
+    A close below the 50-day SMA on volume >= ``BREAKDOWN_VOL_MULT`` x its 50-day
+    average is the classic "the trend has broken" sell tell once a leader is
+    extended. This NEVER auto-liquidates — it informs. The recommended action is
+    graduated by position maturity (a brand-new buy gets room; a mature position
+    that breaks down on volume is told to exit):
+
+      none          no breakdown
+      tighten_stop  breakdown, but the position is young / the break is shallow
+      exit          a clear breakdown on a matured position
+
+    Returns a JSON-friendly dict; ``breakdown_detected`` False (action 'none')
+    on insufficient data. Never raises.
+    """
+    out: Dict[str, object] = {
+        "breakdown_detected": False, "breakdown_price": None, "breakdown_date": None,
+        "volume_multiple": None, "below_50dma": None, "recommended_action": "none",
+        "confidence": 0.0,
+    }
+    try:
+        if price_data is None or "Close" not in getattr(price_data, "columns", []) or len(price_data) < 50:
+            return out
+        close = price_data["Close"]
+        sma50 = close.rolling(50).mean()
+        last_close = float(close.iloc[-1])
+        last_sma = float(sma50.iloc[-1])
+        if not np.isfinite(last_sma) or last_sma <= 0:
+            return out
+        below = last_close < last_sma
+        out["below_50dma"] = bool(below)
+
+        vol_mult = None
+        if "Volume" in price_data.columns and len(price_data) >= 51:
+            avg = float(price_data["Volume"].iloc[-51:-1].mean())
+            if avg > 0:
+                vol_mult = round(float(price_data["Volume"].iloc[-1]) / avg, 2)
+                out["volume_multiple"] = vol_mult
+
+        on_volume = vol_mult is not None and vol_mult >= BREAKDOWN_VOL_MULT
+        if not (below and on_volume):
+            return out
+
+        out["breakdown_detected"] = True
+        out["breakdown_price"] = round(last_close, 2)
+        ts = price_data.index[-1]
+        out["breakdown_date"] = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else None
+
+        # Depth below the 50-DMA scales confidence; volume adds to it.
+        depth = (last_sma - last_close) / last_sma
+        confidence = min(0.95, 0.45 + depth * 6.0 + max(0.0, vol_mult - BREAKDOWN_VOL_MULT) * 0.15)
+        out["confidence"] = round(float(confidence), 2)
+
+        young = position_days_open and 0 < position_days_open < MIN_HOLD_FOR_EXIT_BARS
+        # A young position, or a still-profitable one on a shallow break, gets a
+        # tighten-stop rather than a hard exit.
+        in_profit = entry_price is not None and entry_price > 0 and last_close > entry_price
+        if young or (in_profit and depth < 0.02):
+            out["recommended_action"] = "tighten_stop"
+        else:
+            out["recommended_action"] = "exit"
+        return out
+    except Exception:  # noqa: BLE001 - sell signal must never break the payload
+        logger.warning("50-DMA breakdown detection failed", exc_info=True)
+        return out
+
+
 def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     high, low, close = df["High"], df["Low"], df["Close"]
     tr = pd.concat(

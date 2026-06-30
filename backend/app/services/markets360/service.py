@@ -28,7 +28,7 @@ from app.wiring.bootstrap import (
 from . import chart as chart_overlays
 from . import quarters as quarter_table
 from . import ratings
-from .signals import compute_buy_signal
+from .signals import compute_buy_signal, detect_50dma_breakdown
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,12 @@ class Markets360Service:
             buy_risk_state=bands.get("buy_risk_state"),
         )
 
+        # --- exit / trend-invalidation signal -----------------------------
+        # Minervini's primary sell tell: a 50-DMA breakdown on volume. No
+        # position context here (single-symbol view), so it reports the raw
+        # breakdown; null-ish when intact. Never auto-liquidates.
+        exit_signal = self._safe(lambda: detect_50dma_breakdown(price_df)) or None
+
         # --- quarterly strip ----------------------------------------------
         quarters = self._build_quarters(edgar, fundamentals)
 
@@ -148,6 +154,7 @@ class Markets360Service:
             "states": states,
             "chart": chart,
             "signal": signal,
+            "exit_signal": exit_signal,
             "quarters": quarters,
             "degraded_reasons": degraded,
         }

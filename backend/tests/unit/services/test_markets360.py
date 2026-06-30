@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from app.services.markets360 import quarters, ratings
-from app.services.markets360.signals import compute_buy_signal
+from app.services.markets360.signals import compute_buy_signal, detect_50dma_breakdown
 
 
 # --------------------------------------------------------------------------- #
@@ -160,3 +160,62 @@ class TestBuySignal:
             df, buy_points=[], pressure_state="sell", tpr_state="strong", buy_risk_state="high"
         )
         assert sig["type"] != "triple_barrel"
+
+
+class TestFiftyDmaBreakdown:
+    @staticmethod
+    def _frame(close, vol):
+        close = np.asarray(close, dtype="float64")
+        vol = np.asarray(vol, dtype="float64")
+        n = len(close)
+        idx = pd.bdate_range("2024-01-01", periods=n)
+        return pd.DataFrame({
+            "Open": close, "High": close * 1.01, "Low": close * 0.99,
+            "Close": close, "Volume": vol,
+        }, index=idx)
+
+    def test_no_breakdown_in_a_clean_uptrend(self):
+        n = 120
+        r = detect_50dma_breakdown(self._frame(np.linspace(20, 80, n), np.full(n, 1e6)))
+        assert r["breakdown_detected"] is False
+        assert r["recommended_action"] == "none"
+
+    @staticmethod
+    def _breakdown_series():
+        # ramp up, then chop flat near 80 so the 50-DMA sits at price, then a
+        # modest drop clearly under the 50-DMA on the final bar.
+        ramp = list(np.linspace(40, 80, 70))
+        flat = [80.0] * 49
+        close = np.array(ramp + flat + [76.0])      # last close ~5% under the ~80 50DMA
+        return close
+
+    def test_breakdown_below_50dma_on_volume_flags_exit(self):
+        close = self._breakdown_series()
+        vol = np.full(len(close), 1_000_000.0)
+        vol[-1] = 2_000_000.0                        # on a volume surge
+        r = detect_50dma_breakdown(self._frame(close, vol))
+        assert r["breakdown_detected"] is True
+        assert r["below_50dma"] is True
+        assert r["volume_multiple"] >= 1.3
+        assert r["recommended_action"] == "exit"
+        assert 0.0 < r["confidence"] <= 0.95
+        assert r["breakdown_date"] is not None
+
+    def test_breakdown_below_50dma_without_volume_is_not_flagged(self):
+        close = self._breakdown_series()
+        vol = np.full(len(close), 1_000_000.0)       # no surge
+        r = detect_50dma_breakdown(self._frame(close, vol))
+        assert r["breakdown_detected"] is False
+
+    def test_young_position_gets_tighten_stop_not_exit(self):
+        close = self._breakdown_series()
+        vol = np.full(len(close), 1_000_000.0)
+        vol[-1] = 2_000_000.0
+        r = detect_50dma_breakdown(self._frame(close, vol), position_days_open=2)
+        assert r["breakdown_detected"] is True
+        assert r["recommended_action"] == "tighten_stop"
+
+    def test_insufficient_data_is_safe(self):
+        r = detect_50dma_breakdown(self._frame(np.linspace(10, 12, 20), np.full(20, 1e6)))
+        assert r["breakdown_detected"] is False
+        assert r["recommended_action"] == "none"
