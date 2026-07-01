@@ -213,7 +213,7 @@ def compute_esr(
     if level_score is None:
         return None
     # Blend: 70% growth level, 30% steadiness bonus.
-    return int(round(min(99, level_score * (0.70 + 0.30 * steadiness) + 0.30 * 99 * steadiness * 0.0)))
+    return int(round(min(99, level_score * (0.70 + 0.30 * steadiness))))
 
 
 # ---------------------------------------------------------------------------
