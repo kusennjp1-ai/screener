@@ -824,6 +824,18 @@ def _map_feature_to_scan_result(
         "tpr_state": d.get("tpr_state"),
         "tpr_score": d.get("tpr_score"),
         "tpr_max": d.get("tpr_max"),
+        # General-market regime (Minervini's first rule; same across a scan)
+        "market_regime": d.get("market_regime"),
+        "market_health": d.get("market_health"),
+        "market_exposure_pct": d.get("market_exposure_pct"),
+        "market_distribution_days": d.get("market_distribution_days"),
+        "market_above_50dma": d.get("market_above_50dma"),
+        "market_above_200dma": d.get("market_above_200dma"),
+        "market_50_above_200dma": d.get("market_50_above_200dma"),
+        # Rating-basis explainability
+        "rating_basis_score": d.get("rating_basis_score"),
+        "rating_basis_screener": d.get("rating_basis_screener"),
+        "rating_explanation": d.get("rating_explanation"),
     }
 
     # Setup Engine fields (extracted from details JSON blob)

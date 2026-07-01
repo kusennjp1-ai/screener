@@ -47,6 +47,10 @@ class StockUniverse(Base):
     status = Column(String(32), nullable=False, default=UNIVERSE_STATUS_ACTIVE, index=True)
     status_reason = Column(String(255))
     is_sp500 = Column(Boolean, default=False, index=True)  # S&P 500 membership
+    # True for ETFs / ETNs / funds (not common stocks). Populated at ingestion
+    # from the source's security type (see services.security_type.classify_is_etf)
+    # so scans can exclude funds — e.g. the US Markets 360 screener runs ex-ETF.
+    is_etf = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
     source = Column(String(20), default="finviz")  # finviz, manual
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     first_seen_at = Column(DateTime(timezone=True), server_default=func.now())

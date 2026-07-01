@@ -35,6 +35,7 @@ from app.domain.scanning.scoring import (
 )
 from app.domain.scanning.ports import StockDataProvider
 from app.services.minervini_bands import calculate_bands
+from app.services.market_regime import assess_market_regime
 
 logger = logging.getLogger(__name__)
 
@@ -587,11 +588,29 @@ class ScanOrchestrator:
             execution_cap = apply_execution_cap(adjustment.rating, execution_state)
             overall_rating = execution_cap.rating.value
 
+            # 7c-bis. Rating-basis explainability. The rating comes from the
+            #     best-fit (max) screener score, NOT the diluted composite — so a
+            #     72-composite "Buy" can lose to a 68-composite Stage-2 RS-85
+            #     "Watch". Record which screener(s) drove it and which adjustments
+            #     actually applied, so the dashboard can explain the rating.
+            _max_score = max((o.score for o in domain_outputs.values()), default=rating_basis_score)
+            rating_basis_screener = ", ".join(
+                sorted(n for n, o in domain_outputs.items() if o.score >= _max_score - 1e-9)
+            )
+            rating_explanation = self._build_rating_explanation(
+                overall_rating, rating_basis_screener, rating_basis_score,
+                composite_score, domain_outputs, adjustment.reason, execution_cap,
+            )
+
             # 7d. Minervini Markets 360-style band STATES (Pressure / Buy Risk /
             #     TPR). Lightweight (no per-bar history here) — the per-bar
             #     history for the chart strips is produced in the static chart
             #     export. Reuses the already-fetched benchmark; never raises.
             band_states = self._compute_band_states(stock_data)
+
+            # 7e. General-market regime (Minervini's first rule). Computed from
+            #     the benchmark; identical across the scan, attached to each row.
+            market_regime = self._assess_regime(stock_data)
 
             # 8. Combine results
             combined_result = self._combine_results(
@@ -620,6 +639,10 @@ class ScanOrchestrator:
                 execution_cap_applied=execution_cap.capped,
                 execution_cap_reason=execution_cap.reason,
                 band_states=band_states,
+                market_regime=market_regime,
+                rating_basis_score=round(float(rating_basis_score), 2),
+                rating_basis_screener=rating_basis_screener,
+                rating_explanation=rating_explanation,
             )
             if data_status == "insufficient_history":
                 for key, value in _partial_history_metrics(stock_data).items():
@@ -689,6 +712,61 @@ class ScanOrchestrator:
             )
             return {}
 
+    @staticmethod
+    def _build_rating_explanation(
+        final_rating: str,
+        basis_screener: str,
+        rating_basis_score: float,
+        composite_score: float,
+        domain_outputs: Dict[str, object],
+        quality_reason: Optional[str],
+        execution_cap: object,
+    ) -> str:
+        """Human-readable account of why the rating is what it is: the best-fit
+        screener that drove it, the per-screener scores, and any quality /
+        execution-cap adjustment that actually applied."""
+        basis = basis_screener or "n/a"
+        parts = [f"Rating {final_rating} from best-fit {basis} score {rating_basis_score:.0f}"]
+        scores = ", ".join(f"{n}:{o.score:.0f}" for n, o in sorted(domain_outputs.items()))
+        if scores:
+            parts.append(f"screeners {scores}; composite {composite_score:.0f}")
+        if quality_reason:
+            parts.append(f"quality: {quality_reason}")
+        if getattr(execution_cap, "capped", False) and getattr(execution_cap, "reason", None):
+            parts.append(f"execution cap: {execution_cap.reason}")
+        return " — ".join(parts)
+
+    def _assess_regime(self, stock_data: StockData) -> Dict[str, object]:
+        """Assess the general-market regime from the benchmark attached to this
+        stock (Minervini's first rule: only buy in a confirmed uptrend, and scale
+        exposure to market health). The benchmark is identical across a scan, so
+        every row carries the same regime — cheap (one rolling mean) and lets the
+        UI show a single regime banner + suggested exposure. Returns a flat,
+        ``market_``-prefixed subset; empty dict on any failure (never aborts a
+        scan), mirroring ``_compute_band_states``.
+        """
+        try:
+            bench = getattr(stock_data, "benchmark_data", None)
+            regime = assess_market_regime(bench)
+            if regime.get("regime") is None:
+                return {}
+            return {
+                "market_regime": regime.get("regime"),
+                "market_health": regime.get("health"),
+                "market_exposure_pct": regime.get("exposure_pct"),
+                "market_distribution_days": regime.get("distribution_days"),
+                "market_above_50dma": regime.get("above_50dma"),
+                "market_above_200dma": regime.get("above_200dma"),
+                "market_50_above_200dma": regime.get("fifty_above_200"),
+            }
+        except Exception:  # noqa: BLE001 - regime must never abort a scan
+            logger.warning(
+                "market-regime assessment failed for %s; omitting regime",
+                getattr(stock_data, "symbol", "?"),
+                exc_info=True,
+            )
+            return {}
+
     def _combine_results(
         self,
         symbol: str,
@@ -711,6 +789,10 @@ class ScanOrchestrator:
         execution_cap_applied: bool = False,
         execution_cap_reason: Optional[str] = None,
         band_states: Optional[Dict[str, object]] = None,
+        market_regime: Optional[Dict[str, object]] = None,
+        rating_basis_score: Optional[float] = None,
+        rating_basis_screener: Optional[str] = None,
+        rating_explanation: Optional[str] = None,
     ) -> Dict:
         """
         Combine all screener results into a single result dict.
@@ -790,9 +872,16 @@ class ScanOrchestrator:
             "execution_state": execution_state,
             "execution_cap_applied": execution_cap_applied,
             "execution_cap_reason": execution_cap_reason,
+            # Rating-basis explainability (why this rating, from which screener).
+            "rating_basis_score": rating_basis_score,
+            "rating_basis_screener": rating_basis_screener,
+            "rating_explanation": rating_explanation,
             # MM360 band states (Pressure / Buy Risk / TPR); empty dict when
             # unavailable so the keys simply don't appear for that row.
             **(band_states or {}),
+            # General-market regime (market_regime/health/exposure/...); empty
+            # dict when no benchmark so the keys simply don't appear.
+            **(market_regime or {}),
             "current_price": current_price,
             "acc_dis_rating": acc_dis_rating,
 

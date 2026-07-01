@@ -14,5 +14,5 @@ class SqlUniverseRepository(UniverseRepository):
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def resolve_symbols(self, universe_def: object) -> list[str]:
-        return _resolve(self._session, universe_def)
+    def resolve_symbols(self, universe_def: object, exclude_etfs: bool = False) -> list[str]:
+        return _resolve(self._session, universe_def, exclude_etfs=exclude_etfs)

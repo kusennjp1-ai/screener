@@ -26,6 +26,7 @@ const ValidationPage = lazy(() => import('./pages/ValidationPage'));
 const ThemesPage = lazy(() => import('./pages/ThemesPage'));
 const ChatbotPage = lazy(() => import('./pages/ChatbotPage'));
 const OperationsPage = lazy(() => import('./pages/OperationsPage'));
+const Markets360Page = lazy(() => import('./features/markets360/pages/Markets360Page'));
 
 // Loading fallback component
 const PageLoadingFallback = () => (
@@ -308,6 +309,8 @@ function AppShell() {
             {features.themes && <Route path="/themes" element={<ThemesPage />} />}
             {features.chatbot && <Route path="/chatbot" element={assistantChatbotRoute} />}
             <Route path="/stocks/:ticker" element={<StockDetails />} />
+            <Route path="/markets360" element={<Markets360Page />} />
+            <Route path="/markets360/:ticker" element={<Markets360Page />} />
             <Route path="/operations" element={<OperationsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

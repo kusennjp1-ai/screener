@@ -315,7 +315,7 @@ class FakeUniverseRepository(UniverseRepository):
         self._symbols = symbols or []
         self.resolve_calls: list[object] = []
 
-    def resolve_symbols(self, universe_def: object) -> list[str]:
+    def resolve_symbols(self, universe_def: object, exclude_etfs: bool = False) -> list[str]:
         self.resolve_calls.append(universe_def)
         return self._symbols
 

@@ -81,17 +81,24 @@ class MovingAverageAnalyzer:
         self,
         ma_200_current: float,
         ma_200_month_ago: float,
-        min_increase_pct: float = 1.0
+        min_increase_pct: float = 0.0
     ) -> Dict:
         """
         Check if 200-day MA is trending up.
 
-        Minervini requires 200-day MA to be rising for at least 1 month.
+        Minervini's Trend Template criterion is simply that the 200-day MA is
+        *rising* (today's value above its value ~1 month ago) — not that it has
+        risen by some minimum percentage. A slow-but-steadily-rising 200DMA is a
+        valid Stage-2 read; requiring a +1% move over a month wrongly rejected
+        such names and diverged from the canonical band logic in minervini_bands.
+        The default threshold is therefore 0.0 (strictly rising); callers may pass
+        a larger ``min_increase_pct`` to demand a steeper slope.
 
         Args:
             ma_200_current: Current 200-day MA
-            ma_200_month_ago: 200-day MA from ~20 trading days ago
-            min_increase_pct: Minimum % increase to consider "rising" (default: 1%)
+            ma_200_month_ago: 200-day MA from ~1 month (~20-22 trading days) ago
+            min_increase_pct: Minimum % increase to consider "rising" (default: 0%
+                = strictly rising)
 
         Returns:
             Dict with trend status
@@ -104,7 +111,7 @@ class MovingAverageAnalyzer:
             }
 
         change_pct = ((ma_200_current - ma_200_month_ago) / ma_200_month_ago) * 100
-        trending_up = change_pct >= min_increase_pct
+        trending_up = change_pct > min_increase_pct
 
         return {
             "trending_up": trending_up,

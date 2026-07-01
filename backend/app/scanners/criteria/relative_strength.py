@@ -20,9 +20,22 @@ class RelativeStrengthCalculator:
     - Compare stock performance vs benchmark (SPY) over multiple periods
     - Weight recent performance more heavily
     - Assign percentile rank (0-100) vs universe
+
+    Authenticity note: the IBD/Minervini RS rating is a *percentile rank vs the
+    universe*. That requires a cross-sectional snapshot, so it is only produced
+    when ``universe_performances`` is supplied; otherwise these methods fall back
+    to a fixed 50 + rel_perf*100 scaling (NOT a percentile) and log a warning so
+    the divergence is visible. Ranking is market-scoped: the universe is
+    partitioned by market upstream (DataPreparationLayer), so US names are never
+    ranked against international ones.
     """
 
-    # Time periods in trading days and their weights
+    # Default time periods in trading days and their weights (recency-tilted,
+    # IBD-style). These are CALIBRATION constants — whether 40/20/20/20 actually
+    # predicts forward outperformance is an empirical question to be answered with
+    # scripts/validate_forward_returns.py on real screener output, NOT by intuition
+    # (overfit risk). Until that runs, keep the default; they are now overridable
+    # via the constructor so a data-driven retune needs no code change.
     PERIODS = {
         63: 0.40,   # Last quarter (3 months): 40% weight
         126: 0.20,  # 2nd quarter: 20% weight
@@ -30,14 +43,19 @@ class RelativeStrengthCalculator:
         252: 0.20,  # Full year: 20% weight
     }
 
-    def __init__(self, benchmark: str = "SPY"):
+    def __init__(self, benchmark: str = "SPY", periods: Optional[Dict[int, float]] = None):
         """
         Initialize RS calculator.
 
         Args:
             benchmark: Benchmark ticker symbol (default: SPY)
+            periods: Optional {lookback_days: weight} override for the recency
+                weighting. Defaults to the class PERIODS. Supplying this lets a
+                forward-return-validated configuration be injected without editing
+                code (see the calibration note on PERIODS).
         """
         self.benchmark = benchmark
+        self.PERIODS = dict(periods) if periods else dict(self.PERIODS)
 
     def calculate_return(self, prices: pd.Series, period: int) -> Optional[float]:
         """
@@ -150,7 +168,13 @@ class RelativeStrengthCalculator:
             )
             rs_rating = percentile
         else:
-            # Without universe, use a simple scaling
+            # Without universe, use a simple scaling (NOT a percentile rank).
+            logger.warning(
+                "RS rating for %s computed without universe data; result uses "
+                "fixed 50 + rel_perf*100 scaling, not an authentic Minervini/IBD "
+                "percentile rank. Pass universe_performances to percentile-rank.",
+                stock_symbol,
+            )
             # Positive performance > 0 gets score 50-100, negative gets 0-50
             if rel_performance >= 0:
                 rs_rating = min(100, 50 + (rel_performance * 100))
@@ -226,7 +250,13 @@ class RelativeStrengthCalculator:
             )
             rs_rating = percentile
         else:
-            # Without universe, use simple scaling
+            # Without universe, use simple scaling (NOT a percentile rank).
+            logger.warning(
+                "Period-%d RS computed without universe data; result uses fixed "
+                "50 + rel_perf*100 scaling, not an authentic Minervini/IBD "
+                "percentile rank. Pass universe_performances to percentile-rank.",
+                period,
+            )
             # Positive performance > 0 gets score 50-100, negative gets 0-50
             if rel_performance >= 0:
                 rs_rating = min(100, 50 + (rel_performance * 100))

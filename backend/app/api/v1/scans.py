@@ -180,6 +180,7 @@ async def create_scan(
         screeners=request.screeners,
         composite_method=request.composite_method,
         criteria=request.criteria,
+        exclude_etfs=request.exclude_etfs,
         idempotency_key=request.idempotency_key,
     )
     try:

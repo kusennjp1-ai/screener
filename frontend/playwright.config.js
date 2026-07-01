@@ -13,6 +13,11 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4173',
     headless: true,
     trace: 'retain-on-failure',
+    // Allow pointing at a pre-installed browser when the pinned Playwright
+    // build's auto-download isn't available (e.g. sandboxed CI images).
+    ...(globalThis.process?.env?.PW_CHROMIUM_PATH
+      ? { launchOptions: { executablePath: globalThis.process.env.PW_CHROMIUM_PATH } }
+      : {}),
   },
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 4173',

@@ -650,8 +650,12 @@ class MinerviniScanner(BaseStockScreener):
                 "passes": vcp_result["vcp_detected"],
             }
         else:
-            # If VCP not calculated, redistribute points proportionally
-            score = (score / 80) * 100  # Scale up to 100
+            # VCP is an optional BONUS (max 20 pts), not a penalty for its
+            # absence. Previously the score was rescaled (score/80*100) when VCP
+            # was missing, which let a VCP-absent stock OUTSCORE an identical
+            # VCP-present one — backwards. Leave the raw score as-is: it caps at
+            # 80 without VCP and reaches up to 100 with it.
+            pass
 
         # Determine if passes the strict Minervini Trend Template.
         #

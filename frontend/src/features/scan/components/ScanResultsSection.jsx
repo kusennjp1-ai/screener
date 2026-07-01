@@ -1,6 +1,7 @@
 import { Box, Button, CircularProgress, Paper, Typography } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import ResultsTable from '../../../components/Scan/ResultsTable';
+import MarketRegimeBanner from './MarketRegimeBanner';
 
 function isFiltered(filters) {
   return Boolean(
@@ -47,6 +48,7 @@ export default function ScanResultsSection({
   if (resultsData && resultsData.results && resultsData.results.length > 0) {
     return (
       <>
+        <MarketRegimeBanner results={resultsData.results} />
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">
             Results: {resultsData.total} stocks

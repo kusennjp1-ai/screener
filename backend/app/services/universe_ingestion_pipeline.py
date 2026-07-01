@@ -26,6 +26,7 @@ from ..models.stock_universe import (
     UNIVERSE_EVENT_LISTING_TIER_CHANGED,
     UNIVERSE_STATUS_ACTIVE,
 )
+from .security_type import classify_is_etf
 from .universe_classification import prefer_meaningful
 
 
@@ -405,6 +406,7 @@ class UniversePersistence:
         new_events: list[StockUniverseStatusEvent],
     ) -> None:
         existing.name = row.name or existing.name
+        existing.is_etf = classify_is_etf(row.symbol, row.name or existing.name)
         existing.market = row.market
         existing.exchange = row.mic
         existing.currency = row.currency
@@ -513,6 +515,7 @@ class UniversePersistence:
             sector=row.sector,
             industry=row.industry,
             market_cap=row.market_cap,
+            is_etf=classify_is_etf(row.symbol, row.name),
             is_active=lifecycle.is_active,
             status=lifecycle.status,
             status_reason=reason,

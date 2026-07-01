@@ -33,6 +33,7 @@ export const SCREENER_OPTIONS = [
   { id: 'custom', label: 'Cust' },
   { id: 'volume_breakthrough', label: 'VolB' },
   { id: 'setup_engine', label: 'Setup' },
+  { id: 'markets360', label: 'M360' },
 ];
 
 // Geographic markets the backend supports. TEST is a developer utility

@@ -223,3 +223,76 @@ def test_summary_stats_includes_invalidated_with_pnl(tmp_path: Path):
     assert stats["count"] == 2  # only those with P&L
     assert stats["win_rate"] == 0.5  # 1 win, 1 loss
     assert stats["avg_pnl_pct"] == pytest.approx(2.5, abs=0.01)  # (10 + -5) / 2
+
+
+# -- Position exhaustion -------------------------------------------------------
+
+
+def _active_thesis(entry_date="2026-03-01T00:00:00+00:00", entry_price=100.0, **extra):
+    t = {
+        "status": "ACTIVE",
+        "entry": {"actual_date": entry_date, "actual_price": entry_price,
+                  "target_price": extra.pop("target_price", None)},
+        "exit": extra.pop("exit", {}),
+    }
+    t.update(extra)
+    return t
+
+
+def test_exhaustion_active_window():
+    t = _active_thesis()
+    r = thesis_review.position_exhaustion(t, as_of="2026-03-06")  # 5 days held
+    assert r["applicable"] is True
+    assert r["hold_duration_days"] == 5
+    assert r["days_to_exhaustion"] == 23
+    assert r["exhaustion_status"] == "active"
+    assert r["recommended_action"] == "none"
+
+
+def test_exhaustion_warning_window():
+    t = _active_thesis()
+    r = thesis_review.position_exhaustion(t, as_of="2026-03-24")  # 23 days (>= 28-7)
+    assert r["exhaustion_status"] == "warning"
+    assert r["recommended_action"] == "tighten_stop"
+
+
+def test_exhaustion_critical_exits_when_stalled():
+    t = _active_thesis()
+    r = thesis_review.position_exhaustion(t, as_of="2026-04-05")  # 35 days
+    assert r["exhaustion_status"] == "critical"
+    assert r["recommended_action"] == "exit"
+    assert r["days_to_exhaustion"] == 0
+
+
+def test_exhaustion_critical_but_near_target_tightens():
+    t = _active_thesis(target_price=120.0)
+    # 35 days held but price is 90% of the way to target -> tighten, don't dump
+    r = thesis_review.position_exhaustion(t, as_of="2026-04-05", current_price=118.0)
+    assert r["exhaustion_status"] == "critical"
+    assert r["progression_to_target_pct"] == 90.0
+    assert r["recommended_action"] == "tighten_stop"
+
+
+def test_exhaustion_respects_thesis_time_stop_days():
+    t = _active_thesis(exit={"time_stop_days": 10})
+    r = thesis_review.position_exhaustion(t, as_of="2026-03-13")  # 12 days, window 10
+    assert r["exhaustion_days"] == 10
+    assert r["exhaustion_status"] == "critical"
+
+
+def test_exhaustion_not_applicable_for_non_active():
+    assert thesis_review.position_exhaustion({"status": "IDEA"})["applicable"] is False
+    assert thesis_review.position_exhaustion(
+        {"status": "ACTIVE", "entry": {}})["applicable"] is False
+
+
+def test_list_exhaustion_alerts_flags_stale_active(tmp_path):
+    state_dir = tmp_path / "theses"
+    state_dir.mkdir()
+    # one fresh, one stale ACTIVE thesis
+    _create_active_thesis(state_dir, entry_date="2026-06-01T00:00:00+00:00")  # fresh
+    _create_active_thesis(state_dir, entry_date="2026-03-01T00:00:00+00:00")  # stale
+    alerts = thesis_review.list_exhaustion_alerts(str(state_dir), as_of="2026-06-20")
+    assert len(alerts) == 1
+    assert alerts[0]["exhaustion_status"] == "critical"
+    assert alerts[0]["ticker"] == "AAPL"
