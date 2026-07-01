@@ -148,6 +148,11 @@ def test_run_daily_refresh_bootstraps_universe_before_other_tasks(monkeypatch):
         lambda *, pointer_key, run_id: calls.append(f"pointer:{pointer_key}:{run_id}"),
     )
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     expected_markets = list(export_script.STATIC_EXPORT_MARKETS)
@@ -225,6 +230,11 @@ def test_run_daily_refresh_computes_eps_rating_before_snapshots(monkeypatch):
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh(market="US")  # noqa: SLF001 - intentional unit test coverage
 
     assert warnings == []
@@ -276,6 +286,11 @@ def test_run_daily_refresh_uses_resolved_tracked_ibd_csv_path(monkeypatch, tmp_p
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     assert warnings == []
@@ -340,6 +355,11 @@ def test_run_daily_refresh_can_hydrate_imported_snapshot_without_live_fundamenta
         lambda *, pointer_key, run_id: calls.append(f"pointer:{pointer_key}:{run_id}"),
     )
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh(  # noqa: SLF001 - intentional unit test coverage
         skip_universe_refresh=True,
         skip_fundamentals_refresh=True,
@@ -407,6 +427,11 @@ def test_run_daily_refresh_price_delta_mode_skips_snapshot_hydration(monkeypatch
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh(  # noqa: SLF001 - intentional unit test coverage
         skip_universe_refresh=True,
         skip_fundamentals_refresh=True,
@@ -460,6 +485,11 @@ def test_run_daily_refresh_warns_when_default_market_run_id_is_missing(monkeypat
         lambda **_kwargs: calls.append("pointer"),
     )
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     assert calls == list(export_script.STATIC_EXPORT_MARKETS)
@@ -507,6 +537,11 @@ def test_run_daily_refresh_does_not_repoint_default_pointer_for_unpublished_us_r
         lambda **kwargs: pointer_calls.append(kwargs),
     )
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     assert pointer_calls == []
@@ -569,6 +604,11 @@ def test_run_daily_refresh_disables_serialized_lock_during_export(monkeypatch):
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     assert events == ["enter:fetch", "enter:workload", "exit:workload", "exit:fetch"]
@@ -605,6 +645,11 @@ def test_run_daily_refresh_limits_work_to_selected_market(monkeypatch):
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, warnings = export_script._run_daily_refresh(  # noqa: SLF001 - intentional unit test coverage
         market="HK",
     )
@@ -682,6 +727,11 @@ def test_run_daily_refresh_uses_per_market_trading_date_for_in(monkeypatch):
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     results, _warnings = export_script._run_daily_refresh(market="IN")  # noqa: SLF001
 
     assert results["price_refresh"]["as_of_date"] == "2026-04-01"
@@ -727,6 +777,11 @@ def test_run_daily_refresh_uses_static_daily_mode_and_group_rank_bypass(monkeypa
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     feature_calls = [call for call in calls if call[0] == "feature_snapshot"]
@@ -985,6 +1040,11 @@ def test_run_daily_refresh_warns_when_non_default_market_snapshot_is_not_publish
     )
     monkeypatch.setattr(export_script, "_upsert_feature_run_pointer", lambda **_kwargs: None)
 
+    monkeypatch.setattr(  # hermetic: real backfill reaches a live benchmark fetch
+        export_script,
+        "_ensure_group_rank_history",
+        lambda **kwargs: {"status": "errored", "market": kwargs.get("market"), "error": "hermetic-unit-test"},
+    )
     _results, warnings = export_script._run_daily_refresh()  # noqa: SLF001 - intentional unit test coverage
 
     assert "Static export market HK snapshot returned status 'skipped' (market HK is disabled in local runtime preferences)." in warnings
