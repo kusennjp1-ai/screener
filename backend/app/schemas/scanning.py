@@ -230,6 +230,22 @@ class ScanResultItem(BaseModel):
     composite_reason: Optional[str] = None
     ipo_bonus: Optional[float] = None
 
+    # Execution-state axis (rating cap transparency). Both repository read
+    # paths populate these in extended_fields; the table renders them as chips.
+    execution_state: Optional[str] = None
+    execution_cap_applied: Optional[bool] = None
+    execution_cap_reason: Optional[str] = None
+
+    # MM360 band states (Pressure / Buy Risk / TPR) — rendered as the
+    # Prs/Risk/TPR columns in the results table.
+    pressure_state: Optional[str] = None
+    pressure_value: Optional[float] = None
+    buy_risk_state: Optional[str] = None
+    buy_risk_atr: Optional[float] = None
+    tpr_state: Optional[str] = None
+    tpr_score: Optional[float] = None
+    tpr_max: Optional[float] = None
+
     # General-market regime (Minervini's first rule: trade with the market).
     # Computed once from the benchmark and attached to every row so the UI can
     # show a regime banner and scale suggested exposure. Same value across a scan.
@@ -379,6 +395,18 @@ class ScanResultItem(BaseModel):
             unavailable_screeners=normalize_string_list(ef.get("unavailable_screeners")),
             composite_reason=ef.get("composite_reason"),
             ipo_bonus=ef.get("ipo_bonus"),
+            # Execution-state axis
+            execution_state=ef.get("execution_state"),
+            execution_cap_applied=ef.get("execution_cap_applied"),
+            execution_cap_reason=ef.get("execution_cap_reason"),
+            # MM360 band states
+            pressure_state=ef.get("pressure_state"),
+            pressure_value=ef.get("pressure_value"),
+            buy_risk_state=ef.get("buy_risk_state"),
+            buy_risk_atr=ef.get("buy_risk_atr"),
+            tpr_state=ef.get("tpr_state"),
+            tpr_score=ef.get("tpr_score"),
+            tpr_max=ef.get("tpr_max"),
             # General-market regime (same value across a scan)
             market_regime=ef.get("market_regime"),
             market_health=ef.get("market_health"),
