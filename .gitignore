@@ -87,3 +87,6 @@ backend/tests/load/baselines/current_run.json
 
 # Markets 360 band-calibration fixtures (real public OHLCV used by tests)
 !backend/tests/fixtures/markets360/*.csv
+
+# Redis persistence snapshots from local runs
+dump.rdb
