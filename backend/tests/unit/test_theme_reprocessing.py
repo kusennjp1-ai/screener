@@ -238,9 +238,15 @@ class TestExtractFromContentBugFix:
     @patch("app.services.theme_extraction_service.ThemeExtractionService._load_configured_model")
     @patch("app.services.theme_extraction_service.ThemeExtractionService._load_pipeline_config")
     @patch("app.services.theme_extraction_service.ThemeExtractionService._load_reprocessing_config")
-    def test_extract_from_content_falls_back_only_for_current_item(
+    def test_extract_from_content_transient_failure_does_not_flip_provider(
         self, mock_reproc, mock_pipeline, mock_model, mock_client, db_session, pipeline_source
     ):
+        """A transient litellm failure propagates (process_batch marks the item
+        for retry) and must NOT permanently switch the provider — the next call
+        retries litellm. The old per-item gemini fallback was removed with the
+        sanctioned-provider policy (Groq/Minimax/Z.AI via litellm only)."""
+        import pytest as _pytest
+
         from app.services.theme_extraction_service import ThemeExtractionService
 
         service = ThemeExtractionService.__new__(ThemeExtractionService)
@@ -248,7 +254,6 @@ class TestExtractFromContentBugFix:
         service.pipeline = "technical"
         service.provider = "litellm"
         service.llm = MagicMock()
-        service.gemini_client = object()
         service.configured_model = None
         service.pipeline_config = None
         service._valid_tickers = {"NVDA"}
@@ -266,18 +271,13 @@ class TestExtractFromContentBugFix:
             service,
             "_try_generate_litellm",
             side_effect=[Exception("transient timeout"), litellm_response],
-        ) as litellm_mock, patch.object(
-            service,
-            "_try_generate_gemini",
-            return_value=litellm_response,
-        ) as gemini_mock:
-            first_mentions = service.extract_from_content(item)
+        ) as litellm_mock:
+            with _pytest.raises(Exception, match="transient timeout"):
+                service.extract_from_content(item)
             second_mentions = service.extract_from_content(item)
 
         assert service.provider == "litellm"
         assert litellm_mock.call_count == 2
-        assert gemini_mock.call_count == 1
-        assert first_mentions[0]["tickers"] == ["NVDA"]
         assert second_mentions[0]["tickers"] == ["NVDA"]
 
     @patch("app.services.theme_extraction_service.ThemeExtractionService._init_client")
