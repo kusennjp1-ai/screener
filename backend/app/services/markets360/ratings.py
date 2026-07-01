@@ -333,7 +333,7 @@ def compute_monalert_net(
     if price_data is None or len(price_data) < smooth + 2 or "Close" not in price_data.columns:
         return out
     close = price_data["Close"]
-    ret = close.pct_change() * 100.0
+    ret = close.pct_change(fill_method=None) * 100.0
     impulse = pd.Series(0.0, index=close.index)
     impulse[ret >= threshold_pct] = 1.0
     impulse[ret <= -threshold_pct] = -1.0
