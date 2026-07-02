@@ -48,32 +48,9 @@ cd backend
 
 ### Docker Deployment
 
-Layered Docker Compose architecture with three scenarios:
-
-```bash
-# Local development
-cp .env.docker.example .env   # Add API keys for chatbot
-docker-compose up
-
-# Homelab (behind reverse proxy like Traefik/nginx proxy manager)
-cp .env.docker.example .env.docker
-# Edit: CORS_ORIGINS=https://stocks.home.lan
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# VPS with auto-HTTPS (Hostinger, DigitalOcean, etc.)
-cp .env.docker.example .env.docker
-# Edit: DOMAIN=stocks.yourdomain.com, CORS_ORIGINS=https://stocks.yourdomain.com
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.https.yml up -d
-```
-
-**Docker files:**
-- `docker-compose.yml` - Base config (local dev)
-- `docker-compose.prod.yml` - Production overlay (resource limits, health checks, logging)
-- `docker-compose.https.yml` - HTTPS overlay (Caddy with Let's Encrypt)
-- `.env.docker.example` - Docker environment template
-- `Caddyfile` - Caddy TLS configuration
-
-**Note:** Backend runs as non-root user (uid 1000). After upgrade: `sudo chown -R 1000:1000 ./data`
+Three compose scenarios (local / homelab / VPS+HTTPS). Invoke the `deploy`
+skill (`.claude/skills/deploy/`) for the full commands, overlay files, and
+the non-root `chown` note.
 
 ### Running Tests
 
@@ -142,25 +119,10 @@ make golden-update # Regenerate golden snapshots
 ```
 
 ### Diagnostic Scripts
-Utility scripts are in `backend/scripts/`:
-```bash
-cd backend
-source venv/bin/activate
 
-python scripts/inspect_redis.py            # Inspect Redis cache keys
-python scripts/cache_diagnostic.py         # Trace cache flow (DB → Redis)
-python scripts/check_cache_status.py       # Check price cache status
-python scripts/clear_redis_price_cache.py  # Clear Redis cache after config change
-python scripts/force_full_cache_refresh.py # Force full cache refresh
-python scripts/cleanup_orphaned_scans.py   # Synchronously delete orphaned scans
-```
-
-Manual orphaned scan cleanup runs directly:
-```bash
-python scripts/cleanup_orphaned_scans.py
-```
-
-The Celery task `app.tasks.cache_tasks.cleanup_orphaned_scans` remains the scheduled background path and requires a live worker to execute.
+Cache/pipeline debugging utilities live in `backend/scripts/`. Invoke the
+`diagnose-cache` skill (`.claude/skills/diagnose-cache/`) for the script
+catalogue and the freshness-gate playbook.
 
 ## Architecture
 
@@ -214,31 +176,11 @@ The Celery task `app.tasks.cache_tasks.cleanup_orphaned_scans` remains the sched
 
 ### Frontend API Client Convention
 
-**CRITICAL: API paths must NOT include `/api` prefix**
-
-The axios client in `frontend/src/api/client.js` handles the `/api` prefix via `baseURL`:
-- **Local dev**: `baseURL = 'http://localhost:8000/api'`
-- **Docker**: `baseURL = '/api'` (set via `VITE_API_URL` build arg)
-
-When adding new API endpoints, use paths starting with `/v1/`:
-```javascript
-// ✅ CORRECT - path without /api prefix
-const response = await apiClient.get('/v1/themes/rankings');
-
-// ❌ WRONG - will cause double prefix in Docker (/api/api/v1/...)
-const response = await apiClient.get('/api/v1/themes/rankings');
-```
-
-For API modules with a `BASE_PATH` constant:
-```javascript
-// ✅ CORRECT
-const BASE_PATH = '/v1/user-themes';
-
-// ❌ WRONG
-const BASE_PATH = '/api/v1/user-themes';
-```
-
-**Why this matters**: In Docker, nginx proxies `/api/*` to the backend. If paths include `/api`, you get `/api/api/v1/...` which returns 404.
+**CRITICAL: API paths must NOT include the `/api` prefix** — `client.js`
+supplies it via `baseURL`; including it yields `/api/api/v1/...` (404) in
+Docker. Use `/v1/...` paths and `BASE_PATH` constants without `/api`.
+Full contract with examples: `.claude/rules/frontend-api.md` (auto-scoped
+to `frontend/**`).
 
 ## Data Sources & Rate Limits
 - **yfinance**: 1 req/sec (self-imposed)
