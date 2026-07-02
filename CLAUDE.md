@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Stock screening platform implementing CANSLIM (William O'Neil) and Minervini methodologies, with theme discovery, AI chatbot, and market analysis. Full-stack application with FastAPI backend, React frontend, PostgreSQL, Redis caching, and Celery for background tasks.
 
+**Companion docs (read when relevant):**
+- `CONTEXT.md` — canonical domain vocabulary (Market, MIC, universe, snapshot…). Use these exact terms in code, plans, and reviews.
+- `AGENTS.md` — issue tracking via **bd (beads)**: `bd ready` → claim → `bd close`. Check it before inventing ad-hoc TODO lists.
+- `trading-skills/` — vendored skill library with its own `CLAUDE.md`; treat it as a sub-project.
+
+## Model & Context Policy
+
+- **Exploration/search** (find code, sweep files): delegate to a read-only subagent — keep transcripts out of the main context.
+- **Implementation**: default session model. **Design/audit/hard debugging**: strongest available model with higher effort.
+- Heavy outputs (test logs, scans, large diffs) belong in subagents or files, not the main conversation. Prefer `/compact` at natural milestones in long sessions.
+- Procedures live in `.claude/skills/` (invoke on demand); only always-true facts belong in this file.
+
 ## Development Commands
 
 ### Backend
