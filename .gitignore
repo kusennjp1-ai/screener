@@ -60,11 +60,14 @@ docker-data/
 Thumbs.db
 .vscode/
 .idea/
-# Ignore local/private Claude state, but TRACK the shared session-start hook +
-# settings so Claude Code on the web can install deps for every session.
+# Ignore local/private Claude state, but TRACK shared team assets: settings,
+# hooks, skills, rules, and agents (settings.local.json stays ignored).
 .claude/*
 !.claude/settings.json
 !.claude/hooks/
+!.claude/skills/
+!.claude/rules/
+!.claude/agents/
 .specstory
 
 # Temporary files
@@ -87,3 +90,6 @@ backend/tests/load/baselines/current_run.json
 
 # Markets 360 band-calibration fixtures (real public OHLCV used by tests)
 !backend/tests/fixtures/markets360/*.csv
+
+# Redis persistence snapshots from local runs
+dump.rdb

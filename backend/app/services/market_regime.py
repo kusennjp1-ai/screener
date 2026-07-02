@@ -36,7 +36,7 @@ REGIME_EXPOSURE = {
 
 
 def _distribution_days(close: pd.Series, volume: pd.Series, window: int = DIST_WINDOW) -> int:
-    ret = close.pct_change()
+    ret = close.pct_change(fill_method=None)
     vol_up = volume > volume.shift(1)
     dist = (ret <= DIST_DOWN_PCT) & vol_up
     return int(dist.tail(window).sum())

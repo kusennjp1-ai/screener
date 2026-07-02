@@ -62,7 +62,7 @@ class TestResolveSymbols:
 
         assert result == ["AAPL", "MSFT", "GOOGL"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange=None, sp500_only=False, limit=None
+            mock_db, market=None, exchange=None, sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -74,7 +74,7 @@ class TestResolveSymbols:
 
         assert result == ["0700.HK", "9988.HK"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market="HK", exchange=None, sp500_only=False, limit=None
+            mock_db, market="HK", exchange=None, sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -86,7 +86,7 @@ class TestResolveSymbols:
 
         assert result == ["920118.BJ"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market="CN", exchange="XBSE", sp500_only=False, limit=None
+            mock_db, market="CN", exchange="XBSE", sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -98,7 +98,7 @@ class TestResolveSymbols:
 
         assert result == ["500325.BO"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market="IN", exchange="XBOM", sp500_only=False, limit=None
+            mock_db, market="IN", exchange="XBOM", sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -119,7 +119,7 @@ class TestResolveSymbols:
             exchange=None,
             sp500_only=False,
             limit=None,
-            listing_tier="gem",
+            listing_tier="gem", exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -131,7 +131,7 @@ class TestResolveSymbols:
 
         assert result == ["IBM", "GE"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange="NYSE", sp500_only=False, limit=None
+            mock_db, market=None, exchange="NYSE", sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -143,7 +143,7 @@ class TestResolveSymbols:
 
         assert result == ["920118.BJ"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market="CN", exchange="BJSE", sp500_only=False, limit=None
+            mock_db, market="CN", exchange="BJSE", sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -154,7 +154,7 @@ class TestResolveSymbols:
         resolve_symbols(mock_db, u)
 
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange="NASDAQ", sp500_only=False, limit=None
+            mock_db, market=None, exchange="NASDAQ", sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -166,7 +166,7 @@ class TestResolveSymbols:
 
         assert result == ["AAPL", "MSFT"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange=None, index_name="SP500", limit=None
+            mock_db, market=None, exchange=None, index_name="SP500", limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -210,7 +210,7 @@ class TestResolveSymbols:
         resolve_symbols(mock_db, u, limit=10)
 
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange=None, sp500_only=False, limit=10
+            mock_db, market=None, exchange=None, sp500_only=False, limit=10, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -230,7 +230,7 @@ class TestResolveSymbols:
 
         assert result == ["AAPL", "MSFT"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange=None, sp500_only=False, limit=None
+            mock_db, market=None, exchange=None, sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -241,7 +241,7 @@ class TestResolveSymbols:
 
         assert result == ["AAPL"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange=None, sp500_only=False, limit=None
+            mock_db, market=None, exchange=None, sp500_only=False, limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -252,7 +252,7 @@ class TestResolveSymbols:
 
         assert result == ["AAPL"]
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            mock_db, market=None, exchange=None, sp500_only=False, limit=None
+            mock_db, market=None, exchange=None, sp500_only=False, limit=None, exclude_etfs=False
         )
 
 

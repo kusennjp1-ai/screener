@@ -99,8 +99,11 @@ def test_pressure_buy_when_closing_near_highs():
     assert out["pressure_state"] == "buy"
 
 
-def test_pressure_sell_when_closing_near_lows():
-    df = _ohlcv(np.linspace(50.0, 150.0, 300), high_off=1.0, low_off=0.2)
+def test_pressure_sell_on_sustained_decline():
+    # The calibrated band is Force-Index driven (close-to-close change x
+    # volume), so distribution is falling CLOSES, not intrabar position: a
+    # monotonic decline keeps the force negative -> selling pressure.
+    df = _ohlcv(np.linspace(150.0, 50.0, 300), high_off=1.0, low_off=0.2)
     out = compute_pressure(df)
     assert out["pressure_state"] == "sell"
 

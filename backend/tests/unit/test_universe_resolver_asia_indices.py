@@ -26,7 +26,7 @@ class TestIndexResolverDispatch:
         resolve_symbols(self.mock_db, u)
 
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            self.mock_db, market=None, exchange=None, index_name="HSI", limit=None
+            self.mock_db, market=None, exchange=None, index_name="HSI", limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -37,7 +37,7 @@ class TestIndexResolverDispatch:
         resolve_symbols(self.mock_db, u)
 
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            self.mock_db, market=None, exchange=None, index_name="NIKKEI225", limit=None
+            self.mock_db, market=None, exchange=None, index_name="NIKKEI225", limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -48,7 +48,7 @@ class TestIndexResolverDispatch:
         resolve_symbols(self.mock_db, u)
 
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            self.mock_db, market=None, exchange=None, index_name="TAIEX", limit=None
+            self.mock_db, market=None, exchange=None, index_name="TAIEX", limit=None, exclude_etfs=False
         )
 
     @patch("app.services.universe_resolver.get_stock_universe_service")
@@ -62,5 +62,5 @@ class TestIndexResolverDispatch:
         resolve_symbols(self.mock_db, u)
 
         mock_service.return_value.get_active_symbols.assert_called_once_with(
-            self.mock_db, market=None, exchange=None, index_name="SP500", limit=None
+            self.mock_db, market=None, exchange=None, index_name="SP500", limit=None, exclude_etfs=False
         )

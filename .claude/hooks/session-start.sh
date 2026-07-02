@@ -18,14 +18,22 @@ cd "$CLAUDE_PROJECT_DIR"
 python3 -m pip install --quiet --disable-pip-version-check --upgrade pip wheel \
   || echo "[session-start] WARN: pip/wheel upgrade failed; continuing."
 
-echo "[session-start] installing backend Python deps (app + tests)..."
-python3 -m pip install --disable-pip-version-check \
-  -r backend/requirements.txt -r backend/requirements-test.txt \
-  || echo "[session-start] WARN: some backend deps failed to install; continuing."
-
-echo "[session-start] installing frontend deps..."
-( cd frontend && npm install --no-audit --no-fund --loglevel=error ) \
-  || echo "[session-start] WARN: frontend npm install failed; continuing."
+# Backend (pip) and frontend (npm) installs are independent — run them in
+# parallel to roughly halve cold-start time. --prefer-binary skips slow sdist
+# builds when a wheel exists. Each side still warns-and-continues on failure.
+echo "[session-start] installing backend + frontend deps in parallel..."
+(
+  python3 -m pip install --disable-pip-version-check --prefer-binary \
+    -r backend/requirements.txt -r backend/requirements-test.txt \
+    || echo "[session-start] WARN: some backend deps failed to install; continuing."
+) &
+BACKEND_PID=$!
+(
+  cd frontend && npm install --no-audit --no-fund --loglevel=error \
+    || echo "[session-start] WARN: frontend npm install failed; continuing."
+) &
+FRONTEND_PID=$!
+wait "$BACKEND_PID" "$FRONTEND_PID"
 
 # The app settings / test suite require DATABASE_URL to import; mirror CI's dummy
 # value so pytest, scripts and `make gate-*` load without a live DB.
