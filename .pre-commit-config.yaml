@@ -1,0 +1,18 @@
+# Local commit hygiene (optional but recommended):
+#   pip install pre-commit && pre-commit install --hook-type commit-msg --hook-type pre-commit
+# CI remains the source of truth; these catch mistakes before a push.
+repos:
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []  # types follow CLAUDE.md "Git Conventions"
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        exclude: ^trading-skills/docs/  # Jekyll templates use custom tags
+      - id: end-of-file-fixer
+        exclude: \.(csv|json)$
