@@ -17,7 +17,11 @@ x-app-env: &app-env
   API_HOST: 0.0.0.0
   API_PORT: "8000"
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:80,http://frontend}
-  SERVER_AUTH_PASSWORD: ${SERVER_AUTH_PASSWORD:?Set SERVER_AUTH_PASSWORD in your Docker environment}
+  # Auth is ON by default. Set SERVER_AUTH_ENABLED=false to run fully open
+  # (single-user localhost only — never expose an unauthenticated API to a LAN
+  # or the internet). When disabled, SERVER_AUTH_PASSWORD is ignored.
+  SERVER_AUTH_ENABLED: ${SERVER_AUTH_ENABLED:-true}
+  SERVER_AUTH_PASSWORD: ${SERVER_AUTH_PASSWORD:-}
   SERVER_AUTH_SESSION_SECRET: ${SERVER_AUTH_SESSION_SECRET:-}
   SERVER_AUTH_SECURE_COOKIE: ${SERVER_AUTH_SECURE_COOKIE:-false}
   SERVER_EXPOSE_API_DOCS: ${SERVER_EXPOSE_API_DOCS:-false}
