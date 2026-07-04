@@ -61,7 +61,7 @@ export default function SellPlanCard({ sellPlan }) {
 
   return (
     <Box sx={{
-      position: 'absolute', right: 16, top: 16, zIndex: 5, width: 300,
+      position: 'absolute', right: 16, top: 56, zIndex: 5, width: 300,
       bgcolor: 'rgba(13,16,22,0.96)', border: `1px solid ${meta.color}`, borderRadius: 1.5,
       boxShadow: '0 8px 28px rgba(0,0,0,0.55)', p: 1.5,
       ...(meta.pulse && {
