@@ -28,6 +28,7 @@ from app.wiring.bootstrap import (
 from . import chart as chart_overlays
 from . import quarters as quarter_table
 from . import ratings
+from .exit_signals import compute_sell_plan
 from .signals import compute_buy_signal, detect_50dma_breakdown
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,15 @@ class Markets360Service:
         # breakdown; null-ish when intact. Never auto-liquidates.
         exit_signal = self._safe(lambda: detect_50dma_breakdown(price_df)) or None
 
+        # --- sell plan (climax + breakdown + trailing-stop ladder) ---------
+        # Entry/stop context comes from the buy-signal card when it carries
+        # one; without it the plan still scores climax/breakdown tells.
+        sell_plan = self._safe(lambda: compute_sell_plan(
+            price_df,
+            entry=signal.get("trigger_price") if signal else None,
+            initial_stop=signal.get("stop") if signal else None,
+        )) or None
+
         # --- quarterly strip ----------------------------------------------
         quarters = self._build_quarters(edgar, fundamentals)
 
@@ -155,6 +165,7 @@ class Markets360Service:
             "chart": chart,
             "signal": signal,
             "exit_signal": exit_signal,
+            "sell_plan": sell_plan,
             "quarters": quarters,
             "degraded_reasons": degraded,
         }

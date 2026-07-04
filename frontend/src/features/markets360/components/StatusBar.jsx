@@ -1,5 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import { formatLargeNumber } from '../../../utils/formatUtils';
+import GlossaryLabel from '../../../components/common/GlossaryLabel';
 
 // Color ramps tuned to the Markets 360 chips: 0–99 ratings go red→amber→green,
 // signed % chips go green/red by sign, band states map to their strip colors.
@@ -21,10 +22,12 @@ const STATE_COLOR = {
 };
 const TPR_LETTER_COLOR = { A: '#1a7f5a', B: '#3f7f2a', C: '#9a8520', D: '#a2542e', E: '#a23b2e' };
 
-function Field({ label, value, color = '#d1d4dc', strong }) {
+function Field({ label, value, color = '#d1d4dc', strong, term }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, px: 0.75 }}>
-      <Typography sx={{ fontSize: 11, color: '#787b86', fontWeight: 600 }}>{label}</Typography>
+      <GlossaryLabel term={term}>
+        <Typography component="span" sx={{ fontSize: 11, color: '#787b86', fontWeight: 600 }}>{label}</Typography>
+      </GlossaryLabel>
       <Typography sx={{ fontSize: strong ? 13 : 12, color, fontWeight: strong ? 700 : 600, fontVariantNumeric: 'tabular-nums' }}>
         {value ?? '–'}
       </Typography>
@@ -32,10 +35,12 @@ function Field({ label, value, color = '#d1d4dc', strong }) {
   );
 }
 
-function Chip({ label, value, bg }) {
+function Chip({ label, value, bg, term }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75 }}>
-      <Typography sx={{ fontSize: 11, color: '#9aa0aa', fontWeight: 700 }}>{label}</Typography>
+      <GlossaryLabel term={term}>
+        <Typography component="span" sx={{ fontSize: 11, color: '#9aa0aa', fontWeight: 700 }}>{label}</Typography>
+      </GlossaryLabel>
       <Box sx={{
         bgcolor: bg, color: '#fff', borderRadius: 0.75, px: 0.75, minWidth: 22,
         textAlign: 'center', fontSize: 11.5, fontWeight: 800, lineHeight: '18px',
@@ -66,25 +71,25 @@ export default function StatusBar({ data }) {
         <Field label="$" value={q.change != null ? `${q.change >= 0 ? '+' : ''}${fmt(q.change)}` : '–'} color={signColor(q.change)} />
         <Field label="%" value={pct(q.change_pct)} color={signColor(q.change_pct)} />
         <Sep />
-        <Chip label="ER" value={r.er} bg={ratingColor(r.er)} />
-        <Chip label="SR" value={r.sr} bg={ratingColor(r.sr)} />
-        <Field label="VCP" value={r.vcp_pct != null ? `${Number(r.vcp_pct).toFixed(1)}%` : '–'} color="#e0a52e" />
+        <Chip label="ER" value={r.er} bg={ratingColor(r.er)} term="er" />
+        <Chip label="SR" value={r.sr} bg={ratingColor(r.sr)} term="sr" />
+        <Field label="VCP" value={r.vcp_pct != null ? `${Number(r.vcp_pct).toFixed(1)}%` : '–'} color="#e0a52e" term="vcp" />
         <Sep />
         <Chip label="Trend" value={s.trend_stage?.stage != null ? `S${s.trend_stage.stage}` : '–'}
-              bg={s.trend_stage?.stage === 2 ? '#1a7f5a' : s.trend_stage?.stage === 4 ? '#a23b2e' : '#5c6270'} />
-        <Chip label="Pressure" value={(s.pressure?.state || '–').slice(0, 3).toUpperCase()} bg={STATE_COLOR[s.pressure?.state] || '#3a3f4b'} />
-        <Chip label="Buy Risk" value={(s.buy_risk?.state || '–').toUpperCase()} bg={STATE_COLOR[s.buy_risk?.state] || '#3a3f4b'} />
-        <Chip label="RPR" value={r.rpr} bg={ratingColor(r.rpr)} />
-        <Chip label="TPR" value={r.tpr} bg={TPR_LETTER_COLOR[r.tpr] || '#3a3f4b'} />
+              bg={s.trend_stage?.stage === 2 ? '#1a7f5a' : s.trend_stage?.stage === 4 ? '#a23b2e' : '#5c6270'} term="stage" />
+        <Chip label="Pressure" value={(s.pressure?.state || '–').slice(0, 3).toUpperCase()} bg={STATE_COLOR[s.pressure?.state] || '#3a3f4b'} term="pressure" />
+        <Chip label="Buy Risk" value={(s.buy_risk?.state || '–').toUpperCase()} bg={STATE_COLOR[s.buy_risk?.state] || '#3a3f4b'} term="buy_risk" />
+        <Chip label="RPR" value={r.rpr} bg={ratingColor(r.rpr)} term="rpr" />
+        <Chip label="TPR" value={r.tpr} bg={TPR_LETTER_COLOR[r.tpr] || '#3a3f4b'} term="tpr" />
       </Box>
       {/* Row 2: volume + rate chips */}
       <Box sx={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', py: 0.5, borderTop: '1px solid #16181f' }}>
         <Field label="V" value={q.volume != null ? formatLargeNumber(q.volume) : '–'} />
-        <Field label="VRR" value={spct(r.vrr_pct)} color={signColor(r.vrr_pct)} />
-        <Field label="+/–20dma" value={spct(r.dist_20dma_pct)} color={signColor(r.dist_20dma_pct)} />
+        <Field label="VRR" value={spct(r.vrr_pct)} color={signColor(r.vrr_pct)} term="vrr" />
+        <Field label="+/–20dma" value={spct(r.dist_20dma_pct)} color={signColor(r.dist_20dma_pct)} term="dist_20dma" />
         <Sep />
-        <Chip label="ESR" value={r.esr} bg={ratingColor(r.esr)} />
-        <Chip label="MonAlert" value={s.monalert_net} bg={s.monalert_net >= 5 ? '#1a7f5a' : s.monalert_net <= 0 ? '#a23b2e' : '#5c6270'} />
+        <Chip label="ESR" value={r.esr} bg={ratingColor(r.esr)} term="esr" />
+        <Chip label="MonAlert" value={s.monalert_net} bg={s.monalert_net >= 5 ? '#1a7f5a' : s.monalert_net <= 0 ? '#a23b2e' : '#5c6270'} term="monalert" />
       </Box>
     </Box>
   );

@@ -1,5 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import BoltIcon from '@mui/icons-material/Bolt';
+import GlossaryLabel from '../../../components/common/GlossaryLabel';
 
 // The "Buying Now!" signal card — mirrors the MM360 popover: headline, the
 // behavioral-analytic label, timestamp + author, and the protective stop.
@@ -29,15 +30,19 @@ export default function BuyingNowCard({ signal, author }) {
       <Typography sx={{ color: '#9aa0aa', fontSize: 12 }}>By {signal.author || author || 'Mark Minervini'}</Typography>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid #23262f' }}>
         {signal.trigger_price != null && (
-          <Typography sx={{ color: '#d1d4dc', fontSize: 13 }}>
-            entry <b>{signal.trigger_price.toFixed(2)}</b>
-          </Typography>
+          <GlossaryLabel term="entry">
+            <Typography component="span" sx={{ color: '#d1d4dc', fontSize: 13 }}>
+              entry <b>{signal.trigger_price.toFixed(2)}</b>
+            </Typography>
+          </GlossaryLabel>
         )}
         {signal.stop != null && (
-          <Typography sx={{ color: '#f23645', fontSize: 13 }}>
-            stop @ <b>{signal.stop.toFixed(2)}</b>
-            {signal.risk_pct != null && <span style={{ color: '#787b86' }}> (−{signal.risk_pct}%)</span>}
-          </Typography>
+          <GlossaryLabel term="stop">
+            <Typography component="span" sx={{ color: '#f23645', fontSize: 13 }}>
+              stop @ <b>{signal.stop.toFixed(2)}</b>
+              {signal.risk_pct != null && <span style={{ color: '#787b86' }}> (−{signal.risk_pct}%)</span>}
+            </Typography>
+          </GlossaryLabel>
         )}
       </Box>
     </Box>

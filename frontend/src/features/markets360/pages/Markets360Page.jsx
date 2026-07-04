@@ -9,6 +9,7 @@ import StatusBar from '../components/StatusBar';
 import Markets360Chart from '../components/Markets360Chart';
 import BuyingNowCard from '../components/BuyingNowCard';
 import ExitSignalCard from '../components/ExitSignalCard';
+import SellPlanCard from '../components/SellPlanCard';
 import QuarterlyStrip from '../components/QuarterlyStrip';
 
 const PERIODS = [
@@ -133,7 +134,9 @@ export default function Markets360Page() {
             <LegendOverlay data={data} timeframe={timeframe} hover={hover} />
             <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} />
             <BuyingNowCard signal={data?.signal} />
-            <ExitSignalCard exitSignal={data?.exit_signal} />
+{data?.sell_plan
+              ? <SellPlanCard sellPlan={data.sell_plan} />
+              : <ExitSignalCard exitSignal={data?.exit_signal} />}
           </>
         )}
       </Box>
