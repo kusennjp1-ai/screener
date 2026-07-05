@@ -12,7 +12,8 @@
 | バンドright-edge一致 | 91% (P 82% / BR 92% / TPR 100%, 12銘柄) | 2026-07-05 | `markets360_band_rightedge_eval.py` |
 | TPRフルストリップ(IBB) | 58% | PR#47時点 | 同上docstring |
 | FIRE±5 fixtures基準率(コントロール) | 95.8% → **54.2%** (C1後) | 2026-07-05 | `validate_trade_ideas.py --fixtures` |
-| 908トレード実測 (COV/TT/S2/SETUP/RS70/FIRE±5/MSCORE/GATE) | **CI実行中** | — | CI `backtest.yml` bundleジョブ |
+| 908トレード実測 @C1 (CIベースライン) | COV 64.8 / TT 61.7 / S2 90.0 / SETUP 78.6 / RS70 73.6 / FIRE±5 88.6 / MSCORE 95.5 / GATE 40.0（判別力: SETUP +52.0pp, FIRE±5 +24.4pp） | 2026-07-05 | `backend/calibration/trade_idea_report.md`（CI） |
+| 908トレード実測 @C3 | GATE 40.0→**45.1**（2011: 0→75, 2020: 28.3→45.8）、control 19.7、他metric不変 | 2026-07-05 | ローカル再測定（バンドル、〜7分） |
 | W3.2 RS較正 | KEEP 40/20/20/20 (T+21 excess +1.79%, t=+9.63, n=1978) | 済 | `backend/calibration/W3.2_rs_weight_calibration.md` |
 
 ## サイクルログ
@@ -28,6 +29,32 @@
 - **検証**: FIRE±5コントロール基準率 95.8%→54.2%。golden gate-5 43 passed。services/scanners/golden 172 passed。新テスト4件。
 - **理論的根拠**: Minerviniはpivot+5%超を追わない。構造なき高値近接はセットアップではない。
 - **次**: C2 FTD検出。
+
+### C2 — 2026-07-05 FTD検出（コミット 0047eb7）
+- **変更**: `detect_follow_through` — 補正安値(≥6%下落)→試行day1=最初の陽線→day4-15の+1.2%＋出来高増で確認。FTD日安値割れ失効、分配日カウントのFTDリセット、pilot露出50%でcorrection/downtrend→confirmed_uptrend昇格。
+- **検証**: 新テスト5、影響208 passed、golden 43。**実測: GATE 40.0→45.1%（2011年 0→75%、2020年 28.3→45.8%）、判別力維持**。
+- **次**: C3 分配日正典化。
+
+### C3 — 2026-07-05 分配日の正典化（コミット 8372edd）
+- **変更**: +5%ラリーで失効、ストーリングデイ（高値圏±3%・出来高増・レンジ下半分・値幅≤+0.2%）を分配にカウント、docstring整合。
+- **検証**: 新テスト2、影響210 passed、golden 43。
+- **次**: C4 RPRユニバース配線。
+
+### C4 — 2026-07-05 markets360 RPR = authentic percentile（コミット 2b97b1f）
+- **変更**: バルクスキャンで `rs_universe_performances["weighted"]`（63/126/189/252・40/20/20/20、W3.2検証済み定義と同一）をcompute_rprに配線。daily限定（weeklyは非可換）。
+- **検証**: 新テスト1（ユニバースが順位を駆動する双方向証明）、200 passed、golden 43。
+- **次**: C5 SEPAルール1。
+
+### C5 — 2026-07-05 MinerviniScannerに市場ゲート（コミット be718ca）
+- **変更**: rating計算で `market_uptrend is False` ならBuy/Strong Buy→Watchにcap。passes_template（セットアップ判定）は市場非依存のまま。regime不明はノーブロック。
+- **検証**: 新テスト3、216 passed、golden 43。C2のFTDによりcapは底で数週早く解除される。
+- **次**: C6 TT正典化。
+
+### C6 — 2026-07-05 passes_templateを公刊8条件に正典化（コミット直近）
+- **変更**: 非正準の9つ目のベトー（60日回帰スロープStage分類）をpasses_templateから除去。8条件（MAスタック+200日上向き / 52週位置 / RS≥70）の厳密ANDに。回帰Stageはスコア20点とdetails["stage"]に残存。
+- **根拠**: 実測でTT 61.7% vs バンドStage-2 90.0%。ピン留めテスト：+52%/年のリーダーが+2.9%/70日のグラインドで「Stage 3 Topping」誤読、8条件は全成立。
+- **検証**: 新テスト2、205 passed、golden 43。**908実測はバックグラウンド測定中**（report_c6）。
+- **次**: C7 progressive exposure ladder。
 
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
