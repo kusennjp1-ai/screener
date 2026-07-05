@@ -52,3 +52,69 @@ def test_distribution_days_push_uptrend_under_pressure():
 def test_insufficient_data_returns_none():
     r = assess_market_regime(_index(np.linspace(100, 110, 50)))
     assert r["regime"] is None
+
+
+# --- follow-through day (O'Neil bottom confirmation) -------------------------
+
+def _correction_with_rally(ftd_day: int, ftd_gain: float, ftd_vol_mult: float,
+                           rally_days: int = 10) -> pd.DataFrame:
+    """A long uptrend, a ~15% correction, then a rally attempt. On attempt day
+    ``ftd_day`` the index gains ``ftd_gain`` on ``ftd_vol_mult``x prior volume;
+    other rally days drift +0.3% on flat volume."""
+    up = np.linspace(300, 460, 220)
+    down = np.linspace(460, 391, 40)          # -15% correction into the low
+    closes = list(up) + list(down)
+    vols = [1_000_000.0] * len(closes)
+    c = closes[-1]
+    for d in range(1, rally_days + 1):
+        gain = ftd_gain if d == ftd_day else 0.003
+        c *= 1 + gain
+        closes.append(c)
+        vols.append(vols[-1] * (ftd_vol_mult if d == ftd_day else 1.0))
+    return _index(np.asarray(closes), np.asarray(vols))
+
+
+def test_ftd_upgrades_correction_to_pilot_uptrend():
+    """+1.5% on higher volume on rally-attempt day 5 = a follow-through day:
+    the regime leaves correction/downtrend at PILOT exposure, weeks before the
+    MAs could recover."""
+    r = assess_market_regime(_correction_with_rally(ftd_day=5, ftd_gain=0.015, ftd_vol_mult=1.6))
+    assert r["regime"] == "confirmed_uptrend"
+    assert r["exposure_pct"] == 50  # pilot buys, not a mature uptrend's 100
+    ftd = r["components"]["follow_through"]
+    assert ftd is not None and ftd["attempt_day"] == 5
+    assert ftd["gain_pct"] >= 1.2
+
+
+def test_no_ftd_before_attempt_day_4():
+    """A big up day on attempt day 2 is a bounce, not a follow-through."""
+    r = assess_market_regime(_correction_with_rally(ftd_day=2, ftd_gain=0.015, ftd_vol_mult=1.6))
+    assert r["components"]["follow_through"] is None
+    assert r["regime"] in ("correction", "downtrend")
+
+
+def test_no_ftd_on_lower_volume():
+    """+1.5% on LOWER volume than the prior session does not confirm."""
+    r = assess_market_regime(_correction_with_rally(ftd_day=5, ftd_gain=0.015, ftd_vol_mult=0.7))
+    assert r["components"]["follow_through"] is None
+    assert r["regime"] in ("correction", "downtrend")
+
+
+def test_failed_ftd_undercut_is_circuit_broken():
+    """A close below the FTD session's low invalidates the confirmation."""
+    df = _correction_with_rally(ftd_day=5, ftd_gain=0.015, ftd_vol_mult=1.6, rally_days=6)
+    closes = df["Close"].to_numpy().tolist()
+    vols = df["Volume"].to_numpy().tolist()
+    # crash well below the FTD day's low right after it
+    closes.append(closes[-1] * 0.90)
+    vols.append(vols[-1])
+    r = assess_market_regime(_index(np.asarray(closes), np.asarray(vols)))
+    assert r["components"]["follow_through"] is None
+    assert r["regime"] in ("correction", "downtrend")
+
+
+def test_healthy_uptrend_never_takes_the_ftd_path():
+    r = assess_market_regime(_index(np.linspace(300, 460, 300)))
+    assert r["regime"] == "confirmed_uptrend"
+    assert r["exposure_pct"] == 100
+    assert r["components"]["follow_through"] is None
