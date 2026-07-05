@@ -118,3 +118,43 @@ def test_healthy_uptrend_never_takes_the_ftd_path():
     assert r["regime"] == "confirmed_uptrend"
     assert r["exposure_pct"] == 100
     assert r["components"]["follow_through"] is None
+
+
+# --- distribution-day counting fidelity (O'Neil) -----------------------------
+
+def test_distribution_day_expires_after_a_5pct_rally():
+    """A distribution day stops counting once the index rallies 5% above its
+    close — absorbed selling is no longer a warning."""
+    from app.services.market_regime import _distribution_days
+
+    n = 40
+    close = np.full(n, 100.0)
+    vol = np.full(n, 1_000_000.0)
+    close[20] = 99.0        # -1% inside the 25-session window ...
+    vol[20] = 1_500_000.0   # ... on higher volume = distribution
+    # without a rally it still counts
+    assert _distribution_days(pd.Series(close), pd.Series(vol)) >= 1
+    # rally 6% above the distribution day's close -> expired
+    close[30:] = 99.0 * 1.06
+    assert _distribution_days(pd.Series(close), pd.Series(vol)) == 0
+
+
+def test_stalling_day_counts_as_distribution():
+    """Churn near highs — an up session making no headway (<= +0.2%) on higher
+    volume, closing in the lower half of its range — is distribution."""
+    from app.services.market_regime import _distribution_days
+
+    n = 30
+    close = np.linspace(100, 110, n)
+    vol = np.full(n, 1_000_000.0)
+    high = close * 1.001
+    low = close * 0.999
+    # stall on the last bar: +0.1% close, big volume, wide range, close near low
+    close[-1] = close[-2] * 1.001
+    vol[-1] = 2_000_000.0
+    high[-1] = close[-2] * 1.02   # ran 2% intraday...
+    low[-1] = close[-2] * 0.999   # ...and gave it all back
+    count = _distribution_days(
+        pd.Series(close), pd.Series(vol), high=pd.Series(high), low=pd.Series(low)
+    )
+    assert count >= 1
