@@ -832,6 +832,8 @@ def _map_feature_to_scan_result(
         "market_above_50dma": d.get("market_above_50dma"),
         "market_above_200dma": d.get("market_above_200dma"),
         "market_50_above_200dma": d.get("market_50_above_200dma"),
+        "market_ftd_date": d.get("market_ftd_date"),
+        "market_ftd_days_since": d.get("market_ftd_days_since"),
         # Rating-basis explainability
         "rating_basis_score": d.get("rating_basis_score"),
         "rating_basis_screener": d.get("rating_basis_screener"),

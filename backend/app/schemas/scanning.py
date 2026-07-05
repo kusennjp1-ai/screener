@@ -253,6 +253,8 @@ class ScanResultItem(BaseModel):
     market_health: Optional[float] = None       # 0-100
     market_exposure_pct: Optional[int] = None   # 0-100 suggested equity exposure
     market_distribution_days: Optional[int] = None
+    market_ftd_date: Optional[str] = None       # live follow-through-day date (bottom confirmation)
+    market_ftd_days_since: Optional[int] = None  # sessions since the FTD (drives the exposure ladder)
     market_above_50dma: Optional[bool] = None
     market_above_200dma: Optional[bool] = None
     market_50_above_200dma: Optional[bool] = None
@@ -412,6 +414,8 @@ class ScanResultItem(BaseModel):
             market_health=ef.get("market_health"),
             market_exposure_pct=ef.get("market_exposure_pct"),
             market_distribution_days=ef.get("market_distribution_days"),
+            market_ftd_date=ef.get("market_ftd_date"),
+            market_ftd_days_since=ef.get("market_ftd_days_since"),
             market_above_50dma=ef.get("market_above_50dma"),
             market_above_200dma=ef.get("market_above_200dma"),
             market_50_above_200dma=ef.get("market_50_above_200dma"),

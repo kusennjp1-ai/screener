@@ -39,6 +39,8 @@ export default function MarketRegimeBanner({ results }) {
   const health = row.market_health;
   const exposure = row.market_exposure_pct;
   const distDays = row.market_distribution_days;
+  const ftdDate = row.market_ftd_date;
+  const ftdAge = row.market_ftd_days_since;
 
   return (
     <Paper
@@ -53,6 +55,16 @@ export default function MarketRegimeBanner({ results }) {
       <Tooltip title={meta.hint} arrow>
         <Chip size="small" color={meta.color} label={meta.label} />
       </Tooltip>
+      {ftdDate && (
+        <GlossaryLabel term="follow_through">
+          <Chip
+            size="small"
+            color="info"
+            variant="outlined"
+            label={`FTD ${ftdDate}${ftdAge != null ? ` (+${ftdAge}d)` : ''}`}
+          />
+        </GlossaryLabel>
+      )}
       {health != null && (
         <GlossaryLabel term="market_health">
           <Typography component="span" variant="body2" color="text.secondary">

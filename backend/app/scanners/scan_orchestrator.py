@@ -750,6 +750,10 @@ class ScanOrchestrator:
             regime = assess_market_regime(bench)
             if regime.get("regime") is None:
                 return {}
+            # A live follow-through day is why the regime can read
+            # confirmed_uptrend while the MA structure is still broken — the
+            # UI banner needs it to explain the pilot-sized exposure.
+            ftd = (regime.get("components") or {}).get("follow_through") or {}
             return {
                 "market_regime": regime.get("regime"),
                 "market_health": regime.get("health"),
@@ -758,6 +762,8 @@ class ScanOrchestrator:
                 "market_above_50dma": regime.get("above_50dma"),
                 "market_above_200dma": regime.get("above_200dma"),
                 "market_50_above_200dma": regime.get("fifty_above_200"),
+                "market_ftd_date": ftd.get("date"),
+                "market_ftd_days_since": ftd.get("days_since"),
             }
         except Exception:  # noqa: BLE001 - regime must never abort a scan
             logger.warning(

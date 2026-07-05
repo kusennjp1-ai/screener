@@ -905,6 +905,8 @@ def _map_row_to_domain(
     extended["market_above_50dma"] = details.get("market_above_50dma")
     extended["market_above_200dma"] = details.get("market_above_200dma")
     extended["market_50_above_200dma"] = details.get("market_50_above_200dma")
+    extended["market_ftd_date"] = details.get("market_ftd_date")
+    extended["market_ftd_days_since"] = details.get("market_ftd_days_since")
     # Rating-basis explainability
     extended["rating_basis_score"] = details.get("rating_basis_score")
     extended["rating_basis_screener"] = details.get("rating_basis_screener")
