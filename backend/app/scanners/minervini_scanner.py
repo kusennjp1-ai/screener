@@ -676,20 +676,28 @@ class MinerviniScanner(BaseStockScreener):
 
         # Determine if passes the strict Minervini Trend Template.
         #
-        # This is the canonical 8-point template expressed as a strict boolean
-        # AND of every condition — NOT a soft score threshold. Previously this
-        # was `score >= 70 and rs_rating >= 70 and stage == 2`, which let stocks
-        # far below their 52-week high (and without the full MA stack) "pass".
+        # This is the canonical published template expressed as a strict boolean
+        # AND of the 8 conditions — NOT a soft score threshold, and NOT more
+        # than the 8:
         #
-        #   - rs_rating >= 70                 (relative strength leader)
-        #   - stage == 2                      (Stage 2 advancing)
-        #   - ma_analysis meets_all_criteria  (price>50>150>200, 50>150>200,
-        #                                      200-day MA rising >= 1 month)
-        #   - >= 30% above the 52-week low
-        #   - within 25% of the 52-week high
+        #   - ma_analysis meets_all_criteria  (1-4, 8: price>50>150>200 stack,
+        #                                      150>200, 200-day MA rising >= 1mo,
+        #                                      price above the 50-day)
+        #   - >= 30% above the 52-week low    (5)
+        #   - within 25% of the 52-week high  (6)
+        #   - rs_rating >= 70                 (7: relative strength leader)
+        #
+        # "Stage 2" is the LABEL these 8 conditions jointly define (Minervini:
+        # the template "ensures the stock is in a Stage 2 uptrend") — not a 9th
+        # veto. The previous extra `stage == 2` requirement, a 60-day
+        # regression-slope classifier (needs > ~3% gain per 60 sessions),
+        # rejected slow-grinding advances that satisfy every published
+        # condition — entries Minervini demonstrably took (the 908-idea harness
+        # measured TT at only 61.7% of his entries vs 90% for the band-based
+        # Stage-2 read). The regression stage still contributes 20 score points
+        # and ships in details["stage"] as a quality overlay.
         passes_template = bool(
             rs_rating >= 70
-            and stage == 2
             and ma_analysis["meets_all_criteria"]
             and position_52w["meets_low_criteria"]
             and position_52w["meets_high_criteria"]
