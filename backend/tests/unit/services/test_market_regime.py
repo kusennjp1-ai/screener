@@ -57,17 +57,17 @@ def test_insufficient_data_returns_none():
 # --- follow-through day (O'Neil bottom confirmation) -------------------------
 
 def _correction_with_rally(ftd_day: int, ftd_gain: float, ftd_vol_mult: float,
-                           rally_days: int = 10) -> pd.DataFrame:
+                           rally_days: int = 10, drift: float = 0.003) -> pd.DataFrame:
     """A long uptrend, a ~15% correction, then a rally attempt. On attempt day
     ``ftd_day`` the index gains ``ftd_gain`` on ``ftd_vol_mult``x prior volume;
-    other rally days drift +0.3% on flat volume."""
+    other rally days drift ``drift`` on flat volume."""
     up = np.linspace(300, 460, 220)
     down = np.linspace(460, 391, 40)          # -15% correction into the low
     closes = list(up) + list(down)
     vols = [1_000_000.0] * len(closes)
     c = closes[-1]
     for d in range(1, rally_days + 1):
-        gain = ftd_gain if d == ftd_day else 0.003
+        gain = ftd_gain if d == ftd_day else drift
         c *= 1 + gain
         closes.append(c)
         vols.append(vols[-1] * (ftd_vol_mult if d == ftd_day else 1.0))
@@ -80,10 +80,28 @@ def test_ftd_upgrades_correction_to_pilot_uptrend():
     MAs could recover."""
     r = assess_market_regime(_correction_with_rally(ftd_day=5, ftd_gain=0.015, ftd_vol_mult=1.6))
     assert r["regime"] == "confirmed_uptrend"
-    assert r["exposure_pct"] == 50  # pilot buys, not a mature uptrend's 100
+    assert r["exposure_pct"] == 50  # one week in: half exposure, not 100
     ftd = r["components"]["follow_through"]
     assert ftd is not None and ftd["attempt_day"] == 5
     assert ftd["gain_pct"] >= 1.2
+
+
+def test_progressive_exposure_ladder_after_the_ftd():
+    """Exposure steps up as the new rally proves itself: 25% in the first
+    sessions after the FTD, 50% after a week, 75% after three clean weeks."""
+    fresh = assess_market_regime(_correction_with_rally(
+        ftd_day=5, ftd_gain=0.015, ftd_vol_mult=1.6, rally_days=7))    # 2 sessions after
+    week = assess_market_regime(_correction_with_rally(
+        ftd_day=5, ftd_gain=0.015, ftd_vol_mult=1.6, rally_days=12))   # 7 sessions after
+    # low drift keeps the MA structure broken (still 'correction' by MAs) so
+    # the 3-weeks-proven rung is exercised — deep-bear shape (2009/2020-like)
+    proven = assess_market_regime(_correction_with_rally(
+        ftd_day=5, ftd_gain=0.015, ftd_vol_mult=1.6, rally_days=25, drift=0.0005))
+    assert fresh["exposure_pct"] == 25
+    assert week["exposure_pct"] == 50
+    assert proven["exposure_pct"] == 75
+    for r in (fresh, week, proven):
+        assert r["regime"] == "confirmed_uptrend"
 
 
 def test_no_ftd_before_attempt_day_4():

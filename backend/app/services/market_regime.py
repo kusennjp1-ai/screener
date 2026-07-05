@@ -60,9 +60,24 @@ FTD_MIN_DAY = 4             # earliest attempt day that can confirm
 FTD_MAX_DAY = 15            # a "follow-through" past ~3 weeks is stale
 FTD_LOOKBACK = 120          # sessions searched for the correction low
 FTD_MIN_DECLINE = 0.06      # the low must cap a >= 6% decline to need an FTD
-# A fresh FTD warrants PILOT exposure only (Minervini/IBD: probe with initial
-# buys, scale as they show traction) — not the full 100% of a mature uptrend.
-FTD_PILOT_EXPOSURE = 50
+# Progressive exposure after an FTD (Minervini/IBD Market School: probe with
+# pilot buys, add only as the rally proves itself; full size belongs to a
+# mature uptrend whose MA structure has recovered — the base-regime path).
+# True progressive exposure feeds on per-position traction, which a market
+# scan cannot see; rally AGE + post-FTD distribution is the honest stateless
+# proxy: fresh confirmation -> 25%, surviving 1 week -> 50%, surviving 3 weeks
+# clean (<= 2 new distribution days) -> 75%.
+FTD_EXPOSURE_FRESH = 25     # sessions 0-4 after the FTD
+FTD_EXPOSURE_WEEK = 50      # sessions 5-14
+FTD_EXPOSURE_PROVEN = 75    # 15+ sessions with <= 2 distribution days since
+
+
+def _ftd_exposure(days_since: int, dist_since: int) -> int:
+    if days_since < 5:
+        return FTD_EXPOSURE_FRESH
+    if days_since < 15:
+        return FTD_EXPOSURE_WEEK
+    return FTD_EXPOSURE_PROVEN if dist_since <= 2 else FTD_EXPOSURE_WEEK
 
 
 def _distribution_days(
@@ -249,7 +264,7 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
         ftd = detect_follow_through(index_ohlcv)
         if ftd is not None and ftd["dist_since_ftd"] < DIST_CORRECTION:
             regime = "confirmed_uptrend"
-            exposure_pct = FTD_PILOT_EXPOSURE
+            exposure_pct = _ftd_exposure(int(ftd["days_since"]), int(ftd["dist_since_ftd"]))
         else:
             ftd = None
 
