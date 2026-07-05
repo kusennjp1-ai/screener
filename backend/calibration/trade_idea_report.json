@@ -1,0 +1,180 @@
+{
+  "overall": {
+    "n": 588,
+    "cov_pct": 64.8,
+    "tt_pct": 61.7,
+    "s2_pct": 90.0,
+    "setup_pct": 78.6,
+    "rs70_pct": 73.6,
+    "fire_pct": 88.6,
+    "mscore": 95.5,
+    "gate_pct": 40.0
+  },
+  "control": {
+    "n": 575,
+    "cov_pct": 100.0,
+    "tt_pct": 35.9,
+    "s2_pct": 37.9,
+    "setup_pct": 26.6,
+    "rs70_pct": 54.7,
+    "fire_pct": 64.2,
+    "mscore": 71.6,
+    "gate_pct": 15.3
+  },
+  "per_year": {
+    "2022": {
+      "n": 1,
+      "cov_pct": 100.0,
+      "tt_pct": 0.0,
+      "s2_pct": 0.0,
+      "setup_pct": 0.0,
+      "rs70_pct": 0.0,
+      "fire_pct": 100.0,
+      "mscore": 72.8,
+      "gate_pct": 0.0
+    },
+    "2021": {
+      "n": 80,
+      "cov_pct": 70.2,
+      "tt_pct": 71.2,
+      "s2_pct": 90.0,
+      "setup_pct": 78.8,
+      "rs70_pct": 83.8,
+      "fire_pct": 87.5,
+      "mscore": 97.5,
+      "gate_pct": 48.8
+    },
+    "2020": {
+      "n": 120,
+      "cov_pct": 70.6,
+      "tt_pct": 65.5,
+      "s2_pct": 90.8,
+      "setup_pct": 76.7,
+      "rs70_pct": 83.2,
+      "fire_pct": 90.0,
+      "mscore": 97.0,
+      "gate_pct": 28.3
+    },
+    "2019": {
+      "n": 48,
+      "cov_pct": 73.8,
+      "tt_pct": 70.2,
+      "s2_pct": 93.8,
+      "setup_pct": 87.5,
+      "rs70_pct": 72.3,
+      "fire_pct": 87.5,
+      "mscore": 96.2,
+      "gate_pct": 37.5
+    },
+    "2018": {
+      "n": 84,
+      "cov_pct": 73.7,
+      "tt_pct": 54.2,
+      "s2_pct": 92.9,
+      "setup_pct": 83.3,
+      "rs70_pct": 67.5,
+      "fire_pct": 94.0,
+      "mscore": 94.4,
+      "gate_pct": 21.4
+    },
+    "2017": {
+      "n": 53,
+      "cov_pct": 66.2,
+      "tt_pct": 38.5,
+      "s2_pct": 86.8,
+      "setup_pct": 71.7,
+      "rs70_pct": 51.9,
+      "fire_pct": 90.6,
+      "mscore": 92.3,
+      "gate_pct": 64.2
+    },
+    "2016": {
+      "n": 35,
+      "cov_pct": 81.4,
+      "tt_pct": 51.5,
+      "s2_pct": 82.9,
+      "setup_pct": 74.3,
+      "rs70_pct": 63.6,
+      "fire_pct": 82.9,
+      "mscore": 92.7,
+      "gate_pct": 48.6
+    },
+    "2015": {
+      "n": 34,
+      "cov_pct": 69.4,
+      "tt_pct": 61.8,
+      "s2_pct": 76.5,
+      "setup_pct": 70.6,
+      "rs70_pct": 76.5,
+      "fire_pct": 88.2,
+      "mscore": 94.0,
+      "gate_pct": 20.6
+    },
+    "2014": {
+      "n": 34,
+      "cov_pct": 57.6,
+      "tt_pct": 54.5,
+      "s2_pct": 91.2,
+      "setup_pct": 67.6,
+      "rs70_pct": 63.6,
+      "fire_pct": 88.2,
+      "mscore": 93.9,
+      "gate_pct": 55.9
+    },
+    "2013": {
+      "n": 37,
+      "cov_pct": 57.8,
+      "tt_pct": 63.9,
+      "s2_pct": 94.6,
+      "setup_pct": 86.5,
+      "rs70_pct": 69.4,
+      "fire_pct": 86.5,
+      "mscore": 96.5,
+      "gate_pct": 48.6
+    },
+    "2012": {
+      "n": 24,
+      "cov_pct": 42.9,
+      "tt_pct": 75.0,
+      "s2_pct": 95.8,
+      "setup_pct": 91.7,
+      "rs70_pct": 79.2,
+      "fire_pct": 83.3,
+      "mscore": 96.0,
+      "gate_pct": 58.3
+    },
+    "2011": {
+      "n": 8,
+      "cov_pct": 38.1,
+      "tt_pct": 75.0,
+      "s2_pct": 100.0,
+      "setup_pct": 87.5,
+      "rs70_pct": 87.5,
+      "fire_pct": 62.5,
+      "mscore": 95.8,
+      "gate_pct": 0.0
+    },
+    "2010": {
+      "n": 23,
+      "cov_pct": 46.0,
+      "tt_pct": 78.3,
+      "s2_pct": 91.3,
+      "setup_pct": 78.3,
+      "rs70_pct": 87.0,
+      "fire_pct": 87.0,
+      "mscore": 96.8,
+      "gate_pct": 52.2
+    },
+    "1997": {
+      "n": 7,
+      "cov_pct": 31.8,
+      "tt_pct": 57.1,
+      "s2_pct": 85.7,
+      "setup_pct": 71.4,
+      "rs70_pct": 71.4,
+      "fire_pct": 100.0,
+      "mscore": 97.2,
+      "gate_pct": 71.4
+    }
+  }
+}
