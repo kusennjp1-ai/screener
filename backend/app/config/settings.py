@@ -121,6 +121,12 @@ class Settings(BaseSettings):
     server_auth_session_ttl_hours: int = 24
     server_auth_secure_cookie: bool = False
     server_expose_api_docs: bool = False
+    # Staleness gate for manual scans. ON by default so scans never run on
+    # out-of-date prices. Set false for a single-user local deployment that
+    # wants to scan whatever cached data exists (e.g. when the market-data
+    # vendor only has history through an earlier date than the calendar's last
+    # completed trading day). See services/market_data_freshness.py.
+    scan_freshness_gate_enabled: bool = True
 
     # Admin API key (required for config endpoints)
     admin_api_key: str = ""

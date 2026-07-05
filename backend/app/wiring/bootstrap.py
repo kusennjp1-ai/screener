@@ -730,16 +730,23 @@ def get_create_scan_use_case() -> CreateScanUseCase:
     any kwarg as a client-controllable query parameter, which could let a
     caller disable the gate with ``?with_freshness_gate=false``.
 
+    The gate can be turned off server-side via ``SCAN_FRESHNESS_GATE_ENABLED``
+    (settings, default on). This is a deployment-owner switch read from the
+    environment — not client-controllable — for single-user local runs that
+    want to scan whatever cached data exists.
+
     Internal non-HTTP callers (e.g. bootstrap scans that *populate* the cache
     and therefore can't be gated on that data already existing) must use
     :func:`get_create_scan_use_case_without_freshness_gate` instead.
     """
+    from app.config import settings
     from app.use_cases.scanning.create_scan import CreateScanUseCase
     from app.services.market_data_freshness import check_symbol_freshness
 
+    checker = check_symbol_freshness if settings.scan_freshness_gate_enabled else None
     return CreateScanUseCase(
         dispatcher=get_task_dispatcher(),
-        freshness_checker=check_symbol_freshness,
+        freshness_checker=checker,
     )
 
 

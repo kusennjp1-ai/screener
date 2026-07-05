@@ -25,6 +25,11 @@ x-app-env: &app-env
   SERVER_AUTH_SESSION_SECRET: ${SERVER_AUTH_SESSION_SECRET:-}
   SERVER_AUTH_SECURE_COOKIE: ${SERVER_AUTH_SECURE_COOKIE:-false}
   SERVER_EXPOSE_API_DOCS: ${SERVER_EXPOSE_API_DOCS:-false}
+  # Manual-scan staleness gate. ON by default (scans refuse stale prices). Set
+  # false for a single-user local run to scan whatever cached data exists —
+  # e.g. when the data vendor's latest history predates the calendar's last
+  # trading day, which would otherwise block scans permanently.
+  SCAN_FRESHNESS_GATE_ENABLED: ${SCAN_FRESHNESS_GATE_ENABLED:-true}
   HERMES_API_BASE: ${HERMES_API_BASE:-http://hermes:8642/v1}
   HERMES_API_KEY: ${HERMES_API_KEY:-}
   HERMES_MODEL: ${HERMES_MODEL:-hermes-agent}
