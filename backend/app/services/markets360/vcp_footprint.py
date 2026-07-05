@@ -23,8 +23,14 @@ Output (all keys always present; ``None``/``False`` on insufficient data):
   tight_near_highs    price coiled within ~5% of the base high
   pivot               buy-point price (resistance to break)
   distance_to_pivot_pct  +ve = still below pivot, -ve = already through it
-  ready_for_breakout  within ~3% under the pivot (actionable now)
-  near_pivot          within ~8% under the pivot (Minervini buy-zone watch)
+  ready_for_breakout  VCP detected AND coiled within 3% under the pivot
+  near_pivot          VCP detected AND within 8% under / 5% over the pivot
+                      (the 5% chase limit — Minervini never buys further past
+                      the buy point)
+
+Both pivot states are gated on ``detected``: proximity to a recent high with no
+contraction structure is not a setup, and ungated flags fired on ~96% of random
+uptrend days (zero timing information — see scripts/validate_trade_ideas.py).
 """
 from __future__ import annotations
 
@@ -50,6 +56,9 @@ def _f(v: object) -> Optional[float]:
 # trigger can be hit the moment the breakout fires. Tighter than the legacy 3%
 # "ready" flag, this 8% band is the "on the radar" zone.
 NEAR_PIVOT_PCT = 8.0
+# Minervini's chase limit: a breakout bought more than ~5% above the pivot is a
+# chase, so the radar zone extends at most 5% PAST the pivot (negative distance).
+MAX_PAST_PIVOT_PCT = 5.0
 
 _EMPTY: Dict[str, object] = {
     "detected": False,
@@ -100,9 +109,17 @@ def compute_vcp_footprint(
 
     pivot = _f(pivot_info.get("pivot"))
     dist = _f(pivot_info.get("distance_pct"))  # +ve => current price below pivot
-    near_pivot = (
-        dist is not None and 0.0 <= dist <= NEAR_PIVOT_PCT
-    ) or bool(pivot_info.get("ready_for_breakout"))
+    detected = bool(legacy.get("vcp_detected", False))
+    # Actionable pivot states require the VCP STRUCTURE, not just proximity to a
+    # recent high: without the `detected` gate, any uptrending stock sat "near
+    # pivot" ~96% of the time (measured on the fixtures via the trade-idea
+    # harness control), which carries zero timing information. Minervini's
+    # radar zone = a completed contraction coiling within 8% under the pivot,
+    # or a fresh breakout no more than the ~5% chase limit above it.
+    near_pivot = detected and (
+        dist is not None and -MAX_PAST_PIVOT_PCT <= dist <= NEAR_PIVOT_PCT
+    )
+    ready = detected and bool(pivot_info.get("ready_for_breakout", False))
 
     score = _f(legacy.get("vcp_score"))
     # legacy bases are most-recent-first; reverse to oldest->newest footprint
@@ -110,7 +127,7 @@ def compute_vcp_footprint(
         _f(d) for d in reversed(legacy.get("bases_depth", []) or []) if _f(d) is not None
     ]
     return {
-        "detected": bool(legacy.get("vcp_detected", False)),
+        "detected": detected,
         "score": round(score, 1) if score is not None else None,
         "num_contractions": int(legacy.get("num_bases", 0) or 0),
         "contraction_ratio": _f(legacy.get("contraction_ratio")),
@@ -119,6 +136,6 @@ def compute_vcp_footprint(
         "tight_near_highs": bool(legacy.get("tight_near_highs", False)),
         "pivot": pivot,
         "distance_to_pivot_pct": dist,
-        "ready_for_breakout": bool(pivot_info.get("ready_for_breakout", False)),
+        "ready_for_breakout": ready,
         "near_pivot": bool(near_pivot),
     }

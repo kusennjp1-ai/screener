@@ -416,8 +416,12 @@ class VCPDetector:
         else:
             distance_pct = None
 
-        # Ready for breakout if within 3% of pivot
-        ready_for_breakout = distance_pct is not None and distance_pct <= 3
+        # Ready for breakout = coiled within 3% UNDER the pivot. The lower bound
+        # matters: distance goes negative once price clears the pivot, and
+        # without it every stock extended past its base stayed "ready" forever
+        # (Minervini: past the pivot it's a breakout or a chase, never "ready";
+        # he refuses entries more than ~5% above the buy point).
+        ready_for_breakout = distance_pct is not None and 0 <= distance_pct <= 3
 
         return {
             "pivot": round(pivot, 2) if pivot else None,
