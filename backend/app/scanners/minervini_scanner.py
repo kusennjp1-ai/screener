@@ -25,6 +25,7 @@ from .criteria.adr_calculator import ADRCalculator
 from .criteria.rs_sparkline import RSSparklineCalculator
 from .criteria.price_sparkline import PriceSparklineCalculator
 from .criteria.beta_calculator import BetaCalculator
+from app.services.market_regime import assess_market_regime
 
 logger = logging.getLogger(__name__)
 
@@ -480,6 +481,17 @@ class MinerviniScanner(BaseStockScreener):
                 }
             }
 
+            # SEPA rule 1: assess the general market from the benchmark so the
+            # rating can be capped in a correction/downtrend. The template
+            # verdict itself stays market-independent (setups are setups); an
+            # unknown regime (no/short benchmark) never blocks.
+            regime = assess_market_regime(spy_data)
+            details["market_regime"] = regime.get("regime")
+            details["market_uptrend"] = (
+                regime["regime"] in ("confirmed_uptrend", "uptrend_under_pressure")
+                if regime.get("regime") is not None else None
+            )
+
             # Calculate rating
             rating = self.calculate_rating(score_result["score"], details)
 
@@ -513,10 +525,15 @@ class MinerviniScanner(BaseStockScreener):
         passes_template = bool(details.get("passes_template", False))
 
         if passes_template:
-            if score >= 85:
-                return "Strong Buy"
-            else:
-                return "Buy"
+            rating = "Strong Buy" if score >= 85 else "Buy"
+            # SEPA rule 1 — trade WITH the general market. A perfect template
+            # in a correction/downtrend is a watchlist name, not a buy (the
+            # setup itself, passes_template, stays market-independent).
+            # market_uptrend is None when no benchmark was available; an
+            # unknown market never blocks (matches markets360's fallback).
+            if details.get("market_uptrend") is False:
+                rating = "Watch"
+            return rating
         elif score >= 60:
             return "Watch"
         else:
