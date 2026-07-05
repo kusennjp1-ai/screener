@@ -659,24 +659,67 @@ class ScanOrchestrator:
         stock_data: StockData,
         screener_results: Dict[str, ScreenerResult],
     ) -> ExecutionState:
-        """Classify one stock's execution state from the Minervini details.
+        """Classify one stock's execution state with fallback input sourcing.
 
-        Pulls the inputs the decision tree needs (price, SMA50/200, VCP pivot,
-        recent contraction low, breakout volume ratio) from the already-computed
-        Minervini screener output. Defensive by design: any missing input or
-        unexpected error yields ``ExecutionState.UNKNOWN`` (a no-op in the cap),
-        so one bad symbol never aborts the per-symbol scan loop.
+        Input precedence per field: Minervini screener details -> Markets 360
+        details (its VCP-footprint pivot / volume surge) -> direct computation
+        from the price data (SMAs, 50-day volume ratio). Before the fallbacks,
+        any scan not running the minervini screener got UNKNOWN and therefore
+        NO State Cap — an extended name could keep a Strong Buy just because a
+        different screener produced it. Defensive by design: any unexpected
+        error yields ``ExecutionState.UNKNOWN`` (a no-op in the cap), so one
+        bad symbol never aborts the per-symbol scan loop.
         """
         try:
-            minervini = screener_results.get("minervini")
-            details = (minervini.details or {}) if minervini is not None else {}
+            def _details(name: str) -> Dict:
+                r = screener_results.get(name)
+                return (r.details or {}) if r is not None else {}
+
+            minervini = _details("minervini")
+            m360 = _details("markets360")
+            price_df = getattr(stock_data, "price_data", None)
+            close = (
+                price_df["Close"]
+                if price_df is not None and "Close" in getattr(price_df, "columns", [])
+                else None
+            )
+
+            def _sma(n: int):
+                if close is None or len(close) < n:
+                    return None
+                return float(close.iloc[-n:].mean())
+
+            sma50 = minervini.get("ma_50")
+            if sma50 is None:
+                sma50 = _sma(50)
+            sma200 = minervini.get("ma_200")
+            if sma200 is None:
+                sma200 = _sma(200)
+
+            pivot = minervini.get("vcp_pivot")
+            if pivot is None:
+                pivot = m360.get("pivot")
+
+            contraction_low = minervini.get("vcp_base_low")
+            if contraction_low is None and price_df is not None and "Low" in price_df.columns and len(price_df) >= 15:
+                # the right-side base low (same window risk.py hides stops under)
+                contraction_low = float(price_df["Low"].tail(15).min())
+
+            volume_ratio = minervini.get("volume_surge")
+            if volume_ratio is None:
+                volume_ratio = m360.get("volume_surge")
+            if volume_ratio is None and price_df is not None and "Volume" in price_df.columns and len(price_df) >= 51:
+                avg50 = float(price_df["Volume"].iloc[-51:-1].mean())
+                if avg50 > 0:
+                    volume_ratio = float(price_df["Volume"].iloc[-1]) / avg50
+
             return compute_execution_state(
                 price=stock_data.get_current_price(),
-                sma50=details.get("ma_50"),
-                sma200=details.get("ma_200"),
-                pivot=details.get("vcp_pivot"),
-                contraction_low=details.get("vcp_base_low"),
-                volume_ratio=details.get("volume_surge"),
+                sma50=sma50,
+                sma200=sma200,
+                pivot=pivot,
+                contraction_low=contraction_low,
+                volume_ratio=volume_ratio,
             )
         except Exception:  # noqa: BLE001 - classification must never abort a scan
             logger.warning(

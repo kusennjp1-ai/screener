@@ -741,10 +741,13 @@ def _make_minervini_like(details: dict, score: float = 90.0, passes: bool = True
 
 class TestScanOrchestratorExecutionState:
     def test_result_carries_execution_state_fields(self):
-        # No minervini screener -> inputs missing -> UNKNOWN, a no-op cap.
+        # No minervini screener: the orchestrator now falls back to computing
+        # SMAs/volume from the price data itself, so the state is classified
+        # (flat synthetic tape at its own MAs, no pivot -> pre_breakout) and
+        # the State Cap axis works for every screener combination.
         orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
         result = orch.scan_stock_multi("TEST", ["alpha"], composite_method="weighted_average")
-        assert result["execution_state"] == "unknown"
+        assert result["execution_state"] == "pre_breakout"
         assert result["execution_cap_applied"] is False
         assert "execution_cap_reason" in result
 
@@ -762,9 +765,32 @@ class TestScanOrchestratorExecutionState:
         }
         assert orch._compute_execution_state(stock, results) is ExecutionState.BREAKOUT  # noqa: SLF001
 
-    def test_compute_execution_state_unknown_without_minervini(self):
+    def test_compute_execution_state_falls_back_to_price_data(self):
+        # Without any screener details the SMAs/volume ratio come straight from
+        # the price data: flat tape at its own MAs, no pivot -> PRE_BREAKOUT.
         orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
         stock = _make_stock_data("TEST")
+        assert orch._compute_execution_state(stock, {}) is ExecutionState.PRE_BREAKOUT  # noqa: SLF001
+
+    def test_compute_execution_state_uses_markets360_pivot_fallback(self):
+        # markets360's VCP-footprint pivot drives the pivot bands when the
+        # minervini screener didn't run: price 100 vs pivot 80 = +25% above
+        # -> OVEREXTENDED (with flat MAs at 100 the MA checks pass first).
+        orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
+        stock = _make_stock_data("TEST")
+        results = {
+            "markets360": ScreenerResult(
+                score=80.0, passes=True, rating="Buy", breakdown={},
+                details={"pivot": 80.0, "volume_surge": 1.0},
+                screener_name="markets360",
+            )
+        }
+        assert orch._compute_execution_state(stock, results) is ExecutionState.OVEREXTENDED  # noqa: SLF001
+
+    def test_compute_execution_state_unknown_without_price_data(self):
+        orch, _, _ = _build_orchestrator([("alpha", 75.0, True)])
+        stock = _make_stock_data("TEST")
+        stock.price_data = None
         assert orch._compute_execution_state(stock, {}) is ExecutionState.UNKNOWN  # noqa: SLF001
 
     def test_overextended_minervini_caps_rating_to_pass_but_keeps_score(self):
