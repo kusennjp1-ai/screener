@@ -14,6 +14,7 @@
 | FIRE±5 fixtures基準率(コントロール) | 95.8% → **54.2%** (C1後) | 2026-07-05 | `validate_trade_ideas.py --fixtures` |
 | 908トレード実測 @C1 (CIベースライン) | COV 64.8 / TT 61.7 / S2 90.0 / SETUP 78.6 / RS70 73.6 / FIRE±5 88.6 / MSCORE 95.5 / GATE 40.0（判別力: SETUP +52.0pp, FIRE±5 +24.4pp） | 2026-07-05 | `backend/calibration/trade_idea_report.md`（CI） |
 | 908トレード実測 @C3 | GATE 40.0→**45.1**（2011: 0→75, 2020: 28.3→45.8）、control 19.7、他metric不変 | 2026-07-05 | ローカル再測定（バンドル、〜7分） |
+| 908トレード実測 @C6 | TT 61.7→**69.7**（control 35.9→39.2のみ）→ **TT判別力 +25.8→+30.5pp** | 2026-07-05 | ローカル再測定 |
 | W3.2 RS較正 | KEEP 40/20/20/20 (T+21 excess +1.79%, t=+9.63, n=1978) | 済 | `backend/calibration/W3.2_rs_weight_calibration.md` |
 
 ## サイクルログ
@@ -53,8 +54,13 @@
 ### C6 — 2026-07-05 passes_templateを公刊8条件に正典化（コミット直近）
 - **変更**: 非正準の9つ目のベトー（60日回帰スロープStage分類）をpasses_templateから除去。8条件（MAスタック+200日上向き / 52週位置 / RS≥70）の厳密ANDに。回帰Stageはスコア20点とdetails["stage"]に残存。
 - **根拠**: 実測でTT 61.7% vs バンドStage-2 90.0%。ピン留めテスト：+52%/年のリーダーが+2.9%/70日のグラインドで「Stage 3 Topping」誤読、8条件は全成立。
-- **検証**: 新テスト2、205 passed、golden 43。**908実測はバックグラウンド測定中**（report_c6）。
+- **検証**: 新テスト2、205 passed、golden 43。**908実測: TT 61.7→69.7%、判別力+25.8→+30.5pp**（エントリー側が+8.0pp、コントロール側は+3.3ppのみ＝ベトーは本人のエントリーを選択的に落としていた）。
 - **次**: C7 progressive exposure ladder。
+
+### C7 — 2026-07-05 Progressive exposure ladder（コミット直近）
+- **変更**: FTD後の固定50%を段階化——0-4営業日25% / 5-14日50% / 15日以上かつ分配≤2日で75% / MA回復でベース経路100%。遷移は滑らか（20→25→50→55→100）。
+- **検証**: 3段すべてピン留め、206 passed、golden 43。
+- **次**: C8 FTD/exposureのUI露出（現状バナーに出ない）。
 
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
