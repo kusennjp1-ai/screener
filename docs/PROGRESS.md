@@ -62,6 +62,22 @@
 - **検証**: 3段すべてピン留め、206 passed、golden 43。
 - **次**: C8 FTD/exposureのUI露出（現状バナーに出ない）。
 
+### C8 — 2026-07-05 FTDをUIに露出（コミット 441ad47）
+- **変更**: market_ftd_date / market_ftd_days_since を orchestrator→repo×2→schema→ScanResultItem に配線。regimeバナーに「FTD 2026-06-30 (+3d)」チップ＋日本語グロッサリー（follow_through）。
+- **検証**: backend 369 passed、frontend banner 6/6、golden 43。
+- **次**: C9 execution stateフォールバック。
+
+### C9 — 2026-07-05 execution state入力フォールバック（コミット 3198064）
+- **変更**: 入力優先順位 minervini→markets360(footprint pivot/volume_surge)→価格データ直接計算(SMA50/200・15日安値・50日出来高比)。UNKNOWN は価格データ欠如時のみ。「minervini無し→unknown」のピンは意図的に更新。
+- **検証**: 新テスト3、235 passed、golden 43。gate-1の4failはstash検証で既存（NR7 numpy read-only、環境起因）。
+- **次**: C10 ブラウザ実証。
+
+### C10 — 2026-07-06 E2Eブラウザ実証＋バンドラベル修正（コミット 727b7ce）
+- **変更**: sandbox内にフルスタック構築（Postgres16+Redis+uvicorn+celery+vite、fixtures13銘柄シード、SERVER_AUTH_ENABLED=false / SCAN_FRESHNESS_GATE_ENABLED=false の実機動作確認）。PlaywrightでSCAN投入（UI→API→celery疎通）、M360ページ実描画確認（バンド・チャート・カード全部出る）。発見した欠陥「バンドラベルがストリップを覆う」をピル化で修正、1440px/375px両方で前後比較。
+- **検証**: スクショ前後比較（scratchpad/m360_bands_fixed_*.png）、markets360スイート+lint緑。
+- **教訓**: Redis再起動でprice cache消失→celeryがyfinanceフォールバック（ブロック済み）に走る。sandbox E2Eは seed_from_realdata 再実行でRedis温め直しが必要。
+- **次**: C11 スキャン結果テーブル＋regimeバナーの実画面検証、モバイルヘッダー崩れ修正。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
