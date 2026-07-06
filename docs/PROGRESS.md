@@ -78,6 +78,16 @@
 - **教訓**: Redis再起動でprice cache消失→celeryがyfinanceフォールバック（ブロック済み）に走る。sandbox E2Eは seed_from_realdata 再実行でRedis温め直しが必要。
 - **次**: C11 スキャン結果テーブル＋regimeバナーの実画面検証、モバイルヘッダー崩れ修正。
 
+### C11 — 2026-07-06 NumPy 2.x互換（コミット ae2f08c）+ モバイルヘッダー（f596885）
+- **変更**: `np.float_`/`np.int_`（NumPy 2.0で削除）→ `np.floating`/`np.integer`（serialization.py + technical.py）。**sandbox E2Eで発見した実バグ**：numpy 2.x環境では全スキャンが永続化で失敗する。ヘッダーは375pxで1行化（タイトルmd未満非表示、ナビはスワイプ可能ストリップ、44pxタップ領域）。
+- **検証**: numpy 2.4.6でround-trip検証、golden 43、スイート175。ヘッダーはPlaywright 375px実写で確認。
+
+### C12 — 2026-07-06 freshness gate OFF時のcached-only読み（コミット 9565282）
+- **変更**: `_read_prices_bulk()` 抽出——gate ON: get_many（vendor refresh込み）/ OFF: get_many_cached_only（ネットワークゼロ）。トグルの意味論をパイプラインまで貫通。
+- **検証**: **sandbox E2Eでスキャン完走**（13銘柄、rating/regime=correction/execution_state全行、composite順位付き）。seamテスト2件、210 passed、golden 43。
+- **E2E教訓**: pkillはシェルごと死ぬことがある（exit 144）→ setsidで起動、旧celeryプロセスが旧バイトコードで走り続ける罠に注意。
+- **既知の残課題**: ①UIのPrevious Scansピッカーから完了スキャンを選ぶ自動化が未検証（API直では13件返る）②composite ratingは市場ゲート非適用（M360/minerviniの各rating capのみ）——SEPAルール1のグローバル適用は次サイクル候補 ③mobileのMA凡例重なり ④ベンチマークbundleはgate OFFでもvendorを試みる（SPYはDBにあるが未配線）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
