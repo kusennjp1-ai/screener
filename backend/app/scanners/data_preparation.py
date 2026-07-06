@@ -20,6 +20,7 @@ from ..services.price_cache_service import PriceCacheService
 from ..services.rate_limiter import RateLimitTimeoutError
 from ..services.security_master_service import SecurityMasterResolver, security_master_resolver
 from ..wiring.bootstrap import get_rate_limiter, get_yfinance_service
+from ..config import settings as app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -427,6 +428,26 @@ class DataPreparationLayer:
 
         return stock_data
 
+    def _read_prices_bulk(self, symbols, *, period, market_by_symbol):
+        """Bulk price reads honoring the scan freshness gate setting.
+
+        Gate ON (default): get_many — Redis -> DB -> vendor refresh of stale
+        symbols. Gate OFF: the operator opted into scanning whatever cached
+        data exists (SCAN_FRESHNESS_GATE_ENABLED=false), so read cached-only
+        with NO vendor refresh — otherwise a network-restricted deployment
+        fails the scan after download retries instead of degrading to the
+        cache it was promised.
+        """
+        if app_settings.scan_freshness_gate_enabled:
+            return self.price_cache.get_many(
+                symbols, period=period, market_by_symbol=market_by_symbol,
+            )
+        logger.info(
+            "Freshness gate disabled: cached-only price reads (no vendor refresh) for %d symbols",
+            len(symbols),
+        )
+        return self.price_cache.get_many_cached_only(symbols, period=period)
+
     def prepare_data_bulk(
         self,
         symbols: List[str],
@@ -473,7 +494,14 @@ class DataPreparationLayer:
         # Get cached data for all symbols in parallel
         # Price data is always needed (no needs_price_data flag)
         # IMPORTANT: Pass period so get_many() can fall back to database if Redis only has 30 days
-        cached_prices = self.price_cache.get_many(
+        #
+        # When the operator disabled the scan freshness gate
+        # (SCAN_FRESHNESS_GATE_ENABLED=false), they explicitly opted into
+        # scanning whatever cached data exists — so honor that HERE too:
+        # cached-only reads, no vendor refresh. Otherwise a scan on a
+        # network-restricted deployment fails outright after the download
+        # retries instead of degrading to the cache it was promised.
+        cached_prices = self._read_prices_bulk(
             unique_canonical_symbols,
             period=requirements.price_period,
             market_by_symbol=market_by_symbol,
