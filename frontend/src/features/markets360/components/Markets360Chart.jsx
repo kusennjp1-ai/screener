@@ -27,9 +27,9 @@ const BAND_COLOR = {
   sell: '#9a3b32', high: '#9a3b32', weak: '#9a3b32',
 };
 const BAND_ROWS = [
-  { key: 'pressure_history', label: 'Minervini Pressure' },
-  { key: 'buy_risk_history', label: 'Minervini Buy Risk (Colors)' },
-  { key: 'tpr_history', label: 'Minervini TPR (Colors)' },
+  { key: 'pressure_history', label: 'Pressure' },
+  { key: 'buy_risk_history', label: 'Buy Risk' },
+  { key: 'tpr_history', label: 'TPR' },
 ];
 // Buy-point chip styling per stage.
 const CHIP = {
@@ -56,7 +56,15 @@ function BandRow({ history, label, top, rightInset }) {
       {history.map((s, i) => (
         <div key={i} style={{ flex: 1, background: BAND_COLOR[s] || '#3a3f4b' }} />
       ))}
-      <div style={{ position: 'absolute', left: 6, top: 0, fontSize: 11, color: '#e6e8ec', whiteSpace: 'nowrap', textShadow: '0 1px 2px #000' }}>
+      {/* Compact pill on a translucent backing so the label AND the band
+          colors both stay readable (the old full-width text covered the
+          strip, badly on 375px screens). */}
+      <div style={{
+        position: 'absolute', left: 4, top: 1, height: 11, lineHeight: '11px',
+        fontSize: 9, fontWeight: 700, letterSpacing: 0.3, color: '#d7dae0',
+        background: 'rgba(10,11,16,0.72)', borderRadius: 3, padding: '0 5px',
+        whiteSpace: 'nowrap',
+      }}>
         {label}
       </div>
     </div>
