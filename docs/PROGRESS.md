@@ -115,7 +115,7 @@
 ### C19（設計のみ・次コンテキストで実装） — TPRフルストリップ較正の方針
 - **現状**: right-edge一致は TPR 100%（12銘柄）だが、フルストリップ（時系列全体）はLLYハーネスで52%。ただしLLYハーネスはスクショからの近似価格で**ground truthがノイズ**。
 - **観測**: OURSのTPRはREALより早期にweakへ落ち、weakに長く留まる（ヒステリシス不足 or 条件の非対称）。REALはG→A→G→A→Rの遷移が滑らか＝**A（transition）の滞留が長い**。
-- **設計案**: ①minervini_bandsのTPRヒステリシス（strong→weak直行を禁止しtransition経由を強制、N=3-5日の確認待ち）②52週レンジをClose基準→High/Low基準に統一（scanner系との不一致もマップ指摘済み）③評価は`markets360_band_rightedge_eval.py`の12銘柄を**過去52週の各週末**に拡張した「週次right-edge系列」で行う（実OHLCV・スクショ非依存でノイズ排除）——一致率の分母を12→~600に増やしつつ真実性を保つ。
+- **設計案**: ①minervini_bandsのTPRヒステリシス（strong→weak直行を禁止しtransition経由を強制、N=3-5日の確認待ち）②52週レンジをClose基準→High/Low基準に統一（scanner系との不一致もマップ指摘済み）③【設計修正】週次遡及はground truth不在（スクショは各銘柄1時点のみ）で不可能。正しい評価軸：REALストリップ（スクショ由来のLLY/IBB系列）と OURS の**フリップ率・状態滞留時間の分布**を比較し、OURSの過剰フリップ/早期weak落ちをヒステリシスで是正する（9dff227のPressure較正と同じ手法をTPRに適用）。真値系列が無い区間の「一致率」を偽装しないこと。
 - **レッドライン**: right-edge 12銘柄の一致（P82/BR92/TPR100）を絶対に下げない。calibration/bands関連の既存テスト16件green維持。
 
 ### 環境メモ（復元用）
