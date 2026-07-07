@@ -119,6 +119,53 @@ def test_quarterly_series_picks_first_available_tag():
     assert series[(2025, 3)] == 1.6
 
 
+def _relabeled_facts(eps, rev, ni):
+    """EDGAR quirk: fy/fp describe the FILING's fiscal frame, so prior-year
+    comparative rows inside a newer 10-Q carry the NEWER fy. Build facts where
+    the 2024 quarters exist ONLY as comparatives labeled fy=2025 (filed with
+    the matching 2025 10-Q) — the shape that made the old (fy, q) keying lose
+    every YoY base ("missing/invalid YoY base" across large caps in CI)."""
+    filed_by_q = {1: "2025-05-01", 2: "2025-08-01", 3: "2025-11-01"}
+
+    def entries(values):
+        out = []
+        for (fy, q), val in values.items():
+            start, end = _QPERIODS[q]
+            out.append(_q(start.format(y=fy), end.format(y=fy), val,
+                          2025, f"Q{q}", filed=filed_by_q[q]))
+        return out
+
+    return {"facts": {"us-gaap": {
+        "EarningsPerShareDiluted": {"units": {"USD/shares": entries(eps)}},
+        "Revenues": {"units": {"USD": entries(rev)}},
+        "NetIncomeLoss": {"units": {"USD": entries(ni)}},
+    }}}
+
+
+def test_code33_survives_relabeled_comparatives():
+    facts = _relabeled_facts(_EPS, _REV, _NI)
+    # The old (fy, q) keying collapses each 2024 comparative onto its 2025
+    # sibling's key, so no year-ago quarter survives:
+    assert (2024, 1) not in quarterly_series(facts, EPS_TAGS, is_eps=True)
+    # Date-keyed Code 33 still finds every YoY base and the acceleration.
+    result = compute_code33_from_facts(facts)
+    assert result.passes is True, result.reason
+    assert result.quarters == ["FY2025Q3", "FY2025Q2", "FY2025Q1"]
+    assert result.eps_yoy[0] > result.eps_yoy[1] > result.eps_yoy[2]
+
+
+def test_quarterly_series_dated_dedupes_restatements_latest_filed_wins():
+    from app.services.sec_edgar_financials import quarterly_series_dated
+    facts = _facts(_EPS, _REV, _NI)
+    # A later-filed restatement of 2025 Q1 revenue (same period, new value).
+    facts["facts"]["us-gaap"]["Revenues"]["units"]["USD"].append(
+        _q("2025-01-01", "2025-03-31", 111, 2025, "Q1", filed="2026-02-15")
+    )
+    dated = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False)
+    by_end = {end: (val, label) for end, val, label in dated}
+    assert by_end["2025-03-31"] == (111, "FY2025Q1")  # restated value, original label
+
+
 def test_dated_quarterly_eps_returns_quarter_end_dates_excluding_annual():
     from app.services.sec_edgar_financials import dated_quarterly_eps
     facts = _facts(_EPS, _REV, _NI)
