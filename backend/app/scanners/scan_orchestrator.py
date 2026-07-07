@@ -588,6 +588,23 @@ class ScanOrchestrator:
             execution_cap = apply_execution_cap(adjustment.rating, execution_state)
             overall_rating = execution_cap.rating.value
 
+            # 7c-ter. SEPA rule 1 on the FINAL rating. Individual screeners cap
+            #     their own ratings by regime, but the best-fit rating could come
+            #     from a screener with no market gate (e.g. CANSLIM/SE), letting a
+            #     row read "Buy" in a correction (observed live in E2E). Only the
+            #     actionable rating is capped — scores and screener details are
+            #     untouched, and the regime fields explain the downgrade. An FTD
+            #     (C2) lifts the regime out of correction weeks before the MAs
+            #     recover, so this does not stay dark through a legitimate turn.
+            market_regime = self._assess_regime(stock_data)
+            market_gate_capped = False
+            if (
+                overall_rating in ("Strong Buy", "Buy")
+                and market_regime.get("market_regime") in ("correction", "downtrend")
+            ):
+                overall_rating = "Watch"
+                market_gate_capped = True
+
             # 7c-bis. Rating-basis explainability. The rating comes from the
             #     best-fit (max) screener score, NOT the diluted composite — so a
             #     72-composite "Buy" can lose to a 68-composite Stage-2 RS-85
@@ -601,6 +618,10 @@ class ScanOrchestrator:
                 overall_rating, rating_basis_screener, rating_basis_score,
                 composite_score, domain_outputs, adjustment.reason, execution_cap,
             )
+            if market_gate_capped:
+                rating_explanation += (
+                    f"; market gate: {market_regime.get('market_regime')} caps to Watch (SEPA rule 1)"
+                )
 
             # 7d. Minervini Markets 360-style band STATES (Pressure / Buy Risk /
             #     TPR). Lightweight (no per-bar history here) — the per-bar
@@ -608,9 +629,8 @@ class ScanOrchestrator:
             #     export. Reuses the already-fetched benchmark; never raises.
             band_states = self._compute_band_states(stock_data)
 
-            # 7e. General-market regime (Minervini's first rule). Computed from
-            #     the benchmark; identical across the scan, attached to each row.
-            market_regime = self._assess_regime(stock_data)
+            # 7e. General-market regime already computed at 7c-ter; attached to
+            #     each row below (identical across the scan).
 
             # 8. Combine results
             combined_result = self._combine_results(

@@ -11,6 +11,7 @@ Verifies:
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -56,8 +57,13 @@ class FakeDataProvider(StockDataProvider):
         return {s: self._map[s] for s in symbols if s in self._map}
 
 
-def _make_stock_data(symbol: str = "TEST", n_days: int = 200) -> StockData:
-    """Build a StockData with n_days of synthetic price data."""
+def _make_stock_data(symbol: str = "TEST", n_days: int = 200, flat_benchmark: bool = False) -> StockData:
+    """Build a StockData with n_days of synthetic price data.
+
+    The benchmark RISES so the market regime reads confirmed_uptrend: rating
+    tests exercise their own logic without the orchestrator's SEPA-rule-1
+    market gate capping Buy ratings (the gate has its own dedicated test).
+    """
     dates = pd.date_range(end="2026-01-15", periods=n_days, freq="B")
     df = pd.DataFrame(
         {
@@ -69,7 +75,19 @@ def _make_stock_data(symbol: str = "TEST", n_days: int = 200) -> StockData:
         },
         index=dates,
     )
-    benchmark = df.copy()
+    bench_close = (
+        np.full(n_days, 300.0) if flat_benchmark else np.linspace(300.0, 460.0, n_days)
+    )
+    benchmark = pd.DataFrame(
+        {
+            "Open": bench_close,
+            "High": bench_close * 1.002,
+            "Low": bench_close * 0.998,
+            "Close": bench_close,
+            "Volume": 1_000_000.0,
+        },
+        index=dates,
+    )
     return StockData(
         symbol=symbol,
         price_data=df,
@@ -389,7 +407,7 @@ class TestScanOrchestratorErrorPaths:
         assert result["rs_rating_1m"] is None
 
     def test_young_ipo_insufficient_rows_include_partial_metrics_when_history_allows(self):
-        stock_data = _make_stock_data("TEST", n_days=30)
+        stock_data = _make_stock_data("TEST", n_days=30, flat_benchmark=True)  # pins RS fallback 50
         provider = FakeDataProvider({"TEST": stock_data})
         registry = ScreenerRegistry()
 
@@ -418,7 +436,7 @@ class TestScanOrchestratorErrorPaths:
         assert result["ma_alignment"] is None
 
     def test_young_ipo_invalid_1m_rs_stays_null_instead_of_zero(self):
-        stock_data = _make_stock_data("TEST", n_days=30)
+        stock_data = _make_stock_data("TEST", n_days=30, flat_benchmark=True)  # pins RS fallback 50
         stock_data.price_data.iloc[-21, stock_data.price_data.columns.get_loc("Close")] = 0.0
         provider = FakeDataProvider({"TEST": stock_data})
         registry = ScreenerRegistry()
@@ -463,7 +481,7 @@ class TestScanOrchestratorErrorPaths:
         assert result["price_change_1d"] is None
 
     def test_partial_young_ipo_composite_uses_only_applicable_screeners(self):
-        stock_data = _make_stock_data("TEST", n_days=60)
+        stock_data = _make_stock_data("TEST", n_days=60, flat_benchmark=True)  # pins RS fallback 50
         provider = FakeDataProvider({"TEST": stock_data})
         registry = ScreenerRegistry()
 
@@ -505,7 +523,7 @@ class TestScanOrchestratorErrorPaths:
         assert result["rs_rating_1m"] == 50.0
 
     def test_partial_young_ipo_without_strong_ipo_score_gets_no_bonus(self):
-        stock_data = _make_stock_data("TEST", n_days=60)
+        stock_data = _make_stock_data("TEST", n_days=60, flat_benchmark=True)  # pins RS fallback 50
         provider = FakeDataProvider({"TEST": stock_data})
         registry = ScreenerRegistry()
 
@@ -813,6 +831,24 @@ class TestScanOrchestratorExecutionState:
         assert result["execution_state"] == "overextended"
         assert result["execution_cap_applied"] is True
         assert result["rating"] == "Pass"                  # capped from Strong Buy
+
+
+class TestScanOrchestratorMarketGate:
+    def test_final_rating_capped_to_watch_in_a_downtrending_market(self):
+        """SEPA rule 1 on the FINAL rating: even when the best-fit screener has
+        no market gate of its own, a Buy/Strong Buy is capped to Watch while
+        the general market is in a correction/downtrend. Scores untouched."""
+        stock = _make_stock_data("TEST", n_days=300, flat_benchmark=True)
+        provider = FakeDataProvider({"TEST": stock})
+        registry = ScreenerRegistry()
+        registry.register(make_fake_screener_class("alpha", 90.0, True))
+        orch = ScanOrchestrator(data_provider=provider, registry=registry)
+
+        result = orch.scan_stock_multi("TEST", ["alpha"], composite_method="weighted_average")
+        assert result["market_regime"] in ("correction", "downtrend")
+        assert result["composite_score"] == 90.0
+        assert result["rating"] not in ("Strong Buy", "Buy")
+        assert "market gate" in (result.get("rating_explanation") or "")
 
 
 class TestScanOrchestratorBands:
