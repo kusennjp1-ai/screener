@@ -142,6 +142,11 @@
 - **解釈**: Code 33はアイデア時点でも~12%しか点灯しない＝Minervini本人の記述どおり「理想形であって必要条件ではない」。**スクリーナーではボーナス/ランキング信号に留め、ハードゲートにしない**（現行配線どおり）を実測で確認。単体テスト12/12（vantageシフト・restatement不可視をピン留め）、レッドライン177/177、golden 43/43。
 - **次**: Q4導出の残渣（GM/OXY/Z/SSTK/NATRがFY Q4末でYoYベース欠落）の調査、またはポジション管理ビュー（買値登録→売りエンジンR倍数監視）。
 
+### C26 — 2026-07-07 ポジション管理ビュー（買値登録→売りエンジン自動監視）（コミット 67aa478）
+- **変更**: トレードの「管理・売り」半分を実装。positionsテーブル＋`/v1/positions` CRUD＋close。ライブ状態は**読み取り時に既存のMarkets 360売りエンジンで計算**（compute_sell_plan＋r_multiple_targets再利用＝2画面が食い違えない設計）。トレーリングストップ・ラダー（stopは上がるのみ）、クライマックス、50日線割れ、R倍数＋2R進捗バー、2R/3Rターゲット（元のリスク単位基準）。価格はcache-only読み（一覧表示が外部fetchを誘発しない）。フロントはPositionsナビページ——SellPlanCardと同じ配色/日本語のアクションチップ、登録ダイアログ（stop<entry検証、1Rリスク%とMinervini 7-8%上限表示）、44pxタップターゲット。
+- **検証**: sandboxフルスタック（Postgres+uvicorn+vite+Playwright）で実写確認——MSFTフィクスチャが+2.07Rで50日線崩壊のexit（stopはbreakevenへ切り上げ）、ブラウザ経由登録のFTNTはラダーが110→128.87へトレール。1440px/375pxスクショ目視済み。backend unit 4/4・ページテスト5/5・レッドライン181/181・golden 43/43・eslint緑。
+- **次**: Markets360のSellPlanCard/BuyingNowCardから「この銘柄をポジション登録」ワンクリック導線、またはQ4導出残渣調査。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
