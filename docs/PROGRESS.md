@@ -88,6 +88,18 @@
 - **E2E教訓**: pkillはシェルごと死ぬことがある（exit 144）→ setsidで起動、旧celeryプロセスが旧バイトコードで走り続ける罠に注意。
 - **既知の残課題**: ①UIのPrevious Scansピッカーから完了スキャンを選ぶ自動化が未検証（API直では13件返る）②composite ratingは市場ゲート非適用（M360/minerviniの各rating capのみ）——SEPAルール1のグローバル適用は次サイクル候補 ③mobileのMA凡例重なり ④ベンチマークbundleはgate OFFでもvendorを試みる（SPYはDBにあるが未配線）。
 
+### C13 — 2026-07-06 最終ratingへのSEPAルール1（コミット 3cd4988）
+- **変更**: オーケストレータで execution cap 直後に市場ゲート——best-fitがCANSLIM/SE由来でも correction/downtrend で Buy/Strong Buy→Watch。rating_explanationに「market gate: … (SEPA rule 1)」記録。E2Eで観測した「FTNTがcorrection中にBuy」を封鎖。
+- **検証**: 専用テスト＋orchestrator 34/34、スイート211、golden 43。テストハーネスのベンチマークを上昇系列に（RSフォールバック50をピンする2テストのみflat維持）。
+
+### C14 — 2026-07-06 Code 33誤命名の除去（コミット 30b2b4e）
+- **変更**: canslim_scannerの決算ブラックアウトから"Code 33"ラベル除去（本来のCode 33＝EPS+売上+マージン3四半期加速はsec_edgar_financials.py）。挙動不変。
+- **検証**: canslim 4/4、gate テスト更新、golden 43。
+
+### C15 — 2026-07-06 M360チャート凡例のモバイル可読性（コミット 直近）
+- **変更**: LegendOverlayに半透明バッキング＋responsive font（375pxでロウソク足に重なって判読不能だった）。タイトルはnoWrap+ellipsis、MA行はwrap。
+- **検証**: Playwright 375px実写確認、markets360スイート+lint緑。
+- **次**: Code33のCI統計検証（GitHub MCP要再認証のため次セッション）、TPRフルストリップ改善、908再測定（C13以降は経路的に不変のはず）。
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

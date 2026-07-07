@@ -41,8 +41,14 @@ function LegendOverlay({ data, timeframe, hover }) {
   const c = (v) => (v == null ? '–' : Number(v).toFixed(2));
 
   return (
-    <Box sx={{ position: 'absolute', top: 54, left: 12, zIndex: 4, pointerEvents: 'none' }}>
-      <Typography sx={{ color: '#e6e8ec', fontSize: 15, fontWeight: 700 }}>
+    // Translucent backing + responsive sizes: on 375px the naked legend text
+    // used to wrap onto the candles and become unreadable.
+    <Box sx={{
+      position: 'absolute', top: 54, left: 12, zIndex: 4, pointerEvents: 'none',
+      maxWidth: 'calc(100% - 24px)', bgcolor: 'rgba(10,11,16,0.55)',
+      borderRadius: 1, px: 0.75, py: 0.25,
+    }}>
+      <Typography noWrap sx={{ color: '#e6e8ec', fontSize: { xs: 12.5, sm: 15 }, fontWeight: 700 }}>
         {data?.symbol} · {data?.name} · {timeframe === 'weekly' ? '1W' : '1D'} · {data?.exchange}
       </Typography>
       {last && (
@@ -60,12 +66,12 @@ function LegendOverlay({ data, timeframe, hover }) {
           )}
         </Box>
       )}
-      <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 0.75, sm: 1.5 }, mt: 0.25 }}>
         {MA_LEGEND.map((m) => {
           const v = lastMa(m.key);
           if (v == null) return null;
           return (
-            <Typography key={m.key} sx={{ fontSize: 12, color: m.color, fontWeight: 600 }}>
+            <Typography key={m.key} sx={{ fontSize: { xs: 10.5, sm: 12 }, color: m.color, fontWeight: 600 }}>
               MA {Number(v).toFixed(2)}
             </Typography>
           );
