@@ -9,7 +9,8 @@ venv/
 backend/venv
 ENV/
 
-# Node modules
+# Node modules (any level — root one appears when npm runs from the repo root)
+node_modules/
 frontend/node_modules
 
 # Build artifacts
