@@ -1,9 +1,11 @@
 import { useMemo, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Box, CircularProgress, Typography, Alert } from '@mui/material';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Box, Button, CircularProgress, Snackbar, Typography, Alert } from '@mui/material';
 
 import { fetchMarkets360, markets360Keys } from '../api/markets360';
+import { createPosition } from '../../../api/positions';
+import AddPositionDialog from '../../../components/positions/AddPositionDialog';
 import ChartToolbar from '../components/ChartToolbar';
 import StatusBar from '../components/StatusBar';
 import Markets360Chart from '../components/Markets360Chart';
@@ -98,6 +100,12 @@ export default function Markets360Page() {
   const [timeframe, setTimeframe] = useState('daily');
   const [period, setPeriod] = useState('1y');
   const [hover, setHover] = useState(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registered, setRegistered] = useState(false);
+  const registerMutation = useMutation({
+    mutationFn: createPosition,
+    onSuccess: () => { setRegisterOpen(false); setRegistered(true); },
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: markets360Keys.symbol(symbol, period),
@@ -139,13 +147,41 @@ export default function Markets360Page() {
           <>
             <LegendOverlay data={data} timeframe={timeframe} hover={hover} />
             <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} />
-            <BuyingNowCard signal={data?.signal} />
+            <BuyingNowCard signal={data?.signal} onRegister={() => setRegisterOpen(true)} />
 {data?.sell_plan
               ? <SellPlanCard sellPlan={data.sell_plan} />
               : <ExitSignalCard exitSignal={data?.exit_signal} />}
           </>
         )}
       </Box>
+
+      <AddPositionDialog
+        open={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+        isSubmitting={registerMutation.isPending}
+        submitError={registerMutation.isError
+          ? (registerMutation.error?.response?.data?.detail || 'Failed to register position')
+          : null}
+        initialValues={{
+          symbol,
+          entry_price: data?.signal?.trigger_price != null ? String(data.signal.trigger_price) : '',
+          initial_stop: data?.signal?.stop != null ? String(data.signal.stop) : '',
+          entry_date: new Date().toISOString().slice(0, 10),
+        }}
+        onSubmit={(payload) => registerMutation.mutate(payload)}
+      />
+      <Snackbar
+        open={registered}
+        autoHideDuration={6000}
+        onClose={() => setRegistered(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={`${symbol} を登録しました — 売りエンジンが監視を開始`}
+        action={(
+          <Button component={RouterLink} to="/positions" size="small" sx={{ color: '#3aa0ff' }}>
+            Positionsへ
+          </Button>
+        )}
+      />
 
       {/* Bottom range bar */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 0.5, bgcolor: '#0a0a0f', borderTop: '1px solid #1c1f27' }}>

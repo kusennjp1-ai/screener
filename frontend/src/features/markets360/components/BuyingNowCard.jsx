@@ -1,10 +1,13 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import BoltIcon from '@mui/icons-material/Bolt';
+import AddIcon from '@mui/icons-material/Add';
 import GlossaryLabel from '../../../components/common/GlossaryLabel';
 
 // The "Buying Now!" signal card — mirrors the MM360 popover: headline, the
 // behavioral-analytic label, timestamp + author, and the protective stop.
-export default function BuyingNowCard({ signal, author }) {
+// `onRegister` (optional) adds the one-click bridge to the Positions journal:
+// buy the signal -> register the position -> the sell engine watches it.
+export default function BuyingNowCard({ signal, author, onRegister }) {
   if (!signal || !signal.active) return null;
   const ts = signal.as_of ? new Date(signal.as_of) : null;
   const when = ts
@@ -45,6 +48,15 @@ export default function BuyingNowCard({ signal, author }) {
           </GlossaryLabel>
         )}
       </Box>
+      {onRegister && signal.trigger_price != null && (
+        <Button
+          fullWidth size="small" variant="outlined" startIcon={<AddIcon />}
+          onClick={onRegister} data-testid="register-from-signal"
+          sx={{ mt: 1, minHeight: 44, color: '#3aa0ff', borderColor: '#3a6df0' }}
+        >
+          Register Position（ポジション登録）
+        </Button>
+      )}
     </Box>
   );
 }
