@@ -182,7 +182,11 @@ def quarterly_series_dated(
             if fy is not None and q in (1, 2, 3, 4):
                 lprev = q_label.get(end)
                 if lprev is None or filed < lprev[0]:
-                    q_label[end] = (filed, f"FY{int(fy)}Q{q}")
+                    # Q4 rows often exist ONLY as comparatives in the NEXT
+                    # year's 10-K (DECK's 2025-03-31 Q4 carries fy=2026), so
+                    # for Q4 the end year is the trustworthy fiscal label.
+                    label_fy = int(end[:4]) if q == 4 else int(fy)
+                    q_label[end] = (filed, f"FY{label_fy}Q{q}")
         elif _ANNUAL_MIN_DAYS <= dur <= _ANNUAL_MAX_DAYS:
             prev_a = annual.get(end)
             if prev_a is None or filed >= prev_a[0]:
@@ -190,7 +194,7 @@ def quarterly_series_dated(
                 annual[end] = (filed, float(val), int(fy) if fy is not None else 0)
 
     # Derive Q4 = annual - the three quarters ending inside the annual window.
-    for a_end, (_, a_val, a_fy) in annual.items():
+    for a_end, (_, a_val, _a_fy) in annual.items():
         if a_end in q_val:
             continue  # a real 3-month Q4 entry already covers this end
         inside = [
@@ -199,7 +203,10 @@ def quarterly_series_dated(
         ]
         if len(inside) == 3:
             q_val[a_end] = ("", a_val - sum(v for _, v in inside))
-            q_label.setdefault(a_end, ("", f"FY{a_fy}Q4"))
+            # Label by the period's END year, not the annual entry's fy — that
+            # fy is the FILING's frame (GM's 2023-12-31 Q4 arrives inside the
+            # FY2025 10-K and would be labeled FY2025Q4, or FY0Q4 when absent).
+            q_label[a_end] = ("", f"FY{a_end[:4]}Q4")
 
     out = [
         (end, v, q_label.get(end, ("", end))[1])
@@ -313,12 +320,22 @@ def compute_code33_from_facts(
         # Year-ago base by END DATE, not fiscal label — EDGAR fy/fp describe
         # the filing's frame and lose year-ago quarters to relabeled
         # comparatives (see quarterly_series_dated).
-        g_eps = _yoy_growth(eps.get(end), _yoy_base(eps, end))
-        g_rev = _yoy_growth(rev.get(end), _yoy_base(rev, end))
-        g_mar = _yoy_growth(margin.get(end), _yoy_base(margin, end))
+        eps_base, rev_base = _yoy_base(eps, end), _yoy_base(rev, end)
+        mar_base = _yoy_base(margin, end)
+        g_eps = _yoy_growth(eps.get(end), eps_base)
+        g_rev = _yoy_growth(rev.get(end), rev_base)
+        g_mar = _yoy_growth(margin.get(end), mar_base)
         # Margin YoY is informational unless gated on.
         if g_eps is None or g_rev is None or (require_margin and g_mar is None):
-            return Code33Result(False, f"missing/invalid YoY base at {label_by_end.get(end, end)}")
+            label = label_by_end.get(end, end)
+            # A quarter that EXISTS but has a non-positive base is a
+            # legitimate Code 33 fail — % growth off a loss quarter is
+            # undefined, and Minervini's test targets profitable growers.
+            # Only a genuinely absent quarter means "cannot judge".
+            gated_bases = [eps_base, rev_base] + ([mar_base] if require_margin else [])
+            if any(b is not None and b <= 0 for b in gated_bases):
+                return Code33Result(False, f"YoY base <= 0 at {label} — loss quarter, % growth undefined")
+            return Code33Result(False, f"missing YoY base at {label}")
         eps_yoy.append(g_eps)
         sales_yoy.append(g_rev)
         margin_yoy.append(g_mar if g_mar is not None else float("nan"))

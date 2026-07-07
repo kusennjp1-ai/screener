@@ -49,8 +49,12 @@ def _idea_rows(limit: int | None) -> list[tuple[str, str]]:
 
 
 def _evaluable(reason: str) -> bool:
-    """True when there was enough (point-in-time) EDGAR history to judge."""
-    return reason == "ok" or reason.startswith("not accelerating")
+    """True when there was enough (point-in-time) EDGAR history to judge.
+
+    A "YoY base <= 0" quarter IS a judgment (Code 33 fails on loss-quarter
+    comparisons); only genuinely absent data means "cannot judge".
+    """
+    return reason == "ok" or reason.startswith("not accelerating") or reason.startswith("YoY base <= 0")
 
 
 def _run_as_of_idea_dates(client, limit: int | None, require_margin: bool, markdown_path: str | None) -> int:
@@ -203,8 +207,12 @@ def main() -> int:
                 dated = quarterly_series_dated(facts, tags, is_eps=is_eps)
                 tail = ", ".join(f"{end}={val:.6g}[{label}]" for end, val, label in dated[-10:])
                 print(f"  DUMP {ticker} {name}: {tail or '(empty)'}", file=sys.stderr)
-        if res.reason not in ("no EDGAR facts", "missing EPS/revenue/net-income series",
-                              "fewer than 3 comparable quarters"):
+        insufficient_data = (
+            res.reason in ("no EDGAR facts", "missing EPS/revenue/net-income series",
+                           "fewer than 3 comparable quarters")
+            or res.reason.startswith("missing YoY base")
+        )
+        if not insufficient_data:
             evaluated += 1
         if res.passes:
             passes += 1

@@ -196,6 +196,36 @@ def _pit_facts():
     }}}
 
 
+def test_negative_yoy_base_is_a_fail_not_missing_data():
+    # 2024 Q1 is a LOSS quarter: the 2025 Q1 YoY comparison is undefined.
+    # That's a legitimate Code 33 fail (loss quarter), not "cannot judge" —
+    # the GM/OXY/Z/SSTK/NATR shape from the CI diagnostics run.
+    eps = dict(_EPS)
+    eps[(2024, 1)] = -0.5
+    result = compute_code33_from_facts(_facts(eps, _REV, _NI))
+    assert result.passes is False
+    assert result.reason.startswith("YoY base <= 0")
+    # A genuinely absent quarter still reads as missing data.
+    gone = {k: v for k, v in _EPS.items() if k != (2024, 1)}
+    result2 = compute_code33_from_facts(_facts(gone, _REV, _NI))
+    assert result2.passes is False
+    assert result2.reason.startswith("missing YoY base")
+
+
+def test_derived_q4_label_uses_period_end_year():
+    from app.services.sec_edgar_financials import quarterly_series_dated
+    facts = _facts(_EPS, _REV, _NI)
+    # A 2024 annual arriving inside a LATER filing frame (fy=2025, the GM
+    # shape) must still label the derived Q4 by its period end year.
+    facts["facts"]["us-gaap"]["Revenues"]["units"]["USD"].append(
+        {"start": "2024-01-01", "end": "2024-12-31", "val": 460, "fy": 2025, "fp": "FY",
+         "form": "10-K", "filed": "2026-02-15"}
+    )
+    dated = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False)
+    by_end = {end: (val, label) for end, val, label in dated}
+    assert by_end["2024-12-31"] == (460 - (100 + 100 + 100), "FY2024Q4")
+
+
 def test_code33_as_of_evaluates_point_in_time():
     facts = _pit_facts()
     # Live: the three 2025 quarters.
