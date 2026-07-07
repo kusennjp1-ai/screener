@@ -104,6 +104,14 @@
 ### C16 — 2026-07-07 ドリフト確認（レッドライン儀式）
 - **測定**: 908ハーネス再実行→**C6と全metric完全一致**（想定通り：C13-15はorchestrator/UI層でハーネス経路外）。フロント全スイート446/446。
 - **次の候補（優先順）**: ①Code33のCI統計検証（`code33-check.yml --from-trade-ideas`、GitHub MCP要再認証） ②TPRフルストリップ較正（LLYハーネスはスクショ近似価格でノイズ大——実OHLCV固定のright-edge評価を週次系列に拡張する方が筋が良い） ③ポジション管理ビュー（買値登録→売りエンジンがR倍数自動監視） ④static PWAへのmarkets360組み込み。
+### C17 — 2026-07-07 バンド3列の日本語グロッサリー（コミット 794335c）
+- **変更**: metricGlossaryに pressure_state / buy_risk_state / tpr_state 追加——結果テーブルで唯一「?」が出なかった列群を解消（EN/JAツールチップのテーブル全列カバレッジ完成）。
+- **検証**: Scanスイート109/109、lint緑。
+
+### C18 — 2026-07-07 execution state「unknown」の解説補完（コミット 直近）
+- **変更**: EXECUTION_STATE_GLOSSARYにunknownエントリ（判定不能＝Cap非適用の説明）。マップ指摘の残件。
+- **次の最有力**: ①Code33 CI統計検証（要GitHub MCP再認証）②TPRフルストリップ（実OHLCVベースの週次right-edge拡張として設計）③ポジション管理ビュー④static PWAにmarkets360。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
