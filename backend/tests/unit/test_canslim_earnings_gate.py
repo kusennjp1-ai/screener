@@ -1,4 +1,4 @@
-"""W2.1: CANSLIM earnings-proximity gate (Code-33) + the yfinance plumbing."""
+"""W2.1: CANSLIM earnings-proximity blackout gate + the yfinance plumbing."""
 from datetime import date, timedelta
 
 from app.scanners.canslim_scanner import (
@@ -23,7 +23,7 @@ def test_blackout_window_hard_avoids():
     assert g["blackout"] is True
     assert g["penalty"] == 0.0
     assert g["days_to_next_earnings"] == 3
-    assert "Code-33" in g["reason"]
+    assert "pre-earnings blackout" in g["reason"]
 
 
 def test_blackout_boundary_inclusive():
