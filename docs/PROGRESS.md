@@ -152,6 +152,12 @@
 - **検証**: FTNTフィクスチャ（Buying Nowアクティブ）でブラウザ実写——カードのボタン→プレフィル済みダイアログ（149.67/stop 134.70/リスク10.0%）→スナックバー→/positionsに行が出現。テスト BuyingNowCard 3・AddPositionDialog 2・PositionsPage 5 全緑、eslint緑。
 - **次**: Q4導出残渣（GM/OXY/Z/SSTK/NATR）のCI診断、または静的PWAへのmarkets360統合。
 
+### C28 — 2026-07-07 Q4「残渣」診断→赤字四半期セマンティクス修正（コミット 6d1b38b / 50316b9）
+- **診断**: `--dump`診断モード＋CI `extra_args`入力を追加し、GM/OXY/Z/SSTK/NATRの日付キー系列をCIログで実見（run 28904876982）。**Q4導出の欠落ではなかった**——全四半期が存在し、前年Q4のEPSが負（GM −1.42 / OXY −0.32 / Z −0.23 / SSTK −0.04 / NATR −0.02）でYoY%が定義不能なだけ＝理論的に正しい棄却。副産物として実バグ2件発見：①導出Q4/比較行のみのQ4のラベルがまた提出書類側fy（GMの2023-12-31が「FY2025Q4」、fy欠落で「FY0Q4」、DECKの2025-03-31が「FY2026Q4」）②「missing/invalid YoY base」がデータ欠落と赤字四半期を混同。
+- **Fix**: 理由を分離——`YoY base <= 0 at <label>（赤字四半期）`は**評価可能なFAIL**（Code 33は黒字成長企業のテスト）、`missing YoY base`のみ「判定不能」。Q4ラベルは期末年で決定（provenance非依存）。passesの意味は不変（全て✗のまま）。unit 14/14・レッドライン181/181・golden 43/43。
+- **再計測（run 28905243272、全908、正直な分母）**: 評価可能ペア65→**126**、pass@idea **7.1%** vs control **3.2%**＝判別**+4.0pp**（ベース比2.2倍）。2021年（n=48）14.6% vs 2.1%。結論強化：**Code 33はレアなボーナス信号でありハードゲート不可**（現行配線どおり）。
+- **次**: 静的PWAへのmarkets360統合（static-site.ymlにper-symbolペイロード輸出＋StaticMarkets360Page）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
