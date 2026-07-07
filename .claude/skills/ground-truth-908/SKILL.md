@@ -54,3 +54,9 @@ catch-rate backtest job.
 Related CI-only validators (all workflow_dispatch): `minervini-validate.yml`
 (per-ticker TT+Code33 scorecard), `vcp-calibration.yml` (VCP recall on the
 908), `code33-check.yml --from-trade-ideas` (EDGAR Code 33 pass rates).
+
+`code33-check.yml` with `as_of_idea_dates=true` measures the POINT-IN-TIME
+Code 33 catch rate: each idea evaluated on filings filed <= its idea date
+(compute_code33_from_facts(as_of=...)), against a 1-year-earlier same-stock
+control — report the discrimination, not the raw rate. XBRL starts ~2009-2011,
+so pre-2010 ideas are mostly not evaluable (reported honestly in the summary).
