@@ -105,3 +105,46 @@ describe('RRGChart', () => {
     });
   });
 });
+
+
+describe('RRGChart rotation playback + money-flow strip', () => {
+  const threeWeekData = {
+    ...sampleData,
+    groups: sampleData.groups.map((g) => ({
+      ...g,
+      tail: [
+        { date: '2024-09-15', x: 100, y: 100 },
+        ...g.tail,
+      ],
+    })),
+  };
+
+  it('shows where money is flowing in and out (資金流入/流出 chips)', () => {
+    renderWithProviders(<RRGChart data={sampleData} />);
+    expect(screen.getByTestId('rrg-flow-strip')).toBeInTheDocument();
+    expect(screen.getByText('資金流入')).toBeInTheDocument();
+    expect(screen.getByText('資金流出')).toBeInTheDocument();
+    // AlphaTech moved +4.3/+8.1 => inflow; BetaMetals -3.3/-5.1 => outflow
+    expect(screen.getByText(/AlphaTech ↗ \+12\.4/)).toBeInTheDocument();
+    expect(screen.getByText(/BetaMetals ↘ -8\.4/)).toBeInTheDocument();
+  });
+
+  it('renders playback controls when tails carry 3+ weeks', () => {
+    renderWithProviders(<RRGChart data={threeWeekData} />);
+    expect(screen.getByLabelText('Play rotation playback')).toBeInTheDocument();
+    expect(screen.getByText('Live')).toBeInTheDocument();
+  });
+
+  it('hides playback controls for 2-point tails (nothing to animate)', () => {
+    renderWithProviders(<RRGChart data={sampleData} />);
+    expect(screen.queryByLabelText(/rotation playback/)).not.toBeInTheDocument();
+  });
+
+  it('play button starts stepping frames from week 1', () => {
+    renderWithProviders(<RRGChart data={threeWeekData} />);
+    fireEvent.click(screen.getByLabelText('Play rotation playback'));
+    // frame 0 selected: the header shows that week's date instead of Live
+    expect(screen.queryByText('Live')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Pause rotation playback')).toBeInTheDocument();
+  });
+});

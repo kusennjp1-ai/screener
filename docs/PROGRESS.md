@@ -118,6 +118,14 @@
 - **設計案**: ①minervini_bandsのTPRヒステリシス（strong→weak直行を禁止しtransition経由を強制、N=3-5日の確認待ち）②52週レンジをClose基準→High/Low基準に統一（scanner系との不一致もマップ指摘済み）③【設計修正】週次遡及はground truth不在（スクショは各銘柄1時点のみ）で不可能。正しい評価軸：REALストリップ（スクショ由来のLLY/IBB系列）と OURS の**フリップ率・状態滞留時間の分布**を比較し、OURSの過剰フリップ/早期weak落ちをヒステリシスで是正する（9dff227のPressure較正と同じ手法をTPRに適用）。真値系列が無い区間の「一致率」を偽装しないこと。
 - **レッドライン**: right-edge 12銘柄の一致（P82/BR92/TPR100）を絶対に下げない。calibration/bands関連の既存テスト16件green維持。
 
+### C20 — 2026-07-07 開発スキル蓄積（コミット f0da6b0）
+- **変更**: `.claude/skills/` に minervini-dev-loop（サイクル規律・凍結metric・理論ガードレール）/ ground-truth-908（オフライン再生＋CIディスパッチ手順）/ sandbox-e2e（フルスタック起動＋Playwright＋落とし穴集）。将来のOpus 4.8セッションがモデル非依存で即継続可能に。
+
+### C21 — 2026-07-07 セクター回転アニメーション＋資金フロー・ストリップ（コミット 直近）
+- **変更**: RRGChartに再生機能——▶で週次テールをタイムトラベル（rechartsのtweenでドットが滑らかに移動、スライダーで任意週へ、終端でLiveに復帰）。**資金流入/流出ストリップ**：現フレームの移動ベクトル(Δratio+Δmomentum、JdK流「向きが資金の行き先」)で流入トップ3↗（緑チップ）/流出トップ3↘（赤チップ）を常時表示。groups/sectors両スコープ・live/staticページ共用のRRGChart内で完結。
+- **検証**: rrgFlow純関数テスト5件（象限・フレームスライス・流入流出ランキング・フレーム別フロー）、DOMテスト4件（ストリップ表示・3週未満で再生非表示・再生開始）。Chartsスイート54/54、lint緑。
+- **未検証**: ブラウザ実写はsandboxにgroup-rankデータが無くRRGが404のため不可（DOMテストで代替）。ユーザーPC（ランク実データあり）のGROUPSページで要目視確認。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
