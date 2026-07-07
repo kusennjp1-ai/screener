@@ -130,7 +130,7 @@ def quarterly_series(facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
 
 
 def quarterly_series_dated(
-    facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
+    facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool, as_of: Optional[str] = None
 ) -> list[tuple[str, float, str]]:
     """Quarterly series keyed by PERIOD END DATE: ``[(end, value, label), ...]``
     ascending by end.
@@ -146,6 +146,11 @@ def quarterly_series_dated(
 
     Q4 is derived per annual entry as annual minus the three quarterly values
     whose end dates fall inside that fiscal year's window.
+
+    ``as_of`` (YYYY-MM-DD) makes the series point-in-time: only entries FILED
+    on or before that date are used (entries without a ``filed`` date are
+    dropped for zero look-ahead), reproducing exactly what an investor could
+    have known then — later restatements included in newer filings vanish.
     """
     fact = _first_tag(facts, tags)
     entries = _select_unit_entries(fact)
@@ -166,6 +171,8 @@ def quarterly_series_dated(
         if dur is None:
             continue
         filed = e.get("filed", "")
+        if as_of is not None and (not filed or filed > as_of):
+            continue
         if _QUARTER_MIN_DAYS <= dur <= _QUARTER_MAX_DAYS:
             prev = q_val.get(end)
             if prev is None or filed >= prev[0]:
@@ -257,7 +264,9 @@ class Code33Result:
     quarters: list[str] = field(default_factory=list)
 
 
-def compute_code33_from_facts(facts: dict[str, Any], *, require_margin: bool = True) -> Code33Result:
+def compute_code33_from_facts(
+    facts: dict[str, Any], *, require_margin: bool = True, as_of: Optional[str] = None
+) -> Code33Result:
     """Evaluate Code 33 from a parsed EDGAR companyfacts dict.
 
     Literal Code 33 (``require_margin=True``) needs diluted EPS, sales, AND net
@@ -266,10 +275,13 @@ def compute_code33_from_facts(facts: dict[str, Any], *, require_margin: bool = T
     ``require_margin=False`` is the relaxed screen used live: EPS and sales YoY
     growth accelerating for three quarters (margin is still computed and
     reported, just not gated on).
+
+    ``as_of`` evaluates point-in-time (filings filed on or before that date) —
+    used to measure the historical catch rate at trade-idea dates.
     """
-    eps_d = quarterly_series_dated(facts, EPS_TAGS, is_eps=True)
-    rev_d = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False)
-    ni_d = quarterly_series_dated(facts, NET_INCOME_TAGS, is_eps=False)
+    eps_d = quarterly_series_dated(facts, EPS_TAGS, is_eps=True, as_of=as_of)
+    rev_d = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False, as_of=as_of)
+    ni_d = quarterly_series_dated(facts, NET_INCOME_TAGS, is_eps=False, as_of=as_of)
     if not eps_d or not rev_d or (require_margin and not ni_d):
         return Code33Result(False, "missing EPS/revenue/net-income series")
 
@@ -380,11 +392,11 @@ class SecEdgarClient:
         except Exception:  # noqa: BLE001 - missing/withdrawn filers are not fatal
             return None
 
-    def code33(self, ticker: str, *, require_margin: bool = True) -> Code33Result:
+    def code33(self, ticker: str, *, require_margin: bool = True, as_of: Optional[str] = None) -> Code33Result:
         facts = self.company_facts(ticker)
         if not facts:
             return Code33Result(False, "no EDGAR facts")
-        return compute_code33_from_facts(facts, require_margin=require_margin)
+        return compute_code33_from_facts(facts, require_margin=require_margin, as_of=as_of)
 
     def code33_map(self, tickers: list[str], *, require_margin: bool = False) -> dict[str, bool]:
         """{ticker: passes} for many tickers. Missing/withdrawn filers -> False.

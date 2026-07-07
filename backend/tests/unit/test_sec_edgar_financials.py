@@ -166,6 +166,65 @@ def test_quarterly_series_dated_dedupes_restatements_latest_filed_wins():
     assert by_end["2025-03-31"] == (111, "FY2025Q1")  # restated value, original label
 
 
+# Three years of Q1-Q3 where YoY growth strictly accelerates chronologically
+# (+10/+20/+40/+80/+160/+320%), so EVERY 3-quarter vantage point passes Code 33.
+_EPS3 = {(2023, 1): 1.0, (2023, 2): 1.0, (2023, 3): 1.0,
+         (2024, 1): 1.1, (2024, 2): 1.2, (2024, 3): 1.4,
+         (2025, 1): 1.98, (2025, 2): 3.12, (2025, 3): 5.88}
+_REV3 = {k: v * 100 for k, v in _EPS3.items()}
+# Margins follow the same accelerating pattern (2023 = 10%, then 11/12/14,
+# 19.8/31.2/58.8%), so ni = rev * margin also passes the strict screen.
+_MARGIN3 = {(2023, 1): 0.10, (2023, 2): 0.10, (2023, 3): 0.10,
+            (2024, 1): 0.11, (2024, 2): 0.12, (2024, 3): 0.14,
+            (2025, 1): 0.198, (2025, 2): 0.312, (2025, 3): 0.588}
+_NI3 = {k: _REV3[k] * _MARGIN3[k] for k in _REV3}
+
+
+def _pit_facts():
+    """Facts where each quarter is filed ~1 month after its period ends
+    (Q1 -> 05-01, Q2 -> 08-01, Q3 -> 11-01 of its own year)."""
+    def entries(values):
+        return [
+            _q(_QPERIODS[q][0].format(y=fy), _QPERIODS[q][1].format(y=fy),
+               val, fy, f"Q{q}", filed=f"{fy}-{q * 3 + 2:02d}-01")
+            for (fy, q), val in values.items()
+        ]
+    return {"facts": {"us-gaap": {
+        "EarningsPerShareDiluted": {"units": {"USD/shares": entries(_EPS3)}},
+        "Revenues": {"units": {"USD": entries(_REV3)}},
+        "NetIncomeLoss": {"units": {"USD": entries(_NI3)}},
+    }}}
+
+
+def test_code33_as_of_evaluates_point_in_time():
+    facts = _pit_facts()
+    # Live: the three 2025 quarters.
+    live = compute_code33_from_facts(facts)
+    assert live.passes is True, live.reason
+    assert live.quarters == ["FY2025Q3", "FY2025Q2", "FY2025Q1"]
+    # As of mid-June 2025 only the Q1 filing (05-01) is public — the vantage
+    # shifts back to [2025Q1, 2024Q3, 2024Q2] and still passes.
+    pit = compute_code33_from_facts(facts, as_of="2025-06-15")
+    assert pit.passes is True, pit.reason
+    assert pit.quarters == ["FY2025Q1", "FY2024Q3", "FY2024Q2"]
+    # Before any 2024 filing there is no accelerating triple to see.
+    early = compute_code33_from_facts(facts, as_of="2024-01-15")
+    assert early.passes is False
+
+
+def test_code33_as_of_ignores_later_filed_restatements():
+    facts = _pit_facts()
+    # A 2026-filed restatement slashes 2025 Q1 revenue; point-in-time at the
+    # 2025 idea date must still see the originally filed value.
+    facts["facts"]["us-gaap"]["Revenues"]["units"]["USD"].append(
+        _q("2025-01-01", "2025-03-31", 1.0, 2025, "Q1", filed="2026-02-15")
+    )
+    pit = compute_code33_from_facts(facts, as_of="2025-06-15")
+    assert pit.passes is True, pit.reason
+    # Without as_of the restated value wins and the acceleration breaks.
+    assert compute_code33_from_facts(facts).passes is False
+
+
 def test_dated_quarterly_eps_returns_quarter_end_dates_excluding_annual():
     from app.services.sec_edgar_financials import dated_quarterly_eps
     facts = _facts(_EPS, _REV, _NI)

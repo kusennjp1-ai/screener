@@ -15,6 +15,10 @@ on:
         description: 'Max trade-idea tickers to check'
         type: string
         default: '40'
+      as_of_idea_dates:
+        description: 'Point-in-time catch rate AT idea dates (with 1y-earlier control)'
+        type: boolean
+        default: false
 
 jobs:
   code33:
@@ -40,6 +44,9 @@ jobs:
           ARGS=""
           if [ "${{ github.event.inputs.from_trade_ideas }}" = "true" ]; then
             ARGS="--from-trade-ideas --limit ${{ github.event.inputs.limit }}"
+          fi
+          if [ "${{ github.event.inputs.as_of_idea_dates }}" = "true" ]; then
+            ARGS="$ARGS --as-of-idea-dates --limit ${{ github.event.inputs.limit }}"
           fi
           python -m scripts.check_code33 $ARGS --markdown "$RUNNER_TEMP/code33-report.md"
 
