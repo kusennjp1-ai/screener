@@ -15,6 +15,7 @@
 | 908トレード実測 @C1 (CIベースライン) | COV 64.8 / TT 61.7 / S2 90.0 / SETUP 78.6 / RS70 73.6 / FIRE±5 88.6 / MSCORE 95.5 / GATE 40.0（判別力: SETUP +52.0pp, FIRE±5 +24.4pp） | 2026-07-05 | `backend/calibration/trade_idea_report.md`（CI） |
 | 908トレード実測 @C3 | GATE 40.0→**45.1**（2011: 0→75, 2020: 28.3→45.8）、control 19.7、他metric不変 | 2026-07-05 | ローカル再測定（バンドル、〜7分） |
 | 908トレード実測 @C6 | TT 61.7→**69.7**（control 35.9→39.2のみ）→ **TT判別力 +25.8→+30.5pp** | 2026-07-05 | ローカル再測定 |
+| 908トレード実測 @C15（ドリフト確認） | **C6と完全一致**（TT 69.7 / S2 90.0 / SETUP 78.6 / FIRE 88.6 / GATE 45.1、判別力 SETUP+52.0pp / FIRE+24.4pp）＝C13-15による劣化なし | 2026-07-07 | ローカル再測定 |
 | W3.2 RS較正 | KEEP 40/20/20/20 (T+21 excess +1.79%, t=+9.63, n=1978) | 済 | `backend/calibration/W3.2_rs_weight_calibration.md` |
 
 ## サイクルログ
@@ -99,7 +100,10 @@
 ### C15 — 2026-07-06 M360チャート凡例のモバイル可読性（コミット 直近）
 - **変更**: LegendOverlayに半透明バッキング＋responsive font（375pxでロウソク足に重なって判読不能だった）。タイトルはnoWrap+ellipsis、MA行はwrap。
 - **検証**: Playwright 375px実写確認、markets360スイート+lint緑。
-- **次**: Code33のCI統計検証（GitHub MCP要再認証のため次セッション）、TPRフルストリップ改善、908再測定（C13以降は経路的に不変のはず）。
+
+### C16 — 2026-07-07 ドリフト確認（レッドライン儀式）
+- **測定**: 908ハーネス再実行→**C6と全metric完全一致**（想定通り：C13-15はorchestrator/UI層でハーネス経路外）。フロント全スイート446/446。
+- **次の候補（優先順）**: ①Code33のCI統計検証（`code33-check.yml --from-trade-ideas`、GitHub MCP要再認証） ②TPRフルストリップ較正（LLYハーネスはスクショ近似価格でノイズ大——実OHLCV固定のright-edge評価を週次系列に拡張する方が筋が良い） ③ポジション管理ビュー（買値登録→売りエンジンがR倍数自動監視） ④static PWAへのmarkets360組み込み。
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
