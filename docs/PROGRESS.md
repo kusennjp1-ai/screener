@@ -130,6 +130,12 @@
 - **実験**: フリップ/滞留統計でOURSのTPRが弱気過剰（R47/60 vs REAL32/60、A帯に留まれない）と判明→仮説「TPR_WEAK_RAW 4→3（過半数喪失で初めてweak）」を両固定metricで検証。
 - **結果**: right-edge floorは維持（TPR10/10・全体91%）だが**LLYフルストリップは52.4%→38.1%に悪化**→即revert。乖離の主因は閾値でなく**時間軸の系統的リード**（OURSがREALより約10バケット早く遷移＝スクショ近似価格の歪み）。
 - **結論**: フルストリップ較正は追加のMM360スクショ（複数時点）というground truthが増えるまで凍結。閾値フィッティングは行わない（憲章どおり）。right-edge 12銘柄が引き続き信頼できる較正基準。
+### C24 — 2026-07-07 Code 33 YoYベースを期末日キーに（コミット 4b8b856）
+- **原因**: CI code33-check（run 28856831094）で大型株が軒並み「missing/invalid YoY base at FY2026 Q1」。EDGARの`fy`/`fp`は**提出書類側の会計フレーム**であり期間のものではない——新しい10-Q内の前年同期比較行は新しいfyを名乗るため、旧実装の`(fy−1, q)`ルックアップは前年四半期を喪失（同一キーに衝突・上書き）。
+- **Fix**: `quarterly_series_dated()`新設——期末日キー（衝突フリー）、同一期間の重複は最新filed優先（restatement対応）、表示ラベルは最古filed優先（元の提出書類は自四半期を正しくラベルする）、Q4は年次−期内3四半期で導出。`_yoy_base()`は期末日の近接（350-380日、変則決算向け340-390日フォールバック）で前年同期を特定。`compute_code33_from_facts`を全面的にdated系列へ移行（`quarterly_series`は四半期テーブル/静的エクスポートの既存消費者向けに温存）。
+- **検証**: 回帰テスト追加——2024年四半期がfy=2025ラベルの比較行としてのみ存在する形状で、旧keyingは前年喪失・新pathはCode33合格を固定。restatement dedupeテストも追加。unit 10/10・レッドライン177/177・golden gate-5 43/43。
+- **次**: CI code33-check再dispatchでカバレッジ改善を実測（RBLX/DKNG/CMG/GM等が評価可能になるはず）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
