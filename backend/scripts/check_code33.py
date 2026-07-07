@@ -19,7 +19,13 @@ import csv
 import sys
 from pathlib import Path
 
-from app.services.sec_edgar_financials import SecEdgarClient
+from app.services.sec_edgar_financials import (
+    EPS_TAGS,
+    NET_INCOME_TAGS,
+    REVENUE_TAGS,
+    SecEdgarClient,
+    quarterly_series_dated,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 TRADE_IDEAS_CSV = _REPO_ROOT / "data" / "minervini_trade_ideas.csv"
@@ -149,6 +155,12 @@ def main() -> int:
     parser.add_argument("--user-agent", type=str, default="screener-research code33 (research@example.com)")
     parser.add_argument("--markdown", type=str, default=None)
     parser.add_argument(
+        "--dump",
+        action="store_true",
+        help="Diagnostics: print each ticker's dated quarterly series (end=value[label]) "
+        "per metric to stderr, to see exactly which quarter-ends/YoY bases exist.",
+    )
+    parser.add_argument(
         "--as-of-idea-dates",
         action="store_true",
         help="Evaluate each trade idea point-in-time (filings filed on or before its "
@@ -185,6 +197,12 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             rows.append((ticker, "ERR", "-", "-", "-", str(exc)[:60]))
             continue
+        if args.dump:
+            facts = client.company_facts(ticker) or {}
+            for name, tags, is_eps in (("EPS", EPS_TAGS, True), ("REV", REVENUE_TAGS, False), ("NI", NET_INCOME_TAGS, False)):
+                dated = quarterly_series_dated(facts, tags, is_eps=is_eps)
+                tail = ", ".join(f"{end}={val:.6g}[{label}]" for end, val, label in dated[-10:])
+                print(f"  DUMP {ticker} {name}: {tail or '(empty)'}", file=sys.stderr)
         if res.reason not in ("no EDGAR facts", "missing EPS/revenue/net-income series",
                               "fewer than 3 comparable quarters"):
             evaluated += 1

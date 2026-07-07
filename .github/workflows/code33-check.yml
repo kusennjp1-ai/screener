@@ -19,6 +19,10 @@ on:
         description: 'Point-in-time catch rate AT idea dates (with 1y-earlier control)'
         type: boolean
         default: false
+      extra_args:
+        description: 'Extra args passed through to scripts.check_code33 (e.g. tickers + --dump)'
+        type: string
+        default: ''
 
 jobs:
   code33:
@@ -47,6 +51,9 @@ jobs:
           fi
           if [ "${{ github.event.inputs.as_of_idea_dates }}" = "true" ]; then
             ARGS="$ARGS --as-of-idea-dates --limit ${{ github.event.inputs.limit }}"
+          fi
+          if [ -n "${{ github.event.inputs.extra_args }}" ]; then
+            ARGS="$ARGS ${{ github.event.inputs.extra_args }}"
           fi
           python -m scripts.check_code33 $ARGS --markdown "$RUNNER_TEMP/code33-report.md"
 
