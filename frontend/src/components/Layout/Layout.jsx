@@ -87,6 +87,7 @@ function Layout({ children }) {
     { path: '/breadth', label: 'Breadth' },
     { path: '/groups', label: 'Groups' },
     { path: '/markets360', label: 'Markets 360' },
+    { path: '/positions', label: 'Positions' },
     { path: '/validation', label: 'Backtest' },
     ...(features.themes ? [{ path: '/themes', label: 'Themes' }] : []),
     ...(features.chatbot ? [{ path: '/chatbot', label: 'Assistant' }] : []),

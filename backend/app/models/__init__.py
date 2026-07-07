@@ -41,6 +41,7 @@ from .institutional_ownership import InstitutionalOwnershipHistory
 from .fx_rate import FXRate
 from .app_settings import AppSetting
 from .ui_view_snapshot import UIViewSnapshot, UIViewSnapshotPointer
+from .position import Position
 from app.infra.db.models.feature_store import (
     FeatureRun, FeatureRunUniverseSymbol, StockFeatureDaily, FeatureRunPointer,
 )
@@ -105,6 +106,7 @@ __all__ = [
     "TickerValidationLog",
     # Filter Presets
     "FilterPreset",
+    "Position",
     # Institutional Ownership History
     "InstitutionalOwnershipHistory",
     # FX
