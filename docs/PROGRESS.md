@@ -112,6 +112,12 @@
 - **変更**: EXECUTION_STATE_GLOSSARYにunknownエントリ（判定不能＝Cap非適用の説明）。マップ指摘の残件。
 - **次の最有力**: ①Code33 CI統計検証（要GitHub MCP再認証）②TPRフルストリップ（実OHLCVベースの週次right-edge拡張として設計）③ポジション管理ビュー④static PWAにmarkets360。
 
+### C19（設計のみ・次コンテキストで実装） — TPRフルストリップ較正の方針
+- **現状**: right-edge一致は TPR 100%（12銘柄）だが、フルストリップ（時系列全体）はLLYハーネスで52%。ただしLLYハーネスはスクショからの近似価格で**ground truthがノイズ**。
+- **観測**: OURSのTPRはREALより早期にweakへ落ち、weakに長く留まる（ヒステリシス不足 or 条件の非対称）。REALはG→A→G→A→Rの遷移が滑らか＝**A（transition）の滞留が長い**。
+- **設計案**: ①minervini_bandsのTPRヒステリシス（strong→weak直行を禁止しtransition経由を強制、N=3-5日の確認待ち）②52週レンジをClose基準→High/Low基準に統一（scanner系との不一致もマップ指摘済み）③評価は`markets360_band_rightedge_eval.py`の12銘柄を**過去52週の各週末**に拡張した「週次right-edge系列」で行う（実OHLCV・スクショ非依存でノイズ排除）——一致率の分母を12→~600に増やしつつ真実性を保つ。
+- **レッドライン**: right-edge 12銘柄の一致（P82/BR92/TPR100）を絶対に下げない。calibration/bands関連の既存テスト16件green維持。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
