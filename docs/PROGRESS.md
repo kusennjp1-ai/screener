@@ -147,6 +147,11 @@
 - **検証**: sandboxフルスタック（Postgres+uvicorn+vite+Playwright）で実写確認——MSFTフィクスチャが+2.07Rで50日線崩壊のexit（stopはbreakevenへ切り上げ）、ブラウザ経由登録のFTNTはラダーが110→128.87へトレール。1440px/375pxスクショ目視済み。backend unit 4/4・ページテスト5/5・レッドライン181/181・golden 43/43・eslint緑。
 - **次**: Markets360のSellPlanCard/BuyingNowCardから「この銘柄をポジション登録」ワンクリック導線、またはQ4導出残渣調査。
 
+### C27 — 2026-07-07 Buying Nowカードから「ポジション登録」ワンクリック導線（コミット f6b104b）
+- **変更**: スクリーン→買い→管理のループを閉じる導線。Markets 360の買いシグナルカードに登録ボタン——シグナルのトリガー価格・損切り・当日日付をプレフィルした共有AddPositionDialog（PositionsPageから components/positions/ へ抽出、open毎にinitialValuesで再シード）を開き、コミット前に1Rリスク%をMinervini 7-8%上限と並べて表示。成功時はスナックバー＋Positionsへのジャンプリンク。
+- **検証**: FTNTフィクスチャ（Buying Nowアクティブ）でブラウザ実写——カードのボタン→プレフィル済みダイアログ（149.67/stop 134.70/リスク10.0%）→スナックバー→/positionsに行が出現。テスト BuyingNowCard 3・AddPositionDialog 2・PositionsPage 5 全緑、eslint緑。
+- **次**: Q4導出残渣（GM/OXY/Z/SSTK/NATR）のCI診断、または静的PWAへのmarkets360統合。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
