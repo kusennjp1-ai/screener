@@ -189,6 +189,11 @@
 - **検証**: FTNT実機で「Entry 149.67」「Stop 134.70」の軸ラベル＋水平線を実写確認。positionLinesテスト4/4・markets360スイート23/23・eslint緑。
 - **次**: C35候補=ポジションアラートのpush通知化、または複数ポジション線の重ね描き。
 
+### C35 — 2026-07-08 ポジションアラートのpush通知化（コミット d019a50）
+- **変更**: celery beatタスク`send_position_alerts`（平日、`POSITION_ALERT_HOUR/MINUTE`、デフォルト21:30=US close後）——digestのポジションセクション（=Positionsページと同一の売りエンジン）を評価し、**要アクションがある時だけ**`POSITION_ALERT_WEBHOOK_URL`へcompactなmarkdownをPOST。ペイロードはDiscord`content`とSlack`text`両キー同梱で1設定で両対応。URL未設定=no-op、要アクションなし=送信なし（日次ノイズゼロ）。`_build_positions_section`を単一の真実として再利用——アラート・ダイジェスト・Positionsページが食い違えない。
+- **検証**: sandboxでローカルHTTPシンク相手にE2E——実DBの5ポジション評価→`{'status':'sent', actionable:2}`、受信メッセージにMSFT exit(+2.07R)とFTNT raise_stop(+4.70R, stop 128.87↑)＋日本語注記。beat登録とタスク登録をcelery_app importで機械検証。unit 3・digest 11・レッドライン193・golden 43。
+- **次**: C36候補=同一銘柄複数ポジション線の重ね描き、または凍結中以外のバックログ再点検（SPEC優先表）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
