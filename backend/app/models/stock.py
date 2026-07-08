@@ -1,5 +1,5 @@
 """Stock-related database models"""
-from sqlalchemy import Column, Integer, String, Float, BigInteger, Date, DateTime, Index, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, BigInteger, Boolean, Date, DateTime, Index, JSON, UniqueConstraint
 from sqlalchemy.sql import func
 from ..database import Base
 from .types import JsonColumn
@@ -77,6 +77,12 @@ class StockFundamental(Base):
     # earnings landmine). Fetched into the payload; needs this column to survive
     # the DB round-trip so the gate actually sees it.
     next_earnings_date = Column(String(20))
+    # Code 33 (Minervini earnings acceleration: EPS+sales+margin YoY-growth rising
+    # 3 quarters). Computed from SEC EDGAR (US filers only), so nullable — null =
+    # unknown / not-US / EDGAR unavailable, True/False = evaluated. Populated by
+    # the fundamentals refresh (EDGAR-enabled envs); surfaced in buy-context so
+    # the buy checklist lights it live, not only in the static export.
+    code33 = Column(Boolean, nullable=True)
     growth_reporting_cadence = Column(String(24))  # quarterly | semiannual | annual | unknown
     growth_metric_basis = Column(String(40))  # quarterly_qoq | comparable_period_yoy | unavailable
     growth_comparable_period_date = Column(String(50))  # Same-period prior-year statement date

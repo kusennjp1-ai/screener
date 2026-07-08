@@ -114,3 +114,22 @@ def test_model_exposes_next_earnings_date_column():
     assert "next_earnings_date" in StockFundamental.__table__.columns
     rec = StockFundamental(symbol="X", next_earnings_date="2026-07-03")
     assert rec.next_earnings_date == "2026-07-03"
+
+
+def test_store_persists_code33_flag():
+    from unittest.mock import MagicMock
+    from app.models.stock import StockFundamental
+    from app.services.fundamentals_cache_service import FundamentalsCacheService
+
+    captured = {"record": None}
+    fake_db = MagicMock()
+    fake_db.query.return_value.filter.return_value.first.return_value = None
+
+    def _capture(record):
+        if isinstance(record, StockFundamental):
+            captured["record"] = record
+
+    fake_db.add.side_effect = _capture
+    svc = FundamentalsCacheService(redis_client=None, session_factory=lambda: fake_db)
+    svc._store_in_database("AAPL", {"market_cap": 1, "code33": True}, data_source="edgar", market="US")
+    assert captured["record"].code33 is True

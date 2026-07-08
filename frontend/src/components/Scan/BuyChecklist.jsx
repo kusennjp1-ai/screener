@@ -48,7 +48,9 @@ export default function BuyChecklist({ buyContext, stockData }) {
   const rs = stockData?.rs_rating ?? null;
   const eps = stockData?.eps_rating ?? null;
   const passesTemplate = stockData?.passes_template ?? stockData?.ma_alignment ?? null;
-  const code33 = stockData?.code33 ?? null;
+  // Prefer buy-context's live code33 (from cached EDGAR flag); fall back to the
+  // scan row (static export stamps it there).
+  const code33 = buyContext?.code33 ?? stockData?.code33 ?? null;
 
   return (
     <Box data-testid="buy-checklist" sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}>

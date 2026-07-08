@@ -42,11 +42,20 @@ class _FakeBenchmarkCache:
         return _FakeBundle(self._frame)
 
 
-def _wire(monkeypatch, price_frame, benchmark_frame):
+class _FakeFundamentalsCache:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def get_fundamentals(self, symbol, market=None):
+        return self._payload
+
+
+def _wire(monkeypatch, price_frame, benchmark_frame, fundamentals=None):
     import app.wiring.bootstrap as bootstrap
 
     monkeypatch.setattr(bootstrap, "get_price_cache", lambda: _FakePriceCache(price_frame))
     monkeypatch.setattr(bootstrap, "get_benchmark_cache", lambda: _FakeBenchmarkCache(benchmark_frame))
+    monkeypatch.setattr(bootstrap, "get_fundamentals_cache", lambda: _FakeFundamentalsCache(fundamentals))
     monkeypatch.setattr(buy_context_module, "_resolve_market", lambda symbol: "US")
 
 
@@ -63,6 +72,19 @@ def test_buy_context_packages_bands_overlays_and_signal(monkeypatch):
     assert set(ctx["signal"]["barrels"]) == {"trend", "pressure", "breakout"}
     assert isinstance(ctx["vcp_boxes"], list)
     assert isinstance(ctx["buy_points"], list)
+
+
+def test_buy_context_surfaces_code33_from_fundamentals(monkeypatch):
+    _wire(monkeypatch, _df(), _df(end=100.0), fundamentals={"code33": True})
+    assert build_buy_context("FTNT")["code33"] is True
+
+
+def test_buy_context_code33_null_when_not_evaluated(monkeypatch):
+    _wire(monkeypatch, _df(), _df(end=100.0), fundamentals={"code33": None})
+    assert build_buy_context("FTNT")["code33"] is None
+    # and when there is no fundamentals row at all
+    _wire(monkeypatch, _df(), _df(end=100.0), fundamentals=None)
+    assert build_buy_context("FTNT")["code33"] is None
 
 
 def test_buy_context_degrades_without_cached_prices(monkeypatch):

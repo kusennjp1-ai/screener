@@ -40,7 +40,7 @@ def build_buy_context(symbol: str) -> Dict[str, Any]:
         from app.services.markets360 import chart as chart_overlays
         from app.services.markets360.signals import compute_buy_signal
         from app.services.minervini_bands import calculate_bands
-        from app.wiring.bootstrap import get_benchmark_cache, get_price_cache
+        from app.wiring.bootstrap import get_benchmark_cache, get_fundamentals_cache, get_price_cache
 
         price_df = get_price_cache().get_cached_only(symbol, period=_PERIOD)
         if price_df is None or getattr(price_df, "empty", True) or "Close" not in price_df.columns:
@@ -66,6 +66,17 @@ def build_buy_context(symbol: str) -> Dict[str, Any]:
             buy_risk_state=bands.get("buy_risk_state"),
         )
 
+        # Code 33 (Minervini earnings acceleration) from the cached fundamentals
+        # flag — null when not evaluated (non-US / no EDGAR). Cache-only; the
+        # buy checklist lights it live from here, not just in the static export.
+        code33 = None
+        try:
+            fundamentals = get_fundamentals_cache().get_fundamentals(symbol, market=market)
+            if fundamentals is not None:
+                code33 = fundamentals.get("code33")
+        except Exception:  # noqa: BLE001 - a bonus flag must not break the viewer
+            logger.warning("buy-context code33 load failed for %s", symbol, exc_info=True)
+
         idx = price_df.index[-1]
         return {
             "symbol": symbol,
@@ -75,6 +86,7 @@ def build_buy_context(symbol: str) -> Dict[str, Any]:
             "buy_points": buy_points,
             "vcp_boxes": vcp_boxes,
             "signal": signal,
+            "code33": code33,
         }
     except Exception:  # noqa: BLE001 - chart decoration must never 500 the viewer
         logger.warning("buy-context failed for %s", symbol, exc_info=True)

@@ -45,6 +45,13 @@ describe('BuyChecklist', () => {
     expect(screen.getByText(/3バレル全点灯＝Triple Barrel買い/)).toBeInTheDocument();
   });
 
+  it('lights Code 33 from buy-context (live) over the scan row', () => {
+    renderWithProviders(
+      <BuyChecklist buyContext={{ ...buyContext, code33: true }} stockData={stockData} />,
+    );
+    expect(screen.getByTestId('buy-check-code33')).toHaveAttribute('data-met', 'true');
+  });
+
   it('shows the lit-barrel count when the signal is inactive', () => {
     renderWithProviders(
       <BuyChecklist
