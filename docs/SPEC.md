@@ -33,6 +33,29 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | 二軸 (quality × execution state) | `domain/scanning/scoring.py` 7状態+State Cap | ⚠️ | execution stateの入力が**minerviniスキャナー限定**。m360/SEのみのスキャンはunknown＝Capなし。SMA200過伸長100%(tradermonty=50%)は未較正。サーバー側フィルタ不可 |
 | Setup Engine | `analysis/patterns/` 7検出器+readiness、gate-1..5 | ✅ | 7状態enumとは別語彙（in_early_zone等）。pivotが3実装で不一致あり得る（reconciliation無し） |
 
+## ファンダメンタル・カバレッジ表（C41監査、2026-07-08）
+
+「取得(fetch)→保存(column)→スコア消費(scanner)」の3段で、各Minervini/CANSLIMファンダ指標の状態。**取得できているか＝fetch+column両方が✅か**。
+
+| 指標 | 取得 | 保存(列) | スコア消費 | 備考 |
+|---|:--:|:--:|:--:|---|
+| 四半期EPS成長YoY (`eps_growth_qq/yy`) | ✅ finviz/growth_cadence | ✅ | ✅ CANSLIM C/A | 中核 |
+| 年間EPS成長 (`eps_growth_annual`, `eps_5yr_cagr`) | ✅ | ✅ | ⚠️ 未消費（CはYoY使用） | |
+| 四半期/年間 売上成長 (`sales_growth_qq/yy`, `revenue_growth`) | ✅ finviz | ✅ | ⚠️ 表示のみ・未スコア | |
+| 純/営業/粗 利益率 | ✅ finviz | ✅ | ⚠️ 未スコア | |
+| ROE/ROA/ROIC | ✅ finviz | ✅ | ⚠️ 未スコア（SMRのみ） | |
+| フォワードEPS推定 (`eps_next_q/y/5y`) | ✅ finviz | ✅ | ⚠️ 未スコア | |
+| 機関保有 (`institutional_ownership`) | ✅ finviz | ✅ | ✅ CANSLIM I | 変化(trans/change)は未消費 |
+| 負債 (`debt_to_equity`, `lt_debt_to_equity`) | ✅ finviz | ✅ | ⚠️ 未スコア | |
+| EPS Rating（percentile合成） | ✅ 算出 | ✅ | ⚠️ 未消費（scan_resultsには載る） | |
+| **決算日 (`next_earnings_date`)** | ✅ yfinance | ✅ **C41で修正** | ✅ CANSLIM近接ゲート | **修正前: 取得済だが列欠落で往復脱落→ゲート常時no-op（死んでいた）** |
+| **Code 33（EPS+売上+利益率3四半期加速）** | ✅ EDGAR (CIのみ) | ❌ 列なし | ❌ **どのスキャナーも未消費** | エンジンは実装済だがstatic export/presetのみ。ライブスキャン・API・BuyChecklistの`code33`はライブでは常にnull |
+| 決算サプライズ（実績vs予想） | ❌ 未取得 | ❌ | ❌ | finviz `EPS Surprise`等を未マッピング。カタリスト系 |
+| アナリスト推定改定方向 | ❌ 未取得 | ❌ | ❌ | カタリスト系 |
+| 利益率の拡大/加速トレンド | ❌（Code33内のみ） | ❌ | ❌ | 単発margin値はあるが前期比トレンド無し |
+
+**結論**: Minervini中核ファンダ（EPS/売上/利益率/ROE/機関保有/EPS Rating）は**取得+保存とも揃う**。ただし ①**Code 33（決算加速＝Minervini最重要ファンダ）がどのスキャナーにも未統合**（最大の残ギャップ、EDGAR依存でCI必要）②多くのファンダが保存済だがスコア未消費（CANSLIMはC/A/I＋テクニカルN/S/Lのみ、Minerviniは`needs_fundamentals=False`でファンダ無スコア）③サプライズ/推定改定/margin加速は未取得（カタリスト系、二次的）。
+
 ## Validation — 凍結契約（レッドライン）
 
 **固定 ground-truth ハーネス**: `backend/scripts/validate_trade_ideas.py`

@@ -220,6 +220,12 @@
 - **未修正で記録（別サイクル候補）**: ①US planの`alphavantage`ステップは未登録adapterで空no-op（第3段が死んでいる）②`_store_in_database`が部分ペイロードのNoneで既存カラムを上書きし得る。
 - **次**: C41=Alpha Vantage未登録adapter（登録 or plan除去でWARNINGノイズ解消）、またはSPECバックログ再点検。
 
+### C41 — 2026-07-08 Minerviniファンダ・カバレッジ監査＋決算日配線修正（コミット 9455153）
+- **監査（ユーザー依頼「必要なファンダ指標は全て取得できているか」）**: 探索エージェント2本＋ライブ実測で「取得→保存→スコア消費」3段マップ作成→SPEC.mdに永続カバレッジ表を記録。**中核（EPS/売上/利益率/ROE/機関保有/EPS Rating）は取得+保存とも揃う**。ギャップ: ①Code 33がどのスキャナーも未消費（static/presetのみ、最大の残課題・EDGAR依存）②多数のファンダが保存済だが未スコア ③サプライズ/推定改定/margin加速は未取得（カタリスト系）。
+- **発見→修正した実バグ**: `next_earnings_date`は yfinance が取得しCANSLIM近接ゲートが読むのに、`StockFundamental`に列が無く store→DB→read再構築で脱落→ゲートが常時no-op（W2.1「完了」扱いだが data plumbing 断線・**死んでいた**）。列追加（migration 0024）＋store/read 4箇所配線。日付欠落時は従来通り permissive（golden不変）。
+- **E2E実証**: 実DBに3日後の決算日を投入→`get_fundamentals`往復でキー生存→CANSLIMゲートが`blackout=True (3d to report)`発火（修正前は到達せず）。配線回帰テスト2件＋既存ゲートテスト10件。レッドライン199・golden 43。
+- **次**: C42候補=Code 33のライブ統合（EDGAR facts をscan時に参照 or scan_resultsに`code33`列を追加しCIバンドル経由で供給）——Minervini最重要ファンダの未統合を閉じる。要CI検証。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
