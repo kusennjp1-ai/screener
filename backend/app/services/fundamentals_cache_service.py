@@ -386,6 +386,7 @@ class FundamentalsCacheService:
                 # Quarter metadata (consolidated from QuarterlyData)
                 "recent_quarter_date": record.recent_quarter_date,
                 "previous_quarter_date": record.previous_quarter_date,
+                "next_earnings_date": record.next_earnings_date,
                 "growth_reporting_cadence": record.growth_reporting_cadence,
                 "growth_metric_basis": record.growth_metric_basis,
                 "growth_comparable_period_date": record.growth_comparable_period_date,
@@ -903,6 +904,7 @@ class FundamentalsCacheService:
                 existing_record.sales_growth_qq = data.get("sales_growth_qq")
                 existing_record.recent_quarter_date = data.get("recent_quarter_date")
                 existing_record.previous_quarter_date = data.get("previous_quarter_date")
+                existing_record.next_earnings_date = data.get("next_earnings_date")
                 existing_record.growth_reporting_cadence = data.get("growth_reporting_cadence")
                 existing_record.growth_metric_basis = data.get("growth_metric_basis")
                 existing_record.growth_comparable_period_date = data.get("growth_comparable_period_date")
@@ -1046,6 +1048,7 @@ class FundamentalsCacheService:
                     sales_growth_qq=data.get("sales_growth_qq"),
                     recent_quarter_date=data.get("recent_quarter_date"),
                     previous_quarter_date=data.get("previous_quarter_date"),
+                    next_earnings_date=data.get("next_earnings_date"),
                     growth_reporting_cadence=data.get("growth_reporting_cadence"),
                     growth_metric_basis=data.get("growth_metric_basis"),
                     growth_comparable_period_date=data.get("growth_comparable_period_date"),
@@ -1304,6 +1307,7 @@ class FundamentalsCacheService:
                     # Quarter metadata
                     "recent_quarter_date": record.recent_quarter_date,
                     "previous_quarter_date": record.previous_quarter_date,
+                    "next_earnings_date": record.next_earnings_date,
                     "growth_reporting_cadence": record.growth_reporting_cadence,
                     "growth_metric_basis": record.growth_metric_basis,
                     "growth_comparable_period_date": record.growth_comparable_period_date,

@@ -74,3 +74,43 @@ def test_coerce_date_handles_varied_inputs():
     # epoch seconds for 2026-07-01
     epoch = 1782950400
     assert _coerce_date(epoch).year == 2026
+
+
+# --- Data plumbing: next_earnings_date must survive the DB round-trip -----
+# The gate logic above was always sound, but the field was fetched by yfinance
+# and then DROPPED (no DB column), so the cached fundamentals dict handed to
+# the gate never contained it and the gate was a permanent no-op. These pin
+# that the column now carries the value through store + read.
+
+def test_store_persists_next_earnings_date():
+    from unittest.mock import MagicMock
+    from app.models.stock import StockFundamental
+    from app.services.fundamentals_cache_service import FundamentalsCacheService
+
+    captured = {"record": None}
+    fake_db = MagicMock()
+    fake_db.query.return_value.filter.return_value.first.return_value = None  # insert path
+
+    def _capture(record):
+        if isinstance(record, StockFundamental):
+            captured["record"] = record
+
+    fake_db.add.side_effect = _capture
+    svc = FundamentalsCacheService(redis_client=None, session_factory=lambda: fake_db)
+
+    svc._store_in_database(
+        "AAPL",
+        {"market_cap": 3_000_000_000_000, "next_earnings_date": "2026-07-31"},
+        data_source="yfinance",
+        market="US",
+    )
+    assert captured["record"] is not None
+    assert captured["record"].next_earnings_date == "2026-07-31"
+
+
+def test_model_exposes_next_earnings_date_column():
+    from app.models.stock import StockFundamental
+
+    assert "next_earnings_date" in StockFundamental.__table__.columns
+    rec = StockFundamental(symbol="X", next_earnings_date="2026-07-03")
+    assert rec.next_earnings_date == "2026-07-03"
