@@ -178,6 +178,12 @@
 - **検証**: FTNT実機375pxでブラウザ実写——初版はバンドストリップ左端に被り→**フロー行に置き直して再実写**（ストリップ・全バー可視を確認）。デスクトップはバッジ0個（カード不変）をPlaywrightでカウント検証。SignalBadgesテスト4/4・markets360+モーダル20/20・レッドライン181・golden 43・eslint緑。
 - **次**: C33候補=ポジションアラートのpush通知化、またはRRG再生とバッジの統一モーション言語化（duration/easingトークン共有）。
 
+### C33 — 2026-07-08 モーション語彙の統一（コミット 9c61828）
+- **変更**: 4画面が同じ概念を4つの私的定義で実装していた（sellPulse/posPulse/badgeIn+badgePulse/インライン600ms・700msリテラル）→ `theme/motion.js`に単一語彙化：MOTION durations（fast160/enter360/tween600/pulse2000）＋easing 2種、`pulseRing()`・`enterSlideFade(order, pulseColor)`・`standardTransition()`・`PLAYBACK_FRAME_MS`。SignalBadges・SellPlanCard・Positionsアクションチップ＋R進捗バー・RRG再生（フレーム間隔＋ヘッドtween）が全てトークン消費——トークン1つ変えれば全画面が一緒に動く。
+- **アクセシビリティ**: SellPlanCardとポジションチップは従来**無条件**でパルスしていた→全アニメーションを`prefers-reduced-motion`背後に移動。Playwrightの`reducedMotion: 'reduce'`エミュレーションで`animationName: none`を機械検証＋通常モーションのスクショでパルスリング健在を目視。
+- **検証**: motionトークンテスト3（ガード・スタガー算術・合成をピン）、消費側スイート42/42、eslint緑。ビジュアル回帰なし（positions実写）。
+- **次**: C34候補=ポジションアラートのpush通知化、または登録済みポジションのMarkets360チャートへのentry/stop水平線描画。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
