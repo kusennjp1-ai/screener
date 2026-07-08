@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Box, Button, CircularProgress, Snackbar, Typography, Alert } from '@mui/material';
+import { Box, Button, CircularProgress, Snackbar, Typography, Alert, useMediaQuery } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
 import { fetchMarkets360, markets360Keys } from '../api/markets360';
 import { createPosition } from '../../../api/positions';
@@ -12,6 +13,7 @@ import Markets360Chart from '../components/Markets360Chart';
 import BuyingNowCard from '../components/BuyingNowCard';
 import ExitSignalCard from '../components/ExitSignalCard';
 import SellPlanCard from '../components/SellPlanCard';
+import SignalBadges from '../components/SignalBadges';
 import QuarterlyStrip from '../components/QuarterlyStrip';
 
 const PERIODS = [
@@ -96,6 +98,8 @@ function LegendOverlay({ data, timeframe, hover }) {
 export default function Markets360Page() {
   const { ticker } = useParams();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const symbol = (ticker || 'AAPL').toUpperCase();
   const [timeframe, setTimeframe] = useState('daily');
   const [period, setPeriod] = useState('1y');
@@ -130,6 +134,9 @@ export default function Markets360Page() {
         onAskMai={() => {}}
       />
       <StatusBar data={data} />
+      {/* 375px: overlay cards would cover the candles — an in-flow animated
+          badge strip carries the same signals without hiding a single bar. */}
+      {isMobile && <SignalBadges signal={data?.signal} sellPlan={data?.sell_plan} />}
 
       <Box sx={{ position: 'relative', flex: 1, minHeight: 560 }}>
         {isLoading && (
@@ -147,10 +154,14 @@ export default function Markets360Page() {
           <>
             <LegendOverlay data={data} timeframe={timeframe} hover={hover} />
             <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} />
-            <BuyingNowCard signal={data?.signal} onRegister={() => setRegisterOpen(true)} />
-{data?.sell_plan
-              ? <SellPlanCard sellPlan={data.sell_plan} />
-              : <ExitSignalCard exitSignal={data?.exit_signal} />}
+            {!isMobile && (
+              <>
+                <BuyingNowCard signal={data?.signal} onRegister={() => setRegisterOpen(true)} />
+                {data?.sell_plan
+                  ? <SellPlanCard sellPlan={data.sell_plan} />
+                  : <ExitSignalCard exitSignal={data?.exit_signal} />}
+              </>
+            )}
           </>
         )}
       </Box>

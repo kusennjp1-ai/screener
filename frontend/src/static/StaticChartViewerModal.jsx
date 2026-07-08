@@ -22,6 +22,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import CandlestickChart from '../components/Charts/CandlestickChart';
 import BuyingNowCard from '../features/markets360/components/BuyingNowCard';
 import SellPlanCard from '../features/markets360/components/SellPlanCard';
+import SignalBadges from '../features/markets360/components/SignalBadges';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
@@ -588,6 +589,12 @@ function StaticChartViewerModal({
                       horizontally on narrow screens. */}
                   <ChartInfoStrip minerviniInfo={minerviniInfo} />
                   <BandLegend />
+                  {isMobile && (
+                    <SignalBadges
+                      signal={chartPayload?.signal}
+                      sellPlan={chartPayload?.sell_plan}
+                    />
+                  )}
                   <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                     <CandlestickChart
                       symbol={currentSymbol}
@@ -611,7 +618,8 @@ function StaticChartViewerModal({
                     />
                     {/* Markets 360 signal cards from the static payload —
                         same components as the live page, desktop only (at
-                        375px a 300px card would cover the candles). */}
+                        375px a 300px card would cover the candles; mobile
+                        gets the in-flow badge strip above the chart). */}
                     {!isMobile && (
                       <>
                         <BuyingNowCard signal={chartPayload?.signal} />
