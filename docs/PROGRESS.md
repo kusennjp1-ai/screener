@@ -213,6 +213,13 @@
 - **検証**: ブラウザ実写——サイドバーEPS Q/Qホバーで日本語解説表示、適用済みラベルに点線下線。Scan+staticスイート161/161・eslint緑。
 - **次**: SPECバックログ再点検（理論忠実度残項目）。
 
+### C40 — 2026-07-08 ファンダ取得パイプライン検証＋stale配信フォールバック（コミット e5dd30c）※Opus 4.8で実施
+- **検証（ユーザー依頼「ファンダ取得は問題ないか」）**: 探索エージェント＋ライブ実測でパイプライン全体を確認。①parse/compute/cache=ユニット69件green ②`store()→get_fundamentals`一気通貫=全フィールド往復OK（pe/epsQQ/salesQQ/roe/mcap）③空キャッシュ=クリーンに404縮退 ④`DataSourceService`構築OK（宣言済み`defusedxml`がsandboxのみ未インストール→pip install、requirements-server.txtには存在）→ネットワーク境界まで到達（sandboxは403で仕様通り）⑤ライブ取得の実体はCI `weekly-reference-data.yml`（本番アプリは週次GitHubバンドルをimportし通常ライブ取得しない）。
+- **発見した実バグ→修正**: `get_fundamentals`のstale分岐が、DB行が古い（>7日）＋ライブ取得失敗（プロバイダ403/429/停止は日常）時に**使えるstale行を捨ててNone→404→パネル全「-」**。修正: 先にリフレッシュ試行→失敗時のみstale行を`is_stale:true`付きで配信。真のキャッシュミスは従来通りNone→404、明示`force_refresh`（週次タスク）も不変。
+- **E2E実証**: FTNT行を30日前に古くしRedisキー削除、プロバイダ遮断下で`GET /v1/stocks/FTNT/fundamentals`——修正前404→修正後`is_stale=true`でpe=45.2/roe=0.34配信。回帰テスト3分岐（stale配信・fresh優先・真ミス）。fundamentals 52・レッドライン184・golden 43。
+- **未修正で記録（別サイクル候補）**: ①US planの`alphavantage`ステップは未登録adapterで空no-op（第3段が死んでいる）②`_store_in_database`が部分ペイロードのNoneで既存カラムを上書きし得る。
+- **次**: C41=Alpha Vantage未登録adapter（登録 or plan除去でWARNINGノイズ解消）、またはSPECバックログ再点検。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

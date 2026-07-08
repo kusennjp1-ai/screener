@@ -5,7 +5,8 @@
 
 ## 現在
 
-- **サイクル**: C39 完了（グロッサリ全面カバレッジ＋静的ビューアにチェックリスト）／ **次: C40**
+- **サイクル**: C40 完了（ファンダ取得検証＋stale配信フォールバック）※Opus 4.8に切替済み／ **次: C41**
+- **モデル**: fableから**Opus 4.8**へ切替（ユーザー指示）。以降のコミット co-author は harness指定に従う。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし（code33-check ディスパッチは全消化済み）
 
@@ -22,8 +23,10 @@
 
 ## 次アクション（優先順）
 
-1. **C40: SPECバックログ再点検**（docs/SPEC.md優先表→理論忠実度の残項目から次サイクル群を選定）。
-2. 「今買うべき銘柄」の可視化はC37-C39で完成：スキャン結果→バンド3本・VCP箱・Buy Trigger線がチャート上の根拠、買い点灯条件チェックリストがルールを明示、全指標タップで日本語解説。
+1. **C41候補a: Alpha Vantage未登録adapter** — US planの第3段が空no-op（`fundamentals_provider_adapters.py`にadapter未登録＋APIの`use_alpha_vantage`paramも未消費）。登録するか plan除去でWARNINGノイズ解消。
+2. **C41候補b: `_store_in_database`の部分ペイロード上書き** — 部分リフレッシュのNoneが既存の valuation/growth カラムを上書きし得る（`_assign_if_present`ガードは一部のみ）。
+3. **C41候補c: SPECバックログ再点検**（理論忠実度残項目）。
+4. **設定メモ**: sandboxは`defusedxml`が未インストールになりがち→ファンダ系フェッチ経路を触る前に`pip install defusedxml`（requirements-server.txt宣言済み）。
 3. **設定メモ**: 通知は`.env`に`POSITION_ALERT_WEBHOOK_URL`（Discord/Slack webhook）を設定。
 4. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
