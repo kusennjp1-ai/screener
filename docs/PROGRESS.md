@@ -168,6 +168,11 @@
 - **検証**: export serviceテストがペイロードブロックとバンド状態フィードスルーをピン（57 passed、tpr_state=strong→barrels.trend=true）。モーダルテストが静的ペイロードから両カード描画をピン（staticスイート49 passed）。レッドライン238・golden 43・eslint緑。実サイトの見た目は次回のstatic-site.ymlビルド後にGitHub Pagesで確認可能。
 - **次**: ポジションのdaily要約 or モバイル向けシグナル表現（コンパクトバッジ）。
 
+### C31 — 2026-07-08 デイリーダイジェストにポジション要約（コミット f4097b7）
+- **変更**: 日次ダイジェストが全オープンポジションを**Positionsページと同一の売りエンジン**で評価（cache-only価格＝外部fetch誘発なし）し、**要アクションのみ**を緊急度順（exit＞sell_into_strength＞tighten_stop＞raise_stop）で表示——R倍数・P&L・現在のラダーstop・日本語注記付き。JSON・markdown（通知用アラート素材）・DigestPageテーブル（色分けアクション、/positionsへリンク）の3面に出力。副産物：**孤児だったDigestTabをDailyページに実装**（どこからもimportされていなかった）。プロファイル定義のsection_orderには'positions'をrisks直前に自動挿入。失敗時は空セクションに縮退。
+- **検証**: sandbox実機で/v1/digest/dailyがMSFT exit(+2.07R)・FTNT raise_stop(+4.70R, stop 128.87↑)を緊急度順で返却、hold/no_dataは非表示（C27でシグナル価格登録した方のFTNTはhold＝正しく除外）。markdownセクション・Digestタブのブラウザ実写確認。digestテスト11/11・ページ4/4・レッドライン192・golden 43。
+- **次**: モバイル向け静的シグナルバッジ、またはポジションアラートのpush通知化（beat＋markdown配信）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
