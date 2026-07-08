@@ -9,15 +9,18 @@
  *
  * Pure: returns [] when there is no matching open position.
  */
-export const positionPriceLines = (position) => {
+export const positionPriceLines = (position, { index = 0, count = 1 } = {}) => {
   if (!position || position.status !== 'open' || position.entry_price == null) return [];
+  // With several positions in one symbol, number the labels so the axis
+  // reads unambiguously (Entry#1 = oldest entry, matching the journal).
+  const tag = count > 1 ? `#${index + 1} ` : '';
   const lines = [
     {
-      id: 'position-entry',
+      id: `position-entry-${index}`,
       price: Number(position.entry_price),
       color: '#3aa0ff',
       dashed: false,
-      title: `Entry ${Number(position.entry_price).toFixed(2)}`,
+      title: `Entry ${tag}${Number(position.entry_price).toFixed(2)}`,
     },
   ];
   const ladder = position.sell_plan?.trailing || {};
@@ -25,12 +28,24 @@ export const positionPriceLines = (position) => {
   if (stop != null) {
     const raised = Boolean(ladder.raised);
     lines.push({
-      id: 'position-stop',
+      id: `position-stop-${index}`,
       price: Number(stop),
       color: raised ? '#22ab94' : '#f23645',
       dashed: true,
-      title: `Stop ${Number(stop).toFixed(2)}${raised ? ' ↑' : ''}`,
+      title: `Stop ${tag}${Number(stop).toFixed(2)}${raised ? ' ↑' : ''}`,
     });
   }
   return lines;
+};
+
+/**
+ * All price lines for one symbol's OPEN positions, oldest entry first so
+ * the #1/#2 numbering matches the order the trades were put on.
+ */
+export const symbolPositionLines = (positions, symbol) => {
+  const matches = (positions || [])
+    .filter((p) => p.symbol === symbol && p.status === 'open' && p.entry_price != null)
+    .slice()
+    .sort((a, b) => String(a.entry_date).localeCompare(String(b.entry_date)));
+  return matches.flatMap((p, index) => positionPriceLines(p, { index, count: matches.length }));
 };

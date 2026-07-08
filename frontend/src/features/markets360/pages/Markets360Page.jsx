@@ -7,7 +7,7 @@ import { useTheme } from '@mui/material/styles';
 import { fetchMarkets360, markets360Keys } from '../api/markets360';
 import { createPosition, getPositions } from '../../../api/positions';
 import AddPositionDialog from '../../../components/positions/AddPositionDialog';
-import { positionPriceLines } from '../positionLines';
+import { symbolPositionLines } from '../positionLines';
 import ChartToolbar from '../components/ChartToolbar';
 import StatusBar from '../components/StatusBar';
 import Markets360Chart from '../components/Markets360Chart';
@@ -131,10 +131,10 @@ export default function Markets360Page() {
     queryFn: () => getPositions('open'),
     staleTime: 60_000,
   });
-  const positionLines = useMemo(() => {
-    const match = (positionsQuery.data?.positions || []).find((p) => p.symbol === symbol);
-    return positionPriceLines(match);
-  }, [positionsQuery.data, symbol]);
+  const positionLines = useMemo(
+    () => symbolPositionLines(positionsQuery.data?.positions, symbol),
+    [positionsQuery.data, symbol],
+  );
 
   return (
     <Box sx={{ bgcolor: '#0a0a0f', minHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
