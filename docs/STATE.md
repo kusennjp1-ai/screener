@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C33 完了（モーション語彙の統一 theme/motion.js＋reduced-motion一括ガード）／ **次: C34**
+- **サイクル**: C34 完了（自分のトレードをチャートに描画——entry/ラダーstop水平線）／ **次: C35**
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし（code33-check ディスパッチは全消化済み）
 
@@ -22,8 +22,8 @@
 
 ## 次アクション（優先順）
 
-1. **C34候補a: 登録ポジションのentry/stop水平線をMarkets360チャートに描画**（自分の建値とラダーstopをチャート上で常時視認——トレード管理の視覚化完成）。
-2. **C34候補b: ポジションアラートのpush通知化**（celery beatで日次digest markdown生成→配信チャネル）。
+1. **C35候補a: ポジションアラートのpush通知化**（celery beatで日次digest markdown生成→配信チャネル）。
+2. **C35候補b: 同一銘柄の複数ポジション線の重ね描き**（C34は最新entryのみ描画）。
 3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 

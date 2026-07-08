@@ -184,6 +184,11 @@
 - **検証**: motionトークンテスト3（ガード・スタガー算術・合成をピン）、消費側スイート42/42、eslint緑。ビジュアル回帰なし（positions実写）。
 - **次**: C34候補=ポジションアラートのpush通知化、または登録済みポジションのMarkets360チャートへのentry/stop水平線描画。
 
+### C34 — 2026-07-08 自分のトレードをチャートに描画（コミット f169a3a）
+- **変更**: 表示中の銘柄にオープンポジションがあれば、Markets 360チャートに**自分の建値と現在のラダーstop**を水平線描画——entry=青実線、stop=破線（元リスク未解消は赤、ラダー切り上げ後は緑＋↑）、両方軸ラベル付き。売りエンジンがstopを切り上げるたびに線が動く。`positionPriceLines()`は純関数、チャートは汎用`priceLines`プロップ（lightweight-charts createPriceLine、変更時に再生成）。同一銘柄に複数ポジション時は最新entryを描画（v1仕様）。
+- **検証**: FTNT実機で「Entry 149.67」「Stop 134.70」の軸ラベル＋水平線を実写確認。positionLinesテスト4/4・markets360スイート23/23・eslint緑。
+- **次**: C35候補=ポジションアラートのpush通知化、または複数ポジション線の重ね描き。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
