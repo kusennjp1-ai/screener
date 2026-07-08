@@ -43,6 +43,16 @@ def convert_numpy_types(obj):
         return obj
 
 
+@router.get("/{symbol}/buy-context")
+async def get_buy_context(symbol: str):
+    """Why (and whether) this chart is a buy — MM360 bands, VCP box, staged
+    buy points, and the buy signal with its three confirmation barrels.
+    Cache-only prices: `available: false` when the symbol isn't cached."""
+    from ...services.buy_context import build_buy_context
+
+    return convert_numpy_types(build_buy_context(symbol))
+
+
 @router.get("/{symbol}/minervini")
 async def scan_minervini(
     symbol: str,

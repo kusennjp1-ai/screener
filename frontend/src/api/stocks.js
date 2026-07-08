@@ -92,6 +92,18 @@ export const getMinerviniScan = async (symbol, includeVCP = true) => {
 };
 
 /**
+ * Get the chart buy context for a stock — MM360 color bands (with per-bar
+ * histories), VCP box, staged buy points, and the buy signal with its three
+ * confirmation barrels. Cache-only server side ({available:false} on miss).
+ * @param {string} symbol - Stock ticker symbol
+ * @returns {Promise} Buy context payload
+ */
+export const getBuyContext = async (symbol) => {
+  const response = await apiClient.get(`/v1/technical/${symbol}/buy-context`);
+  return response.data;
+};
+
+/**
  * Get Relative Strength (RS) rating for a stock
  * @param {string} symbol - Stock ticker symbol
  * @returns {Promise} RS rating data
