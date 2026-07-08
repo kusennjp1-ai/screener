@@ -194,6 +194,11 @@
 - **検証**: sandboxでローカルHTTPシンク相手にE2E——実DBの5ポジション評価→`{'status':'sent', actionable:2}`、受信メッセージにMSFT exit(+2.07R)とFTNT raise_stop(+4.70R, stop 128.87↑)＋日本語注記。beat登録とタスク登録をcelery_app importで機械検証。unit 3・digest 11・レッドライン193・golden 43。
 - **次**: C36候補=同一銘柄複数ポジション線の重ね描き、または凍結中以外のバックログ再点検（SPEC優先表）。
 
+### C36 — 2026-07-08 複数ポジション線の重ね描き（コミット de267b6）
+- **変更**: C34は最新ポジションのみ描画→`symbolPositionLines()`が表示銘柄の**全オープンポジション**を古いentry順に積層、複数時は軸ラベルに#1/#2番号（ピラミッディングが一意に読める。単一時は無番号のまま）。stop線は個別に色分け——ラダー切り上げ済みは緑↑、新規建玉の初期stopは赤。
+- **検証**: FTNT実機（2建玉）で4本全て実写確認——Entry #1 110.00／Stop #1 128.87 ↑（緑）／Entry #2 149.67／Stop #2 134.70（赤）。positionLines 5/5・markets360 24/24・eslint緑。
+- **次**: SPECバックログ再点検（トレードライフサイクル可視化は完成——screen→buy→chart上のトレード→daily監視→アラート→close）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

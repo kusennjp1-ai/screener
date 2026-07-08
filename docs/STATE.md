@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C35 完了（ポジションアラートのpush通知化——beat＋webhook）／ **次: C36**
+- **サイクル**: C36 完了（複数ポジション線の重ね描き——トレードライフサイクル可視化が完成）／ **次: C37**
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし（code33-check ディスパッチは全消化済み）
 
@@ -22,9 +22,9 @@
 
 ## 次アクション（優先順）
 
-1. **C36候補a: 同一銘柄の複数ポジション線の重ね描き**（C34は最新entryのみ描画）。
-2. **C36候補b: SPECバックログ再点検**（トレードライフサイクル完成後の次テーマ選定——理論忠実度残項目を優先）。
-3. **設定メモ**: 通知を使うには`.env`に`POSITION_ALERT_WEBHOOK_URL`（Discord/Slack webhook）を設定。
+1. **C37: SPECバックログ再点検**（docs/SPEC.md優先表を読み、理論忠実度の残項目から次サイクル群を選定。トレードライフサイクル可視化はC26-C36で完成：screen→buy→チャート上のトレード→daily監視→webhookアラート→close）。
+2. **設定メモ**: 通知を使うには`.env`に`POSITION_ALERT_WEBHOOK_URL`（Discord/Slack webhook）を設定。
+3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 
