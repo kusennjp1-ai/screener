@@ -208,6 +208,11 @@
 - **検証**: 実スキャンFTNTで実写——エンジン実値どおりの表示（Pressure✓・TPR transition×・template fail・RS 62×）、Trend Templateタップで日本語ツールチップ。BuyChecklist 3/3・Scanスイート112/112・eslint緑。
 - **次**: C39=英語表記グロッサリの残カバレッジ一斉点検（サイドバー各ラベル等）、静的ビューアへのチェックリスト展開。
 
+### C39 — 2026-07-08 グロッサリ全面カバレッジ＋静的ビューアにチェックリスト（コミット 79a17fb）
+- **変更**: スキャンサイドバーの英語ラベルはグロッサリ適用**ゼロ**だった→`MetricRow`に`term`プロップを追加し、解説のある全行を配線（スコア4種・RS 1M/3M/12M・Beta・β-adj RS・成長6種・バリュエーション5種・VCP Score/Pivot）。グロッサリに13エントリ新規追加（EPS Q/Q=CANSLIMのC・+25%合格ライン、P/E=Minerviniは高PERで却下しない、Inst Own=40-70%適正帯等）。静的PWAビューアにもライブと同一の買い点灯条件チェックリスト（静的ペイロードのbands+signalから供給——1コンポーネント2画面）。
+- **検証**: ブラウザ実写——サイドバーEPS Q/Qホバーで日本語解説表示、適用済みラベルに点線下線。Scan+staticスイート161/161・eslint緑。
+- **次**: SPECバックログ再点検（理論忠実度残項目）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

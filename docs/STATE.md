@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C38 完了（全スキャンチャートにMM360バンド＋買い点灯条件チェックリスト）／ **次: C39**
+- **サイクル**: C39 完了（グロッサリ全面カバレッジ＋静的ビューアにチェックリスト）／ **次: C40**
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし（code33-check ディスパッチは全消化済み）
 
@@ -22,8 +22,8 @@
 
 ## 次アクション（優先順）
 
-1. **C39: グロッサリ残カバレッジ点検**——StockMetricsSidebar等の英語ラベルにGlossaryLabel未適用箇所のスイープ＋静的ビューアへのBuyChecklist展開（静的ペイロードはsignal/bands保持済み）。
-2. SPECバックログ再点検（理論忠実度の残項目）。
+1. **C40: SPECバックログ再点検**（docs/SPEC.md優先表→理論忠実度の残項目から次サイクル群を選定）。
+2. 「今買うべき銘柄」の可視化はC37-C39で完成：スキャン結果→バンド3本・VCP箱・Buy Trigger線がチャート上の根拠、買い点灯条件チェックリストがルールを明示、全指標タップで日本語解説。
 3. **設定メモ**: 通知は`.env`に`POSITION_ALERT_WEBHOOK_URL`（Discord/Slack webhook）を設定。
 4. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
