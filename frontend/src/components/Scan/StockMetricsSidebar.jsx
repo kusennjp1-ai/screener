@@ -15,6 +15,7 @@ import {
 import { formatPercent, formatRatio, formatPatternName, getScoreColor } from '../../utils/formatUtils';
 import { resolveMarketCapDisplay } from '../../utils/marketCapUtils';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../Charts/executionState';
+import GlossaryLabel from '../common/GlossaryLabel';
 
 // Alias for this component's usage (uses hex colors)
 const getGrowthColor = getGrowthColorHex;
@@ -39,11 +40,13 @@ const BoolIndicator = ({ value }) => {
 /**
  * Metric row component for 2-column grid
  */
-const MetricRow = ({ label, value, color }) => (
+const MetricRow = ({ label, value, color, term }) => (
   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-      {label}
-    </Typography>
+    <GlossaryLabel term={term}>
+      <Typography component="span" variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+        {label}
+      </Typography>
+    </GlossaryLabel>
     <Typography variant="body2" fontWeight="medium" sx={{ color: color || 'text.primary', fontSize: '0.8rem' }}>
       {value}
     </Typography>
@@ -138,21 +141,25 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
             <MetricRow
               label="EPS Q/Q"
+            term="eps_qq"
               value={formatPercent(fundamentals.eps_growth_qq)}
               color={getGrowthColor(fundamentals.eps_growth_qq)}
             />
             <MetricRow
               label="Sales Q/Q"
+            term="sales_qq"
               value={formatPercent(fundamentals.sales_growth_qq)}
               color={getGrowthColor(fundamentals.sales_growth_qq)}
             />
             <MetricRow
               label="EPS TTM"
+            term="eps_ttm"
               value={formatPercent(fundamentals.eps_growth_annual)}
               color={getGrowthColor(fundamentals.eps_growth_annual)}
             />
             <MetricRow
               label="Rev Growth"
+            term="rev_growth"
               value={formatPercent(fundamentals.revenue_growth)}
               color={getGrowthColor(fundamentals.revenue_growth)}
             />
@@ -166,11 +173,12 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
           <SectionHeader>VALUATION</SectionHeader>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
             <MetricRow label={marketCapMetric.label} value={marketCapMetric.formattedValue} />
-            <MetricRow label="P/E" value={formatRatio(fundamentals.pe_ratio)} />
-            <MetricRow label="Fwd P/E" value={formatRatio(fundamentals.forward_pe)} />
-            <MetricRow label="PEG" value={formatRatio(fundamentals.peg_ratio)} />
+            <MetricRow term="pe_ratio" label="P/E" value={formatRatio(fundamentals.pe_ratio)} />
+            <MetricRow term="fwd_pe" label="Fwd P/E" value={formatRatio(fundamentals.forward_pe)} />
+            <MetricRow term="peg" label="PEG" value={formatRatio(fundamentals.peg_ratio)} />
             <MetricRow
               label="ROE"
+            term="roe"
               value={fundamentals.roe != null ? `${fundamentals.roe.toFixed(1)}%` : '-'}
             />
             <MetricRow
@@ -179,6 +187,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
             />
             <MetricRow
               label="Inst Own"
+            term="inst_own"
               value={fundamentals.institutional_ownership != null ? `${fundamentals.institutional_ownership.toFixed(1)}%` : '-'}
             />
           </Box>
@@ -276,16 +285,18 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
           <MetricRow
             label="Composite"
+            term="composite"
             value={stockData.composite_score?.toFixed(1) || '-'}
             color="primary.main"
           />
           <MetricRow
             label="EPS Rating"
+            term="eps_rating"
             value={stockData.eps_rating != null ? stockData.eps_rating : '-'}
             color={getEpsRatingColor(stockData.eps_rating)}
           />
-          <MetricRow label="Minervini" value={stockData.minervini_score?.toFixed(1) || '-'} />
-          <MetricRow label="CANSLIM" value={stockData.canslim_score?.toFixed(1) || '-'} />
+          <MetricRow term="minervini" label="Minervini" value={stockData.minervini_score?.toFixed(1) || '-'} />
+          <MetricRow term="canslim" label="CANSLIM" value={stockData.canslim_score?.toFixed(1) || '-'} />
           <MetricRow label="IPO" value={stockData.ipo_score?.toFixed(1) || '-'} />
           <MetricRow label="Custom" value={stockData.custom_score?.toFixed(1) || '-'} />
           <MetricRow label="Vol Break" value={stockData.volume_breakthrough_score?.toFixed(1) || '-'} />
@@ -309,11 +320,11 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
               <RSTrendIcon trend={stockData.rs_trend} />
             </Box>
           </Box>
-          <MetricRow label="RS 1M" value={stockData.rs_rating_1m?.toFixed(1) || '-'} />
-          <MetricRow label="RS 3M" value={stockData.rs_rating_3m?.toFixed(1) || '-'} />
-          <MetricRow label="RS 12M" value={stockData.rs_rating_12m?.toFixed(1) || '-'} />
-          <MetricRow label="Beta" value={stockData.beta?.toFixed(2) || '-'} />
-          <MetricRow label="β-adj RS" value={stockData.beta_adj_rs?.toFixed(0) || '-'} />
+          <MetricRow term="rs_rating" label="RS 1M" value={stockData.rs_rating_1m?.toFixed(1) || '-'} />
+          <MetricRow term="rs_rating" label="RS 3M" value={stockData.rs_rating_3m?.toFixed(1) || '-'} />
+          <MetricRow term="rs_rating" label="RS 12M" value={stockData.rs_rating_12m?.toFixed(1) || '-'} />
+          <MetricRow term="beta" label="Beta" value={stockData.beta?.toFixed(2) || '-'} />
+          <MetricRow term="beta_adj_rs" label="β-adj RS" value={stockData.beta_adj_rs?.toFixed(0) || '-'} />
         </Box>
       </Box>
 
@@ -325,31 +336,37 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
           <MetricRow
             label="EPS Q/Q"
+            term="eps_qq"
             value={formatPercent(stockData.eps_growth_qq ?? fundamentals?.eps_growth_qq)}
             color={getGrowthColor(stockData.eps_growth_qq ?? fundamentals?.eps_growth_qq)}
           />
           <MetricRow
             label="Sales Q/Q"
+            term="sales_qq"
             value={formatPercent(stockData.sales_growth_qq ?? fundamentals?.sales_growth_qq)}
             color={getGrowthColor(stockData.sales_growth_qq ?? fundamentals?.sales_growth_qq)}
           />
           <MetricRow
             label="EPS Y/Y"
+            term="eps_yy"
             value={formatPercent(stockData.eps_growth_yy ?? fundamentals?.eps_growth_yy)}
             color={getGrowthColor(stockData.eps_growth_yy ?? fundamentals?.eps_growth_yy)}
           />
           <MetricRow
             label="Sales Y/Y"
+            term="sales_yy"
             value={formatPercent(stockData.sales_growth_yy ?? fundamentals?.sales_growth_yy)}
             color={getGrowthColor(stockData.sales_growth_yy ?? fundamentals?.sales_growth_yy)}
           />
           <MetricRow
             label="EPS TTM"
+            term="eps_ttm"
             value={formatPercent(fundamentals?.eps_growth_annual)}
             color={getGrowthColor(fundamentals?.eps_growth_annual)}
           />
           <MetricRow
             label="Rev Growth"
+            term="rev_growth"
             value={formatPercent(fundamentals?.revenue_growth)}
             color={getGrowthColor(fundamentals?.revenue_growth)}
           />
@@ -363,11 +380,12 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
         <SectionHeader>VALUATION</SectionHeader>
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
           <MetricRow label={marketCapMetric.label} value={marketCapMetric.formattedValue} />
-          <MetricRow label="P/E" value={formatRatio(fundamentals?.pe_ratio)} />
-          <MetricRow label="Fwd P/E" value={formatRatio(fundamentals?.forward_pe)} />
-          <MetricRow label="PEG" value={formatRatio(fundamentals?.peg_ratio)} />
+          <MetricRow term="pe_ratio" label="P/E" value={formatRatio(fundamentals?.pe_ratio)} />
+          <MetricRow term="fwd_pe" label="Fwd P/E" value={formatRatio(fundamentals?.forward_pe)} />
+          <MetricRow term="peg" label="PEG" value={formatRatio(fundamentals?.peg_ratio)} />
           <MetricRow
             label="ROE"
+            term="roe"
             value={fundamentals?.roe != null ? `${fundamentals.roe.toFixed(1)}%` : '-'}
           />
           <MetricRow
@@ -376,6 +394,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
           />
           <MetricRow
             label="Inst Own"
+            term="inst_own"
             value={fundamentals?.institutional_ownership != null ? `${fundamentals.institutional_ownership.toFixed(1)}%` : '-'}
           />
         </Box>
@@ -394,9 +413,10 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
                 </Typography>
                 <BoolIndicator value={stockData.vcp_detected} />
               </Box>
-              <MetricRow label="Score" value={stockData.vcp_score?.toFixed(1) || '-'} />
+              <MetricRow term="vcp" label="Score" value={stockData.vcp_score?.toFixed(1) || '-'} />
               <MetricRow
                 label="Pivot"
+                term="pivot"
                 value={stockData.vcp_pivot ? `$${stockData.vcp_pivot.toFixed(2)}` : '-'}
               />
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

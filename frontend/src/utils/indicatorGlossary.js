@@ -175,6 +175,72 @@ export const INDICATOR_GLOSSARY = {
     how: '点灯すれば強力なボーナス。ただし必須条件ではない（ハードゲートにしない）。',
   },
 
+  beta: {
+    title: 'Beta（ベータ）',
+    jp: '市場全体に対する感応度。1.0=市場並み、1.5=市場の1.5倍動く。',
+    how: '高ベータは上昇局面で有利だが下落も大きい。ポジションサイズで調整。',
+  },
+  beta_adj_rs: {
+    title: 'β-adjusted RS（ベータ調整済みRS）',
+    jp: 'RS Ratingからベータ由来の「ただ値動きが荒いだけ」の成分を除いた実力値。',
+    how: '生のRSが高くてもβ調整で沈む銘柄は、単なる高ボラの可能性。',
+  },
+  eps_qq: {
+    title: 'EPS Q/Q（四半期EPS成長率）',
+    jp: '直近四半期EPSの前年同期比成長率。CANSLIMの「C」。',
+    how: '+25%以上が合格ライン。+40〜50%超で理想。加速していればさらに強い。',
+  },
+  sales_qq: {
+    title: 'Sales Q/Q（四半期売上成長率）',
+    jp: '直近四半期売上の前年同期比成長率。EPSの質を確認する脚。',
+    how: '+20〜25%以上が理想。EPSだけ伸びて売上が伸びない場合はコスト削減頼み。',
+  },
+  eps_yy: {
+    title: 'EPS Y/Y（年間EPS成長率）',
+    jp: '年間EPSの前年比成長率。CANSLIMの「A」。',
+    how: '+25%以上を3年継続が理想形。',
+  },
+  sales_yy: {
+    title: 'Sales Y/Y（年間売上成長率）',
+    jp: '年間売上の前年比成長率。',
+    how: '成長の持続性を確認。EPSとの乖離が大きい場合は要注意。',
+  },
+  eps_ttm: {
+    title: 'EPS TTM（直近12ヶ月EPS）',
+    jp: '直近12ヶ月の合計EPS。収益ラインの原料。',
+    how: '黒字かつ増加基調が前提。マイナスならCode 33系の判定は不能。',
+  },
+  rev_growth: {
+    title: 'Revenue Growth（売上成長率）',
+    jp: '売上高の成長率。',
+    how: '大化け銘柄は例外なく売上が伸びている。',
+  },
+  pe_ratio: {
+    title: 'P/E（株価収益率）',
+    jp: '株価÷EPS。Minerviniは高PERを理由に成長株を却下しない。',
+    how: '成長株のPERは高くて当然。PERの絶対値より「成長がPERを正当化するか」。',
+  },
+  fwd_pe: {
+    title: 'Forward P/E（予想PER）',
+    jp: '来期予想EPSベースのPER。',
+    how: '実績PERより低ければ市場は成長継続を織り込み中。',
+  },
+  peg: {
+    title: 'PEG（PER÷成長率）',
+    jp: 'PERを成長率で割った値。1.0以下なら成長対比で割安とされる。',
+    how: '参考指標。SEPAではチャートとRSが優先。',
+  },
+  roe: {
+    title: 'ROE（自己資本利益率）',
+    jp: '自己資本に対する利益率。経営効率の指標。',
+    how: '17%以上が機関投資家好みの目安。',
+  },
+  inst_own: {
+    title: 'Institutional Ownership（機関保有率）',
+    jp: '機関投資家の保有比率。CANSLIMの「I」。',
+    how: '40〜70%が適正帯。増加中（スポンサーシップ拡大）が理想。',
+  },
+
   // --- Buy / sell plan cards -------------------------------------------------
   entry: {
     title: 'Entry（エントリー価格）',

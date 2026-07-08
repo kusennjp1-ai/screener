@@ -23,6 +23,7 @@ import CandlestickChart from '../components/Charts/CandlestickChart';
 import BuyingNowCard from '../features/markets360/components/BuyingNowCard';
 import SellPlanCard from '../features/markets360/components/SellPlanCard';
 import SignalBadges from '../features/markets360/components/SignalBadges';
+import BuyChecklist from '../components/Scan/BuyChecklist';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
@@ -561,6 +562,16 @@ function StaticChartViewerModal({
                 height: { xs: 'auto', md: '100%' },
               }}
             >
+              {/* 買い点灯条件 — same checklist as the live scan viewer, fed
+                  from the static payload's bands + signal blocks. */}
+              <BuyChecklist
+                buyContext={{
+                  available: Boolean(chartPayload?.bands || chartPayload?.signal),
+                  bands: chartPayload?.bands || {},
+                  signal: chartPayload?.signal || {},
+                }}
+                stockData={stockData}
+              />
               <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
             </Box>
 
