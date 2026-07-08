@@ -3,6 +3,7 @@ import BoltIcon from '@mui/icons-material/Bolt';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import VerticalAlignTopIcon from '@mui/icons-material/VerticalAlignTop';
+import { enterSlideFade } from '../../../theme/motion';
 
 // Compact Markets 360 signal badges — the mobile-first counterpart of the
 // BuyingNowCard / SellPlanCard overlays (which would cover the candles at
@@ -50,27 +51,8 @@ const badgeSx = (color, pulse, order) => ({
   bgcolor: 'rgba(13,16,22,0.92)',
   height: 30,
   '.MuiChip-icon': { color },
-  '@media (prefers-reduced-motion: no-preference)': {
-    animation: 'badgeIn 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
-    animationDelay: `${order * 90}ms`,
-    '@keyframes badgeIn': {
-      from: { opacity: 0, transform: 'translateY(-6px) scale(0.96)' },
-      to: { opacity: 1, transform: 'translateY(0) scale(1)' },
-    },
-    ...(pulse && {
-      // The ring pulses, not the chip itself — legible while alive.
-      boxShadow: `0 0 0 0 ${color}44`,
-      animationName: 'badgeIn, badgePulse',
-      animationDuration: '360ms, 2s',
-      animationTimingFunction: 'cubic-bezier(0.2, 0.8, 0.2, 1), ease-in-out',
-      animationIterationCount: '1, infinite',
-      animationDelay: `${order * 90}ms, ${360 + order * 90}ms`,
-      '@keyframes badgePulse': {
-        '0%, 100%': { boxShadow: `0 0 0 0 ${color}44` },
-        '50%': { boxShadow: `0 0 0 6px ${color}00` },
-      },
-    }),
-  },
+  // Shared motion vocabulary: staggered arrival; urgent -> pulse ring.
+  ...enterSlideFade(order, pulse ? color : null),
 });
 
 export default function SignalBadges({ signal, sellPlan, sx }) {

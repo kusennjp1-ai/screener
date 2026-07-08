@@ -50,6 +50,7 @@ import PauseIcon from '@mui/icons-material/Pause';
 import { QUADRANT_COLORS, QUADRANT_FILLS, quadrantColor } from './rrgColors';
 import { buildTailPoints } from './rrgTrace';
 import { computeFlows, groupAtFrame, maxFrames } from './rrgFlow';
+import { MOTION, PLAYBACK_FRAME_MS } from '../../theme/motion';
 import { useRRGFilters } from './useRRGFilters';
 import RRGFilters from './RRGFilters';
 
@@ -252,7 +253,7 @@ export default function RRGChart({ data, isLoading, error, onSelectGroup, height
         }
         return next;
       });
-    }, 700);
+    }, PLAYBACK_FRAME_MS);
     return () => clearInterval(id);
   }, [playing, totalFrames]);
   const startPlayback = () => {
@@ -476,7 +477,7 @@ export default function RRGChart({ data, isLoading, error, onSelectGroup, height
               <Scatter
                 data={currentPoints}
                 isAnimationActive={playing}
-                animationDuration={600}
+                animationDuration={MOTION.duration.tween}
                 animationEasing="ease-in-out"
                 onClick={(pt) => onSelectGroup?.(pt?.industry_group)}
                 cursor="pointer"

@@ -3,6 +3,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import VerticalAlignTopIcon from '@mui/icons-material/VerticalAlignTop';
 import GlossaryLabel from '../../../components/common/GlossaryLabel';
+import { pulseRing } from '../../../theme/motion';
 
 // 売りタイミングカード — the exit half of the trade. Renders the backend
 // sell_plan: climax (sell into strength), 50-DMA breakdown (sell into
@@ -64,13 +65,7 @@ export default function SellPlanCard({ sellPlan }) {
       position: 'absolute', right: 16, top: 56, zIndex: 5, width: 300,
       bgcolor: 'rgba(13,16,22,0.96)', border: `1px solid ${meta.color}`, borderRadius: 1.5,
       boxShadow: '0 8px 28px rgba(0,0,0,0.55)', p: 1.5,
-      ...(meta.pulse && {
-        animation: 'sellPulse 2s ease-in-out infinite',
-        '@keyframes sellPulse': {
-          '0%, 100%': { boxShadow: `0 0 0 0 ${meta.color}44` },
-          '50%': { boxShadow: `0 0 0 8px ${meta.color}00` },
-        },
-      }),
+      ...(meta.pulse && pulseRing(meta.color)),
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
         <Icon sx={{ color: meta.color, fontSize: 20 }} />

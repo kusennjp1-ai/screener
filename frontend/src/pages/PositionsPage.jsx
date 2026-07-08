@@ -12,6 +12,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import GlossaryLabel from '../components/common/GlossaryLabel';
 import AddPositionDialog from '../components/positions/AddPositionDialog';
+import { pulseRing, standardTransition } from '../theme/motion';
 import {
   closePosition, createPosition, deletePosition, getPositions,
 } from '../api/positions';
@@ -42,13 +43,7 @@ function ActionChip({ action }) {
           color: meta.color,
           border: `1px solid ${meta.color}`,
           bgcolor: 'transparent',
-          ...(meta.pulse && {
-            animation: 'posPulse 2s ease-in-out infinite',
-            '@keyframes posPulse': {
-              '0%, 100%': { boxShadow: `0 0 0 0 ${meta.color}44` },
-              '50%': { boxShadow: `0 0 0 6px ${meta.color}00` },
-            },
-          }),
+          ...(meta.pulse && pulseRing(meta.color)),
         }}
       />
     </Tooltip>
@@ -70,7 +65,7 @@ function RMultipleCell({ position }) {
         <Box sx={{ mt: 0.4, height: 4, borderRadius: 2, bgcolor: 'action.hover', overflow: 'hidden' }}>
           <Box sx={{
             width: `${progress * 100}%`, height: '100%', bgcolor: color, borderRadius: 2,
-            transition: 'width 600ms cubic-bezier(0.4, 0, 0.2, 1)',
+            transition: standardTransition('width'),
           }}
           />
         </Box>
