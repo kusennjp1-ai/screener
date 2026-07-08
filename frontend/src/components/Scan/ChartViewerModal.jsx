@@ -20,6 +20,7 @@ import { getGroupDetail } from '../../api/groups';
 import { useChartNavigation } from '../../hooks/useChartNavigation';
 import { buildFilterParams, getStableFilterKey } from '../../utils/filterUtils';
 import CandlestickChart from '../Charts/CandlestickChart';
+import BuyChecklist from './BuyChecklist';
 import StockMetricsSidebar from './StockMetricsSidebar';
 import PeerComparisonModal from './PeerComparisonModal';
 import SetupEngineDrawer from './SetupEngineDrawer';
@@ -530,13 +531,17 @@ function ChartViewerModal({
 
             {/* Main Content */}
             <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-              {/* Sidebar */}
-              <StockMetricsSidebar
-                stockData={finalStockData}
-                fundamentals={fundamentals}
-                onViewPeers={() => setPeerModalOpen(true)}
-                onViewSetupDetails={() => setSetupDrawerOpen(true)}
-              />
+              {/* Sidebar — the buy checklist rides on top: WHY this chart
+                  is (or isn't) a buy, mirroring the engine's exact rules. */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+                <BuyChecklist buyContext={buyContext} stockData={finalStockData} />
+                <StockMetricsSidebar
+                  stockData={finalStockData}
+                  fundamentals={fundamentals}
+                  onViewPeers={() => setPeerModalOpen(true)}
+                  onViewSetupDetails={() => setSetupDrawerOpen(true)}
+                />
+              </Box>
 
               {/* Chart Area */}
               <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>

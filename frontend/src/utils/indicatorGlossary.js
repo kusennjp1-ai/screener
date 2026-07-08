@@ -159,6 +159,22 @@ export const INDICATOR_GLOSSARY = {
     how: 'LOW（緑）＝買って良い位置。HIGH（赤）＝過熱、新規買いは不利。',
   },
 
+  trend_template: {
+    title: 'Trend Template（トレンドテンプレート）',
+    jp: 'Minerviniの8条件（株価が150/200日線の上、50>150>200の並び、200日線が上昇、52週安値から30%以上、52週高値から25%以内、RS 70以上など）。Stage 2上昇トレンドの定義。',
+    how: '全条件クリア＝Stage 2。買い候補の必須条件（これを満たさない銘柄は監視のみ）。',
+  },
+  triple_barrel: {
+    title: 'Triple Barrel（三連銃身シグナル）',
+    jp: '3つの独立した確認が同時点灯した最強の買いシグナル：①Trend（TPRバンド=緑）②Pressure（買い圧力バンド=緑）③Breakout（ピボット突破＋Buy Riskが緑/黄）。',
+    how: '3つ全て点灯＝Buying Now。2つ以下でも直近のBuy Point突破があれば段階シグナル（Alert→Ready→Buy Point）。',
+  },
+  code33: {
+    title: 'Code 33（コード33）',
+    jp: 'EPS・売上・利益率の3つが3四半期連続でYoY成長率を加速させている状態（Minerviniの理想形）。実測ではアイデア時点の点灯率7%程度のレアシグナル。',
+    how: '点灯すれば強力なボーナス。ただし必須条件ではない（ハードゲートにしない）。',
+  },
+
   // --- Buy / sell plan cards -------------------------------------------------
   entry: {
     title: 'Entry（エントリー価格）',
