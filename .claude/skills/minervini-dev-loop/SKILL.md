@@ -5,9 +5,14 @@ description: The improvement-cycle discipline for the Minervini screener — fro
 
 # Minervini screener — improvement loop protocol
 
-State lives in **docs/PROGRESS.md** (cycle log + current metric values) and
-**docs/SPEC.md** (canonical spec, fidelity table, frozen validation contract).
-Read both FIRST; a fresh session can restore everything from them.
+Three state files, three roles — read **STATE.md first**:
+
+- **docs/STATE.md** — the NOW snapshot (current cycle, live metric values,
+  next actions, absolute constraints). OVERWRITTEN whole at each cycle end,
+  never appended. A fresh session restores from this in 30 seconds.
+- **docs/PROGRESS.md** — the append-only cycle log (what was tried, measured,
+  rejected). History and evidence live here.
+- **docs/SPEC.md** — canonical spec, fidelity table, frozen validation contract.
 
 ## The cycle (1 concern = 1 commit)
 
@@ -23,10 +28,12 @@ Read both FIRST; a fresh session can restore everything from them.
    cd .. && DATABASE_URL="postgresql://local/none" make gate-5   # golden 43
    ```
    Frontend when touched: `cd frontend && npx vitest run <area> && npm run lint`
-   (Node via `export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"`; vitest MUST
-   run from frontend/ or `describe is not defined`).
+   (vitest MUST run from frontend/ or `describe is not defined`. Node 22 is
+   already on PATH in this sandbox at /opt/node22; NVM exists only on the
+   user's PC).
 4. Measure the frozen metrics (below) when the change touches scanner/band/regime logic.
-5. Append the cycle to docs/PROGRESS.md: date, change, numbers, next, unresolved.
+5. Append the cycle to docs/PROGRESS.md (date, change, numbers, next) AND
+   overwrite docs/STATE.md with the new now-snapshot.
 6. Commit (Conventional Commits) + push. Report 3 lines: 変更点 / 検証数値 / 次.
 
 ## Frozen metrics — never add/repoint metrics to fake an improvement
@@ -55,6 +62,36 @@ compare flip-rate / dwell-time statistics vs the REAL strips (see PROGRESS C19).
 - Pivot states require detected VCP structure + chase limit +5% past pivot.
 - Code 33 = 3 quarters of accelerating EPS+sales+margins
   (`services/sec_edgar_financials.py`) — NOT the CANSLIM earnings blackout.
+
+## Failure ledger — errors are assets, don't rediscover them
+
+Domain traps (each cost a debugging session; check BEFORE touching the area):
+
+- **EDGAR fy/fp = the FILING's fiscal frame, not the period's.** Comparative
+  rows in newer filings carry the newer fy. Key quarters by PERIOD END DATE
+  (C24), label Q4 by end year (C28). Never key or join on (fy, fp).
+- **Negative YoY base = legitimate Code 33 FAIL, not missing data** (C28).
+  Loss-quarter %-growth is undefined; reason strings distinguish
+  `YoY base <= 0` (evaluable fail) from `missing YoY base` (cannot judge).
+- **Code 33 is a BONUS signal, never a hard gate** — measured at idea dates:
+  7.1% pass vs 3.2% same-stock 1y-earlier control (126 pairs, C25/C28).
+- **Threshold fitting without theory gets rejected** (C23: TPR_WEAK_RAW 4→3
+  held one metric, degraded another → reverted same cycle). Full-strip band
+  divergence is a systematic TIME LEAD, not a threshold problem.
+- **Raw hit rates are gameable; report entry−control DISCRIMINATION.**
+
+Tooling traps (sandbox/CI):
+
+- CI artifact blob store is proxy-blocked (403) → read the report from the
+  JOB LOGS (`get_job_logs`, tail_lines sized to reach the markdown table).
+- `workflow_dispatch` inputs/steps come from the DISPATCHED REF's file —
+  branch-side edits to a registered workflow are live immediately.
+- jsdom `<input type="date">` ignores `user.type` → `fireEvent.change`.
+- React Query v5 calls mutationFn with a context 2nd arg → assert on
+  `mock.calls[0][0]`, not `toHaveBeenCalledWith(payload)`.
+- Playwright scripts must LIVE INSIDE frontend/ (ESM resolves packages from
+  the script's path, not cwd).
+- This sandbox has NO NVM; Node 22 is at `/opt/node22/bin` (already on PATH).
 
 ## Environment truths
 

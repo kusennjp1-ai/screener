@@ -33,8 +33,8 @@ DATABASE_URL=... REDIS_HOST=localhost CELERY_BROKER_URL=redis://localhost:6379/0
   setsid nohup python3 -m celery -A app.celery_app worker --pool=solo \
   -Q celery,data_fetch,user_scans_us,user_scans_shared,market_jobs_us > /tmp/celery.log 2>&1 &
 
-# Frontend:
-cd frontend && . "$HOME/.nvm/nvm.sh" && setsid nohup npm run dev > /tmp/vite.log 2>&1 &
+# Frontend (Node 22 already on PATH at /opt/node22 — NO NVM in this sandbox):
+cd frontend && setsid nohup npm run dev > /tmp/vite.log 2>&1 &
 ```
 
 Kick a scan directly: `POST http://localhost:8000/api/v1/scans` with
@@ -61,10 +61,14 @@ poll `GET /api/v1/scans?limit=1` to terminal state; results at
 ## Playwright verification
 
 ```js
-import { chromium } from 'playwright';               // run from frontend/
+import { chromium } from 'playwright';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 // desktop: {width:1440,height:900}; mobile: {width:375,height:812,isMobile:true}
 ```
+
+The script FILE must live inside `frontend/` (copy in, run, delete) — ESM
+resolves `playwright` from the script's own path, not the cwd, so a
+scratchpad-located script throws ERR_MODULE_NOT_FOUND even with cwd=frontend.
 
 MUI Select interaction: click `[role="combobox"]`, then click
 `[role="option"]` by text (Market → "United States", Universe → "All United

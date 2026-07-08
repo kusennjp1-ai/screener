@@ -158,6 +158,11 @@
 - **再計測（run 28905243272、全908、正直な分母）**: 評価可能ペア65→**126**、pass@idea **7.1%** vs control **3.2%**＝判別**+4.0pp**（ベース比2.2倍）。2021年（n=48）14.6% vs 2.1%。結論強化：**Code 33はレアなボーナス信号でありハードゲート不可**（現行配線どおり）。
 - **次**: 静的PWAへのmarkets360統合（static-site.ymlにper-symbolペイロード輸出＋StaticMarkets360Page）。
 
+### C29 — 2026-07-08 ループ基盤強化: STATE.md＋失敗台帳（Failure as Asset）
+- **変更**: ユーザー提供の自己改善型AI設計ガイド（STATE/Verification/Memory/Skillsの4本柱）を当ループに写像。既存: PROGRESS.md=履歴、凍結metric+golden=Verification、`.claude/skills/`=Skills蓄積。**欠けていた2要素を追加**——①`docs/STATE.md`（「今」だけのスナップショット。毎サイクル全面上書き。現在metric値・次アクション・絶対制約・実行中ジョブ。30秒で再開可能）②失敗パターン台帳（minervini-dev-loop skillに「Failure ledger」節——EDGAR fy/fp罠、赤字ベース=FAIL、閾値フィッティング否決、artifact 403→job logs、jsdom date input、RQ v5 mutationFn第2引数、Playwright ESM解決、NVM無し等）。CLAUDE.mdにSTATE.md最優先読み込みを明記。sandbox-e2e skillの誤記（NVM前提）も修正。
+- **注**: ガイドの「Fable 5フレームワーク」なるPython APIは実在しない（Fable 5は本セッションのモデル名）。設計思想のみ採用し、架空APIの移植は行わない。
+- **次**: C30 静的PWA markets360統合。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

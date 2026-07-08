@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Stock screening platform implementing CANSLIM (William O'Neil) and Minervini methodologies, with theme discovery, AI chatbot, and market analysis. Full-stack application with FastAPI backend, React frontend, PostgreSQL, Redis caching, and Celery for background tasks.
 
 **Companion docs (read when relevant):**
+- `docs/STATE.md` — the NOW snapshot for the Minervini improvement loop (current cycle, live metric values, next actions, absolute constraints). **Read first when resuming loop work**; overwritten whole each cycle. History: `docs/PROGRESS.md`, spec: `docs/SPEC.md`.
 - `CONTEXT.md` — canonical domain vocabulary (Market, MIC, universe, snapshot…). Use these exact terms in code, plans, and reviews.
 - `AGENTS.md` — issue tracking via **bd (beads)**: `bd ready` → claim → `bd close`. Check it before inventing ad-hoc TODO lists.
 - `trading-skills/` — vendored skill library with its own `CLAUDE.md`; treat it as a sub-project.
