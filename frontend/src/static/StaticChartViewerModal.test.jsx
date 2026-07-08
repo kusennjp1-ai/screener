@@ -84,6 +84,20 @@ describe('StaticChartViewerModal', () => {
               description: 'AI chip leader',
               pe_ratio: 45.2,
             },
+            signal: {
+              active: true,
+              headline: 'Buying Now!',
+              trigger_price: 104.5,
+              stop: 96.1,
+              risk_pct: 8.0,
+              as_of: '2026-04-02T00:00:00Z',
+            },
+            sell_plan: {
+              action: 'raise_stop',
+              climax: { flags: [] },
+              breakdown: null,
+              trailing: { r_multiple: 2.1, stop: 101.3, raised: true },
+            },
           }),
         };
       }
@@ -144,5 +158,12 @@ describe('StaticChartViewerModal', () => {
     );
     const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
     expect(requestedUrls.every((url) => url.includes('/static-data/') && !url.includes('/api'))).toBe(true);
+
+    // Markets 360 signal cards from the static payload (desktop viewport):
+    // the same Buying Now / sell-plan components as the live page.
+    expect(screen.getByText('Buying Now!')).toBeInTheDocument();
+    expect(screen.getByText('96.10')).toBeInTheDocument(); // buy card's protective stop
+    expect(screen.getByText('Raise Stop')).toBeInTheDocument();
+    expect(screen.getByText('101.30')).toBeInTheDocument(); // ladder's raised stop
   }, 10000);
 });

@@ -20,6 +20,8 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import CandlestickChart from '../components/Charts/CandlestickChart';
+import BuyingNowCard from '../features/markets360/components/BuyingNowCard';
+import SellPlanCard from '../features/markets360/components/SellPlanCard';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
@@ -586,7 +588,7 @@ function StaticChartViewerModal({
                       horizontally on narrow screens. */}
                   <ChartInfoStrip minerviniInfo={minerviniInfo} />
                   <BandLegend />
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                     <CandlestickChart
                       symbol={currentSymbol}
                       period="6mo"
@@ -607,6 +609,17 @@ function StaticChartViewerModal({
                       bands={chartPayload?.bands || null}
                       buyPoints={chartPayload?.buy_points || null}
                     />
+                    {/* Markets 360 signal cards from the static payload —
+                        same components as the live page, desktop only (at
+                        375px a 300px card would cover the candles). */}
+                    {!isMobile && (
+                      <>
+                        <BuyingNowCard signal={chartPayload?.signal} />
+                        {chartPayload?.sell_plan
+                          ? <SellPlanCard sellPlan={chartPayload.sell_plan} />
+                          : null}
+                      </>
+                    )}
                   </Box>
                 </Box>
               ) : (
