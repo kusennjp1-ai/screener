@@ -163,6 +163,11 @@
 - **注**: ガイドの「Fable 5フレームワーク」なるPython APIは実在しない（Fable 5は本セッションのモデル名）。設計思想のみ採用し、架空APIの移植は行わない。
 - **次**: C30 静的PWA markets360統合。
 
+### C30 — 2026-07-08 静的PWAにMarkets 360シグナルカード（コミット a3a8bb9）
+- **変更**: 静的チャートペイロード（charts/{SYMBOL}.json）に`signal`＋`sell_plan`ブロックを追加——`_compute_m360_signals()`はライブMarkets360Serviceと**同一配線**（buy signalにチャート自身のbuy points＋バンド状態を供給、sell planはbuy signalのentry/stopを使用）なので静的ビューアとライブページが食い違えない。StaticChartViewerModalがローソク足上に同じBuyingNowCard/SellPlanCardを描画（デスクトップのみ——375pxでは300pxカードがチャートを覆うため。モバイル向け表現は将来課題）。シグナル計算失敗はカード非表示に縮退、エクスポートを壊さない。
+- **検証**: export serviceテストがペイロードブロックとバンド状態フィードスルーをピン（57 passed、tpr_state=strong→barrels.trend=true）。モーダルテストが静的ペイロードから両カード描画をピン（staticスイート49 passed）。レッドライン238・golden 43・eslint緑。実サイトの見た目は次回のstatic-site.ymlビルド後にGitHub Pagesで確認可能。
+- **次**: ポジションのdaily要約 or モバイル向けシグナル表現（コンパクトバッジ）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C29 完了（ループ基盤強化: STATE.md + 失敗台帳）／ **次: C30**
+- **サイクル**: C30 完了（静的PWAにMarkets 360シグナルカード）／ **次: C31**
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし（code33-check ディスパッチは全消化済み）
 
@@ -22,9 +22,10 @@
 
 ## 次アクション（優先順）
 
-1. **C30: 静的PWAへのmarkets360統合** — `static-site.yml`にper-symbolペイロード輸出＋`StaticMarkets360Page`（HashRouter配下 `/markets360`）。
-2. ポジションのdaily要約（celery beatで日次評価→アラート素材）。
-3. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
+1. **C31: ポジションのdaily要約** — celery beatで日次評価（compute_position_status一括実行）→アラート素材化。
+2. 静的ビューアのモバイル向けシグナル表現（コンパクトバッジ。C30はデスクトップのみカード表示）。
+3. 静的サイト実ビルドでのカード見た目確認（次回static-site.ymlラン後、GitHub Pages）。
+4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 
 ## 絶対制約（ユーザー指示・恒久）
 
