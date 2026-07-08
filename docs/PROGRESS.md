@@ -199,6 +199,15 @@
 - **検証**: FTNT実機（2建玉）で4本全て実写確認——Entry #1 110.00／Stop #1 128.87 ↑（緑）／Entry #2 149.67／Stop #2 134.70（赤）。positionLines 5/5・markets360 24/24・eslint緑。
 - **次**: SPECバックログ再点検（トレードライフサイクル可視化は完成——screen→buy→chart上のトレード→daily監視→アラート→close）。
 
+### C37 — 2026-07-08 全スキャン結果チャートにMM360バンド＋VCP＋buy points（コミット 83f619f）
+- **変更**: 新エンドポイント`GET /v1/technical/{symbol}/buy-context`（cache-only、ミス時`available:false`で絶対に500しない）——3本カラーバンド（per-bar履歴付き）・VCP箱・段階buy points・買いシグナル（3バレル内訳）を、**Markets 360タブと同一エンジン**で任意銘柄に供給。スキャン結果のChartViewerModalが全てをCandlestickChartへ（プリミティブは既存）：バンド帯・VCP破線箱・Alert/Buy Ptチップ・Buy Triggerピボット線。
+- **検証**: 実スキャン（FTNT）でブラウザ実写——3帯・VCP箱・チップ・「Buy Trigger 149.67」全描画。serviceテスト3/3（形状・キャッシュミス縮退・ベンチマーク死亡耐性）、Scanスイート109/109、レッドライン184、golden 43。
+
+### C38 — 2026-07-08 買い点灯条件チェックリスト＋グロッサリ拡充（コミット 7903812）
+- **変更**: スキャンチャートビューアのサイドバー最上部に**買い点灯条件チェックリスト**——エンジン直結の3バレル（Trend=TPR緑／Pressure=圧力緑／Breakout=ピボット突破＋Buy Risk緑黄）＋ファンダ脚（Trend Template 8条件=必須、RS≥70=必須・90+理想、EPS≥80=推奨、Code 33=ボーナス・レア※実測7.1%に整合、ハードゲートにしない）。行毎に✓/×/—、点灯時はシグナル名＋トリガー価格をヘッダ表示、ルール自体を日本語で明記（「3バレル全点灯=Triple Barrel。VCP箱・Buy Ptチップ・Buy Trigger線が根拠の位置」）。全行タップで日本語解説（グロッサリに`trend_template`/`triple_barrel`/`code33`追加）。行は共有モーショントークンでスタガー入場。
+- **検証**: 実スキャンFTNTで実写——エンジン実値どおりの表示（Pressure✓・TPR transition×・template fail・RS 62×）、Trend Templateタップで日本語ツールチップ。BuyChecklist 3/3・Scanスイート112/112・eslint緑。
+- **次**: C39=英語表記グロッサリの残カバレッジ一斉点検（サイドバー各ラベル等）、静的ビューアへのチェックリスト展開。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
