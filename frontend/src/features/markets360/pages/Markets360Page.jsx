@@ -5,8 +5,9 @@ import { Box, Button, CircularProgress, Snackbar, Typography, Alert, useMediaQue
 import { useTheme } from '@mui/material/styles';
 
 import { fetchMarkets360, markets360Keys } from '../api/markets360';
-import { createPosition } from '../../../api/positions';
+import { createPosition, getPositions } from '../../../api/positions';
 import AddPositionDialog from '../../../components/positions/AddPositionDialog';
+import { positionPriceLines } from '../positionLines';
 import ChartToolbar from '../components/ChartToolbar';
 import StatusBar from '../components/StatusBar';
 import Markets360Chart from '../components/Markets360Chart';
@@ -124,6 +125,17 @@ export default function Markets360Page() {
 
   const chartPayload = useMemo(() => data?.chart || null, [data]);
 
+  // The viewer's own trade, drawn on the chart (entry + live ladder stop).
+  const positionsQuery = useQuery({
+    queryKey: ['positions', 'open'],
+    queryFn: () => getPositions('open'),
+    staleTime: 60_000,
+  });
+  const positionLines = useMemo(() => {
+    const match = (positionsQuery.data?.positions || []).find((p) => p.symbol === symbol);
+    return positionPriceLines(match);
+  }, [positionsQuery.data, symbol]);
+
   return (
     <Box sx={{ bgcolor: '#0a0a0f', minHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
       <ChartToolbar
@@ -153,7 +165,7 @@ export default function Markets360Page() {
         {chartPayload && (
           <>
             <LegendOverlay data={data} timeframe={timeframe} hover={hover} />
-            <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} />
+            <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} priceLines={positionLines} />
             {!isMobile && (
               <>
                 <BuyingNowCard signal={data?.signal} onRegister={() => setRegisterOpen(true)} />

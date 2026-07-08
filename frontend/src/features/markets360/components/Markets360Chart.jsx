@@ -4,6 +4,7 @@ import {
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
+  LineStyle,
   createSeriesMarkers,
 } from 'lightweight-charts';
 
@@ -85,6 +86,7 @@ export default function Markets360Chart({
   visibility = {},
   onLegend = null,
   monalertNet = null,
+  priceLines = null,
 }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -206,6 +208,27 @@ export default function Markets360Chart({
       maRefs.current = {};
     };
   }, [height, onLegend, recomputeOverlay]);
+
+  // The viewer's own trade on the chart: entry + current ladder stop as
+  // horizontal price lines with axis labels. Recreated whenever the lines
+  // change (the stop line moves as the ladder ratchets).
+  const priceLineRefs = useRef([]);
+  useEffect(() => {
+    const candle = candleRef.current;
+    if (!candle) return undefined;
+    priceLineRefs.current.forEach((line) => {
+      try { candle.removePriceLine(line); } catch { /* already gone */ }
+    });
+    priceLineRefs.current = (priceLines || []).map((def) => candle.createPriceLine({
+      price: def.price,
+      color: def.color,
+      lineWidth: 1,
+      lineStyle: def.dashed ? LineStyle.Dashed : LineStyle.Solid,
+      axisLabelVisible: true,
+      title: def.title,
+    }));
+    return undefined;
+  }, [priceLines, payload]);
 
   // Feed data whenever payload / timeframe changes.
   useEffect(() => {
