@@ -304,9 +304,30 @@ class FundamentalsCacheService:
 
                 return cached_data
             else:
-                # Data is stale - fetch fresh data
+                # Data is stale - try to refresh, but NEVER discard the still
+                # usable stale row if the refresh fails. Provider 403/429/outage
+                # is common, and a day-old fundamental is far better than a 404
+                # that blanks the whole panel. Only an explicit force_refresh
+                # (above) or a genuine cache miss (below) yields None.
                 logger.info(f"Cache HIT but STALE for {symbol} (last update: {last_update}) - fetching fresh data")
-                return self._fetch_and_cache(symbol, market=market)
+                refreshed = self._fetch_and_cache(symbol, market=market)
+                if refreshed is not None:
+                    return refreshed
+                logger.warning(
+                    "Fundamentals refresh failed for %s; serving stale cache (last update: %s)",
+                    symbol,
+                    last_update,
+                    extra={
+                        "event": "fundamentals_served_stale",
+                        "path": "fundamentals_cache_service.get_fundamentals",
+                        "symbol": symbol,
+                        "error_code": "fundamentals_refresh_failed_served_stale",
+                    },
+                )
+                self._ensure_field_availability_metadata(symbol, cached_data, market)
+                stale_payload = dict(cached_data)
+                stale_payload["is_stale"] = True
+                return stale_payload
 
         # No cached data - fetch from yfinance
         logger.info(f"Cache MISS for {symbol} - fetching fresh data")
