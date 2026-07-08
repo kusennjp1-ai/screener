@@ -49,6 +49,7 @@ celery_app = Celery(
         'app.tasks.daily_market_pipeline_tasks',  # Per-market daily refresh + scan pipeline
         'app.tasks.telemetry_tasks',  # Weekly telemetry governance audit (asia.10.4)
         'app.tasks.runtime_bootstrap_tasks',  # Local-default first-run bootstrap orchestration
+        'app.tasks.position_alert_tasks',  # Daily sell-engine readout over open positions
         'app.interfaces.tasks.feature_store_tasks',  # Daily feature snapshot
     ]
 )
@@ -397,6 +398,18 @@ if settings.cache_warmup_enabled:
     # already do a full refresh that supersedes the stale-intraday refresh.
     # The task function remains available for manual invocation via the API.
     _shared_entries = {
+        # Daily position alerts — the sell engine's readout over open
+        # positions, pushed to the configured webhook (no-op when the URL is
+        # unset or nothing is actionable). After the US close pipeline.
+        'daily-position-alerts': {
+            'task': 'app.tasks.position_alert_tasks.send_position_alerts',
+            'schedule': crontab(
+                hour=settings.position_alert_hour,
+                minute=settings.position_alert_minute,
+                day_of_week='1-5',
+            ),
+        },
+
         # Weekly cleanup of orphaned scans (cancelled, stale running/queued).
         # Runs Sunday at 1:45 AM ET, before weekly-full-refresh at 2:00 AM.
         'weekly-orphaned-scan-cleanup': {

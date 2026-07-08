@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""  # For web search (primary)
     serper_api_key: str = ""  # For web search (fallback)
 
+    # Position alerts — daily sell-engine readout over open positions pushed
+    # to a webhook (payload carries both Discord `content` and Slack `text`
+    # keys). Empty URL disables the beat task entirely.
+    position_alert_webhook_url: str = ""
+    position_alert_hour: int = 21   # after the US close pipeline (server tz)
+    position_alert_minute: int = 30
+
     # Runtime profile
     feature_themes: bool = True
     feature_chatbot: bool = True
