@@ -173,6 +173,11 @@
 - **検証**: sandbox実機で/v1/digest/dailyがMSFT exit(+2.07R)・FTNT raise_stop(+4.70R, stop 128.87↑)を緊急度順で返却、hold/no_dataは非表示（C27でシグナル価格登録した方のFTNTはhold＝正しく除外）。markdownセクション・Digestタブのブラウザ実写確認。digestテスト11/11・ページ4/4・レッドライン192・golden 43。
 - **次**: モバイル向け静的シグナルバッジ、またはポジションアラートのpush通知化（beat＋markdown配信）。
 
+### C32 — 2026-07-08 モバイル向けアニメーション・シグナルバッジ（コミット aef4b9b）
+- **変更**: 375pxでオーバーレイカードがローソク足を覆う問題（C30はモバイル非表示で回避＝情報喪失）を解消。`SignalBadges`——チャート上部の**通常フロー行**（何も覆わない）のコンパクトバッジ帯。カードと同じ配色・日本語タップ解説。ライブMarkets 360ページと静的PWAビューアの両方で使用、デスクトップはフルカード維持。モーションは意図設計：90msスタガーのスライドフェード入場（「エンジンが今語った」感）、緊急アクション（exit/sell_into_strength/active buy）は共有2秒パルスリング、**全て`prefers-reduced-motion`ガード付き**（モーション無しでも完全に読める）。raise_stopバッジはラダーの新stopをインライン表示（`Raise Stop @ 128.87`）。
+- **検証**: FTNT実機375pxでブラウザ実写——初版はバンドストリップ左端に被り→**フロー行に置き直して再実写**（ストリップ・全バー可視を確認）。デスクトップはバッジ0個（カード不変）をPlaywrightでカウント検証。SignalBadgesテスト4/4・markets360+モーダル20/20・レッドライン181・golden 43・eslint緑。
+- **次**: C33候補=ポジションアラートのpush通知化、またはRRG再生とバッジの統一モーション言語化（duration/easingトークン共有）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
