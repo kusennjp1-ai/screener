@@ -223,14 +223,20 @@ function DigestPage() {
     return <Alert severity="warning">No digest data is available.</Alert>;
   }
 
-  const orderedSections = activeProfileDetail?.digest?.section_order || [
+  const baseSections = activeProfileDetail?.digest?.section_order || [
     'market',
     'leaders',
     'themes',
     'validation',
     'watchlists',
+    'positions',
     'risks',
   ];
+  // Profiles predate the positions section — slot it before risks when a
+  // profile-defined order doesn't mention it.
+  const orderedSections = baseSections.includes('positions')
+    ? baseSections
+    : [...baseSections.filter((s) => s !== 'risks'), 'positions', ...(baseSections.includes('risks') ? ['risks'] : [])];
 
   const sections = {
     market: (
@@ -377,6 +383,55 @@ function DigestPage() {
             </TableBody>
           </Table>
         </TableContainer>
+      </SectionCard>
+    ),
+    positions: (
+      <SectionCard title="Positions（ポジション）" key="positions">
+        <Typography variant="body2" sx={{ mb: 1 }}>{digestData.positions?.summary || '-'}</Typography>
+        {(digestData.positions?.actionable?.length ?? 0) > 0 && (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Symbol</TableCell>
+                  <TableCell>Action</TableCell>
+                  <TableCell align="right">R</TableCell>
+                  <TableCell align="right">P&L %</TableCell>
+                  <TableCell align="right">Stop</TableCell>
+                  <TableCell>Note</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {digestData.positions.actionable.map((item) => (
+                  <TableRow key={item.symbol} data-testid={`digest-position-${item.symbol}`}>
+                    <TableCell>
+                      <Link component={RouterLink} to="/positions" underline="hover">
+                        {item.symbol}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Typography
+                        component="span"
+                        variant="body2"
+                        sx={{
+                          fontWeight: 700,
+                          color: item.action === 'exit' ? 'error.main'
+                            : item.action === 'raise_stop' ? 'success.main' : 'warning.main',
+                        }}
+                      >
+                        {item.action}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">{item.r_multiple != null ? `${item.r_multiple >= 0 ? '+' : ''}${item.r_multiple.toFixed(2)}R` : '-'}</TableCell>
+                    <TableCell align="right">{item.pnl_pct != null ? `${item.pnl_pct >= 0 ? '+' : ''}${item.pnl_pct.toFixed(2)}%` : '-'}</TableCell>
+                    <TableCell align="right">{item.stop != null ? `${item.stop.toFixed(2)}${item.stop_raised ? ' ↑' : ''}` : '-'}</TableCell>
+                    <TableCell>{item.note}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </SectionCard>
     ),
     risks: (

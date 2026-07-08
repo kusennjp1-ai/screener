@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.infra.db.models.feature_store import FeatureRun, StockFeatureDaily
 from app.models.market_breadth import MarketBreadth
+from app.models.position import Position
 from app.models.stock_universe import StockUniverse
 from app.models.theme import ThemeAlert, ThemeCluster, ThemeMetrics
 from app.models.user_watchlist import UserWatchlist, WatchlistItem
@@ -113,6 +114,7 @@ def session():
             ThemeAlert.__table__,
             UserWatchlist.__table__,
             WatchlistItem.__table__,
+            Position.__table__,
         ],
     )
     db = TestingSessionLocal()
@@ -123,6 +125,7 @@ def session():
         Base.metadata.drop_all(
             engine,
             tables=[
+                Position.__table__,
                 WatchlistItem.__table__,
                 UserWatchlist.__table__,
                 ThemeAlert.__table__,
@@ -632,3 +635,59 @@ def test_digest_service_recent_alert_window_covers_exactly_seven_eastern_days(se
         (ValidationSourceKind.THEME_ALERT, date(2026, 4, 4)),
     ]
     assert [alert.title for alert in payload.themes.recent_alerts] == ["Inside window"]
+
+
+def test_digest_positions_section_surfaces_actionable_positions(session, monkeypatch):
+    import numpy as np
+    import pandas as pd
+
+    _seed_digest_data(session)
+    session.add_all(
+        [
+            # Winner well past 2R on an 8-point risk unit -> ladder action.
+            Position(symbol="NVDA", entry_price=100.0, entry_date=date(2026, 1, 15),
+                     initial_stop=92.0, status="open"),
+            # No cached prices -> no_data -> stays out of the actionable list.
+            Position(symbol="ZZZZ", entry_price=50.0, entry_date=date(2026, 2, 1),
+                     initial_stop=46.0, status="open"),
+            # Closed positions are ignored entirely.
+            Position(symbol="AMD", entry_price=80.0, entry_date=date(2026, 1, 2),
+                     initial_stop=74.0, status="closed", close_price=95.0),
+        ]
+    )
+    session.commit()
+
+    n = 80
+    closes = np.linspace(100.0, 130.0, n)
+    frame = pd.DataFrame(
+        {
+            "Open": closes,
+            "High": closes * 1.01,
+            "Low": closes * 0.99,
+            "Close": closes,
+            "Volume": np.full(n, 1_000_000.0),
+        },
+        index=pd.date_range("2026-01-15", periods=n, freq="B"),
+    )
+
+    class _FakePriceCache:
+        def get_many_cached_only(self, symbols, period="1y"):
+            return {"NVDA": frame}
+
+    import app.wiring.bootstrap as bootstrap
+
+    monkeypatch.setattr(bootstrap, "get_price_cache", lambda: _FakePriceCache())
+
+    service = DigestService(validation_service=_FakeValidationService())
+    payload = service.get_daily_digest(session, as_of_date=date(2026, 4, 4))
+
+    assert payload.positions.open_total == 2
+    assert [item.symbol for item in payload.positions.actionable] == ["NVDA"]
+    nvda = payload.positions.actionable[0]
+    assert nvda.action in ("raise_stop", "sell_into_strength", "tighten_stop", "exit")
+    assert nvda.r_multiple is not None and nvda.r_multiple >= 2.0
+    assert "要アクション" in payload.positions.summary
+
+    markdown = service.render_markdown(payload)
+    assert "## Positions（ポジション）" in markdown
+    assert "**NVDA**" in markdown

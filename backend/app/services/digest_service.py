@@ -23,6 +23,8 @@ from app.schemas.digest import (
     DigestFreshness,
     DigestLeaderItem,
     DigestMarketSection,
+    DigestPositionItem,
+    DigestPositionsSection,
     DigestRiskNote,
     DigestThemeAlertItem,
     DigestThemeItem,
@@ -119,6 +121,8 @@ class DigestService:
         if latest_run is None and watchlists:
             degraded_reasons.append("watchlists_missing_feature_run_context")
 
+        positions = self._build_positions_section(db)
+
         latest_theme_alert_at = self._load_latest_theme_alert_at(db, effective_as_of_date)
         freshness = self._build_freshness(
             latest_run=latest_run,
@@ -143,6 +147,7 @@ class DigestService:
             themes=themes_result.section,
             validation=validation["section"],
             watchlists=watchlists,
+            positions=positions,
             risks=risks,
             degraded_reasons=_dedupe(degraded_reasons),
         )
@@ -218,6 +223,15 @@ class DigestService:
                 )
         else:
             lines.append("- No watchlist highlights are available.")
+
+        lines.extend(["", "## Positions（ポジション）", payload.positions.summary or "-"])
+        for item in payload.positions.actionable:
+            r_txt = f"{item.r_multiple:+.2f}R" if item.r_multiple is not None else "-"
+            pnl_txt = f"{item.pnl_pct:+.2f}%" if item.pnl_pct is not None else "-"
+            stop_txt = f"stop {item.stop:.2f}{' ↑' if item.stop_raised else ''}" if item.stop is not None else "stop -"
+            lines.append(
+                f"- **{item.symbol}** [{item.action}] | {r_txt} | {pnl_txt} | {stop_txt} | {item.note}"
+            )
 
         lines.extend(["", "## Risks"])
         if payload.risks:
@@ -612,6 +626,69 @@ class DigestService:
             ),
             "degraded_reasons": degraded_reasons,
         }
+
+    _POSITION_ACTION_NOTES = {
+        "exit": "売り：トレンド崩壊（50日線を出来高を伴い割り込み）",
+        "sell_into_strength": "強さに売る：クライマックスを検出",
+        "tighten_stop": "損切りラインを引き締め（浅い50日線割れ）",
+        "raise_stop": "損切りラインを切り上げ（R倍数の利益を確保）",
+    }
+
+    def _build_positions_section(self, db: Session) -> DigestPositionsSection:
+        """Daily trade-management readout over open positions.
+
+        Runs the same sell engine as the Positions page (cache-only prices —
+        the digest never triggers external fetches) and surfaces only the
+        ACTIONABLE positions, most urgent first. Defensive: any failure yields
+        an empty section rather than breaking the digest.
+        """
+        try:
+            from app.models.position import Position
+            from app.services.position_status import compute_position_status
+            from app.wiring.bootstrap import get_price_cache
+
+            rows = db.query(Position).filter(Position.status == "open").all()
+            if not rows:
+                return DigestPositionsSection(summary="オープンポジションなし")
+
+            price_dfs = get_price_cache().get_many_cached_only(
+                [p.symbol for p in rows], period="1y"
+            )
+            urgency = {"exit": 0, "sell_into_strength": 1, "tighten_stop": 2, "raise_stop": 3}
+            actionable: list[DigestPositionItem] = []
+            for position in rows:
+                status = compute_position_status(
+                    price_dfs.get(position.symbol),
+                    position.entry_price,
+                    position.initial_stop,
+                )
+                action = status.get("action", "no_data")
+                if action not in urgency:
+                    continue
+                trailing = (status.get("sell_plan") or {}).get("trailing") or {}
+                actionable.append(DigestPositionItem(
+                    symbol=position.symbol,
+                    entry_price=position.entry_price,
+                    entry_date=position.entry_date.isoformat(),
+                    action=action,
+                    r_multiple=status.get("r_multiple"),
+                    pnl_pct=status.get("pnl_pct"),
+                    stop=trailing.get("stop"),
+                    stop_raised=bool(trailing.get("raised")),
+                    note=self._POSITION_ACTION_NOTES.get(action, ""),
+                ))
+            actionable.sort(key=lambda item: urgency[item.action])
+            summary = (
+                f"オープン{len(rows)}件中 {len(actionable)}件が要アクション"
+                if actionable
+                else f"オープン{len(rows)}件、全て保持（売りシグナルなし）"
+            )
+            return DigestPositionsSection(
+                open_total=len(rows), actionable=actionable, summary=summary,
+            )
+        except Exception:  # noqa: BLE001 - positions must not break the digest
+            logger.warning("digest positions section failed", exc_info=True)
+            return DigestPositionsSection(summary="ポジション評価が利用できません")
 
     def _build_watchlist_highlights(
         self,

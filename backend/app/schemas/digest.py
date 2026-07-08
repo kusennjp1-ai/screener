@@ -107,6 +107,28 @@ class DigestWatchlistHighlight(BaseModel):
     notes: str
 
 
+class DigestPositionItem(BaseModel):
+    """One open position's daily sell-engine readout."""
+
+    symbol: str
+    entry_price: float
+    entry_date: str
+    action: str
+    r_multiple: Optional[float] = None
+    pnl_pct: Optional[float] = None
+    stop: Optional[float] = None
+    stop_raised: bool = False
+    note: str = ""
+
+
+class DigestPositionsSection(BaseModel):
+    """Daily trade-management summary over the positions journal."""
+
+    open_total: int = 0
+    actionable: list[DigestPositionItem] = []
+    summary: str = ""
+
+
 class DigestRiskNote(BaseModel):
     """One deterministic risk note."""
 
@@ -125,5 +147,6 @@ class DailyDigestResponse(BaseModel):
     themes: DigestThemeSection
     validation: DigestValidationSection
     watchlists: list[DigestWatchlistHighlight]
+    positions: DigestPositionsSection = DigestPositionsSection()
     risks: list[DigestRiskNote]
     degraded_reasons: list[str]
