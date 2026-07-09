@@ -254,6 +254,11 @@
 - **検証**: 新ゲートテスト5件（純粋rating 3態様＋scan_stock配線2件、downtrend合成ベンチでrating≠Buy/market_uptrend=False）。凍結metricは構造的に無風（908ハーネスはMinervini+Markets360のみ実行）。レッドライン205 passed・golden 43床・CANSLIMスイート15/15。
 - **次**: 残バックログ=①execution stateフォールバック＋全スキャンState Cap ②RPRのuniverse_performances配線 ③canslim誤命名修正。
 
+### C47 — 2026-07-09 最終監査——execution stateフォールバック/RPRスキャン配線も実装済み（docsコミット）
+- **監査**: C47候補a（execution stateフォールバック）は`scan_orchestrator._compute_execution_state`で**実装済み**（minervini詳細→m360詳細→価格データ直接計算の3段フォールバック、全スキャンでState Cap稼働、docstringに設計意図明記）。C47候補b（RPR universe配線）は**スキャン経路は実装済み**（markets360_scanner.py:108-110）、残るのは単銘柄タブ（service.py:110）のみでこれはスキャンユニバース不在という構造問題（feature storeからの供給設計が必要）。C47候補c（canslim誤命名）も**修正済みコメント**を確認。→SPECバックログを真実に全面同期。
+- **ループ全体の到達点（C43-C47）**: Minerviniファンダ5項目のスコア統合（+10上限ボーナス）→UI内訳表示（チップ+日本語解説）→O'Neil Mゲート（CANSLIM市場キャップ）→SPEC/バックログの真実化。凍結metric全維持（908ハーネスはバイト一致、golden 43床、band right-edge 91%床）。
+- **次セッションへ**: 残バックログはSPEC参照（単銘柄RPR設計／TPR凍結／静的ビルド確認／traction exposure／カタリスト系取得）。**開始前にコードをgrepしてSPECの乖離欄を検証すること**（C45/C47で2度、再実装の無駄を回避した教訓）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

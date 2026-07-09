@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C46 完了（O'Neil Mゲート=CANSLIMのrating市場キャップ、32ebd74）。C45=SPEC真実化監査（FTD/失効/ストーリング/exposureラダー/Minervini市場ゲートは実装済みだったと確認、1c04cf8）／ **次: C47候補は下記**
+- **サイクル**: C47 完了（最終監査: execution stateフォールバック・RPRスキャン配線・canslim誤命名修正は全て実装済みと確認→SPECバックログ真実化）。本セッション成果: C43スコア統合→C44 UI内訳→C45監査→C46 Mゲート→C47監査／ **次: 下記の真バックログから**
 - **モデル**: Fable 5復帰（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし
@@ -32,11 +32,10 @@
 
 ## 次アクション（優先順）
 
-1. **C47候補a: Execution stateフォールバック** — execution state入力はminerviniスキャナー限定。SE/m360のみのスキャンはunknown＝State Capなし（SPECバックログ1）。
-2. **C47候補b: markets360 RPRにuniverse_performances配線**（authentic percentile、SPECバックログ2）。
-3. **C47候補c: canslim_scanner.py:32 "Code 33"誤命名修正**（実体は決算ブラックアウト。コメントのみの小型サイクル）。
-4. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／静的ビルドFnd Bonus確認=次回static-site.ymlラン後（PR #48マージ後）。
-**注意（C45の教訓）**: SPECの乖離欄は古くなる——サイクル開始時はSPECを信じる前にコードをgrepする。
+1. **単銘柄タブのRPR authentic percentile化** — `services/markets360/service.py:110`は線形フォールバック。単銘柄ページにスキャンユニバースが無いため、feature store等からのuniverse-performance供給を設計してから（中型）。
+2. **静的PWA実ビルドでのFnd Bonus/カード確認** — PR #48マージ→static-site.ymlラン後にGitHub Pagesで実写。
+3. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／TPRストリップ=凍結／traction連動exposure=ポジション管理側。
+**注意（C45/C47の教訓・2度実証）**: SPECの乖離欄・バックログは古くなる——**サイクル開始時はSPECを信じる前にコードをgrepする**。
 4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 
 **設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。通知は`POSITION_ALERT_WEBHOOK_URL`。

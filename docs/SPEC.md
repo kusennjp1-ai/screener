@@ -93,12 +93,11 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 
 ## 優先バックログ（理論的忠実度 → 数値改善 → UX の順）
 
-**C45監査（2026-07-09）: 旧1・2・5・6は実装済みと確認し削除**（FTD+失効+ストーリング=0047eb7/8372edd、exposureラダー=e05577b、Minervini市場ゲート=calculate_ratingのSEPAルール1、Code 33統合=C43）。
+**C45+C47監査（2026-07-09）: 旧バックログはほぼ全て実装済みだった**——FTD+失効+ストーリング（0047eb7/8372edd）／exposureラダー（e05577b）／Minervini市場ゲート（SEPAルール1）／CANSLIM市場ゲート（C46 32ebd74）／Code 33統合（C43）／execution stateフォールバック（`scan_orchestrator._compute_execution_state`: minervini→m360→価格直接計算の3段、全スキャンでState Cap稼働）／スキャン経路のRPR universe配線（markets360_scanner.py:108）／canslim誤命名（コメント済修正）。
 
-1. Execution state入力のフォールバック（SE/m360 pivot）＋全スキャンでState Cap
-2. markets360のRPRにuniverse_performancesを配線（authentic percentile）
-3. CANSLIMのratingへの市場ゲート（Minerviniは済、CANSLIMは無ゲート）
-4. canslim_scanner.py:32 "Code 33"誤命名修正（実体は決算ブラックアウト）
-5. TPRフルストリップ一致改善（58%→）※凍結中（MM360実写が増えるまで）
-6. 静的PWA実ビルドでのFnd Bonus/カード見た目確認（次回static-site.ymlラン後）
-7. ポジション単位のtraction連動progressive exposure（ポジション管理側）
+**残る真のバックログ**:
+1. Markets 360**単銘柄タブ**のRPRをauthentic percentileに（`services/markets360/service.py:110`は線形フォールバックのまま。単銘柄ページにはスキャンユニバースが無いため、feature store等からのuniverse-performance供給の設計が必要）
+2. TPRフルストリップ一致改善（58%→）※凍結中（複数時点のMM360実写が増えるまで）
+3. 静的PWA実ビルドでのFnd Bonus/カード確認（PR #48マージ→static-site.ymlラン後）
+4. ポジション単位のtraction連動progressive exposure（ポジション管理側の将来課題）
+5. 決算サプライズ/アナリスト推定改定/margin加速トレンドの取得（カタリスト系、二次的）
