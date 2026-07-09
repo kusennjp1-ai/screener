@@ -151,6 +151,10 @@ class ScanResultItem(BaseModel):
     vcp_atr_score: Optional[float] = None
     passes_template: Optional[bool] = None
 
+    # SEPA fundamental bonus (C43): capped +10 score add-on + component breakdown
+    fundamental_bonus: Optional[float] = None
+    fundamental_bonus_detail: Optional[Dict[str, Any]] = None
+
     # Pocket Pivot / Power Trend
     pocket_pivot: Optional[bool] = None
     power_trend: Optional[bool] = None
@@ -340,6 +344,8 @@ class ScanResultItem(BaseModel):
             vcp_contraction_ratio=ef.get("vcp_contraction_ratio"),
             vcp_atr_score=ef.get("vcp_atr_score"),
             passes_template=ef.get("passes_template"),
+            fundamental_bonus=ef.get("fundamental_bonus"),
+            fundamental_bonus_detail=ef.get("fundamental_bonus_detail"),
             pocket_pivot=ef.get("pocket_pivot"),
             power_trend=ef.get("power_trend"),
             # Growth fields

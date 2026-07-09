@@ -773,6 +773,9 @@ def _map_feature_to_scan_result(
         "vcp_contraction_ratio": d.get("vcp_contraction_ratio"),
         "vcp_atr_score": d.get("vcp_atr_score"),
         "passes_template": d.get("passes_template", False),
+        # SEPA fundamental bonus (C43) — parity with scan_result_repo
+        "fundamental_bonus": d.get("fundamental_bonus"),
+        "fundamental_bonus_detail": d.get("fundamental_bonus_detail"),
         "adr_percent": d.get("adr_percent"),
         "eps_growth_qq": d.get("eps_growth_qq"),
         "sales_growth_qq": d.get("sales_growth_qq"),

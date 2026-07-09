@@ -1094,6 +1094,13 @@ class ScanOrchestrator:
                 result["beta_adj_rs_3m"] = minervini_details["beta_adj_rs_3m"]
             if "beta_adj_rs_12m" in minervini_details:
                 result["beta_adj_rs_12m"] = minervini_details["beta_adj_rs_12m"]
+            # SEPA fundamental bonus (C43): number + per-component breakdown
+            # so the UI can show WHY a passer ranks higher.
+            if "fundamental_bonus" in minervini_details:
+                result["fundamental_bonus"] = minervini_details["fundamental_bonus"]
+            _fb = (minervini_details.get("full_analysis") or {}).get("fundamental_bonus")
+            if isinstance(_fb, dict):
+                result["fundamental_bonus_detail"] = _fb
 
         # Promote setup_engine payload to top level for json_extract queries
         if "setup_engine" in screener_results:

@@ -804,6 +804,9 @@ def _map_row_to_domain(
         "vcp_contraction_ratio": details.get("vcp_contraction_ratio"),
         "vcp_atr_score": details.get("vcp_atr_score"),
         "passes_template": details.get("passes_template", False),
+        # SEPA fundamental bonus (C43): capped +10 add-on and its components
+        "fundamental_bonus": details.get("fundamental_bonus"),
+        "fundamental_bonus_detail": details.get("fundamental_bonus_detail"),
         "adr_percent": result.adr_percent,
         "eps_growth_qq": result.eps_growth_qq,
         "sales_growth_qq": result.sales_growth_qq,

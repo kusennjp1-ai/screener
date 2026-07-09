@@ -16,6 +16,7 @@ import { formatPercent, formatRatio, formatPatternName, getScoreColor } from '..
 import { resolveMarketCapDisplay } from '../../utils/marketCapUtils';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../Charts/executionState';
 import GlossaryLabel from '../common/GlossaryLabel';
+import { enterSlideFade } from '../../theme/motion';
 
 // Alias for this component's usage (uses hex colors)
 const getGrowthColor = getGrowthColorHex;
@@ -52,6 +53,68 @@ const MetricRow = ({ label, value, color, term }) => (
     </Typography>
   </Box>
 );
+
+/**
+ * SEPA fundamental bonus breakdown — one chip per measured component.
+ * met=true → colored chip with points, met=false → muted chip, missing → skipped.
+ */
+const BONUS_CHIP_META = {
+  code33: { label: 'Code 33', term: 'code33' },
+  eps_growth_qq: { label: 'EPS Q/Q', term: 'eps_qq' },
+  sales_growth_qq: { label: 'Sales Q/Q', term: 'sales_qq' },
+  roe: { label: 'ROE', term: 'roe' },
+  eps_rating: { label: 'EPS Rat', term: 'eps_rating' },
+};
+
+const FundamentalBonusBreakdown = ({ bonus, detail }) => {
+  const components = detail?.components || {};
+  const measured = Object.entries(BONUS_CHIP_META)
+    .map(([key, meta]) => ({ key, meta, comp: components[key] }))
+    .filter(({ comp }) => comp && comp.met !== null && comp.met !== undefined);
+  if (measured.length === 0) return null;
+
+  return (
+    <Box sx={{ mt: 0.75 }} data-testid="fundamental-bonus">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+        <GlossaryLabel term="fundamental_bonus">
+          <Typography component="span" variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            Fnd Bonus
+          </Typography>
+        </GlossaryLabel>
+        <Typography
+          variant="body2"
+          fontWeight="medium"
+          sx={{ fontSize: '0.8rem', color: bonus > 0 ? 'success.main' : 'text.secondary' }}
+        >
+          {bonus > 0 ? `+${Number(bonus).toFixed(1)}` : '0'} / 10
+        </Typography>
+      </Box>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+        {measured.map(({ key, meta, comp }, index) => (
+          <Box key={key} sx={enterSlideFade(index)}>
+            <GlossaryLabel term={meta.term}>
+              <Chip
+                size="small"
+                data-testid={`bonus-chip-${key}`}
+                data-met={comp.met ? 'true' : 'false'}
+                label={comp.met ? `${meta.label} +${comp.points}` : meta.label}
+                sx={{
+                  height: 20,
+                  fontSize: '0.65rem',
+                  fontWeight: comp.met ? 600 : 400,
+                  bgcolor: comp.met ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
+                  color: comp.met ? 'success.main' : 'text.disabled',
+                  border: '1px solid',
+                  borderColor: comp.met ? 'rgba(76, 175, 80, 0.4)' : 'divider',
+                }}
+              />
+            </GlossaryLabel>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+};
 
 /**
  * Section header component
@@ -301,6 +364,10 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
           <MetricRow label="Custom" value={stockData.custom_score?.toFixed(1) || '-'} />
           <MetricRow label="Vol Break" value={stockData.volume_breakthrough_score?.toFixed(1) || '-'} />
         </Box>
+        <FundamentalBonusBreakdown
+          bonus={stockData.fundamental_bonus}
+          detail={stockData.fundamental_bonus_detail}
+        />
       </Box>
 
       <Divider />
