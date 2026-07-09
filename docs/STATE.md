@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C47 完了（最終監査: execution stateフォールバック・RPRスキャン配線・canslim誤命名修正は全て実装済みと確認→SPECバックログ真実化）。本セッション成果: C43スコア統合→C44 UI内訳→C45監査→C46 Mゲート→C47監査／ **次: 下記の真バックログから**
+- **サイクル**: C49 完了（C48=クローズ後~30分の高速価格配信 ac7edfd、C49=PWAに価格更新時刻表示 599da28。ユーザー要望②に対応）／ **次: C50=スマホUI統一（ユーザー要望①、下記1参照）**
 - **モデル**: Fable 5復帰（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし
@@ -32,9 +32,11 @@
 
 ## 次アクション（優先順）
 
-1. **単銘柄タブのRPR authentic percentile化** — `services/markets360/service.py:110`は線形フォールバック。単銘柄ページにスキャンユニバースが無いため、feature store等からのuniverse-performance供給を設計してから（中型）。
-2. **静的PWA実ビルドでのFnd Bonus/カード確認** — PR #48マージ→static-site.ymlラン後にGitHub Pagesで実写。
-3. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／TPRストリップ=凍結／traction連動exposure=ポジション管理側。
+1. **C50候補: スマホ（静的PWA）とPC版のUI統一（ユーザー要望①）** — 乖離の理由: GitHub Pagesはバックエンド不能→静的JSON専用の別ページ群（`frontend/src/static/`）として構築された歴史的経緯。統一パス: (a)短期=StaticScanPage/HomeをライブScanPageの見た目・列・フィルタに寄せる（チャートモーダルは既に同一コンポーネント共有: BuyChecklist/StockMetricsSidebar/CandlestickChart）(b)中期=ライブページ本体に「静的データアダプタ」を注入して1コードベース化。着手時は静的バンドル(scratchpadの/static-fastに生成済み)をviteでローカル表示→実写比較から。
+2. **高速価格配信の実測確認** — PR #48マージ後、平日16:06 ETの初回runで所要時間を実測（目標~30分、`prices_only`のdispatch入力でも手動検証可）。PWAホームに「価格更新」時刻が出ることも実ビルドで確認。
+3. **単銘柄タブのRPR authentic percentile化** — feature storeからのuniverse-performance供給を設計してから（中型）。
+4. **静的PWA実ビルドでのFnd Bonus/カード確認** — PR #48マージ→static-site.ymlラン後。
+5. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／TPRストリップ=凍結／traction連動exposure=ポジション管理側。既存workflowテスト3失敗（test_static_workflow_markets等）はpre-existing（main系多市場定義を期待）。
 **注意（C45/C47の教訓・2度実証）**: SPECの乖離欄・バックログは古くなる——**サイクル開始時はSPECを信じる前にコードをgrepする**。
 4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 
@@ -52,5 +54,5 @@
 - Postgres16/Redisはインストール済み（このセッションで起動済み）。DB接続は `DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。フルスタック起動手順は `sandbox-e2e` skill。
 - Node 22 は `/opt/node22/bin`（**このsandboxにNVMは無い**。NVMはユーザーPC側の話）。
 - Yahoo/EDGAR egressは**GitHub Actionsのみ**（CIディスパッチのトリック: `ground-truth-908` skill）。
-- CI成果物のblobストアはプロキシで403 → **ジョブログ（get_job_logs）から読む**。
+- CI成果物のblobストアはプロキシで403 → **ジョブログ（get_job_logs）から読む**。GitHub MCPは切断中（要再認証）＝CI dispatch/ログ読みは再認証まで不可。
 - スマホ用スクリーナー（静的PWA, GitHub Pages）: **https://kusennjp1-ai.github.io/screener/**（static-site.yml がmainから毎日デプロイ。URLは2026-07-09のdeployジョブログで実確認済み）。

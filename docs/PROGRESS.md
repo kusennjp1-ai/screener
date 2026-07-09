@@ -259,6 +259,16 @@
 - **ループ全体の到達点（C43-C47）**: Minerviniファンダ5項目のスコア統合（+10上限ボーナス）→UI内訳表示（チップ+日本語解説）→O'Neil Mゲート（CANSLIM市場キャップ）→SPEC/バックログの真実化。凍結metric全維持（908ハーネスはバイト一致、golden 43床、band right-edge 91%床）。
 - **次セッションへ**: 残バックログはSPEC参照（単銘柄RPR設計／TPR凍結／静的ビルド確認／traction exposure／カタリスト系取得）。**開始前にコードをgrepしてSPECの乖離欄を検証すること**（C45/C47で2度、再実装の無駄を回避した教訓）。
 
+### C48 — 2026-07-09 クローズ後~30分の高速価格配信（コミット ac7edfd）※ユーザー要望「市場が閉まってから30分以内に更新」
+- **原因分析**: PWAの価格鮮度＝Pagesデプロイ時刻。従来は16:10 ETトリガー→フルビルド（スキャン/スナップショット再計算）~2時間→**クローズ2時間超後にやっと反映**。ボトルネックは価格取得ではなくスキャン再計算。チャート/バンド/買いシグナルは**エクスポート時に価格キャッシュから再計算**される構造なので、価格だけ先行更新する2段階配信が成立。
+- **変更**: ①`export_static_site --prices-only`＝当日価格をバッチ取得→**発行済みfeature run（前日ランク）のまま再エクスポート**（スナップショット再構築なし。発行済run無しはexit 79でcombineがフォールバック）②`last_completed_trading_day(close_buffer_minutes=)`＝既定30分は全既存呼び出し不変、高速パスのみ5分バッファ（16:05に当日を「完了」扱い）③static-site.yml＝平日16:06 ET新スケジュール＋`prices_only` dispatch入力→高速モード、**専用concurrencyグループ**（16:10フルビルドに相殺されない）、IBD診断スキップ、daily-priceリリース資産も先行更新。
+- **検証**: 新ユニット4件（16:04/16:06/16:31のバッファ境界・refresh配線・CLIガード）。sandbox E2E＝fixture feature run(13銘柄)発行→prices-onlyエクスポートで完全バンドル生成（scan chunks＋charts 13枚: bars/bands/VCP/signal）。レッドライン160・golden 43床。既存workflowテスト3失敗はC48以前からのpre-existing（main系多市場定義期待）とstashで確認。
+- **注意**: スケジュールは**mainマージ後に発効**。初回実runで実測タイミング要確認（目標: 16:06起動→~16:30-35配信）。GitHub MCPは現在切断（要再認証）でCI dispatchはこのセッションから不可。
+
+### C49 — 2026-07-09 PWAに「価格更新 M/D HH:MM」表示（コミット 599da28）
+- **変更**: home payloadの`freshness.prices_generated_at`（エクスポート時刻＝価格反映時刻）を新設し、PWAホームの鮮度行の先頭に「価格更新 7/9 16:32」のように表示（閲覧者ロケール）。2段階配信で「価格は今日・ランクは前日スキャン」という分離が見えるように。旧バンドル（フィールド無し）は従来表示のまま。
+- **検証**: StaticHomePageテスト9/9（新2件: ラベル表示＋旧バンドル後方互換）、staticスイート全green、eslint 0 errors。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
