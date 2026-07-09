@@ -238,6 +238,12 @@
 - **検証**: 新テスト14（tier境界・cap厳密10・欠損中立・ゴミ値中立・ROE分数正規化・スキャナー統合3種）。実DBのE2E: FTNT実キャッシュ行（code33=True他）→get_many→スキャナーで**76.83→85.83（+9.0）**、passes不変・stale-fallback配信（C40経路）も同時に実証。
 - **残**: UIでボーナス内訳表示（details.full_analysis.fundamental_bonusに搭載済み・フロント未表示）、CANSLIMへの同思想適用は別論点。
 
+### C44 — 2026-07-09 ファンダボーナス内訳をスキャンUIに表示（コミット 34addf8）
+- **変更**: `fundamental_bonus`＋成分内訳を読み経路の全段に配線——orchestrator flatten → `scan_results.details` → `scan_result_repo`/`feature_store_repo`（スキーマ・パリティ）→ `ScanResultItem` → UIスナップショットbootstrap。チャートビューアのSCORESセクションに「Fnd Bonus +N / 10」行＋成分チップ（達成=緑+加点表示／未達=ミュート／欠損=非表示）、共有モーショントークンでスタガー入場、グロッサリに`fundamental_bonus`日本語エントリ（採点ルール明文）。
+- **ハマりどころ（次回のため）**: スキャン結果ページのデータ源は`/v1/scans/{id}/results`ではなく**`/v1/scans/bootstrap`（発行済UIスナップショット）**。スナップショットは発行時点のシリアライズで凍結されるため、スキーマ追加後は`get_ui_snapshot_service().publish_scan_bootstrap(scan_id)`で再発行しないとUIに出ない（新規スキャンは自動で新スキーマ）。sandboxのvite/uvicornはコード編集後に必ず再起動（stale bytecode/module）。
+- **検証**: ブラウザ実写3枚（1440px/ツールチップ/375px）——FTNTで+9.0/10、Code 33 +4・EPS Q/Q +2.5・Sales Q/Q +0.5・ROE +1が緑、EPS Ratがミュート、タップで日本語ツールチップ。バックエンドred-line 275 passed・golden 43床・Scanスイート116/116・eslint 0 errors。フロントテスト3件＋永続化テスト2件追加。
+- **残**: 静的PWAビューア側への同表示展開（次のstatic-site.ymlラン後に自動でpayloadに載る——StaticChartViewerModalは同一Sidebarを使うため表示されるはずだが実ビルドで要確認）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

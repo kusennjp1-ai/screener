@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C43 完了（SEPAファンダボーナスをMinerviniスコアに統合、コミット 0364c62。中核ファンダは取得→保存→スコア消費まで全段クローズ）／ **次: C44候補は下記**
+- **サイクル**: C44 完了（ファンダボーナス内訳をスキャンUIに表示、コミット 34addf8。C43のスコア統合と合わせ「取得→保存→スコア→UI説明」まで全段クローズ）／ **次: C45候補は下記**
 - **モデル**: Fable 5復帰（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし
@@ -26,14 +26,15 @@
 - `backend/app/scanners/criteria/fundamental_bonus.py` — 純関数、上限+10: Code33 +4 / EPS成長qq ≥40 +2.5・≥25 +1.5 / 売上qq ≥25 +1.5・≥10 +0.5 / ROE ≥17% +1（単位正規化: finviz=%、旧yfinance=分数） / EPS Rating ≥80 +1。欠損＝中立0。
 - Minervini `needs_fundamentals=True` + `needs_quarterly_growth=True`。cache-onlyスキャンは`batch_only_fundamentals`（run_bulk_scan.py:243）でget_many読みのみ・ライブフォールバック無し。
 - `passes_template`/Stage-2/setup検出は不変。テンプレ不通過はスコア85でもBuyにならない（E2E確認: FTNT 76.83→85.83 +9.0でrating Watchのまま）。
-- ボーナス内訳は `details.fundamental_bonus`（数値）と `details.full_analysis.fundamental_bonus`（components全部）に搭載済み——**フロント表示は未実装（C44候補）**。
+- ボーナス内訳は `details.fundamental_bonus` / `fundamental_bonus_detail` としてAPI・UIスナップショットまで配線済み（C44）。サイドバーSCORESに「Fnd Bonus +N / 10」＋成分チップ表示。
+- **UIスナップショットの罠（C44で発見）**: スキャン結果ページは`/v1/scans/bootstrap`（発行済スナップショット）から読む。スキーマ追加後は`publish_scan_bootstrap(scan_id)`で再発行しないと既存スキャンのUIに出ない（新規スキャンは自動）。
 - 908ハーネスは`StockData(fundamentals=None)`構築なのでボーナス恒等0＝凍結metric構造的に不変（テストでピン留め: `test_fundamental_bonus.py::test_scanner_score_unchanged_without_fundamentals`）。
 
 ## 次アクション（優先順）
 
-1. **C44候補a: ボーナス内訳のUI表示** — scan結果テーブル/サイドバーに「ファンダボーナス +N」チップ＋クリックで内訳（code33/EPS/売上/ROE/EPS Rating、日本語グロッサリ連携）。データはdetailsに既に載っている。ブラウザ実写必須。
-2. **C44候補b: SPECバックログ1（FTD検出＋分配日失効＋ストーリングデイ）** — 理論忠実度の最大残項目（O'Neil/Minervini市場タイミングの核）。凍結metricへは市場regime経由のみ（buyable_nowゲート）で影響小さいが要測定。
-3. **C43残調査済み項目（再調査不要）**: Alpha Vantage未登録adapter=低ROI保留／部分ペイロード上書き=理論のみdefensive保留／CANSLIMへのファンダボーナス思想適用=別論点・要ユーザー判断。
+1. **C45候補a: SPECバックログ1（FTD検出＋分配日+5%失効＋ストーリングデイ）** — 理論忠実度の最大残項目（O'Neil/Minervini市場タイミングの核）。凍結metricへは市場regime経由のみ（buyable_nowゲート）で影響小さいが要測定。
+2. **C45候補b: 静的PWAビューアのFnd Bonus表示確認** — StaticChartViewerModalは同一Sidebarを使うため次回static-site.ymlラン後に自動表示のはず。実ビルド（GitHub Pages）で要確認。
+3. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／CANSLIMへのファンダボーナス思想適用=要ユーザー判断。
 4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 
 **設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。通知は`POSITION_ALERT_WEBHOOK_URL`。
