@@ -23,14 +23,14 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | VCP | `legacy_vcp_detection.py` + `vcp_footprint.py`（漸減する押し・出来高枯れ・pivot） | ✅ | 本人トレードでのrecall ~35%（gate: score≥55+contracting_depth+tight_near_highs）。Close基準の深さ計測。事前Stage-2上昇の要求なし |
 | Pivot状態 | `vcp_footprint.py` near_pivot/ready（**要 detected**、chase上限+5%） | ✅ C1で修正 | 修正前はランダム日の96%で発火（構造ゲート無し+下限無し） |
 | Code 33 | `sec_edgar_financials.py::compute_code33_from_facts`（EPS+売上+マージン3四半期加速） | ✅ C43でスコア統合 | C42でライブ配線（`refresh_code33_flags`→`code33`列→buy-context→BuyChecklist）、**C43でMinerviniスコアに統合**（`criteria/fundamental_bonus.py`: Code 33 +4を筆頭に上限+10のSEPAファンダボーナス、欠損中立・passes_template不変）。本番はマージン脚を外した緩和版。canslim_scanner.py:32の"Code 33"は誤命名（決算ブラックアウトの話） |
-| Market regime | `market_regime.py` 4状態 + health 0-100 + exposure + **FTD検出** | ✅ C45監査で確認 | FTD（day4-15・+1.2%・出来高増・failure circuit breaker）＋分配日+5%失効＋ストーリングデイ＝**全て実装済み**（コミット 0047eb7/8372edd、テスト12件）。FTDはcorrection/downtrendをpilot exposureで confirmed_uptrend に昇格。CANSLIMのratingは依然無ゲート（Minerviniは calculate_rating のSEPAルール1でゲート済み） |
+| Market regime | `market_regime.py` 4状態 + health 0-100 + exposure + **FTD検出** | ✅ C45監査で確認 | FTD（day4-15・+1.2%・出来高増・failure circuit breaker）＋分配日+5%失効＋ストーリングデイ＝**全て実装済み**（コミット 0047eb7/8372edd、テスト12件）。FTDはcorrection/downtrendをpilot exposureで confirmed_uptrend に昇格。Minervini（SEPAルール1）・CANSLIM（**C46**のMゲート）ともratingを市場でキャップ |
 | Progressive exposure | `market_regime.py::_ftd_exposure` FTD後 25→50→75%ラダー | ✅（stateless近似） | FTD経過日数＋FTD後分配日数による正直なstateless proxy（e05577b）。真のポジション単位traction連動（pilot利益で加速）はスキャン側では不可能——ポジション管理側の将来課題。risk.pyの1.25%は固定のまま |
 | Entry signals | `entry_signals.py` pocket pivot / power trend / volume surge | ✅ | |
 | Buy signal (Buying Now) | `markets360/signals.py` triple barrel、1.5x出来高、VCP pivotアンカー | ✅ | |
 | Exit: 50DMA割れ | `signals.py::detect_50dma_breakdown` | ✅ | |
 | Exit: climax / trailing ladder | `exit_signals.py`（1R半減→2R建値→3R+1Rロック） | ✅ | |
 | 3色バンド (Pressure/BuyRisk/TPR) | `minervini_bands.py`（Force Index EMA / ATR extension / 7条件TT） | ✅ | right-edge一致 91%（P82%/BR92%/TPR100%, 12銘柄実スクショ）。フルストリップはTPRが最弱（IBB 58%） |
-| 二軸 (quality × execution state) | `domain/scanning/scoring.py` 7状態+State Cap | ⚠️ | execution stateの入力が**minerviniスキャナー限定**。m360/SEのみのスキャンはunknown＝Capなし。SMA200過伸長100%(tradermonty=50%)は未較正。サーバー側フィルタ不可 |
+| 二軸 (quality × execution state) | `domain/scanning/scoring.py` 7状態+State Cap | ✅ C47監査で確認 | 入力は`_compute_execution_state`の3段フォールバック（minervini→m360→価格直接計算）で**全スキャンでCap稼働**。SMA200過伸長100%(tradermonty=50%)は未較正。サーバー側フィルタ不可 |
 | Setup Engine | `analysis/patterns/` 7検出器+readiness、gate-1..5 | ✅ | 7状態enumとは別語彙（in_early_zone等）。pivotが3実装で不一致あり得る（reconciliation無し） |
 
 ## ファンダメンタル・カバレッジ表（C41監査、2026-07-08）
@@ -49,7 +49,7 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | 負債 (`debt_to_equity`, `lt_debt_to_equity`) | ✅ finviz | ✅ | ⚠️ 未スコア | |
 | EPS Rating（percentile合成） | ✅ 算出 | ✅ | ✅ Minerviniボーナス **C43** | ≥80（IBD買い最低ライン）で+1 |
 | **決算日 (`next_earnings_date`)** | ✅ yfinance | ✅ **C41で修正** | ✅ CANSLIM近接ゲート | **修正前: 取得済だが列欠落で往復脱落→ゲート常時no-op（死んでいた）** |
-| **Code 33（EPS+売上+利益率3四半期加速）** | ✅ EDGAR | ✅ `code33`列 **C42で追加** | △ UIチェックリストに点灯（スキャナースコアは未統合） | **C42でライブ配線完了**: `refresh_code33_flags`タスク（EDGAR計算・`FUNDAMENTALS_CODE33_ENABLED`・週次beat）→`code33`列→buy-context→BuyChecklist。sandboxはEDGAR不達でnull（本番/CIで点灯）。残: スキャナーのランキングスコアへの統合 |
+| **Code 33（EPS+売上+利益率3四半期加速）** | ✅ EDGAR | ✅ `code33`列 **C42で追加** | ✅ Minerviniボーナス **C43**（+4点の筆頭）＋UIチェックリスト | C42ライブ配線（`refresh_code33_flags`・`FUNDAMENTALS_CODE33_ENABLED`・週次beat）→C43でスコア統合→C44でUI内訳表示。sandboxはEDGAR不達でnull（本番/CIで点灯） |
 | 決算サプライズ（実績vs予想） | ❌ 未取得 | ❌ | ❌ | finviz `EPS Surprise`等を未マッピング。カタリスト系 |
 | アナリスト推定改定方向 | ❌ 未取得 | ❌ | ❌ | カタリスト系 |
 | 利益率の拡大/加速トレンド | ❌（Code33内のみ） | ❌ | ❌ | 単発margin値はあるが前期比トレンド無し |
