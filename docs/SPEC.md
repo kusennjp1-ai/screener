@@ -22,7 +22,7 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | RS Rating | `criteria/relative_strength.py` 63d40%/126d20%/189d20%/252d20%、スキャンユニバース内percentile | ✅ | W3.2で実データ検証済み(KEEP)。ユニバース無しでは線形フォールバック。スキャン対象内percentileでありIBDの全市場percentileではない |
 | VCP | `legacy_vcp_detection.py` + `vcp_footprint.py`（漸減する押し・出来高枯れ・pivot） | ✅ | 本人トレードでのrecall ~35%（gate: score≥55+contracting_depth+tight_near_highs）。Close基準の深さ計測。事前Stage-2上昇の要求なし |
 | Pivot状態 | `vcp_footprint.py` near_pivot/ready（**要 detected**、chase上限+5%） | ✅ C1で修正 | 修正前はランダム日の96%で発火（構造ゲート無し+下限無し） |
-| Code 33 | `sec_edgar_financials.py::compute_code33_from_facts`（EPS+売上+マージン3四半期加速） | △ C42でライブ配線 | エンジン＋**C42でライブ配線完了**（`refresh_code33_flags`→`code33`列→buy-context→BuyChecklistに点灯）。本番はマージン脚を外した緩和版。**残: スキャナーのスコア/ランキングへの統合**（現状はUIチェックリスト情報表示のみ）。canslim_scanner.py:32の"Code 33"は誤命名（決算ブラックアウトの話） |
+| Code 33 | `sec_edgar_financials.py::compute_code33_from_facts`（EPS+売上+マージン3四半期加速） | ✅ C43でスコア統合 | C42でライブ配線（`refresh_code33_flags`→`code33`列→buy-context→BuyChecklist）、**C43でMinerviniスコアに統合**（`criteria/fundamental_bonus.py`: Code 33 +4を筆頭に上限+10のSEPAファンダボーナス、欠損中立・passes_template不変）。本番はマージン脚を外した緩和版。canslim_scanner.py:32の"Code 33"は誤命名（決算ブラックアウトの話） |
 | Market regime | `market_regime.py` 4状態 + health 0-100 + exposure 100/55/20/0 | ⚠️ | **FTD（フォロースルーデイ）検出なし**。分配日の+5%ラリー失効なし。ストーリングデイなし。docstring(5+)と定数(4)不一致。regimeはmarkets360のbuyable_nowのみをゲートし、Minervini/CANSLIMのratingは無ゲート |
 | Progressive exposure | — | ❌ | 未実装（regime毎の固定4値のみ。FTD後のpilot→加速のラダー無し。risk.pyの1.25%は固定） |
 | Entry signals | `entry_signals.py` pocket pivot / power trend / volume surge | ✅ | |
@@ -41,20 +41,20 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 |---|:--:|:--:|:--:|---|
 | 四半期EPS成長YoY (`eps_growth_qq/yy`) | ✅ finviz/growth_cadence | ✅ | ✅ CANSLIM C/A | 中核 |
 | 年間EPS成長 (`eps_growth_annual`, `eps_5yr_cagr`) | ✅ | ✅ | ⚠️ 未消費（CはYoY使用） | |
-| 四半期/年間 売上成長 (`sales_growth_qq/yy`, `revenue_growth`) | ✅ finviz | ✅ | ⚠️ 表示のみ・未スコア | |
-| 純/営業/粗 利益率 | ✅ finviz | ✅ | ⚠️ 未スコア | |
-| ROE/ROA/ROIC | ✅ finviz | ✅ | ⚠️ 未スコア（SMRのみ） | |
+| 四半期/年間 売上成長 (`sales_growth_qq/yy`, `revenue_growth`) | ✅ finviz | ✅ | ✅ Minerviniボーナス **C43** | ≥25% +1.5 / ≥10% +0.5（EPSの売上裏付け） |
+| 純/営業/粗 利益率 | ✅ finviz | ✅ | ⚠️ 未スコア（Code33内で加速のみ消費） | |
+| ROE/ROA/ROIC | ✅ finviz | ✅ | ✅ ROEはMinerviniボーナス **C43**（+SMR） | ≥17%で+1、単位正規化（finviz=%／yfinance=分数） |
 | フォワードEPS推定 (`eps_next_q/y/5y`) | ✅ finviz | ✅ | ⚠️ 未スコア | |
 | 機関保有 (`institutional_ownership`) | ✅ finviz | ✅ | ✅ CANSLIM I | 変化(trans/change)は未消費 |
 | 負債 (`debt_to_equity`, `lt_debt_to_equity`) | ✅ finviz | ✅ | ⚠️ 未スコア | |
-| EPS Rating（percentile合成） | ✅ 算出 | ✅ | ⚠️ 未消費（scan_resultsには載る） | |
+| EPS Rating（percentile合成） | ✅ 算出 | ✅ | ✅ Minerviniボーナス **C43** | ≥80（IBD買い最低ライン）で+1 |
 | **決算日 (`next_earnings_date`)** | ✅ yfinance | ✅ **C41で修正** | ✅ CANSLIM近接ゲート | **修正前: 取得済だが列欠落で往復脱落→ゲート常時no-op（死んでいた）** |
 | **Code 33（EPS+売上+利益率3四半期加速）** | ✅ EDGAR | ✅ `code33`列 **C42で追加** | △ UIチェックリストに点灯（スキャナースコアは未統合） | **C42でライブ配線完了**: `refresh_code33_flags`タスク（EDGAR計算・`FUNDAMENTALS_CODE33_ENABLED`・週次beat）→`code33`列→buy-context→BuyChecklist。sandboxはEDGAR不達でnull（本番/CIで点灯）。残: スキャナーのランキングスコアへの統合 |
 | 決算サプライズ（実績vs予想） | ❌ 未取得 | ❌ | ❌ | finviz `EPS Surprise`等を未マッピング。カタリスト系 |
 | アナリスト推定改定方向 | ❌ 未取得 | ❌ | ❌ | カタリスト系 |
 | 利益率の拡大/加速トレンド | ❌（Code33内のみ） | ❌ | ❌ | 単発margin値はあるが前期比トレンド無し |
 
-**結論**: Minervini中核ファンダ（EPS/売上/利益率/ROE/機関保有/EPS Rating）は**取得+保存とも揃う**。ただし ①**Code 33（決算加速＝Minervini最重要ファンダ）がどのスキャナーにも未統合**（最大の残ギャップ、EDGAR依存でCI必要）②多くのファンダが保存済だがスコア未消費（CANSLIMはC/A/I＋テクニカルN/S/Lのみ、Minerviniは`needs_fundamentals=False`でファンダ無スコア）③サプライズ/推定改定/margin加速は未取得（カタリスト系、二次的）。
+**結論（C43更新）**: Minervini中核ファンダ（EPS/売上/ROE/機関保有/EPS Rating/Code 33）は**取得+保存+スコア消費まで揃った**。C43で`needs_fundamentals=True`化し、`criteria/fundamental_bonus.py`の上限+10 SEPAボーナス（Code33 +4 / EPS成長 +2.5|+1.5 / 売上 +1.5|+0.5 / ROE +1 / EPS Rating +1、欠損中立0）がMinerviniスコアを再ランク。`passes_template`は不変＝テクニカルが最終審判。残: ①年間EPS成長・margin水準・負債は未スコア（二次的）②サプライズ/推定改定/margin加速トレンドは未取得（カタリスト系）③ボーナス内訳のUI表示。
 
 ## Validation — 凍結契約（レッドライン）
 

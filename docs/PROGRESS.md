@@ -232,6 +232,12 @@
 - **検証**: buy-context surfacing 3ケース＋store persistence＋BuyChecklist読み（フロント4/4）＋タスク3ケース（disabled/非US/stamp）。レッドライン189・golden 43。
 - **残（C43候補）**: ①Code 33を**スキャナースコア/ランキングに統合**（現状はUIチェックリスト情報のみ、凍結metric影響を要測定）②保存済ファンダのスコア統合（年間EPS/売上/margin/ROE/EPS Rating）③Alpha Vantage未登録adapter ④`_store_in_database`部分ペイロード上書き。
 
+### C43 — 2026-07-09 SEPAファンダボーナスをMinerviniスコアに統合（コミット 0364c62）※Fable 5復帰
+- **設計（ユーザー指示「ミネルヴィニなら何を重視するかで判断」）**: 「テクニカルが最終審判」の原則を守り、**上限+10の純粋加点**として統合——Code 33 +4（本人最重要の決算加速シグナル、実測+4.0ppエッジ）／四半期EPS成長 ≥40% +2.5・≥25% +1.5（オニールのC）／売上確認 ≥25% +1.5・≥10% +0.5（EPSの裏付け）／ROE ≥17% +1（オニール/IBD品質床）／EPS Rating ≥80 +1（IBD買い最低ライン）。`passes_template`・Stage-2・setup検出は**不変**、欠損データは中立0（ペナルティ無し）、ボーナスはテンプレ通過者の**並び替え**にのみ働く（テンプレ不通過はスコア85でもBuyにならないことをE2Eで確認）。純関数`criteria/fundamental_bonus.py`、ROE単位正規化（finviz=%／旧yfinance=分数）。`needs_fundamentals=True`化——cache-onlyスキャンは`batch_only_fundamentals`でget_many読みのみ・ライブフォールバック無し（ミス=中立0）。
+- **凍結metric安全性**: 908ハーネスは`StockData(fundamentals=None)`で構築→ボーナス恒等0。**フル再実行で全数値バイト一致**: TT 69.7 / S2 90.0 / SETUP 78.6 / FIRE±5 88.6 / MSCORE 95.5 / GATE 45.1、判別 SETUP +52.0pp / FIRE±5 +24.4pp。golden 43 passed床維持。レッドライン200 passed（唯一のfailは除外対象`test_mcp_market_copilot`のpre-existing、クリーンベースで再現確認済み）。
+- **検証**: 新テスト14（tier境界・cap厳密10・欠損中立・ゴミ値中立・ROE分数正規化・スキャナー統合3種）。実DBのE2E: FTNT実キャッシュ行（code33=True他）→get_many→スキャナーで**76.83→85.83（+9.0）**、passes不変・stale-fallback配信（C40経路）も同時に実証。
+- **残**: UIでボーナス内訳表示（details.full_analysis.fundamental_bonusに搭載済み・フロント未表示）、CANSLIMへの同思想適用は別論点。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
