@@ -398,6 +398,15 @@ if settings.cache_warmup_enabled:
     # already do a full refresh that supersedes the stale-intraday refresh.
     # The task function remains available for manual invocation via the API.
     _shared_entries = {
+        # Weekly Code 33 (Minervini earnings-acceleration) EDGAR stamp, a few
+        # hours after the Saturday fundamental refresh so the flag reflects the
+        # freshest data. No-op unless FUNDAMENTALS_CODE33_ENABLED (needs EDGAR).
+        'weekly-code33-refresh': {
+            'task': 'app.tasks.fundamentals_tasks.refresh_code33_flags',
+            'schedule': crontab(hour=12, minute=0, day_of_week=6),
+            'kwargs': {'market': 'US'},
+        },
+
         # Daily position alerts — the sell engine's readout over open
         # positions, pushed to the configured webhook (no-op when the URL is
         # unset or nothing is actionable). After the US close pipeline.

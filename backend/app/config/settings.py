@@ -502,6 +502,12 @@ class Settings(BaseSettings):
     provider_snapshot_cutover_enabled: bool = False
     provider_snapshot_on_demand_fallback_enabled: bool = True
     provider_snapshot_min_active_coverage_us: float = 0.98
+
+    # Code 33 (Minervini earnings acceleration) EDGAR refresh. Off by default:
+    # needs outbound data.sec.gov (US filers only), available in CI / prod but
+    # not the app sandbox. When on, the fundamentals refresh stamps the code33
+    # column so live scans / buy-context surface it.
+    fundamentals_code33_enabled: bool = False
     provider_snapshot_min_active_coverage_hk: float = 0.70
     provider_snapshot_min_active_coverage_in: float = 0.60
     provider_snapshot_min_active_coverage_jp: float = 0.60
