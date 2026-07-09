@@ -1061,7 +1061,7 @@ def test_resolve_latest_completed_trading_date_uses_market_calendar(monkeypatch)
         "HK": date(2026, 4, 1),
     }
 
-    def last_completed_trading_day(market: str) -> date:
+    def last_completed_trading_day(market: str, *, close_buffer_minutes: int = 30) -> date:
         calls.append(market)
         return market_dates[market]
 

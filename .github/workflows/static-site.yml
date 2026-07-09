@@ -2,6 +2,13 @@ name: Static Site
 
 on:
   schedule:
+    # FAST price publish — 4:06pm ET, minutes after the US close. Refreshes
+    # today's prices and republishes charts/bands/signals against the latest
+    # published scan (prices-only mode; no snapshot rebuild), so the site
+    # carries closing prices within roughly half an hour of the bell. The
+    # full build below replaces it with fresh ranks a couple of hours later.
+    - cron: '6 16 * * 1-5'
+      timezone: 'America/New_York'
     # US group — 4:10pm ET, after US close. Uses the New York
     # timezone so it tracks DST automatically.
     - cron: '10 16 * * 1-6'
@@ -22,9 +29,16 @@ on:
           - all
           - asia
           - us
+      prices_only:
+        description: 'Fast prices-only publish (no scan rebuild)'
+        type: boolean
+        default: false
 
 concurrency:
-  group: static-site-${{ github.ref }}
+  # The fast prices-only run gets its own group so the 4:10pm full build does
+  # not cancel it mid-publish (and vice versa); full runs keep sharing one
+  # group so the UTC safety net still supersedes a hung primary.
+  group: static-site-${{ github.ref }}${{ (github.event.schedule == '6 16 * * 1-5' || github.event.inputs.prices_only == 'true') && '-fast' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -39,6 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       markets: ${{ steps.pick.outputs.markets }}
+      mode: ${{ steps.pick.outputs.mode }}
     steps:
       # Resolve which markets this run builds. The schedule that fired
       # (github.event.schedule) selects the group; manual dispatch uses the
@@ -50,23 +65,33 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
           MARKET_GROUP: ${{ github.event.inputs.market_group }}
+          PRICES_ONLY: ${{ github.event.inputs.prices_only }}
         run: |
           ASIA='["HK","IN","JP","KR","TW","CN","SG","MY","AU"]'
           US='["US"]'
           ALL='["US"]'
 
+          mode="full"
           if [ "$EVENT_NAME" = "schedule" ]; then
             markets="$US"   # 4:10pm ET (America/New_York), US-only deployment
+            if [ "$SCHEDULE" = "6 16 * * 1-5" ]; then
+              mode="prices_only"   # 4:06pm ET fast price publish
+            fi
           else
             case "$MARKET_GROUP" in
               asia) markets="$ASIA" ;;
               us)   markets="$US" ;;
               *)    markets="$ALL" ;;
             esac
+            if [ "$PRICES_ONLY" = "true" ]; then
+              mode="prices_only"
+              markets="$US"   # fast path is US-scoped
+            fi
           fi
 
           echo "markets=$markets" >> "$GITHUB_OUTPUT"
-          echo "Building markets: $markets"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Building markets: $markets (mode: $mode)"
 
   ensure_daily_price_release:
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
@@ -287,13 +312,21 @@ jobs:
         run: |
           cd backend
           set +e
-          python -m app.scripts.export_static_site \
-            --output-dir /tmp/static-data \
-            --refresh-daily \
-            --build-mode price_delta \
-            --skip-universe-refresh \
-            --skip-fundamentals-refresh \
-            --market "${{ matrix.market }}"
+          if [ "${{ needs.select-markets.outputs.mode }}" = "prices_only" ]; then
+            # Fast post-close publish: today's prices + existing published scan.
+            python -m app.scripts.export_static_site \
+              --output-dir /tmp/static-data \
+              --prices-only \
+              --market "${{ matrix.market }}"
+          else
+            python -m app.scripts.export_static_site \
+              --output-dir /tmp/static-data \
+              --refresh-daily \
+              --build-mode price_delta \
+              --skip-universe-refresh \
+              --skip-fundamentals-refresh \
+              --market "${{ matrix.market }}"
+          fi
           status=$?
           set -e
           if [ "$status" -eq 78 ]; then
@@ -316,7 +349,7 @@ jobs:
         # leadership list against IBD's published leaders (data/ibd_reference/)
         # and write the overlap to the job summary. Read-only and
         # continue-on-error so it can never affect the published build.
-        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' }}
+        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode != 'prices_only' }}
         continue-on-error: true
         run: |
           cd backend
@@ -326,7 +359,7 @@ jobs:
         # Per-name diagnosis: for each IBD leader, show the screener's ratings
         # and which IBD-50 gate (if any) excludes it — so low overlap can be
         # traced to gates vs missing data vs ranking. Read-only / non-blocking.
-        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' }}
+        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode != 'prices_only' }}
         continue-on-error: true
         run: |
           cd backend
