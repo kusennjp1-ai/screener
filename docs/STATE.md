@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C44 完了（ファンダボーナス内訳をスキャンUIに表示、コミット 34addf8。C43のスコア統合と合わせ「取得→保存→スコア→UI説明」まで全段クローズ）／ **次: C45候補は下記**
+- **サイクル**: C46 完了（O'Neil Mゲート=CANSLIMのrating市場キャップ、32ebd74）。C45=SPEC真実化監査（FTD/失効/ストーリング/exposureラダー/Minervini市場ゲートは実装済みだったと確認、1c04cf8）／ **次: C47候補は下記**
 - **モデル**: Fable 5復帰（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし
@@ -32,9 +32,11 @@
 
 ## 次アクション（優先順）
 
-1. **C45候補a: SPECバックログ1（FTD検出＋分配日+5%失効＋ストーリングデイ）** — 理論忠実度の最大残項目（O'Neil/Minervini市場タイミングの核）。凍結metricへは市場regime経由のみ（buyable_nowゲート）で影響小さいが要測定。
-2. **C45候補b: 静的PWAビューアのFnd Bonus表示確認** — StaticChartViewerModalは同一Sidebarを使うため次回static-site.ymlラン後に自動表示のはず。実ビルド（GitHub Pages）で要確認。
-3. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／CANSLIMへのファンダボーナス思想適用=要ユーザー判断。
+1. **C47候補a: Execution stateフォールバック** — execution state入力はminerviniスキャナー限定。SE/m360のみのスキャンはunknown＝State Capなし（SPECバックログ1）。
+2. **C47候補b: markets360 RPRにuniverse_performances配線**（authentic percentile、SPECバックログ2）。
+3. **C47候補c: canslim_scanner.py:32 "Code 33"誤命名修正**（実体は決算ブラックアウト。コメントのみの小型サイクル）。
+4. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／静的ビルドFnd Bonus確認=次回static-site.ymlラン後（PR #48マージ後）。
+**注意（C45の教訓）**: SPECの乖離欄は古くなる——サイクル開始時はSPECを信じる前にコードをgrepする。
 4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
 
 **設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。通知は`POSITION_ALERT_WEBHOOK_URL`。

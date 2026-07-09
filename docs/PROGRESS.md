@@ -249,6 +249,11 @@
 - **教訓**: SPECの「既知の乖離」列はコミットに追随しない——**サイクル開始時はSPECを信じる前にコードをgrepする**（今回それで無駄な再実装を回避）。
 - **残バックログ（真実）**: ①execution stateフォールバック＋全スキャンState Cap ②RPRのuniverse_performances配線 ③CANSLIM市場ゲート ④canslim誤命名修正 ⑤TPRストリップ（凍結）⑥静的ビルド確認 ⑦traction連動exposure（ポジション管理側）。
 
+### C46 — 2026-07-09 O'Neilの「M」ゲート——CANSLIMは市場に逆らってBuyを出さない（コミット 32ebd74）
+- **変更**: CANSLIMはC-A-N-S-L-Iを採点しながら**自分の「M」（市場方向）を無視**——確立した下降相場でもStrong Buyを印字できた。Minervini SEPAルール1ゲートを鏡映：取得済みベンチマークから`assess_market_regime`（FTD昇格込み）、`details.market_regime`/`market_uptrend`を露出、correction/downtrendではBuy/Strong Buy→**Watchにキャップ**。スコアはセットアップ計測のまま不変、regime不明（ベンチマーク無し/短い）は絶対にブロックしない（Minerviniゲートと同一のフォールバック意味論）。
+- **検証**: 新ゲートテスト5件（純粋rating 3態様＋scan_stock配線2件、downtrend合成ベンチでrating≠Buy/market_uptrend=False）。凍結metricは構造的に無風（908ハーネスはMinervini+Markets360のみ実行）。レッドライン205 passed・golden 43床・CANSLIMスイート15/15。
+- **次**: 残バックログ=①execution stateフォールバック＋全スキャンState Cap ②RPRのuniverse_performances配線 ③canslim誤命名修正。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
