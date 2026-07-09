@@ -23,8 +23,8 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | VCP | `legacy_vcp_detection.py` + `vcp_footprint.py`（漸減する押し・出来高枯れ・pivot） | ✅ | 本人トレードでのrecall ~35%（gate: score≥55+contracting_depth+tight_near_highs）。Close基準の深さ計測。事前Stage-2上昇の要求なし |
 | Pivot状態 | `vcp_footprint.py` near_pivot/ready（**要 detected**、chase上限+5%） | ✅ C1で修正 | 修正前はランダム日の96%で発火（構造ゲート無し+下限無し） |
 | Code 33 | `sec_edgar_financials.py::compute_code33_from_facts`（EPS+売上+マージン3四半期加速） | ✅ C43でスコア統合 | C42でライブ配線（`refresh_code33_flags`→`code33`列→buy-context→BuyChecklist）、**C43でMinerviniスコアに統合**（`criteria/fundamental_bonus.py`: Code 33 +4を筆頭に上限+10のSEPAファンダボーナス、欠損中立・passes_template不変）。本番はマージン脚を外した緩和版。canslim_scanner.py:32の"Code 33"は誤命名（決算ブラックアウトの話） |
-| Market regime | `market_regime.py` 4状態 + health 0-100 + exposure 100/55/20/0 | ⚠️ | **FTD（フォロースルーデイ）検出なし**。分配日の+5%ラリー失効なし。ストーリングデイなし。docstring(5+)と定数(4)不一致。regimeはmarkets360のbuyable_nowのみをゲートし、Minervini/CANSLIMのratingは無ゲート |
-| Progressive exposure | — | ❌ | 未実装（regime毎の固定4値のみ。FTD後のpilot→加速のラダー無し。risk.pyの1.25%は固定） |
+| Market regime | `market_regime.py` 4状態 + health 0-100 + exposure + **FTD検出** | ✅ C45監査で確認 | FTD（day4-15・+1.2%・出来高増・failure circuit breaker）＋分配日+5%失効＋ストーリングデイ＝**全て実装済み**（コミット 0047eb7/8372edd、テスト12件）。FTDはcorrection/downtrendをpilot exposureで confirmed_uptrend に昇格。CANSLIMのratingは依然無ゲート（Minerviniは calculate_rating のSEPAルール1でゲート済み） |
+| Progressive exposure | `market_regime.py::_ftd_exposure` FTD後 25→50→75%ラダー | ✅（stateless近似） | FTD経過日数＋FTD後分配日数による正直なstateless proxy（e05577b）。真のポジション単位traction連動（pilot利益で加速）はスキャン側では不可能——ポジション管理側の将来課題。risk.pyの1.25%は固定のまま |
 | Entry signals | `entry_signals.py` pocket pivot / power trend / volume surge | ✅ | |
 | Buy signal (Buying Now) | `markets360/signals.py` triple barrel、1.5x出来高、VCP pivotアンカー | ✅ | |
 | Exit: 50DMA割れ | `signals.py::detect_50dma_breakdown` | ✅ | |
@@ -93,11 +93,12 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 
 ## 優先バックログ（理論的忠実度 → 数値改善 → UX の順）
 
-1. FTD検出＋分配日+5%失効＋ストーリングデイ（O'Neil/Minervini市場タイミングの核）
-2. Progressive exposure ladder（FTD後 pilot 25-50% → traction で75-100%）
-3. Execution state入力のフォールバック（SE/m360 pivot）＋全スキャンでState Cap
-4. markets360のRPRにuniverse_performancesを配線（authentic percentile）
-5. MinerviniScannerへの市場ゲート（SEPAルール1: Strong Buy in downtrend禁止）
-6. Code 33のスキャン統合（EDGARデータのある米国銘柄）＋誤命名修正
-7. TPRフルストリップ一致改善（58%→）
-8. モバイル/PWA・アニメーション・英日tooltip完全カバレッジ
+**C45監査（2026-07-09）: 旧1・2・5・6は実装済みと確認し削除**（FTD+失効+ストーリング=0047eb7/8372edd、exposureラダー=e05577b、Minervini市場ゲート=calculate_ratingのSEPAルール1、Code 33統合=C43）。
+
+1. Execution state入力のフォールバック（SE/m360 pivot）＋全スキャンでState Cap
+2. markets360のRPRにuniverse_performancesを配線（authentic percentile）
+3. CANSLIMのratingへの市場ゲート（Minerviniは済、CANSLIMは無ゲート）
+4. canslim_scanner.py:32 "Code 33"誤命名修正（実体は決算ブラックアウト）
+5. TPRフルストリップ一致改善（58%→）※凍結中（MM360実写が増えるまで）
+6. 静的PWA実ビルドでのFnd Bonus/カード見た目確認（次回static-site.ymlラン後）
+7. ポジション単位のtraction連動progressive exposure（ポジション管理側）

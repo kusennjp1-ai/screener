@@ -244,6 +244,11 @@
 - **検証**: ブラウザ実写3枚（1440px/ツールチップ/375px）——FTNTで+9.0/10、Code 33 +4・EPS Q/Q +2.5・Sales Q/Q +0.5・ROE +1が緑、EPS Ratがミュート、タップで日本語ツールチップ。バックエンドred-line 275 passed・golden 43床・Scanスイート116/116・eslint 0 errors。フロントテスト3件＋永続化テスト2件追加。
 - **残**: 静的PWAビューア側への同表示展開（次のstatic-site.ymlラン後に自動でpayloadに載る——StaticChartViewerModalは同一Sidebarを使うため表示されるはずだが実ビルドで要確認）。
 
+### C45 — 2026-07-09 SPEC真実化監査——バックログ4項目は実装済みだった（コミット docs）
+- **監査**: SPECバックログ着手前のコード照合で、**旧バックログ1・2・5・6が全て実装済み**と判明——①FTD検出（day4-15・+1.2%・出来高増・failed-FTD circuit breaker、0047eb7）②分配日+5%失効＋ストーリングデイ（8372edd）③FTD後progressive exposureラダー 25→50→75%（e05577b）④Minervini市場ゲート（calculate_ratingのSEPAルール1）⑤Code 33統合（C43）。market_regimeテスト12件green。SPECの忠実度表2行（Market regime ⚠️→✅、Progressive exposure ❌→✅ stateless近似）とバックログを現実に同期。
+- **教訓**: SPECの「既知の乖離」列はコミットに追随しない——**サイクル開始時はSPECを信じる前にコードをgrepする**（今回それで無駄な再実装を回避）。
+- **残バックログ（真実）**: ①execution stateフォールバック＋全スキャンState Cap ②RPRのuniverse_performances配線 ③CANSLIM市場ゲート ④canslim誤命名修正 ⑤TPRストリップ（凍結）⑥静的ビルド確認 ⑦traction連動exposure（ポジション管理側）。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
