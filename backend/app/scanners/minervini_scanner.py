@@ -25,6 +25,7 @@ from .criteria.adr_calculator import ADRCalculator
 from .criteria.rs_sparkline import RSSparklineCalculator
 from .criteria.price_sparkline import PriceSparklineCalculator
 from .criteria.beta_calculator import BetaCalculator
+from .criteria.fundamental_bonus import compute_fundamental_bonus
 from app.services.market_regime import assess_market_regime
 
 logger = logging.getLogger(__name__)
@@ -77,8 +78,12 @@ class MinerviniScanner(BaseStockScreener):
         """
         return DataRequirements(
             price_period="2y",  # Need 2 years for 200-day MA and RS calc
-            needs_fundamentals=False,  # Minervini doesn't use fundamentals
-            needs_quarterly_growth=False,  # NOT used in Minervini scoring (only informational)
+            # Cached fundamentals feed the capped SEPA fundamental bonus
+            # (Code 33 / EPS+sales growth / ROE / EPS Rating). Cache-only
+            # scans read them via get_many with no live fallback; a miss is
+            # neutral (bonus 0), never an error.
+            needs_fundamentals=True,
+            needs_quarterly_growth=True,  # informational display columns
             needs_benchmark=True,  # Need SPY for RS rating
             needs_earnings_history=False
         )
@@ -405,11 +410,20 @@ class MinerviniScanner(BaseStockScreener):
                 vcp_result
             )
 
+            # SEPA fundamental bonus: technicals decide WHAT is buyable
+            # (passes_template untouched); fundamentals re-rank WHICH passers
+            # lead the list. Capped +10, missing data is neutral 0.
+            fundamental_bonus = compute_fundamental_bonus(data.fundamentals)
+            final_score = round(
+                min(100.0, score_result["score"] + fundamental_bonus["bonus"]), 2
+            )
+
             # Build breakdown dict
             breakdown = {
                 component: details["points"]
                 for component, details in score_result["breakdown"].items()
             }
+            breakdown["fundamental_bonus"] = fundamental_bonus["bonus"]
 
             # Build details dict
             details = {
@@ -467,12 +481,14 @@ class MinerviniScanner(BaseStockScreener):
                 "beta_adj_rs_1m": beta_metrics.get("beta_adj_rs_1m"),
                 "beta_adj_rs_3m": beta_metrics.get("beta_adj_rs_3m"),
                 "beta_adj_rs_12m": beta_metrics.get("beta_adj_rs_12m"),
+                "fundamental_bonus": fundamental_bonus["bonus"],
                 "full_analysis": {
                     "rs": rs_result,
                     "ma_analysis": ma_analysis,
                     "stage": stage_result,
                     "position_52w": position_52w,
                     "vcp": vcp_result,
+                    "fundamental_bonus": fundamental_bonus,
                     "quarterly_growth": quarterly_growth,
                     "adr": {
                         "adr_percent": adr_percent,
@@ -493,10 +509,10 @@ class MinerviniScanner(BaseStockScreener):
             )
 
             # Calculate rating
-            rating = self.calculate_rating(score_result["score"], details)
+            rating = self.calculate_rating(final_score, details)
 
             return ScreenerResult(
-                score=score_result["score"],
+                score=final_score,
                 passes=score_result["passes_template"],
                 rating=rating,
                 breakdown=breakdown,
