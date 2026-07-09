@@ -226,6 +226,12 @@
 - **E2E実証**: 実DBに3日後の決算日を投入→`get_fundamentals`往復でキー生存→CANSLIMゲートが`blackout=True (3d to report)`発火（修正前は到達せず）。配線回帰テスト2件＋既存ゲートテスト10件。レッドライン199・golden 43。
 - **次**: C42候補=Code 33のライブ統合（EDGAR facts をscan時に参照 or scan_resultsに`code33`列を追加しCIバンドル経由で供給）——Minervini最重要ファンダの未統合を閉じる。要CI検証。
 
+### C42 — 2026-07-08 Code 33のライブ統合（最重要ファンダギャップを閉じる）※2コミット
+- **C42.1 配線（コミット 39c32aa）**: `code33`列を`stock_fundamentals`に追加（migration 0025）＋store/read 4箇所配線＋`build_buy_context`が cached fundamentals から surface＋`BuyChecklist`が`buyContext.code33`優先読み（scan行fallback）。null時は「—」（false negative無し）。E2E: `store(code33=True)`→get_fundamentals往復→buy-context `code33:true`→チェックリスト点灯。
+- **C42.2 EDGAR計算（コミット 4bcc658）**: `refresh_code33_flags`タスク——EDGAR company factsで全US行のCode 33を計算し、**単一カラムの targeted update**（他ファンダを壊さない）＋Redis無効化。週次beat（土12:00、ファンダリフレッシュ後）。`FUNDAMENTALS_CODE33_ENABLED`でゲート（data.sec.gov必要＝CI/本番のみ、sandboxは不達）。
+- **検証**: buy-context surfacing 3ケース＋store persistence＋BuyChecklist読み（フロント4/4）＋タスク3ケース（disabled/非US/stamp）。レッドライン189・golden 43。
+- **残（C43候補）**: ①Code 33を**スキャナースコア/ランキングに統合**（現状はUIチェックリスト情報のみ、凍結metric影響を要測定）②保存済ファンダのスコア統合（年間EPS/売上/margin/ROE/EPS Rating）③Alpha Vantage未登録adapter ④`_store_in_database`部分ペイロード上書き。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。

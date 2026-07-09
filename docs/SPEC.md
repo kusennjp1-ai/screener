@@ -22,7 +22,7 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | RS Rating | `criteria/relative_strength.py` 63d40%/126d20%/189d20%/252d20%、スキャンユニバース内percentile | ✅ | W3.2で実データ検証済み(KEEP)。ユニバース無しでは線形フォールバック。スキャン対象内percentileでありIBDの全市場percentileではない |
 | VCP | `legacy_vcp_detection.py` + `vcp_footprint.py`（漸減する押し・出来高枯れ・pivot） | ✅ | 本人トレードでのrecall ~35%（gate: score≥55+contracting_depth+tight_near_highs）。Close基準の深さ計測。事前Stage-2上昇の要求なし |
 | Pivot状態 | `vcp_footprint.py` near_pivot/ready（**要 detected**、chase上限+5%） | ✅ C1で修正 | 修正前はランダム日の96%で発火（構造ゲート無し+下限無し） |
-| Code 33 | `sec_edgar_financials.py::compute_code33_from_facts`（EPS+売上+マージン3四半期加速） | ⚠️ | エンジンは文字通り実装済みだが**どのスキャナーのスコアにも未統合**（static export+presetのみ）。本番はマージン脚を外した緩和版。canslim_scanner.py:32の"Code 33"は誤命名（決算ブラックアウトの話） |
+| Code 33 | `sec_edgar_financials.py::compute_code33_from_facts`（EPS+売上+マージン3四半期加速） | △ C42でライブ配線 | エンジン＋**C42でライブ配線完了**（`refresh_code33_flags`→`code33`列→buy-context→BuyChecklistに点灯）。本番はマージン脚を外した緩和版。**残: スキャナーのスコア/ランキングへの統合**（現状はUIチェックリスト情報表示のみ）。canslim_scanner.py:32の"Code 33"は誤命名（決算ブラックアウトの話） |
 | Market regime | `market_regime.py` 4状態 + health 0-100 + exposure 100/55/20/0 | ⚠️ | **FTD（フォロースルーデイ）検出なし**。分配日の+5%ラリー失効なし。ストーリングデイなし。docstring(5+)と定数(4)不一致。regimeはmarkets360のbuyable_nowのみをゲートし、Minervini/CANSLIMのratingは無ゲート |
 | Progressive exposure | — | ❌ | 未実装（regime毎の固定4値のみ。FTD後のpilot→加速のラダー無し。risk.pyの1.25%は固定） |
 | Entry signals | `entry_signals.py` pocket pivot / power trend / volume surge | ✅ | |
@@ -49,7 +49,7 @@ Mark Minervini の SEPA® 方法論（*Trade Like a Stock Market Wizard* /
 | 負債 (`debt_to_equity`, `lt_debt_to_equity`) | ✅ finviz | ✅ | ⚠️ 未スコア | |
 | EPS Rating（percentile合成） | ✅ 算出 | ✅ | ⚠️ 未消費（scan_resultsには載る） | |
 | **決算日 (`next_earnings_date`)** | ✅ yfinance | ✅ **C41で修正** | ✅ CANSLIM近接ゲート | **修正前: 取得済だが列欠落で往復脱落→ゲート常時no-op（死んでいた）** |
-| **Code 33（EPS+売上+利益率3四半期加速）** | ✅ EDGAR (CIのみ) | ❌ 列なし | ❌ **どのスキャナーも未消費** | エンジンは実装済だがstatic export/presetのみ。ライブスキャン・API・BuyChecklistの`code33`はライブでは常にnull |
+| **Code 33（EPS+売上+利益率3四半期加速）** | ✅ EDGAR | ✅ `code33`列 **C42で追加** | △ UIチェックリストに点灯（スキャナースコアは未統合） | **C42でライブ配線完了**: `refresh_code33_flags`タスク（EDGAR計算・`FUNDAMENTALS_CODE33_ENABLED`・週次beat）→`code33`列→buy-context→BuyChecklist。sandboxはEDGAR不達でnull（本番/CIで点灯）。残: スキャナーのランキングスコアへの統合 |
 | 決算サプライズ（実績vs予想） | ❌ 未取得 | ❌ | ❌ | finviz `EPS Surprise`等を未マッピング。カタリスト系 |
 | アナリスト推定改定方向 | ❌ 未取得 | ❌ | ❌ | カタリスト系 |
 | 利益率の拡大/加速トレンド | ❌（Code33内のみ） | ❌ | ❌ | 単発margin値はあるが前期比トレンド無し |

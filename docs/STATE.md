@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C41 完了（Minerviniファンダ監査＋決算日配線修正——死んでいたCANSLIM近接ゲートを復活）／ **次: C42**
+- **サイクル**: C42 完了（Code 33ライブ統合＝配線39c32aa＋EDGAR計算4bcc658。最重要ファンダギャップをUIまで閉じた）／ **次: C43**
 - **モデル**: fableから**Opus 4.8**へ切替（ユーザー指示）。以降のコミット co-author は harness指定に従う。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、mainは触らない）
 - **実行中/待機中の外部ジョブ**: なし（code33-check ディスパッチは全消化済み）
@@ -23,11 +23,11 @@
 
 ## 次アクション（優先順）
 
-1. **C42候補a（最有力・Minervini最重要ギャップ）: Code 33のライブ統合** — 決算加速がどのスキャナーも未消費（static/presetのみ）。scan_resultsに`code33`列追加＋CIバンドル経由で供給、or EDGAR facts をscan時参照。BuyChecklistの`code33`をライブで点灯させる。要CI検証（EDGARはCIのみ）。SPEC忠実度表のCode33 ⚠️を閉じる。
-2. **C42候補b: 保存済ファンダのスコア統合** — 年間EPS成長・売上成長・利益率・ROE・EPS Rating は保存済だが未スコア。Minervini/CANSLIMのランキングに反映（凍結metric影響を要測定）。
-3. **C42候補c: Alpha Vantage未登録adapter**（US第3段が空no-op）。
-4. **C42候補d: `_store_in_database`部分ペイロード上書き**（Noneで既存カラム上書き）。
-5. **設定メモ**: sandboxは`defusedxml`が未インストールになりがち→ファンダ系フェッチ経路を触る前に`pip install defusedxml`（requirements-server.txt宣言済み）。ファンダ列追加後は`alembic upgrade head`。
+1. **C43候補a: Code 33をスキャナースコア/ランキングに統合** — C42でUIチェックリストまでは点灯するが、スキャンの並び順には影響しない。Minervini/CANSLIMのスコアにボーナス項として加算（凍結metric＝908harness+golden影響を要測定、加算は控えめに）。
+2. **C43候補b: 保存済ファンダのスコア統合** — 年間EPS成長・売上成長・利益率・ROE・EPS Rating は保存済だが未スコア。
+3. **C43候補c: Alpha Vantage未登録adapter**（US第3段が空no-op、`use_alpha_vantage`param未消費）。
+4. **C43候補d: `_store_in_database`部分ペイロード上書き**（Noneで既存カラム上書き）。
+5. **設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。
 3. **設定メモ**: 通知は`.env`に`POSITION_ALERT_WEBHOOK_URL`（Discord/Slack webhook）を設定。
 4. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
