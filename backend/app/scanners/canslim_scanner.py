@@ -23,6 +23,7 @@ from .base_screener import (
 )
 from .screener_registry import register_screener
 from .criteria.relative_strength import RelativeStrengthCalculator
+from app.services.market_regime import assess_market_regime
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +249,17 @@ class CANSLIMScanner(BaseStockScreener):
                     "rs_all_periods": rs_ratings
                 }
             }
+
+            # M — Market direction. O'Neil: three out of four stocks follow
+            # the general market, so a Buy against it is a watchlist name.
+            # Mirrors the Minervini SEPA rule-1 gate: rating-only (the score
+            # keeps measuring the setup), and an unknown regime never blocks.
+            regime = assess_market_regime(data.benchmark_data)
+            details["market_regime"] = regime.get("regime")
+            details["market_uptrend"] = (
+                regime["regime"] in ("confirmed_uptrend", "uptrend_under_pressure")
+                if regime.get("regime") is not None else None
+            )
 
             # Calculate rating (on the earnings-gated score)
             rating = self.calculate_rating(final_score, details)
@@ -668,13 +680,21 @@ class CANSLIMScanner(BaseStockScreener):
         rs_rating = details.get("rs_rating", 0) or 0
 
         if score >= 80 and eps_growth >= 25 and rs_rating >= 80:
-            return "Strong Buy"
+            rating = "Strong Buy"
         elif score >= 70:
-            return "Buy"
+            rating = "Buy"
         elif score >= 60:
             return "Watch"
         else:
             return "Pass"
+
+        # M — never issue a Buy against the general market (O'Neil's market
+        # direction letter). market_uptrend is None when no benchmark was
+        # available; an unknown market never blocks (same fallback as the
+        # Minervini SEPA rule-1 gate).
+        if details.get("market_uptrend") is False:
+            return "Watch"
+        return rating
 
     def _insufficient_data_result(self, symbol: str, reason: str) -> ScreenerResult:
         """Return result for insufficient data."""
