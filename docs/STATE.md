@@ -23,11 +23,15 @@
 
 ## 次アクション（優先順）
 
-1. **C43候補a: Code 33をスキャナースコア/ランキングに統合** — C42でUIチェックリストまでは点灯するが、スキャンの並び順には影響しない。Minervini/CANSLIMのスコアにボーナス項として加算（凍結metric＝908harness+golden影響を要測定、加算は控えめに）。
-2. **C43候補b: 保存済ファンダのスコア統合** — 年間EPS成長・売上成長・利益率・ROE・EPS Rating は保存済だが未スコア。
-3. **C43候補c: Alpha Vantage未登録adapter**（US第3段が空no-op、`use_alpha_vantage`param未消費）。
-4. **C43候補d: `_store_in_database`部分ペイロード上書き**（Noneで既存カラム上書き）。
-5. **設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。
+**残C43候補の調査結論（C42時点で精査済——次セッションは再調査不要）**:
+1. **C43候補a: Code 33をスキャナースコアに統合** — C42でUIチェックリスト点灯まで完了。並び順への反映は残。**ただしsandboxではcode33=null（EDGAR不達）のため、スコア加算の効果を検証できない＋凍結metric（908harness+golden）影響を測れない→本番/CI環境かEDGARモック整備が前提**。着手はユーザー判断（凍結metricトレードオフ）待ち推奨。
+2. **C43候補b: 保存済ファンダのスコア統合**（年間EPS/売上/margin/ROE/EPS Rating）— Minerviniスキャナは意図的に`needs_fundamentals=False`。追加は方法論変更＋908metric影響大→要ユーザー判断＋測定。
+3. **C43候補c: Alpha Vantage未登録adapter — 低優先と判定**。AVServiceは統一`get_fundamentals`を持たず（overview/earnings/income statement分離）、25req/日でfinviz+yfinose両失敗時のみ発火。adapter登録は非自明かつ本番のみ検証可、削除はテスト複数＋PLAN_VERSION更新。実害は毎fetchのWARNINGログのみ。**やるなら削除より登録だが投資対効果低**。
+4. **C43候補d: 部分ペイロード上書き — 理論上のホットスポットで実経路では未発生と確認**。`_fetch_and_cache`（フル取得）・hybrid（フルpayload）・`refresh_code33_flags`（targeted update）いずれも部分storeしない。on-demand enrichmentもフル再取得。**現状defensive-onlyで、50フィールド改修は完全性テスト回帰リスク＞益→保留**。将来partial store経路を追加する時に対処。
+
+**設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。
+
+**ファンダ系の到達点（C40-C42）**: 取得ロジック健全（ユニット多数green）／stale失敗時フォールバック配信（C40）／決算日配線復活でCANSLIM近接ゲート稼働（C41）／Code 33ライブ配線＋EDGAR計算タスク（C42）。中核Minerviniファンダは取得・保存・（一部）スコア消費まで揃う。残はスコア統合系で、いずれも凍結metric or 実環境の制約下。
 3. **設定メモ**: 通知は`.env`に`POSITION_ALERT_WEBHOOK_URL`（Discord/Slack webhook）を設定。
 4. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
 3. 静的サイト実ビルドでのカード/バッジ見た目確認（次回static-site.ymlラン後、GitHub Pages）。
