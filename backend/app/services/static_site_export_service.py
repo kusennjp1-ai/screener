@@ -1307,6 +1307,11 @@ class StaticSiteExportService:
                 "scan_run_id": latest_run.id,
                 "scan_as_of_date": latest_run.as_of_date.isoformat(),
                 "scan_published_at": _coerce_datetime(latest_run.published_at),
+                # Export time == when prices were last refreshed into this
+                # bundle. After the fast post-close publish this is minutes
+                # after the bell while scan_as_of_date is still yesterday's
+                # run — the UI shows both so the split is visible.
+                "prices_generated_at": generated_at,
                 "breadth_latest_date": breadth_current.get("date"),
                 "groups_latest_date": (((groups_payload.get("payload") or {}).get("rankings") or {}).get("date")),
             },

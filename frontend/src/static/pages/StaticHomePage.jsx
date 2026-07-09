@@ -183,6 +183,19 @@ function StaticHomePage() {
   const marketDisplay = home?.market_display_name || marketEntry.display_name;
   const flag = marketFlag(marketEntry.market);
 
+  // When prices were last refreshed into this bundle. The fast post-close
+  // publish updates prices minutes after the bell while scan ranks stay on
+  // the previous full run, so this can be NEWER than スキャン — show both.
+  const pricesGeneratedAt = freshness.prices_generated_at || home?.generated_at;
+  const pricesUpdatedLabel = (() => {
+    if (!pricesGeneratedAt) return null;
+    const parsed = new Date(pricesGeneratedAt);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleString('ja-JP', {
+      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  })();
+
   const handleRowClick = (symbol, navigationSymbols) => {
     if (chartEnabledSymbols.has(symbol)) {
       setModalNavigationSymbols(navigationSymbols);
@@ -215,7 +228,7 @@ function StaticHomePage() {
           color="text.secondary"
           sx={{ fontFamily: 'monospace', fontSize: '11px' }}
         >
-          {`スキャン ${freshness.scan_as_of_date || '-'} · 騰落 ${freshness.breadth_latest_date || '-'} · グループ ${freshness.groups_latest_date || '-'}`}
+          {`${pricesUpdatedLabel ? `価格更新 ${pricesUpdatedLabel} · ` : ''}スキャン ${freshness.scan_as_of_date || '-'} · 騰落 ${freshness.breadth_latest_date || '-'} · グループ ${freshness.groups_latest_date || '-'}`}
         </Typography>
       </Box>
 
