@@ -269,6 +269,12 @@
 - **変更**: home payloadの`freshness.prices_generated_at`（エクスポート時刻＝価格反映時刻）を新設し、PWAホームの鮮度行の先頭に「価格更新 7/9 16:32」のように表示（閲覧者ロケール）。2段階配信で「価格は今日・ランクは前日スキャン」という分離が見えるように。旧バンドル（フィールド無し）は従来表示のまま。
 - **検証**: StaticHomePageテスト9/9（新2件: ラベル表示＋旧バンドル後方互換）、staticスイート全green、eslint 0 errors。
 
+### C50 — 2026-07-10 feature-runバンドル——高速価格配信をCIの新品DBで成立させる（コミット 3e7ede5）
+- **発見したギャップ**: `--prices-only`は「発行済みfeature run」への再エクスポートだが、CIジョブのDBは毎回新品＝runが存在せず、16:06高速ジョブはexit 79→combineフォールバック→**前日サイトの再発行になるだけ**だった（C48時点の見落とし）。
+- **変更**: ①`build_feature_run_bundle.py`＝フルビルドが発行済みrun（メタ+全StockFeatureDaily行+pointer key）をgzipで`daily-price-data`リリースへ ②`import_feature_run_bundle.py`＝高速ジョブが新品DBへseed（冪等・manifest未発行時は既存exit79へ縮退）③static-site.ymlに条件付きseed/uploadステップ（uploadはcontinue-on-errorで夜間発行を絶対に塞がない）。
+- **検証**: sandbox往復E2E（実Postgres run→feature store全消去→import→prices-onlyエクスポートで完全USバンドル再生成）＋新ユニット2件（新品DB往復・冪等性）。レッドライン164・golden 43床。
+- **運用メモ**: PR #48マージ済（main 00b9c90）→当日フルビルドをdispatch（run 29067612109）。**C50はブランチ上——mainへマージされるまで16:06高速ランは無害なフォールバック動作**。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
