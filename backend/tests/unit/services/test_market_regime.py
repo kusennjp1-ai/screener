@@ -176,3 +176,37 @@ def test_stalling_day_counts_as_distribution():
         pd.Series(close), pd.Series(vol), high=pd.Series(high), low=pd.Series(low)
     )
     assert count >= 1
+
+
+def test_heavy_distribution_at_highs_is_pressure_not_correction():
+    """C55: distribution clustering while the trend is INTACT (price above a
+    rising 50-day, near the highs) downgrades to under-pressure — it must NOT
+    read as a 20%-exposure correction. Correction requires price damage."""
+    n = 300
+    close = np.linspace(300, 460, n)
+    vol = np.full(n, 1_000_000.0)
+    # 7 distribution days in the last 25 sessions: small down closes on
+    # rising volume, while the uptrend stays fully intact.
+    for k in range(1, 8):
+        i = n - 2 * k
+        close[i] = close[i - 1] * 0.995
+        vol[i] = 1_600_000.0 + k * 10_000
+    r = assess_market_regime(_index(close, vol))
+    assert r["distribution_days"] >= 5
+    assert r["above_50dma"] is True
+    assert r["regime"] == "uptrend_under_pressure"
+    assert r["exposure_pct"] == 55
+
+
+def test_losing_the_50day_with_distribution_is_a_correction():
+    """Price damage (below the 50-day) plus distribution = correction."""
+    n = 300
+    close = np.concatenate([np.linspace(300, 460, n - 30), np.linspace(460, 420, 30)])
+    vol = np.full(n, 1_000_000.0)
+    for k in range(1, 8):
+        i = n - 2 * k
+        vol[i] = 1_700_000.0
+    r = assess_market_regime(_index(close, vol))
+    assert r["above_50dma"] is False
+    assert r["regime"] in ("correction", "downtrend")
+    assert r["exposure_pct"] <= 25
