@@ -281,6 +281,11 @@
 - **検証**: 375px実写2枚——両タブで「Market [Correction] Health 54/100 · Suggested exposure 20% · 7 distribution days」がPC版と同一描画。staticスイート52/52・eslint 0 errors。
 - **運用**: PR #49（C50）はCI green→mainへマージ済（c433bff）。**本日16:06 ETの定時ランが高速価格配信の初回実測**になる。
 
+### C52 — 2026-07-10 UIアニメーション/グラフィック強化（コミット 5744669, cf45f28）※ユーザー依頼
+- **変更①（バナー）**: 市場レジームバナー（PC/スマホ共有）をテキストからグラフィックへ——Healthメーター（0-100、マウント時にtweenでスイープ・赤/琥珀/緑の水準色）／エクスポージャー階段（4段が下からスタガー点灯＝pilot→full のスケールイン思想）／レジームchipに決定的局面（confirmed_uptrend/downtrend）のみ呼吸パルス／分配日chipは件数でエスカレート（≥4警告・≥6エラー）。数値ラベルは不変が第一・全モーションはprefers-reduced-motionガード内。既存6テスト無改変でpass＋新3テスト（メーター/階段点灯数/chip色）。
+- **変更②（ホームカード）**: キー指数カード（SPY/QQQ…）に共有enterSlideFadeスタガー入場＋hover 2px浮上（fastトークン、hover対応端末のみ）。
+- **検証**: 375px実写で2状態（correction=琥珀54%・1/4段・赤分配7日chip／confirmed_uptrend=緑89%・3/4段・FTDチップ・ミュート2日chip）を確認。関連スイート177/177・eslint 0 errors。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
