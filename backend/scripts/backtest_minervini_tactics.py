@@ -330,6 +330,12 @@ def metrics(curve, trades, start_equity=100_000.0):
         gains = sum(max(0.0, t.get("pnl", t["exit"] - t["entry"])) for t in trades)
         losses = sum(max(0.0, -t.get("pnl", t["exit"] - t["entry"])) for t in trades)
         out["profit_factor"] = round(gains / losses, 2) if losses > 0 else None
+    yearly = eq.resample("YE").last()
+    prev = start_equity
+    out["yearly_return_pct"] = {}
+    for ts, val in yearly.items():
+        out["yearly_return_pct"][str(ts.year)] = round(100 * (val / prev - 1), 1)
+        prev = val
     return out
 
 
