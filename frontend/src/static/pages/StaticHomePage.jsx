@@ -26,6 +26,7 @@ import StaticChartViewerModal from '../StaticChartViewerModal';
 import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
+import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
 import { marketFlag } from '../marketFlags';
@@ -244,7 +245,7 @@ function StaticHomePage() {
             _closes: (item.history || []).map((h) => h.close).filter((c) => c != null),
           }))
           .filter((item) => item.latest_close != null && item._closes.length > 1)
-          .map((item) => {
+          .map((item, cardIndex) => {
           const closes = item._closes;
           const trend = closes[closes.length - 1] > closes[0]
             ? 1
@@ -263,6 +264,11 @@ function StaticHomePage() {
                   display: 'flex',
                   alignItems: 'stretch',
                   gap: 1.5,
+                  ...enterSlideFade(cardIndex),
+                  transition: `transform ${MOTION.duration.fast}ms ${MOTION.easing.standard}, border-color ${MOTION.duration.fast}ms ${MOTION.easing.standard}`,
+                  '@media (hover: hover)': {
+                    '&:hover': { transform: 'translateY(-2px)', borderColor: 'primary.main' },
+                  },
                 }}
               >
                 <Box sx={{ flex: '0 0 auto', minWidth: 0 }}>
