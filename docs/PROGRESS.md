@@ -275,6 +275,12 @@
 - **検証**: sandbox往復E2E（実Postgres run→feature store全消去→import→prices-onlyエクスポートで完全USバンドル再生成）＋新ユニット2件（新品DB往復・冪等性）。レッドライン164・golden 43床。
 - **運用メモ**: PR #48マージ済（main 00b9c90）→当日フルビルドをdispatch（run 29067612109）。**C50はブランチ上——mainへマージされるまで16:06高速ランは無害なフォールバック動作**。
 
+### C51 — 2026-07-10 市場レジームバナーを静的PWAに搭載——UI統一の第一歩（コミット 39918b4）
+- **調査結論（ユーザー要望①「なぜUIが違う」）**: スキャン結果テーブルとフィルタは**既にPC版と同一コンポーネント**（StaticScanPageがResultsTable/FilterPanelをimport済み）、チャートモーダルも共有済み。真の乖離は①シェル/ナビ ②ホーム画面 ③**市場レジームバー不在**（ミネルヴィニ・ルール1の文脈がスマホに無い）だった。
+- **変更**: PC版の`MarketRegimeBanner`（レジームchip・Health 0-100・推奨エクスポージャー・分配日数・FTD経過）を静的スキャンページ（フィルタ上、未フィルタ行から供給＝0件でも市場文脈が残る）と静的ホーム（鮮度行直下）へそのまま搭載。レジーム項目は全エクスポート行に既に載っており**純粋なコンポーネント再利用**（新規データ配線ゼロ）。
+- **検証**: 375px実写2枚——両タブで「Market [Correction] Health 54/100 · Suggested exposure 20% · 7 distribution days」がPC版と同一描画。staticスイート52/52・eslint 0 errors。
+- **運用**: PR #49（C50）はCI green→mainへマージ済（c433bff）。**本日16:06 ETの定時ランが高速価格配信の初回実測**になる。
+
 ### 環境メモ（復元用）
 - ブランチ: `claude/minerva-market-360-rebuild-toy2fa`（PR #48 OPEN、#47はMERGED）
 - sandbox: yfinance/stooq 403（プロキシ回避は禁止）。GitHub raw 200。celery/httpx未インストール→一部テストはcollection error（既知・環境要因）。
