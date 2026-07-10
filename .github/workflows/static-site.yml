@@ -301,6 +301,42 @@ jobs:
             --market "${{ matrix.market }}" \
             --allow-stale
 
+      # Fast prices-only runs re-export against the latest PUBLISHED feature
+      # run, but this job's database is fresh — seed the run from the bundle
+      # the previous full build uploaded. Without it the export exits 79 and
+      # the combine job just republishes yesterday's site.
+      - name: Seed feature run bundle from GitHub (fast mode)
+        if: ${{ needs.select-markets.outputs.mode == 'prices_only' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/feature-run
+          MARKET_LOWER="$(echo "${{ matrix.market }}" | tr '[:upper:]' '[:lower:]')"
+          for attempt in 1 2 3; do
+            if gh release download daily-price-data \
+              --pattern "feature-run-latest-${MARKET_LOWER}.json" \
+              --dir /tmp/feature-run --clobber; then
+              break
+            fi
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
+          done
+          if [ ! -f "/tmp/feature-run/feature-run-latest-${MARKET_LOWER}.json" ]; then
+            echo "No feature-run manifest published yet; the export will exit 79 and combine falls back." >&2
+            exit 0
+          fi
+          BUNDLE_ASSET="$(python -c "import json;print(json.load(open('/tmp/feature-run/feature-run-latest-${MARKET_LOWER}.json'))['bundle_asset_name'])")"
+          for attempt in 1 2 3; do
+            if gh release download daily-price-data \
+              --pattern "$BUNDLE_ASSET" \
+              --dir /tmp/feature-run --clobber; then
+              break
+            fi
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
+          done
+          cd backend
+          python -m app.scripts.import_feature_run_bundle \
+            --input "/tmp/feature-run/${BUNDLE_ASSET}"
+
       - name: Export market static data bundle
         id: export-market
         env:
@@ -395,6 +431,29 @@ jobs:
             exit 1
           fi
 
+          gh release upload daily-price-data "$BUNDLE_PATH" --clobber
+          gh release upload daily-price-data "$MANIFEST_PATH" --clobber
+
+      # Full builds also publish their feature run so the next fast
+      # prices-only run can re-export yesterday's scan against fresh prices.
+      - name: Upload feature run bundle (full mode)
+        if: ${{ steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode != 'prices_only' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MARKET_LOWER="$(echo "${{ matrix.market }}" | tr '[:upper:]' '[:lower:]')"
+          cd backend
+          python -m app.scripts.build_feature_run_bundle \
+            --market "${{ matrix.market }}" \
+            --output-dir /tmp/feature-run-out
+          cd ..
+          BUNDLE_PATH="$(find /tmp/feature-run-out -maxdepth 1 -name "feature-run-${MARKET_LOWER}-*.json.gz" | head -n 1)"
+          MANIFEST_PATH="/tmp/feature-run-out/feature-run-latest-${MARKET_LOWER}.json"
+          if [ -z "$BUNDLE_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
+            echo "Missing feature-run bundle outputs" >&2
+            exit 1
+          fi
           gh release upload daily-price-data "$BUNDLE_PATH" --clobber
           gh release upload daily-price-data "$MANIFEST_PATH" --clobber
 
