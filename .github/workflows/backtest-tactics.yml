@@ -41,7 +41,7 @@ jobs:
       - name: Build long-history price bundle (Yahoo)
         run: |
           cd backend
-          python -m app.scripts.build_backtest_price_bundle \
+          PYTHONPATH=. python scripts/build_backtest_price_bundle.py \
             --period "${{ github.event.inputs.period || '6y' }}" \
             --output /tmp/bt/backtest-price-us-${{ github.event.inputs.period || '6y' }}.json.gz
 
