@@ -24,10 +24,23 @@ jobs:
   build-and-backtest:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: stockscanner
+          POSTGRES_USER: stockscanner
+          POSTGRES_PASSWORD: stockscanner
+        options: >-
+          --health-cmd "pg_isready -U stockscanner -d stockscanner"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     env:
       REDIS_ENABLED: "false"
-      # No database is used, but settings validation requires the URL.
-      DATABASE_URL: postgresql://local/none
+      DATABASE_URL: postgresql://stockscanner:stockscanner@localhost:5432/stockscanner
     steps:
       - uses: actions/checkout@v4
 
