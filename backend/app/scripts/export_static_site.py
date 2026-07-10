@@ -73,6 +73,10 @@ def _resolve_latest_completed_trading_date(market: str, *, close_buffer_minutes:
 # minutes (Yahoo's daily bar is final within minutes of the bell; waiting the
 # full consolidation window would defeat the point of the fast path).
 PRICES_ONLY_CLOSE_BUFFER_MINUTES = 5
+# Chart-relevant refresh budget for the fast path: STATIC_CHART_LIMIT charts
+# ship by default plus preset/group expansions — 6x covers those expansions
+# while keeping the refresh ~8 minutes instead of 52.
+PRICES_ONLY_REFRESH_SYMBOL_LIMIT = 1200
 
 
 def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
@@ -87,10 +91,14 @@ def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
     as_of = _resolve_latest_completed_trading_date(
         market, close_buffer_minutes=PRICES_ONLY_CLOSE_BUFFER_MINUTES
     )
+    symbols = _chart_relevant_symbols(market, limit=PRICES_ONLY_REFRESH_SYMBOL_LIMIT)
     with disable_serialized_data_fetch_lock(), disable_serialized_market_workload():
         return {
             "as_of_date": as_of.isoformat(),
-            "price_refresh": _refresh_static_daily_prices(as_of_date=as_of, market=market),
+            "refresh_symbol_subset": len(symbols) if symbols is not None else None,
+            "price_refresh": _refresh_static_daily_prices(
+                as_of_date=as_of, market=market, symbols=symbols
+            ),
         }
 
 
@@ -171,14 +179,47 @@ def _write_market_diagnostics(output_dir: Path, market: str, snapshot: dict[str,
     return diagnostics_path
 
 
-def _refresh_static_daily_prices(*, as_of_date: date, market: str | None = None) -> dict[str, Any]:
+def _refresh_static_daily_prices(
+    *,
+    as_of_date: date,
+    market: str | None = None,
+    symbols: list[str] | None = None,
+) -> dict[str, Any]:
     service = StaticDailyPriceRefreshService(
         session_factory=SessionLocal,
         price_cache=get_price_cache(),
         fetcher=BulkDataFetcher(),
         batch_size_for_market=_static_daily_price_refresh_batch_size,
     )
-    return service.refresh(as_of_date=as_of_date, market=market)
+    return service.refresh(as_of_date=as_of_date, market=market, symbols=symbols)
+
+
+def _chart_relevant_symbols(market: str, limit: int) -> list[str] | None:
+    """Top of the latest PUBLISHED feature run — the names whose charts the
+    prices-only export re-serializes. Fresh closes only surface through
+    chart payloads on the fast path, so refreshing beyond this set is pure
+    wall-clock (C57: full-universe refresh was 52 of 84 pipeline minutes)."""
+    from app.infra.db.models.feature_store import (
+        FeatureRunPointer,
+        StockFeatureDaily,
+    )
+
+    with SessionLocal() as db:
+        pointer = (
+            db.query(FeatureRunPointer)
+            .filter(FeatureRunPointer.key == _market_pointer_key(market))
+            .one_or_none()
+        )
+        if pointer is None:
+            return None
+        rows = (
+            db.query(StockFeatureDaily.symbol)
+            .filter(StockFeatureDaily.run_id == pointer.run_id)
+            .order_by(StockFeatureDaily.composite_score.desc().nullslast())
+            .limit(limit)
+            .all()
+        )
+    return [symbol for symbol, in rows] or None
 
 
 def _generate_trading_dates(

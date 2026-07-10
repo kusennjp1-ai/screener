@@ -39,15 +39,23 @@ class TestPricesOnlyRefresh:
 
         fake_refresh = MagicMock(return_value={"status": "completed"})
         fake_resolve = MagicMock(return_value=date(2026, 7, 8))
+        fake_subset = MagicMock(return_value=["AAPL", "MSFT"])
         with patch.object(mod, "_refresh_static_daily_prices", fake_refresh), \
-             patch.object(mod, "_resolve_latest_completed_trading_date", fake_resolve):
+             patch.object(mod, "_resolve_latest_completed_trading_date", fake_resolve), \
+             patch.object(mod, "_chart_relevant_symbols", fake_subset):
             out = mod._run_prices_only_refresh(market="US")
 
         fake_resolve.assert_called_once_with(
             "US", close_buffer_minutes=mod.PRICES_ONLY_CLOSE_BUFFER_MINUTES
         )
-        fake_refresh.assert_called_once_with(as_of_date=date(2026, 7, 8), market="US")
+        fake_subset.assert_called_once_with(
+            "US", limit=mod.PRICES_ONLY_REFRESH_SYMBOL_LIMIT
+        )
+        fake_refresh.assert_called_once_with(
+            as_of_date=date(2026, 7, 8), market="US", symbols=["AAPL", "MSFT"]
+        )
         assert out["as_of_date"] == "2026-07-08"
+        assert out["refresh_symbol_subset"] == 2
         assert mod.PRICES_ONLY_CLOSE_BUFFER_MINUTES < 30
 
     def test_cli_guards(self):
