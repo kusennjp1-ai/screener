@@ -17,7 +17,7 @@
  * component is purely presentational. It is shared by the live Group Rankings
  * page and the static-site Groups page — both pass the same `{ groups: [...] }`.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ScatterChart,
   Scatter,
@@ -36,14 +36,21 @@ import {
   Box,
   Card,
   CardContent,
+  Chip,
+  IconButton,
+  Slider,
   Typography,
   CircularProgress,
   Alert,
   FormControlLabel,
   Switch,
 } from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PauseIcon from '@mui/icons-material/Pause';
 import { QUADRANT_COLORS, QUADRANT_FILLS, quadrantColor } from './rrgColors';
 import { buildTailPoints } from './rrgTrace';
+import { computeFlows, groupAtFrame, maxFrames } from './rrgFlow';
+import { MOTION, PLAYBACK_FRAME_MS } from '../../theme/motion';
 import { useRRGFilters } from './useRRGFilters';
 import RRGFilters from './RRGFilters';
 
@@ -228,13 +235,52 @@ export default function RRGChart({ data, isLoading, error, onSelectGroup, height
   // full per-week detail.
   const detailed = shown.length <= DETAIL_LIMIT;
 
+  // --- Playback (sector-rotation animation) --------------------------------
+  // frame == null renders the live (latest) chart; 0..totalFrames-1 time-travels
+  // every series along its weekly tail. While playing, recharts tweens the head
+  // dots between frames, so rotation reads as motion — where money is going.
+  const totalFrames = useMemo(() => maxFrames(shown), [shown]);
+  const [frame, setFrame] = useState(null);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (!playing) return undefined;
+    const id = setInterval(() => {
+      setFrame((f) => {
+        const next = (f == null ? 0 : f + 1);
+        if (next >= totalFrames - 1) {
+          setPlaying(false);
+          return null; // finished: snap back to live
+        }
+        return next;
+      });
+    }, PLAYBACK_FRAME_MS);
+    return () => clearInterval(id);
+  }, [playing, totalFrames]);
+  const startPlayback = () => {
+    setFrame(0);
+    setPlaying(true);
+  };
+
+  const framedShown = useMemo(
+    () => (frame == null ? shown : shown.map((g) => groupAtFrame(g, frame))),
+    [shown, frame],
+  );
+  const flows = useMemo(() => computeFlows(shown, frame), [shown, frame]);
+  const frameDate = useMemo(() => {
+    if (frame == null) return asOf;
+    for (const g of framedShown) {
+      if (g.current?.date) return g.current.date;
+    }
+    return asOf;
+  }, [frame, framedShown, asOf]);
+
   const currentPoints = useMemo(
-    () => shown.map((g) => ({ ...g, ...g.current, isCurrent: true })),
-    [shown],
+    () => framedShown.map((g) => ({ ...g, ...g.current, isCurrent: true })),
+    [framedShown],
   );
   const tails = useMemo(
-    () => shown.map((g) => ({ name: g.industry_group, color: quadrantColor(g.quadrant), points: buildTailPoints(g, asOf) })),
-    [shown, asOf],
+    () => framedShown.map((g) => ({ name: g.industry_group, color: quadrantColor(g.quadrant), points: buildTailPoints(g, asOf) })),
+    [framedShown, asOf],
   );
 
   if (isLoading) {
@@ -280,6 +326,32 @@ export default function RRGChart({ data, isLoading, error, onSelectGroup, height
             {asOf ? ` · ${asOf}` : ''}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
+          {totalFrames >= 3 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
+              <IconButton
+                size="small"
+                aria-label={playing ? 'Pause rotation playback' : 'Play rotation playback'}
+                onClick={() => (playing ? setPlaying(false) : startPlayback())}
+              >
+                {playing ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+              </IconButton>
+              <Slider
+                size="small"
+                aria-label="Rotation week"
+                min={0}
+                max={totalFrames - 1}
+                value={frame == null ? totalFrames - 1 : frame}
+                onChange={(_, v) => {
+                  setPlaying(false);
+                  setFrame(v >= totalFrames - 1 ? null : v);
+                }}
+                sx={{ width: 110 }}
+              />
+              <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 78 }}>
+                {frame == null ? 'Live' : frameDate || `w${frame + 1}`}
+              </Typography>
+            </Box>
+          )}
           <FormControlLabel
             control={
               <Switch
@@ -303,6 +375,36 @@ export default function RRGChart({ data, isLoading, error, onSelectGroup, height
             onRankChange={filter.setRankRange}
           />
         </Box>
+
+        {(flows.inflow.length > 0 || flows.outflow.length > 0) && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 1 }} data-testid="rrg-flow-strip">
+            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+              資金流入
+            </Typography>
+            {flows.inflow.map((f) => (
+              <Chip
+                key={`in-${f.name}`}
+                size="small"
+                color="success"
+                variant="outlined"
+                label={`${f.name} ↗ +${f.score.toFixed(1)}`}
+              />
+            ))}
+            <Box sx={{ width: 8 }} />
+            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+              資金流出
+            </Typography>
+            {flows.outflow.map((f) => (
+              <Chip
+                key={`out-${f.name}`}
+                size="small"
+                color="error"
+                variant="outlined"
+                label={`${f.name} ↘ ${f.score.toFixed(1)}`}
+              />
+            ))}
+          </Box>
+        )}
 
         {shown.length === 0 ? (
           <Alert severity="info">No {scopeLabel.toLowerCase()} match the current filter.</Alert>
@@ -374,7 +476,9 @@ export default function RRGChart({ data, isLoading, error, onSelectGroup, height
               {/* Current head dots — sized by constituents, colored by quadrant, clickable. */}
               <Scatter
                 data={currentPoints}
-                isAnimationActive={false}
+                isAnimationActive={playing}
+                animationDuration={MOTION.duration.tween}
+                animationEasing="ease-in-out"
                 onClick={(pt) => onSelectGroup?.(pt?.industry_group)}
                 cursor="pointer"
               >

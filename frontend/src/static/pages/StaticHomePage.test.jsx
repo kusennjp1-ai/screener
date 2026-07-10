@@ -501,4 +501,23 @@ describe('StaticHomePage', () => {
       });
     });
   });
+
+  it('shows 価格更新 from freshness.prices_generated_at ahead of the scan date', async () => {
+    homePayload.freshness.prices_generated_at = '2026-04-24T20:35:00Z';
+
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+    const line = await screen.findByText(/価格更新 .+ · スキャン 2026-04-24/);
+    expect(line).toBeInTheDocument();
+  });
+
+  it('omits the price label on pre-fast-publish bundles without the field', async () => {
+    delete homePayload.freshness.prices_generated_at;
+    delete homePayload.generated_at;
+
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+    const line = await screen.findByText(/スキャン 2026-04-24/);
+    expect(line.textContent).not.toContain('価格更新');
+  });
 });

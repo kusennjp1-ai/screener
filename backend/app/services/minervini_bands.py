@@ -264,7 +264,7 @@ def _pressure_sell_override(price_data: pd.DataFrame, cfg: BandConfig = DAILY) -
     close = price_data["Close"]
     high = price_data["High"]
     vol = price_data["Volume"]
-    ret = close.pct_change()
+    ret = close.pct_change(fill_method=None)
     avgvol = vol.rolling(cfg.buyrisk_ma).mean()
 
     crash = (ret <= PRESSURE_CRASH_RET) & (vol >= PRESSURE_CRASH_VOL_MULT * avgvol)
@@ -282,7 +282,7 @@ def _pressure_buy_override(price_data: pd.DataFrame, cfg: BandConfig = DAILY) ->
     """Per-bar mask forcing "buy" on a breakout to a fresh high on up-volume."""
     close = price_data["Close"]
     vol = price_data["Volume"]
-    ret = close.pct_change()
+    ret = close.pct_change(fill_method=None)
     avgvol = vol.rolling(cfg.buyrisk_ma).mean()
     new_high = close >= close.rolling(cfg.breakout_high_bars).max()
     breakout = new_high & (ret > PRESSURE_BREAKOUT_RET) & (vol > avgvol)

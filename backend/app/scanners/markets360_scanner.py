@@ -98,7 +98,16 @@ class Markets360Scanner(BaseStockScreener):
             return self._insufficient(symbol)
 
         close = price["Close"]
-        rpr = ratings.compute_rpr(close, benchmark_close)
+        # Authentic percentile RPR when the orchestrator supplies the scan
+        # universe's recency-weighted outperformance list. The "weighted" list
+        # is built by RelativeStrengthCalculator with the SAME lookbacks and
+        # 40/20/20/20 weights as compute_rpr's internal score, so the
+        # percentile compares like with like. Daily only: a weekly-resampled
+        # score is not commensurable with the daily universe distribution.
+        universe_perf = None
+        if timeframe != "weekly" and data.rs_universe_performances:
+            universe_perf = data.rs_universe_performances.get("weighted")
+        rpr = ratings.compute_rpr(close, benchmark_close, universe_performances=universe_perf)
 
         pressure = bands.get("pressure_state")
         buy_risk = bands.get("buy_risk_state")

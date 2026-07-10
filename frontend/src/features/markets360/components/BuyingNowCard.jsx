@@ -1,9 +1,13 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import BoltIcon from '@mui/icons-material/Bolt';
+import AddIcon from '@mui/icons-material/Add';
+import GlossaryLabel from '../../../components/common/GlossaryLabel';
 
 // The "Buying Now!" signal card — mirrors the MM360 popover: headline, the
 // behavioral-analytic label, timestamp + author, and the protective stop.
-export default function BuyingNowCard({ signal, author }) {
+// `onRegister` (optional) adds the one-click bridge to the Positions journal:
+// buy the signal -> register the position -> the sell engine watches it.
+export default function BuyingNowCard({ signal, author, onRegister }) {
   if (!signal || !signal.active) return null;
   const ts = signal.as_of ? new Date(signal.as_of) : null;
   const when = ts
@@ -29,17 +33,30 @@ export default function BuyingNowCard({ signal, author }) {
       <Typography sx={{ color: '#9aa0aa', fontSize: 12 }}>By {signal.author || author || 'Mark Minervini'}</Typography>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid #23262f' }}>
         {signal.trigger_price != null && (
-          <Typography sx={{ color: '#d1d4dc', fontSize: 13 }}>
-            entry <b>{signal.trigger_price.toFixed(2)}</b>
-          </Typography>
+          <GlossaryLabel term="entry">
+            <Typography component="span" sx={{ color: '#d1d4dc', fontSize: 13 }}>
+              entry <b>{signal.trigger_price.toFixed(2)}</b>
+            </Typography>
+          </GlossaryLabel>
         )}
         {signal.stop != null && (
-          <Typography sx={{ color: '#f23645', fontSize: 13 }}>
-            stop @ <b>{signal.stop.toFixed(2)}</b>
-            {signal.risk_pct != null && <span style={{ color: '#787b86' }}> (−{signal.risk_pct}%)</span>}
-          </Typography>
+          <GlossaryLabel term="stop">
+            <Typography component="span" sx={{ color: '#f23645', fontSize: 13 }}>
+              stop @ <b>{signal.stop.toFixed(2)}</b>
+              {signal.risk_pct != null && <span style={{ color: '#787b86' }}> (−{signal.risk_pct}%)</span>}
+            </Typography>
+          </GlossaryLabel>
         )}
       </Box>
+      {onRegister && signal.trigger_price != null && (
+        <Button
+          fullWidth size="small" variant="outlined" startIcon={<AddIcon />}
+          onClick={onRegister} data-testid="register-from-signal"
+          sx={{ mt: 1, minHeight: 44, color: '#3aa0ff', borderColor: '#3a6df0' }}
+        >
+          Register Position（ポジション登録）
+        </Button>
+      )}
     </Box>
   );
 }

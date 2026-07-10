@@ -804,6 +804,9 @@ def _map_row_to_domain(
         "vcp_contraction_ratio": details.get("vcp_contraction_ratio"),
         "vcp_atr_score": details.get("vcp_atr_score"),
         "passes_template": details.get("passes_template", False),
+        # SEPA fundamental bonus (C43): capped +10 add-on and its components
+        "fundamental_bonus": details.get("fundamental_bonus"),
+        "fundamental_bonus_detail": details.get("fundamental_bonus_detail"),
         "adr_percent": result.adr_percent,
         "eps_growth_qq": result.eps_growth_qq,
         "sales_growth_qq": result.sales_growth_qq,
@@ -905,6 +908,8 @@ def _map_row_to_domain(
     extended["market_above_50dma"] = details.get("market_above_50dma")
     extended["market_above_200dma"] = details.get("market_above_200dma")
     extended["market_50_above_200dma"] = details.get("market_50_above_200dma")
+    extended["market_ftd_date"] = details.get("market_ftd_date")
+    extended["market_ftd_days_since"] = details.get("market_ftd_days_since")
     # Rating-basis explainability
     extended["rating_basis_score"] = details.get("rating_basis_score")
     extended["rating_basis_screener"] = details.get("rating_basis_screener")

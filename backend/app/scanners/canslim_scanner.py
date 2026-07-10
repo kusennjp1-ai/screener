@@ -23,14 +23,18 @@ from .base_screener import (
 )
 from .screener_registry import register_screener
 from .criteria.relative_strength import RelativeStrengthCalculator
+from app.services.market_regime import assess_market_regime
 
 logger = logging.getLogger(__name__)
 
 # Trailing trading days that make up a 52-week window (~252 sessions/year).
 TRADING_DAYS_52W = 252
 
-# Earnings-proximity rule ("Code 33" — don't hold into a binary). Minervini/O'Neil
-# avoid buying just before a report: a gap on the print can blow through any stop.
+# Earnings-proximity blackout — never buy into a binary report (Minervini/
+# O'Neil: a gap on the print can blow through any stop). NOTE: this is NOT
+# Minervini's "Code 33" (three consecutive quarters of accelerating EPS +
+# sales + margins — that engine lives in services/sec_edgar_financials.py);
+# the earlier label here was a naming collision.
 EARNINGS_BLACKOUT_DAYS = 5      # 0-5 days out: hard avoid (score 0, fail)
 EARNINGS_PENALTY_DAYS = 14      # 6-14 days out: elevated gap risk -> soft penalty
 EARNINGS_PENALTY_POINTS = 15.0
@@ -191,7 +195,7 @@ class CANSLIMScanner(BaseStockScreener):
                 c_result, a_result, n_result, s_result, l_result, i_result
             )
 
-            # Earnings-proximity gate (Code-33): never buy into a binary report.
+            # Earnings-proximity gate: never buy into a binary report.
             earnings = self._check_earnings_proximity(fundamentals)
             final_score = score_result["score"]
             final_passes = score_result["passes"]
@@ -245,6 +249,17 @@ class CANSLIMScanner(BaseStockScreener):
                     "rs_all_periods": rs_ratings
                 }
             }
+
+            # M — Market direction. O'Neil: three out of four stocks follow
+            # the general market, so a Buy against it is a watchlist name.
+            # Mirrors the Minervini SEPA rule-1 gate: rating-only (the score
+            # keeps measuring the setup), and an unknown regime never blocks.
+            regime = assess_market_regime(data.benchmark_data)
+            details["market_regime"] = regime.get("regime")
+            details["market_uptrend"] = (
+                regime["regime"] in ("confirmed_uptrend", "uptrend_under_pressure")
+                if regime.get("regime") is not None else None
+            )
 
             # Calculate rating (on the earnings-gated score)
             rating = self.calculate_rating(final_score, details)
@@ -597,7 +612,7 @@ class CANSLIMScanner(BaseStockScreener):
         out["days_to_next_earnings"] = days
         if days <= EARNINGS_BLACKOUT_DAYS:
             out["blackout"] = True
-            out["reason"] = f"pre-earnings blackout ({days}d to report; Code-33 rule)"
+            out["reason"] = f"pre-earnings blackout ({days}d to report)"
         elif days <= EARNINGS_PENALTY_DAYS:
             out["penalty"] = EARNINGS_PENALTY_POINTS
             out["reason"] = f"earnings in {days}d — elevated gap risk"
@@ -665,13 +680,21 @@ class CANSLIMScanner(BaseStockScreener):
         rs_rating = details.get("rs_rating", 0) or 0
 
         if score >= 80 and eps_growth >= 25 and rs_rating >= 80:
-            return "Strong Buy"
+            rating = "Strong Buy"
         elif score >= 70:
-            return "Buy"
+            rating = "Buy"
         elif score >= 60:
             return "Watch"
         else:
             return "Pass"
+
+        # M — never issue a Buy against the general market (O'Neil's market
+        # direction letter). market_uptrend is None when no benchmark was
+        # available; an unknown market never blocks (same fallback as the
+        # Minervini SEPA rule-1 gate).
+        if details.get("market_uptrend") is False:
+            return "Watch"
+        return rating
 
     def _insufficient_data_result(self, symbol: str, reason: str) -> ScreenerResult:
         """Return result for insufficient data."""

@@ -82,9 +82,9 @@ def convert_numpy_types(obj: object) -> object:
         return obj.isoformat()
     elif isinstance(obj, np.bool_):
         return bool(obj)
-    elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+    elif isinstance(obj, np.integer):  # all int widths; np.int_ etc. survive but np.integer is the 2.x-safe base
         return int(obj)
-    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+    elif isinstance(obj, np.floating):  # np.float_ was removed in NumPy 2.0; np.floating covers every width
         val = float(obj)
         if np.isnan(val) or np.isinf(val):
             return None

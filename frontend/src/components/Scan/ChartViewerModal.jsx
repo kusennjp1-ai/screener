@@ -15,11 +15,12 @@ import PeopleIcon from '@mui/icons-material/People';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAllFilteredSymbols, getSetupDetails, getSingleResult } from '../../api/scans';
 import { prefetchPriceHistoryBatch } from '../../api/priceHistory';
-import { getStockFundamentals } from '../../api/stocks';
+import { getBuyContext, getStockFundamentals } from '../../api/stocks';
 import { getGroupDetail } from '../../api/groups';
 import { useChartNavigation } from '../../hooks/useChartNavigation';
 import { buildFilterParams, getStableFilterKey } from '../../utils/filterUtils';
 import CandlestickChart from '../Charts/CandlestickChart';
+import BuyChecklist from './BuyChecklist';
 import StockMetricsSidebar from './StockMetricsSidebar';
 import PeerComparisonModal from './PeerComparisonModal';
 import SetupEngineDrawer from './SetupEngineDrawer';
@@ -192,6 +193,17 @@ function ChartViewerModal({
     enabled: open && !!currentSymbol,
     staleTime: 300000, // 5 minutes (data is cached 7 days server-side)
   });
+
+  // Buy context — the Markets 360 wiring for THIS chart: the three color
+  // bands, the VCP box, staged buy points, and the buy signal's barrels.
+  const { data: buyContext } = useQuery({
+    queryKey: ['buyContext', currentSymbol],
+    queryFn: () => getBuyContext(currentSymbol),
+    enabled: open && !!currentSymbol,
+    staleTime: 300000,
+    retry: false,
+  });
+  const buyContextAvailable = Boolean(buyContext?.available);
 
   // Fetch group ranking for current stock's industry group
   const industryGroup = finalStockData?.ibd_industry_group;
@@ -519,13 +531,17 @@ function ChartViewerModal({
 
             {/* Main Content */}
             <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-              {/* Sidebar */}
-              <StockMetricsSidebar
-                stockData={finalStockData}
-                fundamentals={fundamentals}
-                onViewPeers={() => setPeerModalOpen(true)}
-                onViewSetupDetails={() => setSetupDrawerOpen(true)}
-              />
+              {/* Sidebar — the buy checklist rides on top: WHY this chart
+                  is (or isn't) a buy, mirroring the engine's exact rules. */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+                <BuyChecklist buyContext={buyContext} stockData={finalStockData} />
+                <StockMetricsSidebar
+                  stockData={finalStockData}
+                  fundamentals={fundamentals}
+                  onViewPeers={() => setPeerModalOpen(true)}
+                  onViewSetupDetails={() => setSetupDrawerOpen(true)}
+                />
+              </Box>
 
               {/* Chart Area */}
               <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>
@@ -536,6 +552,11 @@ function ChartViewerModal({
                     height={chartHeight}
                     visibleRange={visibleRange}
                     onVisibleRangeChange={setVisibleRange}
+                    bands={buyContextAvailable ? buyContext.bands : null}
+                    vcpBoxes={buyContextAvailable ? buyContext.vcp_boxes : null}
+                    buyPoints={buyContextAvailable ? buyContext.buy_points : null}
+                    pivotPrice={buyContextAvailable ? (buyContext.signal?.trigger_price ?? null) : null}
+                    pivotLabel="Buy Trigger"
                   />
                 ) : (
                   <Box

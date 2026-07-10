@@ -2101,6 +2101,42 @@ def test_export_chart_bundle_writes_top_ranked_payloads_with_sidebar_metadata(
     assert nvda_payload["stock_data"]["ibd_group_rank"] == 1
     assert nvda_payload["fundamentals"]["description"] == "AI chip leader"
     assert nvda_payload["bars"][-1]["close"] == 103.0
+    # Markets 360 signal blocks ride in every chart payload so the static
+    # viewer can render the same Buying Now / sell-plan cards as the live page.
+    assert nvda_payload["signal"]["active"] is False  # 3 bars -> no fresh trigger
+    assert nvda_payload["sell_plan"]["action"] in (
+        "hold", "raise_stop", "tighten_stop", "sell_into_strength", "exit",
+    )
+
+
+def test_compute_m360_signals_uses_band_states_and_buy_points(service_and_session_factory):
+    service, _ = service_and_session_factory
+    n = 90
+    closes = [100.0 + 0.4 * i for i in range(n)]
+    price_df = pd.DataFrame(
+        {
+            "Open": closes,
+            "High": [c * 1.01 for c in closes],
+            "Low": [c * 0.99 for c in closes],
+            "Close": closes,
+            "Volume": [1_000_000.0] * n,
+        },
+        index=pd.date_range("2026-01-02", periods=n, freq="B"),
+    )
+    out = service._compute_m360_signals(  # noqa: SLF001 - intentional unit coverage
+        price_df,
+        bands={"pressure_state": "buy", "tpr_state": "strong", "buy_risk_state": "low"},
+        buy_points=[],
+    )
+    # Both engines ran on the same wiring as the live Markets360Service.
+    assert set(out) == {"signal", "sell_plan"}
+    assert "barrels" in out["signal"]
+    assert out["signal"]["barrels"]["trend"] is True  # tpr_state fed through
+    assert out["sell_plan"]["action"] in (
+        "hold", "raise_stop", "tighten_stop", "sell_into_strength", "exit",
+    )
+    # Degrades to {} (cards absent), never raises.
+    assert service._compute_m360_signals(None, bands={}, buy_points=[]) == {}  # noqa: SLF001
 
 
 def test_export_chart_bundle_backfills_past_skipped_symbols_to_fill_limit(

@@ -90,9 +90,13 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 512M
+          # The data-fetch worker warms the price/fundamentals cache for the whole
+          # active universe on first-run bootstrap (~10k US symbols). At 512M the
+          # ForkPool worker was OOM-killed (SIGKILL) mid-warmup and the bootstrap
+          # failed; 2G gives it headroom to complete.
+          memory: 2G
         reservations:
-          memory: 128M
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d datafetch-global@$$HOSTNAME"]
       interval: 60s

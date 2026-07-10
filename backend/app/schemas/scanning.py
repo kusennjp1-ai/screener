@@ -151,6 +151,10 @@ class ScanResultItem(BaseModel):
     vcp_atr_score: Optional[float] = None
     passes_template: Optional[bool] = None
 
+    # SEPA fundamental bonus (C43): capped +10 score add-on + component breakdown
+    fundamental_bonus: Optional[float] = None
+    fundamental_bonus_detail: Optional[Dict[str, Any]] = None
+
     # Pocket Pivot / Power Trend
     pocket_pivot: Optional[bool] = None
     power_trend: Optional[bool] = None
@@ -230,6 +234,22 @@ class ScanResultItem(BaseModel):
     composite_reason: Optional[str] = None
     ipo_bonus: Optional[float] = None
 
+    # Execution-state axis (rating cap transparency). Both repository read
+    # paths populate these in extended_fields; the table renders them as chips.
+    execution_state: Optional[str] = None
+    execution_cap_applied: Optional[bool] = None
+    execution_cap_reason: Optional[str] = None
+
+    # MM360 band states (Pressure / Buy Risk / TPR) — rendered as the
+    # Prs/Risk/TPR columns in the results table.
+    pressure_state: Optional[str] = None
+    pressure_value: Optional[float] = None
+    buy_risk_state: Optional[str] = None
+    buy_risk_atr: Optional[float] = None
+    tpr_state: Optional[str] = None
+    tpr_score: Optional[float] = None
+    tpr_max: Optional[float] = None
+
     # General-market regime (Minervini's first rule: trade with the market).
     # Computed once from the benchmark and attached to every row so the UI can
     # show a regime banner and scale suggested exposure. Same value across a scan.
@@ -237,6 +257,8 @@ class ScanResultItem(BaseModel):
     market_health: Optional[float] = None       # 0-100
     market_exposure_pct: Optional[int] = None   # 0-100 suggested equity exposure
     market_distribution_days: Optional[int] = None
+    market_ftd_date: Optional[str] = None       # live follow-through-day date (bottom confirmation)
+    market_ftd_days_since: Optional[int] = None  # sessions since the FTD (drives the exposure ladder)
     market_above_50dma: Optional[bool] = None
     market_above_200dma: Optional[bool] = None
     market_50_above_200dma: Optional[bool] = None
@@ -322,6 +344,8 @@ class ScanResultItem(BaseModel):
             vcp_contraction_ratio=ef.get("vcp_contraction_ratio"),
             vcp_atr_score=ef.get("vcp_atr_score"),
             passes_template=ef.get("passes_template"),
+            fundamental_bonus=ef.get("fundamental_bonus"),
+            fundamental_bonus_detail=ef.get("fundamental_bonus_detail"),
             pocket_pivot=ef.get("pocket_pivot"),
             power_trend=ef.get("power_trend"),
             # Growth fields
@@ -379,11 +403,25 @@ class ScanResultItem(BaseModel):
             unavailable_screeners=normalize_string_list(ef.get("unavailable_screeners")),
             composite_reason=ef.get("composite_reason"),
             ipo_bonus=ef.get("ipo_bonus"),
+            # Execution-state axis
+            execution_state=ef.get("execution_state"),
+            execution_cap_applied=ef.get("execution_cap_applied"),
+            execution_cap_reason=ef.get("execution_cap_reason"),
+            # MM360 band states
+            pressure_state=ef.get("pressure_state"),
+            pressure_value=ef.get("pressure_value"),
+            buy_risk_state=ef.get("buy_risk_state"),
+            buy_risk_atr=ef.get("buy_risk_atr"),
+            tpr_state=ef.get("tpr_state"),
+            tpr_score=ef.get("tpr_score"),
+            tpr_max=ef.get("tpr_max"),
             # General-market regime (same value across a scan)
             market_regime=ef.get("market_regime"),
             market_health=ef.get("market_health"),
             market_exposure_pct=ef.get("market_exposure_pct"),
             market_distribution_days=ef.get("market_distribution_days"),
+            market_ftd_date=ef.get("market_ftd_date"),
+            market_ftd_days_since=ef.get("market_ftd_days_since"),
             market_above_50dma=ef.get("market_above_50dma"),
             market_above_200dma=ef.get("market_above_200dma"),
             market_50_above_200dma=ef.get("market_50_above_200dma"),

@@ -87,6 +87,7 @@ function Layout({ children }) {
     { path: '/breadth', label: 'Breadth' },
     { path: '/groups', label: 'Groups' },
     { path: '/markets360', label: 'Markets 360' },
+    { path: '/positions', label: 'Positions' },
     { path: '/validation', label: 'Backtest' },
     ...(features.themes ? [{ path: '/themes', label: 'Themes' }] : []),
     ...(features.chatbot ? [{ path: '/chatbot', label: 'Assistant' }] : []),
@@ -106,39 +107,60 @@ function Layout({ children }) {
       <AppBar position="static" sx={{ minHeight: 48 }}>
         <Toolbar variant="dense" sx={{ minHeight: 48 }}>
           <ShowChartIcon sx={{ mr: 1, fontSize: 20 }} />
-          <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>
+          {/* Title text hides on phones — the chart mark is the brand; the
+              px it frees keeps the nav + search usable at 375px. */}
+          <Typography
+            variant="subtitle1"
+            component="div"
+            sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'block' } }}
+          >
             STOCK SCANNER
           </Typography>
           <RuntimeActivityStatusButton />
           <Box sx={{ flexGrow: 1 }} />
           <TickerSearch />
           <Box sx={{ flexGrow: 1 }} />
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Button
-                key={item.path}
-                color="inherit"
-                component={RouterLink}
-                to={item.path}
-                size="small"
-                sx={{
-                  backgroundColor: isActive ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
-                  borderBottom: isActive ? '2px solid white' : '2px solid transparent',
-                  borderRadius: 0,
-                  fontWeight: isActive ? 600 : 400,
-                  fontSize: '12px',
-                  px: 1.5,
-                  py: 0.5,
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-                  },
-                }}
-              >
-                {item.label}
-              </Button>
-            );
-          })}
+          {/* Nav collapses into a swipeable strip on narrow screens instead of
+              overflowing off-canvas; every tab stays reachable one-handed. */}
+          <Box
+            sx={{
+              display: 'flex',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': { display: 'none' },
+              maxWidth: { xs: '52vw', sm: '60vw', md: 'none' },
+            }}
+          >
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Button
+                  key={item.path}
+                  color="inherit"
+                  component={RouterLink}
+                  to={item.path}
+                  size="small"
+                  sx={{
+                    backgroundColor: isActive ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
+                    borderBottom: isActive ? '2px solid white' : '2px solid transparent',
+                    borderRadius: 0,
+                    fontWeight: isActive ? 600 : 400,
+                    fontSize: '12px',
+                    px: 1.5,
+                    py: 0.5,
+                    flexShrink: 0,
+                    minHeight: 44,
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                    },
+                  }}
+                >
+                  {item.label}
+                </Button>
+              );
+            })}
+          </Box>
           <IconButton
             sx={{ ml: 1 }}
             onClick={(event) => setProfileMenuAnchor(event.currentTarget)}

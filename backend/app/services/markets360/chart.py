@@ -131,10 +131,10 @@ def serialize_rpr_pane(df: pd.DataFrame, benchmark_df: Optional[pd.DataFrame], d
         bench = benchmark_df["Close"].reindex(close.index).ffill()
 
     win = 63
-    stock_ret = close.pct_change(win) * 100.0
+    stock_ret = close.pct_change(win, fill_method=None) * 100.0
     rel = stock_ret
     if bench is not None:
-        rel = stock_ret - bench.pct_change(win) * 100.0
+        rel = stock_ret - bench.pct_change(win, fill_method=None) * 100.0
     rel = rel.rolling(5).mean()
     # Logistic squash: 0% rel -> ~55, +25% -> ~85, -25% -> ~20.
     rpr = 1.0 / (1.0 + np.exp(-rel / 12.0)) * 99.0

@@ -588,6 +588,23 @@ class ScanOrchestrator:
             execution_cap = apply_execution_cap(adjustment.rating, execution_state)
             overall_rating = execution_cap.rating.value
 
+            # 7c-ter. SEPA rule 1 on the FINAL rating. Individual screeners cap
+            #     their own ratings by regime, but the best-fit rating could come
+            #     from a screener with no market gate (e.g. CANSLIM/SE), letting a
+            #     row read "Buy" in a correction (observed live in E2E). Only the
+            #     actionable rating is capped — scores and screener details are
+            #     untouched, and the regime fields explain the downgrade. An FTD
+            #     (C2) lifts the regime out of correction weeks before the MAs
+            #     recover, so this does not stay dark through a legitimate turn.
+            market_regime = self._assess_regime(stock_data)
+            market_gate_capped = False
+            if (
+                overall_rating in ("Strong Buy", "Buy")
+                and market_regime.get("market_regime") in ("correction", "downtrend")
+            ):
+                overall_rating = "Watch"
+                market_gate_capped = True
+
             # 7c-bis. Rating-basis explainability. The rating comes from the
             #     best-fit (max) screener score, NOT the diluted composite — so a
             #     72-composite "Buy" can lose to a 68-composite Stage-2 RS-85
@@ -601,6 +618,10 @@ class ScanOrchestrator:
                 overall_rating, rating_basis_screener, rating_basis_score,
                 composite_score, domain_outputs, adjustment.reason, execution_cap,
             )
+            if market_gate_capped:
+                rating_explanation += (
+                    f"; market gate: {market_regime.get('market_regime')} caps to Watch (SEPA rule 1)"
+                )
 
             # 7d. Minervini Markets 360-style band STATES (Pressure / Buy Risk /
             #     TPR). Lightweight (no per-bar history here) — the per-bar
@@ -608,9 +629,8 @@ class ScanOrchestrator:
             #     export. Reuses the already-fetched benchmark; never raises.
             band_states = self._compute_band_states(stock_data)
 
-            # 7e. General-market regime (Minervini's first rule). Computed from
-            #     the benchmark; identical across the scan, attached to each row.
-            market_regime = self._assess_regime(stock_data)
+            # 7e. General-market regime already computed at 7c-ter; attached to
+            #     each row below (identical across the scan).
 
             # 8. Combine results
             combined_result = self._combine_results(
@@ -659,24 +679,67 @@ class ScanOrchestrator:
         stock_data: StockData,
         screener_results: Dict[str, ScreenerResult],
     ) -> ExecutionState:
-        """Classify one stock's execution state from the Minervini details.
+        """Classify one stock's execution state with fallback input sourcing.
 
-        Pulls the inputs the decision tree needs (price, SMA50/200, VCP pivot,
-        recent contraction low, breakout volume ratio) from the already-computed
-        Minervini screener output. Defensive by design: any missing input or
-        unexpected error yields ``ExecutionState.UNKNOWN`` (a no-op in the cap),
-        so one bad symbol never aborts the per-symbol scan loop.
+        Input precedence per field: Minervini screener details -> Markets 360
+        details (its VCP-footprint pivot / volume surge) -> direct computation
+        from the price data (SMAs, 50-day volume ratio). Before the fallbacks,
+        any scan not running the minervini screener got UNKNOWN and therefore
+        NO State Cap — an extended name could keep a Strong Buy just because a
+        different screener produced it. Defensive by design: any unexpected
+        error yields ``ExecutionState.UNKNOWN`` (a no-op in the cap), so one
+        bad symbol never aborts the per-symbol scan loop.
         """
         try:
-            minervini = screener_results.get("minervini")
-            details = (minervini.details or {}) if minervini is not None else {}
+            def _details(name: str) -> Dict:
+                r = screener_results.get(name)
+                return (r.details or {}) if r is not None else {}
+
+            minervini = _details("minervini")
+            m360 = _details("markets360")
+            price_df = getattr(stock_data, "price_data", None)
+            close = (
+                price_df["Close"]
+                if price_df is not None and "Close" in getattr(price_df, "columns", [])
+                else None
+            )
+
+            def _sma(n: int):
+                if close is None or len(close) < n:
+                    return None
+                return float(close.iloc[-n:].mean())
+
+            sma50 = minervini.get("ma_50")
+            if sma50 is None:
+                sma50 = _sma(50)
+            sma200 = minervini.get("ma_200")
+            if sma200 is None:
+                sma200 = _sma(200)
+
+            pivot = minervini.get("vcp_pivot")
+            if pivot is None:
+                pivot = m360.get("pivot")
+
+            contraction_low = minervini.get("vcp_base_low")
+            if contraction_low is None and price_df is not None and "Low" in price_df.columns and len(price_df) >= 15:
+                # the right-side base low (same window risk.py hides stops under)
+                contraction_low = float(price_df["Low"].tail(15).min())
+
+            volume_ratio = minervini.get("volume_surge")
+            if volume_ratio is None:
+                volume_ratio = m360.get("volume_surge")
+            if volume_ratio is None and price_df is not None and "Volume" in price_df.columns and len(price_df) >= 51:
+                avg50 = float(price_df["Volume"].iloc[-51:-1].mean())
+                if avg50 > 0:
+                    volume_ratio = float(price_df["Volume"].iloc[-1]) / avg50
+
             return compute_execution_state(
                 price=stock_data.get_current_price(),
-                sma50=details.get("ma_50"),
-                sma200=details.get("ma_200"),
-                pivot=details.get("vcp_pivot"),
-                contraction_low=details.get("vcp_base_low"),
-                volume_ratio=details.get("volume_surge"),
+                sma50=sma50,
+                sma200=sma200,
+                pivot=pivot,
+                contraction_low=contraction_low,
+                volume_ratio=volume_ratio,
             )
         except Exception:  # noqa: BLE001 - classification must never abort a scan
             logger.warning(
@@ -750,6 +813,10 @@ class ScanOrchestrator:
             regime = assess_market_regime(bench)
             if regime.get("regime") is None:
                 return {}
+            # A live follow-through day is why the regime can read
+            # confirmed_uptrend while the MA structure is still broken — the
+            # UI banner needs it to explain the pilot-sized exposure.
+            ftd = (regime.get("components") or {}).get("follow_through") or {}
             return {
                 "market_regime": regime.get("regime"),
                 "market_health": regime.get("health"),
@@ -758,6 +825,8 @@ class ScanOrchestrator:
                 "market_above_50dma": regime.get("above_50dma"),
                 "market_above_200dma": regime.get("above_200dma"),
                 "market_50_above_200dma": regime.get("fifty_above_200"),
+                "market_ftd_date": ftd.get("date"),
+                "market_ftd_days_since": ftd.get("days_since"),
             }
         except Exception:  # noqa: BLE001 - regime must never abort a scan
             logger.warning(
@@ -1025,6 +1094,13 @@ class ScanOrchestrator:
                 result["beta_adj_rs_3m"] = minervini_details["beta_adj_rs_3m"]
             if "beta_adj_rs_12m" in minervini_details:
                 result["beta_adj_rs_12m"] = minervini_details["beta_adj_rs_12m"]
+            # SEPA fundamental bonus (C43): number + per-component breakdown
+            # so the UI can show WHY a passer ranks higher.
+            if "fundamental_bonus" in minervini_details:
+                result["fundamental_bonus"] = minervini_details["fundamental_bonus"]
+            _fb = (minervini_details.get("full_analysis") or {}).get("fundamental_bonus")
+            if isinstance(_fb, dict):
+                result["fundamental_bonus_detail"] = _fb
 
         # Promote setup_engine payload to top level for json_extract queries
         if "setup_engine" in screener_results:

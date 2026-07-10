@@ -27,6 +27,7 @@ const ThemesPage = lazy(() => import('./pages/ThemesPage'));
 const ChatbotPage = lazy(() => import('./pages/ChatbotPage'));
 const OperationsPage = lazy(() => import('./pages/OperationsPage'));
 const Markets360Page = lazy(() => import('./features/markets360/pages/Markets360Page'));
+const PositionsPage = lazy(() => import('./pages/PositionsPage'));
 
 // Loading fallback component
 const PageLoadingFallback = () => (
@@ -311,6 +312,7 @@ function AppShell() {
             <Route path="/stocks/:ticker" element={<StockDetails />} />
             <Route path="/markets360" element={<Markets360Page />} />
             <Route path="/markets360/:ticker" element={<Markets360Page />} />
+            <Route path="/positions" element={<PositionsPage />} />
             <Route path="/operations" element={<OperationsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

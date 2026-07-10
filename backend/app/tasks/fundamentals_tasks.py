@@ -1564,3 +1564,63 @@ def calculate_smr_ratings(self):
 
     finally:
         db.close()
+
+
+@celery_app.task(bind=True, name='app.tasks.fundamentals_tasks.refresh_code33_flags')
+def refresh_code33_flags(self, market: str = 'US', require_margin: bool = False):
+    """Stamp the Code 33 (Minervini earnings-acceleration) flag onto US rows.
+
+    Computes Code 33 from SEC EDGAR XBRL company facts (US filers only) and
+    writes the boolean into ``stock_fundamentals.code33`` so live scans and the
+    buy checklist surface it — not just the static export. Off unless
+    ``settings.fundamentals_code33_enabled`` (needs data.sec.gov, absent in the
+    app sandbox). Targeted single-column update, so it never clobbers other
+    fundamentals; Redis fundamentals keys for updated symbols are invalidated.
+    """
+    if not settings.fundamentals_code33_enabled:
+        return {'status': 'disabled'}
+    if market.upper() != 'US':
+        return {'status': 'skipped', 'reason': 'code33 is US-only (EDGAR)'}
+
+    from ..models.stock import StockFundamental
+
+    db = SessionLocal()
+    try:
+        symbols = [
+            row.symbol
+            for row in db.query(StockFundamental.symbol).all()
+            if row.symbol
+        ]
+        if not symbols:
+            return {'status': 'empty'}
+
+        from ..services.sec_edgar_financials import SecEdgarClient
+
+        flags = SecEdgarClient().code33_map(symbols, require_margin=require_margin)
+
+        updated = 0
+        passed = 0
+        for symbol, is_code33 in flags.items():
+            db.query(StockFundamental).filter(
+                StockFundamental.symbol == symbol
+            ).update({'code33': bool(is_code33)}, synchronize_session=False)
+            updated += 1
+            passed += int(bool(is_code33))
+        db.commit()
+
+        # Invalidate Redis so the fresh flag is served immediately.
+        try:
+            cache = get_fundamentals_cache()
+            for symbol in flags:
+                cache.invalidate_cache(symbol)
+        except Exception:  # noqa: BLE001 - stale Redis self-heals on 7d TTL
+            logger.warning("code33 Redis invalidation failed", exc_info=True)
+
+        logger.info("Code 33 refresh: %d evaluated, %d passed", updated, passed)
+        return {'status': 'ok', 'evaluated': updated, 'passed': passed}
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Code 33 refresh failed: {e}", exc_info=True)
+        db.rollback()
+        return {'status': 'error', 'error': str(e)}
+    finally:
+        db.close()

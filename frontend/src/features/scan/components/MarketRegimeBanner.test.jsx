@@ -35,4 +35,22 @@ describe('MarketRegimeBanner', () => {
     renderWithProviders(<MarketRegimeBanner results={[{ market_regime: 'weird_state' }]} />);
     expect(screen.getByText('weird_state')).toBeInTheDocument();
   });
+
+  it('shows the follow-through-day chip when a live FTD backs the regime', () => {
+    renderWithProviders(<MarketRegimeBanner results={[{
+      market_regime: 'confirmed_uptrend',
+      market_exposure_pct: 25,
+      market_ftd_date: '2026-06-30',
+      market_ftd_days_since: 3,
+    }]} />);
+    expect(screen.getByText('FTD 2026-06-30 (+3d)')).toBeInTheDocument();
+    expect(screen.getByText(/25%/)).toBeInTheDocument();
+  });
+
+  it('renders no FTD chip when the regime is MA-driven', () => {
+    renderWithProviders(<MarketRegimeBanner results={[{
+      market_regime: 'confirmed_uptrend', market_exposure_pct: 100,
+    }]} />);
+    expect(screen.queryByText(/^FTD /)).not.toBeInTheDocument();
+  });
 });

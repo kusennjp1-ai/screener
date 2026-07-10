@@ -224,8 +224,17 @@ class MarketCalendarService:
         now: datetime | None = None,
         *,
         mic: str | None = None,
+        close_buffer_minutes: int = 30,
     ) -> date:
-        """Return the latest trading day that should already have end-of-day bars."""
+        """Return the latest trading day that should already have end-of-day bars.
+
+        ``close_buffer_minutes`` is how long after the official close today's
+        session starts counting as "completed". The 30-minute default is the
+        conservative EOD-consolidation window every freshness gate relies on;
+        the static-site fast price publish passes a smaller buffer because
+        Yahoo's daily bar is final within minutes of the close and the whole
+        point of that path is publishing inside the first half hour.
+        """
         normalized = self.normalize_market(market)
         market_now = self.market_now(normalized, now=now, mic=mic)
         current_session = pd.Timestamp(market_now.date())
@@ -257,7 +266,7 @@ class MarketCalendarService:
                 market_close.tz_convert(
                     self.market_timezone(normalized, mic=mic)
                 ).to_pydatetime()
-                + timedelta(minutes=30)
+                + timedelta(minutes=close_buffer_minutes)
             )
             if market_now >= close_with_buffer:
                 return current_session.date()

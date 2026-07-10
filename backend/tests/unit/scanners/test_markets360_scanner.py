@@ -36,6 +36,31 @@ def test_scanner_passes_a_stage2_leader():
     assert 0 <= res.score <= 100
 
 
+def test_rpr_uses_authentic_percentile_when_universe_supplied():
+    """With the orchestrator's universe outperformance list attached, RPR is a
+    percentile rank against it — not the hand-calibrated fallback curve. A
+    leader beating every universe name reads 9x+; the same leader ranked
+    against a universe of even stronger names reads low."""
+    n = 540
+    stock = _frame(np.linspace(20, 130, n))
+    bench = _frame(np.linspace(100, 104, n))
+    scanner = Markets360Scanner()
+
+    weak_universe = {"weighted": [-20.0, -5.0, 0.0, 5.0, 10.0, 20.0]}
+    strong_universe = {"weighted": [400.0, 500.0, 600.0, 700.0, 800.0, 900.0]}
+
+    top = scanner.scan_stock("LEAD", StockData(
+        symbol="LEAD", price_data=stock, benchmark_data=bench, market="US",
+        rs_universe_performances=weak_universe))
+    bottom = scanner.scan_stock("LEAD", StockData(
+        symbol="LEAD", price_data=stock, benchmark_data=bench, market="US",
+        rs_universe_performances=strong_universe))
+    assert top.details["rpr"] >= 90
+    assert bottom.details["rpr"] <= 10
+    # and the two calls prove the universe (not the curve) drove the number
+    assert top.details["rpr"] != bottom.details["rpr"]
+
+
 def test_market_regime_caps_a_leader_in_a_bad_market():
     """Same Stage-2 leader: in a confirmed-uptrend market it is buyable (Buy/Strong
     Buy); in a downtrending market the setup still passes (watchlist) but the rating

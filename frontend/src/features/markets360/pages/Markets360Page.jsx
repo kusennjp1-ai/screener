@@ -1,13 +1,20 @@
 import { useMemo, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Box, CircularProgress, Typography, Alert } from '@mui/material';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Box, Button, CircularProgress, Snackbar, Typography, Alert, useMediaQuery } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
 import { fetchMarkets360, markets360Keys } from '../api/markets360';
+import { createPosition, getPositions } from '../../../api/positions';
+import AddPositionDialog from '../../../components/positions/AddPositionDialog';
+import { symbolPositionLines } from '../positionLines';
 import ChartToolbar from '../components/ChartToolbar';
 import StatusBar from '../components/StatusBar';
 import Markets360Chart from '../components/Markets360Chart';
 import BuyingNowCard from '../components/BuyingNowCard';
+import ExitSignalCard from '../components/ExitSignalCard';
+import SellPlanCard from '../components/SellPlanCard';
+import SignalBadges from '../components/SignalBadges';
 import QuarterlyStrip from '../components/QuarterlyStrip';
 
 const PERIODS = [
@@ -39,8 +46,14 @@ function LegendOverlay({ data, timeframe, hover }) {
   const c = (v) => (v == null ? '–' : Number(v).toFixed(2));
 
   return (
-    <Box sx={{ position: 'absolute', top: 54, left: 12, zIndex: 4, pointerEvents: 'none' }}>
-      <Typography sx={{ color: '#e6e8ec', fontSize: 15, fontWeight: 700 }}>
+    // Translucent backing + responsive sizes: on 375px the naked legend text
+    // used to wrap onto the candles and become unreadable.
+    <Box sx={{
+      position: 'absolute', top: 54, left: 12, zIndex: 4, pointerEvents: 'none',
+      maxWidth: 'calc(100% - 24px)', bgcolor: 'rgba(10,11,16,0.55)',
+      borderRadius: 1, px: 0.75, py: 0.25,
+    }}>
+      <Typography noWrap sx={{ color: '#e6e8ec', fontSize: { xs: 12.5, sm: 15 }, fontWeight: 700 }}>
         {data?.symbol} · {data?.name} · {timeframe === 'weekly' ? '1W' : '1D'} · {data?.exchange}
       </Typography>
       {last && (
@@ -58,12 +71,12 @@ function LegendOverlay({ data, timeframe, hover }) {
           )}
         </Box>
       )}
-      <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 0.75, sm: 1.5 }, mt: 0.25 }}>
         {MA_LEGEND.map((m) => {
           const v = lastMa(m.key);
           if (v == null) return null;
           return (
-            <Typography key={m.key} sx={{ fontSize: 12, color: m.color, fontWeight: 600 }}>
+            <Typography key={m.key} sx={{ fontSize: { xs: 10.5, sm: 12 }, color: m.color, fontWeight: 600 }}>
               MA {Number(v).toFixed(2)}
             </Typography>
           );
@@ -86,10 +99,18 @@ function LegendOverlay({ data, timeframe, hover }) {
 export default function Markets360Page() {
   const { ticker } = useParams();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const symbol = (ticker || 'AAPL').toUpperCase();
   const [timeframe, setTimeframe] = useState('daily');
   const [period, setPeriod] = useState('1y');
   const [hover, setHover] = useState(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registered, setRegistered] = useState(false);
+  const registerMutation = useMutation({
+    mutationFn: createPosition,
+    onSuccess: () => { setRegisterOpen(false); setRegistered(true); },
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: markets360Keys.symbol(symbol, period),
@@ -104,6 +125,17 @@ export default function Markets360Page() {
 
   const chartPayload = useMemo(() => data?.chart || null, [data]);
 
+  // The viewer's own trade, drawn on the chart (entry + live ladder stop).
+  const positionsQuery = useQuery({
+    queryKey: ['positions', 'open'],
+    queryFn: () => getPositions('open'),
+    staleTime: 60_000,
+  });
+  const positionLines = useMemo(
+    () => symbolPositionLines(positionsQuery.data?.positions, symbol),
+    [positionsQuery.data, symbol],
+  );
+
   return (
     <Box sx={{ bgcolor: '#0a0a0f', minHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
       <ChartToolbar
@@ -114,6 +146,9 @@ export default function Markets360Page() {
         onAskMai={() => {}}
       />
       <StatusBar data={data} />
+      {/* 375px: overlay cards would cover the candles — an in-flow animated
+          badge strip carries the same signals without hiding a single bar. */}
+      {isMobile && <SignalBadges signal={data?.signal} sellPlan={data?.sell_plan} />}
 
       <Box sx={{ position: 'relative', flex: 1, minHeight: 560 }}>
         {isLoading && (
@@ -130,11 +165,46 @@ export default function Markets360Page() {
         {chartPayload && (
           <>
             <LegendOverlay data={data} timeframe={timeframe} hover={hover} />
-            <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} />
-            <BuyingNowCard signal={data?.signal} />
+            <Markets360Chart chart={chartPayload} timeframe={timeframe} height={560} onLegend={onLegend} monalertNet={data?.states?.monalert_net} priceLines={positionLines} />
+            {!isMobile && (
+              <>
+                <BuyingNowCard signal={data?.signal} onRegister={() => setRegisterOpen(true)} />
+                {data?.sell_plan
+                  ? <SellPlanCard sellPlan={data.sell_plan} />
+                  : <ExitSignalCard exitSignal={data?.exit_signal} />}
+              </>
+            )}
           </>
         )}
       </Box>
+
+      <AddPositionDialog
+        open={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+        isSubmitting={registerMutation.isPending}
+        submitError={registerMutation.isError
+          ? (registerMutation.error?.response?.data?.detail || 'Failed to register position')
+          : null}
+        initialValues={{
+          symbol,
+          entry_price: data?.signal?.trigger_price != null ? String(data.signal.trigger_price) : '',
+          initial_stop: data?.signal?.stop != null ? String(data.signal.stop) : '',
+          entry_date: new Date().toISOString().slice(0, 10),
+        }}
+        onSubmit={(payload) => registerMutation.mutate(payload)}
+      />
+      <Snackbar
+        open={registered}
+        autoHideDuration={6000}
+        onClose={() => setRegistered(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={`${symbol} を登録しました — 売りエンジンが監視を開始`}
+        action={(
+          <Button component={RouterLink} to="/positions" size="small" sx={{ color: '#3aa0ff' }}>
+            Positionsへ
+          </Button>
+        )}
+      />
 
       {/* Bottom range bar */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 0.5, bgcolor: '#0a0a0f', borderTop: '1px solid #1c1f27' }}>

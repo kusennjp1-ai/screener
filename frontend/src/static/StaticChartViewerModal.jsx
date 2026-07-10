@@ -20,6 +20,10 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import CandlestickChart from '../components/Charts/CandlestickChart';
+import BuyingNowCard from '../features/markets360/components/BuyingNowCard';
+import SellPlanCard from '../features/markets360/components/SellPlanCard';
+import SignalBadges from '../features/markets360/components/SignalBadges';
+import BuyChecklist from '../components/Scan/BuyChecklist';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
@@ -558,6 +562,16 @@ function StaticChartViewerModal({
                 height: { xs: 'auto', md: '100%' },
               }}
             >
+              {/* 買い点灯条件 — same checklist as the live scan viewer, fed
+                  from the static payload's bands + signal blocks. */}
+              <BuyChecklist
+                buyContext={{
+                  available: Boolean(chartPayload?.bands || chartPayload?.signal),
+                  bands: chartPayload?.bands || {},
+                  signal: chartPayload?.signal || {},
+                }}
+                stockData={stockData}
+              />
               <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
             </Box>
 
@@ -586,7 +600,13 @@ function StaticChartViewerModal({
                       horizontally on narrow screens. */}
                   <ChartInfoStrip minerviniInfo={minerviniInfo} />
                   <BandLegend />
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                  {isMobile && (
+                    <SignalBadges
+                      signal={chartPayload?.signal}
+                      sellPlan={chartPayload?.sell_plan}
+                    />
+                  )}
+                  <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                     <CandlestickChart
                       symbol={currentSymbol}
                       period="6mo"
@@ -607,6 +627,18 @@ function StaticChartViewerModal({
                       bands={chartPayload?.bands || null}
                       buyPoints={chartPayload?.buy_points || null}
                     />
+                    {/* Markets 360 signal cards from the static payload —
+                        same components as the live page, desktop only (at
+                        375px a 300px card would cover the candles; mobile
+                        gets the in-flow badge strip above the chart). */}
+                    {!isMobile && (
+                      <>
+                        <BuyingNowCard signal={chartPayload?.signal} />
+                        {chartPayload?.sell_plan
+                          ? <SellPlanCard sellPlan={chartPayload.sell_plan} />
+                          : null}
+                      </>
+                    )}
                   </Box>
                 </Box>
               ) : (

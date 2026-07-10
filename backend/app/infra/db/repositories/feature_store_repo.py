@@ -773,6 +773,9 @@ def _map_feature_to_scan_result(
         "vcp_contraction_ratio": d.get("vcp_contraction_ratio"),
         "vcp_atr_score": d.get("vcp_atr_score"),
         "passes_template": d.get("passes_template", False),
+        # SEPA fundamental bonus (C43) — parity with scan_result_repo
+        "fundamental_bonus": d.get("fundamental_bonus"),
+        "fundamental_bonus_detail": d.get("fundamental_bonus_detail"),
         "adr_percent": d.get("adr_percent"),
         "eps_growth_qq": d.get("eps_growth_qq"),
         "sales_growth_qq": d.get("sales_growth_qq"),
@@ -832,6 +835,8 @@ def _map_feature_to_scan_result(
         "market_above_50dma": d.get("market_above_50dma"),
         "market_above_200dma": d.get("market_above_200dma"),
         "market_50_above_200dma": d.get("market_50_above_200dma"),
+        "market_ftd_date": d.get("market_ftd_date"),
+        "market_ftd_days_since": d.get("market_ftd_days_since"),
         # Rating-basis explainability
         "rating_basis_score": d.get("rating_basis_score"),
         "rating_basis_screener": d.get("rating_basis_screener"),

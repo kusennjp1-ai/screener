@@ -125,6 +125,23 @@ describe('DigestPage', () => {
           notes: '1 leader overlap and 1 alert overlap out of 2 tracked symbols.',
         },
       ],
+      positions: {
+        open_total: 2,
+        actionable: [
+          {
+            symbol: 'MSFT',
+            entry_price: 320,
+            entry_date: '2026-01-15',
+            action: 'exit',
+            r_multiple: 2.07,
+            pnl_pct: 16.55,
+            stop: 320,
+            stop_raised: true,
+            note: '売り：トレンド崩壊（50日線を出来高を伴い割り込み）',
+          },
+        ],
+        summary: 'オープン2件中 1件が要アクション',
+      },
       risks: [
         {
           kind: 'validation',
@@ -147,6 +164,10 @@ describe('DigestPage', () => {
     expect(screen.getAllByRole('link', { name: 'NVDA' })[0]).toHaveAttribute('href', '/stocks/NVDA');
     expect(screen.getAllByText('AI Infrastructure').length).toBeGreaterThan(0);
     expect(screen.getByText('Core Leaders')).toBeInTheDocument();
+    // Positions section: the actionable row links to the Positions page.
+    expect(screen.getByText('オープン2件中 1件が要アクション')).toBeInTheDocument();
+    expect(screen.getByTestId('digest-position-MSFT')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'MSFT' })).toHaveAttribute('href', '/positions');
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('# Daily Digest (2026-04-04)\n'));

@@ -72,8 +72,10 @@ def test_data_requirements():
 
     assert requirements.price_period == "2y", "Incorrect price period"
     assert requirements.needs_benchmark == True, "Should need benchmark"
-    # Minervini doesn't use quarterly growth in scoring (only informational)
-    assert requirements.needs_quarterly_growth == False, "Minervini doesn't need quarterly growth"
+    # C43: cached fundamentals feed the capped SEPA fundamental bonus, and
+    # quarterly growth populates the informational display columns.
+    assert requirements.needs_fundamentals == True, "Fundamental bonus needs cached fundamentals"
+    assert requirements.needs_quarterly_growth == True, "Quarterly growth feeds display columns"
 
     logger.info("\n✅ Data requirements test passed!\n")
 

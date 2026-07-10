@@ -8,8 +8,12 @@ down-weight buy signals by regime.
 Signals (all from the index daily OHLCV):
 - Trend: close > 50DMA > 200DMA with a rising 50DMA  (the index in its own Stage 2)
 - Distribution days: O'Neil's institutional-selling tell — index down >= 0.2% on
-  volume above the prior session, counted over the last ~25 sessions. 5+ = under
-  pressure, 6+ = topping/correction risk.
+  volume above the prior session, plus STALLING days (churn: heavy-volume up
+  sessions making no real headway near highs). Counted over the last ~25
+  sessions; a day EXPIRES early once the index rallies 5% above its close.
+  4+ = under pressure, 6+ = topping/correction risk (DIST_* constants below).
+- Follow-through day: the O'Neil bottom confirmation that re-enables buying
+  weeks before the MA structure can recover (detect_follow_through).
 - Position vs the 21EMA / 50DMA and drawdown from the recent high.
 
 Output is a label, a 0-100 health score, and a suggested equity exposure %, which
@@ -26,6 +30,17 @@ DIST_WINDOW = 25            # sessions to count distribution days over
 DIST_DOWN_PCT = -0.002      # a down day of >= 0.2% counts
 DIST_UNDER_PRESSURE = 4     # >= this many = uptrend under pressure
 DIST_CORRECTION = 6         # >= this many = distribution-driven correction risk
+# O'Neil expiry: a distribution day stops counting once the index rallies 5%
+# above that day's close — institutional selling that the market has already
+# absorbed and left behind is no longer a warning.
+DIST_EXPIRY_RALLY = 0.05
+# Stalling day (churn): an up session that makes no real headway (<= +0.2%) on
+# volume above the prior session, closing in the lower half of its range while
+# near the highs — heavy selling INTO strength. O'Neil counts it as
+# distribution. The exact IBD definition is proprietary; this is a documented
+# approximation of its published description.
+STALL_MAX_GAIN = 0.002
+STALL_NEAR_HIGH_PCT = 0.03  # within 3% of the 25-session high
 
 REGIME_EXPOSURE = {
     "confirmed_uptrend": 100,
@@ -34,12 +49,160 @@ REGIME_EXPOSURE = {
     "downtrend": 0,
 }
 
+# --- Follow-through day (O'Neil's bottom-confirmation signal) ---------------
+# After a correction low, day 1 of a rally attempt is the first up close; a
+# follow-through is a >= +1.2% index gain on volume above the prior session,
+# landing on attempt day 4 or later (canonically days 4-7, accepted to ~15).
+# An FTD is the EARLIEST valid all-clear — MA structure recovers weeks later,
+# which is exactly why regimes derived from MAs alone are late at bottoms.
+FTD_MIN_GAIN = 0.012        # +1.2% (modern IBD threshold)
+FTD_MIN_DAY = 4             # earliest attempt day that can confirm
+FTD_MAX_DAY = 15            # a "follow-through" past ~3 weeks is stale
+FTD_LOOKBACK = 120          # sessions searched for the correction low
+FTD_MIN_DECLINE = 0.06      # the low must cap a >= 6% decline to need an FTD
+# Progressive exposure after an FTD (Minervini/IBD Market School: probe with
+# pilot buys, add only as the rally proves itself; full size belongs to a
+# mature uptrend whose MA structure has recovered — the base-regime path).
+# True progressive exposure feeds on per-position traction, which a market
+# scan cannot see; rally AGE + post-FTD distribution is the honest stateless
+# proxy: fresh confirmation -> 25%, surviving 1 week -> 50%, surviving 3 weeks
+# clean (<= 2 new distribution days) -> 75%.
+FTD_EXPOSURE_FRESH = 25     # sessions 0-4 after the FTD
+FTD_EXPOSURE_WEEK = 50      # sessions 5-14
+FTD_EXPOSURE_PROVEN = 75    # 15+ sessions with <= 2 distribution days since
 
-def _distribution_days(close: pd.Series, volume: pd.Series, window: int = DIST_WINDOW) -> int:
-    ret = close.pct_change()
+
+def _ftd_exposure(days_since: int, dist_since: int) -> int:
+    if days_since < 5:
+        return FTD_EXPOSURE_FRESH
+    if days_since < 15:
+        return FTD_EXPOSURE_WEEK
+    return FTD_EXPOSURE_PROVEN if dist_since <= 2 else FTD_EXPOSURE_WEEK
+
+
+def _distribution_days(
+    close: pd.Series,
+    volume: pd.Series,
+    window: int = DIST_WINDOW,
+    high: Optional[pd.Series] = None,
+    low: Optional[pd.Series] = None,
+) -> int:
+    """Count live distribution days over the trailing ``window`` sessions.
+
+    O'Neil-faithful counting:
+      - classic distribution: down >= 0.2% on volume above the prior session
+      - stalling (churn): up <= +0.2% on higher volume, closing in the lower
+        half of the day's range while within 3% of the recent high (needs
+        High/Low; skipped when unavailable)
+      - expiry: a flagged day stops counting once ANY later close is 5% above
+        that day's close (the market absorbed the selling and moved on)
+    """
+    ret = close.pct_change(fill_method=None)
     vol_up = volume > volume.shift(1)
     dist = (ret <= DIST_DOWN_PCT) & vol_up
-    return int(dist.tail(window).sum())
+
+    if high is not None and low is not None:
+        rng = high - low
+        lower_half = (close - low) <= 0.5 * rng.where(rng > 0)
+        near_high = close >= close.rolling(window, min_periods=1).max() * (1 - STALL_NEAR_HIGH_PCT)
+        stalling = (ret > 0) & (ret <= STALL_MAX_GAIN) & vol_up & lower_half.fillna(False) & near_high
+        dist = dist | stalling
+
+    flagged = dist.tail(window)
+    closes = close.tail(window)
+    count = 0
+    values = close.to_numpy(dtype="float64")
+    offset = len(close) - len(flagged)
+    for j, (is_dist, c0) in enumerate(zip(flagged.to_numpy(), closes.to_numpy(dtype="float64"))):
+        if not is_dist:
+            continue
+        # expired if any later close rallied 5% above this day's close
+        later = values[offset + j + 1:]
+        if later.size and (later >= c0 * (1 + DIST_EXPIRY_RALLY)).any():
+            continue
+        count += 1
+    return int(count)
+
+
+def detect_follow_through(index_ohlcv: Optional[pd.DataFrame]) -> Optional[Dict[str, object]]:
+    """Detect a live O'Neil follow-through day off the latest correction low.
+
+    Stateless: recomputed from the index OHLCV tail each call. Returns None
+    when there is no valid, still-standing FTD; otherwise a dict with the
+    confirmation metadata:
+
+      date            FTD session timestamp
+      attempt_day     rally-attempt day it landed on (>= FTD_MIN_DAY)
+      gain_pct        the FTD session's % gain
+      days_since      sessions elapsed since the FTD
+      dist_since_ftd  distribution days AFTER the FTD (the count resets at a
+                      confirmation — stale pre-FTD distribution must not kill
+                      a brand-new uptrend)
+
+    Failure handling is built in: a close below the FTD session's low is the
+    classic failed-follow-through circuit breaker and returns None.
+    """
+    if (
+        index_ohlcv is None
+        or "Close" not in getattr(index_ohlcv, "columns", [])
+        or len(index_ohlcv) < FTD_MIN_DAY + 2
+    ):
+        return None
+    tail = index_ohlcv.tail(FTD_LOOKBACK)
+    closes = tail["Close"].to_numpy(dtype="float64")
+    vols = (
+        tail["Volume"].to_numpy(dtype="float64")
+        if "Volume" in tail.columns else np.ones(len(tail))
+    )
+    lows = (
+        tail["Low"].to_numpy(dtype="float64")
+        if "Low" in tail.columns else closes
+    )
+
+    low_pos = int(lows.argmin())
+    if low_pos < 1 or low_pos >= len(closes) - FTD_MIN_DAY:
+        return None
+    # The low must cap a real decline — an FTD off a shallow dip is noise.
+    prior_high = float(closes[:low_pos].max())
+    if prior_high <= 0 or (prior_high - closes[low_pos]) / prior_high < FTD_MIN_DECLINE:
+        return None
+
+    # Rally attempt day 1 = the first up close after the low session.
+    day1 = None
+    for i in range(low_pos + 1, len(closes)):
+        if closes[i] > closes[i - 1]:
+            day1 = i
+            break
+    if day1 is None:
+        return None
+
+    for i in range(day1, len(closes)):
+        attempt_day = i - day1 + 1
+        if attempt_day < FTD_MIN_DAY:
+            continue
+        if attempt_day > FTD_MAX_DAY:
+            return None
+        gain = closes[i] / closes[i - 1] - 1.0
+        if gain >= FTD_MIN_GAIN and vols[i] > vols[i - 1]:
+            # Circuit breaker: any later close under the FTD session's low.
+            if (closes[i + 1:] < lows[i]).any():
+                return None
+            after = tail.iloc[i:]
+            after_vol = (
+                after["Volume"] if "Volume" in after.columns
+                else pd.Series(1.0, index=after.index)
+            )
+            return {
+                "date": tail.index[i],
+                "attempt_day": int(attempt_day),
+                "gain_pct": round(float(gain) * 100.0, 2),
+                "days_since": int(len(closes) - 1 - i),
+                "dist_since_ftd": _distribution_days(
+                    after["Close"], after_vol,
+                    high=after.get("High"), low=after.get("Low"),
+                ),
+            }
+    return None
 
 
 def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, object]:
@@ -72,7 +235,10 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
     above_21 = c > float(ema21.iloc[-1])
     hi = float(close.tail(252).max())
     pct_from_high = (hi - c) / hi if hi > 0 else 0.0
-    dist = _distribution_days(close, volume)
+    dist = _distribution_days(
+        close, volume,
+        high=index_ohlcv.get("High"), low=index_ohlcv.get("Low"),
+    )
 
     trend_ok = above_50 and fifty_above_200 and s50_rising and above_200
 
@@ -85,6 +251,22 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
         regime = "correction" if (dist >= DIST_CORRECTION or not above_50) else "uptrend_under_pressure"
     else:
         regime = "downtrend"
+
+    # Follow-through day: the MA-derived read above is inherently WEEKS late at
+    # bottoms (structure can't recover before price does). O'Neil/Minervini
+    # re-enter on the FTD, with pilot-sized buys. A live FTD upgrades a
+    # correction/downtrend to a confirmed uptrend at pilot exposure — unless
+    # distribution has already piled up again since the confirmation (the
+    # distribution count resets at an FTD).
+    ftd = None
+    exposure_pct = REGIME_EXPOSURE[regime]
+    if regime in ("correction", "downtrend"):
+        ftd = detect_follow_through(index_ohlcv)
+        if ftd is not None and ftd["dist_since_ftd"] < DIST_CORRECTION:
+            regime = "confirmed_uptrend"
+            exposure_pct = _ftd_exposure(int(ftd["days_since"]), int(ftd["dist_since_ftd"]))
+        else:
+            ftd = None
 
     # 0-100 health: trend structure (50) + distribution penalty (30) + drawdown (20).
     health = 0.0
@@ -99,7 +281,7 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
     return {
         "regime": regime,
         "health": round(health, 1),
-        "exposure_pct": REGIME_EXPOSURE[regime],
+        "exposure_pct": exposure_pct,
         "distribution_days": dist,
         "above_50dma": above_50,
         "above_200dma": above_200,
@@ -107,5 +289,9 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
         "pct_from_high": round(float(pct_from_high) * 100, 2),
         "components": {
             "trend_ok": trend_ok, "above_21ema": above_21, "fifty_rising": s50_rising,
+            "follow_through": (
+                {**ftd, "date": str(ftd["date"].date() if hasattr(ftd["date"], "date") else ftd["date"])}
+                if ftd else None
+            ),
         },
     }

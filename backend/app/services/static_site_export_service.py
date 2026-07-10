@@ -802,6 +802,8 @@ class StaticSiteExportService:
                 return
             rs_line, blue_dots = self._serialize_rs_line(price_df, benchmark_df)
             rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
+            buy_points = self._compute_buy_points(price_df)
+            bands = self._compute_chart_bands(price_df, benchmark_df)
             self._write_json(
                 output_dir / rel_path,
                 {
@@ -818,9 +820,10 @@ class StaticSiteExportService:
                     "stock_data": stock_data,
                     "fundamentals": fundamentals_value,
                     "vcp_boxes": self._compute_vcp_boxes(price_df),
-                    "buy_points": self._compute_buy_points(price_df),
+                    "buy_points": buy_points,
                     "eps_line": self._compute_eps_line(symbol, price_df),
-                    "bands": self._compute_chart_bands(price_df, benchmark_df),
+                    "bands": bands,
+                    **self._compute_m360_signals(price_df, bands=bands, buy_points=buy_points),
                 },
             )
             entries.append({"symbol": symbol, "rank": rank, "path": rel_path.as_posix()})
@@ -1304,6 +1307,11 @@ class StaticSiteExportService:
                 "scan_run_id": latest_run.id,
                 "scan_as_of_date": latest_run.as_of_date.isoformat(),
                 "scan_published_at": _coerce_datetime(latest_run.published_at),
+                # Export time == when prices were last refreshed into this
+                # bundle. After the fast post-close publish this is minutes
+                # after the bell while scan_as_of_date is still yesterday's
+                # run — the UI shows both so the split is visible.
+                "prices_generated_at": generated_at,
                 "breadth_latest_date": breadth_current.get("date"),
                 "groups_latest_date": (((groups_payload.get("payload") or {}).get("rankings") or {}).get("date")),
             },
@@ -2162,6 +2170,38 @@ class StaticSiteExportService:
             return calculate_bands(price_df, benchmark_close=benchmark_close, with_history=True)
         except Exception:  # noqa: BLE001 - bands are optional chart decoration
             logger.warning("chart band computation failed", exc_info=True)
+            return {}
+
+    def _compute_m360_signals(self, price_df, *, bands, buy_points) -> dict[str, Any]:
+        """Markets 360 signal blocks for one static chart payload.
+
+        Same engines and the same wiring as the live Markets360Service, so the
+        static viewer's Buying Now / sell-plan cards can never disagree with
+        the live page: the buy signal reuses the chart's own buy points and
+        band states; the sell plan takes its entry/stop from the buy signal
+        when present. Defensive: any failure yields ``{}`` (cards just absent).
+        """
+        if price_df is None or getattr(price_df, "empty", True):
+            return {}
+        try:
+            from app.services.markets360.exit_signals import compute_sell_plan
+            from app.services.markets360.signals import compute_buy_signal
+
+            signal = compute_buy_signal(
+                price_df,
+                buy_points=buy_points,
+                pressure_state=(bands or {}).get("pressure_state"),
+                tpr_state=(bands or {}).get("tpr_state"),
+                buy_risk_state=(bands or {}).get("buy_risk_state"),
+            )
+            sell_plan = compute_sell_plan(
+                price_df,
+                entry=signal.get("trigger_price") if signal else None,
+                initial_stop=signal.get("stop") if signal else None,
+            )
+            return {"signal": signal, "sell_plan": sell_plan}
+        except Exception:  # noqa: BLE001 - signal cards must not break the export
+            logger.warning("m360 signal computation failed", exc_info=True)
             return {}
 
     def _get_edgar_client(self):

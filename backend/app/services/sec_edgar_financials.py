@@ -129,6 +129,104 @@ def quarterly_series(facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
     return quarterly
 
 
+def quarterly_series_dated(
+    facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool, as_of: Optional[str] = None
+) -> list[tuple[str, float, str]]:
+    """Quarterly series keyed by PERIOD END DATE: ``[(end, value, label), ...]``
+    ascending by end.
+
+    EDGAR's ``fy``/``fp`` describe the FILING's fiscal frame, not the period's:
+    a prior-year comparative row inside a newer 10-Q carries the newer fiscal
+    year, so keying by ``(fy, q)`` loses/clobbers year-ago quarters (the
+    "missing/invalid YoY base" failures observed across large caps in the CI
+    Code 33 check). End-date keying is collision-free; duplicates of the SAME
+    period dedupe by latest ``filed`` (restatements win), while the display
+    label comes from the EARLIEST filing of that period — the original filing
+    labels its own quarter correctly.
+
+    Q4 is derived per annual entry as annual minus the three quarterly values
+    whose end dates fall inside that fiscal year's window.
+
+    ``as_of`` (YYYY-MM-DD) makes the series point-in-time: only entries FILED
+    on or before that date are used (entries without a ``filed`` date are
+    dropped for zero look-ahead), reproducing exactly what an investor could
+    have known then — later restatements included in newer filings vanish.
+    """
+    fact = _first_tag(facts, tags)
+    entries = _select_unit_entries(fact)
+    if not entries:
+        return []
+
+    # end -> (filed, value) for 3-month periods; end -> (filed, label)
+    q_val: dict[str, tuple[str, float]] = {}
+    q_label: dict[str, tuple[str, str]] = {}
+    annual: dict[str, tuple[str, float, int]] = {}  # end -> (filed, value, fy)
+
+    for e in entries:
+        val = e.get("val")
+        start, end = e.get("start"), e.get("end")
+        if val is None or not start or not end:
+            continue
+        dur = _days(start, end)
+        if dur is None:
+            continue
+        filed = e.get("filed", "")
+        if as_of is not None and (not filed or filed > as_of):
+            continue
+        if _QUARTER_MIN_DAYS <= dur <= _QUARTER_MAX_DAYS:
+            prev = q_val.get(end)
+            if prev is None or filed >= prev[0]:
+                q_val[end] = (filed, float(val))
+            fy, fp = e.get("fy"), e.get("fp")
+            q = _FP_TO_NUM.get(fp)
+            if fy is not None and q in (1, 2, 3, 4):
+                lprev = q_label.get(end)
+                if lprev is None or filed < lprev[0]:
+                    # Q4 rows often exist ONLY as comparatives in the NEXT
+                    # year's 10-K (DECK's 2025-03-31 Q4 carries fy=2026), so
+                    # for Q4 the end year is the trustworthy fiscal label.
+                    label_fy = int(end[:4]) if q == 4 else int(fy)
+                    q_label[end] = (filed, f"FY{label_fy}Q{q}")
+        elif _ANNUAL_MIN_DAYS <= dur <= _ANNUAL_MAX_DAYS:
+            prev_a = annual.get(end)
+            if prev_a is None or filed >= prev_a[0]:
+                fy = e.get("fy")
+                annual[end] = (filed, float(val), int(fy) if fy is not None else 0)
+
+    # Derive Q4 = annual - the three quarters ending inside the annual window.
+    for a_end, (_, a_val, _a_fy) in annual.items():
+        if a_end in q_val:
+            continue  # a real 3-month Q4 entry already covers this end
+        inside = [
+            (end, v) for end, (_, v) in q_val.items()
+            if end < a_end and (_days(end, a_end) or 9999) < 300
+        ]
+        if len(inside) == 3:
+            q_val[a_end] = ("", a_val - sum(v for _, v in inside))
+            # Label by the period's END year, not the annual entry's fy — that
+            # fy is the FILING's frame (GM's 2023-12-31 Q4 arrives inside the
+            # FY2025 10-K and would be labeled FY2025Q4, or FY0Q4 when absent).
+            q_label[a_end] = ("", f"FY{a_end[:4]}Q4")
+
+    out = [
+        (end, v, q_label.get(end, ("", end))[1])
+        for end, (_, v) in q_val.items()
+    ]
+    out.sort(key=lambda t: t[0])
+    return out
+
+
+def _yoy_base(dated: dict[str, float], end: str) -> Optional[float]:
+    """The value of the quarter ending ~1 year before ``end`` (350-380 days,
+    widened to 340-390 as a fallback for irregular fiscal calendars)."""
+    for lo, hi in ((350, 380), (340, 390)):
+        for base_end, val in dated.items():
+            d = _days(base_end, end)
+            if d is not None and lo <= d <= hi:
+                return val
+    return None
+
+
 def dated_quarterly_eps(facts: dict[str, Any], tags: Iterable[str] = EPS_TAGS) -> list[tuple[str, float]]:
     """``[(end_date, diluted_eps), ...]`` for quarterly EPS, oldest-first.
 
@@ -173,7 +271,9 @@ class Code33Result:
     quarters: list[str] = field(default_factory=list)
 
 
-def compute_code33_from_facts(facts: dict[str, Any], *, require_margin: bool = True) -> Code33Result:
+def compute_code33_from_facts(
+    facts: dict[str, Any], *, require_margin: bool = True, as_of: Optional[str] = None
+) -> Code33Result:
     """Evaluate Code 33 from a parsed EDGAR companyfacts dict.
 
     Literal Code 33 (``require_margin=True``) needs diluted EPS, sales, AND net
@@ -182,25 +282,33 @@ def compute_code33_from_facts(facts: dict[str, Any], *, require_margin: bool = T
     ``require_margin=False`` is the relaxed screen used live: EPS and sales YoY
     growth accelerating for three quarters (margin is still computed and
     reported, just not gated on).
+
+    ``as_of`` evaluates point-in-time (filings filed on or before that date) —
+    used to measure the historical catch rate at trade-idea dates.
     """
-    eps = quarterly_series(facts, EPS_TAGS, is_eps=True)
-    rev = quarterly_series(facts, REVENUE_TAGS, is_eps=False)
-    ni = quarterly_series(facts, NET_INCOME_TAGS, is_eps=False)
-    if not eps or not rev or (require_margin and not ni):
+    eps_d = quarterly_series_dated(facts, EPS_TAGS, is_eps=True, as_of=as_of)
+    rev_d = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False, as_of=as_of)
+    ni_d = quarterly_series_dated(facts, NET_INCOME_TAGS, is_eps=False, as_of=as_of)
+    if not eps_d or not rev_d or (require_margin and not ni_d):
         return Code33Result(False, "missing EPS/revenue/net-income series")
 
-    # Margin per quarter where both revenue and net income exist (revenue > 0).
-    margin: dict[tuple[int, int], float] = {}
-    for key, r in rev.items():
-        n = ni.get(key)
-        if n is not None and r and r > 0:
-            margin[key] = n / r
+    eps = {end: v for end, v, _ in eps_d}
+    rev = {end: v for end, v, _ in rev_d}
+    ni = {end: v for end, v, _ in ni_d}
+    label_by_end = {end: label for end, _, label in eps_d}
 
-    # The three most recent quarters with the metrics we gate on + a year-ago one.
+    # Margin per quarter-end where both revenue and net income exist (rev > 0).
+    margin: dict[str, float] = {}
+    for end, r in rev.items():
+        n = ni.get(end)
+        if n is not None and r and r > 0:
+            margin[end] = n / r
+
+    # The three most recent quarter-ends carrying the metrics we gate on.
     comparable = set(eps) & set(rev)
     if require_margin:
         comparable &= set(margin)
-    recent = _ordered_quarters(comparable)
+    recent = sorted(comparable, reverse=True)
     if len(recent) < 3:
         return Code33Result(False, "fewer than 3 comparable quarters")
 
@@ -208,18 +316,30 @@ def compute_code33_from_facts(facts: dict[str, Any], *, require_margin: bool = T
     sales_yoy: list[float] = []
     margin_yoy: list[float] = []
     labels: list[str] = []
-    for quarter in recent[:3]:
-        prior_key = (quarter.fy - 1, quarter.q)
-        g_eps = _yoy_growth(eps.get(quarter.key), eps.get(prior_key))
-        g_rev = _yoy_growth(rev.get(quarter.key), rev.get(prior_key))
-        g_mar = _yoy_growth(margin.get(quarter.key), margin.get(prior_key))
+    for end in recent[:3]:
+        # Year-ago base by END DATE, not fiscal label — EDGAR fy/fp describe
+        # the filing's frame and lose year-ago quarters to relabeled
+        # comparatives (see quarterly_series_dated).
+        eps_base, rev_base = _yoy_base(eps, end), _yoy_base(rev, end)
+        mar_base = _yoy_base(margin, end)
+        g_eps = _yoy_growth(eps.get(end), eps_base)
+        g_rev = _yoy_growth(rev.get(end), rev_base)
+        g_mar = _yoy_growth(margin.get(end), mar_base)
         # Margin YoY is informational unless gated on.
         if g_eps is None or g_rev is None or (require_margin and g_mar is None):
-            return Code33Result(False, f"missing/invalid YoY base at FY{quarter.fy} Q{quarter.q}")
+            label = label_by_end.get(end, end)
+            # A quarter that EXISTS but has a non-positive base is a
+            # legitimate Code 33 fail — % growth off a loss quarter is
+            # undefined, and Minervini's test targets profitable growers.
+            # Only a genuinely absent quarter means "cannot judge".
+            gated_bases = [eps_base, rev_base] + ([mar_base] if require_margin else [])
+            if any(b is not None and b <= 0 for b in gated_bases):
+                return Code33Result(False, f"YoY base <= 0 at {label} — loss quarter, % growth undefined")
+            return Code33Result(False, f"missing YoY base at {label}")
         eps_yoy.append(g_eps)
         sales_yoy.append(g_rev)
         margin_yoy.append(g_mar if g_mar is not None else float("nan"))
-        labels.append(f"FY{quarter.fy}Q{quarter.q}")
+        labels.append(label_by_end.get(end, end))
 
     # recent[:3] is most-recent-first, so accelerating == strictly decreasing as
     # we go back in time: yoy[0] > yoy[1] > yoy[2].
@@ -289,11 +409,11 @@ class SecEdgarClient:
         except Exception:  # noqa: BLE001 - missing/withdrawn filers are not fatal
             return None
 
-    def code33(self, ticker: str, *, require_margin: bool = True) -> Code33Result:
+    def code33(self, ticker: str, *, require_margin: bool = True, as_of: Optional[str] = None) -> Code33Result:
         facts = self.company_facts(ticker)
         if not facts:
             return Code33Result(False, "no EDGAR facts")
-        return compute_code33_from_facts(facts, require_margin=require_margin)
+        return compute_code33_from_facts(facts, require_margin=require_margin, as_of=as_of)
 
     def code33_map(self, tickers: list[str], *, require_margin: bool = False) -> dict[str, bool]:
         """{ticker: passes} for many tickers. Missing/withdrawn filers -> False.

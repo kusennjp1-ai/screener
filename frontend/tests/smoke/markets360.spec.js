@@ -200,7 +200,7 @@ test('LLY reproduces the reference (Triple Barrel, full layout)', async ({ page 
   await expect(page.getByText('Eli Lilly & Co.', { exact: false })).toBeVisible();
   await expect(page.getByText('Buying Now!')).toBeVisible();
   await expect(page.getByText('Triple Barrel Behavioral Analytic Buy Signal')).toBeVisible();
-  await expect(page.getByText('Minervini Pressure')).toBeVisible();
+  await expect(page.getByText('Pressure', { exact: true }).first()).toBeVisible(); // band label (compact since 727b7ce); .first() — the StatusBar chip also says Pressure
   await expect(page.getByText('SEPA Buy Point')).toBeVisible();
   await expect(page.getByText('+495%')).toBeVisible();
   await expect(page.getByText('News Count', { exact: false })).toBeVisible();
@@ -253,7 +253,7 @@ for (const file of realFixtures) {
       return jsonResponse(route, {});
     });
     await page.goto(`/markets360/${sym}`);
-    await expect(page.getByText('Minervini Pressure')).toBeVisible();
+    await expect(page.getByText('Pressure', { exact: true }).first()).toBeVisible(); // band label (compact since 727b7ce); .first() — the StatusBar chip also says Pressure
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `tests/smoke/__screenshots__/markets360-${sym.toLowerCase()}-real.png` });
   });

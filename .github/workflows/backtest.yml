@@ -30,6 +30,14 @@ on:
         description: 'Max % below the 52w high for "strict", negative (app preset uses -10)'
         type: string
         default: '-10'
+      build_bundle:
+        description: 'Also build the offline trade-idea OHLCV bundle, run the fixed ground-truth harness, and commit bundle+report to this branch'
+        type: boolean
+        default: false
+      bundle_sleep:
+        description: 'Seconds between Yahoo downloads for the bundle job'
+        type: string
+        default: '0.8'
 
 jobs:
   backtest:
@@ -77,4 +85,75 @@ jobs:
         with:
           name: minervini-backtest-report
           path: ${{ runner.temp }}/backtest-report.md
+          if-no-files-found: ignore
+
+  # Builds the offline OHLCV bundle around all 908 trade ideas, runs the FIXED
+  # ground-truth harness (scripts/validate_trade_ideas.py), and commits the
+  # ~5MB gzipped bundle + report back to the triggering branch so sandboxed
+  # sessions (no Yahoo egress) can replay the full harness offline every cycle.
+  bundle:
+    if: ${{ github.event.inputs.build_bundle == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/unused
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Fetch OHLCV windows for the trade ideas
+        working-directory: backend
+        run: python -m scripts.fetch_trade_idea_windows --sleep "${{ github.event.inputs.bundle_sleep }}"
+
+      - name: Run the fixed ground-truth harness
+        working-directory: backend
+        run: |
+          python -m scripts.validate_trade_ideas \
+            --json calibration/trade_idea_report.json \
+            | tee calibration/trade_idea_report.md
+
+      - name: Publish harness report to job summary
+        if: ${{ always() }}
+        run: |
+          if [ -f backend/calibration/trade_idea_report.md ]; then
+            cat backend/calibration/trade_idea_report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Harness produced no report (see logs)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Commit bundle + report to the branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/calibration/trade_idea_windows \
+                  backend/calibration/trade_idea_report.json \
+                  backend/calibration/trade_idea_report.md
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+          git commit -m "data(validation): trade-idea OHLCV bundle + ground-truth report [skip ci]"
+          # The session may push to the branch while this job runs; rebase first.
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload bundle artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trade-idea-validation
+          path: |
+            backend/calibration/trade_idea_report.md
+            backend/calibration/trade_idea_report.json
           if-no-files-found: ignore

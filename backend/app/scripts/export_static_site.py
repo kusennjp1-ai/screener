@@ -55,7 +55,7 @@ def _tracked_ibd_csv_path() -> Path:
     return IBDIndustryService.resolve_tracked_csv_path(settings.ibd_industry_csv_path)
 
 
-def _resolve_latest_completed_trading_date(market: str) -> date:
+def _resolve_latest_completed_trading_date(market: str, *, close_buffer_minutes: int = 30) -> date:
     """Return the latest completed trading session date for ``market``.
 
     Each market has its own calendar (NYSE, HKEX, NSE, …). Using the NYSE
@@ -63,7 +63,35 @@ def _resolve_latest_completed_trading_date(market: str) -> date:
     closed but the target exchange traded, or builds their snapshot for a
     stale date when NYSE traded but the target exchange did not.
     """
-    return get_market_calendar_service().last_completed_trading_day(market)
+    return get_market_calendar_service().last_completed_trading_day(
+        market, close_buffer_minutes=close_buffer_minutes
+    )
+
+
+# The fast price-only publish fires minutes after the close, so it counts
+# today's session as completed after a short buffer instead of the default 30
+# minutes (Yahoo's daily bar is final within minutes of the bell; waiting the
+# full consolidation window would defeat the point of the fast path).
+PRICES_ONLY_CLOSE_BUFFER_MINUTES = 5
+
+
+def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
+    """Refresh today's prices without rebuilding the scan snapshot.
+
+    Used by the fast post-close publish: the subsequent ``service.export``
+    re-serializes charts/bands/signals from the fresh price cache while scan
+    ranks stay pinned to the latest *published* feature run (yesterday's until
+    the full build lands). Fetch failures are tolerated — a partially fresh
+    price set still beats yesterday's everywhere.
+    """
+    as_of = _resolve_latest_completed_trading_date(
+        market, close_buffer_minutes=PRICES_ONLY_CLOSE_BUFFER_MINUTES
+    )
+    with disable_serialized_data_fetch_lock(), disable_serialized_market_workload():
+        return {
+            "as_of_date": as_of.isoformat(),
+            "price_refresh": _refresh_static_daily_prices(as_of_date=as_of, market=market),
+        }
 
 
 def _market_pointer_key(market: str) -> str:
@@ -597,6 +625,16 @@ def main() -> int:
         help="Refresh mode to use before static export. price_delta is the optimized default.",
     )
     parser.add_argument(
+        "--prices-only",
+        action="store_true",
+        help=(
+            "Fast post-close publish: refresh today's prices and re-export "
+            "against the latest PUBLISHED feature run (no scan/snapshot "
+            "rebuild). Charts, bands and buy signals pick up today's bars; "
+            "scan ranks stay from the previous full build."
+        ),
+    )
+    parser.add_argument(
         "--skip-universe-refresh",
         action="store_true",
         help="Do not refresh the live stock universe before exporting.",
@@ -624,6 +662,12 @@ def main() -> int:
         raise SystemExit("--combine-artifacts-dir cannot be used together with --market")
     if args.fallback_artifacts_dir and not args.combine_artifacts_dir:
         raise SystemExit("--fallback-artifacts-dir requires --combine-artifacts-dir")
+    if args.prices_only and args.refresh_daily:
+        raise SystemExit("--prices-only cannot be used together with --refresh-daily")
+    if args.prices_only and args.combine_artifacts_dir:
+        raise SystemExit("--prices-only cannot be used together with --combine-artifacts-dir")
+    if args.prices_only and not args.market:
+        raise SystemExit("--prices-only requires --market")
 
     refresh_warnings: list[str] = []
     selected_market_non_publishable_snapshot: dict[str, Any] | None = None
@@ -640,6 +684,12 @@ def main() -> int:
         )
     else:
         prepare_runtime()
+
+        if args.prices_only:
+            prices_only_result = _run_prices_only_refresh(market=args.market)
+            print("Prices-only refresh complete:")
+            for name, result_item in prices_only_result.items():
+                print(f"  - {name}: {result_item}")
 
         if args.refresh_daily:
             refresh_results, refresh_warnings = _run_daily_refresh(
@@ -674,6 +724,12 @@ def main() -> int:
                 write_manifest=args.market is None,
             )
         except NoPublishedStaticMarketArtifact:
+            if args.prices_only:
+                print(
+                    f"Prices-only export skipped for market {args.market}: no published "
+                    "feature run exists yet (a full build must land first)."
+                )
+                return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
             if (
                 args.market is not None
                 and args.refresh_daily

@@ -96,3 +96,47 @@ def test_contractions_are_oldest_to_newest():
     # smoke: list exists and matches the reported count when present
     if fp["num_contractions"] and fp["contractions_pct"]:
         assert len(fp["contractions_pct"]) <= fp["num_contractions"] + 1
+
+
+def test_pivot_states_require_the_vcp_structure():
+    """near_pivot / ready_for_breakout are gated on `detected`: proximity to a
+    recent high with no contraction structure is NOT a setup. A smooth 200-bar
+    uptrend sits near its highs constantly but has no tightening pullbacks, so
+    both flags must stay False."""
+    for _ in range(3):  # a few trend shapes, all structureless
+        fp = compute_vcp_footprint(_frame(np.linspace(20, 130, 200)))
+        if not fp["detected"]:
+            assert fp["near_pivot"] is False
+            assert fp["ready_for_breakout"] is False
+
+
+def test_extended_past_pivot_is_not_near_pivot():
+    """Minervini's chase limit: > ~5% past the pivot is a chase. Whatever the
+    detector reports as the pivot, a stock far above it must never read
+    near_pivot/ready — this was the ungated-flag bug that made the signal fire
+    on ~96% of random uptrend days."""
+    base = np.concatenate([
+        np.linspace(50, 60, 80),          # advance
+        np.linspace(60, 55, 20),          # pullback 1 (~8%)
+        np.linspace(55, 60, 20),
+        np.linspace(60, 57.5, 15),        # pullback 2 (~4%)
+        np.linspace(57.5, 60, 15),
+        np.full(20, 60.0) * (1 + np.linspace(-0.015, 0, 20)),  # tight coil
+        np.linspace(60, 85, 30),          # +40% past any plausible pivot
+    ])
+    fp = compute_vcp_footprint(_frame(base))
+    assert fp["near_pivot"] is False
+    assert fp["ready_for_breakout"] is False
+
+
+def test_legacy_ready_flag_has_a_lower_bound():
+    """find_pivot_point: 'ready' means coiled UNDER the pivot (0..3%), never
+    already through it (negative distance)."""
+    from app.analysis.patterns.legacy_vcp_detection import VCPDetector
+
+    det = VCPDetector()
+    bases = [{"high_price": 100.0, "low_price": 90.0}]
+    under = det.find_pivot_point(bases, current_price=98.0)   # 2% under
+    over = det.find_pivot_point(bases, current_price=140.0)   # 40% past
+    assert under["ready_for_breakout"] is True
+    assert over["ready_for_breakout"] is False

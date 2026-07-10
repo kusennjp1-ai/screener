@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""  # For web search (primary)
     serper_api_key: str = ""  # For web search (fallback)
 
+    # Position alerts — daily sell-engine readout over open positions pushed
+    # to a webhook (payload carries both Discord `content` and Slack `text`
+    # keys). Empty URL disables the beat task entirely.
+    position_alert_webhook_url: str = ""
+    position_alert_hour: int = 21   # after the US close pipeline (server tz)
+    position_alert_minute: int = 30
+
     # Runtime profile
     feature_themes: bool = True
     feature_chatbot: bool = True
@@ -121,6 +128,12 @@ class Settings(BaseSettings):
     server_auth_session_ttl_hours: int = 24
     server_auth_secure_cookie: bool = False
     server_expose_api_docs: bool = False
+    # Staleness gate for manual scans. ON by default so scans never run on
+    # out-of-date prices. Set false for a single-user local deployment that
+    # wants to scan whatever cached data exists (e.g. when the market-data
+    # vendor only has history through an earlier date than the calendar's last
+    # completed trading day). See services/market_data_freshness.py.
+    scan_freshness_gate_enabled: bool = True
 
     # Admin API key (required for config endpoints)
     admin_api_key: str = ""
@@ -489,6 +502,12 @@ class Settings(BaseSettings):
     provider_snapshot_cutover_enabled: bool = False
     provider_snapshot_on_demand_fallback_enabled: bool = True
     provider_snapshot_min_active_coverage_us: float = 0.98
+
+    # Code 33 (Minervini earnings acceleration) EDGAR refresh. Off by default:
+    # needs outbound data.sec.gov (US filers only), available in CI / prod but
+    # not the app sandbox. When on, the fundamentals refresh stamps the code33
+    # column so live scans / buy-context surface it.
+    fundamentals_code33_enabled: bool = False
     provider_snapshot_min_active_coverage_hk: float = 0.70
     provider_snapshot_min_active_coverage_in: float = 0.60
     provider_snapshot_min_active_coverage_jp: float = 0.60
