@@ -1,0 +1,74 @@
+name: Backtest Tactics
+
+# Long-history portfolio backtest of the Minervini tactics. Yahoo egress
+# exists only here, so this workflow fetches the multi-year bundle, uploads
+# it to the daily-price-data release (for offline sandbox reruns), runs the
+# backtest, and prints the report to the job summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      period:
+        description: 'History depth to fetch (yfinance period)'
+        type: string
+        default: '6y'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backtest-tactics-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      REDIS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Build long-history price bundle (Yahoo)
+        run: |
+          cd backend
+          python -m app.scripts.build_backtest_price_bundle \
+            --period "${{ github.event.inputs.period || '6y' }}" \
+            --output /tmp/bt/backtest-price-us-${{ github.event.inputs.period || '6y' }}.json.gz
+
+      - name: Upload bundle to release (for offline reruns)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload daily-price-data \
+            "/tmp/bt/backtest-price-us-${{ github.event.inputs.period || '6y' }}.json.gz" --clobber
+
+      - name: Run tactics backtest
+        run: |
+          cd backend
+          PYTHONPATH=. python scripts/backtest_minervini_tactics.py \
+            --bundle "/tmp/bt/backtest-price-us-${{ github.event.inputs.period || '6y' }}.json.gz" \
+            --output /tmp/bt/report.json
+          echo '## Tactics backtest report' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/bt/report.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-report
+          path: |
+            /tmp/bt/report.json
+            /tmp/bt/report.full.json
+          if-no-files-found: error
