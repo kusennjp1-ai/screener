@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import FilterPanel from '../../components/Scan/FilterPanel';
 import ResultsTable from '../../components/Scan/ResultsTable';
+import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import {
@@ -369,6 +370,12 @@ function StaticScanPage() {
           チャートデータの読み込みに失敗しました。スキャン結果はチャートなしで利用できます。
         </Alert>
       ) : null}
+
+      {/* Minervini rule 1 — the same market-regime banner the PC scan page
+          shows; regime fields ride on every static scan row. Fed from the
+          unfiltered set so the market context stays visible even when the
+          active filters match nothing. */}
+      <MarketRegimeBanner results={hydratedRows} />
 
       {hydrationComplete && (
         <FilterPanel

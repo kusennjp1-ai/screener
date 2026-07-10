@@ -520,4 +520,15 @@ describe('StaticHomePage', () => {
     const line = await screen.findByText(/スキャン 2026-04-24/);
     expect(line.textContent).not.toContain('価格更新');
   });
+
+  it('shows the shared market-regime banner when scan rows carry regime fields', async () => {
+    scanChunkPayload.rows[0].market_regime = 'correction';
+    scanChunkPayload.rows[0].market_health = 54;
+    scanChunkPayload.rows[0].market_exposure_pct = 20;
+
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+    expect(await screen.findByText('Correction')).toBeInTheDocument();
+    expect(screen.getByText(/Health 54\/100/)).toBeInTheDocument();
+  });
 });

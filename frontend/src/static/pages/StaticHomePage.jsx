@@ -25,6 +25,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import StaticChartViewerModal from '../StaticChartViewerModal';
 import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
+import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
 import { marketFlag } from '../marketFlags';
@@ -231,6 +232,10 @@ function StaticHomePage() {
           {`${pricesUpdatedLabel ? `価格更新 ${pricesUpdatedLabel} · ` : ''}スキャン ${freshness.scan_as_of_date || '-'} · 騰落 ${freshness.breadth_latest_date || '-'} · グループ ${freshness.groups_latest_date || '-'}`}
         </Typography>
       </Box>
+
+      {/* Minervini rule 1 — same market-regime banner as the PC scan page,
+          read off the loaded scan rows (regime fields ride on every row). */}
+      <MarketRegimeBanner results={scanRows} />
 
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {(home.key_markets || [])
