@@ -1,0 +1,67 @@
+{
+  "as_of": "2026-07-09",
+  "window": {
+    "start": "2025-07-23",
+    "end": "2026-07-09"
+  },
+  "universe_size": 3340,
+  "caveats": [
+    "survivorship bias: today's listed universe only",
+    "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
+    "daily bars: entries at next open (later than intraday pivot buys), 10bps/side costs"
+  ],
+  "results": {
+    "full_tactics": {
+      "metrics": {
+        "total_return_pct": 7.7,
+        "cagr_pct": 8.1,
+        "max_drawdown_pct": -10.1,
+        "sharpe": 0.74,
+        "trades": 30,
+        "win_rate_pct": 43.3,
+        "avg_r": 0.32,
+        "profit_factor": 1.47,
+        "avg_invested_pct": 57.5
+      }
+    },
+    "no_market_gate": {
+      "metrics": {
+        "total_return_pct": -7.4,
+        "cagr_pct": -7.7,
+        "max_drawdown_pct": -19.5,
+        "sharpe": -0.44,
+        "trades": 63,
+        "win_rate_pct": 36.5,
+        "avg_r": -0.08,
+        "profit_factor": 0.78,
+        "avg_invested_pct": 93.7
+      }
+    },
+    "spy_buy_hold": {
+      "metrics": {
+        "total_return_pct": 19.5,
+        "cagr_pct": 20.4,
+        "max_drawdown_pct": -8.9,
+        "sharpe": 1.53,
+        "trades": 0,
+        "win_rate_pct": null,
+        "avg_r": null,
+        "profit_factor": null,
+        "avg_invested_pct": 100.0
+      }
+    },
+    "spy_regime_timed": {
+      "metrics": {
+        "total_return_pct": 6.8,
+        "cagr_pct": 7.1,
+        "max_drawdown_pct": -3.8,
+        "sharpe": 1.08,
+        "trades": 0,
+        "win_rate_pct": null,
+        "avg_r": null,
+        "profit_factor": null,
+        "avg_invested_pct": 100.0
+      }
+    }
+  }
+}

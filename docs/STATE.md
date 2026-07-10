@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C52 完了（UIアニメーション/グラフィック強化: レジームバナーのHealthメーター+エクスポージャー階段+パルス、ホームカードのスタガー入場。5744669/cf45f28）。PR #48-#50マージ済。**本日16:06 ET（JST翌5:06）の定時ランが高速価格配信の初回実測**／ **次: C53候補=①16:06ラン実測確認②シェル/ホームのさらなる統一③単銘柄RPR**
+- **サイクル**: C55 完了（C53=弱点監査WEAKNESSES.md、C54=戦術バックテスト初回実測 docs/BACKTEST_C54.md、C55=レジーム過剰弱気修正でGATE判別+42.8pp）／ **次: C56=CIで5年超バンドル→2022ベア込み再実行（戦術検証の本命）**
 - **モデル**: Fable 5復帰（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48はMERGED——**新規コミットはmainマージバック後の積み直し**。C50が未マージ。mainへの直接pushは引き続き禁止）
 - **実行中/待機中の外部ジョブ**: なし
@@ -14,7 +14,7 @@
 
 | metric | 値 | 測定 |
 |---|---|---|
-| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / 45.1 %（**C43後フル再実行でバイト一致**、MSCORE 95.5） | `scripts/validate_trade_ideas.py`（~7分） |
+| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / **66.5** %（MSCORE 95.5。GATEはC55で45.1→66.5・判別+25.4→**+42.8pp**、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
 | 判別（entry−control） | SETUP +52.0pp / FIRE±5 +24.4pp / TT +30.5pp | 同上・CONTROL行 |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |

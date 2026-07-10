@@ -244,11 +244,20 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
 
     if trend_ok and dist < DIST_UNDER_PRESSURE:
         regime = "confirmed_uptrend"
-    elif trend_ok and dist < DIST_CORRECTION:
+    elif trend_ok:
+        # Heavy distribution with an INTACT trend is "under pressure", not a
+        # correction: IBD's market pulse only flips to "market in correction"
+        # on price damage (indexes undercutting key levels). The C55 backtest
+        # audit caught the old mapping calling 124 of 140 "correction" days
+        # while SPY sat within 3% of its high, purely because the
+        # distribution count crossed the threshold — capping exposure at 20%
+        # through most of a +19.5% SPY year.
         regime = "uptrend_under_pressure"
     elif above_200 and not (c < s200 and s50 < s200):
-        # above the 200DMA but trend not clean, or distribution piling up
-        regime = "correction" if (dist >= DIST_CORRECTION or not above_50) else "uptrend_under_pressure"
+        # above the 200DMA but the clean trend is broken: losing the 50-day
+        # is the price damage that makes it a correction; otherwise it is
+        # still only pressure.
+        regime = "correction" if not above_50 else "uptrend_under_pressure"
     else:
         regime = "downtrend"
 
