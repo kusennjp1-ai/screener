@@ -5,35 +5,38 @@
 
 ## 現在
 
-- **サイクル**: C57 完了（C56=**6年バックテスト成功**——2022ベア防御+20.9pp実証・PF1.67・ただし総リターンはSPY B&Hに劣後、C57=高速価格配信をチャート関連1,200銘柄に絞り~52分短縮）／ **次: C58=2025年アンダーパフォーマンス診断（戦術−4.2% vs SPY+17.7%、ゲート無しも−4.4%→敗因は銘柄選択/執行側）**
+- **サイクル**: C59 完了（VCP時系列反転バグ修正→legacyファネル+89.0%でSPY超え・recall調査は見送り）／ **次: C60候補=10年バンドルで別窓（2016-2021）追試（最優先の懐疑テスト）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48-#53 全てMERGED。ブランチに未マージ4コミット: a7de637 C57＋workflow修正3件＋docs——**PR作成→CI green→squash mergeが確立フロー**。mainへの直接pushは禁止）
-- **実行中/待機中の外部ジョブ**: なし（backtest-tactics run 29131626082 成功済・24分）
+- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #54までMERGED。**未マージコミット5件+docs**: 358df1d/6028bd8/4628e31/07cf293/0f7edb7＝バックテスト修正群。**GitHub MCP切断中→PR作成・マージ不可、再認証待ち**。pushは可能・実施済み）
+- **実行中/待機中の外部ジョブ**: なし
 
 ## 凍結metricの現在値（低下＝即revert）
 
 | metric | 値 | 測定 |
 |---|---|---|
-| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / **66.5** %（MSCORE 95.5。GATEはC55で45.1→66.5・判別+25.4→**+42.8pp**、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
-| 判別（entry−control） | SETUP +52.0pp / FIRE±5 +24.4pp / TT +30.5pp | 同上・CONTROL行 |
+| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / **66.5** %（MSCORE 95.5・判別+42.8pp） | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
-| 戦術バックテスト（参考・凍結外） | 5年: フル+53.9%/maxDD−13.9%/PF1.67 vs ゲート無し+33.9%/−25.2% vs SPY+83.6%/−24.5% | CI `backtest-tactics.yml`（6yバンドルはリリースに保存済み） |
+| 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%/−13.9%/PF2.02/Sharpe0.87（SPY+83.6%/−24.5%/0.80超え）、製品再現+45.4%/−20.0% | ローカル or CI `backtest-tactics.yml` |
 
-## 6年バックテストの読み方（C56・docs/BACKTEST_C54.md詳細）
+**注意**: C55までの凍結metricは不変（バックテスト修正はscripts/のみ、本体サービス無変更）。
+**C56の+53.9%は非決定性バグの偶然の1試行＝無効**（BACKTEST_C54.md参照）。
 
-- **証明**: 2022ベアで+2.7% vs SPY−18.2%（+20.9pp）・maxDD半減・PF1.67・選択アルファ+13.5pp（vs SPY×レジーム）。
-- **誠実な敗北**: 総リターン−29.7pp劣後。主犯=2025年（−4.2 vs +17.7）と投資比率59%。
-- **切り分け済み**: 2025年はゲート無しも−4.4%・SPY×レジーム+11.7% → **レジームは無罪、銘柄選択/執行の問題**。
-- 全トレード記録: CI artifact 8242474227（report.full.json）。6yバンドル: `daily-price-data`リリースの`backtest-price-us-6y.json.gz`（81MB・2,068銘柄・as_of 2026-07-10）→ sandboxでオフライン再実行可能（`PYTHONPATH=. python scripts/backtest_minervini_tactics.py --bundle ...`）。
+## C58の要点（docs/BACKTEST_C54.md全面改訂済み）
+
+- バックテストは決定的になった（RS降順候補・sorted sells・シード2種で一致確認）。
+- armed買い逆指値=前日プランに対し交差判定（毎日上書きで死んでいた）。
+- `--funnel product`=スマホ画面のBuy Signalチェックリスト再現（minervini_bandsウォークフォワード履歴・TPR緑∧圧力緑・Buy Risk緑/黄・フレッシュ交差）。バンド計算は`compute_band_panels`（history_bars拡張で1コール/銘柄・全銘柄7分）。
+- 誠実な結論: 強気5年窓ではSPY B&Hに勝てず。型は実証（PF1.4-1.6・ゲート寄与+60.7pp・2022年legacy−2.9% vs SPY−18.2%）。
+- C59でVCP時系列反転を修正→VCP由来115件/PF2.13が主役に（v2までの数字は反転バグ込み）。
+- 成果物: scratchpadの`report_6y_legacy_v2.full.json`・`report_6y_product_v2.full.json`（全トレード）、6yバンドルはリリース`backtest-price-us-6y.json.gz`。
 
 ## 次アクション（優先順）
 
-1. **C58: 2025年診断** — 6yバンドルをリリースからDL→sandboxで再実行し2025年トレードを層別（early vs armed・保有期間・エントリー月・セクター）。どの型が負けたか特定してから対策（仮説例: 2025はブレイクアウト失敗年→armed比率/出来高確認の効き具合を検証）。**レジーム較正は触らない**（無罪が実証済み）。
-2. **高速配信の2回目実測** — C57マージ後の平日16:06 ETラン（目標: パイプライン~30-40分）。スケジューラ遅延69分は残存課題→cron多重登録（16:06/16:20の2本）が次候補。
-3. **単銘柄タブのRPR authentic percentile化** — feature storeからのuniverse-performance供給を設計してから（中型）。
-4. **スマホUI統一の続き** — 残る乖離はシェル/ナビとホーム画面の情報密度（スキャン結果・チャート・レジームバナーは共有済み）。
-5. **調査済み・保留**: Alpha Vantage未登録adapter=低ROI／TPRストリップ=凍結／traction連動exposure=ポジション管理側／既存workflowテスト3失敗=pre-existing。
+1. **C60: 別窓追試** — CIで10年バンドル構築（backtest-tactics.yml period=10y）→2016-2021窓でlegacyファネルを検証（+89.0%の懐疑テスト）。recall本格改修はベース分割設計から（オフライン計測: scratchpad/vcp_recall_pareto.py・36.1%）。
+2. **PR作成・マージ** — GitHub MCP再認証後すぐ（コミット済み5件+docs）。CI green→squash merge→mainマージバックの確立フロー。
+3. **高速配信の2回目実測** — C57マージ済み。平日16:06 ETランでパイプライン~30-40分を確認。
+4. **単銘柄タブRPR percentile化／スマホUI統一続き**（中型・保留中）。
 **注意（C45/C47の教訓）**: サイクル開始時はSPECを信じる前にコードをgrepする。
 
 ## 絶対制約（ユーザー指示・恒久）
@@ -45,8 +48,9 @@
 
 ## 環境（このsandboxの真実）
 
-- Postgres16/Redisはインストール済み。DB接続は `DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。フルスタック起動手順は `sandbox-e2e` skill。
-- Node 22 は `/opt/node22/bin`（**このsandboxにNVMは無い**）。
-- Yahoo/EDGAR egressは**GitHub Actionsのみ**。**新workflowはmainに載るまでdispatch API不可**（C56教訓）。GitHubリリース資産はプロキシ経由でDL可（daily-price-data）。
-- CI成果物のblobストアはプロキシで403 → **ジョブログ（get_job_logs）から読む**。
-- スマホ用スクリーナー（静的PWA, GitHub Pages）: **https://kusennjp1-ai.github.io/screener/**
+- Postgres16/Redis稼働。`DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。フルスタックは `sandbox-e2e` skill。
+- Node 22 は `/opt/node22/bin`（NVM無し）。
+- Yahoo/EDGAR egressは**GitHub Actionsのみ**。新workflowはmainに載るまでdispatch不可。リリース資産DLは可（6yバンドル取得済み）。
+- バックテストのローカル実行: `cd backend && DATABASE_URL=... REDIS_ENABLED=false PYTHONPATH=. python3 scripts/backtest_minervini_tactics.py --bundle <6y.json.gz> --output out.json [--funnel product]`（~35分）。
+- **GitHub MCP切断中**（PR操作・CIログ読み不可。git push/pullは可）。
+- スマホ用スクリーナー（静的PWA）: **https://kusennjp1-ai.github.io/screener/**

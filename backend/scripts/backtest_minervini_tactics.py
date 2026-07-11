@@ -33,6 +33,7 @@ can be separated.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import gzip
 import json
 from dataclasses import dataclass, field
@@ -42,6 +43,7 @@ import numpy as np
 import pandas as pd
 
 from app.scanners.criteria.vcp_detection import VCPDetector
+from app.services import minervini_bands as mb
 from app.services.market_regime import assess_market_regime
 from app.services.markets360.exit_signals import (
     LADDER_BREAKEVEN_R,
@@ -167,6 +169,44 @@ def ladder_stop(close_px: float, entry: float, stop0: float, ma50: float, low20:
     return max(stop, stop0)
 
 
+def compute_band_panels(fields, symbols, spy_close):
+    """Walk-forward band-state panels from the shipped minervini_bands engine.
+
+    One ``calculate_bands`` call per symbol with ``history_bars`` widened to
+    the full panel: the band debounce is strictly causal, so element i of the
+    history strip equals the point-in-time badge an operator saw at bar i.
+    Returns three boolean (dates x symbols) frames: TPR green, pressure green,
+    and Buy Risk green-or-yellow.
+    """
+    close, opn, high, low, volume = (fields[k] for k in ("close", "open", "high", "low", "volume"))
+    idx = close.index
+    cfg = dataclasses.replace(mb.DAILY, history_bars=len(idx))
+    tpr_g = pd.DataFrame(False, index=idx, columns=list(symbols))
+    prs_g = pd.DataFrame(False, index=idx, columns=list(symbols))
+    risk_ok = pd.DataFrame(False, index=idx, columns=list(symbols))
+    for n, s in enumerate(symbols):
+        df = pd.DataFrame({
+            "Open": opn[s], "High": high[s], "Low": low[s],
+            "Close": close[s], "Volume": volume[s],
+        }).dropna(subset=["Close"])
+        if len(df) < 260:
+            continue
+        b = mb.calculate_bands(df, benchmark_close=spy_close,
+                               with_history=True, cfg=cfg)
+        for key, frame, good in (
+            ("tpr_history", tpr_g, ("strong",)),
+            ("pressure_history", prs_g, ("buy",)),
+            ("buy_risk_history", risk_ok, ("low", "medium")),
+        ):
+            hist = b.get(key) or []
+            if hist:
+                dates = df.index[-len(hist):]
+                frame.loc[dates, s] = [st in good for st in hist]
+        if (n + 1) % 200 == 0:
+            print(f"bands: {n + 1}/{len(symbols)} symbols", flush=True)
+    return tpr_g, prs_g, risk_ok
+
+
 @dataclass
 class Position:
     symbol: str
@@ -187,7 +227,8 @@ class Variant:
     equity_curve: list = field(default_factory=list)
 
 
-def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_dates, start_equity=100_000.0):
+def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_dates,
+                start_equity=100_000.0, signal_ok=None):
     close, opn, high, low, volume = (fields[k] for k in ("close", "open", "high", "low", "volume"))
     v = Variant(name=name, market_gate=market_gate)
     cash = start_equity
@@ -200,7 +241,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
         exposure_pct = regimes[d]["exposure"] if market_gate else 100
 
         # --- execute queued exits at the open --------------------------------
-        for sym in list(pending_sells):
+        # sorted so float summation order (cash +=) is bitwise-reproducible
+        for sym in sorted(pending_sells):
             if sym in positions and opn.at[d, sym] == opn.at[d, sym]:
                 p = positions.pop(sym)
                 px = opn.at[d, sym] * (1 - COST_PER_SIDE)
@@ -267,28 +309,44 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 pending_sells.add(sym)
 
         # --- entry signals at the close (fill tomorrow) -----------------------
+        # Armed buy-stops must be judged against YESTERDAY's plans: an armed
+        # name has close <= pivot on its scan day by definition, so checking
+        # the cross against the same day's freshly rebuilt watchlist could
+        # never fire (the daily overwrite silently killed the armed path —
+        # every historical entry came from the 'early' lane, 1-2 days late
+        # and up to 5% above the pivot).
+        prev_watch = watch
         wk = watch_by_week.get(d)
         if wk is not None:
             watch = wk
         if exposure_pct > 0 or not market_gate:
-            for sym, plan in watch.items():
-                if sym in positions or sym in pending_buys:
+            def _risk_ok(sym):
+                # product funnel: Buy Risk green/yellow on the signal day
+                # (the breakout barrel's risk_ok half in compute_buy_signal)
+                return signal_ok is None or bool(signal_ok.at[d, sym])
+
+            for sym, plan in prev_watch.items():  # armed stops set before today
+                if plan["mode"] != "armed" or sym in positions or sym in pending_buys:
+                    continue
+                if not _risk_ok(sym):
                     continue
                 c = close.at[d, sym]
-                if c != c:
+                hi = high.at[d, sym]
+                vol50 = ind["vol50"].at[d, sym]
+                volr = volume.at[d, sym] / vol50 if vol50 and vol50 == vol50 else 0
+                if (c == c and hi == hi and hi >= plan["pivot"] and c > plan["pivot"]
+                        and c <= plan["pivot"] * CHASE_CAP and volr >= BREAKOUT_VOL_RATIO):
+                    pending_buys[sym] = plan
+            for sym, plan in watch.items():  # early post-breakout, today's scan
+                if plan["mode"] != "early" or sym in positions or sym in pending_buys:
                     continue
-                if plan["mode"] == "early":
-                    # breakout already volume-confirmed at scan; buy next open
-                    # while the chase cap still holds
-                    if c <= plan["pivot"] * CHASE_CAP:
-                        pending_buys[sym] = plan
-                else:  # armed buy-stop at the pivot
-                    hi = high.at[d, sym]
-                    vol50 = ind["vol50"].at[d, sym]
-                    volr = volume.at[d, sym] / vol50 if vol50 and vol50 == vol50 else 0
-                    if (hi == hi and hi >= plan["pivot"] and c > plan["pivot"]
-                            and c <= plan["pivot"] * CHASE_CAP and volr >= BREAKOUT_VOL_RATIO):
-                        pending_buys[sym] = plan
+                if not _risk_ok(sym):
+                    continue
+                c = close.at[d, sym]
+                # breakout already volume-confirmed at scan; buy next open
+                # while the chase cap still holds
+                if c == c and c <= plan["pivot"] * CHASE_CAP:
+                    pending_buys[sym] = plan
 
         equity = cash + sum(
             p.shares * (close.at[d, p.symbol] if close.at[d, p.symbol] == close.at[d, p.symbol] else p.entry)
@@ -349,6 +407,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--vcp-only", action="store_true",
+                    help="diagnostic: drop the tight-base fallback from the "
+                         "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--funnel", choices=("legacy", "product"), default="legacy",
+                    help="'product' replays the shipped Buy Signal checklist: "
+                         "TPR band green + pressure band green as candidate "
+                         "gates, VCP pivot else the 30-bar consolidation high "
+                         "(signals._breakout_now fallback), and Buy Risk "
+                         "green/yellow required on the signal day")
     args = ap.parse_args()
 
     fields, as_of = load_panel(Path(args.bundle))
@@ -380,6 +447,12 @@ def main() -> int:
     # (Weekly sampling starved the entry funnel: a VCP pivot approach lasts
     # days, and the live product scans daily — the sim must too.)
     det = VCPDetector()
+    band_panels = None
+    if args.funnel == "product":
+        print("computing walk-forward band panels (shipped minervini_bands)...", flush=True)
+        band_panels = compute_band_panels(fields, tradable, close["SPY"])
+        greens = (band_panels[0] & band_panels[1]).loc[sim_dates].sum(axis=1)
+        print(f"band panels done: avg {greens.mean():.1f} TPR∧pressure-green names/day", flush=True)
     watch_by_week: dict = {}
     week_marks = sim_dates
     tradable_set = set(tradable)
@@ -387,8 +460,21 @@ def main() -> int:
         idx = close.index.get_loc(d)
         row_t = ind["template"].iloc[idx]
         row_rs = ind["rs"].iloc[idx]
-        cands = [s for s in tradable_set
-                 if bool(row_t.get(s, False)) and row_rs.get(s, 0) >= RS_MIN]
+        # RS-descending order: the watchlist dict (and therefore entry-signal
+        # priority under the 10-position cap) starts with the strongest names,
+        # per Minervini "buy the leaders". Iterating the raw set here made the
+        # whole simulation nondeterministic (string-hash order varies per
+        # process): two runs of the same bundle differed by tens of pp.
+        cands = sorted(
+            (s for s in tradable_set
+             if bool(row_t.get(s, False)) and row_rs.get(s, 0) >= RS_MIN),
+            key=lambda s: (-row_rs.get(s, 0), s),
+        )
+        if band_panels is not None:
+            # product funnel: the checklist's first two barrels are candidate
+            # gates — TPR band green (strong) and pressure band green (buy)
+            tpr_row, prs_row = band_panels[0].iloc[idx], band_panels[1].iloc[idx]
+            cands = [s for s in cands if bool(tpr_row.get(s, False)) and bool(prs_row.get(s, False))]
         wl = {}
         for s in cands:
             prices = close[s].iloc[max(0, idx - 251): idx + 1].dropna()
@@ -407,11 +493,22 @@ def main() -> int:
 
             piv = base_low = None
             source = None
-            r = det.detect_vcp(prices.reset_index(drop=True), vols.reset_index(drop=True))
+            # detect_vcp expects MOST-RECENT-FIRST series (see vcp_footprint.py,
+            # which reverses with iloc[::-1] before calling). Passing
+            # chronological order here fed the detector a time-mirrored chart.
+            r = det.detect_vcp(prices.iloc[::-1].reset_index(drop=True),
+                               vols.iloc[::-1].reset_index(drop=True))
             vpiv = (r.get("pivot_info") or {}).get("pivot")
             if r.get("vcp_detected") and vpiv and r.get("recent_base_low"):
                 piv, base_low, source = float(vpiv), float(r["recent_base_low"]), "vcp"
-            else:
+            elif args.funnel == "product":
+                # the shipped signal engine's fallback (signals._breakout_now):
+                # pivot = prior 30-bar consolidation high, base low = 30-bar low
+                hi30 = high[s].iloc[max(0, idx - 30): idx].dropna()
+                lo30 = low[s].iloc[max(0, idx - 30): idx].dropna()
+                if len(hi30) >= 20:
+                    piv, base_low, source = float(hi30.max()), float(lo30.min()), "high30"
+            elif not args.vcp_only:
                 # Tight continuation base (published Minervini criteria, no
                 # fitting): >=4-week base whose high is >=10 sessions old,
                 # depth <=25%, final 10 closes in a <=8% range. He buys these
@@ -437,7 +534,26 @@ def main() -> int:
             #   armed  — price still at/below the pivot: buy-stop AT the pivot.
             #   early  — 0-5% above the pivot with a volume-confirmed breakout
             #            in the last 5 sessions: buy the early post-breakout.
-            if c0 <= piv:
+            if args.funnel == "product" and c0 > piv:
+                # early eligibility per signals._breakout_now: a FRESH pivot
+                # cross (prior close still under) on >=1.5x volume within the
+                # active window (5 bars). Without this the 30-bar-high fallback
+                # marks any name drifting near its highs as buyable and the
+                # funnel triples with extended, base-less entries.
+                fired = False
+                for j in range(max(idx - 4, 31), idx + 1):
+                    pj = piv if source == "vcp" else float(high[s].iloc[j - 30: j].max())
+                    cj = close[s].iloc[j]
+                    cjm1 = close[s].iloc[j - 1]
+                    vj = volume[s].iloc[j]
+                    v50j = ind["vol50"][s].iloc[j]
+                    if (cj == cj and cjm1 == cjm1 and vj == vj and v50j and v50j == v50j
+                            and cj > pj and cjm1 <= pj and vj / v50j >= BREAKOUT_VOL_RATIO):
+                        fired = True
+                        break
+                if fired and c0 <= piv * CHASE_CAP:
+                    wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source}
+            elif c0 <= piv:
                 wl[s] = {"pivot": piv, "base_low": base_low, "mode": "armed", "source": source}
             elif c0 <= piv * CHASE_CAP and recent_vol_surge:
                 wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source}
@@ -446,8 +562,10 @@ def main() -> int:
     print(f"daily watchlists: {len(watch_by_week)} days, avg {np.mean(sizes):.1f} names, max {max(sizes)}", flush=True)
 
     results = {}
+    signal_ok = band_panels[2] if band_panels is not None else None
     for name, gate in (("full_tactics", True), ("no_market_gate", False)):
-        v = run_variant(name, gate, fields, ind, regimes, watch_by_week, sim_dates)
+        v = run_variant(name, gate, fields, ind, regimes, watch_by_week, sim_dates,
+                        signal_ok=signal_ok)
         results[name] = {"metrics": metrics(v.equity_curve, v.trades),
                          "trades": v.trades, "equity_curve": v.equity_curve}
         print(f"{name}: {results[name]['metrics']}", flush=True)
@@ -468,6 +586,8 @@ def main() -> int:
         "as_of": as_of,
         "window": {"start": str(sim_dates[0].date()), "end": str(sim_dates[-1].date())},
         "universe_size": len(tradable),
+        "vcp_only": args.vcp_only,
+        "funnel": args.funnel,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
