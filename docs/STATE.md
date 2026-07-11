@@ -28,12 +28,12 @@
 - armed買い逆指値=前日プランに対し交差判定（毎日上書きで死んでいた）。
 - `--funnel product`=スマホ画面のBuy Signalチェックリスト再現（minervini_bandsウォークフォワード履歴・TPR緑∧圧力緑・Buy Risk緑/黄・フレッシュ交差）。バンド計算は`compute_band_panels`（history_bars拡張で1コール/銘柄・全銘柄7分）。
 - 誠実な結論: 強気5年窓ではSPY B&Hに勝てず。型は実証（PF1.4-1.6・ゲート寄与+60.7pp・2022年legacy−2.9% vs SPY−18.2%）。
-- 層別の宝: **VCP由来PF6.10**（n=17で利益の73%）／armedは本物ピボットでのみ機能。
+- C59でVCP時系列反転を修正→VCP由来115件/PF2.13が主役に（v2までの数字は反転バグ込み）。
 - 成果物: scratchpadの`report_6y_legacy_v2.full.json`・`report_6y_product_v2.full.json`（全トレード）、6yバンドルはリリース`backtest-price-us-6y.json.gz`。
 
 ## 次アクション（優先順）
 
-1. **C59: VCP検出器recall向上** — 908ハーネスのSETUP系とバックテストPF6.10の両面から。検出パラメータではなく検出ロジックの取りこぼし（例: ハンドル付きカップ、3段以上の収縮）をまず定性調査。**凍結metric低下=即revert**の下で。
+1. **C60: 別窓追試** — CIで10年バンドル構築（backtest-tactics.yml period=10y）→2016-2021窓でlegacyファネルを検証（+89.0%の懐疑テスト）。recall本格改修はベース分割設計から（オフライン計測: scratchpad/vcp_recall_pareto.py・36.1%）。
 2. **PR作成・マージ** — GitHub MCP再認証後すぐ（コミット済み5件+docs）。CI green→squash merge→mainマージバックの確立フロー。
 3. **高速配信の2回目実測** — C57マージ済み。平日16:06 ETランでパイプライン~30-40分を確認。
 4. **単銘柄タブRPR percentile化／スマホUI統一続き**（中型・保留中）。
