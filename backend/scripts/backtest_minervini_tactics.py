@@ -200,7 +200,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
         exposure_pct = regimes[d]["exposure"] if market_gate else 100
 
         # --- execute queued exits at the open --------------------------------
-        for sym in list(pending_sells):
+        # sorted so float summation order (cash +=) is bitwise-reproducible
+        for sym in sorted(pending_sells):
             if sym in positions and opn.at[d, sym] == opn.at[d, sym]:
                 p = positions.pop(sym)
                 px = opn.at[d, sym] * (1 - COST_PER_SIDE)
