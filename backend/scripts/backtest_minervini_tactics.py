@@ -349,6 +349,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--vcp-only", action="store_true",
+                    help="diagnostic: drop the tight-base fallback from the "
+                         "watchlist so only VCPDetector setups trade")
     args = ap.parse_args()
 
     fields, as_of = load_panel(Path(args.bundle))
@@ -387,8 +390,16 @@ def main() -> int:
         idx = close.index.get_loc(d)
         row_t = ind["template"].iloc[idx]
         row_rs = ind["rs"].iloc[idx]
-        cands = [s for s in tradable_set
-                 if bool(row_t.get(s, False)) and row_rs.get(s, 0) >= RS_MIN]
+        # RS-descending order: the watchlist dict (and therefore entry-signal
+        # priority under the 10-position cap) starts with the strongest names,
+        # per Minervini "buy the leaders". Iterating the raw set here made the
+        # whole simulation nondeterministic (string-hash order varies per
+        # process): two runs of the same bundle differed by tens of pp.
+        cands = sorted(
+            (s for s in tradable_set
+             if bool(row_t.get(s, False)) and row_rs.get(s, 0) >= RS_MIN),
+            key=lambda s: (-row_rs.get(s, 0), s),
+        )
         wl = {}
         for s in cands:
             prices = close[s].iloc[max(0, idx - 251): idx + 1].dropna()
@@ -411,7 +422,7 @@ def main() -> int:
             vpiv = (r.get("pivot_info") or {}).get("pivot")
             if r.get("vcp_detected") and vpiv and r.get("recent_base_low"):
                 piv, base_low, source = float(vpiv), float(r["recent_base_low"]), "vcp"
-            else:
+            elif not args.vcp_only:
                 # Tight continuation base (published Minervini criteria, no
                 # fitting): >=4-week base whose high is >=10 sessions old,
                 # depth <=25%, final 10 closes in a <=8% range. He buys these
@@ -468,6 +479,7 @@ def main() -> int:
         "as_of": as_of,
         "window": {"start": str(sim_dates[0].date()), "end": str(sim_dates[-1].date())},
         "universe_size": len(tradable),
+        "vcp_only": args.vcp_only,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
