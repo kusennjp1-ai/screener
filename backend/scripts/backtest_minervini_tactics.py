@@ -309,32 +309,44 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 pending_sells.add(sym)
 
         # --- entry signals at the close (fill tomorrow) -----------------------
+        # Armed buy-stops must be judged against YESTERDAY's plans: an armed
+        # name has close <= pivot on its scan day by definition, so checking
+        # the cross against the same day's freshly rebuilt watchlist could
+        # never fire (the daily overwrite silently killed the armed path —
+        # every historical entry came from the 'early' lane, 1-2 days late
+        # and up to 5% above the pivot).
+        prev_watch = watch
         wk = watch_by_week.get(d)
         if wk is not None:
             watch = wk
         if exposure_pct > 0 or not market_gate:
-            for sym, plan in watch.items():
-                if sym in positions or sym in pending_buys:
+            def _risk_ok(sym):
+                # product funnel: Buy Risk green/yellow on the signal day
+                # (the breakout barrel's risk_ok half in compute_buy_signal)
+                return signal_ok is None or bool(signal_ok.at[d, sym])
+
+            for sym, plan in prev_watch.items():  # armed stops set before today
+                if plan["mode"] != "armed" or sym in positions or sym in pending_buys:
                     continue
-                # product funnel: Buy Risk must be green/yellow on the signal
-                # day (the breakout barrel's risk_ok half in compute_buy_signal)
-                if signal_ok is not None and not bool(signal_ok.at[d, sym]):
+                if not _risk_ok(sym):
                     continue
                 c = close.at[d, sym]
-                if c != c:
+                hi = high.at[d, sym]
+                vol50 = ind["vol50"].at[d, sym]
+                volr = volume.at[d, sym] / vol50 if vol50 and vol50 == vol50 else 0
+                if (c == c and hi == hi and hi >= plan["pivot"] and c > plan["pivot"]
+                        and c <= plan["pivot"] * CHASE_CAP and volr >= BREAKOUT_VOL_RATIO):
+                    pending_buys[sym] = plan
+            for sym, plan in watch.items():  # early post-breakout, today's scan
+                if plan["mode"] != "early" or sym in positions or sym in pending_buys:
                     continue
-                if plan["mode"] == "early":
-                    # breakout already volume-confirmed at scan; buy next open
-                    # while the chase cap still holds
-                    if c <= plan["pivot"] * CHASE_CAP:
-                        pending_buys[sym] = plan
-                else:  # armed buy-stop at the pivot
-                    hi = high.at[d, sym]
-                    vol50 = ind["vol50"].at[d, sym]
-                    volr = volume.at[d, sym] / vol50 if vol50 and vol50 == vol50 else 0
-                    if (hi == hi and hi >= plan["pivot"] and c > plan["pivot"]
-                            and c <= plan["pivot"] * CHASE_CAP and volr >= BREAKOUT_VOL_RATIO):
-                        pending_buys[sym] = plan
+                if not _risk_ok(sym):
+                    continue
+                c = close.at[d, sym]
+                # breakout already volume-confirmed at scan; buy next open
+                # while the chase cap still holds
+                if c == c and c <= plan["pivot"] * CHASE_CAP:
+                    pending_buys[sym] = plan
 
         equity = cash + sum(
             p.shares * (close.at[d, p.symbol] if close.at[d, p.symbol] == close.at[d, p.symbol] else p.entry)
