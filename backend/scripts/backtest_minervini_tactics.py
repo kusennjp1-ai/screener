@@ -175,6 +175,8 @@ class Position:
     stop0: float
     stop: float
     entry_date: object
+    mode: str = ""
+    source: str = ""
 
 
 @dataclass
@@ -205,7 +207,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 cash += p.shares * px
                 v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
                                  "entry_date": str(p.entry_date), "exit_date": str(d),
-                                 "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry), "reason": "signal"})
+                                 "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry),
+                                 "mode": p.mode, "source": p.source, "reason": "signal"})
             pending_sells.discard(sym)
 
         # --- execute queued buys at the open ---------------------------------
@@ -234,7 +237,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 continue
             cash -= shares * entry
             invested += shares * entry
-            positions[sym] = Position(sym, shares, entry, stop0, stop0, d)
+            positions[sym] = Position(sym, shares, entry, stop0, stop0, d,
+                                      plan.get("mode", ""), plan.get("source", ""))
 
         # --- intraday protective stops ---------------------------------------
         for sym in list(positions):
@@ -246,7 +250,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 cash += p.shares * px
                 v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
                                  "entry_date": str(p.entry_date), "exit_date": str(d),
-                                 "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry), "reason": "stop"})
+                                 "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry),
+                                 "mode": p.mode, "source": p.source, "reason": "stop"})
                 positions.pop(sym)
 
         # --- close-based management: ladder + 50DMA breakdown ----------------
@@ -301,7 +306,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
         cash += p.shares * px
         v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
                          "entry_date": str(p.entry_date), "exit_date": str(d),
-                         "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry), "reason": "end"})
+                         "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry),
+                         "mode": p.mode, "source": p.source, "reason": "end"})
     v.equity_curve[-1]["equity"] = cash
     return v
 
