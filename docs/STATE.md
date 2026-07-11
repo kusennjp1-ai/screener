@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C58 完了（バックテスト非決定性の発見と修正・armedレーン復活・製品Buy Signalチェックリストの忠実再現）／ **次: C59候補=VCP検出器recall向上（バックテスト層別でVCP由来PF6.10 vs タイトベース1.12——最大のリターンレバー）**
+- **サイクル**: C59 完了（VCP時系列反転バグ修正→legacyファネル+89.0%でSPY超え・recall調査は見送り）／ **次: C60候補=10年バンドルで別窓（2016-2021）追試（最優先の懐疑テスト）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #54までMERGED。**未マージコミット5件+docs**: 358df1d/6028bd8/4628e31/07cf293/0f7edb7＝バックテスト修正群。**GitHub MCP切断中→PR作成・マージ不可、再認証待ち**。pushは可能・実施済み）
 - **実行中/待機中の外部ジョブ**: なし
@@ -17,7 +17,7 @@
 | 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / **66.5** %（MSCORE 95.5・判別+42.8pp） | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
-| 戦術バックテスト（参考・凍結外・**決定的**） | 5年: 製品再現+49.1%/−23.7%/PF1.60、legacy+36.8%/−15.8%、SPY+83.6%/−24.5% | ローカル or CI `backtest-tactics.yml` |
+| 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%/−13.9%/PF2.02/Sharpe0.87（SPY+83.6%/−24.5%/0.80超え）、製品再現+45.4%/−20.0% | ローカル or CI `backtest-tactics.yml` |
 
 **注意**: C55までの凍結metricは不変（バックテスト修正はscripts/のみ、本体サービス無変更）。
 **C56の+53.9%は非決定性バグの偶然の1試行＝無効**（BACKTEST_C54.md参照）。
