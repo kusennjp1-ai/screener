@@ -518,7 +518,26 @@ def main() -> int:
             #   armed  — price still at/below the pivot: buy-stop AT the pivot.
             #   early  — 0-5% above the pivot with a volume-confirmed breakout
             #            in the last 5 sessions: buy the early post-breakout.
-            if c0 <= piv:
+            if args.funnel == "product" and c0 > piv:
+                # early eligibility per signals._breakout_now: a FRESH pivot
+                # cross (prior close still under) on >=1.5x volume within the
+                # active window (5 bars). Without this the 30-bar-high fallback
+                # marks any name drifting near its highs as buyable and the
+                # funnel triples with extended, base-less entries.
+                fired = False
+                for j in range(max(idx - 4, 31), idx + 1):
+                    pj = piv if source == "vcp" else float(high[s].iloc[j - 30: j].max())
+                    cj = close[s].iloc[j]
+                    cjm1 = close[s].iloc[j - 1]
+                    vj = volume[s].iloc[j]
+                    v50j = ind["vol50"][s].iloc[j]
+                    if (cj == cj and cjm1 == cjm1 and vj == vj and v50j and v50j == v50j
+                            and cj > pj and cjm1 <= pj and vj / v50j >= BREAKOUT_VOL_RATIO):
+                        fired = True
+                        break
+                if fired and c0 <= piv * CHASE_CAP:
+                    wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source}
+            elif c0 <= piv:
                 wl[s] = {"pivot": piv, "base_low": base_low, "mode": "armed", "source": source}
             elif c0 <= piv * CHASE_CAP and recent_vol_surge:
                 wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source}
