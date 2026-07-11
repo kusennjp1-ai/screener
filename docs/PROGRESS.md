@@ -299,3 +299,15 @@
 - フロント: NVM で Node 22 (`export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"`)
 - 908バンドル: CI `backtest.yml` を `build_bundle=true` でdispatch → `backend/calibration/trade_idea_windows/` にコミットされる（完了後 `git pull`）
 - 既知のpre-existing failure: backend 37件（main由来）、golden配下 `test_mcp_market_copilot.py` はcelery未導入でcollection error
+
+### C56 — 2026-07-11 6年バックテスト——2022ベア込みで戦術の本命検証（コミット 16a66cb, 969ea3e, 878e3f0, ec33953／PR #53）
+- **基盤**: 新workflow `backtest-tactics.yml`＝CI（Yahoo egress唯一の場所）で6年バンドル構築（`us_universe_full.txt` 2,074銘柄・≥$2B・ETF除外＋SPY）→`daily-price-data`リリースへ保存（`backtest-price-us-6y.json.gz`、オフライン再実行用）→戦術バックテスト実行→ジョブサマリへ레포트。新スクリプト`build_backtest_price_bundle.py`（BulkDataFetcher・gzipバンドルv1）。
+- **CIデバッグ3連**（教訓）: ①バンドルスクリプトは`backend/scripts/`＝`PYTHONPATH=. python scripts/...`で起動（app.scripts ではない）②settings検証で`DATABASE_URL`必須③`prepare_runtime`は起動時に実DB接続する→postgres:16-alpineサービスコンテナが必要。**新workflowはmainに載るまでdispatch API不可**（PR #53を先にマージしてから任意refをdispatch）。run 29131626082が24分で成功。
+- **結果（5年: 2021-07〜2026-07、パネル1,967銘柄×1,506日）**: フル戦術**+53.9%**（CAGR 9.1%・maxDD **−13.9%**・PF **1.67**・135取引・投資比率59%）vs ゲート無し+33.9%（maxDD −25.2%）vs SPY B&H +83.6%（maxDD −24.5%）vs SPY×レジーム+40.4%（maxDD −6.9%・Sharpe 1.03）。
+- **検証された主張**: ①**2022ベア防御=+2.7% vs SPY −18.2%（+20.9pp）**——「大きく負けない」を5年窓で実証 ②maxDDほぼ半減 ③損小利大の型維持（PF1.67・勝率34.8%で利益超過）④銘柄選択アルファ+13.5pp（vs SPY×レジーム）。**誠実な敗北**: 総リターンはSPY B&Hに−29.7pp劣後——主犯は2025年（戦術−4.2% vs SPY +17.7%）と平均投資比率59%の機会費用。
+- **重要な切り分け（年次表から）**: 2025年はゲート無しも−4.4%・SPY×レジームは+11.7%→**2025年の敗因はレジームではなく銘柄選択/執行**。次ループ=2025年トレードの層別診断（early vs armed・保有期間・月別）。詳細: `docs/BACKTEST_C54.md`（C56節）。
+
+### C57 — 2026-07-11 高速価格配信の実測→チャート関連銘柄のみ更新で~52分短縮（コミット a7de637）
+- **実測（初回本番16:06 ETラン）**: クローズ後2時間40分で配信——内訳=GitHubスケジューラ遅延69分（制御不能・観測30-89分）＋パイプライン84分。パイプラインの支配項は**全9,872銘柄の価格更新52分**だが、静的サイトのチャート/バンド/シグナルに実際に使われるのは発行済みfeature runの上位銘柄のみ。
+- **変更**: `--prices-only`パスに`_chart_relevant_symbols(market, limit=1200)`＝FeatureRunPointer→StockFeatureDailyのcomposite_score上位1,200銘柄だけを`_refresh_static_daily_prices(symbols=...)`で更新（refresh service に`symbols`オーバーライド追加）。フルビルド経路は全銘柄更新のまま不変。パイプライン予測84分→~30-40分。
+- **検証**: `test_prices_only_export.py` 4件（subset配線・buffer境界・CLIガード）green。**次の平日16:06ランで2回目実測**（スケジューラ遅延は残るため、根本対策候補=cron多重登録 or 外部トリガーは次候補に記録）。

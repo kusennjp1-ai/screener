@@ -88,16 +88,32 @@ class StaticDailyPriceRefreshService:
             sleep = time.sleep
         self._sleep = sleep
 
-    def refresh(self, *, as_of_date: date, market: str | None = None) -> dict[str, Any]:
+    def refresh(
+        self,
+        *,
+        as_of_date: date,
+        market: str | None = None,
+        symbols: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Refresh price rows; ``symbols`` narrows the candidate set.
+
+        The fast post-close publish passes the chart-relevant subset (top of
+        the published feature run + key markets) — fresh closes only surface
+        through chart payloads there, and refreshing the full ~10k universe
+        cost 52 of its 84 pipeline minutes (C57 measurement).
+        """
         with self._session_factory() as db:
-            query = (
-                db.query(StockUniverse.symbol)
-                .filter(StockUniverse.is_active.is_(True))
-                .order_by(StockUniverse.market_cap.desc().nullslast(), StockUniverse.symbol.asc())
-            )
-            if market is not None:
-                query = query.filter(StockUniverse.market == market)
-            active_symbols = [symbol for symbol, in query.all()]
+            if symbols is not None:
+                active_symbols = list(symbols)
+            else:
+                query = (
+                    db.query(StockUniverse.symbol)
+                    .filter(StockUniverse.is_active.is_(True))
+                    .order_by(StockUniverse.market_cap.desc().nullslast(), StockUniverse.symbol.asc())
+                )
+                if market is not None:
+                    query = query.filter(StockUniverse.market == market)
+                active_symbols = [symbol for symbol, in query.all()]
             key_market_symbols = _key_market_price_symbols(market)
             refresh_candidates = _dedupe_symbols(active_symbols + key_market_symbols)
             supported_symbols, skipped_symbols = split_supported_price_symbols(refresh_candidates)

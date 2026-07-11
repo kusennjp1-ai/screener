@@ -5,10 +5,10 @@
 
 ## 現在
 
-- **サイクル**: C55 完了（C53=弱点監査WEAKNESSES.md、C54=戦術バックテスト初回実測 docs/BACKTEST_C54.md、C55=レジーム過剰弱気修正でGATE判別+42.8pp）／ **次: C56=CIで5年超バンドル→2022ベア込み再実行（戦術検証の本命）**
-- **モデル**: Fable 5復帰（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48はMERGED——**新規コミットはmainマージバック後の積み直し**。C50が未マージ。mainへの直接pushは引き続き禁止）
-- **実行中/待機中の外部ジョブ**: なし
+- **サイクル**: C57 完了（C56=**6年バックテスト成功**——2022ベア防御+20.9pp実証・PF1.67・ただし総リターンはSPY B&Hに劣後、C57=高速価格配信をチャート関連1,200銘柄に絞り~52分短縮）／ **次: C58=2025年アンダーパフォーマンス診断（戦術−4.2% vs SPY+17.7%、ゲート無しも−4.4%→敗因は銘柄選択/執行側）**
+- **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
+- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #48-#53 全てMERGED。ブランチに未マージ4コミット: a7de637 C57＋workflow修正3件＋docs——**PR作成→CI green→squash mergeが確立フロー**。mainへの直接pushは禁止）
+- **実行中/待機中の外部ジョブ**: なし（backtest-tactics run 29131626082 成功済・24分）
 
 ## 凍結metricの現在値（低下＝即revert）
 
@@ -18,41 +18,35 @@
 | 判別（entry−control） | SETUP +52.0pp / FIRE±5 +24.4pp / TT +30.5pp | 同上・CONTROL行 |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
-| レッドラインunit | 200 passed（唯一のfail=`test_mcp_market_copilot` はpre-existing・除外対象、クリーンベース再現確認済） | scanners+services+golden |
-| Code33 as-ofキャッチ率 | 7.1% vs control 3.2%（+4.0pp, 126ペア） | CI `code33-check.yml` as_of_idea_dates=true |
+| 戦術バックテスト（参考・凍結外） | 5年: フル+53.9%/maxDD−13.9%/PF1.67 vs ゲート無し+33.9%/−25.2% vs SPY+83.6%/−24.5% | CI `backtest-tactics.yml`（6yバンドルはリリースに保存済み） |
 
-## C43で入ったもの（要点）
+## 6年バックテストの読み方（C56・docs/BACKTEST_C54.md詳細）
 
-- `backend/app/scanners/criteria/fundamental_bonus.py` — 純関数、上限+10: Code33 +4 / EPS成長qq ≥40 +2.5・≥25 +1.5 / 売上qq ≥25 +1.5・≥10 +0.5 / ROE ≥17% +1（単位正規化: finviz=%、旧yfinance=分数） / EPS Rating ≥80 +1。欠損＝中立0。
-- Minervini `needs_fundamentals=True` + `needs_quarterly_growth=True`。cache-onlyスキャンは`batch_only_fundamentals`（run_bulk_scan.py:243）でget_many読みのみ・ライブフォールバック無し。
-- `passes_template`/Stage-2/setup検出は不変。テンプレ不通過はスコア85でもBuyにならない（E2E確認: FTNT 76.83→85.83 +9.0でrating Watchのまま）。
-- ボーナス内訳は `details.fundamental_bonus` / `fundamental_bonus_detail` としてAPI・UIスナップショットまで配線済み（C44）。サイドバーSCORESに「Fnd Bonus +N / 10」＋成分チップ表示。
-- **UIスナップショットの罠（C44で発見）**: スキャン結果ページは`/v1/scans/bootstrap`（発行済スナップショット）から読む。スキーマ追加後は`publish_scan_bootstrap(scan_id)`で再発行しないと既存スキャンのUIに出ない（新規スキャンは自動）。
-- 908ハーネスは`StockData(fundamentals=None)`構築なのでボーナス恒等0＝凍結metric構造的に不変（テストでピン留め: `test_fundamental_bonus.py::test_scanner_score_unchanged_without_fundamentals`）。
+- **証明**: 2022ベアで+2.7% vs SPY−18.2%（+20.9pp）・maxDD半減・PF1.67・選択アルファ+13.5pp（vs SPY×レジーム）。
+- **誠実な敗北**: 総リターン−29.7pp劣後。主犯=2025年（−4.2 vs +17.7）と投資比率59%。
+- **切り分け済み**: 2025年はゲート無しも−4.4%・SPY×レジーム+11.7% → **レジームは無罪、銘柄選択/執行の問題**。
+- 全トレード記録: CI artifact 8242474227（report.full.json）。6yバンドル: `daily-price-data`リリースの`backtest-price-us-6y.json.gz`（81MB・2,068銘柄・as_of 2026-07-10）→ sandboxでオフライン再実行可能（`PYTHONPATH=. python scripts/backtest_minervini_tactics.py --bundle ...`）。
 
 ## 次アクション（優先順）
 
-1. **C50候補: スマホ（静的PWA）とPC版のUI統一（ユーザー要望①）** — 乖離の理由: GitHub Pagesはバックエンド不能→静的JSON専用の別ページ群（`frontend/src/static/`）として構築された歴史的経緯。統一パス: (a)短期=StaticScanPage/HomeをライブScanPageの見た目・列・フィルタに寄せる（チャートモーダルは既に同一コンポーネント共有: BuyChecklist/StockMetricsSidebar/CandlestickChart）(b)中期=ライブページ本体に「静的データアダプタ」を注入して1コードベース化。着手時は静的バンドル(scratchpadの/static-fastに生成済み)をviteでローカル表示→実写比較から。
-2. **高速価格配信の実測確認** — PR #48マージ後、平日16:06 ETの初回runで所要時間を実測（目標~30分、`prices_only`のdispatch入力でも手動検証可）。PWAホームに「価格更新」時刻が出ることも実ビルドで確認。
+1. **C58: 2025年診断** — 6yバンドルをリリースからDL→sandboxで再実行し2025年トレードを層別（early vs armed・保有期間・エントリー月・セクター）。どの型が負けたか特定してから対策（仮説例: 2025はブレイクアウト失敗年→armed比率/出来高確認の効き具合を検証）。**レジーム較正は触らない**（無罪が実証済み）。
+2. **高速配信の2回目実測** — C57マージ後の平日16:06 ETラン（目標: パイプライン~30-40分）。スケジューラ遅延69分は残存課題→cron多重登録（16:06/16:20の2本）が次候補。
 3. **単銘柄タブのRPR authentic percentile化** — feature storeからのuniverse-performance供給を設計してから（中型）。
-4. **静的PWA実ビルドでのFnd Bonus/カード確認** — PR #48マージ→static-site.ymlラン後。
-5. **調査済み・保留（再調査不要）**: Alpha Vantage未登録adapter=低ROI／部分ペイロード上書き=理論のみdefensive／TPRストリップ=凍結／traction連動exposure=ポジション管理側。既存workflowテスト3失敗（test_static_workflow_markets等）はpre-existing（main系多市場定義を期待）。
-**注意（C45/C47の教訓・2度実証）**: SPECの乖離欄・バックログは古くなる——**サイクル開始時はSPECを信じる前にコードをgrepする**。
-4. TPRフルストリップ較正は**凍結**（複数時点のMM360スクショが増えるまで。PROGRESS C19/C23参照）。
-
-**設定メモ**: sandboxは`defusedxml`未インストールになりがち→ファンダ系フェッチ前に`pip install defusedxml`。ファンダ列追加後は`alembic upgrade head`。Code33本番有効化は`.env`に`FUNDAMENTALS_CODE33_ENABLED=true`（要data.sec.gov）。通知は`POSITION_ALERT_WEBHOOK_URL`。
+4. **スマホUI統一の続き** — 残る乖離はシェル/ナビとホーム画面の情報密度（スキャン結果・チャート・レジームバナーは共有済み）。
+5. **調査済み・保留**: Alpha Vantage未登録adapter=低ROI／TPRストリップ=凍結／traction連動exposure=ポジション管理側／既存workflowテスト3失敗=pre-existing。
+**注意（C45/C47の教訓）**: サイクル開始時はSPECを信じる前にコードをgrepする。
 
 ## 絶対制約（ユーザー指示・恒久）
 
-- **fableが従量課金になったら停止**（その後はOpus 4.8で継続 — skillsに知識蓄積済み）。
+- **fableが従量課金になったら停止**（その後はOpus 4.8で継続）。
 - **egressプロキシ回避は絶対禁止**（市場データベンダーはsandboxで403のまま扱う）。
-- golden/凍結metricの低下＝即revert。数値フィッティングは理論的根拠なしには行わない。
+- golden/凍結metricの低下＝即revert。数値フィッティングは理論的根拠なしには行わない。metric追加・変更で見かけの改善を作らない。
 - 1論点=1コミット、Conventional Commits、サイクル毎にPROGRESS追記＋本ファイル上書き。
 
 ## 環境（このsandboxの真実）
 
-- Postgres16/Redisはインストール済み（このセッションで起動済み）。DB接続は `DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。フルスタック起動手順は `sandbox-e2e` skill。
-- Node 22 は `/opt/node22/bin`（**このsandboxにNVMは無い**。NVMはユーザーPC側の話）。
-- Yahoo/EDGAR egressは**GitHub Actionsのみ**（CIディスパッチのトリック: `ground-truth-908` skill）。
-- CI成果物のblobストアはプロキシで403 → **ジョブログ（get_job_logs）から読む**。GitHub MCPは切断中（要再認証）＝CI dispatch/ログ読みは再認証まで不可。
-- スマホ用スクリーナー（静的PWA, GitHub Pages）: **https://kusennjp1-ai.github.io/screener/**（static-site.yml がmainから毎日デプロイ。URLは2026-07-09のdeployジョブログで実確認済み）。
+- Postgres16/Redisはインストール済み。DB接続は `DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。フルスタック起動手順は `sandbox-e2e` skill。
+- Node 22 は `/opt/node22/bin`（**このsandboxにNVMは無い**）。
+- Yahoo/EDGAR egressは**GitHub Actionsのみ**。**新workflowはmainに載るまでdispatch API不可**（C56教訓）。GitHubリリース資産はプロキシ経由でDL可（daily-price-data）。
+- CI成果物のblobストアはプロキシで403 → **ジョブログ（get_job_logs）から読む**。
+- スマホ用スクリーナー（静的PWA, GitHub Pages）: **https://kusennjp1-ai.github.io/screener/**
