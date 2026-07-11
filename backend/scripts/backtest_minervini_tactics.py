@@ -58,6 +58,7 @@ NEAR_HIGH_MAX_PCT = 25.0       # within 25% of the 52w high (template cond.)
 BREAKOUT_VOL_RATIO = 1.5
 CHASE_CAP = 1.05               # never pay >5% above the pivot
 MAX_POSITIONS = 10
+PROGRESSIVE_RISK = False  # set by --progressive-risk: 2x risk in confirmed uptrend
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -270,7 +271,14 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             stop0 = max(plan["base_low"], entry * (1 - MAX_LOSS_PCT))
             if stop0 >= entry:
                 continue
-            risk_dollars = equity_mark * (ACCOUNT_RISK_PCT / 100.0)
+            # Progressive risk (Minervini): commit harder only when the market
+            # has confirmed — 2x account risk in a confirmed uptrend, base
+            # risk everywhere else. Gate-off variants keep the base risk so
+            # the comparison isolates the regime-linked sizing.
+            risk_pct = ACCOUNT_RISK_PCT
+            if PROGRESSIVE_RISK and market_gate and regimes[d]["regime"] == "confirmed_uptrend":
+                risk_pct = ACCOUNT_RISK_PCT * 2
+            risk_dollars = equity_mark * (risk_pct / 100.0)
             shares = risk_dollars / (entry - stop0)
             shares = min(shares, (MAX_POSITION_PCT * equity_mark) / entry, cash / entry)
             headroom = (exposure_pct / 100.0) * equity_mark - invested
@@ -410,6 +418,9 @@ def main() -> int:
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--progressive-risk", action="store_true",
+                    help="Minervini progressive risk: 2x account risk per "
+                         "trade while the regime is confirmed_uptrend")
     ap.add_argument("--funnel", choices=("legacy", "product"), default="legacy",
                     help="'product' replays the shipped Buy Signal checklist: "
                          "TPR band green + pressure band green as candidate "
@@ -417,6 +428,8 @@ def main() -> int:
                          "(signals._breakout_now fallback), and Buy Risk "
                          "green/yellow required on the signal day")
     args = ap.parse_args()
+    global PROGRESSIVE_RISK
+    PROGRESSIVE_RISK = args.progressive_risk
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
