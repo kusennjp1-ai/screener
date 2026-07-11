@@ -493,7 +493,11 @@ def main() -> int:
 
             piv = base_low = None
             source = None
-            r = det.detect_vcp(prices.reset_index(drop=True), vols.reset_index(drop=True))
+            # detect_vcp expects MOST-RECENT-FIRST series (see vcp_footprint.py,
+            # which reverses with iloc[::-1] before calling). Passing
+            # chronological order here fed the detector a time-mirrored chart.
+            r = det.detect_vcp(prices.iloc[::-1].reset_index(drop=True),
+                               vols.iloc[::-1].reset_index(drop=True))
             vpiv = (r.get("pivot_info") or {}).get("pivot")
             if r.get("vcp_detected") and vpiv and r.get("recent_base_low"):
                 piv, base_low, source = float(vpiv), float(r["recent_base_low"]), "vcp"
