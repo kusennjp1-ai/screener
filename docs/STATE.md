@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C59 完了（VCP時系列反転バグ修正→legacyファネル+89.0%でSPY超え・recall調査は見送り）／ **次: C60候補=10年バンドルで別窓（2016-2021）追試（最優先の懐疑テスト）**
+- **サイクル**: C60 完了（懐疑テスト: **+89%は一般化せず**——9年窓CAGR 6.7% vs SPY 15.1%。ベア防御は両窓で実証、強気年の過剰防御が構造欠陥と確定）／ **次: C61=強気相場のエクスポージャー回復速度（progressive risk・分配日失効のIBD照合、GATE凍結metric直結）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #54までMERGED。**未マージコミット5件+docs**: 358df1d/6028bd8/4628e31/07cf293/0f7edb7＝バックテスト修正群。**GitHub MCP切断中→PR作成・マージ不可、再認証待ち**。pushは可能・実施済み）
 - **実行中/待機中の外部ジョブ**: なし
@@ -17,7 +17,7 @@
 | 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / **66.5** %（MSCORE 95.5・判別+42.8pp） | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
-| 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%/−13.9%/PF2.02/Sharpe0.87（SPY+83.6%/−24.5%/0.80超え）、製品再現+45.4%/−20.0% | ローカル or CI `backtest-tactics.yml` |
+| 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%（SPY+83.6%超え）だが**9年窓では+78.2% vs SPY+251.8%＝一般化せず**（C60）。ベア防御のみ両窓で実証 | ローカル or CI `backtest-tactics.yml`（6y/10yバンドルはリリースに保存） |
 
 **注意**: C55までの凍結metricは不変（バックテスト修正はscripts/のみ、本体サービス無変更）。
 **C56の+53.9%は非決定性バグの偶然の1試行＝無効**（BACKTEST_C54.md参照）。
@@ -33,8 +33,8 @@
 
 ## 次アクション（優先順）
 
-1. **C60: 別窓追試** — CIで10年バンドル構築（backtest-tactics.yml period=10y）→2016-2021窓でlegacyファネルを検証（+89.0%の懐疑テスト）。recall本格改修はベース分割設計から（オフライン計測: scratchpad/vcp_recall_pareto.py・36.1%）。
-2. **PR作成・マージ** — GitHub MCP再認証後すぐ（コミット済み5件+docs）。CI green→squash merge→mainマージバックの確立フロー。
+1. **C61: 強気相場のエクスポージャー回復** — ①progressive risk（confirmed uptrendで口座リスク1.25→2.5%、バックテスト側で先に検証）②分配日失効/リセットのIBD定義照合（本体market_regime.py変更＝GATE凍結metric/908ハーネス必須）。**6y/10y両窓で一貫改善のみ採用**。
+2. **PR作成・マージ** — PR #55まで完了。C60 docsコミットが未PR（GitHub MCP再失効中→再認証待ち）。
 3. **高速配信の2回目実測** — C57マージ済み。平日16:06 ETランでパイプライン~30-40分を確認。
 4. **単銘柄タブRPR percentile化／スマホUI統一続き**（中型・保留中）。
 **注意（C45/C47の教訓）**: サイクル開始時はSPECを信じる前にコードをgrepする。
