@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C65 完了・**PR #57マージ済み**（progressive riskが本番risk planに搭載——次のstatic-site.ymlランでPWAのサイズ提案にも自動反映）／ **次: C66=①SellPlanCard/PWAでaccount_risk_pct表示（UI変更→sandbox-e2eで実ブラウザ検証必須）②高速配信2回目実測（月曜16:06 ET後、C57の~30-40分目標）**
+- **サイクル**: C66 完了（correction=買わない仮説を検証→6y改善/10y悪化で**不採用**。出荷済み20% correction露出は長期で有用と確定。**露出ラダーは緩和・厳格化とも全棄却＝よく較正済み**）／ **次: C67=①SellPlanCard/PWAでaccount_risk_pct表示（UI変更→sandbox-e2e必須）②高速配信2回目実測（平日16:06 ET後）／保留: NotionのMinervini実弾リスト取り込み（ユーザーの複製待ち）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
