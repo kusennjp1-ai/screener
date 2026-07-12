@@ -70,6 +70,11 @@ PRESSURE_RS_MIN = 90
 # (2022-style), the cap stays. 60% = the conventional healthy-majority line.
 BREADTH_CONFIRM = False
 BREADTH_MIN = 0.60
+# Minervini: in a market correction you go to CASH and wait for the FTD; the
+# pre-FTD 20% correction exposure is a residual the shipped engine allows.
+# This flag makes a correction a hard no-buy (like a downtrend) — buying
+# resumes only when the FTD upgrades the regime to confirmed_uptrend.
+NO_CORRECTION_BUYS = False
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -251,6 +256,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
 
     for i, d in enumerate(sim_dates):
         exposure_pct = regimes[d]["exposure"] if market_gate else 100
+        if NO_CORRECTION_BUYS and market_gate and regimes[d]["regime"] == "correction":
+            exposure_pct = 0  # cash in a correction; wait for the FTD
         under_pressure = market_gate and regimes[d]["regime"] == "uptrend_under_pressure"
         if SELECTIVE_PRESSURE and under_pressure:
             exposure_pct = 100  # leaders-only buying below replaces the cap
@@ -439,6 +446,10 @@ def main() -> int:
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--no-correction-buys", action="store_true",
+                    help="treat a market correction as a hard no-buy (0% "
+                         "exposure, like a downtrend) instead of the residual "
+                         "20% cap — wait for the FTD before buying")
     ap.add_argument("--breadth-confirm", action="store_true",
                     help="under pressure: keep full exposure while >=60% of "
                          "the tradable universe holds its 200DMA")
@@ -455,10 +466,11 @@ def main() -> int:
                          "(signals._breakout_now fallback), and Buy Risk "
                          "green/yellow required on the signal day")
     args = ap.parse_args()
-    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM
+    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM, NO_CORRECTION_BUYS
     PROGRESSIVE_RISK = args.progressive_risk
     SELECTIVE_PRESSURE = args.selective_pressure
     BREADTH_CONFIRM = args.breadth_confirm
+    NO_CORRECTION_BUYS = args.no_correction_buys
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -637,6 +649,7 @@ def main() -> int:
         "universe_size": len(tradable),
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
+        "no_correction_buys": args.no_correction_buys,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
