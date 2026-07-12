@@ -63,6 +63,13 @@ PROGRESSIVE_RISK = False  # set by --progressive-risk: 2x risk in confirmed uptr
 # (RS>=90) may still be bought at full exposure while the trend is intact.
 SELECTIVE_PRESSURE = False
 PRESSURE_RS_MIN = 90
+# Breadth confirmation (O'Neil/Minervini market internals): "under pressure"
+# driven by noisy index volume is NOT the same as genuine deterioration. When
+# a clear majority of the tradable universe still holds its 200DMA, the bull
+# is broadly intact and the pressure cap is lifted; when breadth is broken
+# (2022-style), the cap stays. 60% = the conventional healthy-majority line.
+BREADTH_CONFIRM = False
+BREADTH_MIN = 0.60
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -247,6 +254,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
         under_pressure = market_gate and regimes[d]["regime"] == "uptrend_under_pressure"
         if SELECTIVE_PRESSURE and under_pressure:
             exposure_pct = 100  # leaders-only buying below replaces the cap
+        if BREADTH_CONFIRM and under_pressure and regimes[d].get("breadth", 0.0) >= BREADTH_MIN:
+            exposure_pct = 100  # broad participation: index-volume noise, not deterioration
 
         # --- execute queued exits at the open --------------------------------
         # sorted so float summation order (cash +=) is bitwise-reproducible
@@ -430,6 +439,9 @@ def main() -> int:
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--breadth-confirm", action="store_true",
+                    help="under pressure: keep full exposure while >=60% of "
+                         "the tradable universe holds its 200DMA")
     ap.add_argument("--selective-pressure", action="store_true",
                     help="under pressure: only RS>=90 leaders may be bought, "
                          "but at full exposure (tighten selection, not buying)")
@@ -443,9 +455,10 @@ def main() -> int:
                          "(signals._breakout_now fallback), and Buy Risk "
                          "green/yellow required on the signal day")
     args = ap.parse_args()
-    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE
+    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM
     PROGRESSIVE_RISK = args.progressive_risk
     SELECTIVE_PRESSURE = args.selective_pressure
+    BREADTH_CONFIRM = args.breadth_confirm
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -470,6 +483,13 @@ def main() -> int:
         fields["open"]["SPY"].rename("open")).join(fields["high"]["SPY"].rename("high")).join(
         fields["low"]["SPY"].rename("low")).join(fields["volume"]["SPY"].rename("volume"))
     regimes = regime_by_day(spy.dropna(), sim_dates)
+    # Market breadth: fraction of the tradable universe holding its 200DMA
+    # (valid-ma200 names only). Walk-forward by construction.
+    above200 = close[tradable].gt(ind["ma200"][tradable])
+    valid200 = ind["ma200"][tradable].notna()
+    breadth_series = above200.sum(axis=1) / valid200.sum(axis=1).clip(lower=1)
+    for d in sim_dates:
+        regimes[d]["breadth"] = float(breadth_series.loc[d])
     print("regime days computed", flush=True)
 
     # DAILY watchlists using the REAL VCP detector on template+RS leaders.

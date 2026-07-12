@@ -91,3 +91,34 @@ def test_r_multiple_targets_empty_when_risk_nonpositive():
     assert r_multiple_targets(100.0, 100.0) == []  # stop at entry -> no targets
     assert r_multiple_targets(100.0, 110.0) == []  # stop above entry
     assert r_multiple_targets(None, 90.0) == []
+
+
+class TestProgressiveRisk:
+    """C61-validated progressive risk: 2x account heat only in confirmed uptrends."""
+
+    def test_regime_scaling(self):
+        from app.services.markets360.risk import (
+            ACCOUNT_RISK_PCT,
+            ACCOUNT_RISK_PCT_CONFIRMED,
+            account_risk_pct_for_regime,
+        )
+        assert account_risk_pct_for_regime("confirmed_uptrend") == ACCOUNT_RISK_PCT_CONFIRMED
+        for other in ("uptrend_under_pressure", "correction", "downtrend", None):
+            assert account_risk_pct_for_regime(other) == ACCOUNT_RISK_PCT
+
+    def test_plan_carries_risk_pct_and_size_scales(self):
+        import pandas as pd
+        from app.services.markets360.risk import compute_risk_plan
+
+        idx = pd.date_range("2024-01-01", periods=60, freq="B")
+        df = pd.DataFrame(
+            {"Close": [100.0] * 60, "Low": [97.0] * 60, "High": [101.0] * 60},
+            index=idx,
+        )
+        base = compute_risk_plan(df, account_risk_pct=1.25)
+        double = compute_risk_plan(df, account_risk_pct=2.5)
+        assert base["account_risk_pct"] == 1.25
+        assert double["account_risk_pct"] == 2.5
+        # same stop distance -> suggested size doubles (within cap; both values
+        # are independently rounded to 0.1, so allow that much slack)
+        assert abs(double["position_size_pct"] - min(100.0, base["position_size_pct"] * 2)) <= 0.2
