@@ -22,7 +22,7 @@ import pandas as pd
 from app.services.minervini_bands import calculate_bands, to_weekly, DAILY, WEEKLY
 from app.services.markets360 import ratings
 from app.services.markets360.vcp_footprint import compute_vcp_footprint
-from app.services.markets360.risk import compute_risk_plan
+from app.services.markets360.risk import account_risk_pct_for_regime, compute_risk_plan
 from app.services.markets360.rs_line import compute_rs_line_signals
 from app.services.markets360.entry_signals import compute_entry_signals
 from app.services.market_regime import assess_market_regime
@@ -158,7 +158,12 @@ class Markets360Scanner(BaseStockScreener):
 
         # Minervini's other half: the stop defines the size. Plan entry/stop/
         # targets/position-size off the price structure and the VCP pivot.
-        risk_plan = compute_risk_plan(price, pivot=vcp.get("pivot"))
+        # Progressive risk: the suggested size commits harder only when the
+        # general market is a confirmed uptrend (backtest-validated, C61).
+        risk_plan = compute_risk_plan(
+            price, pivot=vcp.get("pivot"),
+            account_risk_pct=account_risk_pct_for_regime(regime.get("regime")),
+        )
 
         # RS line at new high (often before price) — Minervini's leadership tell.
         rs_line = compute_rs_line_signals(close, benchmark_close)

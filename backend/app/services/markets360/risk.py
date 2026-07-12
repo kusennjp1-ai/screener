@@ -30,8 +30,19 @@ MAX_LOSS_PCT = 0.08
 # Account heat per trade: risking 1.25% of equity per position is a common
 # Minervini/O'Neil setting (he flexes 0.5-1.25% with conviction & market health).
 ACCOUNT_RISK_PCT = 1.25
+# Progressive risk (Minervini): commit harder only when the general market has
+# CONFIRMED. Validated on two backtest windows before shipping (C61,
+# docs/BACKTEST_C54.md): 2x risk in confirmed uptrends lifted both the 6y and
+# 10y windows with drawdown unchanged; every attempt to loosen the
+# under-pressure cap instead was rejected (C62-C64).
+ACCOUNT_RISK_PCT_CONFIRMED = 2.5
 # Reward:risk objectives to surface (he targets >= 2-3:1 and sells into strength).
 TARGET_R_MULTIPLES = (2.0, 3.0)
+
+
+def account_risk_pct_for_regime(regime: Optional[str]) -> float:
+    """Per-trade account risk % scaled by market regime (progressive risk)."""
+    return ACCOUNT_RISK_PCT_CONFIRMED if regime == "confirmed_uptrend" else ACCOUNT_RISK_PCT
 
 
 def _f(v: object) -> Optional[float]:
@@ -129,4 +140,5 @@ def compute_risk_plan(
         "targets": targets,
         "position_size_pct": position_size_pct,
         "stop_basis": stop_basis,
+        "account_risk_pct": account_risk_pct,
     }
