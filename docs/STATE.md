@@ -5,9 +5,9 @@
 
 ## 現在
 
-- **サイクル**: C65 完了（progressive riskを製品搭載——risk planがレジーム連動で1.25/2.5%を切替、C61の両窓検証に基づく）／ **次: C66候補=SellPlanCard/静的PWAでのaccount_risk_pct表示＋高速配信2回目実測（平日16:06 ET後にログ確認）**
+- **サイクル**: C65 完了・**PR #57マージ済み**（progressive riskが本番risk planに搭載——次のstatic-site.ymlランでPWAのサイズ提案にも自動反映）／ **次: C66=①SellPlanCard/PWAでaccount_risk_pct表示（UI変更→sandbox-e2eで実ブラウザ検証必須）②高速配信2回目実測（月曜16:06 ET後、C57の~30-40分目標）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #54までMERGED。**未マージコミット5件+docs**: 358df1d/6028bd8/4628e31/07cf293/0f7edb7＝バックテスト修正群。**GitHub MCP切断中→PR作成・マージ不可、再認証待ち**。pushは可能・実施済み）
+- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
 
 ## 凍結metricの現在値（低下＝即revert）
