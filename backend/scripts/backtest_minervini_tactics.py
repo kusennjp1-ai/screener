@@ -59,6 +59,10 @@ BREAKOUT_VOL_RATIO = 1.5
 CHASE_CAP = 1.05               # never pay >5% above the pivot
 MAX_POSITIONS = 10
 PROGRESSIVE_RISK = False  # set by --progressive-risk: 2x risk in confirmed uptrend
+# Minervini under pressure: tighten SELECTION, don't stop buying — leaders
+# (RS>=90) may still be bought at full exposure while the trend is intact.
+SELECTIVE_PRESSURE = False
+PRESSURE_RS_MIN = 90
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -240,6 +244,9 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
 
     for i, d in enumerate(sim_dates):
         exposure_pct = regimes[d]["exposure"] if market_gate else 100
+        under_pressure = market_gate and regimes[d]["regime"] == "uptrend_under_pressure"
+        if SELECTIVE_PRESSURE and under_pressure:
+            exposure_pct = 100  # leaders-only buying below replaces the cap
 
         # --- execute queued exits at the open --------------------------------
         # sorted so float summation order (cash +=) is bitwise-reproducible
@@ -328,6 +335,11 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
         if wk is not None:
             watch = wk
         if exposure_pct > 0 or not market_gate:
+            def _entry_allowed(sym, plan):
+                if SELECTIVE_PRESSURE and under_pressure and plan.get("rs", 0) < PRESSURE_RS_MIN:
+                    return False
+                return _risk_ok(sym)
+
             def _risk_ok(sym):
                 # product funnel: Buy Risk green/yellow on the signal day
                 # (the breakout barrel's risk_ok half in compute_buy_signal)
@@ -336,7 +348,7 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             for sym, plan in prev_watch.items():  # armed stops set before today
                 if plan["mode"] != "armed" or sym in positions or sym in pending_buys:
                     continue
-                if not _risk_ok(sym):
+                if not _entry_allowed(sym, plan):
                     continue
                 c = close.at[d, sym]
                 hi = high.at[d, sym]
@@ -348,7 +360,7 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             for sym, plan in watch.items():  # early post-breakout, today's scan
                 if plan["mode"] != "early" or sym in positions or sym in pending_buys:
                     continue
-                if not _risk_ok(sym):
+                if not _entry_allowed(sym, plan):
                     continue
                 c = close.at[d, sym]
                 # breakout already volume-confirmed at scan; buy next open
@@ -418,6 +430,9 @@ def main() -> int:
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--selective-pressure", action="store_true",
+                    help="under pressure: only RS>=90 leaders may be bought, "
+                         "but at full exposure (tighten selection, not buying)")
     ap.add_argument("--progressive-risk", action="store_true",
                     help="Minervini progressive risk: 2x account risk per "
                          "trade while the regime is confirmed_uptrend")
@@ -428,8 +443,9 @@ def main() -> int:
                          "(signals._breakout_now fallback), and Buy Risk "
                          "green/yellow required on the signal day")
     args = ap.parse_args()
-    global PROGRESSIVE_RISK
+    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE
     PROGRESSIVE_RISK = args.progressive_risk
+    SELECTIVE_PRESSURE = args.selective_pressure
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -565,11 +581,11 @@ def main() -> int:
                         fired = True
                         break
                 if fired and c0 <= piv * CHASE_CAP:
-                    wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source}
+                    wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source, "rs": float(row_rs.get(s, 0))}
             elif c0 <= piv:
-                wl[s] = {"pivot": piv, "base_low": base_low, "mode": "armed", "source": source}
+                wl[s] = {"pivot": piv, "base_low": base_low, "mode": "armed", "source": source, "rs": float(row_rs.get(s, 0))}
             elif c0 <= piv * CHASE_CAP and recent_vol_surge:
-                wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source}
+                wl[s] = {"pivot": piv, "base_low": base_low, "mode": "early", "source": source, "rs": float(row_rs.get(s, 0))}
         watch_by_week[d] = wl
     sizes = [len(w) for w in watch_by_week.values()]
     print(f"daily watchlists: {len(watch_by_week)} days, avg {np.mean(sizes):.1f} names, max {max(sizes)}", flush=True)
