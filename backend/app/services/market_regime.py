@@ -28,14 +28,7 @@ import pandas as pd
 
 DIST_WINDOW = 25            # sessions to count distribution days over
 DIST_DOWN_PCT = -0.002      # a down day of >= 0.2% counts
-# IBD's published rule of thumb is "five or six distribution days over four
-# or five weeks can turn a market". The old threshold of 4 downgraded a
-# confirmed uptrend one day early; the C60 10y audit showed it kept SPY
-# "under pressure" for 189/252 sessions of 2021 (a +28.7% year) — a slow
-# grind-up logs 0.2%-down/volume-up days constantly, so the extra day of
-# tolerance matters. (Known proxy limitation, recorded in BACKTEST_C54.md:
-# SPY ETF volume runs hotter than the exchange volume IBD counts.)
-DIST_UNDER_PRESSURE = 5     # >= this many = uptrend under pressure
+DIST_UNDER_PRESSURE = 4     # >= this many = uptrend under pressure
 DIST_CORRECTION = 6         # >= this many = distribution-driven correction risk
 # O'Neil expiry: a distribution day stops counting once the index rallies 5%
 # above that day's close — institutional selling that the market has already
