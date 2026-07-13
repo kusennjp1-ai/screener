@@ -80,6 +80,10 @@ NO_CORRECTION_BUYS = False
 # (extended + >=2 exhaustion tells) rather than waiting for the trailing stop.
 # Uses the shipped exit_signals.detect_climax_run unchanged.
 SELL_INTO_STRENGTH = False
+# Fraction of the position to unload into a climax (1.0 = whole, 0.5 = sell
+# half and let the rest ride the trailing ladder — Minervini's partial
+# "sell into strength" that keeps a runner while banking some gains).
+CLIMAX_SELL_FRACTION = 1.0
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -257,6 +261,7 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
     positions: dict[str, Position] = {}
     pending_sells: set[str] = set()
     sell_reason: dict[str, str] = {}
+    pending_partials: dict[str, float] = {}
     pending_buys: dict[str, dict] = {}
     watch: dict[str, dict] = {}
 
@@ -284,6 +289,25 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                                  "reason": sell_reason.get(sym, "signal")})
             pending_sells.discard(sym)
             sell_reason.pop(sym, None)
+
+        # --- execute queued PARTIAL (climax) sells at the open --------------
+        for sym in sorted(pending_partials):
+            frac = pending_partials[sym]
+            if sym in positions and opn.at[d, sym] == opn.at[d, sym]:
+                p = positions[sym]
+                sell_sh = p.shares * frac
+                px = opn.at[d, sym] * (1 - COST_PER_SIDE)
+                cash += sell_sh * px
+                v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
+                                 "entry_date": str(p.entry_date), "exit_date": str(d),
+                                 "r": (px - p.entry) / (p.entry - p.stop0),
+                                 "pnl": sell_sh * (px - p.entry),
+                                 "mode": p.mode, "source": p.source,
+                                 "reason": "climax_partial"})
+                p.shares -= sell_sh
+                if p.shares * px < 100:  # dust remainder -> close it out
+                    positions.pop(sym)
+        pending_partials.clear()
 
         # --- execute queued buys at the open ---------------------------------
         equity_mark = cash + sum(
@@ -353,8 +377,11 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                     "Open": opn[sym].iloc[max(0, di - 219): di + 1],
                 }).dropna()
                 if len(win) >= 60 and detect_climax_run(win).get("active"):
-                    pending_sells.add(sym)
-                    sell_reason[sym] = "climax"
+                    if CLIMAX_SELL_FRACTION >= 1.0:
+                        pending_sells.add(sym)
+                        sell_reason[sym] = "climax"
+                    elif sym not in pending_partials:
+                        pending_partials[sym] = CLIMAX_SELL_FRACTION
 
         # --- entry signals at the close (fill tomorrow) -----------------------
         # Armed buy-stops must be judged against YESTERDAY's plans: an armed
@@ -467,6 +494,9 @@ def main() -> int:
                     help="exit profitable positions into a climax run "
                          "(exit_signals.detect_climax_run) instead of only on "
                          "the trailing stop / 50DMA breakdown")
+    ap.add_argument("--climax-partial", action="store_true",
+                    help="with --sell-into-strength, unload only HALF into the "
+                         "climax and keep the rest on the trailing ladder")
     ap.add_argument("--no-correction-buys", action="store_true",
                     help="treat a market correction as a hard no-buy (0% "
                          "exposure, like a downtrend) instead of the residual "
@@ -494,6 +524,8 @@ def main() -> int:
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
+    global CLIMAX_SELL_FRACTION
+    CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -674,6 +706,7 @@ def main() -> int:
         "funnel": args.funnel,
         "no_correction_buys": args.no_correction_buys,
         "sell_into_strength": args.sell_into_strength,
+        "climax_partial": args.climax_partial,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
