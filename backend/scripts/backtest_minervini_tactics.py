@@ -354,7 +354,7 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 }).dropna()
                 if len(win) >= 60 and detect_climax_run(win).get("active"):
                     pending_sells.add(sym)
-                    sell_reason[sym] = CLIMAX
+                    sell_reason[sym] = "climax"
 
         # --- entry signals at the close (fill tomorrow) -----------------------
         # Armed buy-stops must be judged against YESTERDAY's plans: an armed
