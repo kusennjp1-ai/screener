@@ -84,6 +84,41 @@ SELL_INTO_STRENGTH = False
 # half and let the rest ride the trailing ladder — Minervini's partial
 # "sell into strength" that keeps a runner while banking some gains).
 CLIMAX_SELL_FRACTION = 1.0
+# C71: MA-tightness base path (validated in the product footprint at C70 —
+# recall 36->64%, FIRE +/-5 88.6->91.2). Same logic here so the tactics
+# watchlist can pick up flat-base / base-on-base setups the cup detector's
+# monotonic-depth gate rejects. Article-grounded (2x 'double off lows').
+MA_TIGHT = False
+_MAT_BASE_MAX, _MAT_TIGHT, _MAT_RANGE = 42, 10, 0.12
+_MAT_HUG, _MAT_HUGFRAC, _MAT_NEARHI, _MAT_ADV, _MAT_PRIOR = 0.05, 0.5, 0.85, 2.0, 126
+
+
+def ma_tight_pivot(close_ser, high_ser, low_ser):
+    """Chronological MA-tight base -> (pivot, base_low) or None (see C70)."""
+    try:
+        if len(close_ser) < _MAT_BASE_MAX + _MAT_PRIOR:
+            return None
+        piv = float(high_ser.iloc[-_MAT_BASE_MAX:].max())
+        last = float(close_ser.iloc[-1])
+        if piv <= 0 or last <= 0 or last < _MAT_NEARHI * piv:
+            return None
+        c = close_ser.iloc[-_MAT_TIGHT:]
+        if (c.max() - c.min()) / c.max() > _MAT_RANGE:
+            return None
+        ma10 = close_ser.rolling(10).mean().iloc[-_MAT_TIGHT:]
+        hug = np.abs(c.values - ma10.values) / ma10.values <= _MAT_HUG
+        if np.nanmean(hug) < _MAT_HUGFRAC:
+            return None
+        rng = ((high_ser - low_ser) / close_ser).iloc[-_MAT_BASE_MAX:]
+        h = len(rng) // 2
+        if not (rng.iloc[h:].mean() < rng.iloc[:h].mean()):
+            return None
+        prior_low = float(low_ser.iloc[-(_MAT_BASE_MAX + _MAT_PRIOR):-_MAT_BASE_MAX].min())
+        if not (prior_low > 0 and (piv / prior_low) >= _MAT_ADV):
+            return None
+        return piv, float(low_ser.iloc[-_MAT_BASE_MAX:].min())
+    except Exception:
+        return None
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -494,6 +529,9 @@ def main() -> int:
                     help="exit profitable positions into a climax run "
                          "(exit_signals.detect_climax_run) instead of only on "
                          "the trailing stop / 50DMA breakdown")
+    ap.add_argument("--ma-tight", action="store_true",
+                    help="add the C70 MA-tightness base path to the watchlist "
+                         "(flat-base/base-on-base the cup detector misses)")
     ap.add_argument("--climax-partial", action="store_true",
                     help="with --sell-into-strength, unload only HALF into the "
                          "climax and keep the rest on the trailing ladder")
@@ -524,8 +562,9 @@ def main() -> int:
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
-    global CLIMAX_SELL_FRACTION
+    global CLIMAX_SELL_FRACTION, MA_TIGHT
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
+    MA_TIGHT = args.ma_tight
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -617,6 +656,10 @@ def main() -> int:
             vpiv = (r.get("pivot_info") or {}).get("pivot")
             if r.get("vcp_detected") and vpiv and r.get("recent_base_low"):
                 piv, base_low, source = float(vpiv), float(r["recent_base_low"]), "vcp"
+            elif MA_TIGHT and args.funnel != "product" and (
+                (mt := ma_tight_pivot(prices, high[s].iloc[:idx + 1], low[s].iloc[:idx + 1])) is not None
+            ):
+                piv, base_low, source = mt[0], mt[1], "ma_tight"
             elif args.funnel == "product":
                 # the shipped signal engine's fallback (signals._breakout_now):
                 # pivot = prior 30-bar consolidation high, base low = 30-bar low
@@ -658,7 +701,7 @@ def main() -> int:
                 # funnel triples with extended, base-less entries.
                 fired = False
                 for j in range(max(idx - 4, 31), idx + 1):
-                    pj = piv if source == "vcp" else float(high[s].iloc[j - 30: j].max())
+                    pj = piv if source in ("vcp", "ma_tight") else float(high[s].iloc[j - 30: j].max())
                     cj = close[s].iloc[j]
                     cjm1 = close[s].iloc[j - 1]
                     vj = volume[s].iloc[j]
@@ -707,6 +750,7 @@ def main() -> int:
         "no_correction_buys": args.no_correction_buys,
         "sell_into_strength": args.sell_into_strength,
         "climax_partial": args.climax_partial,
+        "ma_tight": args.ma_tight,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
