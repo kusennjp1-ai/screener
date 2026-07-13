@@ -49,6 +49,7 @@ from app.services.markets360.exit_signals import (
     LADDER_BREAKEVEN_R,
     LADDER_HALF_RISK_R,
     LADDER_LOCK_GAINS_R,
+    detect_climax_run,
 )
 from app.services.markets360.risk import ACCOUNT_RISK_PCT, MAX_LOSS_PCT
 
@@ -70,6 +71,54 @@ PRESSURE_RS_MIN = 90
 # (2022-style), the cap stays. 60% = the conventional healthy-majority line.
 BREADTH_CONFIRM = False
 BREADTH_MIN = 0.60
+# Minervini: in a market correction you go to CASH and wait for the FTD; the
+# pre-FTD 20% correction exposure is a residual the shipped engine allows.
+# This flag makes a correction a hard no-buy (like a downtrend) — buying
+# resumes only when the FTD upgrades the regime to confirmed_uptrend.
+NO_CORRECTION_BUYS = False
+# Minervini "sell into strength": exit a profitable position into a climax run
+# (extended + >=2 exhaustion tells) rather than waiting for the trailing stop.
+# Uses the shipped exit_signals.detect_climax_run unchanged.
+SELL_INTO_STRENGTH = False
+# Fraction of the position to unload into a climax (1.0 = whole, 0.5 = sell
+# half and let the rest ride the trailing ladder — Minervini's partial
+# "sell into strength" that keeps a runner while banking some gains).
+CLIMAX_SELL_FRACTION = 1.0
+# C71: MA-tightness base path (validated in the product footprint at C70 —
+# recall 36->64%, FIRE +/-5 88.6->91.2). Same logic here so the tactics
+# watchlist can pick up flat-base / base-on-base setups the cup detector's
+# monotonic-depth gate rejects. Article-grounded (2x 'double off lows').
+MA_TIGHT = False
+_MAT_BASE_MAX, _MAT_TIGHT, _MAT_RANGE = 42, 10, 0.12
+_MAT_HUG, _MAT_HUGFRAC, _MAT_NEARHI, _MAT_ADV, _MAT_PRIOR = 0.05, 0.5, 0.85, 2.0, 126
+
+
+def ma_tight_pivot(close_ser, high_ser, low_ser):
+    """Chronological MA-tight base -> (pivot, base_low) or None (see C70)."""
+    try:
+        if len(close_ser) < _MAT_BASE_MAX + _MAT_PRIOR:
+            return None
+        piv = float(high_ser.iloc[-_MAT_BASE_MAX:].max())
+        last = float(close_ser.iloc[-1])
+        if piv <= 0 or last <= 0 or last < _MAT_NEARHI * piv:
+            return None
+        c = close_ser.iloc[-_MAT_TIGHT:]
+        if (c.max() - c.min()) / c.max() > _MAT_RANGE:
+            return None
+        ma10 = close_ser.rolling(10).mean().iloc[-_MAT_TIGHT:]
+        hug = np.abs(c.values - ma10.values) / ma10.values <= _MAT_HUG
+        if np.nanmean(hug) < _MAT_HUGFRAC:
+            return None
+        rng = ((high_ser - low_ser) / close_ser).iloc[-_MAT_BASE_MAX:]
+        h = len(rng) // 2
+        if not (rng.iloc[h:].mean() < rng.iloc[:h].mean()):
+            return None
+        prior_low = float(low_ser.iloc[-(_MAT_BASE_MAX + _MAT_PRIOR):-_MAT_BASE_MAX].min())
+        if not (prior_low > 0 and (piv / prior_low) >= _MAT_ADV):
+            return None
+        return piv, float(low_ser.iloc[-_MAT_BASE_MAX:].min())
+    except Exception:
+        return None
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -246,11 +295,15 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
     cash = start_equity
     positions: dict[str, Position] = {}
     pending_sells: set[str] = set()
+    sell_reason: dict[str, str] = {}
+    pending_partials: dict[str, float] = {}
     pending_buys: dict[str, dict] = {}
     watch: dict[str, dict] = {}
 
     for i, d in enumerate(sim_dates):
         exposure_pct = regimes[d]["exposure"] if market_gate else 100
+        if NO_CORRECTION_BUYS and market_gate and regimes[d]["regime"] == "correction":
+            exposure_pct = 0  # cash in a correction; wait for the FTD
         under_pressure = market_gate and regimes[d]["regime"] == "uptrend_under_pressure"
         if SELECTIVE_PRESSURE and under_pressure:
             exposure_pct = 100  # leaders-only buying below replaces the cap
@@ -267,8 +320,29 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
                                  "entry_date": str(p.entry_date), "exit_date": str(d),
                                  "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry),
-                                 "mode": p.mode, "source": p.source, "reason": "signal"})
+                                 "mode": p.mode, "source": p.source,
+                                 "reason": sell_reason.get(sym, "signal")})
             pending_sells.discard(sym)
+            sell_reason.pop(sym, None)
+
+        # --- execute queued PARTIAL (climax) sells at the open --------------
+        for sym in sorted(pending_partials):
+            frac = pending_partials[sym]
+            if sym in positions and opn.at[d, sym] == opn.at[d, sym]:
+                p = positions[sym]
+                sell_sh = p.shares * frac
+                px = opn.at[d, sym] * (1 - COST_PER_SIDE)
+                cash += sell_sh * px
+                v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
+                                 "entry_date": str(p.entry_date), "exit_date": str(d),
+                                 "r": (px - p.entry) / (p.entry - p.stop0),
+                                 "pnl": sell_sh * (px - p.entry),
+                                 "mode": p.mode, "source": p.source,
+                                 "reason": "climax_partial"})
+                p.shares -= sell_sh
+                if p.shares * px < 100:  # dust remainder -> close it out
+                    positions.pop(sym)
+        pending_partials.clear()
 
         # --- execute queued buys at the open ---------------------------------
         equity_mark = cash + sum(
@@ -331,6 +405,18 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             vol_ratio = (volume.at[d, sym] / ind["vol50"].at[d, sym]) if ind["vol50"].at[d, sym] else 0
             if ma50 == ma50 and c < ma50 and vol_ratio >= 1.5:
                 pending_sells.add(sym)
+            elif SELL_INTO_STRENGTH and c > p.entry:
+                di = close.index.get_loc(d)
+                win = pd.DataFrame({
+                    "Close": close[sym].iloc[max(0, di - 219): di + 1],
+                    "Open": opn[sym].iloc[max(0, di - 219): di + 1],
+                }).dropna()
+                if len(win) >= 60 and detect_climax_run(win).get("active"):
+                    if CLIMAX_SELL_FRACTION >= 1.0:
+                        pending_sells.add(sym)
+                        sell_reason[sym] = "climax"
+                    elif sym not in pending_partials:
+                        pending_partials[sym] = CLIMAX_SELL_FRACTION
 
         # --- entry signals at the close (fill tomorrow) -----------------------
         # Armed buy-stops must be judged against YESTERDAY's plans: an armed
@@ -439,6 +525,20 @@ def main() -> int:
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--sell-into-strength", action="store_true",
+                    help="exit profitable positions into a climax run "
+                         "(exit_signals.detect_climax_run) instead of only on "
+                         "the trailing stop / 50DMA breakdown")
+    ap.add_argument("--ma-tight", action="store_true",
+                    help="add the C70 MA-tightness base path to the watchlist "
+                         "(flat-base/base-on-base the cup detector misses)")
+    ap.add_argument("--climax-partial", action="store_true",
+                    help="with --sell-into-strength, unload only HALF into the "
+                         "climax and keep the rest on the trailing ladder")
+    ap.add_argument("--no-correction-buys", action="store_true",
+                    help="treat a market correction as a hard no-buy (0% "
+                         "exposure, like a downtrend) instead of the residual "
+                         "20% cap — wait for the FTD before buying")
     ap.add_argument("--breadth-confirm", action="store_true",
                     help="under pressure: keep full exposure while >=60% of "
                          "the tradable universe holds its 200DMA")
@@ -455,10 +555,16 @@ def main() -> int:
                          "(signals._breakout_now fallback), and Buy Risk "
                          "green/yellow required on the signal day")
     args = ap.parse_args()
-    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM
+    global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM, NO_CORRECTION_BUYS
+    global SELL_INTO_STRENGTH
     PROGRESSIVE_RISK = args.progressive_risk
     SELECTIVE_PRESSURE = args.selective_pressure
     BREADTH_CONFIRM = args.breadth_confirm
+    NO_CORRECTION_BUYS = args.no_correction_buys
+    SELL_INTO_STRENGTH = args.sell_into_strength
+    global CLIMAX_SELL_FRACTION, MA_TIGHT
+    CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
+    MA_TIGHT = args.ma_tight
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -550,6 +656,10 @@ def main() -> int:
             vpiv = (r.get("pivot_info") or {}).get("pivot")
             if r.get("vcp_detected") and vpiv and r.get("recent_base_low"):
                 piv, base_low, source = float(vpiv), float(r["recent_base_low"]), "vcp"
+            elif MA_TIGHT and args.funnel != "product" and (
+                (mt := ma_tight_pivot(prices, high[s].iloc[:idx + 1], low[s].iloc[:idx + 1])) is not None
+            ):
+                piv, base_low, source = mt[0], mt[1], "ma_tight"
             elif args.funnel == "product":
                 # the shipped signal engine's fallback (signals._breakout_now):
                 # pivot = prior 30-bar consolidation high, base low = 30-bar low
@@ -591,7 +701,7 @@ def main() -> int:
                 # funnel triples with extended, base-less entries.
                 fired = False
                 for j in range(max(idx - 4, 31), idx + 1):
-                    pj = piv if source == "vcp" else float(high[s].iloc[j - 30: j].max())
+                    pj = piv if source in ("vcp", "ma_tight") else float(high[s].iloc[j - 30: j].max())
                     cj = close[s].iloc[j]
                     cjm1 = close[s].iloc[j - 1]
                     vj = volume[s].iloc[j]
@@ -637,6 +747,10 @@ def main() -> int:
         "universe_size": len(tradable),
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
+        "no_correction_buys": args.no_correction_buys,
+        "sell_into_strength": args.sell_into_strength,
+        "climax_partial": args.climax_partial,
+        "ma_tight": args.ma_tight,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",

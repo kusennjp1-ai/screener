@@ -5,16 +5,16 @@
 
 ## 現在
 
-- **サイクル**: C65 完了（progressive riskを製品搭載——risk planがレジーム連動で1.25/2.5%を切替、C61の両窓検証に基づく）／ **次: C66候補=SellPlanCard/静的PWAでのaccount_risk_pct表示＋高速配信2回目実測（平日16:06 ET後にログ確認）**
+- **サイクル**: C70 完了・**採用**（MA-tightnessベース経路を`compute_vcp_footprint`に統合。**FIRE±5 recall 88.6→91.2**・golden 43不変・他バイト一致・記事準拠2.0x「double」。ユーザーgo済み）／ **次: C71=同経路を戦術バックテストのウォッチリスト構築にも配線→両窓で「検出増→トレード質」検証（tactics scriptは`detect_vcp`直呼びで本変更の影響外のため別途）／ PR作成→CI→マージ**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #54までMERGED。**未マージコミット5件+docs**: 358df1d/6028bd8/4628e31/07cf293/0f7edb7＝バックテスト修正群。**GitHub MCP切断中→PR作成・マージ不可、再認証待ち**。pushは可能・実施済み）
+- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
 
 ## 凍結metricの現在値（低下＝即revert）
 
 | metric | 値 | 測定 |
 |---|---|---|
-| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / 88.6 / **66.5** %（MSCORE 95.5・判別+42.8pp） | `scripts/validate_trade_ideas.py`（~7分） |
+| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / **91.2** / **66.5** %（MSCORE 95.5。**FIRE±5はC70で88.6→91.2に改善**・判別+24.4→+24.1pp＝ノイズ内、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
 | 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%（SPY+83.6%超え）だが**9年窓では+78.2% vs SPY+251.8%＝一般化せず**（C60）。ベア防御のみ両窓で実証 | ローカル or CI `backtest-tactics.yml`（6y/10yバンドルはリリースに保存） |
@@ -33,10 +33,10 @@
 
 ## 次アクション（優先順）
 
-1. **C61: 強気相場のエクスポージャー回復** — ①progressive risk（confirmed uptrendで口座リスク1.25→2.5%、バックテスト側で先に検証）②分配日失効/リセットのIBD定義照合（本体market_regime.py変更＝GATE凍結metric/908ハーネス必須）。**6y/10y両窓で一貫改善のみ採用**。
-2. **PR作成・マージ** — PR #55まで完了。C60 docsコミットが未PR（GitHub MCP再失効中→再認証待ち）。
-3. **高速配信の2回目実測** — C57マージ済み。平日16:06 ETランでパイプライン~30-40分を確認。
-4. **単銘柄タブRPR percentile化／スマホUI統一続き**（中型・保留中）。
+1. **C69: VCP recall向上（最大レバー）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
+2. **未マージdocs/実験フラグのPR** — C66〜C68のコミットが未PR。GitHub MCP再認証後にPR→CI→マージ。
+3. **保留**: Notion/Substack/YouTube/fewmoredaysはプロキシ403（環境ネットワークポリシー・回避禁止）→ユーザーのエクスポート/複製待ち。高速配信2回目実測（平日16:06 ET後）。UI: account_risk_pct表示・スマホ統一。
+4. **リスクトーン・オプション（ユーザー選択待ち）**: 半分クライマックス売り（--sell-into-strength --climax-partial）は両窓でmaxDD改善・Sharpe同値以上・検証済み。リスク低減優先なら即採用可。
 **注意（C45/C47の教訓）**: サイクル開始時はSPECを信じる前にコードをgrepする。
 
 ## 絶対制約（ユーザー指示・恒久）

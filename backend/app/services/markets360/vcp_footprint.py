@@ -52,6 +52,69 @@ def _f(v: object) -> Optional[float]:
         return None
     return f if np.isfinite(f) else None
 
+# --- MA-tightness base path (C70) -------------------------------------------
+# The legacy cup detector keys on strictly-tightening pullback DEPTHS and
+# misses ~64% of Minervini's real entries (measured on the 908 windows). Per
+# the "Studying Historical Winners" interview, Minervini/Qullamaggie define
+# tightness as "multiple tight days on the 10 and/or 20-day MA" over a base of
+# "2 weeks to 2 months" with "volatility contracting" (not monotonic depths),
+# preceded by a "double off the lows". Adding this as a PARALLEL detection path
+# lifted recall 36% -> 64% AND improved entry-vs-control discrimination
+# +20.1pp -> +26.3pp offline (scripts/measure_ma_tight_recall.py) — i.e. it
+# catches flat bases / cup-without-handle / base-on-base the cup model rejects,
+# without loosening into noise. Numbers are article-grounded, not return-fit.
+MA_BASE_MAX = 42        # 2-month base window
+MA_TIGHT_BARS = 10      # the tight leg into the pivot
+MA_TIGHT_RANGE = 0.12   # last-10 close range <= 12%
+MA_HUG_PCT = 0.05       # within 5% of the 10-day MA
+MA_HUG_FRAC = 0.5       # >= half the tight leg hugs the 10DMA
+MA_NEAR_HIGH = 0.85     # close within 15% of the base high
+MA_PRIOR_ADV = 2.0      # prior 2x advance — the article's literal "double off
+#                         the lows"; halves control fires vs a softened 1.5x
+#                         while keeping entry recall high (discrimination-safe).
+MA_PRIOR_LOOKBACK = 126
+
+
+def _ma_tight_base(price_data: pd.DataFrame) -> Optional[Dict[str, float]]:
+    """Chronological MA-tightness base detector (returns pivot/dist or None).
+
+    Faithful port of the offline-validated logic. Requires a tight leg hugging
+    the 10-DMA near the highs, general volatility contraction over the base,
+    and a prior ~1.5x advance. Never raises.
+    """
+    try:
+        close = price_data["Close"]
+        high = price_data["High"]
+        low = price_data["Low"]
+        if len(close) < MA_BASE_MAX + MA_PRIOR_LOOKBACK:
+            return None
+        piv = float(high.iloc[-MA_BASE_MAX:].max())
+        last = float(close.iloc[-1])
+        if piv <= 0 or last <= 0:
+            return None
+        c = close.iloc[-MA_TIGHT_BARS:]
+        if (c.max() - c.min()) / c.max() > MA_TIGHT_RANGE:      # tight leg
+            return None
+        if last < MA_NEAR_HIGH * piv:                            # near the highs
+            return None
+        ma10 = close.rolling(10).mean().iloc[-MA_TIGHT_BARS:]
+        hug = np.abs(c.values - ma10.values) / ma10.values <= MA_HUG_PCT
+        if np.nanmean(hug) < MA_HUG_FRAC:                        # hugs the 10DMA
+            return None
+        rng = ((high - low) / close).iloc[-MA_BASE_MAX:]
+        h = len(rng) // 2
+        if not (rng.iloc[h:].mean() < rng.iloc[:h].mean()):      # volatility shrink
+            return None
+        base_low = float(low.iloc[-MA_BASE_MAX:].min())
+        prior_low = float(low.iloc[-(MA_BASE_MAX + MA_PRIOR_LOOKBACK):-MA_BASE_MAX].min())
+        if not (prior_low > 0 and (piv / prior_low) >= MA_PRIOR_ADV):  # double off lows
+            return None
+        dist = (piv - last) / last * 100.0
+        return {"pivot": piv, "dist": dist, "base_low": base_low}
+    except Exception:  # pragma: no cover - never break a scan
+        return None
+
+
 # A pivot watch: Minervini stalks names coiling just beneath the buy point so the
 # trigger can be hit the moment the breakout fires. Tighter than the legacy 3%
 # "ready" flag, this 8% band is the "on the radar" zone.
@@ -72,6 +135,7 @@ _EMPTY: Dict[str, object] = {
     "distance_to_pivot_pct": None,
     "ready_for_breakout": False,
     "near_pivot": False,
+    "source": None,
 }
 
 
@@ -110,6 +174,16 @@ def compute_vcp_footprint(
     pivot = _f(pivot_info.get("pivot"))
     dist = _f(pivot_info.get("distance_pct"))  # +ve => current price below pivot
     detected = bool(legacy.get("vcp_detected", False))
+    ma_source = False
+    if not detected:
+        # Parallel MA-tightness base path (C70): catches flat-base /
+        # base-on-base setups the cup detector's monotonic-depth gate rejects.
+        ma = _ma_tight_base(price_data)
+        if ma is not None:
+            detected = True
+            ma_source = True
+            pivot = ma["pivot"]
+            dist = ma["dist"]
     # Actionable pivot states require the VCP STRUCTURE, not just proximity to a
     # recent high: without the `detected` gate, any uptrending stock sat "near
     # pivot" ~96% of the time (measured on the fixtures via the trade-idea
@@ -119,7 +193,12 @@ def compute_vcp_footprint(
     near_pivot = detected and (
         dist is not None and -MAX_PAST_PIVOT_PCT <= dist <= NEAR_PIVOT_PCT
     )
-    ready = detected and bool(pivot_info.get("ready_for_breakout", False))
+    if ma_source:
+        # MA-tight bases have no legacy pivot_info; "ready" = coiled within 3%
+        # under the pivot (same threshold the legacy detector uses).
+        ready = dist is not None and 0.0 <= dist <= 3.0
+    else:
+        ready = detected and bool(pivot_info.get("ready_for_breakout", False))
 
     score = _f(legacy.get("vcp_score"))
     # legacy bases are most-recent-first; reverse to oldest->newest footprint
@@ -138,4 +217,5 @@ def compute_vcp_footprint(
         "distance_to_pivot_pct": dist,
         "ready_for_breakout": ready,
         "near_pivot": bool(near_pivot),
+        "source": "ma_tight" if ma_source else ("vcp" if detected else None),
     }
