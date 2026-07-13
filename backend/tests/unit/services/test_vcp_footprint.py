@@ -140,3 +140,32 @@ def test_legacy_ready_flag_has_a_lower_bound():
     over = det.find_pivot_point(bases, current_price=140.0)   # 40% past
     assert under["ready_for_breakout"] is True
     assert over["ready_for_breakout"] is False
+
+
+def test_ma_tight_base_path_detects_flat_base():
+    """C70: the MA-tightness path flags a flat base (2x prior advance, tight
+    leg hugging the 10DMA near highs) that the cup detector's monotonic-depth
+    gate would reject — and tags source='ma_tight'."""
+    import numpy as np
+    import pandas as pd
+    from app.services.markets360.vcp_footprint import compute_vcp_footprint
+
+    idx = pd.date_range("2023-01-01", periods=200, freq="B")
+    rng = np.random.RandomState(1)
+    # prior 2x+ advance (10 -> ~30) then a tight flat leg riding near the highs
+    ramp = np.linspace(10.0, 30.0, 150)
+    # base: slight downward drift then flatten tight near 30 with shrinking range
+    base = 30.0 - np.concatenate([np.linspace(0, 1.2, 25), np.full(25, 1.2)]) \
+        + rng.randn(50) * 0.15
+    close = np.concatenate([ramp, base])
+    df = pd.DataFrame({
+        "Open": close, "High": close * 1.008, "Low": close * 0.992,
+        "Close": close, "Volume": [1e6] * 200,
+    }, index=idx)
+    fp = compute_vcp_footprint(df)
+    assert fp["detected"] is True
+    assert fp["source"] == "ma_tight"
+    assert fp["pivot"] is not None
+    # schema parity preserved
+    from app.services.markets360.vcp_footprint import _EMPTY
+    assert set(fp.keys()) == set(_EMPTY.keys())
