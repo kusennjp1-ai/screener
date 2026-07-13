@@ -49,6 +49,7 @@ from app.services.markets360.exit_signals import (
     LADDER_BREAKEVEN_R,
     LADDER_HALF_RISK_R,
     LADDER_LOCK_GAINS_R,
+    detect_climax_run,
 )
 from app.services.markets360.risk import ACCOUNT_RISK_PCT, MAX_LOSS_PCT
 
@@ -75,6 +76,10 @@ BREADTH_MIN = 0.60
 # This flag makes a correction a hard no-buy (like a downtrend) — buying
 # resumes only when the FTD upgrades the regime to confirmed_uptrend.
 NO_CORRECTION_BUYS = False
+# Minervini "sell into strength": exit a profitable position into a climax run
+# (extended + >=2 exhaustion tells) rather than waiting for the trailing stop.
+# Uses the shipped exit_signals.detect_climax_run unchanged.
+SELL_INTO_STRENGTH = False
 MAX_POSITION_PCT = 0.25
 MIN_DOLLAR_VOL = 5e6
 MIN_PRICE = 5.0
@@ -251,6 +256,7 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
     cash = start_equity
     positions: dict[str, Position] = {}
     pending_sells: set[str] = set()
+    sell_reason: dict[str, str] = {}
     pending_buys: dict[str, dict] = {}
     watch: dict[str, dict] = {}
 
@@ -274,8 +280,10 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 v.trades.append({"symbol": sym, "entry": p.entry, "exit": px,
                                  "entry_date": str(p.entry_date), "exit_date": str(d),
                                  "r": (px - p.entry) / (p.entry - p.stop0), "pnl": p.shares * (px - p.entry),
-                                 "mode": p.mode, "source": p.source, "reason": "signal"})
+                                 "mode": p.mode, "source": p.source,
+                                 "reason": sell_reason.get(sym, "signal")})
             pending_sells.discard(sym)
+            sell_reason.pop(sym, None)
 
         # --- execute queued buys at the open ---------------------------------
         equity_mark = cash + sum(
@@ -338,6 +346,15 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             vol_ratio = (volume.at[d, sym] / ind["vol50"].at[d, sym]) if ind["vol50"].at[d, sym] else 0
             if ma50 == ma50 and c < ma50 and vol_ratio >= 1.5:
                 pending_sells.add(sym)
+            elif SELL_INTO_STRENGTH and c > p.entry:
+                di = close.index.get_loc(d)
+                win = pd.DataFrame({
+                    "Close": close[sym].iloc[max(0, di - 219): di + 1],
+                    "Open": opn[sym].iloc[max(0, di - 219): di + 1],
+                }).dropna()
+                if len(win) >= 60 and detect_climax_run(win).get("active"):
+                    pending_sells.add(sym)
+                    sell_reason[sym] = CLIMAX
 
         # --- entry signals at the close (fill tomorrow) -----------------------
         # Armed buy-stops must be judged against YESTERDAY's plans: an armed
@@ -446,6 +463,10 @@ def main() -> int:
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
+    ap.add_argument("--sell-into-strength", action="store_true",
+                    help="exit profitable positions into a climax run "
+                         "(exit_signals.detect_climax_run) instead of only on "
+                         "the trailing stop / 50DMA breakdown")
     ap.add_argument("--no-correction-buys", action="store_true",
                     help="treat a market correction as a hard no-buy (0% "
                          "exposure, like a downtrend) instead of the residual "
@@ -467,10 +488,12 @@ def main() -> int:
                          "green/yellow required on the signal day")
     args = ap.parse_args()
     global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM, NO_CORRECTION_BUYS
+    global SELL_INTO_STRENGTH
     PROGRESSIVE_RISK = args.progressive_risk
     SELECTIVE_PRESSURE = args.selective_pressure
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
+    SELL_INTO_STRENGTH = args.sell_into_strength
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -650,6 +673,7 @@ def main() -> int:
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
         "no_correction_buys": args.no_correction_buys,
+        "sell_into_strength": args.sell_into_strength,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
