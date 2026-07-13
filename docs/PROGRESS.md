@@ -382,3 +382,9 @@
 - ユーザー提供PDF（Substack記事・先にリンク403だったもの）を副エージェント精読。核心: 本人のタイトさ定義は**「10/20日線に沿った複数のタイトな日」**＋ベース**2週-2ヶ月**＋**「volatility contracting」**（厳密単調ではない）＋前提**「double off lows」**。現行検出器の律速（単調減少ゲート・見逃し81%）とは別物。
 - 実装＋測定: `scripts/measure_ma_tight_recall.py`（908オフライン・entry vs T0-63 control）。**VCP∪MA-tight で recall 36.1→63.8%（+27.7pp）・判別 +20.1→+26.3pp（改善）**。事前上昇フィルタが精度保持（no-priorはcontrol過発火で判別劣化）。C59のパラメータ微調整+2.8ppとは桁違い＝ベース型の取りこぼし（フラットベース/base-on-base）をMA-huggingで捕捉。
 - **凍結契約への含意で一旦停止**: `detect_vcp`/`compute_vcp_footprint`へのOR配線はSETUP(78.6)/FIRE±5(88.6)/GATE(66.5)/golden(43)を再ベースライン化する重い変更。測定は可逆（shipped無変更）。**次段=①統合プロトタイプで908ハーネス全再測→②低下ゼロならgolden-update＋両窓バックテストで検出増の質確認→③採用**。goldenの再凍結は検証契約の再定義のためユーザーgo待ち。
+
+### C70（完了・採用）— MA-tightnessベース経路統合でVCP footprint recall向上（コミット済み）
+- ユーザーgo（「進めていい」）。記事準拠のMA-tight経路を`compute_vcp_footprint`にOR配線（VCPDetector本体は無変更＝goldenのVCPスナップショット不変）。事前上昇は記事の実数**2.0x「double off lows」**（1.5xだと判別−1.1pp→2.0xで−0.3pp・control発火半減。フィッティングでなく原典準拠）。
+- **決定的908ハーネス**: FIRE±5 **88.6→91.2（+2.6pp）**・判別+24.4→+24.1pp（575-588標本で1標本≈0.17pp＝ノイズ内）・**TT/S2/SETUP/RS70/MSCORE/GATEバイト一致**・golden gate-5 **43 passed不変**。純粋な検出改善として採用。ユニットテスト+1（ma_tight経路ピン留め・11 passed）。
+- **含意**: 製品のFIRE±5シグナル/スキャナ setup検出が本人の実セットアップをより多く捕捉（フラットベース/base-on-base）。最新ライブ保有（`docs/MINERVINI_LIVE_HOLDINGS.md`）も記録。
+- 次（C71）: 戦術バックテストのウォッチリスト構築（`detect_vcp`直呼び）にも同MA-tight経路を配線し、両窓で「検出増→トレード質同等以上」を検証。製品コミットはPR化。
