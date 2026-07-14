@@ -156,6 +156,14 @@ _PYTHON_SORT_FIELDS = frozenset({
     "ma_alignment",
     "vcp_detected",
     "passes_template",
+    # Setup-quality rank (C74): surface the highest-probability setups first.
+    # Two-window backtest (docs/DESIGN_PRINCIPLE_SELECTION.md, C72b) showed that
+    # ordering the candidate pool VCP-first — instead of by composite alone —
+    # adds +17pp of raw return over the long window ("more setups than money ->
+    # pick the best"). Product reduction of that ranking with the fields that
+    # actually reach a scan row: VCP-detected setups rank above the rest, ties
+    # broken by composite_score desc.
+    "quality_rank",
 })
 
 # Cap for Python-sorted queries to prevent memory issues.
@@ -340,6 +348,15 @@ def _sort_in_python(
 ) -> list:
     """Sort ScanResult rows (or (ScanResult, ...) tuples) by details JSON field."""
 
+    def get_quality_key(row_obj):
+        # (VCP-detected first, then composite_score) — always best-first, so the
+        # tuple is built for DESC and the shared reverse flag applies uniformly.
+        result = row_obj[0] if isinstance(row_obj, tuple) else row_obj
+        details = result.details or {}
+        vcp = 1 if details.get("vcp_detected") else 0
+        comp = result.composite_score
+        return (vcp, comp if comp is not None else float("-inf"))
+
     def get_sort_key(row_obj):
         result = row_obj[0] if isinstance(row_obj, tuple) else row_obj
         detail_value = (
@@ -349,4 +366,5 @@ def _sort_in_python(
             return float("-inf") if sort.order == SortOrder.DESC else float("inf")
         return detail_value
 
-    return sorted(rows, key=get_sort_key, reverse=(sort.order == SortOrder.DESC))
+    key_fn = get_quality_key if sort.field == "quality_rank" else get_sort_key
+    return sorted(rows, key=key_fn, reverse=(sort.order == SortOrder.DESC))

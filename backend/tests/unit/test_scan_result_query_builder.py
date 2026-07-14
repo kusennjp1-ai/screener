@@ -20,7 +20,50 @@ from app.infra.query.scan_result_query import (
     _JSON_FIELD_MAP,
     _JSON_SORT_NUMERIC,
     _PYTHON_SORT_FIELDS,
+    _sort_in_python,
 )
+
+
+class _Row:
+    """Minimal stand-in for a ScanResult row (details JSON + composite_score)."""
+
+    def __init__(self, symbol, vcp_detected, composite_score):
+        self.symbol = symbol
+        self.details = {"vcp_detected": vcp_detected}
+        self.composite_score = composite_score
+
+
+class TestQualityRankSort:
+    """quality_rank orders VCP-detected setups first, ties by composite desc."""
+
+    def _rank(self, rows):
+        spec = SortSpec(field="quality_rank", order=SortOrder.DESC)
+        return [r.symbol for r in _sort_in_python(rows, spec)]
+
+    def test_vcp_detected_outranks_higher_composite_non_vcp(self):
+        # AAA has a higher composite but no VCP; BBB is VCP-detected -> BBB first.
+        rows = [_Row("AAA", False, 95.0), _Row("BBB", True, 80.0)]
+        assert self._rank(rows) == ["BBB", "AAA"]
+
+    def test_ties_broken_by_composite_desc(self):
+        rows = [
+            _Row("LOWVCP", True, 70.0),
+            _Row("HIVCP", True, 90.0),
+            _Row("HINON", False, 88.0),
+            _Row("LONON", False, 60.0),
+        ]
+        # both VCP first (hi comp first), then non-VCP (hi comp first)
+        assert self._rank(rows) == ["HIVCP", "LOWVCP", "HINON", "LONON"]
+
+    def test_none_composite_sorts_last_within_tier(self):
+        rows = [_Row("HAS", True, 50.0), _Row("NONE", True, None)]
+        assert self._rank(rows) == ["HAS", "NONE"]
+
+    def test_missing_details_treated_as_non_vcp(self):
+        r = _Row("NODET", False, 99.0)
+        r.details = None
+        rows = [r, _Row("VCP", True, 10.0)]
+        assert self._rank(rows) == ["VCP", "NODET"]
 
 
 class TestColumnMapCoverage:
@@ -63,6 +106,7 @@ class TestColumnMapCoverage:
 
     @pytest.mark.parametrize("field", [
         "stage_name", "ma_alignment", "vcp_detected", "passes_template",
+        "quality_rank",
     ])
     def test_python_sort_fields(self, field):
         assert field in _PYTHON_SORT_FIELDS, f"{field} should be in _PYTHON_SORT_FIELDS"
