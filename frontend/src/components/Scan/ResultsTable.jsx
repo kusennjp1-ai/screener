@@ -141,7 +141,11 @@ const columns = [
   { id: 'sales_growth_qq', label: 'Sales', sortable: true, width: 50 },
   { id: 'adr_percent', label: 'ADR', sortable: true, width: 50 },
   { id: 'ma_alignment', label: 'MA', sortable: false, width: 35 },
-  { id: 'vcp_detected', label: 'VCP', sortable: false, width: 40 },
+  // The VCP header sorts by quality_rank (VCP-detected setups first, ties by
+  // composite desc) — the shipped design principle "pick the best setup first"
+  // (docs/DESIGN_PRINCIPLE_SELECTION.md). sortField overrides the emitted sort
+  // key while the column keeps rendering the vcp_detected check.
+  { id: 'vcp_detected', label: 'VCP', sortable: true, sortField: 'quality_rank', width: 40 },
   { id: 'vcp_score', label: 'VScr', sortable: true, width: 50 },
   { id: 'vcp_pivot', label: 'Pvt', sortable: true, width: 55 },
   { id: 'vcp_ready_for_breakout', label: 'Rdy', sortable: false, width: 35 },
@@ -625,8 +629,14 @@ function ResultsTable({
   }, [onPageChange]);
 
   const handleRequestSort = useCallback((property) => {
-    const isAsc = sortBy === property && sortOrder === 'asc';
-    onSortChange(property, isAsc ? 'desc' : 'asc');
+    if (sortBy === property) {
+      // toggle when already the active sort
+      onSortChange(property, sortOrder === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    // quality_rank is a best-first ranking — open it descending so the top
+    // setups surface on the first click, not the worst.
+    onSortChange(property, property === 'quality_rank' ? 'desc' : 'asc');
   }, [sortBy, sortOrder, onSortChange]);
 
   const handleRowClick = useCallback((symbol) => {
@@ -705,13 +715,18 @@ function ResultsTable({
                   }}
                 >
                   {column.sortable && sortingEnabled ? (
-                    <TableSortLabel
-                      active={sortBy === column.id}
-                      direction={sortBy === column.id ? sortOrder : 'asc'}
-                      onClick={() => handleRequestSort(column.id)}
-                    >
-                      {column.label}
-                    </TableSortLabel>
+                    (() => {
+                      const sortKey = column.sortField || column.id;
+                      return (
+                        <TableSortLabel
+                          active={sortBy === sortKey}
+                          direction={sortBy === sortKey ? sortOrder : 'asc'}
+                          onClick={() => handleRequestSort(sortKey)}
+                        >
+                          {column.label}
+                        </TableSortLabel>
+                      );
+                    })()
                   ) : (
                     column.label
                   )}
