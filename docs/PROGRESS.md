@@ -410,3 +410,9 @@
 - **問い2「売り助言はタイトすぎるか」**: 908ミラー診断（`exit_leash_diagnostic.py`）で拘束条件は「50DMA1日割れ」の即時退出と判明（ロック期トレイル緩和ma65は無効）。confirm（50DMA下2日連続）は単窓ミラーで期待値4.51→4.79%・≥3R勝者89→100本。
 - **両窓検証（`--confirm-exit`新設・progressive-risk）＝不採用**: **6y 112.4→88.9%（−23.5pp・maxDD−14.3→−21.8）／10y 97.8→84.3%（−13.5pp・maxDD−27.9→−30.6）**。両窓で生リターンDOWN∧maxDD UP。単窓ミラーの+0.28ppは10枠ポートフォリオの「壊れ玉を1日長く持つ＝DD増＋枠塞ぎで再投入逃す」コストに逆転される（C71/C72同型）。凍結契約「低下＝即revert」で本体無変更。docs/MINERVINI_EXIT_LEASH.md。
 - **確定**: 現行exit leashは両窓最適に近い。執行チューニングは信頼レバーでない（3度目の確認）。正のレバーはdiscovery＋human品質表示に集約。次候補=製品スキャン結果の品質ランクUI（要ブラウザ検証）。
+
+### C74 — 2026-07-14 品質ランクUI実装（設計原則の製品翻訳・両検証済み）
+- **原則の製品化**: スキャン結果を「セットアップ品質」でソートする `quality_rank`（VCP検出優先→composite降順）を実装。C72b両窓バックテスト（長期+17pp）の忠実な製品リダクション。バックエンド`scan_result_query.py`のPythonソートに追加、フロントは既存VCP列ヘッダに`sortField`オーバーライドで配線（クリックで最良セットアップが最上位・初回desc）。凍結metric無変更。
+- **副次バグ修正（発見・修正）**: 結果エンドポイントのJOINクエリ行はSQLAlchemy 2.0の`Row`（tupleでない）。旧Pythonソートは`isinstance(row,tuple)`のみで`Row`を`.details`直読み→`AttributeError('details')`。**全Pythonソートフィールド（vcp_detected/ma_alignment/passes_template/stage_name＋新quality_rank）がAPI境界で壊れていた**のを修正＋回帰テスト。
+- **検証**: バックエンド単体5＋回帰1、フロント25（VCPヘッダがquality_rank desc発火）。**実ブラウザ検証（sandbox-e2e・1440px/375px）**: 実DB・実scan（AA/MSFTをvcp=trueにパッチ）でVCPヘッダクリック→`sort_by=quality_rank`発火→VCP行（composite39.5/4.5）がcomposite100の非VCP行の上に浮上を目視確認（scratchpad/qrank_before/after/mobile.png）。
+- **次候補**: quality_rank発見の拡張（VCP品質スコアで人間watchlistランク）・21EMA押し目(B6)・VCP recall再設計(C69)。

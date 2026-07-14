@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C73完了（**908再現性の直接計測＋exit leash両窓検証**）。(1)908は出荷済みエンジンで setup detected 73.1%/機械 buy_trigger 33.4%（凍結FIRE±5=91.2%参考）＝**発見はほぼ再現・機械執行は1/3**＝発見≠執行を実データで裏づけ（docs/MINERVINI_908_REPRODUCIBILITY.md）。(2)exit leash「50DMA割れ2日確認」は単窓ミラーで+0.28ppだが**両窓で不採用**（6y 112.4→88.9%・10y 97.8→84.3%、両窓ret DOWN∧maxDD UP＝C71/C72同型・枠塞ぎコスト）→本体無変更（docs/MINERVINI_EXIT_LEASH.md）。C70-C72の設計原則（docs/DESIGN_PRINCIPLE_SELECTION.md）: recall(発見)は表示に効く/機械執行に翻訳されず/品質ランクは生リターンに寄与〈C72b・10y+17pp〉。 **次候補: 製品スキャン結果の品質ランクUI化（原則の実装・要ブラウザ検証）・21EMA押し目(B6)・VCP recall再設計（C69・最大レバー）**
+- **サイクル**: C74完了（**品質ランクUI実装＝設計原則の製品翻訳**）。スキャン結果を`quality_rank`（VCP検出優先→composite降順）でソート（C72b両窓+17ppの製品版）。BE=`scan_result_query.py`Pythonソート追加、FE=VCP列ヘッダに`sortField`配線（クリックで最良が最上位・初回desc）。**副次でPythonソートのRowアンパックバグ（全ソートフィールドがAPI境界で壊れていた`AttributeError('details')`）を発見・修正＋回帰**。**実ブラウザ検証済（1440/375px・実DB・VCP行がcomposite100超えて浮上）**。凍結metric無変更。C73: 908再現性=detected73.1%/機械buy33.4%（発見≠執行）、exit leash両窓不採用。 **次候補: VCP品質スコアでwatchlistランク・21EMA押し目(B6)・VCP recall再設計（C69・最大レバー）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
