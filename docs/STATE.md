@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C70-C72完了（**設計原則を徹底検証・docs/DESIGN_PRINCIPLE_SELECTION.md**）: recall(発見)は表示に効く〈C70製品採用・FIRE±5 88.6→91.2〉/機械的自動売買に翻訳されず〈C71/C72不採用・窓依存〉/**既存プールの品質ランク(VCP優先)は生リターンに寄与〈C72b・6y横ばい/10y+17pp・両窓基準以上〉**。＋ライブ保有14銘柄の購入日・理由を主砲で逆算（BUD失敗ブレイク的中）／ **次候補: 製品スキャン結果の品質ランクUI化（原則の実装）・exit leash検証（本人銘柄は252日で伸長＝我々の売りがタイトすぎ）・21EMA押し目(B6)**
+- **サイクル**: C73完了（**908再現性の直接計測＋exit leash両窓検証**）。(1)908は出荷済みエンジンで setup detected 73.1%/機械 buy_trigger 33.4%（凍結FIRE±5=91.2%参考）＝**発見はほぼ再現・機械執行は1/3**＝発見≠執行を実データで裏づけ（docs/MINERVINI_908_REPRODUCIBILITY.md）。(2)exit leash「50DMA割れ2日確認」は単窓ミラーで+0.28ppだが**両窓で不採用**（6y 112.4→88.9%・10y 97.8→84.3%、両窓ret DOWN∧maxDD UP＝C71/C72同型・枠塞ぎコスト）→本体無変更（docs/MINERVINI_EXIT_LEASH.md）。C70-C72の設計原則（docs/DESIGN_PRINCIPLE_SELECTION.md）: recall(発見)は表示に効く/機械執行に翻訳されず/品質ランクは生リターンに寄与〈C72b・10y+17pp〉。 **次候補: 製品スキャン結果の品質ランクUI化（原則の実装・要ブラウザ検証）・21EMA押し目(B6)・VCP recall再設計（C69・最大レバー）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
