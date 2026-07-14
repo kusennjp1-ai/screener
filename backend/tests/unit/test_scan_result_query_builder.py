@@ -65,6 +65,18 @@ class TestQualityRankSort:
         rows = [r, _Row("VCP", True, 10.0)]
         assert self._rank(rows) == ["VCP", "NODET"]
 
+    def test_joined_row_tuple_is_unpacked(self):
+        # The results endpoint runs a JOINED query whose rows are containers
+        # (SQLAlchemy Row / tuple), not bare ScanResults. The sort must unpack
+        # the first element; a stale isinstance(row, tuple)-only check missed
+        # the Row shape and read .details off the container (AttributeError).
+        rows = [
+            (_Row("AAA", False, 95.0), "extra", 1),
+            (_Row("BBB", True, 80.0), "extra", 2),
+        ]
+        spec = SortSpec(field="quality_rank", order=SortOrder.DESC)
+        assert [r[0].symbol for r in _sort_in_python(rows, spec)] == ["BBB", "AAA"]
+
 
 class TestColumnMapCoverage:
     """Verify the column map covers all expected fields."""

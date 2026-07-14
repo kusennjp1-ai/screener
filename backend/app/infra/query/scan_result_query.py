@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import and_, asc, desc, func, or_
+from sqlalchemy.engine import Row
 from sqlalchemy.orm import Query
 
 from app.domain.scanning.filter_spec import (
@@ -348,17 +349,26 @@ def _sort_in_python(
 ) -> list:
     """Sort ScanResult rows (or (ScanResult, ...) tuples) by details JSON field."""
 
+    def _scan_result(row_obj):
+        # Rows come in three shapes: a bare ScanResult (single-entity query), a
+        # SQLAlchemy Row from the joined result query, or a plain tuple. A Row is
+        # NOT a tuple in SQLAlchemy 2.0 — the old `isinstance(row_obj, tuple)`
+        # check missed it and read `.details` off the Row itself, raising
+        # AttributeError. Unpack only the known joined-row containers; anything
+        # else already IS the ScanResult.
+        return row_obj[0] if isinstance(row_obj, (tuple, Row)) else row_obj
+
     def get_quality_key(row_obj):
         # (VCP-detected first, then composite_score) — always best-first, so the
         # tuple is built for DESC and the shared reverse flag applies uniformly.
-        result = row_obj[0] if isinstance(row_obj, tuple) else row_obj
+        result = _scan_result(row_obj)
         details = result.details or {}
         vcp = 1 if details.get("vcp_detected") else 0
         comp = result.composite_score
         return (vcp, comp if comp is not None else float("-inf"))
 
     def get_sort_key(row_obj):
-        result = row_obj[0] if isinstance(row_obj, tuple) else row_obj
+        result = _scan_result(row_obj)
         detail_value = (
             result.details.get(sort.field) if result.details else None
         )
