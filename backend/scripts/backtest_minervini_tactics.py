@@ -89,6 +89,19 @@ CLIMAX_SELL_FRACTION = 1.0
 # watchlist can pick up flat-base / base-on-base setups the cup detector's
 # monotonic-depth gate rejects. Article-grounded (2x 'double off lows').
 MA_TIGHT = False
+# C72: quality-ranked slot allocation. C71 showed that adding MA-tight
+# candidates and filling the 10 slots by RS alone DILUTES with lower-PF setups
+# (6y -48pp). The design principle (Minervini: "more setups than money -> pick
+# the BEST") says: expand the pool with recall, but fill the limited slots with
+# the highest-quality setups first. Rank by setup source (VCP is the PF-2.13
+# core), then RS, so VCP claims slots before MA-tight/base fallbacks.
+QUALITY_RANK = False
+_SOURCE_PRIORITY = {"vcp": 0, "tight_base": 1, "high30": 1, "ma_tight": 2}
+
+
+def _quality_key(item):
+    _sym, plan = item
+    return (_SOURCE_PRIORITY.get(plan.get("source"), 3), -plan.get("rs", 0), _sym)
 _MAT_BASE_MAX, _MAT_TIGHT, _MAT_RANGE = 42, 10, 0.12
 _MAT_HUG, _MAT_HUGFRAC, _MAT_NEARHI, _MAT_ADV, _MAT_PRIOR = 0.05, 0.5, 0.85, 2.0, 126
 
@@ -440,7 +453,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 # (the breakout barrel's risk_ok half in compute_buy_signal)
                 return signal_ok is None or bool(signal_ok.at[d, sym])
 
-            for sym, plan in prev_watch.items():  # armed stops set before today
+            _armed_items = sorted(prev_watch.items(), key=_quality_key) if QUALITY_RANK else prev_watch.items()
+            for sym, plan in _armed_items:  # armed stops set before today
                 if plan["mode"] != "armed" or sym in positions or sym in pending_buys:
                     continue
                 if not _entry_allowed(sym, plan):
@@ -452,7 +466,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 if (c == c and hi == hi and hi >= plan["pivot"] and c > plan["pivot"]
                         and c <= plan["pivot"] * CHASE_CAP and volr >= BREAKOUT_VOL_RATIO):
                     pending_buys[sym] = plan
-            for sym, plan in watch.items():  # early post-breakout, today's scan
+            _early_items = sorted(watch.items(), key=_quality_key) if QUALITY_RANK else watch.items()
+            for sym, plan in _early_items:  # early post-breakout, today's scan
                 if plan["mode"] != "early" or sym in positions or sym in pending_buys:
                     continue
                 if not _entry_allowed(sym, plan):
@@ -529,6 +544,10 @@ def main() -> int:
                     help="exit profitable positions into a climax run "
                          "(exit_signals.detect_climax_run) instead of only on "
                          "the trailing stop / 50DMA breakdown")
+    ap.add_argument("--quality-rank", action="store_true",
+                    help="fill the position slots by setup quality (VCP first, "
+                         "then RS) instead of RS alone — recall expands the "
+                         "pool, quality picks the winners for the limited slots")
     ap.add_argument("--ma-tight", action="store_true",
                     help="add the C70 MA-tightness base path to the watchlist "
                          "(flat-base/base-on-base the cup detector misses)")
@@ -562,9 +581,10 @@ def main() -> int:
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
-    global CLIMAX_SELL_FRACTION, MA_TIGHT
+    global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
     MA_TIGHT = args.ma_tight
+    QUALITY_RANK = args.quality_rank
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -751,6 +771,7 @@ def main() -> int:
         "sell_into_strength": args.sell_into_strength,
         "climax_partial": args.climax_partial,
         "ma_tight": args.ma_tight,
+        "quality_rank": args.quality_rank,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
