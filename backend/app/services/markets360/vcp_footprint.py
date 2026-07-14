@@ -74,6 +74,62 @@ MA_PRIOR_ADV = 2.0      # prior 2x advance — the article's literal "double off
 #                         while keeping entry recall high (discrimination-safe).
 MA_PRIOR_LOOKBACK = 126
 
+# --- Volatility-contraction base path (C75) ---------------------------------
+# MA-tight (above) requires the tight leg to HUG the 10DMA. Some of Minervini's
+# real bases contract in VOLATILITY while riding a few % above the average, so
+# the hug gate misses them. This parallel path keys on ATR contraction (his
+# literal "volatility contracting") plus a tight leg near the highs and the same
+# 2x prior advance, with NO MA-hug requirement — so it catches setups that coil
+# just above the 10DMA. Offline on the 908 windows it adds +3.2pp recall over
+# the VCP∪MA union (52.4 -> 55.6%) AND lifts entry-vs-control discrimination
+# +26.2 -> +27.5pp (both directions positive; increment +19 true vs +11 false;
+# scripts/measure_volcontract_recall.py). Article-grounded, not return-fit.
+VCB_BASE_MAX = 42
+VCB_ATR_LOOK = 10
+VCB_ATR_RATIO = 0.70     # end-of-base ATR <= 0.70x its in-base peak
+VCB_TIGHT_RANGE = 0.10   # last-10 close range <= 10%
+VCB_NEAR_HIGH = 0.85     # close within 15% of the base high
+VCB_PRIOR_ADV = 2.0      # "double off the lows" — the discrimination guard
+VCB_PRIOR_LOOKBACK = 126
+
+
+def _vol_contract_base(price_data: pd.DataFrame) -> Optional[Dict[str, float]]:
+    """ATR volatility-contraction base near the highs (pivot/dist or None).
+
+    Distinct from _ma_tight_base: no 10DMA-hug requirement; keys on ATR shrinking
+    from its in-base peak. Never raises.
+    """
+    try:
+        close = price_data["Close"]
+        high = price_data["High"]
+        low = price_data["Low"]
+        if len(close) < VCB_BASE_MAX + VCB_PRIOR_LOOKBACK:
+            return None
+        piv = float(high.iloc[-VCB_BASE_MAX:].max())
+        last = float(close.iloc[-1])
+        if piv <= 0 or last <= 0 or last < VCB_NEAR_HIGH * piv:  # near the highs
+            return None
+        c10 = close.iloc[-10:]
+        if (c10.max() - c10.min()) / c10.max() > VCB_TIGHT_RANGE:  # tight leg
+            return None
+        pc = close.shift(1)
+        tr = pd.concat([(high - low), (high - pc).abs(), (low - pc).abs()], axis=1).max(axis=1)
+        atr = (tr / close).rolling(VCB_ATR_LOOK).mean().iloc[-VCB_BASE_MAX:]
+        if atr.isna().all():
+            return None
+        atr_peak = float(np.nanmax(atr.values))
+        atr_now = float(atr.iloc[-1])
+        if not (atr_peak > 0 and atr_now / atr_peak <= VCB_ATR_RATIO):  # contracting
+            return None
+        base_low = float(low.iloc[-VCB_BASE_MAX:].min())
+        prior_low = float(low.iloc[-(VCB_BASE_MAX + VCB_PRIOR_LOOKBACK):-VCB_BASE_MAX].min())
+        if not (prior_low > 0 and piv / prior_low >= VCB_PRIOR_ADV):  # double off lows
+            return None
+        dist = (piv - last) / last * 100.0
+        return {"pivot": piv, "dist": dist, "base_low": base_low}
+    except Exception:  # pragma: no cover - never break a scan
+        return None
+
 
 def _ma_tight_base(price_data: pd.DataFrame) -> Optional[Dict[str, float]]:
     """Chronological MA-tightness base detector (returns pivot/dist or None).
@@ -175,6 +231,7 @@ def compute_vcp_footprint(
     dist = _f(pivot_info.get("distance_pct"))  # +ve => current price below pivot
     detected = bool(legacy.get("vcp_detected", False))
     ma_source = False
+    vcb_source = False
     if not detected:
         # Parallel MA-tightness base path (C70): catches flat-base /
         # base-on-base setups the cup detector's monotonic-depth gate rejects.
@@ -184,6 +241,17 @@ def compute_vcp_footprint(
             ma_source = True
             pivot = ma["pivot"]
             dist = ma["dist"]
+    if not detected:
+        # Parallel ATR volatility-contraction base path (C75): catches bases
+        # that contract in volatility while coiling just above the 10DMA (which
+        # the MA-hug gate above misses). Grounded in Minervini's literal
+        # "volatility contracting"; +3.2pp recall / +1.3pp discrimination offline.
+        vcb = _vol_contract_base(price_data)
+        if vcb is not None:
+            detected = True
+            vcb_source = True
+            pivot = vcb["pivot"]
+            dist = vcb["dist"]
     # Actionable pivot states require the VCP STRUCTURE, not just proximity to a
     # recent high: without the `detected` gate, any uptrending stock sat "near
     # pivot" ~96% of the time (measured on the fixtures via the trade-idea
@@ -193,9 +261,9 @@ def compute_vcp_footprint(
     near_pivot = detected and (
         dist is not None and -MAX_PAST_PIVOT_PCT <= dist <= NEAR_PIVOT_PCT
     )
-    if ma_source:
-        # MA-tight bases have no legacy pivot_info; "ready" = coiled within 3%
-        # under the pivot (same threshold the legacy detector uses).
+    if ma_source or vcb_source:
+        # Parallel-path bases have no legacy pivot_info; "ready" = coiled within
+        # 3% under the pivot (same threshold the legacy detector uses).
         ready = dist is not None and 0.0 <= dist <= 3.0
     else:
         ready = detected and bool(pivot_info.get("ready_for_breakout", False))
@@ -217,5 +285,9 @@ def compute_vcp_footprint(
         "distance_to_pivot_pct": dist,
         "ready_for_breakout": ready,
         "near_pivot": bool(near_pivot),
-        "source": "ma_tight" if ma_source else ("vcp" if detected else None),
+        "source": (
+            "ma_tight" if ma_source
+            else "vol_contract" if vcb_source
+            else ("vcp" if detected else None)
+        ),
     }

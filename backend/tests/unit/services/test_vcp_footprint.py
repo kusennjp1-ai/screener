@@ -169,3 +169,33 @@ def test_ma_tight_base_path_detects_flat_base():
     # schema parity preserved
     from app.services.markets360.vcp_footprint import _EMPTY
     assert set(fp.keys()) == set(_EMPTY.keys())
+
+
+def _vcb_frame(prior_adv=True):
+    """Build a series with a wide->tight (ATR-contracting) base near the highs."""
+    rng = np.random.RandomState(3)
+    peak = 30.0
+    ramp = np.linspace(11.0 if prior_adv else 29.0, peak - 2.0, 150)
+    # base: 32 volatile bars (wide swings = high ATR) then 10 tight bars near peak
+    volatile = peak - 2.0 + np.sin(np.linspace(0, 6 * np.pi, 32)) * 2.0 + rng.randn(32) * 0.4
+    tight = np.full(10, peak - 0.3) + rng.randn(10) * 0.05
+    close = np.concatenate([ramp, volatile, tight])
+    idx = pd.date_range("2023-01-01", periods=len(close), freq="B")
+    # wide bars in the volatile section, narrow in the tight leg (ATR contraction)
+    span = np.concatenate([np.full(150, 0.01), np.full(32, 0.03), np.full(10, 0.004)])
+    return pd.DataFrame({
+        "Open": close, "High": close * (1 + span), "Low": close * (1 - span),
+        "Close": close, "Volume": [1e6] * len(close),
+    }, index=idx)
+
+
+def test_vol_contract_base_helper_fires_on_atr_contraction():
+    """C75: the ATR volatility-contraction path fires on a wide->tight base near
+    the highs with a prior 2x advance, and needs the prior advance."""
+    from app.services.markets360.vcp_footprint import _vol_contract_base
+
+    hit = _vol_contract_base(_vcb_frame(prior_adv=True))
+    assert hit is not None
+    assert hit["pivot"] > 0 and hit["dist"] is not None
+    # no prior 2x advance -> the discrimination guard rejects it
+    assert _vol_contract_base(_vcb_frame(prior_adv=False)) is None
