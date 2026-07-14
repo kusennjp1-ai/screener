@@ -97,6 +97,14 @@ MA_TIGHT = False
 # core), then RS, so VCP claims slots before MA-tight/base fallbacks.
 QUALITY_RANK = False
 _SOURCE_PRIORITY = {"vcp": 0, "tight_base": 1, "high30": 1, "ma_tight": 2}
+# C73: confirm the 50DMA trend-exit. The mirror of his 908 picks
+# (scripts/exit_leash_diagnostic.py) shows the single-day 50DMA-breakdown exit
+# is the binding tightness: requiring TWO consecutive closes below the 50DMA
+# (a whipsaw filter Minervini applies by design — a genuine trend break holds
+# below the average) kept ~11 more picks in for the >=3R tail and lifted
+# expectancy +0.28pp with flat/better PF. Structural rule, not a fitted
+# parameter. Validate in BOTH windows before any SellPlanCard change.
+CONFIRM_EXIT = False
 
 
 def _quality_key(item):
@@ -291,6 +299,7 @@ class Position:
     entry_date: object
     mode: str = ""
     source: str = ""
+    below50_prev: bool = False   # prior close was below the 50DMA (--confirm-exit)
 
 
 @dataclass
@@ -416,7 +425,10 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             low20 = low[sym].iloc[max(0, close.index.get_loc(d) - 19): close.index.get_loc(d) + 1].min()
             p.stop = ladder_stop(c, p.entry, p.stop0, ma50 if ma50 == ma50 else np.nan, low20)
             vol_ratio = (volume.at[d, sym] / ind["vol50"].at[d, sym]) if ind["vol50"].at[d, sym] else 0
-            if ma50 == ma50 and c < ma50 and vol_ratio >= 1.5:
+            below50 = ma50 == ma50 and c < ma50
+            fire_50dma = below50 and vol_ratio >= 1.5 and (p.below50_prev or not CONFIRM_EXIT)
+            p.below50_prev = below50
+            if fire_50dma:
                 pending_sells.add(sym)
             elif SELL_INTO_STRENGTH and c > p.entry:
                 di = close.index.get_loc(d)
@@ -567,6 +579,10 @@ def main() -> int:
     ap.add_argument("--progressive-risk", action="store_true",
                     help="Minervini progressive risk: 2x account risk per "
                          "trade while the regime is confirmed_uptrend")
+    ap.add_argument("--confirm-exit", action="store_true",
+                    help="require TWO consecutive closes below the 50DMA before "
+                         "the trend-exit fires (whipsaw filter) — the binding "
+                         "tightness found in the 908-pick mirror")
     ap.add_argument("--funnel", choices=("legacy", "product"), default="legacy",
                     help="'product' replays the shipped Buy Signal checklist: "
                          "TPR band green + pressure band green as candidate "
@@ -581,10 +597,11 @@ def main() -> int:
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
-    global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK
+    global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK, CONFIRM_EXIT
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
     MA_TIGHT = args.ma_tight
     QUALITY_RANK = args.quality_rank
+    CONFIRM_EXIT = args.confirm_exit
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -772,6 +789,7 @@ def main() -> int:
         "climax_partial": args.climax_partial,
         "ma_tight": args.ma_tight,
         "quality_rank": args.quality_rank,
+        "confirm_exit": args.confirm_exit,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
