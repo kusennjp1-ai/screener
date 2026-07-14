@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C74完了（**品質ランクUI実装＝設計原則の製品翻訳**）。スキャン結果を`quality_rank`（VCP検出優先→composite降順）でソート（C72b両窓+17ppの製品版）。BE=`scan_result_query.py`Pythonソート追加、FE=VCP列ヘッダに`sortField`配線（クリックで最良が最上位・初回desc）。**副次でPythonソートのRowアンパックバグ（全ソートフィールドがAPI境界で壊れていた`AttributeError('details')`）を発見・修正＋回帰**。**実ブラウザ検証済（1440/375px・実DB・VCP行がcomposite100超えて浮上）**。凍結metric無変更。C73: 908再現性=detected73.1%/機械buy33.4%（発見≠執行）、exit leash両窓不採用。 **次候補: VCP品質スコアでwatchlistランク・21EMA押し目(B6)・VCP recall再設計（C69・最大レバー）**
+- **サイクル**: C75完了（**VCP recall向上＝ATRボラティリティ収縮ベースを採用**）。ミネルヴィニの literal 定義「volatility contracting」に基づく並列パス`_vol_contract_base`をvcp_footprintに追加（VCPDetector無変更＝golden凍結維持）。単調深さゲートが弾く見逃しの50.7%（84%は高値近辺タイト）を、10DMA吸着不要のATR収縮で回収。**オフライン detected-recall 52.4→55.6%(+3.2pp)・判別+26.2→+27.5pp（両方向改善）。凍結908: FIRE±5 91.2→91.7（床超え）・判別+24.1→+24.0pp（1sample/575ノイズ）・他バイト一致・golden43維持**。C70と同型の採用。C74: 品質ランクUI（実ブラウザ検証済）+Rowアンパックバグ修正。C73: 908再現性=detected73/機械buy33、exit leash両窓不採用。 **次候補: 21EMA押し目(B6)・VCB系のさらなるrecall（W型/複合ベース）・VCP品質スコアでwatchlistランク**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
@@ -14,7 +14,7 @@
 
 | metric | 値 | 測定 |
 |---|---|---|
-| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / **91.2** / **66.5** %（MSCORE 95.5。**FIRE±5はC70で88.6→91.2に改善**・判別+24.4→+24.1pp＝ノイズ内、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
+| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / **91.7** / **66.5** %（MSCORE 95.5。**FIRE±5はC70で88.6→91.2、C75で91.2→91.7に改善**・判別+24.1→+24.0pp＝1sample/575ノイズ、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
 | 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%（SPY+83.6%超え）だが**9年窓では+78.2% vs SPY+251.8%＝一般化せず**（C60）。ベア防御のみ両窓で実証 | ローカル or CI `backtest-tactics.yml`（6y/10yバンドルはリリースに保存） |

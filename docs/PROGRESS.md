@@ -416,3 +416,9 @@
 - **副次バグ修正（発見・修正）**: 結果エンドポイントのJOINクエリ行はSQLAlchemy 2.0の`Row`（tupleでない）。旧Pythonソートは`isinstance(row,tuple)`のみで`Row`を`.details`直読み→`AttributeError('details')`。**全Pythonソートフィールド（vcp_detected/ma_alignment/passes_template/stage_name＋新quality_rank）がAPI境界で壊れていた**のを修正＋回帰テスト。
 - **検証**: バックエンド単体5＋回帰1、フロント25（VCPヘッダがquality_rank desc発火）。**実ブラウザ検証（sandbox-e2e・1440px/375px）**: 実DB・実scan（AA/MSFTをvcp=trueにパッチ）でVCPヘッダクリック→`sort_by=quality_rank`発火→VCP行（composite39.5/4.5）がcomposite100の非VCP行の上に浮上を目視確認（scratchpad/qrank_before/after/mobile.png）。
 - **次候補**: quality_rank発見の拡張（VCP品質スコアで人間watchlistランク）・21EMA押し目(B6)・VCP recall再設計(C69)。
+
+### C75 — 2026-07-14 VCP recall向上: ATRボラティリティ収縮ベースを採用
+- **根拠**: ミス構造計測（`vcp_recall_pareto.py`）で見逃しの**50.7%が単調深さゲート(ratio<0.6)**で死亡・うち84%は高値近辺タイト＝ミネルヴィニの literal「volatility contracting（単調深さではない）」と矛盾。C70 MA-tightは10DMA吸着ぶんを回収済。
+- **実装**: `vcp_footprint.py`に第3並列パス`_vol_contract_base`（ATRが基底ピークの≤0.70倍に収縮＋直近10本タイト near-high＋2x prior advance＝判別ガード、**MA吸着不要**）。VCPDetector無変更＝golden凍結維持（C70同手法）。source='vol_contract'追加。
+- **検証**: オフライン（`measure_volcontract_recall.py`）detected-recall **52.4→55.6%(+3.2pp)**・判別 **+26.2→+27.5pp**（両方向改善・増分 真+19/偽+11）。**凍結908ハーネス: FIRE±5 91.2→91.7（床超え）・判別+24.1→+24.0pp（1/575ノイズ）・TT/S2/SETUP/RS70/GATE/MSCORE バイト一致・golden gate-5 43維持・footprint単体12・harness単体6 pass**。C70と同型（FIRE±5↑・判別flat・他不変）＝採用。理論根拠あり・リターンフィッティングでない。
+- **frozen更新**: FIRE±5床 91.2→**91.7**。**次候補**: VCB系のさらなるrecall（W型・複合ベース）・21EMA押し目(B6)・VCP品質スコアでwatchlistランク。
