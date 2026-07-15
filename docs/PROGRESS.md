@@ -436,3 +436,9 @@
 - **構造的理由**: Stage-2セットアップに達した時点で既に蓄積済＝controlも同様。蓄積はエントリー**タイミング**情報をほぼ足さない（trend/structure要件と冗長）。日次accumulationを timing screen に足すのは young-base同型の希釈リスク＝不採用。
 - **正しい設計（2トラック分離）**: (a) REDFORDの"$ invested"の価値は**ファンダ・ショートリスト**（機関がDD済＝優良）で、**真の13F機関保有データ**が要る＝四半期・45日遅延・EDGAR egressはGitHub Actionsのみ＝「日次」は原理的に不可（13Fは四半期更新）。別トラックのデータ工学（GHA+EDGAR 13F）。(b) 日次でできるのは既存acc_dis/UDVRの表示のみ＝タイミング判別は弱いので screen/rank の主軸にはしない。
 - 計測スクリプト保持（`measure_accdis_discrimination.py`・`measure_udvr_discrimination.py`）。**結論**: 資金流入はタイミングでなくファンダ選別の軸。日次プロキシは弱く主軸化しない。真の13Fは四半期・別トラック。
+
+### C77b — 2026-07-14 決断: Acc/Dis を up/down 出来高で忠実化（資金流入への回答）
+- **決断（「ミネルヴィニならどうするか」）**: 彼は遅延13Fでタイミングを計らない・テープ＝機関の足跡と説く技術派。∴ **13Fパイプライン不要・蓄積の主軸化も却下**（908測定で判別弱）。だが up/down 出来高は彼の**確認**チェック項目→既存 `acc_dis_rating`（CLV平均で全銘柄C=機能不全）を忠実化する correctness fix を採用。
+- **実装**: 日次 close-to-close 方向（up=+1/down=−1/変化なしはCLV fallback）×recency×volume。合成flat-close testはCLV経路で不変維持。
+- **効果**: 908でグレード分布が spread（B 8%→**34%**）・entry-vs-control判別 score>=60 で **+2.5pp→+7.6pp**（3倍）。ただし依然 confirmation 級（VCP+27.5/TT~+30/SETUP+52には遠い）＝docstringに明記し主軸化しない。golden43維持・composite/acc_dis tests 15 pass・frozen harness metric非該当。
+- **2トラック結論**: (a)真の13F機関保有＝四半期・EDGAR egressはGHAのみ＝別トラック（未着手・要判断）。(b)日次確認＝本fixで完了。資金流入は「タイミング」でなく「確認/ファンダ選別」の軸、が確定。
