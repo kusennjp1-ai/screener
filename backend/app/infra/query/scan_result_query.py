@@ -170,6 +170,12 @@ _PYTHON_SORT_FIELDS = frozenset({
 # Cap for Python-sorted queries to prevent memory issues.
 _PYTHON_SORT_LIMIT = 1000
 
+# quality_rank source tiers: a classic VCP is the highest-probability base; the
+# C70/C75 parallel recall paths (MA-tight, ATR volatility-contraction) catch real
+# but looser setups, so they rank below it. Used only to break ties among
+# VCP-detected rows (see get_quality_key in _sort_in_python).
+_QUALITY_SOURCE_TIER: dict[str, int] = {"vcp": 2, "ma_tight": 1, "vol_contract": 1}
+
 
 def _json_sort_expr(query: Query, field: str, column, json_path: tuple[str, ...], order: SortOrder):
     """ORDER BY expression for a JSON field: numeric cast + nulls-last."""
@@ -359,13 +365,26 @@ def _sort_in_python(
         return row_obj[0] if isinstance(row_obj, (tuple, Row)) else row_obj
 
     def get_quality_key(row_obj):
-        # (VCP-detected first, then composite_score) — always best-first, so the
-        # tuple is built for DESC and the shared reverse flag applies uniformly.
+        # (VCP-detected, source-tier, composite) — always best-first, so the tuple
+        # is built for DESC and the shared reverse flag applies uniformly.
+        #
+        # Prefer the markets360 footprint's VCP detection: it carries the C70/C75
+        # recall paths (MA-tight, ATR volatility-contraction) that the flat
+        # minervini `vcp_detected` lacks, plus a source tier. So a name the
+        # recall-improved detector caught surfaces above one it didn't, and a
+        # classic VCP outranks a looser parallel-path base of equal composite.
+        # Falls back to the flat field when markets360 didn't run in this scan.
         result = _scan_result(row_obj)
         details = result.details or {}
-        vcp = 1 if details.get("vcp_detected") else 0
+        mm = (((details.get("screeners") or {}).get("markets360") or {}).get("details") or {})
+        footprint = mm.get("vcp") or {}
+        detected = mm.get("vcp_detected")
+        if detected is None:
+            detected = details.get("vcp_detected")
+        det = 1 if detected else 0
+        tier = _QUALITY_SOURCE_TIER.get(footprint.get("source"), 0) if det else 0
         comp = result.composite_score
-        return (vcp, comp if comp is not None else float("-inf"))
+        return (det, tier, comp if comp is not None else float("-inf"))
 
     def get_sort_key(row_obj):
         result = _scan_result(row_obj)

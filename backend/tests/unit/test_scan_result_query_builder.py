@@ -65,6 +65,35 @@ class TestQualityRankSort:
         rows = [r, _Row("VCP", True, 10.0)]
         assert self._rank(rows) == ["VCP", "NODET"]
 
+    @staticmethod
+    def _mm_row(symbol, footprint_detected, source, composite, flat_detected=False):
+        """A row carrying the markets360 footprint (recall-improved) detection."""
+        r = _Row(symbol, flat_detected, composite)
+        r.details = {
+            "vcp_detected": flat_detected,
+            "screeners": {"markets360": {"details": {
+                "vcp_detected": footprint_detected,
+                "vcp": {"source": source},
+            }}},
+        }
+        return r
+
+    def test_footprint_detection_surfaces_over_flat(self):
+        # flat minervini vcp_detected is False, but the markets360 footprint
+        # caught it via a recall path (vol_contract) -> it must rank as detected,
+        # above a genuinely undetected higher-composite row.
+        caught = self._mm_row("CAUGHT", True, "vol_contract", 60.0, flat_detected=False)
+        missed = self._mm_row("MISSED", False, None, 95.0, flat_detected=False)
+        assert self._rank([missed, caught]) == ["CAUGHT", "MISSED"]
+
+    def test_classic_vcp_outranks_parallel_path_on_tie(self):
+        # equal composite, both detected: a classic VCP outranks a looser
+        # parallel-path (ma_tight / vol_contract) base.
+        vcp = self._mm_row("VCP", True, "vcp", 70.0)
+        matight = self._mm_row("MAT", True, "ma_tight", 70.0)
+        volc = self._mm_row("VOL", True, "vol_contract", 70.0)
+        assert self._rank([matight, volc, vcp])[0] == "VCP"
+
     def test_joined_row_tuple_is_unpacked(self):
         # The results endpoint runs a JOINED query whose rows are containers
         # (SQLAlchemy Row / tuple), not bare ScanResults. The sort must unpack
