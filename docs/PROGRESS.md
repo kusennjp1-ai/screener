@@ -422,3 +422,10 @@
 - **実装**: `vcp_footprint.py`に第3並列パス`_vol_contract_base`（ATRが基底ピークの≤0.70倍に収縮＋直近10本タイト near-high＋2x prior advance＝判別ガード、**MA吸着不要**）。VCPDetector無変更＝golden凍結維持（C70同手法）。source='vol_contract'追加。
 - **検証**: オフライン（`measure_volcontract_recall.py`）detected-recall **52.4→55.6%(+3.2pp)**・判別 **+26.2→+27.5pp**（両方向改善・増分 真+19/偽+11）。**凍結908ハーネス: FIRE±5 91.2→91.7（床超え）・判別+24.1→+24.0pp（1/575ノイズ）・TT/S2/SETUP/RS70/GATE/MSCORE バイト一致・golden gate-5 43維持・footprint単体12・harness単体6 pass**。C70と同型（FIRE±5↑・判別flat・他不変）＝採用。理論根拠あり・リターンフィッティングでない。
 - **frozen更新**: FIRE±5床 91.2→**91.7**。**次候補**: VCB系のさらなるrecall（W型・複合ベース）・21EMA押し目(B6)・VCP品質スコアでwatchlistランク。
+
+### C76 — 2026-07-14 young-base（trend-template guard）＝両検証で分岐→不採用
+- **動機**: 残ミスの72%が`young_no_2x`（高値近辺だが prior advance<2x＝2xガードで除外される first-base/早期リーダー）。2xは判別ヒューリスティックでミネルヴィニ規則でない→本人の実ゲート「Stage-2トレンドテンプレート」に置換を試作。
+- **オフライン（`measure_youngbase_recall.py`）**: detected-recall **55.6→74.3%（+18.7pp）**・判別 **+27.5→+32.8pp**（両方向改善・増分110真/77偽・精度59%）＝VCBより遥かに大きいレバーに見えた。
+- **凍結908ハーネス＝不採用**: FIRE±5 entry 91.7→95.4だが control 67.7→**73.6**（より大きく上昇）→**FIRE±5判別 +24.0→+21.8pp（−2.2pp・~13idea＝ノイズでない実低下）**。「低下＝即revert」で**revert**。
+- **確定した学び**: オフラインの detected-recall（セットアップ存在）は改善でも、FIRE±5（±5日のタイミング特異性）が劣化。young base near-highs in Stage2は本人エントリーの四半期前にも出る＝**タイミング特異性がない**。**2xガードは恣意的に見えて、trend templateが持たないタイミング判別を供給していた**。C74/C75の「見かけの改善を作らない」原則の実践（exit-leash・C71/C72と同型の分岐棄却）。
+- 計測スクリプト（`vcp_miss_frontier.py`・`measure_youngbase_recall.py`）は資産として保持。frozen FIRE±5=91.7（C75）維持。**次候補**: recallは現状が判別最適に近い。VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）。
