@@ -7,18 +7,23 @@ stock is under net institutional buying (accumulation) or selling
 heavily.
 
 Methodology (a documented proxy for IBD's proprietary rating):
-- For each session compute the Close Location Value (CLV), the classic
-  money-flow multiplier::
-
-      CLV = ((Close - Low) - (High - Close)) / (High - Low)   in [-1, +1]
-
-  +1 means the session closed on its high (strong buying), -1 on its low.
-- Weight each session's ``CLV * Volume`` by recency (linear weights so the most
-  recent session counts ~2x the oldest in the window) and aggregate into a
-  volume-weighted money-flow ratio in [-1, +1] — i.e. a recency-weighted
-  Chaikin Money Flow.
+- Each session gets a directional money-flow multiplier: a close-to-close UP day
+  = +1 (accumulation), a DOWN day = -1 (distribution), and an unchanged day
+  falls back to the Close Location Value (CLV = ((Close-Low)-(High-Close)) /
+  (High-Low), +1 = closed on the high). This follows O'Neil/Minervini: the
+  institutional footprint is heavy volume on UP days, not the average intraday
+  close-location — a pure-CLV average compressed nearly every name to ~50 ("C").
+- Weight each session's multiplier by recency (linear, most recent ~2x the
+  oldest) AND volume, and aggregate into a money-flow ratio in [-1, +1].
 - Map the ratio onto a 0–99 score and an A–E letter grade:
   A >= 80, B 60-79, C 40-59, D 20-39, E < 20.
+
+Note (scripts/measure_accdis_discrimination.py, measure_udvr_discrimination.py):
+even faithfully computed, accumulation is a WEAK entry-timing discriminator on
+Minervini's 908 real trades (~+7.6pp entry-vs-control at score>=60, vs VCP-detect
++27.5pp / trend-template ~+30pp / SETUP +52pp) — by the time a name is a Stage-2
+setup it is already accumulated, and so is the control. Use it as CONFIRMATION,
+not as a primary screen axis.
 
 The calculation is self-contained per stock (no universe needed), so it can run
 alongside the per-stock metrics in the scan orchestrator.
@@ -108,6 +113,21 @@ class AccumulationDistributionCalculator:
             clv = np.zeros_like(close)
             clv[valid] = ((close[valid] - low[valid]) - (high[valid] - close[valid])) / span[valid]
 
+            # O'Neil/Minervini accumulation footprint: institutions push price UP
+            # on heavy volume. Score by close-to-close DIRECTION (up day = +1,
+            # down day = -1) so up-volume accumulates and down-volume distributes;
+            # on unchanged days fall back to the intraday close-location (CLV).
+            # The pure-CLV average compressed nearly every name to ~50 ("C") and
+            # barely separated Minervini's real entries from a T0-63 control
+            # (scripts/measure_accdis_discrimination.py: A 0% / B 8% / C 92%);
+            # direction is faithful to IBD's price-and-volume method and spreads
+            # the rating. Synthetic flat-close inputs fall through to CLV, so the
+            # documented close-location behaviour is preserved.
+            change = np.zeros_like(close)
+            change[1:] = close[1:] - close[:-1]
+            mult = np.where(change > 0, 1.0, np.where(change < 0, -1.0, clv))
+            mult = np.where(valid, mult, 0.0)
+
             # Linear recency weights: oldest valid session ~1x, newest ~2x.
             n = len(recent)
             recency = np.linspace(1.0, 2.0, num=n)
@@ -117,7 +137,7 @@ class AccumulationDistributionCalculator:
             if denom <= 0:
                 return None
 
-            money_flow_ratio = float((clv * weights).sum() / denom)  # [-1, +1]
+            money_flow_ratio = float((mult * weights).sum() / denom)  # [-1, +1]
             money_flow_ratio = max(-1.0, min(1.0, money_flow_ratio))
 
             score = int(round((money_flow_ratio + 1.0) / 2.0 * 99))
