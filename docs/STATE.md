@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C75完了（**VCP recall向上＝ATRボラティリティ収縮ベースを採用**）。ミネルヴィニの literal 定義「volatility contracting」に基づく並列パス`_vol_contract_base`をvcp_footprintに追加（VCPDetector無変更＝golden凍結維持）。単調深さゲートが弾く見逃しの50.7%（84%は高値近辺タイト）を、10DMA吸着不要のATR収縮で回収。**オフライン detected-recall 52.4→55.6%(+3.2pp)・判別+26.2→+27.5pp（両方向改善）。凍結908: FIRE±5 91.2→91.7（床超え）・判別+24.1→+24.0pp（1sample/575ノイズ）・他バイト一致・golden43維持**。C70と同型の採用。C74: 品質ランクUI（実ブラウザ検証済）+Rowアンパックバグ修正。C73: 908再現性=detected73/機械buy33、exit leash両窓不採用。 **次候補: 21EMA押し目(B6)・VCB系のさらなるrecall（W型/複合ベース）・VCP品質スコアでwatchlistランク**
+- **サイクル**: C76完了（**young-base＝trend-template guard を凍結ハーネスで棄却**）。残ミス72%の`young_no_2x`を、2xガードをStage-2トレンドテンプレに置換して回収を試作。オフラインは detected-recall 55.6→74.3%(+18.7pp)・判別+27.5→+32.8ppと強いが、**凍結908でFIRE±5判別が−2.2pp低下（control 67.7→73.6が entry超過）→即revert**。学び: detected-recall改善≠FIRE±5タイミング特異性、**2xガードはタイミング判別を供給していた**。計測スクリプトは保持。直前のC75（採用済）: ATRボラティリティ収縮ベース`_vol_contract_base`をvcp_footprintに追加（VCPDetector無変更・golden凍結）→**FIRE±5 91.2→91.7（新床）**・判別+24.1→+24.0pp（ノイズ）・他バイト一致。C74: 品質ランクUI（実ブラウザ検証済）+Rowバグ修正。C73: 908再現性=detected73/機械buy33、exit leash両窓不採用。 **次候補: recallは判別最適近辺＝VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
 - **実行中/待機中の外部ジョブ**: なし
