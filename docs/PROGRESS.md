@@ -442,3 +442,9 @@
 - **実装**: 日次 close-to-close 方向（up=+1/down=−1/変化なしはCLV fallback）×recency×volume。合成flat-close testはCLV経路で不変維持。
 - **効果**: 908でグレード分布が spread（B 8%→**34%**）・entry-vs-control判別 score>=60 で **+2.5pp→+7.6pp**（3倍）。ただし依然 confirmation 級（VCP+27.5/TT~+30/SETUP+52には遠い）＝docstringに明記し主軸化しない。golden43維持・composite/acc_dis tests 15 pass・frozen harness metric非該当。
 - **2トラック結論**: (a)真の13F機関保有＝四半期・EDGAR egressはGHAのみ＝別トラック（未着手・要判断）。(b)日次確認＝本fixで完了。資金流入は「タイミング」でなく「確認/ファンダ選別」の軸、が確定。
+
+### C77 — 2026-07-14 コヒーレンス修正: quality_rank が recall改善detectionを使用
+- **問題**: 製品フラット`vcp_detected`（C74 quality_rankが使用）は minervini_scanner の別VCPDetector由来で、C70/C75のrecallパス（MA-tight/vol_contract）を持つ`compute_vcp_footprint`と別物＝**recall改善がFIRE±5では実証済だが品質ランクに未反映**。
+- **修正（backend限定・9db1fad）**: quality_rank比較器が `details.screeners.markets360.details`（footprint）の`vcp_detected`＋`vcp.source`を優先読み（markets360未実行時はフラットにfallback）。キー=(detected, source_tier{vcp:2,ma_tight/vol_contract:1}, composite)。∴ recall改善で捕捉した銘柄がdetectedとして上位化＆同compositeなら古典VCP>並列パス。
+- **検証**: query-builder 171 tests pass（既存フラット経路は tier=0 で不変＝挙動保存、footprint経路＋source tierの新testを追加）。schema/frontend変更なし（VCP列ヘッダが既にquality_rank発火）＝UI無変更ゆえブラウザ検証不要。nested path は orchestrator コードで確認。
+- **残**: VCP列の**表示bool**もfootprint由来に寄せる／`source`列バッジ（frontend＋ブラウザ検証）。真の13F機関保有トラックは別途（四半期・EDGAR/GHA）。

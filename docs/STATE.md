@@ -33,7 +33,7 @@
 
 ## 次アクション（優先順）
 
-0. **【C77最有力・要注意】コヒーレンスギャップ**: 製品のフラット`vcp_detected`（C74 quality_rankとVCP列が使用）は**minervini_scannerの別VCPDetector**（`app/scanners/criteria/vcp_detection.py`）由来で、**C70/C75のrecallパスを持つ`compute_vcp_footprint`（`app/analysis/patterns/legacy_vcp_detection.py`）とは別物**。つまりrecall改善はFIRE±5（footprint使用）では実証済だが**製品のVCP列/品質ランクには届いていない**。footprintの`detected`+`source`をフラット行に昇格→quality_rankをsource優先（vcp>ma_tight>vol_contract）に精緻化、が筋。ただしどのdetectorを製品VCPの正とするかは相関的変更＝凍結ハーネス＋ブラウザ検証必須。慎重に。
+0. **【C77一部完了】コヒーレンスギャップ**: 製品のフラット`vcp_detected`（VCP列表示）は依然 minervini_scanner の別VCPDetector由来だが、**quality_rank（並び順）は既に markets360 footprint の recall改善detection＋source tier を読むよう修正済（C77・backend限定・9db1fad）**。∴ recall改善（C70/C75）は品質ランクに反映される。**残**: VCP**列の表示bool**もfootprint由来に寄せる/`source`を列バッジ表示（要frontend＋ブラウザ検証）。どのdetectorを表示の正とするかは相関的変更＝慎重に。
 1. **C69: VCP recall向上（最大レバー・概ね飽和）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
 2. **未マージdocs/実験フラグのPR** — C66〜C68のコミットが未PR。GitHub MCP再認証後にPR→CI→マージ。
 3. **保留**: Notion/Substack/YouTube/fewmoredaysはプロキシ403（環境ネットワークポリシー・回避禁止）→ユーザーのエクスポート/複製待ち。高速配信2回目実測（平日16:06 ET後）。UI: account_risk_pct表示・スマホ統一。
