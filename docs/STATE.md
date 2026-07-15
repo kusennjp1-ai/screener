@@ -33,7 +33,8 @@
 
 ## 次アクション（優先順）
 
-1. **C69: VCP recall向上（最大レバー）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
+0. **【C77最有力・要注意】コヒーレンスギャップ**: 製品のフラット`vcp_detected`（C74 quality_rankとVCP列が使用）は**minervini_scannerの別VCPDetector**（`app/scanners/criteria/vcp_detection.py`）由来で、**C70/C75のrecallパスを持つ`compute_vcp_footprint`（`app/analysis/patterns/legacy_vcp_detection.py`）とは別物**。つまりrecall改善はFIRE±5（footprint使用）では実証済だが**製品のVCP列/品質ランクには届いていない**。footprintの`detected`+`source`をフラット行に昇格→quality_rankをsource優先（vcp>ma_tight>vol_contract）に精緻化、が筋。ただしどのdetectorを製品VCPの正とするかは相関的変更＝凍結ハーネス＋ブラウザ検証必須。慎重に。
+1. **C69: VCP recall向上（最大レバー・概ね飽和）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
 2. **未マージdocs/実験フラグのPR** — C66〜C68のコミットが未PR。GitHub MCP再認証後にPR→CI→マージ。
 3. **保留**: Notion/Substack/YouTube/fewmoredaysはプロキシ403（環境ネットワークポリシー・回避禁止）→ユーザーのエクスポート/複製待ち。高速配信2回目実測（平日16:06 ET後）。UI: account_risk_pct表示・スマホ統一。
 4. **リスクトーン・オプション（ユーザー選択待ち）**: 半分クライマックス売り（--sell-into-strength --climax-partial）は両窓でmaxDD改善・Sharpe同値以上・検証済み。リスク低減優先なら即採用可。
