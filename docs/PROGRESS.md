@@ -429,3 +429,10 @@
 - **凍結908ハーネス＝不採用**: FIRE±5 entry 91.7→95.4だが control 67.7→**73.6**（より大きく上昇）→**FIRE±5判別 +24.0→+21.8pp（−2.2pp・~13idea＝ノイズでない実低下）**。「低下＝即revert」で**revert**。
 - **確定した学び**: オフラインの detected-recall（セットアップ存在）は改善でも、FIRE±5（±5日のタイミング特異性）が劣化。young base near-highs in Stage2は本人エントリーの四半期前にも出る＝**タイミング特異性がない**。**2xガードは恣意的に見えて、trend templateが持たないタイミング判別を供給していた**。C74/C75の「見かけの改善を作らない」原則の実践（exit-leash・C71/C72と同型の分岐棄却）。
 - 計測スクリプト（`vcp_miss_frontier.py`・`measure_youngbase_recall.py`）は資産として保持。frozen FIRE±5=91.7（C75）維持。**次候補**: recallは現状が判別最適に近い。VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）。
+
+### C77 — 2026-07-14 資金流入（機関需要）シグナルの調査＝日次プロキシは弱判別
+- **動機（ユーザー・REDFORD投稿）**: 機関の買い集めリスト（13F "$ invested"）はファンダ優良の代理＝スクリーナーに資金流入要素を追加すべきでは。
+- **発見**: 蓄積レーティング`acc_dis_rating`（CLVマネーフロー0-99）は**既に実装済**（composite_ratingに組込）。だが908で判別を計測すると**極めて弱い**: acc_dis +2.5pp／up-down volume ratio 50d +3.8pp（最良）／accumulation-days +2.5pp。cf. VCP検出+27.5pp・trend template ~+30pp・SETUP +52pp。
+- **構造的理由**: Stage-2セットアップに達した時点で既に蓄積済＝controlも同様。蓄積はエントリー**タイミング**情報をほぼ足さない（trend/structure要件と冗長）。日次accumulationを timing screen に足すのは young-base同型の希釈リスク＝不採用。
+- **正しい設計（2トラック分離）**: (a) REDFORDの"$ invested"の価値は**ファンダ・ショートリスト**（機関がDD済＝優良）で、**真の13F機関保有データ**が要る＝四半期・45日遅延・EDGAR egressはGitHub Actionsのみ＝「日次」は原理的に不可（13Fは四半期更新）。別トラックのデータ工学（GHA+EDGAR 13F）。(b) 日次でできるのは既存acc_dis/UDVRの表示のみ＝タイミング判別は弱いので screen/rank の主軸にはしない。
+- 計測スクリプト保持（`measure_accdis_discrimination.py`・`measure_udvr_discrimination.py`）。**結論**: 資金流入はタイミングでなくファンダ選別の軸。日次プロキシは弱く主軸化しない。真の13Fは四半期・別トラック。
