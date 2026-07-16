@@ -33,7 +33,7 @@
 
 ## 次アクション（優先順）
 
-**★ docs/MINERVINI_CAPABILITY_MATRIX.md（C78・6エージェント分析）が最新の優先順の正。上位=執行の規律側（データblocker無し・最大DDレバー）**: (1)compute_sell_planにストップ・ヒット売り分岐（<0.5日・純ロジック・要browser） (2)ブレッドス連動レジーム（同一cache OHLCVから%>50/200DMA・net-new-highでconfirmed_uptrend降格・要908 GATE再測） (3)エクスポージャー梯子の実効化＋レジーム別rating cap＋市場売りアラート（要908＋両窓） (4)mobileオフラインSW＋localStorage watchlist＋保有連動exit可視化（client側・要browser375px） (5)fundamentals付き908リプレイでrating stack検証（data=point-in-time要GHA・計測先行）。
+**★ docs/MINERVINI_CAPABILITY_MATRIX.md（C78）が優先順の正。(1)ストップ・ヒット売り分岐=C79完了（324b5c2・実ブラウザ検証済）** 残: (2)ブレッドス連動レジーム（同一cache OHLCVから%>50/200DMA・net-new-highでconfirmed_uptrend降格・要908 GATE再測） (3)エクスポージャー梯子の実効化＋レジーム別rating cap＋市場売りアラート（要908＋両窓） (4)mobileオフラインSW＋localStorage watchlist＋保有連動exit可視化（client側・要browser375px） (5)fundamentals付き908リプレイでrating stack検証（data=point-in-time要GHA・計測先行）。
 
 
 0. **【C77一部完了】コヒーレンスギャップ**: 製品のフラット`vcp_detected`（VCP列表示）は依然 minervini_scanner の別VCPDetector由来だが、**quality_rank（並び順）は既に markets360 footprint の recall改善detection＋source tier を読むよう修正済（C77・backend限定・9db1fad）**。∴ recall改善（C70/C75）は品質ランクに反映される。**残**: VCP**列の表示bool**もfootprint由来に寄せる/`source`を列バッジ表示（要frontend＋ブラウザ検証）。どのdetectorを表示の正とするかは相関的変更＝慎重に。

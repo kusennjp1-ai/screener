@@ -454,3 +454,10 @@
 - **実行**: workflow（6レンズ並列＝ENTRY/SETUP・SELL/RISK・MARKET-TIMING・CANSLIM・MOBILE/PWA・DATA/INFRA、各実コード裏取り→synthesis）。critic/finalizeはFable-5週次上限で失敗→6レンズ+synthesisをmainループ回収、監査補遺をmainで追加。成果=**docs/MINERVINI_CAPABILITY_MATRIX.md**（CAN 40+項目・CANNOT 33項目を重要度×成績影響で優先順・mobile評価・次5サイクル）。
 - **確定した結論**: 買い側（発見）は忠実・FIRE±5 91.7まで検証済。**最大の空白は「執行の規律」側でデータ/egress blocker無し**: ①ストップ・ヒット売りが未アクション化（<0.5日・critical）②レジームがブレッドス盲目（confirmed@100%で分配天井を見逃す・最大DDレバー）③エクスポージャー梯子が表示のみ＝binary gate ④portfolio heat集計なし ⑤fundamental/rating stackは908で0寄与＝未検証。mobileは日次レビュー用途では可用だがSW/watchlist/pushが空白。
 - **次**: マトリクス§4の上位＝執行規律側から着手（α追加より先）。fundamentalは重み盲信前に908計測。**注: Fable-5が週次上限到達→恒久ルールによりOpus 4.8で継続すべき。**
+
+### C79 — 2026-07-16 ストップ・ヒットを最優先売りアクション化（マトリクス#1）
+- **能力マトリクス§4#1の実装**: `compute_sell_plan`に最優先`stop_hit`分岐（終値≤trailing/initialストップ）。従来は軽出来高・50DMA上のジリ安でストップ割れでも"hold"表示＝「ストップは絶対」が未執行だった。
+- **配線**: digest（urgency 0・日本語注記「ストップは絶対、翌日成行で撤退」）・SellPlanCard（Sell — Stop Hitカード＋stop@表示・green raise行は抑制）・SignalBadges（STOP HITパルスバッジ）・PositionsPage（SELL — Stop Hit）。
+- **検証**: backend 18＋frontend 14 tests pass・lint clean。**実ブラウザ（sandbox-e2e・1440/375px）**: FTNT entry170/stop160/last151.35(−1.86R)に赤パルス「SELL — Stop Hit」、対照LLYは「Raise Stop」（scratchpad/stophit_desktop/mobile.png）。売りプランは助言表示＝凍結metric非該当・golden不変。
+- **副次発見（別サイクル候補）**: `compute_trailing_stop`はステートレス（最終終値からR再計算）＝押し戻し時に梯子が下がる。上げたストップの記憶はポジション層の責務→高値からのMFEベース化 or Position行にstop永続化を検討。
+- **次**: マトリクス#2 ブレッドス連動レジーム（要908 GATE再測）。
