@@ -647,12 +647,22 @@ def main() -> int:
     for d in sim_dates:
         regimes[d]["breadth"] = float(breadth_series.loc[d])
     if BREADTH_REGIME:
-        # Breadth-divergence downgrade: an index-confirmed uptrend with fewer
-        # than 40% of the universe above its 200DMA is a narrow rally — treat
-        # it as under pressure (55% exposure; also disables 2x progressive risk).
+        # Breadth-DIVERGENCE downgrade: only when the index is AT ITS HIGHS
+        # (within 3% of the 252d high) while <40% of the universe holds its
+        # 200DMA — the definition of a narrow distribution top. The first cut
+        # omitted the near-highs condition and fired at post-FTD BOTTOMS where
+        # breadth is still rebuilding (the most profitable moment to be long):
+        # both windows collapsed (6y 112.4->76.5, 10y 97.8->72.1) = that rule
+        # punished bottoms, not tops.
+        spy_close = spy["close"]
+        spy_hi252 = spy_close.rolling(252, min_periods=60).max()
         downgraded = 0
         for d in sim_dates:
+            hi = float(spy_hi252.loc[:d].iloc[-1]) if d in spy_hi252.index else float("nan")
+            px = float(spy_close.loc[:d].iloc[-1])
+            near_high = hi == hi and hi > 0 and (hi - px) / hi <= 0.03
             if (regimes[d]["regime"] == "confirmed_uptrend"
+                    and near_high
                     and regimes[d]["breadth"] < BREADTH_ROT):
                 regimes[d]["regime"] = "uptrend_under_pressure"
                 regimes[d]["exposure"] = 55

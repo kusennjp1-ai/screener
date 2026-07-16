@@ -49,10 +49,12 @@ REGIME_EXPOSURE = {
     "downtrend": 0,
 }
 
-# Breadth-divergence guard (C80): a confirmed_uptrend with fewer than this % of
-# the tradable universe above its 200DMA is a narrow rally — downgraded to
-# under-pressure. Mirror of the conventional 60% healthy-majority line.
+# Breadth-divergence guard (C80): a confirmed_uptrend with the index within 3%
+# of its 52w high while fewer than this % of the tradable universe holds its
+# 200DMA is a narrow distribution top — downgraded to under-pressure. 40% is
+# the mirror of the conventional 60% healthy-majority line; 3% = "at the highs".
 BREADTH_ROT_PCT = 40.0
+BREADTH_DIVERGENCE_NEAR_HIGH = 0.03
 
 # --- Follow-through day (O'Neil's bottom-confirmation signal) ---------------
 # After a correction low, day 1 of a rally attempt is the first up close; a
@@ -279,13 +281,18 @@ def assess_market_regime(
     else:
         regime = "downtrend"
 
-    # Breadth-divergence guard (C80): index trend intact but fewer than 40% of
-    # the universe above its 200DMA = a narrow rally led by a handful of names.
-    # Downgrade to under-pressure exposure. Neutral when breadth is unknown.
+    # Breadth-DIVERGENCE guard (C80): only when the index is AT ITS HIGHS
+    # (within 3% of the 52w high) while fewer than 40% of the universe holds its
+    # 200DMA — the definition of a narrow distribution top. The near-highs
+    # condition is essential: without it the guard fires at post-FTD BOTTOMS
+    # where breadth is still rebuilding (the most profitable moment to be long)
+    # — both backtest windows collapsed under that unfaithful first cut.
+    # Neutral when breadth is unknown.
     if (
         regime == "confirmed_uptrend"
         and breadth_pct_above_200dma is not None
         and breadth_pct_above_200dma < BREADTH_ROT_PCT
+        and pct_from_high <= BREADTH_DIVERGENCE_NEAR_HIGH
     ):
         regime = "uptrend_under_pressure"
 
