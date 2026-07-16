@@ -448,3 +448,9 @@
 - **修正（backend限定・9db1fad）**: quality_rank比較器が `details.screeners.markets360.details`（footprint）の`vcp_detected`＋`vcp.source`を優先読み（markets360未実行時はフラットにfallback）。キー=(detected, source_tier{vcp:2,ma_tight/vol_contract:1}, composite)。∴ recall改善で捕捉した銘柄がdetectedとして上位化＆同compositeなら古典VCP>並列パス。
 - **検証**: query-builder 171 tests pass（既存フラット経路は tier=0 で不変＝挙動保存、footprint経路＋source tierの新testを追加）。schema/frontend変更なし（VCP列ヘッダが既にquality_rank発火）＝UI無変更ゆえブラウザ検証不要。nested path は orchestrator コードで確認。
 - **残**: VCP列の**表示bool**もfootprint由来に寄せる／`source`列バッジ（frontend＋ブラウザ検証）。真の13F機関保有トラックは別途（四半期・EDGAR/GHA）。
+
+### C78 — 2026-07-16 6エージェントでMinervini能力マトリクス（can/cannot・優先順・成績影響）
+- **依頼**: ミネルヴィニ視点でスクリーナー（mobile含む）のできる/できないをループ構造で網羅分析、重要度・実装方針・成績影響を複数エージェントで。
+- **実行**: workflow（6レンズ並列＝ENTRY/SETUP・SELL/RISK・MARKET-TIMING・CANSLIM・MOBILE/PWA・DATA/INFRA、各実コード裏取り→synthesis）。critic/finalizeはFable-5週次上限で失敗→6レンズ+synthesisをmainループ回収、監査補遺をmainで追加。成果=**docs/MINERVINI_CAPABILITY_MATRIX.md**（CAN 40+項目・CANNOT 33項目を重要度×成績影響で優先順・mobile評価・次5サイクル）。
+- **確定した結論**: 買い側（発見）は忠実・FIRE±5 91.7まで検証済。**最大の空白は「執行の規律」側でデータ/egress blocker無し**: ①ストップ・ヒット売りが未アクション化（<0.5日・critical）②レジームがブレッドス盲目（confirmed@100%で分配天井を見逃す・最大DDレバー）③エクスポージャー梯子が表示のみ＝binary gate ④portfolio heat集計なし ⑤fundamental/rating stackは908で0寄与＝未検証。mobileは日次レビュー用途では可用だがSW/watchlist/pushが空白。
+- **次**: マトリクス§4の上位＝執行規律側から着手（α追加より先）。fundamentalは重み盲信前に908計測。**注: Fable-5が週次上限到達→恒久ルールによりOpus 4.8で継続すべき。**
