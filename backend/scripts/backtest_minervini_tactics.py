@@ -71,6 +71,14 @@ PRESSURE_RS_MIN = 90
 # (2022-style), the cap stays. 60% = the conventional healthy-majority line.
 BREADTH_CONFIRM = False
 BREADTH_MIN = 0.60
+# C80: breadth-confirmed REGIME (capability-matrix #2). The index-only regime is
+# breadth-blind: a cap-weighted index can print highs on a handful of mega-caps
+# while the majority of stocks lose their 200DMA (a classic distribution top).
+# When breadth ROTS — fewer than 40% of the tradable universe above its 200DMA,
+# the mirror of the conventional 60% healthy-majority line — a confirmed_uptrend
+# is downgraded to under-pressure exposure. Single grounded threshold, no sweep.
+BREADTH_REGIME = False
+BREADTH_ROT = 0.40
 # Minervini: in a market correction you go to CASH and wait for the FTD; the
 # pre-FTD 20% correction exposure is a residual the shipped engine allows.
 # This flag makes a correction a hard no-buy (like a downtrend) — buying
@@ -570,6 +578,10 @@ def main() -> int:
                     help="treat a market correction as a hard no-buy (0% "
                          "exposure, like a downtrend) instead of the residual "
                          "20% cap — wait for the FTD before buying")
+    ap.add_argument("--breadth-regime", action="store_true",
+                    help="downgrade a confirmed_uptrend to under-pressure "
+                         "exposure when <40%% of the tradable universe holds "
+                         "its 200DMA (breadth-divergence guard)")
     ap.add_argument("--breadth-confirm", action="store_true",
                     help="under pressure: keep full exposure while >=60% of "
                          "the tradable universe holds its 200DMA")
@@ -597,11 +609,12 @@ def main() -> int:
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
-    global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK, CONFIRM_EXIT
+    global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK, CONFIRM_EXIT, BREADTH_REGIME
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
     MA_TIGHT = args.ma_tight
     QUALITY_RANK = args.quality_rank
     CONFIRM_EXIT = args.confirm_exit
+    BREADTH_REGIME = args.breadth_regime
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -633,6 +646,18 @@ def main() -> int:
     breadth_series = above200.sum(axis=1) / valid200.sum(axis=1).clip(lower=1)
     for d in sim_dates:
         regimes[d]["breadth"] = float(breadth_series.loc[d])
+    if BREADTH_REGIME:
+        # Breadth-divergence downgrade: an index-confirmed uptrend with fewer
+        # than 40% of the universe above its 200DMA is a narrow rally — treat
+        # it as under pressure (55% exposure; also disables 2x progressive risk).
+        downgraded = 0
+        for d in sim_dates:
+            if (regimes[d]["regime"] == "confirmed_uptrend"
+                    and regimes[d]["breadth"] < BREADTH_ROT):
+                regimes[d]["regime"] = "uptrend_under_pressure"
+                regimes[d]["exposure"] = 55
+                downgraded += 1
+        print(f"breadth-regime: downgraded {downgraded}/{len(sim_dates)} days", flush=True)
     print("regime days computed", flush=True)
 
     # DAILY watchlists using the REAL VCP detector on template+RS leaders.
@@ -790,6 +815,7 @@ def main() -> int:
         "ma_tight": args.ma_tight,
         "quality_rank": args.quality_rank,
         "confirm_exit": args.confirm_exit,
+        "breadth_regime": args.breadth_regime,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
