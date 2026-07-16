@@ -143,7 +143,10 @@ class Markets360Scanner(BaseStockScreener):
         # in a confirmed uptrend. The benchmark IS the market, so assess its regime
         # (always from daily index data, even on a weekly stock scan) and gate
         # "buyable now" by it — the watchlist (passes) is unchanged.
-        regime = assess_market_regime(data.benchmark_data)
+        regime = assess_market_regime(
+            data.benchmark_data,
+            breadth_pct_above_200dma=getattr(data, "market_breadth_pct_above_200dma", None),
+        )
         market_ok = regime.get("regime") in ("confirmed_uptrend", "uptrend_under_pressure")
         # Unknown regime (no benchmark) does not block — fall back to setup only.
         if regime.get("regime") is None:

@@ -26,6 +26,31 @@ def test_confirmed_uptrend():
     assert r["distribution_days"] <= 1
 
 
+def test_breadth_rot_downgrades_a_confirmed_uptrend():
+    """C80: index trend intact but <40% of the universe above its 200DMA — a
+    narrow rally reads under-pressure, not confirmed."""
+    df = _index(np.linspace(300, 460, 300))
+    r = assess_market_regime(df, breadth_pct_above_200dma=32.0)
+    assert r["regime"] == "uptrend_under_pressure"
+    assert r["exposure_pct"] == 55
+    assert r["breadth_pct_above_200dma"] == 32.0
+
+
+def test_healthy_breadth_keeps_the_uptrend_confirmed():
+    df = _index(np.linspace(300, 460, 300))
+    r = assess_market_regime(df, breadth_pct_above_200dma=68.0)
+    assert r["regime"] == "confirmed_uptrend"
+    assert r["exposure_pct"] == 100
+
+
+def test_missing_breadth_is_neutral():
+    """None = index-only behaviour, byte-identical (the 908 GATE path)."""
+    df = _index(np.linspace(300, 460, 300))
+    base = assess_market_regime(df)
+    assert base["regime"] == "confirmed_uptrend"
+    assert base["breadth_pct_above_200dma"] is None
+
+
 def test_downtrend():
     # below the 200DMA with 50<200 -> downtrend, zero exposure
     r = assess_market_regime(_index(np.linspace(460, 300, 300)))

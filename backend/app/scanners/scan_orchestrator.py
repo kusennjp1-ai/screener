@@ -810,7 +810,12 @@ class ScanOrchestrator:
         """
         try:
             bench = getattr(stock_data, "benchmark_data", None)
-            regime = assess_market_regime(bench)
+            regime = assess_market_regime(
+                bench,
+                breadth_pct_above_200dma=getattr(
+                    stock_data, "market_breadth_pct_above_200dma", None
+                ),
+            )
             if regime.get("regime") is None:
                 return {}
             # A live follow-through day is why the regime can read

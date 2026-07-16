@@ -138,6 +138,10 @@ class StockData:
     timezone: Optional[str] = None
     local_code: Optional[str] = None
     rs_universe_performances: Optional[Dict[int | str, list[float]]] = None
+    # Scan-level market breadth: % of the scanned market's symbols above their
+    # 200DMA (None when the scan is too small to be representative). Feeds the
+    # breadth-divergence regime guard (C80).
+    market_breadth_pct_above_200dma: Optional[float] = None
     precomputed_scan_context: Optional[PrecomputedScanContext] = None
     # See app.domain.scanning.mixed_market_policy.
     is_mixed_market: bool = False
