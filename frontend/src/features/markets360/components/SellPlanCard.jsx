@@ -10,6 +10,14 @@ import { pulseRing } from '../../../theme/motion';
 // weakness) and the trailing-stop ladder. Warning states pulse gently so an
 // actionable exit is impossible to miss; "hold" renders nothing (no noise).
 const ACTION_META = {
+  stop_hit: {
+    color: '#f23645',
+    icon: TrendingDownIcon,
+    title: 'Sell — Stop Hit',
+    ja: '売り：損切りライン到達（ストップは絶対、翌日成行で撤退）',
+    term: 'stop',
+    pulse: true,
+  },
   exit: {
     color: '#f23645',
     icon: TrendingDownIcon,
@@ -92,7 +100,14 @@ export default function SellPlanCard({ sellPlan }) {
         </Box>
       )}
 
-      {(action === 'raise_stop' || trailing?.raised) && trailing?.stop != null && (
+      {action === 'stop_hit' && trailing?.stop != null && (
+        <Typography sx={{ color: '#f23645', fontSize: 13, mt: 0.75 }}>
+          stop @ <b>{Number(trailing.stop).toFixed(2)}</b>
+          {trailing?.r_multiple != null && ` · ${trailing.r_multiple}R`}
+        </Typography>
+      )}
+
+      {action !== 'stop_hit' && (action === 'raise_stop' || trailing?.raised) && trailing?.stop != null && (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid #23262f' }}>
           <GlossaryLabel term="r_multiple">
             <Typography component="span" sx={{ color: '#d1d4dc', fontSize: 13 }}>

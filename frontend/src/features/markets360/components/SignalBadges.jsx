@@ -14,6 +14,13 @@ import { enterSlideFade } from '../../../theme/motion';
 // Both honor prefers-reduced-motion — the badge is still fully readable
 // with zero animation.
 const SELL_META = {
+  stop_hit: {
+    color: '#f23645',
+    Icon: TrendingDownIcon,
+    label: 'STOP HIT',
+    ja: '売り：損切りライン到達（ストップは絶対、翌日成行で撤退）',
+    pulse: true,
+  },
   exit: {
     color: '#f23645',
     Icon: TrendingDownIcon,

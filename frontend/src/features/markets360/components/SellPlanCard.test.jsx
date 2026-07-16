@@ -11,6 +11,21 @@ describe('SellPlanCard', () => {
     expect(c2).toBeEmptyDOMElement();
   });
 
+  it('shows stop-hit as the top-urgency exit with the stop level', () => {
+    renderWithProviders(
+      <SellPlanCard sellPlan={{
+        action: 'stop_hit',
+        breakdown: null,
+        climax: { active: false, flags: [] },
+        trailing: { stop: 96.0, r_multiple: -1.02, raised: false },
+      }} />
+    );
+    expect(screen.getByText('Sell — Stop Hit')).toBeInTheDocument();
+    expect(screen.getByText(/96\.00/)).toBeInTheDocument();
+    // the green "new stop" raise line must NOT render under a stop-hit card
+    expect(screen.queryByText(/new stop/)).not.toBeInTheDocument();
+  });
+
   it('shows the trend-broken exit with volume context', () => {
     renderWithProviders(
       <SellPlanCard sellPlan={{
