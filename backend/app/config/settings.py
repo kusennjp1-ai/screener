@@ -424,8 +424,13 @@ class Settings(BaseSettings):
 
     # Per-market cache warmup schedule (all in the celery_timezone, default ET).
     # Defaults are at or after close + 30m in the market calendar service.
+    # US runs at close+5m (16:05 ET), not +30m: the user's daily review window
+    # is 6-8am JST, and in EST the US close IS 06:00 JST — every idle minute
+    # pushes the refreshed cache (full-universe fetch ~25-40m at 1 req/s) deeper
+    # into that window. Yahoo serves finalized daily bars within minutes of the
+    # bell, so the extra 25m buffer bought nothing (C81).
     cache_warm_hour_us: int = 16
-    cache_warm_minute_us: int = 30
+    cache_warm_minute_us: int = 5
     cache_warm_hour_hk: int = 4
     cache_warm_minute_hk: int = 30
     cache_warm_hour_in: int = 6
