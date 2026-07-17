@@ -95,6 +95,14 @@ GROUP_HALF_PCT = 0.50     # avoid-laggards bottom-half line (preset_screens.py:1
 GROUP_EMERGE_DELTA = 0.20 # same 0.20*G magnitude as the Top-40 leg — one constant
 GROUP_MOM_DAYS = 21       # ibd_group_rank_service rank_change_1m unit
 GROUP_MIN_MEMBERS = 3     # ibd_group_rank_service: >=3 valid-RS members
+# Pre-registered contingency (C82, decided before the rerun): the first run's
+# damage concentrated in post-FTD recovery years (2020 -19.1pp, 2023 -19.9pp)
+# — group RS is built from >=63d member returns, so it is structurally BLIND
+# to new leadership for ~a quarter after a market turn. Suspend the gate for
+# 63 sessions (the repo's canonical quarter: RS shortest leg / control offset)
+# after any correction/downtrend -> confirmed_uptrend upgrade. Thresholds
+# untouched per the contingency contract.
+GROUP_FTD_SUSPEND = 63
 IBD_CSV = Path(__file__).resolve().parents[2] / "data" / "IBD_industry_group.csv"
 ETF_GROUP = "Finance-ETF / ETN"   # winners-backtest precedent
 # Minervini: in a market correction you go to CASH and wait for the FTD; the
@@ -716,6 +724,21 @@ def main() -> int:
         print(f"group-rotation: {grp_score.shape[1]} groups, map coverage "
               f"{100 * len(mapped) / len(tradable):.0f}% of tradable", flush=True)
 
+    # Track market-turn upgrades (correction/downtrend -> confirmed_uptrend) so
+    # the group gate can stand down during its structurally-blind first quarter.
+    _last_upgrade_idx = {}
+    if GROUP_ROTATION:
+        prev_reg = None
+        for _i, _d in enumerate(close.index):
+            r = regimes.get(_d, {}).get("regime")
+            if r is None:
+                continue
+            if prev_reg in ("correction", "downtrend") and r == "confirmed_uptrend":
+                _last_upgrade_idx[_i] = True
+            prev_reg = r
+        _ups = sorted(_last_upgrade_idx)
+        _last_upgrade_idx = {"ups": _ups}
+
     # DAILY watchlists using the REAL VCP detector on template+RS leaders.
     # (Weekly sampling starved the entry funnel: a VCP pivot approach lasts
     # days, and the live product scans daily — the sim must too.)
@@ -748,7 +771,9 @@ def main() -> int:
             # gates — TPR band green (strong) and pressure band green (buy)
             tpr_row, prs_row = band_panels[0].iloc[idx], band_panels[1].iloc[idx]
             cands = [s for s in cands if bool(tpr_row.get(s, False)) and bool(prs_row.get(s, False))]
-        if group_pct is not None:
+        _ups = _last_upgrade_idx.get("ups", []) if group_pct is not None else []
+        _last_up = max((u for u in _ups if u <= idx), default=-10**6)
+        if group_pct is not None and (idx - _last_up) >= GROUP_FTD_SUSPEND:
             gp_row, gm_row = group_pct.iloc[idx], group_mom.iloc[idx]
 
             def _grp_ok(s):
