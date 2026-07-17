@@ -33,6 +33,7 @@ can be separated.
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import gzip
 import json
@@ -79,6 +80,23 @@ BREADTH_MIN = 0.60
 # is downgraded to under-pressure exposure. Single grounded threshold, no sweep.
 BREADTH_REGIME = False
 BREADTH_ROT = 0.40
+# C82: group-rotation overlay (O'Neil: ~half a leader's move is its industry
+# group — buy leaders in LEADING or newly-EMERGING groups). Group score =
+# mean member RS percentile (shipped ibd_group_rank_service avg_rs, >=3
+# valid members/day), ranked across groups daily, walk-forward. New buys
+# allowed only when the group is top-20% (IBD Top-40 convention,
+# preset_screens.py:168) OR has gained >=0.20 rank-pct over 21 sessions
+# (rank_change_1m unit) while in the top half (preset_screens.py:105).
+# Unmapped symbols / unranked groups FAIL OPEN (C80 lesson). No exit leg:
+# group fade never force-sells (SPEC: sells are stock/market-action; C73).
+GROUP_ROTATION = False
+GROUP_LEAD_PCT = 0.80     # top 40 of 197 (preset_screens.py:168-173, 358-364)
+GROUP_HALF_PCT = 0.50     # avoid-laggards bottom-half line (preset_screens.py:105-107)
+GROUP_EMERGE_DELTA = 0.20 # same 0.20*G magnitude as the Top-40 leg — one constant
+GROUP_MOM_DAYS = 21       # ibd_group_rank_service rank_change_1m unit
+GROUP_MIN_MEMBERS = 3     # ibd_group_rank_service: >=3 valid-RS members
+IBD_CSV = Path(__file__).resolve().parents[2] / "data" / "IBD_industry_group.csv"
+ETF_GROUP = "Finance-ETF / ETN"   # winners-backtest precedent
 # Minervini: in a market correction you go to CASH and wait for the FTD; the
 # pre-FTD 20% correction exposure is a residual the shipped engine allows.
 # This flag makes a correction a hard no-buy (like a downtrend) — buying
@@ -578,6 +596,11 @@ def main() -> int:
                     help="treat a market correction as a hard no-buy (0% "
                          "exposure, like a downtrend) instead of the residual "
                          "20% cap — wait for the FTD before buying")
+    ap.add_argument("--group-rotation", action="store_true",
+                    help="allow new buys only from LEADING (top-20%%) or "
+                         "EMERGING (+0.20 rank-pct/21d, top half) IBD groups; "
+                         "walk-forward group RS = mean member RS percentile "
+                         "(data/IBD_industry_group.csv); fail-open on unmapped")
     ap.add_argument("--breadth-regime", action="store_true",
                     help="downgrade a confirmed_uptrend to under-pressure "
                          "exposure when <40%% of the tradable universe holds "
@@ -610,11 +633,13 @@ def main() -> int:
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
     global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK, CONFIRM_EXIT, BREADTH_REGIME
+    global GROUP_ROTATION
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
     MA_TIGHT = args.ma_tight
     QUALITY_RANK = args.quality_rank
     CONFIRM_EXIT = args.confirm_exit
     BREADTH_REGIME = args.breadth_regime
+    GROUP_ROTATION = args.group_rotation
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -670,6 +695,27 @@ def main() -> int:
         print(f"breadth-regime: downgraded {downgraded}/{len(sim_dates)} days", flush=True)
     print("regime days computed", flush=True)
 
+    # --- group-rotation: walk-forward per-group RS percentile panel ----------
+    group_pct = group_mom = None
+    sym_group = None
+    if GROUP_ROTATION:
+        sym_group = {}
+        with open(IBD_CSV, newline="", encoding="utf-8") as fh:
+            for parts in csv.reader(fh):
+                if len(parts) >= 2 and parts[0].strip() and parts[1].strip() \
+                        and parts[1].strip() != ETF_GROUP:
+                    sym_group[parts[0].strip().upper()] = parts[1].strip()
+        mapped = [s for s in tradable if s in sym_group]
+        grp_of = pd.Series({s: sym_group[s] for s in mapped})
+        rs_m = ind["rs"][mapped]
+        grp_score = rs_m.T.groupby(grp_of).mean().T           # dates x groups
+        grp_n = rs_m.notna().T.groupby(grp_of).sum().T
+        grp_score = grp_score.where(grp_n >= GROUP_MIN_MEMBERS)
+        group_pct = grp_score.rank(axis=1, pct=True)          # 1.0 = strongest group
+        group_mom = group_pct.diff(GROUP_MOM_DAYS)
+        print(f"group-rotation: {grp_score.shape[1]} groups, map coverage "
+              f"{100 * len(mapped) / len(tradable):.0f}% of tradable", flush=True)
+
     # DAILY watchlists using the REAL VCP detector on template+RS leaders.
     # (Weekly sampling starved the entry funnel: a VCP pivot approach lasts
     # days, and the live product scans daily — the sim must too.)
@@ -702,6 +748,21 @@ def main() -> int:
             # gates — TPR band green (strong) and pressure band green (buy)
             tpr_row, prs_row = band_panels[0].iloc[idx], band_panels[1].iloc[idx]
             cands = [s for s in cands if bool(tpr_row.get(s, False)) and bool(prs_row.get(s, False))]
+        if group_pct is not None:
+            gp_row, gm_row = group_pct.iloc[idx], group_mom.iloc[idx]
+
+            def _grp_ok(s):
+                g = sym_group.get(s)
+                if g is None:
+                    return True                      # unmapped: fail OPEN
+                gp = gp_row.get(g, np.nan)
+                if gp != gp:
+                    return True                      # unranked group: fail OPEN
+                if gp >= GROUP_LEAD_PCT:
+                    return True                      # LEADING
+                gm = gm_row.get(g, np.nan)
+                return gm == gm and gm >= GROUP_EMERGE_DELTA and gp >= GROUP_HALF_PCT  # EMERGING
+            cands = [s for s in cands if _grp_ok(s)]
         wl = {}
         for s in cands:
             prices = close[s].iloc[max(0, idx - 251): idx + 1].dropna()
@@ -826,6 +887,7 @@ def main() -> int:
         "quality_rank": args.quality_rank,
         "confirm_exit": args.confirm_exit,
         "breadth_regime": args.breadth_regime,
+        "group_rotation": args.group_rotation,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
