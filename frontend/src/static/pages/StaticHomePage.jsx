@@ -26,6 +26,7 @@ import StaticChartViewerModal from '../StaticChartViewerModal';
 import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
+import TodaysBuysCard from '../components/TodaysBuysCard';
 import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
@@ -237,6 +238,14 @@ function StaticHomePage() {
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} />
+
+      {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
+          risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
+      <TodaysBuysCard
+        indexData={chartIndexQuery.data}
+        scanRows={scanRows}
+        onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
+      />
 
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {(home.key_markets || [])

@@ -2128,8 +2128,17 @@ def test_compute_m360_signals_uses_band_states_and_buy_points(service_and_sessio
         bands={"pressure_state": "buy", "tpr_state": "strong", "buy_risk_state": "low"},
         buy_points=[],
     )
-    # Both engines ran on the same wiring as the live Markets360Service.
-    assert set(out) == {"signal", "sell_plan"}
+    # Both engines ran on the same wiring as the live Markets360Service, plus
+    # the C83 decision block (risk plan + the compact index summary).
+    assert set(out) == {"signal", "sell_plan", "risk_plan", "_buy_index"}
+    # risk_plan is the ONE source for stop/size the UI may render
+    assert "stop_loss" in out["risk_plan"] and "position_size_pct" in out["risk_plan"]
+    # the index summary exists whenever a signal dict was computed, and it must
+    # carry the decision fields the Today's-Buys card renders
+    if out["_buy_index"] is not None:
+        for key in ("active", "trigger_price", "stop_loss", "position_size_pct",
+                    "vcp_source", "last_close"):
+            assert key in out["_buy_index"]
     assert "barrels" in out["signal"]
     assert out["signal"]["barrels"]["trend"] is True  # tpr_state fed through
     assert out["sell_plan"]["action"] in (

@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 STATIC_SITE_SCHEMA_VERSION = "static-site-v2"
 SCAN_BUNDLE_SCHEMA_VERSION = "static-scan-v1"
-CHART_BUNDLE_SCHEMA_VERSION = "static-charts-v1"
+CHART_BUNDLE_SCHEMA_VERSION = "static-charts-v2"
 SCAN_CHUNK_SIZE = 1000
 STATIC_CHART_LIMIT = 200
 STATIC_CHART_PERIOD = "6mo"
@@ -804,6 +804,8 @@ class StaticSiteExportService:
             rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
             buy_points = self._compute_buy_points(price_df)
             bands = self._compute_chart_bands(price_df, benchmark_df)
+            m360 = self._compute_m360_signals(price_df, bands=bands, buy_points=buy_points)
+            buy_summary = m360.pop("_buy_index", None)
             self._write_json(
                 output_dir / rel_path,
                 {
@@ -823,10 +825,16 @@ class StaticSiteExportService:
                     "buy_points": buy_points,
                     "eps_line": self._compute_eps_line(symbol, price_df),
                     "bands": bands,
-                    **self._compute_m360_signals(price_df, bands=bands, buy_points=buy_points),
+                    **m360,
                 },
             )
-            entries.append({"symbol": symbol, "rank": rank, "path": rel_path.as_posix()})
+            entries.append({
+                "symbol": symbol, "rank": rank, "path": rel_path.as_posix(),
+                # buy: None when no signal was computable — the UI must degrade
+                # to pivot-only display and never fabricate a trigger (C83).
+                "buy": buy_summary,
+                "rs_rating": (stock_data or {}).get("rs_rating"),
+            })
 
         def _expand_extra_charts(candidate_symbols, *, log_label) -> None:
             """Emit charts for symbols not already exported (preset/group expansion)."""
@@ -2199,7 +2207,43 @@ class StaticSiteExportService:
                 entry=signal.get("trigger_price") if signal else None,
                 initial_stop=signal.get("stop") if signal else None,
             )
-            return {"signal": signal, "sell_plan": sell_plan}
+            # Today's-Buys decision block (C83): the risk plan (-8% capped stop,
+            # sizing) plus a compact per-symbol summary the charts INDEX carries
+            # so the home page can render buy/stop/size without opening every
+            # chart payload. risk_plan numbers are the ONE source for stop/size
+            # anywhere the UI shows them; signal supplies trigger/active/barrels.
+            from app.services.markets360.risk import ACCOUNT_RISK_PCT, compute_risk_plan
+            from app.services.markets360.vcp_footprint import compute_vcp_footprint
+
+            fp = compute_vcp_footprint(price_df)
+            risk_plan = compute_risk_plan(
+                price_df,
+                pivot=fp.get("pivot") or (signal.get("trigger_price") if signal else None),
+            )
+            last_close = float(price_df["Close"].iloc[-1])
+            buy = None
+            if signal:
+                buy = {
+                    "active": bool(signal.get("active")),
+                    "trigger_price": signal.get("trigger_price"),
+                    "stop_loss": risk_plan.get("stop_loss"),
+                    "stop_pct": risk_plan.get("stop_pct"),
+                    "stop_basis": risk_plan.get("stop_basis"),
+                    "position_size_pct": risk_plan.get("position_size_pct"),
+                    "account_risk_pct": ACCOUNT_RISK_PCT,
+                    "target_price_2r": signal.get("target_price_2r"),
+                    "target_price_3r": signal.get("target_price_3r"),
+                    "vcp_detected": bool(fp.get("detected")),
+                    "vcp_source": fp.get("source"),
+                    "distance_to_pivot_pct": fp.get("distance_to_pivot_pct"),
+                    "near_pivot": bool(fp.get("near_pivot")),
+                    "barrels_passed": signal.get("barrels_passed"),
+                    "signal_as_of": signal.get("as_of"),
+                    "buy_risk_state": (bands or {}).get("buy_risk_state"),
+                    "last_close": round(last_close, 2),
+                }
+            return {"signal": signal, "sell_plan": sell_plan,
+                    "risk_plan": risk_plan, "_buy_index": buy}
         except Exception:  # noqa: BLE001 - signal cards must not break the export
             logger.warning("m360 signal computation failed", exc_info=True)
             return {}
