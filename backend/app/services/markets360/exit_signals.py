@@ -216,6 +216,8 @@ def compute_sell_plan(
     Merges the 50-DMA breakdown, the climax-run score, and the trailing-stop
     ladder into one dict with a single ``action``:
 
+      stop_hit             close at/below the protective stop — the stop is
+                           inviolable and outranks every other signal
       exit                 trend invalidated (mature breakdown on volume)
       sell_into_strength   climax tells clustered while extended — unload strength
       tighten_stop         breakdown on a young/shallow break
@@ -226,7 +228,18 @@ def compute_sell_plan(
     climax = detect_climax_run(price_data)
     trail = compute_trailing_stop(price_data, entry, initial_stop)
 
-    if breakdown and breakdown.get("recommended_action") == "exit":
+    # The stop is Minervini's one inviolable rule. Without this branch a name
+    # bleeding below its stop on LIGHT volume while still above the 50-DMA read
+    # "hold" — the exact failure mode that lets a planned 1R loss keep growing.
+    last = None
+    if price_data is not None and "Close" in getattr(price_data, "columns", []) and len(price_data):
+        last = _f(price_data["Close"].iloc[-1])
+    stop_level = trail.get("stop") if trail.get("stop") is not None else _f(initial_stop)
+    stop_hit = last is not None and stop_level is not None and last <= stop_level
+
+    if stop_hit:
+        action = "stop_hit"
+    elif breakdown and breakdown.get("recommended_action") == "exit":
         action = "exit"
     elif climax.get("active"):
         action = "sell_into_strength"

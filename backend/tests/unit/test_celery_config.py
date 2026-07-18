@@ -200,7 +200,10 @@ class TestSettingsValidators:
             market: settings.cache_warm_schedule_for(market)
             for market in ("US", "HK", "IN", "JP", "KR", "TW")
         } == {
-            "US": (16, 30),
+            # US warms at close+5m (C81): in EST the close is 06:00 JST and the
+            # user's daily review opens at 6am JST — the old +30m buffer pushed
+            # the ~25-40m full-universe refresh past the window for no benefit.
+            "US": (16, 5),
             "HK": (4, 30),
             "IN": (6, 30),
             "JP": (2, 30),

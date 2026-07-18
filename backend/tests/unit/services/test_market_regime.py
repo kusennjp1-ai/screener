@@ -26,6 +26,42 @@ def test_confirmed_uptrend():
     assert r["distribution_days"] <= 1
 
 
+def test_breadth_rot_downgrades_a_confirmed_uptrend():
+    """C80: index trend intact but <40% of the universe above its 200DMA — a
+    narrow rally reads under-pressure, not confirmed."""
+    df = _index(np.linspace(300, 460, 300))
+    r = assess_market_regime(df, breadth_pct_above_200dma=32.0)
+    assert r["regime"] == "uptrend_under_pressure"
+    assert r["exposure_pct"] == 55
+    assert r["breadth_pct_above_200dma"] == 32.0
+
+
+def test_healthy_breadth_keeps_the_uptrend_confirmed():
+    df = _index(np.linspace(300, 460, 300))
+    r = assess_market_regime(df, breadth_pct_above_200dma=68.0)
+    assert r["regime"] == "confirmed_uptrend"
+    assert r["exposure_pct"] == 100
+
+
+def test_breadth_guard_requires_the_index_near_its_highs(monkeypatch):
+    """The divergence guard is a TOP signal: rotten breadth only downgrades when
+    the index is at its highs. Tightening the near-high gate to impossible must
+    disable the downgrade even with rotten breadth (bottoms stay confirmed)."""
+    from app.services import market_regime as mr
+    monkeypatch.setattr(mr, "BREADTH_DIVERGENCE_NEAR_HIGH", -1.0)
+    df = _index(np.linspace(300, 460, 300))
+    r = assess_market_regime(df, breadth_pct_above_200dma=32.0)
+    assert r["regime"] == "confirmed_uptrend"
+
+
+def test_missing_breadth_is_neutral():
+    """None = index-only behaviour, byte-identical (the 908 GATE path)."""
+    df = _index(np.linspace(300, 460, 300))
+    base = assess_market_regime(df)
+    assert base["regime"] == "confirmed_uptrend"
+    assert base["breadth_pct_above_200dma"] is None
+
+
 def test_downtrend():
     # below the 200DMA with 50<200 -> downtrend, zero exposure
     r = assess_market_regime(_index(np.linspace(460, 300, 300)))

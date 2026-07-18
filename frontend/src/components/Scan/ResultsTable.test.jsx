@@ -342,5 +342,18 @@ describe('ResultsTable', () => {
       // Since current is asc, clicking again should flip to desc
       expect(onSortChange).toHaveBeenCalledWith('se_setup_score', 'desc');
     });
+
+    it('VCP header emits quality_rank sort, descending on first click', async () => {
+      const onSortChange = vi.fn();
+      renderWithProviders(
+        <ResultsTable {...defaultProps} onSortChange={onSortChange} />
+      );
+
+      const user = userEvent.setup();
+      // The VCP header is wired to quality_rank (VCP-detected setups first);
+      // a best-first ranking opens descending, not ascending.
+      await user.click(screen.getByText('VCP'));
+      expect(onSortChange).toHaveBeenCalledWith('quality_rank', 'desc');
+    });
   });
 });

@@ -120,6 +120,36 @@ def test_sell_plan_holds_on_a_healthy_trend():
     assert plan["climax"]["active"] is False
 
 
+def _stop_bleed_frame(last_close: float) -> pd.DataFrame:
+    # Uptrend whose FINAL close bleeds down on light volume while staying above
+    # the 50-DMA — the exact shape that used to read "hold".
+    close = np.concatenate([np.linspace(70, 100, 119), [last_close]])
+    return _frame(close)
+
+
+def test_sell_plan_stop_hit_outranks_hold_on_light_volume_bleed():
+    """A close at/below the protective stop must read stop_hit even with no
+    50-DMA breakdown (light volume, still above the average) — the stop is
+    inviolable (C79)."""
+    plan = compute_sell_plan(_stop_bleed_frame(95.5), entry=98.0, initial_stop=96.0)
+    assert plan["action"] == "stop_hit"
+
+
+def test_sell_plan_no_stop_hit_while_above_the_stop():
+    plan = compute_sell_plan(_stop_bleed_frame(96.5), entry=98.0, initial_stop=96.0)
+    assert plan["action"] == "hold"
+
+
+def test_sell_plan_stop_hit_after_a_run_gives_back_through_the_stop():
+    """A name that ran and then closed below the protective stop reads stop_hit.
+    (The ladder is stateless — it recomputes from the LAST close, so the level
+    that binds here is the initial stop; remembering a previously-raised stop
+    is the position layer's job.)"""
+    close = np.concatenate([np.linspace(60, 117, 119), [91.0]])  # ran +2R, closed under stop
+    plan = compute_sell_plan(_frame(close), entry=100.0, initial_stop=92.0)
+    assert plan["action"] == "stop_hit"
+
+
 def test_sell_plan_prefers_exit_over_climax():
     """A mature 50-DMA breakdown on volume wins over everything else."""
     close = np.concatenate([np.linspace(50, 100, 240), np.linspace(98, 80, 10)])

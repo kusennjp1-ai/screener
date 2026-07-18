@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import and_, asc, desc, func, or_
+from sqlalchemy.engine import Row
 from sqlalchemy.orm import Query
 
 from app.domain.scanning.filter_spec import (
@@ -156,10 +157,24 @@ _PYTHON_SORT_FIELDS = frozenset({
     "ma_alignment",
     "vcp_detected",
     "passes_template",
+    # Setup-quality rank (C74): surface the highest-probability setups first.
+    # Two-window backtest (docs/DESIGN_PRINCIPLE_SELECTION.md, C72b) showed that
+    # ordering the candidate pool VCP-first — instead of by composite alone —
+    # adds +17pp of raw return over the long window ("more setups than money ->
+    # pick the best"). Product reduction of that ranking with the fields that
+    # actually reach a scan row: VCP-detected setups rank above the rest, ties
+    # broken by composite_score desc.
+    "quality_rank",
 })
 
 # Cap for Python-sorted queries to prevent memory issues.
 _PYTHON_SORT_LIMIT = 1000
+
+# quality_rank source tiers: a classic VCP is the highest-probability base; the
+# C70/C75 parallel recall paths (MA-tight, ATR volatility-contraction) catch real
+# but looser setups, so they rank below it. Used only to break ties among
+# VCP-detected rows (see get_quality_key in _sort_in_python).
+_QUALITY_SOURCE_TIER: dict[str, int] = {"vcp": 2, "ma_tight": 1, "vol_contract": 1}
 
 
 def _json_sort_expr(query: Query, field: str, column, json_path: tuple[str, ...], order: SortOrder):
@@ -340,8 +355,39 @@ def _sort_in_python(
 ) -> list:
     """Sort ScanResult rows (or (ScanResult, ...) tuples) by details JSON field."""
 
+    def _scan_result(row_obj):
+        # Rows come in three shapes: a bare ScanResult (single-entity query), a
+        # SQLAlchemy Row from the joined result query, or a plain tuple. A Row is
+        # NOT a tuple in SQLAlchemy 2.0 — the old `isinstance(row_obj, tuple)`
+        # check missed it and read `.details` off the Row itself, raising
+        # AttributeError. Unpack only the known joined-row containers; anything
+        # else already IS the ScanResult.
+        return row_obj[0] if isinstance(row_obj, (tuple, Row)) else row_obj
+
+    def get_quality_key(row_obj):
+        # (VCP-detected, source-tier, composite) — always best-first, so the tuple
+        # is built for DESC and the shared reverse flag applies uniformly.
+        #
+        # Prefer the markets360 footprint's VCP detection: it carries the C70/C75
+        # recall paths (MA-tight, ATR volatility-contraction) that the flat
+        # minervini `vcp_detected` lacks, plus a source tier. So a name the
+        # recall-improved detector caught surfaces above one it didn't, and a
+        # classic VCP outranks a looser parallel-path base of equal composite.
+        # Falls back to the flat field when markets360 didn't run in this scan.
+        result = _scan_result(row_obj)
+        details = result.details or {}
+        mm = (((details.get("screeners") or {}).get("markets360") or {}).get("details") or {})
+        footprint = mm.get("vcp") or {}
+        detected = mm.get("vcp_detected")
+        if detected is None:
+            detected = details.get("vcp_detected")
+        det = 1 if detected else 0
+        tier = _QUALITY_SOURCE_TIER.get(footprint.get("source"), 0) if det else 0
+        comp = result.composite_score
+        return (det, tier, comp if comp is not None else float("-inf"))
+
     def get_sort_key(row_obj):
-        result = row_obj[0] if isinstance(row_obj, tuple) else row_obj
+        result = _scan_result(row_obj)
         detail_value = (
             result.details.get(sort.field) if result.details else None
         )
@@ -349,4 +395,5 @@ def _sort_in_python(
             return float("-inf") if sort.order == SortOrder.DESC else float("inf")
         return detail_value
 
-    return sorted(rows, key=get_sort_key, reverse=(sort.order == SortOrder.DESC))
+    key_fn = get_quality_key if sort.field == "quality_rank" else get_sort_key
+    return sorted(rows, key=key_fn, reverse=(sort.order == SortOrder.DESC))

@@ -33,6 +33,7 @@ can be separated.
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import gzip
 import json
@@ -71,6 +72,39 @@ PRESSURE_RS_MIN = 90
 # (2022-style), the cap stays. 60% = the conventional healthy-majority line.
 BREADTH_CONFIRM = False
 BREADTH_MIN = 0.60
+# C80: breadth-confirmed REGIME (capability-matrix #2). The index-only regime is
+# breadth-blind: a cap-weighted index can print highs on a handful of mega-caps
+# while the majority of stocks lose their 200DMA (a classic distribution top).
+# When breadth ROTS — fewer than 40% of the tradable universe above its 200DMA,
+# the mirror of the conventional 60% healthy-majority line — a confirmed_uptrend
+# is downgraded to under-pressure exposure. Single grounded threshold, no sweep.
+BREADTH_REGIME = False
+BREADTH_ROT = 0.40
+# C82: group-rotation overlay (O'Neil: ~half a leader's move is its industry
+# group — buy leaders in LEADING or newly-EMERGING groups). Group score =
+# mean member RS percentile (shipped ibd_group_rank_service avg_rs, >=3
+# valid members/day), ranked across groups daily, walk-forward. New buys
+# allowed only when the group is top-20% (IBD Top-40 convention,
+# preset_screens.py:168) OR has gained >=0.20 rank-pct over 21 sessions
+# (rank_change_1m unit) while in the top half (preset_screens.py:105).
+# Unmapped symbols / unranked groups FAIL OPEN (C80 lesson). No exit leg:
+# group fade never force-sells (SPEC: sells are stock/market-action; C73).
+GROUP_ROTATION = False
+GROUP_LEAD_PCT = 0.80     # top 40 of 197 (preset_screens.py:168-173, 358-364)
+GROUP_HALF_PCT = 0.50     # avoid-laggards bottom-half line (preset_screens.py:105-107)
+GROUP_EMERGE_DELTA = 0.20 # same 0.20*G magnitude as the Top-40 leg — one constant
+GROUP_MOM_DAYS = 21       # ibd_group_rank_service rank_change_1m unit
+GROUP_MIN_MEMBERS = 3     # ibd_group_rank_service: >=3 valid-RS members
+# Pre-registered contingency (C82, decided before the rerun): the first run's
+# damage concentrated in post-FTD recovery years (2020 -19.1pp, 2023 -19.9pp)
+# — group RS is built from >=63d member returns, so it is structurally BLIND
+# to new leadership for ~a quarter after a market turn. Suspend the gate for
+# 63 sessions (the repo's canonical quarter: RS shortest leg / control offset)
+# after any correction/downtrend -> confirmed_uptrend upgrade. Thresholds
+# untouched per the contingency contract.
+GROUP_FTD_SUSPEND = 63
+IBD_CSV = Path(__file__).resolve().parents[2] / "data" / "IBD_industry_group.csv"
+ETF_GROUP = "Finance-ETF / ETN"   # winners-backtest precedent
 # Minervini: in a market correction you go to CASH and wait for the FTD; the
 # pre-FTD 20% correction exposure is a residual the shipped engine allows.
 # This flag makes a correction a hard no-buy (like a downtrend) — buying
@@ -89,6 +123,27 @@ CLIMAX_SELL_FRACTION = 1.0
 # watchlist can pick up flat-base / base-on-base setups the cup detector's
 # monotonic-depth gate rejects. Article-grounded (2x 'double off lows').
 MA_TIGHT = False
+# C72: quality-ranked slot allocation. C71 showed that adding MA-tight
+# candidates and filling the 10 slots by RS alone DILUTES with lower-PF setups
+# (6y -48pp). The design principle (Minervini: "more setups than money -> pick
+# the BEST") says: expand the pool with recall, but fill the limited slots with
+# the highest-quality setups first. Rank by setup source (VCP is the PF-2.13
+# core), then RS, so VCP claims slots before MA-tight/base fallbacks.
+QUALITY_RANK = False
+_SOURCE_PRIORITY = {"vcp": 0, "tight_base": 1, "high30": 1, "ma_tight": 2}
+# C73: confirm the 50DMA trend-exit. The mirror of his 908 picks
+# (scripts/exit_leash_diagnostic.py) shows the single-day 50DMA-breakdown exit
+# is the binding tightness: requiring TWO consecutive closes below the 50DMA
+# (a whipsaw filter Minervini applies by design — a genuine trend break holds
+# below the average) kept ~11 more picks in for the >=3R tail and lifted
+# expectancy +0.28pp with flat/better PF. Structural rule, not a fitted
+# parameter. Validate in BOTH windows before any SellPlanCard change.
+CONFIRM_EXIT = False
+
+
+def _quality_key(item):
+    _sym, plan = item
+    return (_SOURCE_PRIORITY.get(plan.get("source"), 3), -plan.get("rs", 0), _sym)
 _MAT_BASE_MAX, _MAT_TIGHT, _MAT_RANGE = 42, 10, 0.12
 _MAT_HUG, _MAT_HUGFRAC, _MAT_NEARHI, _MAT_ADV, _MAT_PRIOR = 0.05, 0.5, 0.85, 2.0, 126
 
@@ -278,6 +333,7 @@ class Position:
     entry_date: object
     mode: str = ""
     source: str = ""
+    below50_prev: bool = False   # prior close was below the 50DMA (--confirm-exit)
 
 
 @dataclass
@@ -403,7 +459,10 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             low20 = low[sym].iloc[max(0, close.index.get_loc(d) - 19): close.index.get_loc(d) + 1].min()
             p.stop = ladder_stop(c, p.entry, p.stop0, ma50 if ma50 == ma50 else np.nan, low20)
             vol_ratio = (volume.at[d, sym] / ind["vol50"].at[d, sym]) if ind["vol50"].at[d, sym] else 0
-            if ma50 == ma50 and c < ma50 and vol_ratio >= 1.5:
+            below50 = ma50 == ma50 and c < ma50
+            fire_50dma = below50 and vol_ratio >= 1.5 and (p.below50_prev or not CONFIRM_EXIT)
+            p.below50_prev = below50
+            if fire_50dma:
                 pending_sells.add(sym)
             elif SELL_INTO_STRENGTH and c > p.entry:
                 di = close.index.get_loc(d)
@@ -440,7 +499,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 # (the breakout barrel's risk_ok half in compute_buy_signal)
                 return signal_ok is None or bool(signal_ok.at[d, sym])
 
-            for sym, plan in prev_watch.items():  # armed stops set before today
+            _armed_items = sorted(prev_watch.items(), key=_quality_key) if QUALITY_RANK else prev_watch.items()
+            for sym, plan in _armed_items:  # armed stops set before today
                 if plan["mode"] != "armed" or sym in positions or sym in pending_buys:
                     continue
                 if not _entry_allowed(sym, plan):
@@ -452,7 +512,8 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
                 if (c == c and hi == hi and hi >= plan["pivot"] and c > plan["pivot"]
                         and c <= plan["pivot"] * CHASE_CAP and volr >= BREAKOUT_VOL_RATIO):
                     pending_buys[sym] = plan
-            for sym, plan in watch.items():  # early post-breakout, today's scan
+            _early_items = sorted(watch.items(), key=_quality_key) if QUALITY_RANK else watch.items()
+            for sym, plan in _early_items:  # early post-breakout, today's scan
                 if plan["mode"] != "early" or sym in positions or sym in pending_buys:
                     continue
                 if not _entry_allowed(sym, plan):
@@ -529,6 +590,10 @@ def main() -> int:
                     help="exit profitable positions into a climax run "
                          "(exit_signals.detect_climax_run) instead of only on "
                          "the trailing stop / 50DMA breakdown")
+    ap.add_argument("--quality-rank", action="store_true",
+                    help="fill the position slots by setup quality (VCP first, "
+                         "then RS) instead of RS alone — recall expands the "
+                         "pool, quality picks the winners for the limited slots")
     ap.add_argument("--ma-tight", action="store_true",
                     help="add the C70 MA-tightness base path to the watchlist "
                          "(flat-base/base-on-base the cup detector misses)")
@@ -539,6 +604,15 @@ def main() -> int:
                     help="treat a market correction as a hard no-buy (0% "
                          "exposure, like a downtrend) instead of the residual "
                          "20% cap — wait for the FTD before buying")
+    ap.add_argument("--group-rotation", action="store_true",
+                    help="allow new buys only from LEADING (top-20%%) or "
+                         "EMERGING (+0.20 rank-pct/21d, top half) IBD groups; "
+                         "walk-forward group RS = mean member RS percentile "
+                         "(data/IBD_industry_group.csv); fail-open on unmapped")
+    ap.add_argument("--breadth-regime", action="store_true",
+                    help="downgrade a confirmed_uptrend to under-pressure "
+                         "exposure when <40%% of the tradable universe holds "
+                         "its 200DMA (breadth-divergence guard)")
     ap.add_argument("--breadth-confirm", action="store_true",
                     help="under pressure: keep full exposure while >=60% of "
                          "the tradable universe holds its 200DMA")
@@ -548,6 +622,10 @@ def main() -> int:
     ap.add_argument("--progressive-risk", action="store_true",
                     help="Minervini progressive risk: 2x account risk per "
                          "trade while the regime is confirmed_uptrend")
+    ap.add_argument("--confirm-exit", action="store_true",
+                    help="require TWO consecutive closes below the 50DMA before "
+                         "the trend-exit fires (whipsaw filter) — the binding "
+                         "tightness found in the 908-pick mirror")
     ap.add_argument("--funnel", choices=("legacy", "product"), default="legacy",
                     help="'product' replays the shipped Buy Signal checklist: "
                          "TPR band green + pressure band green as candidate "
@@ -562,9 +640,14 @@ def main() -> int:
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
-    global CLIMAX_SELL_FRACTION, MA_TIGHT
+    global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK, CONFIRM_EXIT, BREADTH_REGIME
+    global GROUP_ROTATION
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
     MA_TIGHT = args.ma_tight
+    QUALITY_RANK = args.quality_rank
+    CONFIRM_EXIT = args.confirm_exit
+    BREADTH_REGIME = args.breadth_regime
+    GROUP_ROTATION = args.group_rotation
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -596,7 +679,65 @@ def main() -> int:
     breadth_series = above200.sum(axis=1) / valid200.sum(axis=1).clip(lower=1)
     for d in sim_dates:
         regimes[d]["breadth"] = float(breadth_series.loc[d])
+    if BREADTH_REGIME:
+        # Breadth-DIVERGENCE downgrade: only when the index is AT ITS HIGHS
+        # (within 3% of the 252d high) while <40% of the universe holds its
+        # 200DMA — the definition of a narrow distribution top. The first cut
+        # omitted the near-highs condition and fired at post-FTD BOTTOMS where
+        # breadth is still rebuilding (the most profitable moment to be long):
+        # both windows collapsed (6y 112.4->76.5, 10y 97.8->72.1) = that rule
+        # punished bottoms, not tops.
+        spy_close = spy["close"]
+        spy_hi252 = spy_close.rolling(252, min_periods=60).max()
+        downgraded = 0
+        for d in sim_dates:
+            hi = float(spy_hi252.loc[:d].iloc[-1]) if d in spy_hi252.index else float("nan")
+            px = float(spy_close.loc[:d].iloc[-1])
+            near_high = hi == hi and hi > 0 and (hi - px) / hi <= 0.03
+            if (regimes[d]["regime"] == "confirmed_uptrend"
+                    and near_high
+                    and regimes[d]["breadth"] < BREADTH_ROT):
+                regimes[d]["regime"] = "uptrend_under_pressure"
+                regimes[d]["exposure"] = 55
+                downgraded += 1
+        print(f"breadth-regime: downgraded {downgraded}/{len(sim_dates)} days", flush=True)
     print("regime days computed", flush=True)
+
+    # --- group-rotation: walk-forward per-group RS percentile panel ----------
+    group_pct = group_mom = None
+    sym_group = None
+    if GROUP_ROTATION:
+        sym_group = {}
+        with open(IBD_CSV, newline="", encoding="utf-8") as fh:
+            for parts in csv.reader(fh):
+                if len(parts) >= 2 and parts[0].strip() and parts[1].strip() \
+                        and parts[1].strip() != ETF_GROUP:
+                    sym_group[parts[0].strip().upper()] = parts[1].strip()
+        mapped = [s for s in tradable if s in sym_group]
+        grp_of = pd.Series({s: sym_group[s] for s in mapped})
+        rs_m = ind["rs"][mapped]
+        grp_score = rs_m.T.groupby(grp_of).mean().T           # dates x groups
+        grp_n = rs_m.notna().T.groupby(grp_of).sum().T
+        grp_score = grp_score.where(grp_n >= GROUP_MIN_MEMBERS)
+        group_pct = grp_score.rank(axis=1, pct=True)          # 1.0 = strongest group
+        group_mom = group_pct.diff(GROUP_MOM_DAYS)
+        print(f"group-rotation: {grp_score.shape[1]} groups, map coverage "
+              f"{100 * len(mapped) / len(tradable):.0f}% of tradable", flush=True)
+
+    # Track market-turn upgrades (correction/downtrend -> confirmed_uptrend) so
+    # the group gate can stand down during its structurally-blind first quarter.
+    _last_upgrade_idx = {}
+    if GROUP_ROTATION:
+        prev_reg = None
+        for _i, _d in enumerate(close.index):
+            r = regimes.get(_d, {}).get("regime")
+            if r is None:
+                continue
+            if prev_reg in ("correction", "downtrend") and r == "confirmed_uptrend":
+                _last_upgrade_idx[_i] = True
+            prev_reg = r
+        _ups = sorted(_last_upgrade_idx)
+        _last_upgrade_idx = {"ups": _ups}
 
     # DAILY watchlists using the REAL VCP detector on template+RS leaders.
     # (Weekly sampling starved the entry funnel: a VCP pivot approach lasts
@@ -630,6 +771,23 @@ def main() -> int:
             # gates — TPR band green (strong) and pressure band green (buy)
             tpr_row, prs_row = band_panels[0].iloc[idx], band_panels[1].iloc[idx]
             cands = [s for s in cands if bool(tpr_row.get(s, False)) and bool(prs_row.get(s, False))]
+        _ups = _last_upgrade_idx.get("ups", []) if group_pct is not None else []
+        _last_up = max((u for u in _ups if u <= idx), default=-10**6)
+        if group_pct is not None and (idx - _last_up) >= GROUP_FTD_SUSPEND:
+            gp_row, gm_row = group_pct.iloc[idx], group_mom.iloc[idx]
+
+            def _grp_ok(s):
+                g = sym_group.get(s)
+                if g is None:
+                    return True                      # unmapped: fail OPEN
+                gp = gp_row.get(g, np.nan)
+                if gp != gp:
+                    return True                      # unranked group: fail OPEN
+                if gp >= GROUP_LEAD_PCT:
+                    return True                      # LEADING
+                gm = gm_row.get(g, np.nan)
+                return gm == gm and gm >= GROUP_EMERGE_DELTA and gp >= GROUP_HALF_PCT  # EMERGING
+            cands = [s for s in cands if _grp_ok(s)]
         wl = {}
         for s in cands:
             prices = close[s].iloc[max(0, idx - 251): idx + 1].dropna()
@@ -751,6 +909,10 @@ def main() -> int:
         "sell_into_strength": args.sell_into_strength,
         "climax_partial": args.climax_partial,
         "ma_tight": args.ma_tight,
+        "quality_rank": args.quality_rank,
+        "confirm_exit": args.confirm_exit,
+        "breadth_regime": args.breadth_regime,
+        "group_rotation": args.group_rotation,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",

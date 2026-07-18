@@ -2,12 +2,20 @@ name: Static Site
 
 on:
   schedule:
-    # FAST price publish — 4:06pm ET, minutes after the US close. Refreshes
-    # today's prices and republishes charts/bands/signals against the latest
-    # published scan (prices-only mode; no snapshot rebuild), so the site
-    # carries closing prices within roughly half an hour of the bell. The
-    # full build below replaces it with fresh ranks a couple of hours later.
-    - cron: '6 16 * * 1-5'
+    # FAST price publish — minutes after the US close. Refreshes today's prices
+    # and republishes charts/bands/signals against the latest published scan
+    # (prices-only mode; no snapshot rebuild). THREE staggered triggers because
+    # GitHub's scheduler starts cron runs 45-100 minutes late in practice
+    # (measured Jul 2026): the earliest-starting of the three publishes the
+    # close, the later ones are cheap idempotent republishes of the same bar.
+    # Goal: closing prices live by ~6:00-6:15am JST (the user's daily review
+    # window opens at 6am JST; in EST the close itself is 06:00 JST, so the
+    # winter floor is close+~50m ≈ 6:50am JST — scheduler-delay bound).
+    - cron: '4 16 * * 1-5'
+      timezone: 'America/New_York'
+    - cron: '31 16 * * 1-5'
+      timezone: 'America/New_York'
+    - cron: '58 16 * * 1-5'
       timezone: 'America/New_York'
     # US group — 4:10pm ET, after US close. Uses the New York
     # timezone so it tracks DST automatically.
@@ -38,7 +46,7 @@ concurrency:
   # The fast prices-only run gets its own group so the 4:10pm full build does
   # not cancel it mid-publish (and vice versa); full runs keep sharing one
   # group so the UTC safety net still supersedes a hung primary.
-  group: static-site-${{ github.ref }}${{ (github.event.schedule == '6 16 * * 1-5' || github.event.inputs.prices_only == 'true') && '-fast' || '' }}
+  group: static-site-${{ github.ref }}${{ (contains('4 16 * * 1-5|31 16 * * 1-5|58 16 * * 1-5', github.event.schedule) && github.event.schedule != '' || github.event.inputs.prices_only == 'true') && '-fast' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -74,9 +82,11 @@ jobs:
           mode="full"
           if [ "$EVENT_NAME" = "schedule" ]; then
             markets="$US"   # 4:10pm ET (America/New_York), US-only deployment
-            if [ "$SCHEDULE" = "6 16 * * 1-5" ]; then
-              mode="prices_only"   # 4:06pm ET fast price publish
-            fi
+            case "$SCHEDULE" in
+              "4 16 * * 1-5"|"31 16 * * 1-5"|"58 16 * * 1-5")
+                mode="prices_only"   # post-close fast price publish (staggered vs GH delay)
+                ;;
+            esac
           else
             case "$MARKET_GROUP" in
               asia) markets="$ASIA" ;;

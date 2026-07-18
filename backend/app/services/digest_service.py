@@ -628,6 +628,7 @@ class DigestService:
         }
 
     _POSITION_ACTION_NOTES = {
+        "stop_hit": "売り：損切りライン到達（ストップは絶対、翌日成行で撤退）",
         "exit": "売り：トレンド崩壊（50日線を出来高を伴い割り込み）",
         "sell_into_strength": "強さに売る：クライマックスを検出",
         "tighten_stop": "損切りラインを引き締め（浅い50日線割れ）",
@@ -654,7 +655,8 @@ class DigestService:
             price_dfs = get_price_cache().get_many_cached_only(
                 [p.symbol for p in rows], period="1y"
             )
-            urgency = {"exit": 0, "sell_into_strength": 1, "tighten_stop": 2, "raise_stop": 3}
+            urgency = {"stop_hit": 0, "exit": 1, "sell_into_strength": 2,
+                       "tighten_stop": 3, "raise_stop": 4}
             actionable: list[DigestPositionItem] = []
             for position in rows:
                 status = compute_position_status(

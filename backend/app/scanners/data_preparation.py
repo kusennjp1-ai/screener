@@ -212,6 +212,39 @@ class DataPreparationLayer:
         for item in results.values():
             item.is_mixed_market = mixed
 
+    # Minimum symbols with a valid 200DMA before scan breadth is considered
+    # representative of the market — a hand-picked 10-symbol scan must not
+    # masquerade as market breadth and distort the regime.
+    _BREADTH_MIN_SYMBOLS = 50
+
+    def _attach_market_breadth(self, results: dict[str, StockData]) -> None:
+        """Attach per-market %-above-200DMA breadth to every item (C80).
+
+        Computed from the scan's own already-fetched closes (no extra I/O).
+        Left None when a market has fewer than ``_BREADTH_MIN_SYMBOLS`` names
+        with a valid 200DMA, keeping the regime guard neutral on small scans.
+        """
+        counts: dict[str, list[int]] = {}
+        for item in results.values():
+            market = (item.market or "").strip().upper() or "US"
+            df = item.price_data
+            if df is None or getattr(df, "empty", True) or "Close" not in df.columns:
+                continue
+            close = df["Close"].dropna()
+            if len(close) < 200:
+                continue
+            above = float(close.iloc[-1]) > float(close.iloc[-200:].mean())
+            n_above, n_total = counts.setdefault(market, [0, 0])
+            counts[market] = [n_above + int(above), n_total + 1]
+        breadth: dict[str, float] = {
+            market: 100.0 * n_above / n_total
+            for market, (n_above, n_total) in counts.items()
+            if n_total >= self._BREADTH_MIN_SYMBOLS
+        }
+        for item in results.values():
+            market = (item.market or "").strip().upper() or "US"
+            item.market_breadth_pct_above_200dma = breadth.get(market)
+
     def _attach_market_rs_universe_performances(
         self,
         results: dict[str, StockData],
@@ -675,6 +708,9 @@ class DataPreparationLayer:
             # Always detect mixed-market so cap/volume filters use USD columns
             # even when no RS filter is requested (needs_benchmark=False).
             self._detect_and_set_mixed_market_flag(results)
+            # Scan-level breadth for the regime guard — needs only the closes
+            # already fetched, so it runs unconditionally too.
+            self._attach_market_breadth(results)
         if requirements.needs_benchmark and results:
             self._attach_market_rs_universe_performances(results)
 

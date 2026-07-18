@@ -20,6 +20,7 @@ import {
 // Action chip meta — same palette + Japanese readings as the Markets 360
 // SellPlanCard so the two surfaces never disagree about what an action means.
 const ACTION_META = {
+  stop_hit: { color: '#f23645', label: 'SELL — Stop Hit', ja: '売り：損切りライン到達（ストップは絶対、翌日成行で撤退）', pulse: true },
   exit: { color: '#f23645', label: 'SELL — Trend Broken', ja: '売り：トレンド崩壊（50日線を出来高を伴い割り込み）', pulse: true },
   sell_into_strength: { color: '#e0a52e', label: 'Sell Into Strength', ja: '強さに売る：クライマックス（買い疲れの急騰）を検出', pulse: true },
   tighten_stop: { color: '#e0a52e', label: 'Tighten Stop', ja: '損切りラインを引き締め（浅い50日線割れ）', pulse: false },

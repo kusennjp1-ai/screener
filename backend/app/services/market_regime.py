@@ -49,6 +49,13 @@ REGIME_EXPOSURE = {
     "downtrend": 0,
 }
 
+# Breadth-divergence guard (C80): a confirmed_uptrend with the index within 3%
+# of its 52w high while fewer than this % of the tradable universe holds its
+# 200DMA is a narrow distribution top — downgraded to under-pressure. 40% is
+# the mirror of the conventional 60% healthy-majority line; 3% = "at the highs".
+BREADTH_ROT_PCT = 40.0
+BREADTH_DIVERGENCE_NEAR_HIGH = 0.03
+
 # --- Follow-through day (O'Neil's bottom-confirmation signal) ---------------
 # After a correction low, day 1 of a rally attempt is the first up close; a
 # follow-through is a >= +1.2% index gain on volume above the prior session,
@@ -205,17 +212,30 @@ def detect_follow_through(index_ohlcv: Optional[pd.DataFrame]) -> Optional[Dict[
     return None
 
 
-def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, object]:
+def assess_market_regime(
+    index_ohlcv: Optional[pd.DataFrame],
+    breadth_pct_above_200dma: Optional[float] = None,
+) -> Dict[str, object]:
     """Assess the general-market regime from the index/benchmark OHLCV.
 
+    ``breadth_pct_above_200dma`` (0-100, optional): fraction of the tradable
+    universe above its 200DMA. When supplied and ROTTEN (<40% — the mirror of
+    the conventional 60% healthy-majority line), a confirmed_uptrend is
+    downgraded to uptrend_under_pressure: a cap-weighted index can print highs
+    on a few mega-caps while the majority of stocks break down (a classic
+    distribution top the index-only read misses). None = index-only behaviour,
+    byte-identical to before (the 908 GATE harness supplies no breadth).
+    Two-window validated at C80 before shipping.
+
     Returns: {regime, health (0-100), exposure_pct (0-100), distribution_days,
-    above_50dma, above_200dma, fifty_above_200, pct_from_high, components}.
-    All keys are None/empty when there is insufficient data.
+    above_50dma, above_200dma, fifty_above_200, pct_from_high, breadth_pct_above_200dma,
+    components}. All keys are None/empty when there is insufficient data.
     """
     empty = {
         "regime": None, "health": None, "exposure_pct": None,
         "distribution_days": None, "above_50dma": None, "above_200dma": None,
         "fifty_above_200": None, "pct_from_high": None,
+        "breadth_pct_above_200dma": None,
     }
     if index_ohlcv is None or "Close" not in getattr(index_ohlcv, "columns", []) or len(index_ohlcv) < 200:
         return empty
@@ -261,6 +281,21 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
     else:
         regime = "downtrend"
 
+    # Breadth-DIVERGENCE guard (C80): only when the index is AT ITS HIGHS
+    # (within 3% of the 52w high) while fewer than 40% of the universe holds its
+    # 200DMA — the definition of a narrow distribution top. The near-highs
+    # condition is essential: without it the guard fires at post-FTD BOTTOMS
+    # where breadth is still rebuilding (the most profitable moment to be long)
+    # — both backtest windows collapsed under that unfaithful first cut.
+    # Neutral when breadth is unknown.
+    if (
+        regime == "confirmed_uptrend"
+        and breadth_pct_above_200dma is not None
+        and breadth_pct_above_200dma < BREADTH_ROT_PCT
+        and pct_from_high <= BREADTH_DIVERGENCE_NEAR_HIGH
+    ):
+        regime = "uptrend_under_pressure"
+
     # Follow-through day: the MA-derived read above is inherently WEEKS late at
     # bottoms (structure can't recover before price does). O'Neil/Minervini
     # re-enter on the FTD, with pilot-sized buys. A live FTD upgrades a
@@ -296,6 +331,10 @@ def assess_market_regime(index_ohlcv: Optional[pd.DataFrame]) -> Dict[str, objec
         "above_200dma": above_200,
         "fifty_above_200": fifty_above_200,
         "pct_from_high": round(float(pct_from_high) * 100, 2),
+        "breadth_pct_above_200dma": (
+            round(float(breadth_pct_above_200dma), 1)
+            if breadth_pct_above_200dma is not None else None
+        ),
         "components": {
             "trend_ok": trend_ok, "above_21ema": above_21, "fifty_rising": s50_rising,
             "follow_through": (

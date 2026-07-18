@@ -5,16 +5,16 @@
 
 ## 現在
 
-- **サイクル**: C70 完了・**採用**（MA-tightnessベース経路を`compute_vcp_footprint`に統合。**FIRE±5 recall 88.6→91.2**・golden 43不変・他バイト一致・記事準拠2.0x「double」。ユーザーgo済み）／ **次: C71=同経路を戦術バックテストのウォッチリスト構築にも配線→両窓で「検出増→トレード質」検証（tactics scriptは`detect_vcp`直呼びで本変更の影響外のため別途）／ PR作成→CI→マージ**
+- **サイクル**: C76完了（**young-base＝trend-template guard を凍結ハーネスで棄却**）。残ミス72%の`young_no_2x`を、2xガードをStage-2トレンドテンプレに置換して回収を試作。オフラインは detected-recall 55.6→74.3%(+18.7pp)・判別+27.5→+32.8ppと強いが、**凍結908でFIRE±5判別が−2.2pp低下（control 67.7→73.6が entry超過）→即revert**。学び: detected-recall改善≠FIRE±5タイミング特異性、**2xガードはタイミング判別を供給していた**。計測スクリプトは保持。直前のC75（採用済）: ATRボラティリティ収縮ベース`_vol_contract_base`をvcp_footprintに追加（VCPDetector無変更・golden凍結）→**FIRE±5 91.2→91.7（新床）**・判別+24.1→+24.0pp（ノイズ）・他バイト一致。C74: 品質ランクUI（実ブラウザ検証済）+Rowバグ修正。C73: 908再現性=detected73/機械buy33、exit leash両窓不採用。 **次候補: recallは判別最適近辺＝VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）**
 - **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
-- **実行中/待機中の外部ジョブ**: なし
+- **実行中/待機中の外部ジョブ**: PR #59（C73-C82・CI green・マージ待ち＝マージでC81発効）。C82グループローテーション=最終棄却（両窓×2回）、表示バッジ化はユーザー判断待ち。C83: 20y bundle対応（マージ後dispatch）＋今日の買い候補UI（PWA・実ブラウザ検証済・マージ後cronで本番反映）。残=desktop/scanカード・20y回帰スライス。
 
 ## 凍結metricの現在値（低下＝即revert）
 
 | metric | 値 | 測定 |
 |---|---|---|
-| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / **91.2** / **66.5** %（MSCORE 95.5。**FIRE±5はC70で88.6→91.2に改善**・判別+24.4→+24.1pp＝ノイズ内、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
+| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / **91.7** / **66.5** %（MSCORE 95.5。**FIRE±5はC70で88.6→91.2、C75で91.2→91.7に改善**・判別+24.1→+24.0pp＝1sample/575ノイズ、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
 | 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%（SPY+83.6%超え）だが**9年窓では+78.2% vs SPY+251.8%＝一般化せず**（C60）。ベア防御のみ両窓で実証 | ローカル or CI `backtest-tactics.yml`（6y/10yバンドルはリリースに保存） |
@@ -33,9 +33,13 @@
 
 ## 次アクション（優先順）
 
-1. **C69: VCP recall向上（最大レバー）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
+**★ docs/MINERVINI_CAPABILITY_MATRIX.md（C78）が優先順の正。(1)ストップ・ヒット売り分岐=C79完了（324b5c2・実ブラウザ検証済）** (2)ブレッドスdivergenceガード=C80完了（高値圏∧<40%のみ降格・直近10年で発火0＝テール保険・908バイト一致・plumbingは#3の基盤） 残: (3)エクスポージャー梯子の実効化＋レジーム別rating cap＋市場売りアラート（要908＋両窓） (4)mobileオフラインSW＋localStorage watchlist＋保有連動exit可視化（client側・要browser375px） (5)fundamentals付き908リプレイでrating stack検証（data=point-in-time要GHA・計測先行）。
+
+
+0. **【C77一部完了】コヒーレンスギャップ**: 製品のフラット`vcp_detected`（VCP列表示）は依然 minervini_scanner の別VCPDetector由来だが、**quality_rank（並び順）は既に markets360 footprint の recall改善detection＋source tier を読むよう修正済（C77・backend限定・9db1fad）**。∴ recall改善（C70/C75）は品質ランクに反映される。**残**: VCP**列の表示bool**もfootprint由来に寄せる/`source`を列バッジ表示（要frontend＋ブラウザ検証）。どのdetectorを表示の正とするかは相関的変更＝慎重に。
+1. **C69: VCP recall向上（最大レバー・概ね飽和）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
 2. **未マージdocs/実験フラグのPR** — C66〜C68のコミットが未PR。GitHub MCP再認証後にPR→CI→マージ。
-3. **保留**: Notion/Substack/YouTube/fewmoredaysはプロキシ403（環境ネットワークポリシー・回避禁止）→ユーザーのエクスポート/複製待ち。高速配信2回目実測（平日16:06 ET後）。UI: account_risk_pct表示・スマホ統一。
+3. **保留**: Notion/Substack/YouTube/fewmoredaysはプロキシ403（環境ネットワークポリシー・回避禁止）→ユーザーのエクスポート/複製待ち。C81後の初回実測: fast 3本クロン化＋US warm 16:05 ET（mainマージ後に発効・着弾=目標 夏5:30-6:15/冬6:30-6:50 JST）。UI: account_risk_pct表示・スマホ統一。
 4. **リスクトーン・オプション（ユーザー選択待ち）**: 半分クライマックス売り（--sell-into-strength --climax-partial）は両窓でmaxDD改善・Sharpe同値以上・検証済み。リスク低減優先なら即採用可。
 **注意（C45/C47の教訓）**: サイクル開始時はSPECを信じる前にコードをgrepする。
 

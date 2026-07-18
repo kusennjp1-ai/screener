@@ -254,7 +254,10 @@ class CANSLIMScanner(BaseStockScreener):
             # the general market, so a Buy against it is a watchlist name.
             # Mirrors the Minervini SEPA rule-1 gate: rating-only (the score
             # keeps measuring the setup), and an unknown regime never blocks.
-            regime = assess_market_regime(data.benchmark_data)
+            regime = assess_market_regime(
+                data.benchmark_data,
+                breadth_pct_above_200dma=getattr(data, "market_breadth_pct_above_200dma", None),
+            )
             details["market_regime"] = regime.get("regime")
             details["market_uptrend"] = (
                 regime["regime"] in ("confirmed_uptrend", "uptrend_under_pressure")

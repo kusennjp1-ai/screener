@@ -20,7 +20,91 @@ from app.infra.query.scan_result_query import (
     _JSON_FIELD_MAP,
     _JSON_SORT_NUMERIC,
     _PYTHON_SORT_FIELDS,
+    _sort_in_python,
 )
+
+
+class _Row:
+    """Minimal stand-in for a ScanResult row (details JSON + composite_score)."""
+
+    def __init__(self, symbol, vcp_detected, composite_score):
+        self.symbol = symbol
+        self.details = {"vcp_detected": vcp_detected}
+        self.composite_score = composite_score
+
+
+class TestQualityRankSort:
+    """quality_rank orders VCP-detected setups first, ties by composite desc."""
+
+    def _rank(self, rows):
+        spec = SortSpec(field="quality_rank", order=SortOrder.DESC)
+        return [r.symbol for r in _sort_in_python(rows, spec)]
+
+    def test_vcp_detected_outranks_higher_composite_non_vcp(self):
+        # AAA has a higher composite but no VCP; BBB is VCP-detected -> BBB first.
+        rows = [_Row("AAA", False, 95.0), _Row("BBB", True, 80.0)]
+        assert self._rank(rows) == ["BBB", "AAA"]
+
+    def test_ties_broken_by_composite_desc(self):
+        rows = [
+            _Row("LOWVCP", True, 70.0),
+            _Row("HIVCP", True, 90.0),
+            _Row("HINON", False, 88.0),
+            _Row("LONON", False, 60.0),
+        ]
+        # both VCP first (hi comp first), then non-VCP (hi comp first)
+        assert self._rank(rows) == ["HIVCP", "LOWVCP", "HINON", "LONON"]
+
+    def test_none_composite_sorts_last_within_tier(self):
+        rows = [_Row("HAS", True, 50.0), _Row("NONE", True, None)]
+        assert self._rank(rows) == ["HAS", "NONE"]
+
+    def test_missing_details_treated_as_non_vcp(self):
+        r = _Row("NODET", False, 99.0)
+        r.details = None
+        rows = [r, _Row("VCP", True, 10.0)]
+        assert self._rank(rows) == ["VCP", "NODET"]
+
+    @staticmethod
+    def _mm_row(symbol, footprint_detected, source, composite, flat_detected=False):
+        """A row carrying the markets360 footprint (recall-improved) detection."""
+        r = _Row(symbol, flat_detected, composite)
+        r.details = {
+            "vcp_detected": flat_detected,
+            "screeners": {"markets360": {"details": {
+                "vcp_detected": footprint_detected,
+                "vcp": {"source": source},
+            }}},
+        }
+        return r
+
+    def test_footprint_detection_surfaces_over_flat(self):
+        # flat minervini vcp_detected is False, but the markets360 footprint
+        # caught it via a recall path (vol_contract) -> it must rank as detected,
+        # above a genuinely undetected higher-composite row.
+        caught = self._mm_row("CAUGHT", True, "vol_contract", 60.0, flat_detected=False)
+        missed = self._mm_row("MISSED", False, None, 95.0, flat_detected=False)
+        assert self._rank([missed, caught]) == ["CAUGHT", "MISSED"]
+
+    def test_classic_vcp_outranks_parallel_path_on_tie(self):
+        # equal composite, both detected: a classic VCP outranks a looser
+        # parallel-path (ma_tight / vol_contract) base.
+        vcp = self._mm_row("VCP", True, "vcp", 70.0)
+        matight = self._mm_row("MAT", True, "ma_tight", 70.0)
+        volc = self._mm_row("VOL", True, "vol_contract", 70.0)
+        assert self._rank([matight, volc, vcp])[0] == "VCP"
+
+    def test_joined_row_tuple_is_unpacked(self):
+        # The results endpoint runs a JOINED query whose rows are containers
+        # (SQLAlchemy Row / tuple), not bare ScanResults. The sort must unpack
+        # the first element; a stale isinstance(row, tuple)-only check missed
+        # the Row shape and read .details off the container (AttributeError).
+        rows = [
+            (_Row("AAA", False, 95.0), "extra", 1),
+            (_Row("BBB", True, 80.0), "extra", 2),
+        ]
+        spec = SortSpec(field="quality_rank", order=SortOrder.DESC)
+        assert [r[0].symbol for r in _sort_in_python(rows, spec)] == ["BBB", "AAA"]
 
 
 class TestColumnMapCoverage:
@@ -63,6 +147,7 @@ class TestColumnMapCoverage:
 
     @pytest.mark.parametrize("field", [
         "stage_name", "ma_alignment", "vcp_detected", "passes_template",
+        "quality_rank",
     ])
     def test_python_sort_fields(self, field):
         assert field in _PYTHON_SORT_FIELDS, f"{field} should be in _PYTHON_SORT_FIELDS"

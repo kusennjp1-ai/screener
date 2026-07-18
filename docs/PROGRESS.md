@@ -388,3 +388,104 @@
 - **決定的908ハーネス**: FIRE±5 **88.6→91.2（+2.6pp）**・判別+24.4→+24.1pp（575-588標本で1標本≈0.17pp＝ノイズ内）・**TT/S2/SETUP/RS70/MSCORE/GATEバイト一致**・golden gate-5 **43 passed不変**。純粋な検出改善として採用。ユニットテスト+1（ma_tight経路ピン留め・11 passed）。
 - **含意**: 製品のFIRE±5シグナル/スキャナ setup検出が本人の実セットアップをより多く捕捉（フラットベース/base-on-base）。最新ライブ保有（`docs/MINERVINI_LIVE_HOLDINGS.md`）も記録。
 - 次（C71）: 戦術バックテストのウォッチリスト構築（`detect_vcp`直呼び）にも同MA-tight経路を配線し、両窓で「検出増→トレード質同等以上」を検証。製品コミットはPR化。
+
+### C71 — 2026-07-13 MA-tight経路を戦術バックテストにも配線＝窓間不一致でデフォルト不採用（フラグ残置）
+- C70の製品採用（検出/アドバイザリ）に続き、同経路を戦術ウォッチリスト（`--ma-tight`）に配線し**自動売買**での効果を両窓検証。
+- 結果（progressive risk基準 6y +112.4%/10y +97.8%）: **6y +64.3%（−48pp・maxDD−20.9・2025 −13.5%）／10y +156.4%（+58.6pp・maxDD−23.9・2020 +31.4%）**→窓間で真逆・**デフォルト不採用**（クライマックス実験と同型）。
+- **重要な区別（この一連の核心）**: recall向上は**人間トレーダーへの表示（C70・採用）**には価値があるが、**全検出を機械的に自動売買（C71）**すると10枠×テール依存の下で「エントリー増≠好成績」——低質フラットベースが高PFのVCP枠を希釈。製品のFIRE±5 recall改善（88.6→91.2）は維持、バックテスト自動執行のデフォルトはC61据置。フラグは検証用に残置（既定OFF）。
+
+### C72 — 2026-07-13 品質ランク枠割当（設計原則の実装）＝MA-tight併用は窓依存を解消せず
+- 原則（ユーザー指示）: recallで候補プールを広げ、限られた10枠は最良セットアップ（VCP PF2.13優先→RS）で埋める＝ミネルヴィニ「セットアップが資金より多い時は最良を選べ」。`--quality-rank`実装。
+- C72（--ma-tight --quality-rank）: **6y +52.5%（基準+112.4%・C71 +64.3%を下回る）／10y +181.1%**→品質順序でもMA-tight併用は6y窓を救えず・窓依存継続。
+- **知見**: MA-tight候補は枠順序に関わらず6y窓の自動売買で不利＝recall（発見）は**人間の表示（C70製品採用）**に価値、機械的自動売買には翻訳されない。設計原則を別角度で実証。
+- 続行中（C72b）: MA-tightを足さず**既存プール（VCP+タイトベース）を品質ランク**する純粋テスト（VCP優先がタイトベースを上回るか）。結果次第で「最良を買う」原則の成績寄与を確定。
+
+### C72b — 2026-07-13 品質ランク単独＝設計原則が成績に翻訳（両窓で生リターン基準以上）
+- MA-tightを足さず**既存プール（VCP+タイトベース）をVCP優先で枠割当**（`--quality-rank`のみ）: **6y +113.2%（基準+112.4%≈同値・Sharpe0.90）／10y +115.1%（基準+97.8%・+17.3pp・Sharpe0.59・PF1.76）**。両窓とも生リターン基準以上＝「最良を買う」が長期窓で+17pp寄与。
+- **設計原則の確定（docs/DESIGN_PRINCIPLE_SELECTION.md）**: ①recall（発見）は人間の表示に効く・機械的自動売買には翻訳されない（C70採用/C71-72不採用）②既存プールの品質ランク（VCP優先）は生リターンに寄与（C72b・長期+17pp）③現行ファネルは既に原則を大部分体現（VCP支配ゆえ改善は小さめ）。
+- **製品への翻訳**: スキャン結果を「セットアップ品質」でランク（VCP検出＞タイトベース、同格内composite降順）＝原則のUI実装。次候補=スキャン結果ソートの品質ランク化＋exit leash検証。
+
+### C73 — 2026-07-14 908再現性の直接計測＋exit leash両窓検証（不採用）
+- **問い1「以前の908は出荷済みエンジンで当時買えたか」**（`scripts/reproduce_908_buys.py`・[-15,+5]窓・オフライン）: setup **detected 73.1%** / 機械的 **buy_trigger 33.4%**（pivot上抜け+≥1.4x出来高+テンプレ健全）。参考: 凍結FIRE±5=91.2%。**発見はほぼ再現・機械執行は1/3のみ**＝73→33ギャップが設計原則（発見≠執行）の独立裏づけ。docs/MINERVINI_908_REPRODUCIBILITY.md。
+- **問い2「売り助言はタイトすぎるか」**: 908ミラー診断（`exit_leash_diagnostic.py`）で拘束条件は「50DMA1日割れ」の即時退出と判明（ロック期トレイル緩和ma65は無効）。confirm（50DMA下2日連続）は単窓ミラーで期待値4.51→4.79%・≥3R勝者89→100本。
+- **両窓検証（`--confirm-exit`新設・progressive-risk）＝不採用**: **6y 112.4→88.9%（−23.5pp・maxDD−14.3→−21.8）／10y 97.8→84.3%（−13.5pp・maxDD−27.9→−30.6）**。両窓で生リターンDOWN∧maxDD UP。単窓ミラーの+0.28ppは10枠ポートフォリオの「壊れ玉を1日長く持つ＝DD増＋枠塞ぎで再投入逃す」コストに逆転される（C71/C72同型）。凍結契約「低下＝即revert」で本体無変更。docs/MINERVINI_EXIT_LEASH.md。
+- **確定**: 現行exit leashは両窓最適に近い。執行チューニングは信頼レバーでない（3度目の確認）。正のレバーはdiscovery＋human品質表示に集約。次候補=製品スキャン結果の品質ランクUI（要ブラウザ検証）。
+
+### C74 — 2026-07-14 品質ランクUI実装（設計原則の製品翻訳・両検証済み）
+- **原則の製品化**: スキャン結果を「セットアップ品質」でソートする `quality_rank`（VCP検出優先→composite降順）を実装。C72b両窓バックテスト（長期+17pp）の忠実な製品リダクション。バックエンド`scan_result_query.py`のPythonソートに追加、フロントは既存VCP列ヘッダに`sortField`オーバーライドで配線（クリックで最良セットアップが最上位・初回desc）。凍結metric無変更。
+- **副次バグ修正（発見・修正）**: 結果エンドポイントのJOINクエリ行はSQLAlchemy 2.0の`Row`（tupleでない）。旧Pythonソートは`isinstance(row,tuple)`のみで`Row`を`.details`直読み→`AttributeError('details')`。**全Pythonソートフィールド（vcp_detected/ma_alignment/passes_template/stage_name＋新quality_rank）がAPI境界で壊れていた**のを修正＋回帰テスト。
+- **検証**: バックエンド単体5＋回帰1、フロント25（VCPヘッダがquality_rank desc発火）。**実ブラウザ検証（sandbox-e2e・1440px/375px）**: 実DB・実scan（AA/MSFTをvcp=trueにパッチ）でVCPヘッダクリック→`sort_by=quality_rank`発火→VCP行（composite39.5/4.5）がcomposite100の非VCP行の上に浮上を目視確認（scratchpad/qrank_before/after/mobile.png）。
+- **次候補**: quality_rank発見の拡張（VCP品質スコアで人間watchlistランク）・21EMA押し目(B6)・VCP recall再設計(C69)。
+
+### C75 — 2026-07-14 VCP recall向上: ATRボラティリティ収縮ベースを採用
+- **根拠**: ミス構造計測（`vcp_recall_pareto.py`）で見逃しの**50.7%が単調深さゲート(ratio<0.6)**で死亡・うち84%は高値近辺タイト＝ミネルヴィニの literal「volatility contracting（単調深さではない）」と矛盾。C70 MA-tightは10DMA吸着ぶんを回収済。
+- **実装**: `vcp_footprint.py`に第3並列パス`_vol_contract_base`（ATRが基底ピークの≤0.70倍に収縮＋直近10本タイト near-high＋2x prior advance＝判別ガード、**MA吸着不要**）。VCPDetector無変更＝golden凍結維持（C70同手法）。source='vol_contract'追加。
+- **検証**: オフライン（`measure_volcontract_recall.py`）detected-recall **52.4→55.6%(+3.2pp)**・判別 **+26.2→+27.5pp**（両方向改善・増分 真+19/偽+11）。**凍結908ハーネス: FIRE±5 91.2→91.7（床超え）・判別+24.1→+24.0pp（1/575ノイズ）・TT/S2/SETUP/RS70/GATE/MSCORE バイト一致・golden gate-5 43維持・footprint単体12・harness単体6 pass**。C70と同型（FIRE±5↑・判別flat・他不変）＝採用。理論根拠あり・リターンフィッティングでない。
+- **frozen更新**: FIRE±5床 91.2→**91.7**。**次候補**: VCB系のさらなるrecall（W型・複合ベース）・21EMA押し目(B6)・VCP品質スコアでwatchlistランク。
+
+### C76 — 2026-07-14 young-base（trend-template guard）＝両検証で分岐→不採用
+- **動機**: 残ミスの72%が`young_no_2x`（高値近辺だが prior advance<2x＝2xガードで除外される first-base/早期リーダー）。2xは判別ヒューリスティックでミネルヴィニ規則でない→本人の実ゲート「Stage-2トレンドテンプレート」に置換を試作。
+- **オフライン（`measure_youngbase_recall.py`）**: detected-recall **55.6→74.3%（+18.7pp）**・判別 **+27.5→+32.8pp**（両方向改善・増分110真/77偽・精度59%）＝VCBより遥かに大きいレバーに見えた。
+- **凍結908ハーネス＝不採用**: FIRE±5 entry 91.7→95.4だが control 67.7→**73.6**（より大きく上昇）→**FIRE±5判別 +24.0→+21.8pp（−2.2pp・~13idea＝ノイズでない実低下）**。「低下＝即revert」で**revert**。
+- **確定した学び**: オフラインの detected-recall（セットアップ存在）は改善でも、FIRE±5（±5日のタイミング特異性）が劣化。young base near-highs in Stage2は本人エントリーの四半期前にも出る＝**タイミング特異性がない**。**2xガードは恣意的に見えて、trend templateが持たないタイミング判別を供給していた**。C74/C75の「見かけの改善を作らない」原則の実践（exit-leash・C71/C72と同型の分岐棄却）。
+- 計測スクリプト（`vcp_miss_frontier.py`・`measure_youngbase_recall.py`）は資産として保持。frozen FIRE±5=91.7（C75）維持。**次候補**: recallは現状が判別最適に近い。VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）。
+
+### C77 — 2026-07-14 資金流入（機関需要）シグナルの調査＝日次プロキシは弱判別
+- **動機（ユーザー・REDFORD投稿）**: 機関の買い集めリスト（13F "$ invested"）はファンダ優良の代理＝スクリーナーに資金流入要素を追加すべきでは。
+- **発見**: 蓄積レーティング`acc_dis_rating`（CLVマネーフロー0-99）は**既に実装済**（composite_ratingに組込）。だが908で判別を計測すると**極めて弱い**: acc_dis +2.5pp／up-down volume ratio 50d +3.8pp（最良）／accumulation-days +2.5pp。cf. VCP検出+27.5pp・trend template ~+30pp・SETUP +52pp。
+- **構造的理由**: Stage-2セットアップに達した時点で既に蓄積済＝controlも同様。蓄積はエントリー**タイミング**情報をほぼ足さない（trend/structure要件と冗長）。日次accumulationを timing screen に足すのは young-base同型の希釈リスク＝不採用。
+- **正しい設計（2トラック分離）**: (a) REDFORDの"$ invested"の価値は**ファンダ・ショートリスト**（機関がDD済＝優良）で、**真の13F機関保有データ**が要る＝四半期・45日遅延・EDGAR egressはGitHub Actionsのみ＝「日次」は原理的に不可（13Fは四半期更新）。別トラックのデータ工学（GHA+EDGAR 13F）。(b) 日次でできるのは既存acc_dis/UDVRの表示のみ＝タイミング判別は弱いので screen/rank の主軸にはしない。
+- 計測スクリプト保持（`measure_accdis_discrimination.py`・`measure_udvr_discrimination.py`）。**結論**: 資金流入はタイミングでなくファンダ選別の軸。日次プロキシは弱く主軸化しない。真の13Fは四半期・別トラック。
+
+### C77b — 2026-07-14 決断: Acc/Dis を up/down 出来高で忠実化（資金流入への回答）
+- **決断（「ミネルヴィニならどうするか」）**: 彼は遅延13Fでタイミングを計らない・テープ＝機関の足跡と説く技術派。∴ **13Fパイプライン不要・蓄積の主軸化も却下**（908測定で判別弱）。だが up/down 出来高は彼の**確認**チェック項目→既存 `acc_dis_rating`（CLV平均で全銘柄C=機能不全）を忠実化する correctness fix を採用。
+- **実装**: 日次 close-to-close 方向（up=+1/down=−1/変化なしはCLV fallback）×recency×volume。合成flat-close testはCLV経路で不変維持。
+- **効果**: 908でグレード分布が spread（B 8%→**34%**）・entry-vs-control判別 score>=60 で **+2.5pp→+7.6pp**（3倍）。ただし依然 confirmation 級（VCP+27.5/TT~+30/SETUP+52には遠い）＝docstringに明記し主軸化しない。golden43維持・composite/acc_dis tests 15 pass・frozen harness metric非該当。
+- **2トラック結論**: (a)真の13F機関保有＝四半期・EDGAR egressはGHAのみ＝別トラック（未着手・要判断）。(b)日次確認＝本fixで完了。資金流入は「タイミング」でなく「確認/ファンダ選別」の軸、が確定。
+
+### C77 — 2026-07-14 コヒーレンス修正: quality_rank が recall改善detectionを使用
+- **問題**: 製品フラット`vcp_detected`（C74 quality_rankが使用）は minervini_scanner の別VCPDetector由来で、C70/C75のrecallパス（MA-tight/vol_contract）を持つ`compute_vcp_footprint`と別物＝**recall改善がFIRE±5では実証済だが品質ランクに未反映**。
+- **修正（backend限定・9db1fad）**: quality_rank比較器が `details.screeners.markets360.details`（footprint）の`vcp_detected`＋`vcp.source`を優先読み（markets360未実行時はフラットにfallback）。キー=(detected, source_tier{vcp:2,ma_tight/vol_contract:1}, composite)。∴ recall改善で捕捉した銘柄がdetectedとして上位化＆同compositeなら古典VCP>並列パス。
+- **検証**: query-builder 171 tests pass（既存フラット経路は tier=0 で不変＝挙動保存、footprint経路＋source tierの新testを追加）。schema/frontend変更なし（VCP列ヘッダが既にquality_rank発火）＝UI無変更ゆえブラウザ検証不要。nested path は orchestrator コードで確認。
+- **残**: VCP列の**表示bool**もfootprint由来に寄せる／`source`列バッジ（frontend＋ブラウザ検証）。真の13F機関保有トラックは別途（四半期・EDGAR/GHA）。
+
+### C78 — 2026-07-16 6エージェントでMinervini能力マトリクス（can/cannot・優先順・成績影響）
+- **依頼**: ミネルヴィニ視点でスクリーナー（mobile含む）のできる/できないをループ構造で網羅分析、重要度・実装方針・成績影響を複数エージェントで。
+- **実行**: workflow（6レンズ並列＝ENTRY/SETUP・SELL/RISK・MARKET-TIMING・CANSLIM・MOBILE/PWA・DATA/INFRA、各実コード裏取り→synthesis）。critic/finalizeはFable-5週次上限で失敗→6レンズ+synthesisをmainループ回収、監査補遺をmainで追加。成果=**docs/MINERVINI_CAPABILITY_MATRIX.md**（CAN 40+項目・CANNOT 33項目を重要度×成績影響で優先順・mobile評価・次5サイクル）。
+- **確定した結論**: 買い側（発見）は忠実・FIRE±5 91.7まで検証済。**最大の空白は「執行の規律」側でデータ/egress blocker無し**: ①ストップ・ヒット売りが未アクション化（<0.5日・critical）②レジームがブレッドス盲目（confirmed@100%で分配天井を見逃す・最大DDレバー）③エクスポージャー梯子が表示のみ＝binary gate ④portfolio heat集計なし ⑤fundamental/rating stackは908で0寄与＝未検証。mobileは日次レビュー用途では可用だがSW/watchlist/pushが空白。
+- **次**: マトリクス§4の上位＝執行規律側から着手（α追加より先）。fundamentalは重み盲信前に908計測。**注: Fable-5が週次上限到達→恒久ルールによりOpus 4.8で継続すべき。**
+
+### C79 — 2026-07-16 ストップ・ヒットを最優先売りアクション化（マトリクス#1）
+- **能力マトリクス§4#1の実装**: `compute_sell_plan`に最優先`stop_hit`分岐（終値≤trailing/initialストップ）。従来は軽出来高・50DMA上のジリ安でストップ割れでも"hold"表示＝「ストップは絶対」が未執行だった。
+- **配線**: digest（urgency 0・日本語注記「ストップは絶対、翌日成行で撤退」）・SellPlanCard（Sell — Stop Hitカード＋stop@表示・green raise行は抑制）・SignalBadges（STOP HITパルスバッジ）・PositionsPage（SELL — Stop Hit）。
+- **検証**: backend 18＋frontend 14 tests pass・lint clean。**実ブラウザ（sandbox-e2e・1440/375px）**: FTNT entry170/stop160/last151.35(−1.86R)に赤パルス「SELL — Stop Hit」、対照LLYは「Raise Stop」（scratchpad/stophit_desktop/mobile.png）。売りプランは助言表示＝凍結metric非該当・golden不変。
+- **副次発見（別サイクル候補）**: `compute_trailing_stop`はステートレス（最終終値からR再計算）＝押し戻し時に梯子が下がる。上げたストップの記憶はポジション層の責務→高値からのMFEベース化 or Position行にstop永続化を検討。
+- **次**: マトリクス#2 ブレッドス連動レジーム（要908 GATE再測）。
+
+### C80 — 2026-07-16 ブレッドス連動レジーム（マトリクス#2）＝実装・両窓検証・正直な結論
+- **初回ルール（breadth<40%で常時降格）＝両窓崩壊**: 6y 112.4→76.5%・10y 97.8→72.1%（発火2.6-2.8%の日だけで−36pp/−26pp）。**原因はバグ**: FTD直後の底（breadth回復途上＝最も稼げる局面）まで降格。「divergence＝指数が高値圏なのにbreadthが腐る」の高値圏条件を落としていた。
+- **修正ルール（SPY 52週高値3%以内 ∧ breadth<40%）＝一度も発火せず**: 0/1246日・0/2254日、両窓ベースとバイト一致。分布計測: シム窓の高値圏日のbreadthは p25=62%・中央値68.7%＝**「高値圏×<40%」は直近10年の米国に存在しない**（2000年型の極端な狭隘天井のみ該当するテール保険）。
+- **採用（正直な位置づけ）**: ガードは保持（定義に忠実・無害・テール保険）だが、**マトリクスの「最大DDレバー」推定はこの動作点では実証されず＝リターン寄与ゼロ**。実利は (a)スキャンレベルbreadth配線（`market_breadth_pct_above_200dma`・≥50銘柄ガード）が#3(エクスポージャー実効化)の基盤になること、(b)banner/regime出力にbreadth事実が載ること。
+- **検証**: 凍結908**バイト一致**（91.7/66.5・判別+24.0/+52.0）・golden 43・regime18＋breadth4＋スキャナー62テスト。既存4件のquality-policyテスト失敗は**変更前から**（stash確認・pre-existing、C80非起因）。
+- **学び（C76と同族）**: 単変量ゲート（breadth<40%）は天井でなく底を罰する。divergenceは合成条件。エージェント推定の「成績影響」も両窓で測るまで信じない。
+
+### C81 — 2026-07-17 「JST朝6-8時に閉場直後の米国データ」（ユーザー要望・データ着弾の前倒し）
+- **実測診断**: GH Actionsのschedule起動は**45-100分遅延**（run履歴で確認・`timezone`キーはDST込みで有効に動作）。fast配信(16:06 ET単発)の実着弾=夏6:30-7:10 JST・冬7:15-8:10 JST、フルビルド=夏7:40-8:15・冬8:40+。backend beatのUS warm=16:30 ET開始＋全宇宙フェッチ25-40分＝冬は完了7:00-7:30 JST。**いずれも6-8時窓に遅刻/ギリギリ**＝ユーザーの体感どおり。
+- **物理限界の明示**: JST=UTC+9固定、冬の米国クローズ=21:00 UTC=**ちょうど6:00 JST**→冬に6:00以前の反映は不可能。最速≈close+50分（GH遅延下限）＝**冬6:30-6:50 JST・夏5:30-6:15 JST**が到達可能ライン。
+- **対策（コミット済み）**: (1)static-site fastを**3本の時差クロン**（16:04/16:31/16:58 ET）に冗長化＝最先着が配信・後続は冪等再配信、mode/concurrency判定を新cron文字列に対応。(2)backend USウォームを**close+5分（16:05 ET）**に前倒し（+30分バッファはYahooの確定バー配信実態に対して無意味）。
+- **発効条件**: workflowは**mainマージ後に発効**。VPS/自宅deployは再デプロイ（またはCACHE_WARM_MINUTE_US env）で反映。初回実測で着弾時刻を確認すること（STATEの実測項目）。
+- **正直な残課題**: フルランク再計算はビルド~1.5hのため冬は8:00 JST以降が物理限界（fastのprices/bands/signals再評価は窓内に入る）。冬6:00-6:30のスキャンはfreshness gateが409を返す設計どおりの挙動＝「静かに古いデータを出さない」。
+
+### C82 — 2026-07-18 セクターローテーション（グループRSゲート）＝両窓×2回で最終棄却
+- **依頼（ユーザー）**: 上昇継続グループを注視→その中のミネルヴィニ基準リーダーに投資、勢い喪失グループは対象外/売却。バックテストで優位性を証明できれば実装。
+- **設計（4エージェント・根拠引用付き）**: 委託データ`data/IBD_industry_group.csv`（カバレッジ98%）、グループスコア=出荷済みibd_group_rank_serviceと同一の「メンバーRSパーセンタイル平均」（新パラメータゼロ・walk-forward）。ゲート=LEADING(上位20%=IBD Top-40慣行) OR EMERGING(+0.20/21日∧上位半分)。**グループ起因の強制売却は原典に存在せず設計段階で棄却**（売りは銘柄/地合いアクションのみ・C73実証）→エントリー側ゲートのみ・fail-open。
+- **検証1（ゲート常時ON）**: 6y 112.4→86.5%(−25.9pp)・10y 97.8→**43.3%**(−54.5pp・maxDD悪化)。トレード数同等で勝率39→33.8%＝**枠の中身を勝者から入れ替えた**（C71/C72型）。年次分解で劣化は2020(−19.1pp)/2023(−19.9pp)＝**post-FTD回復年に集中**: グループRSは≥63日リターン由来で底打ち後の新リーダーシップに約1四半期盲目。
+- **検証2（事前登録コンティンジェンシー=FTD昇格後63セッション停止・閾値不変）**: 6y 55.4%・10y 37.6%＝**さらに悪化**。10枠ポートフォリオの経路依存で、部分停止は損失を回復せず別の入替を誘発。
+- **最終判定: 棄却**（事前契約どおり）。`--group-rotation`フラグはdefault-offで残置（負の結果の再現手段）。
+- **確定した学び（同族4例目: C71/C76/C80/C82）**: **backward-lookingな相対強度の機械ゲートは、枠制限ポートフォリオでリターンの源泉であるテールを削る**。O'Neil「リーダーグループのリーダーを買え」は**人間の優先表示**として機能する（C72b実証: 品質表示は人間経路で+17pp）のであって、機械エントリーフィルタとしては機能しない。発見と執行の分離原則、4回目の実証。
+- **生き残った価値（次候補・表示側）**: グループ動向バッジ（LEADING/EMERGING/FADING）のスキャン行表示＋保有銘柄のグループFADING時のSellPlanCard助言行（「追加買い禁止・ストップ厳格化」・自動売却なし）。設計スペックの製品節（scratchpad/group_rotation_spec.md）に配線先記載済み。ユーザー判断待ち。
+
+### C83 — 2026-07-18 20年バックテスト対応＋「今日の買い候補」一目UI（ユーザー要望・4エージェント設計）
+- **20年バンドル（SPEC1・コミット済み 469e0b0）**: `backtest-tactics.yml`は既にperiodパラメータ化済→timeout 120→180分＋known-good記載の2行diffのみ。**mainマージ後にdispatch可**（period=20y・~150分・~190MB）。**必須の正直ブロック**: 生存者バイアスは2006年時点で今日宇宙の~38-43%まで減衰＋TSLA/META等の後年IPOが全期間不在＝**ヘッドラインリターンは比較不能・2008/2011/2015-16/2018/2020/2022のレジーム/ベア防御証拠としてのみ使用**。凍結metricは更新しない。
+- **「今日の買い候補」ビュー（SPEC2・実装＋実ブラウザ検証済み dac8eb8）**: exportがチャート毎に`risk_plan`を計算しindex(schema v2)へ圧縮`buy`ブロック（trigger・−8%capストップ・サイズ%・2R/3R・setup source・barrels・as-of）をスタンプ。PWAホーム（レジームバナー直下）に判定リスト: **BUY ZONE=trigger〜+5%チェイス上限＋現値マーカー**、判定優先順 MARKET-RED>STALE>EXTENDED>BUY NOW>WAIT、品質順、行タップでチャートモーダル。stop/sizeの数値源はrisk_plan単一（signal.stopと混在禁止）。buy:null行はpivot-only退化・pre-v2 indexは非表示。任意のローカル資金入力で株数表示。backend 57＋frontend 27 tests・**Playwright 375/1440px検証**（ゾーン算術・EXTENDEDチップ・null退化・タップ遷移・横スクロール無し）。
+- **残**: (a)desktop /scanへの同カードグリッド（ScanResultItemへのrisk_plan昇格・要ブラウザ検証）(b)mainマージ後に20yバンドルdispatch→回帰スライス評価（2008等）(c)PWA本番反映はマージ後のstatic-site cron。

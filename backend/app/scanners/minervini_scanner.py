@@ -501,7 +501,10 @@ class MinerviniScanner(BaseStockScreener):
             # rating can be capped in a correction/downtrend. The template
             # verdict itself stays market-independent (setups are setups); an
             # unknown regime (no/short benchmark) never blocks.
-            regime = assess_market_regime(spy_data)
+            regime = assess_market_regime(
+                spy_data,
+                breadth_pct_above_200dma=getattr(data, "market_breadth_pct_above_200dma", None),
+            )
             details["market_regime"] = regime.get("regime")
             details["market_uptrend"] = (
                 regime["regime"] in ("confirmed_uptrend", "uptrend_under_pressure")

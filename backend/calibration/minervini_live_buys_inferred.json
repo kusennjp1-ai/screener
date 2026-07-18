@@ -1,0 +1,308 @@
+{
+  "KRYS": {
+    "buy_events": [
+      {
+        "date": "2026-06-11",
+        "type": "breakout",
+        "px": 321.55,
+        "pivot": 316.3,
+        "volr": 1.7,
+        "source": null,
+        "above_50d": true
+      }
+    ],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 365.81,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 378.15,
+      "dist_to_pivot_pct": 3.4,
+      "pct_from_50d": 14.0,
+      "template_ok": true
+    }
+  },
+  "MATX": {
+    "buy_events": [
+      {
+        "date": "2026-05-05",
+        "type": "breakout",
+        "px": 186.89,
+        "pivot": 172.15,
+        "volr": 1.7,
+        "source": "vcp",
+        "above_50d": true
+      },
+      {
+        "date": "2026-07-01",
+        "type": "breakout",
+        "px": 203.92,
+        "pivot": 201.94,
+        "volr": 2.0,
+        "source": "vcp",
+        "above_50d": true
+      },
+      {
+        "date": "2026-07-08",
+        "type": "breakout",
+        "px": 204.73,
+        "pivot": 201.94,
+        "volr": 1.4,
+        "source": "vcp",
+        "above_50d": true
+      }
+    ],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 204.77,
+      "vcp_detected": true,
+      "source": "vcp",
+      "near_pivot": true,
+      "ready": false,
+      "pivot": 201.94,
+      "dist_to_pivot_pct": -1.4,
+      "pct_from_50d": 8.2,
+      "template_ok": true
+    }
+  },
+  "MNST": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 97.39,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 97.64,
+      "dist_to_pivot_pct": 0.3,
+      "pct_from_50d": 9.3,
+      "template_ok": true
+    }
+  },
+  "FTNT": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 157.51,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 149.67,
+      "dist_to_pivot_pct": -5.0,
+      "pct_from_50d": 17.3,
+      "template_ok": true
+    }
+  },
+  "CRWD": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 187.18,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 199.38,
+      "dist_to_pivot_pct": 6.5,
+      "pct_from_50d": 14.7,
+      "template_ok": false
+    }
+  },
+  "CSX": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 49.41,
+      "vcp_detected": true,
+      "source": "vcp",
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 46.04,
+      "dist_to_pivot_pct": -6.8,
+      "pct_from_50d": 6.5,
+      "template_ok": true
+    }
+  },
+  "PACS": {
+    "buy_events": [
+      {
+        "date": "2026-05-12",
+        "type": "breakout",
+        "px": 41.01,
+        "pivot": 35.97,
+        "volr": 4.6,
+        "source": "vcp",
+        "above_50d": true
+      },
+      {
+        "date": "2026-06-26",
+        "type": "breakout",
+        "px": 41.89,
+        "pivot": 41.3,
+        "volr": 2.1,
+        "source": null,
+        "above_50d": true
+      },
+      {
+        "date": "2026-06-30",
+        "type": "breakout",
+        "px": 42.64,
+        "pivot": 41.3,
+        "volr": 1.6,
+        "source": null,
+        "above_50d": true
+      }
+    ],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 43.22,
+      "vcp_detected": true,
+      "source": "ma_tight",
+      "near_pivot": true,
+      "ready": false,
+      "pivot": 45.89,
+      "dist_to_pivot_pct": 6.2,
+      "pct_from_50d": 14.5,
+      "template_ok": true
+    }
+  },
+  "BUD": {
+    "buy_events": [
+      {
+        "date": "2026-06-24",
+        "type": "breakout",
+        "px": 84.43,
+        "pivot": 83.96,
+        "volr": 2.0,
+        "source": null,
+        "above_50d": true
+      }
+    ],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 79.61,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 85.09,
+      "dist_to_pivot_pct": 6.9,
+      "pct_from_50d": -1.1,
+      "template_ok": false
+    }
+  },
+  "GEV": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 1091.57,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 1127.59,
+      "dist_to_pivot_pct": 3.3,
+      "pct_from_50d": 5.1,
+      "template_ok": true
+    }
+  },
+  "EBAY": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 117.2,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 118.63,
+      "dist_to_pivot_pct": 1.2,
+      "pct_from_50d": 6.2,
+      "template_ok": true
+    }
+  },
+  "LLY": {
+    "buy_events": [
+      {
+        "date": "2026-06-26",
+        "type": "breakout",
+        "px": 1208.12,
+        "pivot": 1160.95,
+        "volr": 2.3,
+        "source": null,
+        "above_50d": true
+      }
+    ],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 1188.58,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 1229.93,
+      "dist_to_pivot_pct": 3.5,
+      "pct_from_50d": 9.4,
+      "template_ok": true
+    }
+  },
+  "HSBC": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 99.09,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 96.51,
+      "dist_to_pivot_pct": -2.6,
+      "pct_from_50d": 6.9,
+      "template_ok": true
+    }
+  },
+  "BATRK": {
+    "buy_events": [],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 51.18,
+      "vcp_detected": false,
+      "source": null,
+      "near_pivot": false,
+      "ready": false,
+      "pivot": 49.72,
+      "dist_to_pivot_pct": -2.9,
+      "pct_from_50d": 1.2,
+      "template_ok": true
+    }
+  },
+  "XMTR": {
+    "buy_events": [
+      {
+        "date": "2026-06-26",
+        "type": "breakout",
+        "px": 94.37,
+        "pivot": 93.28,
+        "volr": 1.5,
+        "source": "vcp",
+        "above_50d": true
+      }
+    ],
+    "state_now": {
+      "last_date": "2026-07-10",
+      "last_close": 96.07,
+      "vcp_detected": true,
+      "source": "vcp",
+      "near_pivot": true,
+      "ready": false,
+      "pivot": 93.28,
+      "dist_to_pivot_pct": -2.9,
+      "pct_from_50d": 13.6,
+      "template_ok": true
+    }
+  }
+}
