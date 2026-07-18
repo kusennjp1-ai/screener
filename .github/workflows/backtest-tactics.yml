@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       period:
-        description: 'History depth to fetch (yfinance period)'
+        description: 'History depth to fetch (yfinance period; known-good: 6y, 10y, 20y)'
         type: string
         default: '6y'
 
@@ -23,7 +23,7 @@ concurrency:
 jobs:
   build-and-backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     services:
       postgres:
         image: postgres:16-alpine
