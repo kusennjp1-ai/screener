@@ -484,3 +484,8 @@
 - **最終判定: 棄却**（事前契約どおり）。`--group-rotation`フラグはdefault-offで残置（負の結果の再現手段）。
 - **確定した学び（同族4例目: C71/C76/C80/C82）**: **backward-lookingな相対強度の機械ゲートは、枠制限ポートフォリオでリターンの源泉であるテールを削る**。O'Neil「リーダーグループのリーダーを買え」は**人間の優先表示**として機能する（C72b実証: 品質表示は人間経路で+17pp）のであって、機械エントリーフィルタとしては機能しない。発見と執行の分離原則、4回目の実証。
 - **生き残った価値（次候補・表示側）**: グループ動向バッジ（LEADING/EMERGING/FADING）のスキャン行表示＋保有銘柄のグループFADING時のSellPlanCard助言行（「追加買い禁止・ストップ厳格化」・自動売却なし）。設計スペックの製品節（scratchpad/group_rotation_spec.md）に配線先記載済み。ユーザー判断待ち。
+
+### C83 — 2026-07-18 20年バックテスト対応＋「今日の買い候補」一目UI（ユーザー要望・4エージェント設計）
+- **20年バンドル（SPEC1・コミット済み 469e0b0）**: `backtest-tactics.yml`は既にperiodパラメータ化済→timeout 120→180分＋known-good記載の2行diffのみ。**mainマージ後にdispatch可**（period=20y・~150分・~190MB）。**必須の正直ブロック**: 生存者バイアスは2006年時点で今日宇宙の~38-43%まで減衰＋TSLA/META等の後年IPOが全期間不在＝**ヘッドラインリターンは比較不能・2008/2011/2015-16/2018/2020/2022のレジーム/ベア防御証拠としてのみ使用**。凍結metricは更新しない。
+- **「今日の買い候補」ビュー（SPEC2・実装＋実ブラウザ検証済み dac8eb8）**: exportがチャート毎に`risk_plan`を計算しindex(schema v2)へ圧縮`buy`ブロック（trigger・−8%capストップ・サイズ%・2R/3R・setup source・barrels・as-of）をスタンプ。PWAホーム（レジームバナー直下）に判定リスト: **BUY ZONE=trigger〜+5%チェイス上限＋現値マーカー**、判定優先順 MARKET-RED>STALE>EXTENDED>BUY NOW>WAIT、品質順、行タップでチャートモーダル。stop/sizeの数値源はrisk_plan単一（signal.stopと混在禁止）。buy:null行はpivot-only退化・pre-v2 indexは非表示。任意のローカル資金入力で株数表示。backend 57＋frontend 27 tests・**Playwright 375/1440px検証**（ゾーン算術・EXTENDEDチップ・null退化・タップ遷移・横スクロール無し）。
+- **残**: (a)desktop /scanへの同カードグリッド（ScanResultItemへのrisk_plan昇格・要ブラウザ検証）(b)mainマージ後に20yバンドルdispatch→回帰スライス評価（2008等）(c)PWA本番反映はマージ後のstatic-site cron。
