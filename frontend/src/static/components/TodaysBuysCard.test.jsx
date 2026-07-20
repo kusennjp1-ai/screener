@@ -119,6 +119,19 @@ describe('TodaysBuysCard', () => {
     localStorage.removeItem('todaysBuysEquity');
   });
 
+  it('adds a symbol to the watchlist when its star is tapped', () => {
+    localStorage.removeItem('todaysWatchlist');
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([{ symbol: 'NVDA', rank: 1, rs_rating: 94, buy: buyBlock() }])}
+        scanRows={uptrendRows}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('todays-buys-watch-NVDA'));
+    expect(JSON.parse(localStorage.getItem('todaysWatchlist'))).toEqual(['NVDA']);
+    localStorage.removeItem('todaysWatchlist');
+  });
+
   it('opens the chart when a row is tapped', () => {
     const onOpen = vi.fn();
     renderWithProviders(

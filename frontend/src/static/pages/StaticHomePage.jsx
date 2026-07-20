@@ -27,6 +27,7 @@ import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import TodaysBuysCard from '../components/TodaysBuysCard';
+import WatchlistCard from '../components/WatchlistCard';
 import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
@@ -238,6 +239,13 @@ function StaticHomePage() {
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} />
+
+      {/* C86: held/watched names first — the exit is the edge. Surfaces each
+          watched symbol's exported sell action + stop, most-urgent first. */}
+      <WatchlistCard
+        indexData={chartIndexQuery.data}
+        onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
+      />
 
       {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
           risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}

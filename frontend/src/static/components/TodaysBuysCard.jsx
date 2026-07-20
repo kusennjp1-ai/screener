@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
+import { useWatchlist } from '../hooks/useWatchlist';
 
 // 今日の買い候補 — the one-glance decision list (C83).
 //
@@ -71,7 +72,7 @@ function ZoneBar({ buy }) {
   );
 }
 
-function BuyRow({ entry, verdict, equity, onOpenChart }) {
+function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch }) {
   const buy = entry.buy;
   const meta = VERDICT_META[verdict];
   const expanded = verdict === 'buy_now';
@@ -102,6 +103,14 @@ function BuyRow({ entry, verdict, equity, onOpenChart }) {
           sx={{ fontWeight: 800, fontSize: 12.5, color: meta.color }}>
           {meta.label}{verdict === 'extended' && buy?.last_close != null && buy?.trigger_price > 0
             ? ` +${((buy.last_close / buy.trigger_price - 1) * 100).toFixed(1)}%` : ''}
+        </Typography>
+        <Typography
+          data-testid={`todays-buys-watch-${entry.symbol}`}
+          onClick={(e) => { e.stopPropagation(); onToggleWatch?.(entry.symbol); }}
+          sx={{ fontSize: 15, color: watched ? '#e0a52e' : '#4a4e57', cursor: 'pointer', lineHeight: 1 }}
+          aria-label={watched ? `${entry.symbol}を監視リストから外す` : `${entry.symbol}を監視リストに追加`}
+        >
+          ★
         </Typography>
       </Box>
 
@@ -138,6 +147,7 @@ function BuyRow({ entry, verdict, equity, onOpenChart }) {
 
 export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
   const [showAll, setShowAll] = useState(false);
+  const { has: isWatched, toggle: toggleWatch } = useWatchlist();
   const [equity, setEquity] = useState(() => {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('todaysBuysEquity') : null;
     return raw ? Number(raw) : 0;
@@ -218,7 +228,8 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
       ) : (
         <>
           {visible.map(([e, v]) => (
-            <BuyRow key={e.symbol} entry={e} verdict={v} equity={equity} onOpenChart={onOpenChart} />
+            <BuyRow key={e.symbol} entry={e} verdict={v} equity={equity} onOpenChart={onOpenChart}
+              watched={isWatched(e.symbol)} onToggleWatch={toggleWatch} />
           ))}
           {ordered.length > 20 && !showAll && (
             <Typography onClick={() => setShowAll(true)}
