@@ -806,6 +806,7 @@ class StaticSiteExportService:
             bands = self._compute_chart_bands(price_df, benchmark_df)
             m360 = self._compute_m360_signals(price_df, bands=bands, buy_points=buy_points)
             buy_summary = m360.pop("_buy_index", None)
+            sell_summary = m360.pop("_sell_index", None)
             self._write_json(
                 output_dir / rel_path,
                 {
@@ -833,6 +834,9 @@ class StaticSiteExportService:
                 # buy: None when no signal was computable — the UI must degrade
                 # to pivot-only display and never fabricate a trigger (C83).
                 "buy": buy_summary,
+                # sell: None when no exit engine fired (or computation failed);
+                # the watchlist UI degrades to a plain "hold" line (C86).
+                "sell": sell_summary,
                 "rs_rating": (stock_data or {}).get("rs_rating"),
             })
 
@@ -2242,8 +2246,25 @@ class StaticSiteExportService:
                     "buy_risk_state": (bands or {}).get("buy_risk_state"),
                     "last_close": round(last_close, 2),
                 }
+            # Compact per-symbol EXIT summary the charts INDEX carries so a
+            # mobile watchlist can surface a held name's sell action + current
+            # protective stop without opening every chart payload (C86). The
+            # 50-DMA breakdown / climax legs fire even with no entry context, so
+            # a held name breaking its 50-DMA on volume is visible same-day even
+            # when we never captured its buy signal. `stop`/`r_multiple` come
+            # from the trailing ladder and are None until an entry is present.
+            sell = None
+            if sell_plan and sell_plan.get("action"):
+                trail = sell_plan.get("trailing") or {}
+                sell = {
+                    "action": sell_plan.get("action"),
+                    "stop": trail.get("stop"),
+                    "stop_basis": trail.get("basis"),
+                    "r_multiple": trail.get("r_multiple"),
+                    "last_close": round(last_close, 2),
+                }
             return {"signal": signal, "sell_plan": sell_plan,
-                    "risk_plan": risk_plan, "_buy_index": buy}
+                    "risk_plan": risk_plan, "_buy_index": buy, "_sell_index": sell}
         except Exception:  # noqa: BLE001 - signal cards must not break the export
             logger.warning("m360 signal computation failed", exc_info=True)
             return {}

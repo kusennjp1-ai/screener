@@ -2130,7 +2130,7 @@ def test_compute_m360_signals_uses_band_states_and_buy_points(service_and_sessio
     )
     # Both engines ran on the same wiring as the live Markets360Service, plus
     # the C83 decision block (risk plan + the compact index summary).
-    assert set(out) == {"signal", "sell_plan", "risk_plan", "_buy_index"}
+    assert set(out) == {"signal", "sell_plan", "risk_plan", "_buy_index", "_sell_index"}
     # risk_plan is the ONE source for stop/size the UI may render
     assert "stop_loss" in out["risk_plan"] and "position_size_pct" in out["risk_plan"]
     # the index summary exists whenever a signal dict was computed, and it must
@@ -2142,8 +2142,15 @@ def test_compute_m360_signals_uses_band_states_and_buy_points(service_and_sessio
     assert "barrels" in out["signal"]
     assert out["signal"]["barrels"]["trend"] is True  # tpr_state fed through
     assert out["sell_plan"]["action"] in (
-        "hold", "raise_stop", "tighten_stop", "sell_into_strength", "exit",
+        "hold", "raise_stop", "tighten_stop", "sell_into_strength", "exit", "stop_hit",
     )
+    # C86: the compact EXIT summary the charts index carries so a mobile
+    # watchlist can surface a held name's action + stop without opening the
+    # full chart payload. Always present when the sell engine produced an action.
+    assert out["_sell_index"] is not None
+    assert out["_sell_index"]["action"] == out["sell_plan"]["action"]
+    for key in ("action", "stop", "stop_basis", "r_multiple", "last_close"):
+        assert key in out["_sell_index"]
     # Degrades to {} (cards absent), never raises.
     assert service._compute_m360_signals(None, bands={}, buy_points=[]) == {}  # noqa: SLF001
 
