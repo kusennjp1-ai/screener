@@ -5,10 +5,10 @@
 
 ## 現在
 
-- **サイクル**: C76完了（**young-base＝trend-template guard を凍結ハーネスで棄却**）。残ミス72%の`young_no_2x`を、2xガードをStage-2トレンドテンプレに置換して回収を試作。オフラインは detected-recall 55.6→74.3%(+18.7pp)・判別+27.5→+32.8ppと強いが、**凍結908でFIRE±5判別が−2.2pp低下（control 67.7→73.6が entry超過）→即revert**。学び: detected-recall改善≠FIRE±5タイミング特異性、**2xガードはタイミング判別を供給していた**。計測スクリプトは保持。直前のC75（採用済）: ATRボラティリティ収縮ベース`_vol_contract_base`をvcp_footprintに追加（VCPDetector無変更・golden凍結）→**FIRE±5 91.2→91.7（新床）**・判別+24.1→+24.0pp（ノイズ）・他バイト一致。C74: 品質ランクUI（実ブラウザ検証済）+Rowバグ修正。C73: 908再現性=detected73/機械buy33、exit leash両窓不採用。 **次候補: recallは判別最適近辺＝VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）**
-- **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
-- **実行中/待機中の外部ジョブ**: PR #59（C73-C82・CI green・マージ待ち＝マージでC81発効）。C82グループローテーション=最終棄却（両窓×2回）、表示バッジ化はユーザー判断待ち。C83/C84: PR#59マージ済（C81発効・今日の買い候補UI**本番反映済**）。20yバックテスト完了=ヘッドライン無効（凍結810宇宙アーティファクト）・**2008/2022ベア防御確認・チョップ年出血を発見**（2011/14-16/18/19の小負け複利＋20yではgate逆貢献）→C85でuptrend品質tieringも3窓棄却（6y−72pp）。**執行チューニング族は5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残レバー=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4)・desktop/scanカード。
+- **サイクル**: C86完了（**保有連動exit可視化＝matrix#4着手・未pushならpush要**）。ユーザー依頼「弱点をUI含め冷静に分析→複数エージェントで改善・長所も伸ばせ」。監査workflowはsession上限（reset 7pm UTC）で全滅→**既存groundedのcapability-matrix §4をmainループで再評価**し実行。§4残る最大proven-lever=#4「mobileのwatchlist＋保有連動exit可視化」を2コミットで実装: (1)**backend export-only（d87fe80）** charts indexに`sell`圧縮ブロック追加（`_buy_index`と対称・action/trailing stop/r_multiple・50日線割れ/climaxはentry無しでも発火＝買い未捕捉の保有名も当日可視・compute_sell_plan無変更＝**凍結metric無影響**）。(2)**frontend client-only（20b9b61）** `useWatchlist`(localStorage＋event同期)・Today's-Buys行に★トグル・`WatchlistCard`(ホーム・買いリスト上=exit優先・緊急度順stop_hit>exit>...>hold・「要売却N件」)。**375px Playwright検証済**（順序・色・同期・横スクロール無し）。17テスト＋prod build green。**次候補: matrix#4の残り = (a)service worker(オフライン起動・別コミット・build系) (b)watchlist追加導線をStaticScanPageにも (c)建値記録でR実損表示**。または matrix#5(fundamentals 908リプレイ・計測先行・要GHA)。
+- **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
+- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
+- **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。
 
 ## 凍結metricの現在値（低下＝即revert）
 

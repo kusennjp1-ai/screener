@@ -504,3 +504,12 @@
 - **機構**: 露出capはただのスケールダウンではない — invested-cap拘束が買い許可のタイミングを変え、**枠の中身を再配分**（trades 120→149・PF 2.22→1.42）。テール勝者を逃す。
 - **確定した恒久教訓（同族5例目: C71/C76/C80/C82/C85）**: 近代窓のリターンは少数テールが担う。**配分経路（エントリーゲート/エグジット/露出スロットル）への機械的介入は、何を狙っても両窓検証で崩壊する**。この レバー族の追求は打ち切り。残る正のレバーは (a)discovery/表示（C70/C74/C75/C77で実証）(b)規律UI（C79/C83）(c)データ/計測（fundamentals検証・matrix#5）(d)mobile可用性（matrix#4）。
 - フラグはdefault-offで残置（8559035）。凍結metric無変更。
+
+### C86 — 2026-07-20 弱点/長所監査（UI含む）→保有連動exit可視化（matrix#4着手・proven-leverのみ）
+- **依頼（ユーザー）**: 「スクリーナーの弱点をUI含めて冷静に分析して、複数エージェントでループ構造で改善せよ。長所はさらに伸ばせ」。
+- **監査手段**: 複数エージェントworkflowを2度dispatchするもFable-5週次上限→session上限（reset 7pm UTC）で全滅。∴ **既存のgrounded 6レンズ監査（capability-matrix §4）をmainループで再評価**。§4 top-5のうち #1ストップヒット=C79完了・#2ブレッドス=C80完了・#3=執行チューニング族＝5連続棄却で打ち切り確定。**残る最大proven-lever = §4 #4「オフラインSW＋watchlist＋保有連動exit可視化」**（mobile可用性＋規律UI・harness影響ゼロ・「エッジは執行=exit側に偏在」）。
+- **実装（2コミット・1論点1コミット）**:
+  1. **backend（export-only・d87fe80）**: charts index entryに`buy`はあるが`sell`が無く、保有名の50日線割れをチャートを開かずには見られなかった。`_sell_index`/`sell`圧縮ブロック（action・trailing stop・stop_basis・r_multiple・last_close）を`_buy_index`と対称に追加。50日線割れ/climaxはentry context無しでも発火＝**買いシグナル未捕捉の保有名でも当日可視**。compute_sell_plan無変更＝**FIRE±5/GATE/golden無影響**（新1テスト）。
+  2. **frontend（クライアントのみ・20b9b61）**: `useWatchlist`フック（localStorage＋custom event/storage eventでコンポーネント間同期）、Today's-Buys各行に★トグル、`WatchlistCard`をホーム（買いリストの上＝exit優先）に配置。各監視名のexport済み`sell`から**exit action＋保護ストップを緊急度順**（stop_hit>exit>sell_into_strength>tighten_stop>raise_stop>hold）表示・「要売却N件」アラート・当日export不在名は「本日データ未取得」。17テスト＋prod build green。
+- **ブラウザ検証（375px Playwright・実施済み）**: 緊急度順序（NVDA exit→CRWD tighten→AVGO raise→GONE no-data）・色・stop/R表示・横スクロール無し・**コンポーネント間同期確認**（seeded watchlist→買いカード★全gold rgb(224,165,46)、買いカードでCRWD★オフ→watchlistカードから即消去 count→0）。
+- **残（matrix#4の未完部分）**: (a)service worker（Workbox/vite-plugin-pwa）でオフライン起動＝別コミット（build系変更・要オフライン検証）(b)watchlistのStaticScanPageからの追加導線(c)保有株数/建値のlocalStorage記録でR実損表示。凍結metric無変更。
