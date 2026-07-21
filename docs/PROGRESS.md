@@ -522,3 +522,10 @@
   - **WatchlistCard**: exit actionを**アイコン付き色ピル**化＋**R倍率バー**（−1R…+3R・損益分岐線付き）で+2.4R/−0.3Rが一目、緊急度が左ボーダー色とソートを駆動。
   - 共有カラートークンで両カードを1つのビジュアル体系に。
 - **検証**: baseline→after比較スクショで(1)ヘッダー折返しバグ発見→title nowrap化で修正(2)ラダー帯/tick/現値マーカー/Rバー描画確認・横スクロール無し。テストは新ラベルに更新（BUY ZONE→ラダーtick・STALE→データ未更新）、static 69テスト＋prod build green・lint 0エラー。**データ/スキーマ変更なし**（凍結metric無関係）。
+
+### C88 — 2026-07-21 オフラインservice worker（matrix#4残り・matrix#6完了）
+- **依頼**: 「任せるから続けて」→ STATE次候補からmobile可用性の最大レバー = オフライン起動（matrix#6「critical usability」・matrix#4の残り）を選択。朝6-8時JSTのスキャンはスマホ・電車/圏外もあり得るが、毎起動でネット再取得＝弱回線でレビュー不能だった。
+- **設計（新規依存ゼロ・vite-plugin-pwa/Workboxは入れず手書き）**: `public/sw.js` = **NetworkFirst一択**。鮮度critical故オンラインは常に最新をfetch＆cache、オフラインは最後のシェル＋データにフォールバック（起動可能・前日スナップは既存STALEバナーが古さを警告）。same-origin GETのみ・エラー/opaqueは絶対キャッシュしない。skipWaiting+clients.claim+旧cache掃除で新デプロイがreloopなしにクリーン発効。installでシェルをprecache、ハッシュ付きassetは初回制御ロードでruntimeキャッシュ（日次ユーザーは前訪問で常にwarm）。
+- **登録ガード**: `STATIC_SITE_MODE && import.meta.env.PROD`のみ = **静的PWA本番だけ**。backend接続アプリはAPIレスポンスをキャッシュすると危険なので絶対に登録しない。dev(PROD=false)も無効。
+- **検証（localhost Playwright・realistic 2nd-visitフロー）**: オンライン起動でSW登録＋ページ制御→**オフラインreloadでキャッシュ済みシェルを配信**（React mount・title「米国株スクリーナー」維持・#root子あり）＋static-data JSONをキャッシュから配信（default_market="US"）。デフォルトbackendビルドは登録inert確認。static 69テスト＋両ビルドgreen・lint 0エラー。
+- **残（将来強化）**: 完全precache（全ハッシュassetをビルド時マニフェスト化）で初回訪問オフラインも保証＝vite-plugin-pwa導入時。現状は2回目以降オフライン可（日次利用では実質常時）。
