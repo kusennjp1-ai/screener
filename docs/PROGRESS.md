@@ -513,3 +513,12 @@
   2. **frontend（クライアントのみ・20b9b61）**: `useWatchlist`フック（localStorage＋custom event/storage eventでコンポーネント間同期）、Today's-Buys各行に★トグル、`WatchlistCard`をホーム（買いリストの上＝exit優先）に配置。各監視名のexport済み`sell`から**exit action＋保護ストップを緊急度順**（stop_hit>exit>sell_into_strength>tighten_stop>raise_stop>hold）表示・「要売却N件」アラート・当日export不在名は「本日データ未取得」。17テスト＋prod build green。
 - **ブラウザ検証（375px Playwright・実施済み）**: 緊急度順序（NVDA exit→CRWD tighten→AVGO raise→GONE no-data）・色・stop/R表示・横スクロール無し・**コンポーネント間同期確認**（seeded watchlist→買いカード★全gold rgb(224,165,46)、買いカードでCRWD★オフ→watchlistカードから即消去 count→0）。
 - **残（matrix#4の未完部分）**: (a)service worker（Workbox/vite-plugin-pwa）でオフライン起動＝別コミット（build系変更・要オフライン検証）(b)watchlistのStaticScanPageからの追加導線(c)保有株数/建値のlocalStorage記録でR実損表示。凍結metric無変更。
+
+### C87 — 2026-07-21 買い/監視カードのグラフィカル再構築（情報量維持・視認性向上）
+- **依頼（ユーザー）**: 「UIおよびUXは情報量はそのままにグラフィカルでとてもわかりやすく整理してくれ」。
+- **対象選定**: MarketRegimeBannerは既にグラフィカル（healthメーター・露出ラダー・分配日チップ）＋desktop scanと共有＝blast radius大→非対象。text/monospace密度が最も高いのは自作の**2枚の判定カード**（TodaysBuysCard/WatchlistCard）→ここに集中。
+- **再構築（1コミット・render→screenshot→refineループ・375px Playwright）**:
+  - **TodaysBuysCard**: BUY-NOW行を**リスク→リワード・ラダー1本**に集約 — stop→pivot=赤リスク帯・pivot→3R=緑リワード帯・+5%買いゾーンをハイライト・STOP/PIVOT/2R/3Rのtickに実価格ラベル・現値マーカー。position sizeは塗りバー＋株数、barrelsは3ピップ、RSは強度ピル、verdictは色付きステータスドット。**全数値をtick/ラベルとして保持**。非BUY行はスリムなpivotミニゾーン。
+  - **WatchlistCard**: exit actionを**アイコン付き色ピル**化＋**R倍率バー**（−1R…+3R・損益分岐線付き）で+2.4R/−0.3Rが一目、緊急度が左ボーダー色とソートを駆動。
+  - 共有カラートークンで両カードを1つのビジュアル体系に。
+- **検証**: baseline→after比較スクショで(1)ヘッダー折返しバグ発見→title nowrap化で修正(2)ラダー帯/tick/現値マーカー/Rバー描画確認・横スクロール無し。テストは新ラベルに更新（BUY ZONE→ラダーtick・STALE→データ未更新）、static 69テスト＋prod build green・lint 0エラー。**データ/スキーマ変更なし**（凍結metric無関係）。
