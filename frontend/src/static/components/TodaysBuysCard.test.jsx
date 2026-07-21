@@ -50,12 +50,14 @@ describe('TodaysBuysCard', () => {
       />,
     );
     expect(screen.getByText('✓ BUY NOW')).toBeInTheDocument();
-    expect(screen.getByText(/BUY ZONE/)).toBeInTheDocument();
-    expect(screen.getByText(/132\.50/)).toBeInTheDocument();
-    expect(screen.getByText(/139\.13/)).toBeInTheDocument(); // trigger * 1.05
-    expect(screen.getByText(/stop 124\.10/)).toBeInTheDocument();
-    expect(screen.getByText(/size 19\.8% of capital/)).toBeInTheDocument();
-    expect(screen.getByText(/2R 149\.30/)).toBeInTheDocument();
+    // the risk→reward ladder ticks (graphical C87) carry the real prices
+    expect(screen.getByText('STOP')).toBeInTheDocument();
+    expect(screen.getByText('PIVOT')).toBeInTheDocument();
+    expect(screen.getByText('132.50')).toBeInTheDocument(); // pivot tick
+    expect(screen.getByText('149.30')).toBeInTheDocument(); // 2R tick
+    expect(screen.getByText('157.70')).toBeInTheDocument(); // 3R tick
+    expect(screen.getByText(/stop 124\.10/)).toBeInTheDocument(); // footer basis line
+    expect(screen.getByText(/size 19\.8%/)).toBeInTheDocument();
   });
 
   it('degrades a null-buy row to pivot-only honesty', () => {
@@ -102,7 +104,7 @@ describe('TodaysBuysCard', () => {
         scanRows={uptrendRows}
       />,
     );
-    expect(screen.getByText(/STALE/)).toBeInTheDocument();
+    expect(screen.getByText(/データ未更新/)).toBeInTheDocument();
     expect(screen.queryByText('✓ BUY NOW')).not.toBeInTheDocument();
   });
 
