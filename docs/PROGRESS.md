@@ -529,3 +529,11 @@
 - **登録ガード**: `STATIC_SITE_MODE && import.meta.env.PROD`のみ = **静的PWA本番だけ**。backend接続アプリはAPIレスポンスをキャッシュすると危険なので絶対に登録しない。dev(PROD=false)も無効。
 - **検証（localhost Playwright・realistic 2nd-visitフロー）**: オンライン起動でSW登録＋ページ制御→**オフラインreloadでキャッシュ済みシェルを配信**（React mount・title「米国株スクリーナー」維持・#root子あり）＋static-data JSONをキャッシュから配信（default_market="US"）。デフォルトbackendビルドは登録inert確認。static 69テスト＋両ビルドgreen・lint 0エラー。
 - **残（将来強化）**: 完全precache（全ハッシュassetをビルド時マニフェスト化）で初回訪問オフラインも保証＝vite-plugin-pwa導入時。現状は2回目以降オフライン可（日次利用では実質常時）。
+
+### C89 — 2026-07-21 TradingViewブリッジ（deep-link＋Pineオーバーレイ・別件ユーザー提案）
+- **依頼**: tradingview-mcp（https://github.com/tradesdontlie/tradingview-mcp）を活かせないか。
+- **適合性評価（正直）**: そのMCPは**ローカルのTradingView Desktopをchrome-devtools-protocolで自動操作するブリッジ**（有料サブスク＋GUIマシン必須・undocumented内部IF依存で壊れやすい・ToS上の自動収集制限あり）。本製品はheadless backend＋静的Pages PWA＝常時デスクトップもサブスクも無い→**MCP本体の統合は非適合**。かつ「データソースToS尊重・egress回避禁止」の絶対制約にも反する。
+- **転用した価値ある発想**: MCPの目玉「Pine開発／分析をチャートに描画」を**逆向き**に。スクリーナーが既に算出するpivot/stop/2R-3Rを**ユーザー自身のTradingViewへ渡す**（スクレイピング無し・依存無し・当方サブスク不要・ToSクリーン）。
+- **実装（1コミット ce6b3c4）**: `tradingView.js`（tvSymbol/tradingViewUrl＝market→取引所prefix・サフィックス除去、buildPineScript＝Pine v5オーバーレイでpivot/stop/2R/3R水平線＋買いゾーン塗り、欠損値はNaN出さず省略）＋`TradingViewBridge`（チャートドリルインのサイドバーに「TradingViewで開く」リンク＋「Pineオーバーレイをコピー」）。chartPayloadのsignal/risk_plan/as_of_dateから生成、market=useStaticMarket。
+- **検証**: 375px Playwrightでパネル描画・href（?symbol=NVDA）確認、clipboard writeText確認。13新規テスト＋static 82テスト＋staticビルドgreen・lint 0エラー。**データ/スキーマ/凍結metric無変更**。
+- **次候補（同系・ユーザー選択待ち）**: (a)買い/監視カード行にもTradingView導線 (b)クライアント側チャートreplay（MCPのreplay発想・exportバー使用・discipline/教育レバー） (c)完全precache SW。
