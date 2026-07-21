@@ -25,6 +25,8 @@ import SellPlanCard from '../features/markets360/components/SellPlanCard';
 import SignalBadges from '../features/markets360/components/SignalBadges';
 import BuyChecklist from '../components/Scan/BuyChecklist';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
+import TradingViewBridge from './components/TradingViewBridge';
+import { useStaticMarket } from './StaticMarketContext';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
 import { getGroupRankColor } from '../utils/colorUtils';
@@ -177,6 +179,7 @@ function StaticChartViewerModal({
   const theme = useTheme();
   // モバイルでは縦積みレイアウト（チャート上・指標下）＋画面上の前後ボタンに切り替える
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { selectedMarket } = useStaticMarket() || {};
 
   const entries = useMemo(() => chartIndex?.symbols || [], [chartIndex]);
   const entryBySymbol = useMemo(
@@ -573,6 +576,13 @@ function StaticChartViewerModal({
                 stockData={stockData}
               />
               <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
+              <TradingViewBridge
+                symbol={currentSymbol}
+                market={selectedMarket}
+                signal={chartPayload?.signal}
+                riskPlan={chartPayload?.risk_plan}
+                asOf={chartPayload?.as_of_date}
+              />
             </Box>
 
             <Box
