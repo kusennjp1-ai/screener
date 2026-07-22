@@ -543,3 +543,10 @@
 - **実装（1コミット 08ce46f・新規依存ゼロ）**: `vite.config.js`に小さなビルドプラグイン＝全ビルド資産をbase接頭辞付きで列挙した`precache-manifest.json`をemit。`sw.js`はinstallでその全資産を個別add（allSettledで1件404でもinstall全体を壊さない・shellは常時含む）。**ハッシュ付き資産はCacheFirst**（内容アドレス指定＝ファイル名ハッシュがバージョン故に正しく高速、かつNetworkFirst-during-loadのレース＝オフライン再読込時の初期サブリソース取得ドロップを回避）。ナビゲーション＋鮮度クリティカルなdataはNetworkFirst維持。cache v2。
 - **検証（静的ビルドをlocal配信）**: 初回訪問で全20資産をprecache・バイト長一致（mui 405441/charts 590908/…）、caches.matchがオフライン配信、**復帰ユーザーのオフラインフローでアプリmount＋描画確認**（root占有・本文412字）。全ルートchunkがprecacheリストにあり→**オフライン網羅は訪問済ページに限らず完全**。82 static테スト＋両ビルドgreen。
 - **正直な限界**: 「同一セッションで1回ロード→即オフライン再読込」の厳密初回はheadless Chromiumのoffline+SWサブリソースレース（毎回別の大chunkが1つドロップ・cacheは常に完全）で視覚mountをクリーンに再現できず。実利用は前日オンライン→翌日＝復帰フロー（検証済root=1）なので実害なし。標準Workbox相当パターン。
+
+### C90 — 2026-07-22 hallmark監査で判定カードをde-slop（ユーザー提案ツール）
+- **依頼**: https://github.com/Nutlope/hallmark を使ってUI改善。
+- **hallmarkの正体**: Claude Code/Cursor/Codex向けの**anti-AI-slopデザインskill**（audit/redesign/study動詞）。standalone HTML/CSS生成が主だが、**audit動詞**は既存UIをnamed anti-patternで採点。`npx skills add nutlope/hallmark`で導入（skill本体はgitignore＝tooling扱い）。
+- **audit結果（1 critical・2 major・1 minor）**: (critical) **side-stripe card**＝両カードの3px色付き左ボーダー。(major) **emoji/glyphアイコン＋icon-set不一致**＝✓◷✗⚠⛔△▲★をアイコン代用、他はMUI icons使用、しかも△▲は日本語のマイナス表記で緑「ストップ上げ」に▲は誤読。(major) **色トークンの重複/inline**＝hexパレットを両カードにコピペ、MarketRegimeBankとも別系統。(minor) pure #fff・OS monospace。
+- **適用（React/MUI内で・1コミット 39c2f2c）**: (1)side-stripe撤廃→全周hairline＋シンボル横の小accent square。(2)絵文字→**MUI iconに統一**（CheckCircle/Schedule/WarningAmber/Block/TrendingDown/Bolt/KeyboardDoubleArrowUp/ArrowUpward/Star…）＝アプリ全体とアイコン声を一致・△▲曖昧さ解消。(3)共有トークン`designTokens.js`に一本化・見出しはtinted off-white。
+- **検証**: 375px Playwrightで side-stripe無し・MUIアイコン・色一貫を確認。純粋なvisual/token refactor＝データ/スキーマ/挙動/凍結metric無変更。static 82テスト＋build green・lint 0エラー。MarketRegimeBanner（desktop共有・blast radius大）は非対象＝色系統統一は将来課題。

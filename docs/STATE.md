@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C89b完了（**完全precache SW・push要**）。C88のランタイムのみ→**全ビルド資産をprecache**（vite pluginが`precache-manifest.json`をemit・sw.jsがinstallで個別add・allSettled）＋**ハッシュ資産CacheFirst**（NetworkFirst-during-loadレース回避）。全ルートchunkをprecache＝オフライン網羅完全（訪問済ページ限定でない）。静的ビルドlocal配信で全20資産バイト長一致・復帰フローでアプリmount＋描画確認（root=1/412字）。82テスト＋両ビルドgreen（08ce46f）。**次候補: 買い/監視カード行にTV導線・クライアントreplay・同グラフィカル体系をdesktop scanへ**。直前C89: TradingViewブリッジ（ce6b3c4）。
+- **サイクル**: C90完了（**hallmark auditでカードをde-slop・push要**）。ユーザー提案のNutlope/hallmark（anti-slopデザインskill）をnpx skills addで導入しaudit動詞で判定カードを採点→1 critical(side-stripe card)・2 major(絵文字アイコン/icon-set不一致・色トークン重複)を修正: 3px左ボーダー撤廃→hairline＋accent square、絵文字→MUI icon統一（△▲の日本語マイナス誤読も解消）、共有`designTokens.js`に一本化。375px検証・純visual refactor（データ/スキーマ/凍結metric無変更）・static 82テスト＋build green（39c2f2c）。skill本体はgitignore。**次候補: MarketRegimeBanner含む色系統統一(desktop共有・要慎重)・買い/監視行TV導線・クライアントreplay**。直前C89b: 完全precache SW（08ce46f）。
 - **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
 - **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。
