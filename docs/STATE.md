@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C92完了（**買い候補の質修正・ユーザー写真FB・push要**）。写真2「買い候補が買うに値しない」→3点修正: (1)金額上限＝risk.pyに`MAX_POSITION_PCT=25`（36.9%→25%・バックテスト既存cap＝検証済挙動に一致・f3c21b2）(2)未確認ブレイク（barrels 0-1）をBUY NOWにしない＝classifyEntryで>=2要求・AVT→WAIT（backend signal無変更＝FIRE/GATE不変・4df4d95）(3)uptrend_under_pressureで「数を絞る」注意帯（図3のdo less）。375px検証・backend 94/frontend 87テストgreen・凍結metric無変更。YouTube/claude-videoはsandboxからYouTube遮断(000)で動画取込不可＝図3のVCP原則で代替。**重要: 本番PWAはmainビルド＝写真は旧C83版、C87〜C92はmainマージ＋再ビルドで反映**。**次候補: 写真1のスキャン=真のリーダー選別（ファンダ/グループ成長ゲート強化・要検証・matrix#8）**。直前C91: 8点Trend Templateスコアカード（c824ef0/386e94b）。
+- **サイクル**: C93完了（**Minerviniスキャンを本物のリーダーに厳格化＋C86-C93を本番反映PR #60・push/merge進行中**）。写真1FB: スキャンが低成長・景気敏感株を通す→`minervini`/`minervini_vcp`プリセットに epsRating>=80＋ibdGroupRank<=50 を追加（preset-config only・凍結metric無変更・b6ab08a）。写真2FBのC92（金額25%上限・未確認ブレイクをBUY NOWにしない・弱相場は数を絞る）と合わせPR #60（C86-C93）でmain統合→スマホ反映。**Frontend CI smoke失敗はモックdevサーバ相手で当PR起因でない環境flakyと判定・再実行で切り分け中**。YouTube学習は環境遮断で動画取込不可＝文字起こしテキストを貰えば反映可。**次: PR #60マージ→static-site再ビルドでスマホ反映確認**。
 - **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
 - **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。

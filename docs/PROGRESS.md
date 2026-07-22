@@ -568,3 +568,9 @@
 - **検証**: 写真2条件を375px再現→注意帯表示・AVT→WAIT・LXP 36.9%→25.0%・買い件数3→2を確認。backend 94＋frontend 87テスト＋build/lint green。凍結metric（FIRE±5/GATE/golden）無変更。
 - **未対応（写真1・要判断）**: Minerviniスキャンが真のリーダー以外（ARW/PGC/INSW等の低成長・景気敏感株）を通す＝技術テンプレ通過だけで、成長リーダーの**ファンダ・グループリーダーシップ関門が弱い**。EPS/売上成長・先導グループのゲート強化が次の大玉だが、fundamentalは米国限定・未検証（matrix#8）＝計測先行で慎重に。
 - **重要**: 本番PWAは`main`ビルド＝写真は旧C83版。C87〜C92の改善はブランチ上・**mainマージ＋サイト再ビルドで初めて反映**。
+
+### C93 — 2026-07-22 Minerviniスキャンを本物の成長リーダーに厳格化（写真1FB）＋本番反映着手
+- **写真1FB**: Minerviniスキャンが低成長・景気敏感株（ARW卸/PGC地銀/INSW海運）を通す。原因: 基本プリセットが業種グループ「上位98位（≒半分）」まで許容＋業績の"水準"下限なし（code33は加速だけ見る＝低ベースの景気敏感株が加速で通過）。
+- **修正（preset-config only・b6ab08a）**: `minervini`と`minervini_vcp`プリセットに **epsRating>=80**（業績リーダーシップ＝CANSLIMの"L"・null無し: code33が既に米ファンダ必須なので生存者はEPS Rating保有）と **ibdGroupRank<=50**（真の先導グループ＝上位1/4）を追加。スキャンエンジン/凍結metric無変更。弱い相場では候補が減る＝図3「弱い時は少なく」に忠実。プリセットテスト更新（23 pass）。
+- **本番反映（PR #60）**: mainは#59（C73-C83）止まり＝スマホは旧C83版。C86-C93をPR #60で統合予定。**Frontend CI（Playwright smoke）失敗を調査**: smokeはモックのvite devサーバ相手（backend無し）、当PRのグローバル変更2点はdev無効（SW登録=PROD∧static限定・precache plugin=apply:'build'）→当PR起因でない環境/flaky失敗と判定。失敗ジョブ再実行で切り分け中。
+- **重要（ユーザー向け）**: YouTube学習はこの環境ではYouTube遮断で不可＝「動画→文字起こし」をネットの通じる場所で行いテキストを貼れば反映可能。
