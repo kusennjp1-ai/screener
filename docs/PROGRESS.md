@@ -550,3 +550,10 @@
 - **audit結果（1 critical・2 major・1 minor）**: (critical) **side-stripe card**＝両カードの3px色付き左ボーダー。(major) **emoji/glyphアイコン＋icon-set不一致**＝✓◷✗⚠⛔△▲★をアイコン代用、他はMUI icons使用、しかも△▲は日本語のマイナス表記で緑「ストップ上げ」に▲は誤読。(major) **色トークンの重複/inline**＝hexパレットを両カードにコピペ、MarketRegimeBankとも別系統。(minor) pure #fff・OS monospace。
 - **適用（React/MUI内で・1コミット 39c2f2c）**: (1)side-stripe撤廃→全周hairline＋シンボル横の小accent square。(2)絵文字→**MUI iconに統一**（CheckCircle/Schedule/WarningAmber/Block/TrendingDown/Bolt/KeyboardDoubleArrowUp/ArrowUpward/Star…）＝アプリ全体とアイコン声を一致・△▲曖昧さ解消。(3)共有トークン`designTokens.js`に一本化・見出しはtinted off-white。
 - **検証**: 375px Playwrightで side-stripe無し・MUIアイコン・色一貫を確認。純粋なvisual/token refactor＝データ/スキーマ/挙動/凍結metric無変更。static 82テスト＋build green・lint 0エラー。MarketRegimeBanner（desktop共有・blast radius大）は非対象＝色系統統一は将来課題。
+
+### C91 — 2026-07-22 8点トレンドテンプレート・スコアカード（GitHub Minervini screener慣行）
+- **依頼**: 自律ループ継続＋GitHubから使えるものを利用。
+- **調査（grep-first）**: ADR%・U/D volume ratio(10d)・acc/dis(up/down volume)等は既存＝メトリクスは成熟。GitHubのMinervini/momentum screenerが**普遍的に表示**するのに当製品に無いのは**8点Trend Templateチェックリスト**（passes_templateはflat boolのみ、どの条件が通ったか見えない）。
+- **実装（frozen-safe・2コミット）**: (backend c824ef0) `compute_tpr`にopt-in `with_breakdown`追加＝最新バーの8条件（7 price/MA＋RSライン）をラベル付きで返す。**バンドが既に採点する同一per-barロジックを再利用**＝スコアカードとチャートのトレンド色が矛盾しない。default False＝既存caller/凍結band/golden metricsはバイト不変。static exportがchart payloadに`trend_template`ブロックをemit（export-only＋opt-in＝908/band/golden無変更）。backend 3テスト（breakdown形状・score一致・benchmark無し7条件フォールバック）。(frontend 386e94b) `TrendTemplateScorecard`をチャートドリルインに配置＝各条件pass/failアイコン＋JPラベル＋スコア(7/8等)。C90の共有トークン＋MUIアイコン声。
+- **検証**: 375px Playwrightでスコアカード描画（7/8・green check/dimmed cancel）確認。backend bands 13＋export 57＋static 85テスト＋lint 0エラー。凍結metric（FIRE±5/GATE/golden/band-right-edge）は無変更（compute_tprのdefault出力バイト不変・export-only新keyはgolden対象外）。
+- **次候補**: MarketRegimeBanner色系統統一・買い/監視行TV導線・クライアントreplay・スコアカードをdesktop scanへ。
