@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C89完了（**TradingViewブリッジ・push要**）。ユーザー提案のtradingview-mcpを評価→MCP本体は非適合（ローカルDesktop自動操作・有料サブスク・undocumented内部IF・ToS自動収集制限）だが**発想を逆向き転用**: スクリーナー算出のpivot/stop/2R-3Rをユーザー自身のTradingViewへ渡す（ToSクリーン・依存/スクレイピング無し）。`tradingView.js`（tradingViewUrl＋buildPineScript=Pine v5オーバーレイ）＋`TradingViewBridge`（チャートドリルインに「TradingViewで開く」＋「Pineコピー」）。375px検証・13新規＋static 82テストgreen（ce6b3c4）。**次候補: 買い/監視カード行にもTV導線・クライアントreplay・完全precache SW**。直前C88: オフラインSW（eedc2ea）。
+- **サイクル**: C89b完了（**完全precache SW・push要**）。C88のランタイムのみ→**全ビルド資産をprecache**（vite pluginが`precache-manifest.json`をemit・sw.jsがinstallで個別add・allSettled）＋**ハッシュ資産CacheFirst**（NetworkFirst-during-loadレース回避）。全ルートchunkをprecache＝オフライン網羅完全（訪問済ページ限定でない）。静的ビルドlocal配信で全20資産バイト長一致・復帰フローでアプリmount＋描画確認（root=1/412字）。82テスト＋両ビルドgreen（08ce46f）。**次候補: 買い/監視カード行にTV導線・クライアントreplay・同グラフィカル体系をdesktop scanへ**。直前C89: TradingViewブリッジ（ce6b3c4）。
 - **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
 - **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。

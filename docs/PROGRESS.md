@@ -537,3 +537,9 @@
 - **実装（1コミット ce6b3c4）**: `tradingView.js`（tvSymbol/tradingViewUrl＝market→取引所prefix・サフィックス除去、buildPineScript＝Pine v5オーバーレイでpivot/stop/2R/3R水平線＋買いゾーン塗り、欠損値はNaN出さず省略）＋`TradingViewBridge`（チャートドリルインのサイドバーに「TradingViewで開く」リンク＋「Pineオーバーレイをコピー」）。chartPayloadのsignal/risk_plan/as_of_dateから生成、market=useStaticMarket。
 - **検証**: 375px Playwrightでパネル描画・href（?symbol=NVDA）確認、clipboard writeText確認。13新規テスト＋static 82テスト＋staticビルドgreen・lint 0エラー。**データ/スキーマ/凍結metric無変更**。
 - **次候補（同系・ユーザー選択待ち）**: (a)買い/監視カード行にもTradingView導線 (b)クライアント側チャートreplay（MCPのreplay発想・exportバー使用・discipline/教育レバー） (c)完全precache SW。
+
+### C89b — 2026-07-21 完全precache＋CacheFirst資産（全ルートのオフライン化）
+- **動機**: C88はオンラインで訪れたページのみランタイムキャッシュ→ホームだけ見た日はオフラインでチャート/ブレッドスが失敗。オフライン網羅を完成。
+- **実装（1コミット 08ce46f・新規依存ゼロ）**: `vite.config.js`に小さなビルドプラグイン＝全ビルド資産をbase接頭辞付きで列挙した`precache-manifest.json`をemit。`sw.js`はinstallでその全資産を個別add（allSettledで1件404でもinstall全体を壊さない・shellは常時含む）。**ハッシュ付き資産はCacheFirst**（内容アドレス指定＝ファイル名ハッシュがバージョン故に正しく高速、かつNetworkFirst-during-loadのレース＝オフライン再読込時の初期サブリソース取得ドロップを回避）。ナビゲーション＋鮮度クリティカルなdataはNetworkFirst維持。cache v2。
+- **検証（静的ビルドをlocal配信）**: 初回訪問で全20資産をprecache・バイト長一致（mui 405441/charts 590908/…）、caches.matchがオフライン配信、**復帰ユーザーのオフラインフローでアプリmount＋描画確認**（root占有・本文412字）。全ルートchunkがprecacheリストにあり→**オフライン網羅は訪問済ページに限らず完全**。82 static테スト＋両ビルドgreen。
+- **正直な限界**: 「同一セッションで1回ロード→即オフライン再読込」の厳密初回はheadless Chromiumのoffline+SWサブリソースレース（毎回別の大chunkが1つドロップ・cacheは常に完全）で視覚mountをクリーンに再現できず。実利用は前日オンライン→翌日＝復帰フロー（検証済root=1）なので実害なし。標準Workbox相当パターン。
