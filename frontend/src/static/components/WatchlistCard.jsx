@@ -1,7 +1,15 @@
 import { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import BlockIcon from '@mui/icons-material/Block';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import BoltIcon from '@mui/icons-material/Bolt';
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import RemoveIcon from '@mui/icons-material/Remove';
+import StarIcon from '@mui/icons-material/Star';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { C } from '../designTokens';
 
 // 保有・監視リスト — same-day exit surfacing for names the user holds (C86,
 // graphical rebuild C87).
@@ -13,19 +21,16 @@ import { useWatchlist } from '../hooks/useWatchlist';
 // that a held name breaking its 50-DMA was invisible unless you opened its chart.
 // Names not in today's export show a "no data" line rather than vanish.
 
-const C = {
-  green: '#22ab94', red: '#f23645', amber: '#e0a52e', grey: '#787b86',
-  ink: '#d1d4dc', track: '#23262f', panel: 'rgba(13,16,22,0.9)', dim: '#4a4e57',
-};
-
-// Display precedence (rank) + the pill's icon/color. rank<=1 == "sell now".
+// Display precedence (rank) + the pill's MUI icon/color (one icon voice; the
+// △/▲ glyphs read as Japanese negative-number notation, so they're removed).
+// rank<=1 == "sell now".
 const ACTION_META = {
-  stop_hit: { label: 'ストップ割れ — 即売却', icon: '⛔', color: C.red, rank: 0 },
-  exit: { label: '売り — 50日線割れ', icon: '✗', color: C.red, rank: 1 },
-  sell_into_strength: { label: '強さへ利確 (climax)', icon: '△', color: C.amber, rank: 2 },
-  tighten_stop: { label: 'ストップ引き上げ', icon: '▲', color: C.amber, rank: 3 },
-  raise_stop: { label: 'ストップ上げ (利益ロック)', icon: '▲', color: C.green, rank: 4 },
-  hold: { label: 'ホールド', icon: '•', color: C.grey, rank: 5 },
+  stop_hit: { label: 'ストップ割れ — 即売却', Icon: BlockIcon, color: C.red, rank: 0 },
+  exit: { label: '売り — 50日線割れ', Icon: TrendingDownIcon, color: C.red, rank: 1 },
+  sell_into_strength: { label: '強さへ利確 (climax)', Icon: BoltIcon, color: C.amber, rank: 2 },
+  tighten_stop: { label: 'ストップ引き上げ', Icon: KeyboardDoubleArrowUpIcon, color: C.amber, rank: 3 },
+  raise_stop: { label: 'ストップ上げ (利益ロック)', Icon: ArrowUpwardIcon, color: C.green, rank: 4 },
+  hold: { label: 'ホールド', Icon: RemoveIcon, color: C.grey, rank: 5 },
 };
 const DEFAULT_META = ACTION_META.hold;
 
@@ -42,12 +47,13 @@ export function orderWatchRows(rows) {
 }
 
 function ActionPill({ meta }) {
+  const Icon = meta.Icon;
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
       borderRadius: 1, bgcolor: `${meta.color}22`, border: `1px solid ${meta.color}`,
     }}>
-      <Typography sx={{ fontSize: 11, lineHeight: 1 }}>{meta.icon}</Typography>
+      <Icon sx={{ fontSize: 13, color: meta.color }} />
       <Typography sx={{ fontWeight: 800, fontSize: 11, color: meta.color, lineHeight: 1.2 }}>{meta.label}</Typography>
     </Box>
   );
@@ -88,27 +94,30 @@ function WatchRow({ row, onOpenChart, onRemove }) {
       data-testid={`watchlist-row-${symbol}`}
       onClick={() => onOpenChart?.(symbol)}
       sx={{
+        // Hairline all around (no side-stripe); the accent square carries urgency.
         p: 1.1, mb: 0.75, borderRadius: 1.5, cursor: 'pointer',
-        border: `1px solid ${C.track}`, borderLeft: `3px solid ${present ? meta.color : C.dim}`,
-        bgcolor: C.panel,
+        border: `1px solid ${C.track}`, bgcolor: C.panel,
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: '#fff', fontSize: 14.5 }}>{symbol}</Typography>
+        <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: present ? meta.color : C.dim, flexShrink: 0 }} />
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 14.5 }}>{symbol}</Typography>
         <Box sx={{ flex: 1 }} />
         {present ? (
           <Box data-testid={`watchlist-action-${symbol}`}><ActionPill meta={meta} /></Box>
         ) : (
           <Typography sx={{ fontSize: 11.5, color: C.grey }}>本日データ未取得</Typography>
         )}
-        <Typography
+        <Box
+          component="span"
+          role="button"
           data-testid={`watchlist-remove-${symbol}`}
           onClick={(e) => { e.stopPropagation(); onRemove?.(symbol); }}
-          sx={{ fontSize: 15, color: C.amber, cursor: 'pointer', ml: 0.5, lineHeight: 1 }}
+          sx={{ display: 'inline-flex', color: C.amber, cursor: 'pointer', ml: 0.5 }}
           aria-label={`${symbol}を監視リストから外す`}
         >
-          ★
-        </Typography>
+          <StarIcon sx={{ fontSize: 16 }} />
+        </Box>
       </Box>
       {present && sell && (sell.stop != null || sell.r_multiple != null) && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
@@ -152,11 +161,11 @@ export default function WatchlistCard({ indexData, onOpenChart }) {
   return (
     <Box sx={{ mb: 2 }} data-testid="watchlist-card">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: '#fff', fontSize: 15 }}>保有・監視リスト</Typography>
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>保有・監視リスト</Typography>
         {alertCount > 0 && (
           <Box data-testid="watchlist-alert-count"
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px', borderRadius: 1, bgcolor: `${C.red}22`, border: `1px solid ${C.red}` }}>
-            <Typography sx={{ fontSize: 11, lineHeight: 1 }}>⛔</Typography>
+            <BlockIcon sx={{ fontSize: 12, color: C.red }} />
             <Typography sx={{ fontSize: 11, color: C.red, fontWeight: 800 }}>要売却 {alertCount}件</Typography>
           </Box>
         )}

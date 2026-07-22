@@ -71,6 +71,12 @@ Thumbs.db
 !.claude/agents/
 .specstory
 
+# Vendored third-party design skill (installed via `npx skills add nutlope/hallmark`
+# for a UI audit — tooling, not product code). Keep it out of the repo.
+.agents/
+skills-lock.json
+.claude/skills/hallmark
+
 # Temporary files
 *.tmp
 *.swp

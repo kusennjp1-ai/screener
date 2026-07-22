@@ -2,7 +2,15 @@ import { useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import UpdateIcon from '@mui/icons-material/Update';
+import RemoveIcon from '@mui/icons-material/Remove';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { C } from '../designTokens';
 
 // 今日の買い候補 — the one-glance decision list (C83, graphical rebuild C87).
 //
@@ -19,17 +27,13 @@ import { useWatchlist } from '../hooks/useWatchlist';
 // trigger. No performance claims on the card.
 const CHASE_CAP = 1.05; // pivot +5% — Minervini's chase limit (signals.py)
 
-const C = {
-  green: '#22ab94', red: '#f23645', amber: '#e0a52e', grey: '#787b86',
-  ink: '#d1d4dc', track: '#23262f', panel: 'rgba(13,16,22,0.9)', dim: '#4a4e57',
-};
-
+// One MUI icon voice (matches the rest of the app) — never emoji/glyphs.
 const VERDICT_META = {
-  buy_now: { label: 'BUY NOW', icon: '✓', color: C.green },
-  not_triggered: { label: 'WAIT', icon: '◷', color: C.grey },
-  extended: { label: 'EXTENDED', icon: '✗', color: C.amber },
-  stale: { label: 'データ未更新', icon: '⚠', color: C.amber },
-  no_signal: { label: 'シグナル未計算', icon: '–', color: C.grey },
+  buy_now: { label: 'BUY NOW', Icon: CheckCircleIcon, color: C.green },
+  not_triggered: { label: 'WAIT', Icon: ScheduleIcon, color: C.grey },
+  extended: { label: 'EXTENDED', Icon: WarningAmberIcon, color: C.amber },
+  stale: { label: 'データ未更新', Icon: UpdateIcon, color: C.amber },
+  no_signal: { label: 'シグナル未計算', Icon: RemoveIcon, color: C.grey },
 };
 
 const SOURCE_LABEL = { vcp: 'VCP', ma_tight: 'MA-TIGHT', vol_contract: 'VOL-CTR' };
@@ -50,13 +54,14 @@ export function classifyEntry(entry, { marketRed, stale }) {
 const fmt = (v, digits = 2) => (v == null ? '-' : Number(v).toFixed(digits));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// A colored status dot + verdict word — the at-a-glance chip.
+// A status icon + verdict word — the at-a-glance chip.
 function VerdictBadge({ meta, suffix }) {
+  const Icon = meta.Icon;
   return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: meta.color }} />
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+      <Icon sx={{ fontSize: 15, color: meta.color }} />
       <Typography sx={{ fontWeight: 800, fontSize: 12.5, color: meta.color }}>
-        {meta.icon} {meta.label}{suffix}
+        {meta.label}{suffix}
       </Typography>
     </Box>
   );
@@ -66,7 +71,7 @@ function VerdictBadge({ meta, suffix }) {
 function RsPill({ value }) {
   if (value == null) return null;
   const v = clamp(Math.round(value), 0, 99);
-  const col = v >= 90 ? C.green : v >= 80 ? '#4f8cff' : C.grey;
+  const col = v >= 90 ? C.green : v >= 80 ? C.blue : C.grey;
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
       <Box sx={{ width: 26, height: 4, borderRadius: 2, bgcolor: C.track, overflow: 'hidden' }}>
@@ -133,13 +138,13 @@ function RiskRewardLadder({ buy }) {
         )}
         {/* live price marker */}
         {pxPct != null && (
-          <Box sx={{ position: 'absolute', left: `${pxPct}%`, top: -1, bottom: -1, width: 3, borderRadius: 1, bgcolor: inZone ? '#fff' : C.amber, transform: 'translateX(-50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.6)' }} />
+          <Box sx={{ position: 'absolute', left: `${pxPct}%`, top: -1, bottom: -1, width: 3, borderRadius: 1, bgcolor: inZone ? C.inkStrong : C.amber, transform: 'translateX(-50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.6)' }} />
         )}
       </Box>
       {/* tick labels */}
       <Box sx={{ position: 'relative', height: 26, mt: 0.25 }}>
         <Tick p={0} label="STOP" sub={fmt(stop)} color={C.red} align="start" />
-        <Tick p={pivotPct} label="PIVOT" sub={fmt(pivot)} color="#fff" align="mid" />
+        <Tick p={pivotPct} label="PIVOT" sub={fmt(pivot)} color={C.inkStrong} align="mid" />
         {pct(t2) != null && <Tick p={pct(t2)} label="2R" sub={fmt(t2)} color={C.green} align="mid" />}
         <Tick p={100} label="3R" sub={fmt(t3 ?? t2)} color={C.green} align="end" />
       </Box>
@@ -194,7 +199,7 @@ function SizeAndBarrels({ buy, shares }) {
       {sizePct != null && (
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
           <Box sx={{ width: 40, height: 6, borderRadius: 3, bgcolor: C.track, overflow: 'hidden' }}>
-            <Box sx={{ width: `${sizePct}%`, height: '100%', bgcolor: '#4f8cff' }} />
+            <Box sx={{ width: `${sizePct}%`, height: '100%', bgcolor: C.blue }} />
           </Box>
           <Typography sx={{ fontSize: 11.5, color: C.ink, fontFamily: 'monospace' }}>
             size {fmt(size, 1)}%{shares != null ? ` · ${shares}株` : ''}
@@ -232,30 +237,34 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
       data-testid={`todays-buys-row-${entry.symbol}`}
       sx={{
         p: 1.25, mb: 1, borderRadius: 1.5, cursor: 'pointer',
-        borderLeft: `3px solid ${expanded ? meta.color : C.track}`,
+        // Hairline all around (no side-stripe); status reads from the accent
+        // square + verdict icon, elevation from a brighter border on BUY NOW.
         border: `1px solid ${expanded ? meta.color : C.track}`,
-        borderLeftWidth: 3, bgcolor: C.panel,
+        bgcolor: C.panel,
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: '#fff', fontSize: 15 }}>{entry.symbol}</Typography>
+        <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: meta.color, flexShrink: 0 }} />
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>{entry.symbol}</Typography>
         {buy?.vcp_detected && buy?.vcp_source && (
           <Chip size="small" label={SOURCE_LABEL[buy.vcp_source] || buy.vcp_source}
-            sx={{ height: 18, fontSize: 10, color: '#4f8cff', border: '1px solid #4f8cff', bgcolor: 'transparent' }} />
+            sx={{ height: 18, fontSize: 10, color: C.blue, border: `1px solid ${C.blue}`, bgcolor: 'transparent' }} />
         )}
         <RsPill value={entry.rs_rating} />
         <Box sx={{ flex: 1 }} />
         <Box data-testid={`todays-buys-verdict-${entry.symbol}`}>
           <VerdictBadge meta={meta} suffix={suffix} />
         </Box>
-        <Typography
+        <Box
+          component="span"
+          role="button"
           data-testid={`todays-buys-watch-${entry.symbol}`}
           onClick={(e) => { e.stopPropagation(); onToggleWatch?.(entry.symbol); }}
-          sx={{ fontSize: 15, color: watched ? C.amber : C.dim, cursor: 'pointer', lineHeight: 1 }}
+          sx={{ display: 'inline-flex', cursor: 'pointer', color: watched ? C.amber : C.dim }}
           aria-label={watched ? `${entry.symbol}を監視リストから外す` : `${entry.symbol}を監視リストに追加`}
         >
-          ★
-        </Typography>
+          {watched ? <StarIcon sx={{ fontSize: 17 }} /> : <StarBorderIcon sx={{ fontSize: 17 }} />}
+        </Box>
       </Box>
 
       {verdict === 'no_signal' && (
@@ -326,7 +335,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
   return (
     <Box sx={{ mb: 2 }} data-testid="todays-buys-card">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: '#fff', fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
         {buyNowCount > 0 && (
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
             <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: C.green }} />
@@ -344,7 +353,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
               localStorage.setItem('todaysBuysEquity', String(v));
             }
           }}
-          sx={{ fontSize: 11, color: '#4f8cff', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+          sx={{ fontSize: 11, color: C.blue, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
         >
           {equity > 0 ? `資金 $${equity.toLocaleString()}` : '[資金を設定]'}
         </Typography>
@@ -368,7 +377,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
           ))}
           {ordered.length > 20 && !showAll && (
             <Typography onClick={() => setShowAll(true)}
-              sx={{ fontSize: 12, color: '#4f8cff', cursor: 'pointer', textAlign: 'center' }}>
+              sx={{ fontSize: 12, color: C.blue, cursor: 'pointer', textAlign: 'center' }}>
               すべて表示（{ordered.length}件）
             </Typography>
           )}

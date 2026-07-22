@@ -49,7 +49,7 @@ describe('TodaysBuysCard', () => {
         scanRows={uptrendRows}
       />,
     );
-    expect(screen.getByText('✓ BUY NOW')).toBeInTheDocument();
+    expect(screen.getByText('BUY NOW')).toBeInTheDocument();
     // the risk→reward ladder ticks (graphical C87) carry the real prices
     expect(screen.getByText('STOP')).toBeInTheDocument();
     expect(screen.getByText('PIVOT')).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('TodaysBuysCard', () => {
       />,
     );
     expect(screen.getByTestId('todays-buys-market-red')).toBeInTheDocument();
-    expect(screen.queryByText('✓ BUY NOW')).not.toBeInTheDocument();
+    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
   });
 
   it('forces STALE when the export as_of is old', () => {
@@ -105,7 +105,7 @@ describe('TodaysBuysCard', () => {
       />,
     );
     expect(screen.getByText(/データ未更新/)).toBeInTheDocument();
-    expect(screen.queryByText('✓ BUY NOW')).not.toBeInTheDocument();
+    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
   });
 
   it('shows exact share count once equity is set', () => {
