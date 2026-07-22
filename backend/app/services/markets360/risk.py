@@ -27,6 +27,12 @@ import pandas as pd
 
 # Minervini's universal backstop: never let a loss exceed ~7-8%.
 MAX_LOSS_PCT = 0.08
+# No single name may exceed this share of capital, no matter how tight the stop.
+# Minervini never over-concentrates — a very tight stop should mean *more names*,
+# not one 37%-of-capital bet. This mirrors the tactical backtest, which already
+# caps every position at 25% (backtest_minervini_tactics.py MAX_POSITION_PCT),
+# so the plan the user sees now matches the validated behaviour.
+MAX_POSITION_PCT = 25.0
 # Account heat per trade: risking 1.25% of equity per position is a common
 # Minervini/O'Neil setting (he flexes 0.5-1.25% with conviction & market health).
 ACCOUNT_RISK_PCT = 1.25
@@ -129,8 +135,10 @@ def compute_risk_plan(
 
     targets = r_multiple_targets(entry, stop_loss)
     # Position size so a stop-out costs exactly account_risk_pct of equity:
-    #   size%_of_capital = account_risk% / stop%   (capped at 100%)
-    position_size_pct = round(min(100.0, account_risk_pct / (stop_pct / 100.0)), 1)
+    #   size%_of_capital = account_risk% / stop%
+    # capped at MAX_POSITION_PCT so a very tight stop never implies a huge bet
+    # (when capped, a stop-out costs LESS than account_risk_pct — safer).
+    position_size_pct = round(min(MAX_POSITION_PCT, account_risk_pct / (stop_pct / 100.0)), 1)
 
     return {
         "entry": round(entry, 2),

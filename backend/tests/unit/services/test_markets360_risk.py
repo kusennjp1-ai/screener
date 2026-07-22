@@ -6,6 +6,7 @@ from app.services.markets360.risk import (
     compute_risk_plan,
     r_multiple_targets,
     MAX_LOSS_PCT,
+    MAX_POSITION_PCT,
     ACCOUNT_RISK_PCT,
 )
 
@@ -59,11 +60,27 @@ def test_position_size_is_stop_defined():
     """Allocation = account-risk / stop%, so a wider stop -> a smaller position,
     and a stop-out costs ~account_risk_pct of equity."""
     plan = compute_risk_plan(_frame(np.linspace(20, 120, 260)))
-    expected = min(100.0, ACCOUNT_RISK_PCT / (plan["stop_pct"] / 100.0))
+    expected = min(MAX_POSITION_PCT, ACCOUNT_RISK_PCT / (plan["stop_pct"] / 100.0))
     assert abs(plan["position_size_pct"] - round(expected, 1)) < 0.1
-    # being stopped costs ~account_risk_pct of the account
+    # this fixture's stop is wide enough that the cap does not bite, so being
+    # stopped costs ~account_risk_pct of the account
+    assert plan["position_size_pct"] < MAX_POSITION_PCT
     loss_to_account = plan["position_size_pct"] / 100.0 * plan["stop_pct"]
     assert abs(loss_to_account - ACCOUNT_RISK_PCT) < 0.05
+
+
+def test_position_size_is_capped_for_very_tight_stops():
+    """A very tight stop must NOT imply a huge single-name bet — the size caps at
+    MAX_POSITION_PCT and being stopped then costs LESS than the account risk."""
+    # Flat frame -> base-low stop ~1% -> uncapped size would be ~125% of capital.
+    idx = pd.date_range("2024-01-01", periods=60, freq="B")
+    df = pd.DataFrame(
+        {"Close": [100.0] * 60, "Low": [99.0] * 60, "High": [100.5] * 60}, index=idx
+    )
+    plan = compute_risk_plan(df)
+    assert plan["position_size_pct"] == MAX_POSITION_PCT
+    loss_to_account = plan["position_size_pct"] / 100.0 * plan["stop_pct"]
+    assert loss_to_account < ACCOUNT_RISK_PCT
 
 
 def test_targets_are_r_multiples_of_risk():
@@ -111,14 +128,16 @@ class TestProgressiveRisk:
         from app.services.markets360.risk import compute_risk_plan
 
         idx = pd.date_range("2024-01-01", periods=60, freq="B")
+        # Low = 92 -> an 8% stop (the hard cap), wide enough that the 1.25% base
+        # size is well under MAX_POSITION_PCT, so the 2x scaling is visible.
         df = pd.DataFrame(
-            {"Close": [100.0] * 60, "Low": [97.0] * 60, "High": [101.0] * 60},
+            {"Close": [100.0] * 60, "Low": [92.0] * 60, "High": [101.0] * 60},
             index=idx,
         )
         base = compute_risk_plan(df, account_risk_pct=1.25)
         double = compute_risk_plan(df, account_risk_pct=2.5)
         assert base["account_risk_pct"] == 1.25
         assert double["account_risk_pct"] == 2.5
-        # same stop distance -> suggested size doubles (within cap; both values
-        # are independently rounded to 0.1, so allow that much slack)
-        assert abs(double["position_size_pct"] - min(100.0, base["position_size_pct"] * 2)) <= 0.2
+        # same stop distance -> suggested size doubles, but never past the cap
+        # (both values are independently rounded to 0.1, so allow that much slack)
+        assert abs(double["position_size_pct"] - min(MAX_POSITION_PCT, base["position_size_pct"] * 2)) <= 0.2
