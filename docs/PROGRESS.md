@@ -557,3 +557,14 @@
 - **実装（frozen-safe・2コミット）**: (backend c824ef0) `compute_tpr`にopt-in `with_breakdown`追加＝最新バーの8条件（7 price/MA＋RSライン）をラベル付きで返す。**バンドが既に採点する同一per-barロジックを再利用**＝スコアカードとチャートのトレンド色が矛盾しない。default False＝既存caller/凍結band/golden metricsはバイト不変。static exportがchart payloadに`trend_template`ブロックをemit（export-only＋opt-in＝908/band/golden無変更）。backend 3テスト（breakdown形状・score一致・benchmark無し7条件フォールバック）。(frontend 386e94b) `TrendTemplateScorecard`をチャートドリルインに配置＝各条件pass/failアイコン＋JPラベル＋スコア(7/8等)。C90の共有トークン＋MUIアイコン声。
 - **検証**: 375px Playwrightでスコアカード描画（7/8・green check/dimmed cancel）確認。backend bands 13＋export 57＋static 85テスト＋lint 0エラー。凍結metric（FIRE±5/GATE/golden/band-right-edge）は無変更（compute_tprのdefault出力バイト不変・export-only新keyはgolden対象外）。
 - **次候補**: MarketRegimeBanner色系統統一・買い/監視行TV導線・クライアントreplay・スコアカードをdesktop scanへ。
+
+### C92 — 2026-07-22 買い候補の質を修正（ユーザーの写真フィードバック）
+- **依頼**: 写真2「今日の買い候補が購入に値しない銘柄ばかり」。写真1「Minerviniスキャンがミネルヴィニ的でない」。写真3=VCP解説図を参考に。claude-video/YouTube学習も依頼。
+- **YouTube/claude-video**: sandboxからYouTubeは到達不可（curl 000＝ネットワークポリシーで遮断）。claude-videoはyt-dlpでYouTube DLする仕組み＝この環境では動画取込不可。∴図3のVCP原則＋既知のSEPA手法を根拠に修正。
+- **原因特定（grep-first）＋修正3点**:
+  1. **金額上限（f3c21b2）**: `compute_risk_plan`が100%までしか上限なし→浅いstop(−3.4%)で1銘柄36.9%を提案していた。バックテストは既に`MAX_POSITION_PCT=0.25`で検証済＝表示だけズレていた。risk.pyに`MAX_POSITION_PCT=25.0`を追加し表示を検証済挙動に一致。cap発火時はstop-outコスト<account_risk＝より安全。
+  2. **未確認ブレイクをBUY NOWにしない（4df4d95）**: `active`は直近ブレイクがあれば barrels 0/3 でもTrue→写真のAVT(0/3)が「BUY NOW」表示。frontend `classifyEntry`で barrels_passed>=2 を要求（0-1はWAITに降格・不明値は旧挙動維持）。**backend signal無変更＝FIRE/GATE不変**。
+  3. **弱い地合いは「少なく」（4df4d95）**: `uptrend_under_pressure`（分配日多い）で買いカード上部に注意帯「数を絞る・最も締まった候補だけ・枚数と金額控えめ」を表示。図3「setupが少ない=wide and loose=弱い、do less」に忠実。
+- **検証**: 写真2条件を375px再現→注意帯表示・AVT→WAIT・LXP 36.9%→25.0%・買い件数3→2を確認。backend 94＋frontend 87テスト＋build/lint green。凍結metric（FIRE±5/GATE/golden）無変更。
+- **未対応（写真1・要判断）**: Minerviniスキャンが真のリーダー以外（ARW/PGC/INSW等の低成長・景気敏感株）を通す＝技術テンプレ通過だけで、成長リーダーの**ファンダ・グループリーダーシップ関門が弱い**。EPS/売上成長・先導グループのゲート強化が次の大玉だが、fundamentalは米国限定・未検証（matrix#8）＝計測先行で慎重に。
+- **重要**: 本番PWAは`main`ビルド＝写真は旧C83版。C87〜C92の改善はブランチ上・**mainマージ＋サイト再ビルドで初めて反映**。
