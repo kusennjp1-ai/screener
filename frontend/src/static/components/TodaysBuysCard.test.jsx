@@ -38,6 +38,17 @@ describe('classifyEntry', () => {
     // inactive signal below trigger -> waiting
     const waiting = { buy: buyBlock({ active: false, last_close: 128.0 }) };
     expect(classifyEntry(waiting, { marketRed: false, stale: false })).toBe('not_triggered');
+    // active + in zone but only 0-1 confirmation barrels -> NOT a BUY NOW
+    const unconfirmed = { buy: buyBlock({ barrels_passed: 0 }) };
+    expect(classifyEntry(unconfirmed, { marketRed: false, stale: false })).toBe('not_triggered');
+    const oneBarrel = { buy: buyBlock({ barrels_passed: 1 }) };
+    expect(classifyEntry(oneBarrel, { marketRed: false, stale: false })).toBe('not_triggered');
+    // 2 of 3 barrels is enough
+    const twoBarrels = { buy: buyBlock({ barrels_passed: 2 }) };
+    expect(classifyEntry(twoBarrels, { marketRed: false, stale: false })).toBe('buy_now');
+    // unknown barrel count (older export) keeps the old behaviour
+    const legacy = { buy: buyBlock({ barrels_passed: undefined }) };
+    expect(classifyEntry(legacy, { marketRed: false, stale: false })).toBe('buy_now');
   });
 });
 
@@ -132,6 +143,31 @@ describe('TodaysBuysCard', () => {
     fireEvent.click(screen.getByTestId('todays-buys-watch-NVDA'));
     expect(JSON.parse(localStorage.getItem('todaysWatchlist'))).toEqual(['NVDA']);
     localStorage.removeItem('todaysWatchlist');
+  });
+
+  it('shows a "do less" caution when the market is under pressure', () => {
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([{ symbol: 'NVDA', rank: 1, buy: buyBlock() }])}
+        scanRows={[{ market_regime: 'uptrend_under_pressure', market_distribution_days: 8 }]}
+      />,
+    );
+    const note = screen.getByTestId('todays-buys-under-pressure');
+    expect(note).toHaveTextContent('数を絞る');
+    expect(note).toHaveTextContent('分配日 8');
+    // candidates still list (unlike a red market) — the user just does less
+    expect(screen.getByText('BUY NOW')).toBeInTheDocument();
+  });
+
+  it('downgrades an unconfirmed breakout (0 barrels) from BUY NOW to WAIT', () => {
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([{ symbol: 'AVT', rank: 1, buy: buyBlock({ barrels_passed: 0 }) }])}
+        scanRows={uptrendRows}
+      />,
+    );
+    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
+    expect(screen.getByText('WAIT')).toBeInTheDocument();
   });
 
   it('opens the chart when a row is tapped', () => {

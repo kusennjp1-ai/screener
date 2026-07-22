@@ -26,6 +26,10 @@ import { C } from '../designTokens';
 // Rows with buy=null degrade to a pivot-only line — the UI never fabricates a
 // trigger. No performance claims on the card.
 const CHASE_CAP = 1.05; // pivot +5% — Minervini's chase limit (signals.py)
+// A bare breakout with none of the three behavioural barrels (trend / buy
+// pressure / volume-confirmed breakout) is NOT a "BUY NOW". Minervini buys the
+// confirmed setup, not any new high — require at least 2 of 3 barrels.
+const MIN_BARRELS_FOR_BUY = 2;
 
 // One MUI icon voice (matches the rest of the app) — never emoji/glyphs.
 const VERDICT_META = {
@@ -45,7 +49,10 @@ export function classifyEntry(entry, { marketRed, stale }) {
   const zoneHi = buy.trigger_price * CHASE_CAP;
   const px = buy.last_close;
   if (px != null && px > zoneHi) return 'extended';
-  if (!marketRed && buy.active && px != null && px >= buy.trigger_price && px <= zoneHi) {
+  // Unknown barrel count (older export) keeps the old behaviour; a known count
+  // below the threshold downgrades the row from BUY NOW to WAIT.
+  const confirmed = buy.barrels_passed == null || buy.barrels_passed >= MIN_BARRELS_FOR_BUY;
+  if (!marketRed && buy.active && confirmed && px != null && px >= buy.trigger_price && px <= zoneHi) {
     return 'buy_now';
   }
   return 'not_triggered';
@@ -303,6 +310,8 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
   );
   const regime = regimeRow?.market_regime;
   const marketRed = regime === 'correction' || regime === 'downtrend';
+  const underPressure = regime === 'uptrend_under_pressure';
+  const distDays = regimeRow?.market_distribution_days;
 
   const entries = indexData?.symbols || [];
   const asOf = indexData?.as_of_date;
@@ -371,6 +380,17 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
         </Box>
       ) : (
         <>
+          {underPressure && !stale && (
+            <Box sx={{ p: 1, mb: 1, borderRadius: 1.5, border: `1px solid ${C.amber}`, bgcolor: 'rgba(224,165,46,0.08)' }}
+              data-testid="todays-buys-under-pressure">
+              <Typography sx={{ color: C.amber, fontWeight: 700, fontSize: 12.5 }}>
+                地合いに売り圧力 — 数を絞る{distDays != null ? `（分配日 ${distDays}）` : ''}
+              </Typography>
+              <Typography sx={{ color: C.grey, fontSize: 11, mt: 0.25 }}>
+                上昇は続くが押し戻され気味。ミネルヴィニの「弱い時は少なく」。最も締まった候補だけに絞り、枚数と金額を控えめに。
+              </Typography>
+            </Box>
+          )}
           {visible.map(([e, v]) => (
             <BuyRow key={e.symbol} entry={e} verdict={v} equity={equity} onOpenChart={onOpenChart}
               watched={isWatched(e.symbol)} onToggleWatch={toggleWatch} />
