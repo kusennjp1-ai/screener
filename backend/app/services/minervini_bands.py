@@ -450,6 +450,7 @@ def compute_tpr(
     with_history: bool = False,
     confirm_bars: Optional[int] = None,
     cfg: BandConfig = DAILY,
+    with_breakdown: bool = False,
 ) -> Dict[str, object]:
     """Score the 8-point Trend Template per bar; map the count to a phase color,
     debounced so the band paints smooth regime blocks like the real MM360 chart.
@@ -550,6 +551,30 @@ def compute_tpr(
     }
     if with_history:
         out["tpr_history"] = smoothed
+    if with_breakdown:
+        # The 8-point Trend Template checklist for the LATEST bar, using the same
+        # conditions the band scores — so the scorecard the UI shows can never
+        # disagree with the TPR colour. Additive: only present when asked, so the
+        # frozen band/golden metrics (default callers) are byte-unchanged.
+        i = n - 1
+        c = close.iloc[i]
+        s50, s150, s200 = sma50.iloc[i], sma150.iloc[i], sma200.iloc[i]
+        ma_ok = not any(pd.isna(x) for x in (s50, s150, s200))
+        conds = [
+            ("price_above_150_200", "価格 > 150日・200日線", ma_ok and c > s150 and c > s200),
+            ("ma_150_above_200", "150日線 > 200日線", ma_ok and s150 > s200),
+            ("ma_200_rising", "200日線が上向き（約1か月）",
+             ma_ok and i >= slow_slope_bars and s200 > sma200.iloc[i - slow_slope_bars]),
+            ("ma_50_above_150_200", "50日線 > 150日・200日線", ma_ok and s50 > s150 and s50 > s200),
+            ("price_above_50", "価格 > 50日線", ma_ok and c > s50),
+            ("above_52w_low_30", "52週安値から +30% 以上", c >= lo52.iloc[i] * 1.30),
+            ("within_52w_high_25", "52週高値から 25% 以内", c <= hi52.iloc[i] and c >= hi52.iloc[i] * 0.75),
+        ]
+        if rs_series is not None:
+            conds.append(("rs_line_rising", "RSライン上昇（対ベンチマーク）", bool(rs_series.iloc[i])))
+        out["tpr_conditions"] = [
+            {"key": k, "label": lbl, "passed": bool(v)} for (k, lbl, v) in conds
+        ]
     return out
 
 

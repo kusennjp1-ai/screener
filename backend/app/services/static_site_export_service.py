@@ -807,6 +807,7 @@ class StaticSiteExportService:
             m360 = self._compute_m360_signals(price_df, bands=bands, buy_points=buy_points)
             buy_summary = m360.pop("_buy_index", None)
             sell_summary = m360.pop("_sell_index", None)
+            trend_template = self._compute_trend_template(price_df, benchmark_df)
             self._write_json(
                 output_dir / rel_path,
                 {
@@ -826,6 +827,10 @@ class StaticSiteExportService:
                     "buy_points": buy_points,
                     "eps_line": self._compute_eps_line(symbol, price_df),
                     "bands": bands,
+                    # 8-point Minervini Trend Template checklist for the drill-in
+                    # scorecard (C91) — same conditions the TPR band scores, so
+                    # the checklist and the chart colour never disagree.
+                    "trend_template": trend_template,
                     **m360,
                 },
             )
@@ -2183,6 +2188,35 @@ class StaticSiteExportService:
         except Exception:  # noqa: BLE001 - bands are optional chart decoration
             logger.warning("chart band computation failed", exc_info=True)
             return {}
+
+    def _compute_trend_template(self, price_df, benchmark_df) -> dict[str, Any] | None:
+        """8-point Minervini Trend Template checklist for the drill-in scorecard.
+
+        Reuses ``compute_tpr``'s own per-bar conditions (with_breakdown), so the
+        checklist can never disagree with the TPR band the chart draws. Defensive:
+        any failure yields ``None`` (the scorecard just doesn't render).
+        """
+        if price_df is None or getattr(price_df, "empty", True):
+            return None
+        try:
+            from app.services.minervini_bands import compute_tpr
+
+            bench_close = None
+            if benchmark_df is not None and "Close" in getattr(benchmark_df, "columns", []):
+                bench_close = benchmark_df["Close"]
+            tpr = compute_tpr(price_df, bench_close, with_breakdown=True)
+            conditions = tpr.get("tpr_conditions")
+            if not conditions:
+                return None
+            return {
+                "conditions": conditions,
+                "score": tpr.get("tpr_score"),
+                "max": tpr.get("tpr_max"),
+                "state": tpr.get("tpr_state"),
+            }
+        except Exception:  # noqa: BLE001 - the scorecard must not break the export
+            logger.warning("trend-template computation failed", exc_info=True)
+            return None
 
     def _compute_m360_signals(self, price_df, *, bands, buy_points) -> dict[str, Any]:
         """Markets 360 signal blocks for one static chart payload.
