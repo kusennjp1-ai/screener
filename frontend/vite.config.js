@@ -2,6 +2,25 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 
+// Emits precache-manifest.json (base-prefixed list of every built asset) so the
+// static PWA's service worker can fully precache the app for first-visit offline
+// (see public/sw.js). No runtime dependency — just a build-time listing.
+function precacheManifest(base) {
+  return {
+    name: 'precache-manifest',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const files = Object.keys(bundle).map((f) => `${base}${f}`);
+      const list = Array.from(new Set([base, `${base}index.html`, ...files]));
+      this.emitFile({
+        type: 'asset',
+        fileName: 'precache-manifest.json',
+        source: JSON.stringify(list),
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '');
@@ -10,7 +29,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
-    plugins: [react()],
+    plugins: [react(), precacheManifest(base)],
     test: {
       environment: 'jsdom',
       globals: true,

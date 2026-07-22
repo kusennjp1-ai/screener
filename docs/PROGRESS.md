@@ -489,3 +489,88 @@
 - **20年バンドル（SPEC1・コミット済み 469e0b0）**: `backtest-tactics.yml`は既にperiodパラメータ化済→timeout 120→180分＋known-good記載の2行diffのみ。**mainマージ後にdispatch可**（period=20y・~150分・~190MB）。**必須の正直ブロック**: 生存者バイアスは2006年時点で今日宇宙の~38-43%まで減衰＋TSLA/META等の後年IPOが全期間不在＝**ヘッドラインリターンは比較不能・2008/2011/2015-16/2018/2020/2022のレジーム/ベア防御証拠としてのみ使用**。凍結metricは更新しない。
 - **「今日の買い候補」ビュー（SPEC2・実装＋実ブラウザ検証済み dac8eb8）**: exportがチャート毎に`risk_plan`を計算しindex(schema v2)へ圧縮`buy`ブロック（trigger・−8%capストップ・サイズ%・2R/3R・setup source・barrels・as-of）をスタンプ。PWAホーム（レジームバナー直下）に判定リスト: **BUY ZONE=trigger〜+5%チェイス上限＋現値マーカー**、判定優先順 MARKET-RED>STALE>EXTENDED>BUY NOW>WAIT、品質順、行タップでチャートモーダル。stop/sizeの数値源はrisk_plan単一（signal.stopと混在禁止）。buy:null行はpivot-only退化・pre-v2 indexは非表示。任意のローカル資金入力で株数表示。backend 57＋frontend 27 tests・**Playwright 375/1440px検証**（ゾーン算術・EXTENDEDチップ・null退化・タップ遷移・横スクロール無し）。
 - **残**: (a)desktop /scanへの同カードグリッド（ScanResultItemへのrisk_plan昇格・要ブラウザ検証）(b)mainマージ後に20yバンドルdispatch→回帰スライス評価（2008等）(c)PWA本番反映はマージ後のstatic-site cron。
+
+### C84 — 2026-07-19 20年バックテスト実行（2006-2026・PR#59マージ→dispatch→評価完了）
+- **実行**: PR#59 squashマージ（9b7f091）→mainマージバック→`backtest-tactics.yml` period=20y dispatch（GHA 40分・219MB）→パネル整合性合格（SPY 2006-07-18→2026-07-17・ギャップ0・不正値0）→ローカル20y再実行。static-site USフルビルドもdispatch成功＝**今日の買い候補UI本番反映済み**。
+- **結果（tradable=810・sim 2007-07-31→2026-07-17）**: full_tactics **−36.7%**（maxDD−58.3・Sharpe−0.09）／no_market_gate +22.1%／SPY B&H +623.3%（maxDD−55.2）／**SPYレジームタイミング +117.9%（maxDD−19.3）**。
+- **事前登録sanityで sign flip 3件検出（2020/2021/2025）→原因特定**: 20yはtradableを**2007年時点で凍結（810銘柄）**＝post-2007上場の現代リーダーが全期間不在（10y運用は1228銘柄・2017凍結）。後期年の乖離は宇宙差の機械的帰結＝事前警告した frozen-universe アーティファクトそのもの。
+- **有効な抽出（事前宣言どおりレジーム証拠のみ）**: (a)**大型ベアの防御は確認**: 2008 −16.3% vs SPY≈−37%・2022 −8.3% vs −18.2%。(b)**レジームエンジン単体の防御価値は強い**: SPYレジームタイミングで maxDD −55.2→−19.3。(c)**新発見=チョップ年の出血**: 2011 −11.7・2014〜16 −6〜−9・2018 −20.2・2019 −9.8＝横ばい年のブレイクアウト・ダマシとFTD再入場ホイップソーで小さな負けが複利で致命化。20yでは**gateが逆貢献**（−36.7 vs gate無し+22.1）＝6y窓の+60.7pp貢献と正反対＝FTD再入場の2008-12チョップでの反復コスト。
+- **正直な結論**: 20yヘッドライン（−36.7%）は凍結宇宙＋既知の「現代窓を超えて一般化しない」パターン（C60）に支配され、**出荷製品の性能指標として無効**。有効なのはベア防御確認とチョップ年出血の発見。凍結metricは無変更（絶対制約どおり20yは証拠であり基準ではない）。
+- **次サイクル候補（この発見から）**: チョップ年出血の対策＝capability-matrix #21「uptrend品質のtiering」（若い/広い/低分配の確認済み上昇のみ100%・成熟時~80%）や、FTD再入場の失敗コスト削減（failed-FTD検出の早期化）。いずれも要両窓＋20yスライス再検証。
+
+### C85 — 2026-07-19 uptrend品質tiering（matrix#21）＝3窓検証で即棄却・レバー族の教訓確定
+- **ルール（新数値ゼロ）**: Power Trend（health≥80∧分配<2）のみ100%、成熟confirmed=75%（既存FTD proven段）。
+- **結果**: **6y 112.4→40.3%（−72pp・maxDD−14.3→−20.2悪化）／10y 97.8→53.3%（−44.5pp）＝両近代窓崩壊→凍結契約で即棄却**。20yは−36.7→−39.1で不変〜微悪化。狙ったチョップ年は改善（2011+5.5・2018+5.5・2015/16/19+1前後）だが2014−7.2、全年合計−5.1pp。
+- **機構**: 露出capはただのスケールダウンではない — invested-cap拘束が買い許可のタイミングを変え、**枠の中身を再配分**（trades 120→149・PF 2.22→1.42）。テール勝者を逃す。
+- **確定した恒久教訓（同族5例目: C71/C76/C80/C82/C85）**: 近代窓のリターンは少数テールが担う。**配分経路（エントリーゲート/エグジット/露出スロットル）への機械的介入は、何を狙っても両窓検証で崩壊する**。この レバー族の追求は打ち切り。残る正のレバーは (a)discovery/表示（C70/C74/C75/C77で実証）(b)規律UI（C79/C83）(c)データ/計測（fundamentals検証・matrix#5）(d)mobile可用性（matrix#4）。
+- フラグはdefault-offで残置（8559035）。凍結metric無変更。
+
+### C86 — 2026-07-20 弱点/長所監査（UI含む）→保有連動exit可視化（matrix#4着手・proven-leverのみ）
+- **依頼（ユーザー）**: 「スクリーナーの弱点をUI含めて冷静に分析して、複数エージェントでループ構造で改善せよ。長所はさらに伸ばせ」。
+- **監査手段**: 複数エージェントworkflowを2度dispatchするもFable-5週次上限→session上限（reset 7pm UTC）で全滅。∴ **既存のgrounded 6レンズ監査（capability-matrix §4）をmainループで再評価**。§4 top-5のうち #1ストップヒット=C79完了・#2ブレッドス=C80完了・#3=執行チューニング族＝5連続棄却で打ち切り確定。**残る最大proven-lever = §4 #4「オフラインSW＋watchlist＋保有連動exit可視化」**（mobile可用性＋規律UI・harness影響ゼロ・「エッジは執行=exit側に偏在」）。
+- **実装（2コミット・1論点1コミット）**:
+  1. **backend（export-only・d87fe80）**: charts index entryに`buy`はあるが`sell`が無く、保有名の50日線割れをチャートを開かずには見られなかった。`_sell_index`/`sell`圧縮ブロック（action・trailing stop・stop_basis・r_multiple・last_close）を`_buy_index`と対称に追加。50日線割れ/climaxはentry context無しでも発火＝**買いシグナル未捕捉の保有名でも当日可視**。compute_sell_plan無変更＝**FIRE±5/GATE/golden無影響**（新1テスト）。
+  2. **frontend（クライアントのみ・20b9b61）**: `useWatchlist`フック（localStorage＋custom event/storage eventでコンポーネント間同期）、Today's-Buys各行に★トグル、`WatchlistCard`をホーム（買いリストの上＝exit優先）に配置。各監視名のexport済み`sell`から**exit action＋保護ストップを緊急度順**（stop_hit>exit>sell_into_strength>tighten_stop>raise_stop>hold）表示・「要売却N件」アラート・当日export不在名は「本日データ未取得」。17テスト＋prod build green。
+- **ブラウザ検証（375px Playwright・実施済み）**: 緊急度順序（NVDA exit→CRWD tighten→AVGO raise→GONE no-data）・色・stop/R表示・横スクロール無し・**コンポーネント間同期確認**（seeded watchlist→買いカード★全gold rgb(224,165,46)、買いカードでCRWD★オフ→watchlistカードから即消去 count→0）。
+- **残（matrix#4の未完部分）**: (a)service worker（Workbox/vite-plugin-pwa）でオフライン起動＝別コミット（build系変更・要オフライン検証）(b)watchlistのStaticScanPageからの追加導線(c)保有株数/建値のlocalStorage記録でR実損表示。凍結metric無変更。
+
+### C87 — 2026-07-21 買い/監視カードのグラフィカル再構築（情報量維持・視認性向上）
+- **依頼（ユーザー）**: 「UIおよびUXは情報量はそのままにグラフィカルでとてもわかりやすく整理してくれ」。
+- **対象選定**: MarketRegimeBannerは既にグラフィカル（healthメーター・露出ラダー・分配日チップ）＋desktop scanと共有＝blast radius大→非対象。text/monospace密度が最も高いのは自作の**2枚の判定カード**（TodaysBuysCard/WatchlistCard）→ここに集中。
+- **再構築（1コミット・render→screenshot→refineループ・375px Playwright）**:
+  - **TodaysBuysCard**: BUY-NOW行を**リスク→リワード・ラダー1本**に集約 — stop→pivot=赤リスク帯・pivot→3R=緑リワード帯・+5%買いゾーンをハイライト・STOP/PIVOT/2R/3Rのtickに実価格ラベル・現値マーカー。position sizeは塗りバー＋株数、barrelsは3ピップ、RSは強度ピル、verdictは色付きステータスドット。**全数値をtick/ラベルとして保持**。非BUY行はスリムなpivotミニゾーン。
+  - **WatchlistCard**: exit actionを**アイコン付き色ピル**化＋**R倍率バー**（−1R…+3R・損益分岐線付き）で+2.4R/−0.3Rが一目、緊急度が左ボーダー色とソートを駆動。
+  - 共有カラートークンで両カードを1つのビジュアル体系に。
+- **検証**: baseline→after比較スクショで(1)ヘッダー折返しバグ発見→title nowrap化で修正(2)ラダー帯/tick/現値マーカー/Rバー描画確認・横スクロール無し。テストは新ラベルに更新（BUY ZONE→ラダーtick・STALE→データ未更新）、static 69テスト＋prod build green・lint 0エラー。**データ/スキーマ変更なし**（凍結metric無関係）。
+
+### C88 — 2026-07-21 オフラインservice worker（matrix#4残り・matrix#6完了）
+- **依頼**: 「任せるから続けて」→ STATE次候補からmobile可用性の最大レバー = オフライン起動（matrix#6「critical usability」・matrix#4の残り）を選択。朝6-8時JSTのスキャンはスマホ・電車/圏外もあり得るが、毎起動でネット再取得＝弱回線でレビュー不能だった。
+- **設計（新規依存ゼロ・vite-plugin-pwa/Workboxは入れず手書き）**: `public/sw.js` = **NetworkFirst一択**。鮮度critical故オンラインは常に最新をfetch＆cache、オフラインは最後のシェル＋データにフォールバック（起動可能・前日スナップは既存STALEバナーが古さを警告）。same-origin GETのみ・エラー/opaqueは絶対キャッシュしない。skipWaiting+clients.claim+旧cache掃除で新デプロイがreloopなしにクリーン発効。installでシェルをprecache、ハッシュ付きassetは初回制御ロードでruntimeキャッシュ（日次ユーザーは前訪問で常にwarm）。
+- **登録ガード**: `STATIC_SITE_MODE && import.meta.env.PROD`のみ = **静的PWA本番だけ**。backend接続アプリはAPIレスポンスをキャッシュすると危険なので絶対に登録しない。dev(PROD=false)も無効。
+- **検証（localhost Playwright・realistic 2nd-visitフロー）**: オンライン起動でSW登録＋ページ制御→**オフラインreloadでキャッシュ済みシェルを配信**（React mount・title「米国株スクリーナー」維持・#root子あり）＋static-data JSONをキャッシュから配信（default_market="US"）。デフォルトbackendビルドは登録inert確認。static 69テスト＋両ビルドgreen・lint 0エラー。
+- **残（将来強化）**: 完全precache（全ハッシュassetをビルド時マニフェスト化）で初回訪問オフラインも保証＝vite-plugin-pwa導入時。現状は2回目以降オフライン可（日次利用では実質常時）。
+
+### C89 — 2026-07-21 TradingViewブリッジ（deep-link＋Pineオーバーレイ・別件ユーザー提案）
+- **依頼**: tradingview-mcp（https://github.com/tradesdontlie/tradingview-mcp）を活かせないか。
+- **適合性評価（正直）**: そのMCPは**ローカルのTradingView Desktopをchrome-devtools-protocolで自動操作するブリッジ**（有料サブスク＋GUIマシン必須・undocumented内部IF依存で壊れやすい・ToS上の自動収集制限あり）。本製品はheadless backend＋静的Pages PWA＝常時デスクトップもサブスクも無い→**MCP本体の統合は非適合**。かつ「データソースToS尊重・egress回避禁止」の絶対制約にも反する。
+- **転用した価値ある発想**: MCPの目玉「Pine開発／分析をチャートに描画」を**逆向き**に。スクリーナーが既に算出するpivot/stop/2R-3Rを**ユーザー自身のTradingViewへ渡す**（スクレイピング無し・依存無し・当方サブスク不要・ToSクリーン）。
+- **実装（1コミット ce6b3c4）**: `tradingView.js`（tvSymbol/tradingViewUrl＝market→取引所prefix・サフィックス除去、buildPineScript＝Pine v5オーバーレイでpivot/stop/2R/3R水平線＋買いゾーン塗り、欠損値はNaN出さず省略）＋`TradingViewBridge`（チャートドリルインのサイドバーに「TradingViewで開く」リンク＋「Pineオーバーレイをコピー」）。chartPayloadのsignal/risk_plan/as_of_dateから生成、market=useStaticMarket。
+- **検証**: 375px Playwrightでパネル描画・href（?symbol=NVDA）確認、clipboard writeText確認。13新規テスト＋static 82テスト＋staticビルドgreen・lint 0エラー。**データ/スキーマ/凍結metric無変更**。
+- **次候補（同系・ユーザー選択待ち）**: (a)買い/監視カード行にもTradingView導線 (b)クライアント側チャートreplay（MCPのreplay発想・exportバー使用・discipline/教育レバー） (c)完全precache SW。
+
+### C89b — 2026-07-21 完全precache＋CacheFirst資産（全ルートのオフライン化）
+- **動機**: C88はオンラインで訪れたページのみランタイムキャッシュ→ホームだけ見た日はオフラインでチャート/ブレッドスが失敗。オフライン網羅を完成。
+- **実装（1コミット 08ce46f・新規依存ゼロ）**: `vite.config.js`に小さなビルドプラグイン＝全ビルド資産をbase接頭辞付きで列挙した`precache-manifest.json`をemit。`sw.js`はinstallでその全資産を個別add（allSettledで1件404でもinstall全体を壊さない・shellは常時含む）。**ハッシュ付き資産はCacheFirst**（内容アドレス指定＝ファイル名ハッシュがバージョン故に正しく高速、かつNetworkFirst-during-loadのレース＝オフライン再読込時の初期サブリソース取得ドロップを回避）。ナビゲーション＋鮮度クリティカルなdataはNetworkFirst維持。cache v2。
+- **検証（静的ビルドをlocal配信）**: 初回訪問で全20資産をprecache・バイト長一致（mui 405441/charts 590908/…）、caches.matchがオフライン配信、**復帰ユーザーのオフラインフローでアプリmount＋描画確認**（root占有・本文412字）。全ルートchunkがprecacheリストにあり→**オフライン網羅は訪問済ページに限らず完全**。82 static테スト＋両ビルドgreen。
+- **正直な限界**: 「同一セッションで1回ロード→即オフライン再読込」の厳密初回はheadless Chromiumのoffline+SWサブリソースレース（毎回別の大chunkが1つドロップ・cacheは常に完全）で視覚mountをクリーンに再現できず。実利用は前日オンライン→翌日＝復帰フロー（検証済root=1）なので実害なし。標準Workbox相当パターン。
+
+### C90 — 2026-07-22 hallmark監査で判定カードをde-slop（ユーザー提案ツール）
+- **依頼**: https://github.com/Nutlope/hallmark を使ってUI改善。
+- **hallmarkの正体**: Claude Code/Cursor/Codex向けの**anti-AI-slopデザインskill**（audit/redesign/study動詞）。standalone HTML/CSS生成が主だが、**audit動詞**は既存UIをnamed anti-patternで採点。`npx skills add nutlope/hallmark`で導入（skill本体はgitignore＝tooling扱い）。
+- **audit結果（1 critical・2 major・1 minor）**: (critical) **side-stripe card**＝両カードの3px色付き左ボーダー。(major) **emoji/glyphアイコン＋icon-set不一致**＝✓◷✗⚠⛔△▲★をアイコン代用、他はMUI icons使用、しかも△▲は日本語のマイナス表記で緑「ストップ上げ」に▲は誤読。(major) **色トークンの重複/inline**＝hexパレットを両カードにコピペ、MarketRegimeBankとも別系統。(minor) pure #fff・OS monospace。
+- **適用（React/MUI内で・1コミット 39c2f2c）**: (1)side-stripe撤廃→全周hairline＋シンボル横の小accent square。(2)絵文字→**MUI iconに統一**（CheckCircle/Schedule/WarningAmber/Block/TrendingDown/Bolt/KeyboardDoubleArrowUp/ArrowUpward/Star…）＝アプリ全体とアイコン声を一致・△▲曖昧さ解消。(3)共有トークン`designTokens.js`に一本化・見出しはtinted off-white。
+- **検証**: 375px Playwrightで side-stripe無し・MUIアイコン・色一貫を確認。純粋なvisual/token refactor＝データ/スキーマ/挙動/凍結metric無変更。static 82テスト＋build green・lint 0エラー。MarketRegimeBanner（desktop共有・blast radius大）は非対象＝色系統統一は将来課題。
+
+### C91 — 2026-07-22 8点トレンドテンプレート・スコアカード（GitHub Minervini screener慣行）
+- **依頼**: 自律ループ継続＋GitHubから使えるものを利用。
+- **調査（grep-first）**: ADR%・U/D volume ratio(10d)・acc/dis(up/down volume)等は既存＝メトリクスは成熟。GitHubのMinervini/momentum screenerが**普遍的に表示**するのに当製品に無いのは**8点Trend Templateチェックリスト**（passes_templateはflat boolのみ、どの条件が通ったか見えない）。
+- **実装（frozen-safe・2コミット）**: (backend c824ef0) `compute_tpr`にopt-in `with_breakdown`追加＝最新バーの8条件（7 price/MA＋RSライン）をラベル付きで返す。**バンドが既に採点する同一per-barロジックを再利用**＝スコアカードとチャートのトレンド色が矛盾しない。default False＝既存caller/凍結band/golden metricsはバイト不変。static exportがchart payloadに`trend_template`ブロックをemit（export-only＋opt-in＝908/band/golden無変更）。backend 3テスト（breakdown形状・score一致・benchmark無し7条件フォールバック）。(frontend 386e94b) `TrendTemplateScorecard`をチャートドリルインに配置＝各条件pass/failアイコン＋JPラベル＋スコア(7/8等)。C90の共有トークン＋MUIアイコン声。
+- **検証**: 375px Playwrightでスコアカード描画（7/8・green check/dimmed cancel）確認。backend bands 13＋export 57＋static 85テスト＋lint 0エラー。凍結metric（FIRE±5/GATE/golden/band-right-edge）は無変更（compute_tprのdefault出力バイト不変・export-only新keyはgolden対象外）。
+- **次候補**: MarketRegimeBanner色系統統一・買い/監視行TV導線・クライアントreplay・スコアカードをdesktop scanへ。
+
+### C92 — 2026-07-22 買い候補の質を修正（ユーザーの写真フィードバック）
+- **依頼**: 写真2「今日の買い候補が購入に値しない銘柄ばかり」。写真1「Minerviniスキャンがミネルヴィニ的でない」。写真3=VCP解説図を参考に。claude-video/YouTube学習も依頼。
+- **YouTube/claude-video**: sandboxからYouTubeは到達不可（curl 000＝ネットワークポリシーで遮断）。claude-videoはyt-dlpでYouTube DLする仕組み＝この環境では動画取込不可。∴図3のVCP原則＋既知のSEPA手法を根拠に修正。
+- **原因特定（grep-first）＋修正3点**:
+  1. **金額上限（f3c21b2）**: `compute_risk_plan`が100%までしか上限なし→浅いstop(−3.4%)で1銘柄36.9%を提案していた。バックテストは既に`MAX_POSITION_PCT=0.25`で検証済＝表示だけズレていた。risk.pyに`MAX_POSITION_PCT=25.0`を追加し表示を検証済挙動に一致。cap発火時はstop-outコスト<account_risk＝より安全。
+  2. **未確認ブレイクをBUY NOWにしない（4df4d95）**: `active`は直近ブレイクがあれば barrels 0/3 でもTrue→写真のAVT(0/3)が「BUY NOW」表示。frontend `classifyEntry`で barrels_passed>=2 を要求（0-1はWAITに降格・不明値は旧挙動維持）。**backend signal無変更＝FIRE/GATE不変**。
+  3. **弱い地合いは「少なく」（4df4d95）**: `uptrend_under_pressure`（分配日多い）で買いカード上部に注意帯「数を絞る・最も締まった候補だけ・枚数と金額控えめ」を表示。図3「setupが少ない=wide and loose=弱い、do less」に忠実。
+- **検証**: 写真2条件を375px再現→注意帯表示・AVT→WAIT・LXP 36.9%→25.0%・買い件数3→2を確認。backend 94＋frontend 87テスト＋build/lint green。凍結metric（FIRE±5/GATE/golden）無変更。
+- **未対応（写真1・要判断）**: Minerviniスキャンが真のリーダー以外（ARW/PGC/INSW等の低成長・景気敏感株）を通す＝技術テンプレ通過だけで、成長リーダーの**ファンダ・グループリーダーシップ関門が弱い**。EPS/売上成長・先導グループのゲート強化が次の大玉だが、fundamentalは米国限定・未検証（matrix#8）＝計測先行で慎重に。
+- **重要**: 本番PWAは`main`ビルド＝写真は旧C83版。C87〜C92の改善はブランチ上・**mainマージ＋サイト再ビルドで初めて反映**。
+
+### C93 — 2026-07-22 Minerviniスキャンを本物の成長リーダーに厳格化（写真1FB）＋本番反映着手
+- **写真1FB**: Minerviniスキャンが低成長・景気敏感株（ARW卸/PGC地銀/INSW海運）を通す。原因: 基本プリセットが業種グループ「上位98位（≒半分）」まで許容＋業績の"水準"下限なし（code33は加速だけ見る＝低ベースの景気敏感株が加速で通過）。
+- **修正（preset-config only・b6ab08a）**: `minervini`と`minervini_vcp`プリセットに **epsRating>=80**（業績リーダーシップ＝CANSLIMの"L"・null無し: code33が既に米ファンダ必須なので生存者はEPS Rating保有）と **ibdGroupRank<=50**（真の先導グループ＝上位1/4）を追加。スキャンエンジン/凍結metric無変更。弱い相場では候補が減る＝図3「弱い時は少なく」に忠実。プリセットテスト更新（23 pass）。
+- **本番反映（PR #60）**: mainは#59（C73-C83）止まり＝スマホは旧C83版。C86-C93をPR #60で統合予定。**Frontend CI（Playwright smoke）失敗を調査**: smokeはモックのvite devサーバ相手（backend無し）、当PRのグローバル変更2点はdev無効（SW登録=PROD∧static限定・precache plugin=apply:'build'）→当PR起因でない環境/flaky失敗と判定。失敗ジョブ再実行で切り分け中。
+- **重要（ユーザー向け）**: YouTube学習はこの環境ではYouTube遮断で不可＝「動画→文字起こし」をネットの通じる場所で行いテキストを貼れば反映可能。

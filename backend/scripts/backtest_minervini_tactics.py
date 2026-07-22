@@ -105,6 +105,17 @@ GROUP_MIN_MEMBERS = 3     # ibd_group_rank_service: >=3 valid-RS members
 GROUP_FTD_SUSPEND = 63
 IBD_CSV = Path(__file__).resolve().parents[2] / "data" / "IBD_industry_group.csv"
 ETF_GROUP = "Finance-ETF / ETN"   # winners-backtest precedent
+# C85: uptrend-quality tiering (capability-matrix #21; motivated by the 20y
+# evidence — chop years bleed and the gate contributed NEGATIVELY over 2007-26
+# via FTD re-entry whipsaw). A confirmed_uptrend is only worth FULL exposure
+# while it is a POWER TREND: health >= 80 and fewer than 2 distribution days.
+# A mature/deteriorating confirmed uptrend runs at the existing FTD ladder's
+# "proven" step (75%) instead — both numbers are existing engine quantities
+# (market_regime health, DIST thresholds, FTD_EXPOSURE_PROVEN), no new knobs.
+TIERED_UPTREND = False
+POWER_HEALTH_MIN = 80.0
+POWER_DIST_MAX = 2
+MATURE_EXPOSURE = 75          # = market_regime.FTD_EXPOSURE_PROVEN
 # Minervini: in a market correction you go to CASH and wait for the FTD; the
 # pre-FTD 20% correction exposure is a residual the shipped engine allows.
 # This flag makes a correction a hard no-buy (like a downtrend) — buying
@@ -258,9 +269,21 @@ def regime_by_day(spy: pd.DataFrame, sim_dates) -> dict:
             window.rename(columns={"open": "Open", "high": "High", "low": "Low",
                                    "close": "Close", "volume": "Volume"})
         )
+        exposure = r.get("exposure_pct") if r.get("exposure_pct") is not None else 100
+        if (
+            TIERED_UPTREND
+            and r.get("regime") == "confirmed_uptrend"
+            and not (
+                (r.get("health") or 0) >= POWER_HEALTH_MIN
+                and (r.get("distribution_days") if r.get("distribution_days") is not None else 99) < POWER_DIST_MAX
+            )
+        ):
+            # mature/deteriorating uptrend: cap at the proven step; an
+            # FTD-upgraded regime already running 25/50/75 is left alone.
+            exposure = min(exposure, MATURE_EXPOSURE)
         out[d] = {
             "regime": r.get("regime"),
-            "exposure": r.get("exposure_pct") if r.get("exposure_pct") is not None else 100,
+            "exposure": exposure,
         }
     return out
 
@@ -604,6 +627,10 @@ def main() -> int:
                     help="treat a market correction as a hard no-buy (0% "
                          "exposure, like a downtrend) instead of the residual "
                          "20% cap — wait for the FTD before buying")
+    ap.add_argument("--tiered-uptrend", action="store_true",
+                    help="full 100%% exposure only in POWER trends (health>=80, "
+                         "dist<2); mature confirmed uptrends run at the FTD "
+                         "ladder's proven 75%% step (chop-bleed control, C85)")
     ap.add_argument("--group-rotation", action="store_true",
                     help="allow new buys only from LEADING (top-20%%) or "
                          "EMERGING (+0.20 rank-pct/21d, top half) IBD groups; "
@@ -641,13 +668,14 @@ def main() -> int:
     NO_CORRECTION_BUYS = args.no_correction_buys
     SELL_INTO_STRENGTH = args.sell_into_strength
     global CLIMAX_SELL_FRACTION, MA_TIGHT, QUALITY_RANK, CONFIRM_EXIT, BREADTH_REGIME
-    global GROUP_ROTATION
+    global GROUP_ROTATION, TIERED_UPTREND
     CLIMAX_SELL_FRACTION = 0.5 if args.climax_partial else 1.0
     MA_TIGHT = args.ma_tight
     QUALITY_RANK = args.quality_rank
     CONFIRM_EXIT = args.confirm_exit
     BREADTH_REGIME = args.breadth_regime
     GROUP_ROTATION = args.group_rotation
+    TIERED_UPTREND = args.tiered_uptrend
 
     fields, as_of = load_panel(Path(args.bundle))
     close, volume, low, high = fields["close"], fields["volume"], fields["low"], fields["high"]
@@ -913,6 +941,7 @@ def main() -> int:
         "confirm_exit": args.confirm_exit,
         "breadth_regime": args.breadth_regime,
         "group_rotation": args.group_rotation,
+        "tiered_uptrend": args.tiered_uptrend,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",

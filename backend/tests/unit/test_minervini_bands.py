@@ -66,6 +66,30 @@ def test_tpr_falls_back_to_7_conditions_without_benchmark():
     assert out["tpr_state"] == "strong"
 
 
+def test_tpr_breakdown_is_opt_in_and_matches_score():
+    # Default output carries NO breakdown key — frozen band/golden callers unchanged.
+    base = compute_tpr(_strong_uptrend(), benchmark_close=_benchmark())
+    assert "tpr_conditions" not in base
+
+    out = compute_tpr(_strong_uptrend(), benchmark_close=_benchmark(), with_breakdown=True)
+    conds = out["tpr_conditions"]
+    # 8 with a benchmark (7 price/MA + RS line); each is a labeled boolean.
+    assert len(conds) == 8
+    for c in conds:
+        assert set(c) == {"key", "label", "passed"}
+        assert isinstance(c["passed"], bool)
+    # A strong uptrend passes every condition, so the passed-count == the score.
+    assert sum(c["passed"] for c in conds) == out["tpr_score"]
+    assert all(c["passed"] for c in conds)
+
+
+def test_tpr_breakdown_drops_rs_condition_without_benchmark():
+    out = compute_tpr(_strong_uptrend(), benchmark_close=None, with_breakdown=True)
+    conds = out["tpr_conditions"]
+    assert len(conds) == 7
+    assert not any(c["key"] == "rs_line_rising" for c in conds)
+
+
 def test_tpr_weak_on_downtrend():
     out = compute_tpr(_downtrend(), benchmark_close=None)
     assert out["tpr_state"] == "weak"

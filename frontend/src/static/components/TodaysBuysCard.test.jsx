@@ -38,6 +38,17 @@ describe('classifyEntry', () => {
     // inactive signal below trigger -> waiting
     const waiting = { buy: buyBlock({ active: false, last_close: 128.0 }) };
     expect(classifyEntry(waiting, { marketRed: false, stale: false })).toBe('not_triggered');
+    // active + in zone but only 0-1 confirmation barrels -> NOT a BUY NOW
+    const unconfirmed = { buy: buyBlock({ barrels_passed: 0 }) };
+    expect(classifyEntry(unconfirmed, { marketRed: false, stale: false })).toBe('not_triggered');
+    const oneBarrel = { buy: buyBlock({ barrels_passed: 1 }) };
+    expect(classifyEntry(oneBarrel, { marketRed: false, stale: false })).toBe('not_triggered');
+    // 2 of 3 barrels is enough
+    const twoBarrels = { buy: buyBlock({ barrels_passed: 2 }) };
+    expect(classifyEntry(twoBarrels, { marketRed: false, stale: false })).toBe('buy_now');
+    // unknown barrel count (older export) keeps the old behaviour
+    const legacy = { buy: buyBlock({ barrels_passed: undefined }) };
+    expect(classifyEntry(legacy, { marketRed: false, stale: false })).toBe('buy_now');
   });
 });
 
@@ -49,13 +60,15 @@ describe('TodaysBuysCard', () => {
         scanRows={uptrendRows}
       />,
     );
-    expect(screen.getByText('✓ BUY NOW')).toBeInTheDocument();
-    expect(screen.getByText(/BUY ZONE/)).toBeInTheDocument();
-    expect(screen.getByText(/132\.50/)).toBeInTheDocument();
-    expect(screen.getByText(/139\.13/)).toBeInTheDocument(); // trigger * 1.05
-    expect(screen.getByText(/stop 124\.10/)).toBeInTheDocument();
-    expect(screen.getByText(/size 19\.8% of capital/)).toBeInTheDocument();
-    expect(screen.getByText(/2R 149\.30/)).toBeInTheDocument();
+    expect(screen.getByText('BUY NOW')).toBeInTheDocument();
+    // the risk→reward ladder ticks (graphical C87) carry the real prices
+    expect(screen.getByText('STOP')).toBeInTheDocument();
+    expect(screen.getByText('PIVOT')).toBeInTheDocument();
+    expect(screen.getByText('132.50')).toBeInTheDocument(); // pivot tick
+    expect(screen.getByText('149.30')).toBeInTheDocument(); // 2R tick
+    expect(screen.getByText('157.70')).toBeInTheDocument(); // 3R tick
+    expect(screen.getByText(/stop 124\.10/)).toBeInTheDocument(); // footer basis line
+    expect(screen.getByText(/size 19\.8%/)).toBeInTheDocument();
   });
 
   it('degrades a null-buy row to pivot-only honesty', () => {
@@ -92,7 +105,7 @@ describe('TodaysBuysCard', () => {
       />,
     );
     expect(screen.getByTestId('todays-buys-market-red')).toBeInTheDocument();
-    expect(screen.queryByText('✓ BUY NOW')).not.toBeInTheDocument();
+    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
   });
 
   it('forces STALE when the export as_of is old', () => {
@@ -102,8 +115,8 @@ describe('TodaysBuysCard', () => {
         scanRows={uptrendRows}
       />,
     );
-    expect(screen.getByText(/STALE/)).toBeInTheDocument();
-    expect(screen.queryByText('✓ BUY NOW')).not.toBeInTheDocument();
+    expect(screen.getByText(/データ未更新/)).toBeInTheDocument();
+    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
   });
 
   it('shows exact share count once equity is set', () => {
@@ -117,6 +130,44 @@ describe('TodaysBuysCard', () => {
     // floor(10000 * 0.198 / 134.20) = 14
     expect(screen.getByText(/14株/)).toBeInTheDocument();
     localStorage.removeItem('todaysBuysEquity');
+  });
+
+  it('adds a symbol to the watchlist when its star is tapped', () => {
+    localStorage.removeItem('todaysWatchlist');
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([{ symbol: 'NVDA', rank: 1, rs_rating: 94, buy: buyBlock() }])}
+        scanRows={uptrendRows}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('todays-buys-watch-NVDA'));
+    expect(JSON.parse(localStorage.getItem('todaysWatchlist'))).toEqual(['NVDA']);
+    localStorage.removeItem('todaysWatchlist');
+  });
+
+  it('shows a "do less" caution when the market is under pressure', () => {
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([{ symbol: 'NVDA', rank: 1, buy: buyBlock() }])}
+        scanRows={[{ market_regime: 'uptrend_under_pressure', market_distribution_days: 8 }]}
+      />,
+    );
+    const note = screen.getByTestId('todays-buys-under-pressure');
+    expect(note).toHaveTextContent('数を絞る');
+    expect(note).toHaveTextContent('分配日 8');
+    // candidates still list (unlike a red market) — the user just does less
+    expect(screen.getByText('BUY NOW')).toBeInTheDocument();
+  });
+
+  it('downgrades an unconfirmed breakout (0 barrels) from BUY NOW to WAIT', () => {
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([{ symbol: 'AVT', rank: 1, buy: buyBlock({ barrels_passed: 0 }) }])}
+        scanRows={uptrendRows}
+      />,
+    );
+    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
+    expect(screen.getByText('WAIT')).toBeInTheDocument();
   });
 
   it('opens the chart when a row is tapped', () => {

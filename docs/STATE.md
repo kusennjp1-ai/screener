@@ -5,10 +5,10 @@
 
 ## 現在
 
-- **サイクル**: C76完了（**young-base＝trend-template guard を凍結ハーネスで棄却**）。残ミス72%の`young_no_2x`を、2xガードをStage-2トレンドテンプレに置換して回収を試作。オフラインは detected-recall 55.6→74.3%(+18.7pp)・判別+27.5→+32.8ppと強いが、**凍結908でFIRE±5判別が−2.2pp低下（control 67.7→73.6が entry超過）→即revert**。学び: detected-recall改善≠FIRE±5タイミング特異性、**2xガードはタイミング判別を供給していた**。計測スクリプトは保持。直前のC75（採用済）: ATRボラティリティ収縮ベース`_vol_contract_base`をvcp_footprintに追加（VCPDetector無変更・golden凍結）→**FIRE±5 91.2→91.7（新床）**・判別+24.1→+24.0pp（ノイズ）・他バイト一致。C74: 品質ランクUI（実ブラウザ検証済）+Rowバグ修正。C73: 908再現性=detected73/機械buy33、exit leash両窓不採用。 **次候補: recallは判別最適近辺＝VCP品質スコアでwatchlistランク（表示・低risk）・21EMA押し目B6（別エントリー型・要慎重）**
-- **モデル**: Fable 5（従量課金化したら停止→Opus 4.8で継続、が恒久ルール）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（**PR #57までMERGED・mainと同期済み・未マージ差分なし**。フロー: PR作成→CI green→squash merge→mainマージバック）
-- **実行中/待機中の外部ジョブ**: PR #59（C73-C82・CI green・マージ待ち＝マージでC81発効）。C82グループローテーション=最終棄却（両窓×2回）、表示バッジ化はユーザー判断待ち。C83: 20y bundle対応（マージ後dispatch）＋今日の買い候補UI（PWA・実ブラウザ検証済・マージ後cronで本番反映）。残=desktop/scanカード・20y回帰スライス。
+- **サイクル**: C93完了（**Minerviniスキャンを本物のリーダーに厳格化＋C86-C93を本番反映PR #60・push/merge進行中**）。写真1FB: スキャンが低成長・景気敏感株を通す→`minervini`/`minervini_vcp`プリセットに epsRating>=80＋ibdGroupRank<=50 を追加（preset-config only・凍結metric無変更・b6ab08a）。写真2FBのC92（金額25%上限・未確認ブレイクをBUY NOWにしない・弱相場は数を絞る）と合わせPR #60（C86-C93）でmain統合→スマホ反映。**Frontend CI smoke失敗はモックdevサーバ相手で当PR起因でない環境flakyと判定・再実行で切り分け中**。YouTube学習は環境遮断で動画取込不可＝文字起こしテキストを貰えば反映可。**次: PR #60マージ→static-site再ビルドでスマホ反映確認**。
+- **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
+- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
+- **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。
 
 ## 凍結metricの現在値（低下＝即revert）
 
