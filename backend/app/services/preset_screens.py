@@ -91,7 +91,7 @@ PRESET_SCREENS: list[dict] = [
         "id": "minervini",
         "name": "Minervini Trend Template",
         "short_name": "Minervini",
-        "description": "Stage 2 leaders in leading groups: trend template, RS>=90, within 10% of high, top-half IBD group, Code 33 earnings acceleration",
+        "description": "Stage 2 growth leaders in leading groups: trend template, RS>=90, within 10% of high, EPS Rating>=80, a top-quartile IBD group, Code 33 earnings acceleration",
         "tier": 1,
         # Gate on the strict boolean Trend Template (all 8 conditions ANDed in
         # the scanner: price>50>150>200, 50>150>200, 200MA rising >=1mo, >=30%
@@ -102,9 +102,17 @@ PRESET_SCREENS: list[dict] = [
         #   - rsRating >= 90       (top decile of relative strength — true leaders)
         #   - within 10% of high   (buyable range near a breakout, not extended
         #                           bases 10-25% down)
-        #   - ibdGroupRank <= 98   ("leaders in leading groups" — drop the bottom
-        #                           half of the 197 IBD industry groups; Minervini
-        #                           buys leaders OF strong groups)
+        #   - epsRating >= 80      (earnings LEADERSHIP, not just acceleration —
+        #                           the "L" in CANSLIM. Code 33 alone let a
+        #                           low-base cyclical through on an accelerating
+        #                           but unremarkable earnings print; the EPS-Rating
+        #                           floor demands the earnings actually be strong.
+        #                           No null risk: code33 already requires US
+        #                           fundamentals, so survivors have an EPS Rating.)
+        #   - ibdGroupRank <= 50   ("leaders in leading groups" — a genuinely
+        #                           LEADING group, ~top quartile of the 197 IBD
+        #                           groups, not merely the top half. Minervini
+        #                           buys the leaders OF strong groups.)
         # RS is the discriminating lever (most stocks sit near their highs in a
         # rally, so the high-distance filter cuts less). week_52_high_distance is
         # the % BELOW the high (negative), so ">= -10" == within 10%.
@@ -118,8 +126,9 @@ PRESET_SCREENS: list[dict] = [
         "filters": {
             "passesTemplate": True,
             "rsRating": {"min": 90, "max": None},
+            "epsRating": {"min": 80, "max": None},
             "week52HighDistance": {"min": -10, "max": None},
-            "ibdGroupRank": {"min": None, "max": 98},
+            "ibdGroupRank": {"min": None, "max": 50},
             "code33": True,
         },
         "sort_by": "minervini_score",
@@ -132,11 +141,11 @@ PRESET_SCREENS: list[dict] = [
         "description": "The Minervini elite short-list further narrowed to names currently forming a VCP (volatility-contraction base) — a buyable low-risk pivot rather than an extended, post-breakout leader",
         "tier": 1,
         # The premium subset of the Minervini screen: same elite legs (trend
-        # template, RS>=90, within 10% of high, top-half IBD group, Code 33
-        # earnings acceleration) AND a detected VCP base. The plain Minervini
-        # list catches Stage-2 leaders regardless of *where* in the move they
-        # are — many are extended well above the 50-day (already broke out and
-        # ran), which is not a low-risk Minervini entry. Requiring vcpDetected
+        # template, RS>=90, EPS Rating>=80, within 10% of high, top-quartile IBD
+        # group, Code 33 earnings acceleration) AND a detected VCP base. The plain
+        # Minervini list catches Stage-2 leaders regardless of *where* in the move
+        # they are — many are extended well above the 50-day (already broke out
+        # and ran), which is not a low-risk Minervini entry. Requiring vcpDetected
         # surfaces the ones tightening into a fresh base at a proper pivot. This
         # can legitimately be a very small set (often 0) when the leaders have
         # already broken out; that emptiness is itself the signal. Sorted by VCP
@@ -144,8 +153,9 @@ PRESET_SCREENS: list[dict] = [
         "filters": {
             "passesTemplate": True,
             "rsRating": {"min": 90, "max": None},
+            "epsRating": {"min": 80, "max": None},
             "week52HighDistance": {"min": -10, "max": None},
-            "ibdGroupRank": {"min": None, "max": 98},
+            "ibdGroupRank": {"min": None, "max": 50},
             "code33": True,
             "vcpDetected": True,
         },

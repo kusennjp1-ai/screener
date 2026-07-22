@@ -104,21 +104,24 @@ def _preset(screen_id):
 
 def test_minervini_preset_gates_on_strict_template_flag():
     """The Minervini preset gates on the strict boolean trend-template flag
-    (passes_template) AND the elite-leader thresholds (RS>=90, within 10% of the
-    52-week high, top-half IBD group), so it is a tight leaders-in-leading-groups
-    short-list rather than every textbook-minimum pass."""
+    (passes_template) AND the elite-leader thresholds (RS>=90, EPS Rating>=80,
+    within 10% of the 52-week high, a top-quartile IBD group), so it is a tight
+    growth-leaders-in-leading-groups short-list rather than every textbook-minimum
+    pass."""
     screen = _preset("minervini")
 
     assert screen["filters"]["passesTemplate"] is True
     assert screen["filters"]["rsRating"] == {"min": 90, "max": None}
+    assert screen["filters"]["epsRating"] == {"min": 80, "max": None}
     assert screen["filters"]["week52HighDistance"] == {"min": -10, "max": None}
-    assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 98}
+    assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 50}
     assert screen["filters"]["code33"] is True
 
     leader = {
         "symbol": "PASS",
         "passes_template": True,
         "rs_rating": 93,
+        "eps_rating": 88,
         "week_52_high_distance": -6,
         "ibd_group_rank": 25,
         "code33": True,
@@ -133,13 +136,20 @@ def test_minervini_preset_gates_on_strict_template_flag():
     assert _matches_preset_filters(
         {**leader, "rs_rating": 84}, screen["filters"]
     ) is False
+    # Passes the template but weak earnings (EPS Rating 60) -> excluded: a
+    # low-base cyclical with accelerating-but-unremarkable earnings is not a
+    # growth leader.
+    assert _matches_preset_filters(
+        {**leader, "eps_rating": 60}, screen["filters"]
+    ) is False
     # Passes the template but extended >10% below the highs -> excluded.
     assert _matches_preset_filters(
         {**leader, "week_52_high_distance": -14}, screen["filters"]
     ) is False
-    # Passes the template but sits in a bottom-half IBD group -> excluded.
+    # Passes the template but sits below a genuinely leading group (rank 60,
+    # outside the top quartile) -> excluded.
     assert _matches_preset_filters(
-        {**leader, "ibd_group_rank": 150}, screen["filters"]
+        {**leader, "ibd_group_rank": 60}, screen["filters"]
     ) is False
     # Passes the template and the leader thresholds but Code 33 earnings
     # acceleration does not hold -> excluded.
@@ -166,6 +176,7 @@ def test_minervini_vcp_preset_is_minervini_subset_requiring_a_vcp():
         "symbol": "BASE",
         "passes_template": True,
         "rs_rating": 93,
+        "eps_rating": 88,
         "week_52_high_distance": -6,
         "ibd_group_rank": 25,
         "code33": True,
