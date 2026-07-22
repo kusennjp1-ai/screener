@@ -26,6 +26,7 @@ import SignalBadges from '../features/markets360/components/SignalBadges';
 import BuyChecklist from '../components/Scan/BuyChecklist';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import TradingViewBridge from './components/TradingViewBridge';
+import TrendTemplateScorecard from './components/TrendTemplateScorecard';
 import { useStaticMarket } from './StaticMarketContext';
 import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
@@ -576,6 +577,7 @@ function StaticChartViewerModal({
                 stockData={stockData}
               />
               <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
+              <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
                 symbol={currentSymbol}
                 market={selectedMarket}
