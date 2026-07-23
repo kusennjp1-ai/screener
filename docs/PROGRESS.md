@@ -589,3 +589,11 @@
 - **結論**: **戦略の根本変更は不要**。変えるべきは「右テールを守れているか」の**計測と可視化**。
 - **実装（計測のみ・1コミット 7a4f14a）**: `backtest_minervini_tactics.py`の`metrics`に`payoff_distribution`ブロック追加＝expectancy(R)・avg win/loss R・payoff_ratio・Rヒストグラム(<=-1R..>=5R)・**gross gainのtop5%/top10%/最大1件の集中度**。将来「利益を静かに上限化する変更」が入れば右テール集中度の崩壊として検出できる。純レポート＝戦略ロジック・凍結metric無変更。合成データで検証（最大勝ち1件が総利益の72%＝右テール集中を可視化）。
 - **未反映の実行**: 6y/10yバンドルでの実測値埋め込みはローカル~35分 or CI `backtest-tactics.yml`（mainマージ後）。次サイクルで数値を取得しSTATEの凍結表・payoff行に記録。
+
+### C96 — 2026-07-23 「約束」（目的関数）確定＋残処理実行（実測バックテスト＋スマホ表示）
+- **依頼**: 「残っていること（実測バックテストの数値）を実行し、スマホ画面でも見えるように」。さらに**長期戦略の優先順位を約束**として確定: (1)CAGR (2)最大DD (3)リスク調整後(Sharpe/Sortino) (4)期待値/トレード (5)勝率。
+- **約束の確定（docs/OBJECTIVE.md・2377d0d）**: 上記優先順を目的関数として明文化。判定は上位優先・上位を犠牲にした下位改善は不採用。**#3はSortino主・Sharpe従**（Sharpeは上振れ=大勝ちも罰する→右テール保存戦略と矛盾。Sortinoは下振れのみ罰する）。導出される不変ルール（右テール非切断・左テール~8%・勝率は目的化しない）を記載。
+- **計測の完成**:
+  - `backtest_minervini_tactics.py`に`payoff_distribution`（expectancy_r/payoff_ratio/Rヒスト/右テール集中度top5/10/最大1件・7a4f14a）＋`sortino`（517c0b7）を追加。純レポート・凍結metric非接触。
+  - スマホPWA: `StrategyScorecardCard`（cc645b3）＝5指標を優先順で表示＋右テール集中バー。`static-data/strategy-scorecard.json`をfail-softで読む。5テスト・build/lint green。StaticHomePageのMarketRegimeBanner直下に配置。
+- **実測取得（進行中）**: `backtest-tactics.yml`をブランチrefで6y dispatch（run 30051701118）。完了後にmetricsをstrategy-scorecard.jsonへ転記→スマホ実表示を375pxで確認→commit→STATE/OBJECTIVEに実測値記録。
