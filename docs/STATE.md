@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C86-C93を**本番反映完了**（PR #60 squashマージ=c7ceb5d・mainマージバック845e426・static-site US フル再ビルドを main で dispatch＝スマホ反映中/~2h）。写真FB対応: 写真1=Minerviniスキャンに epsRating>=80＋ibdGroupRank<=50（真の成長リーダー・C93）、写真2=金額25%上限・未確認ブレイクをBUY NOWにしない・弱相場は数を絞る（C92）。**Frontend CI smokeは既知のflaky（モックdevサーバのmarkets360実データ/ログイン・当変更と無関係）＝初回失敗→再実行で緑**。YouTube学習は環境遮断で不可＝文字起こしテキストを貰えば反映可。**次: 再ビルド完了後スマホで反映確認・写真1の効果は次のUS実データで確認**。
+- **サイクル**: C94完了（**tradingview-mcpのCDP技術を自前スクリーナーに適用・push要**）。記事の核心＝Chromium/ElectronアプリをCDPで読む→Playwright(同CDP)を自前PWAに向ければこの環境で実行可(localhost非遮断・TV本体だけ本人PC)。複数エージェント設計(wf_79cf71cf・3並列opus)でC1位=クロスサーフェス整合ゲートを採用。`frontend/tools/chart-inspector/`実装(checks.mjs純ルール＋8テスト・inspect.mjs=生CDP Runtime.evaluate+captureScreenshot)＝買いカードのpivot/stop/2R/3R矛盾を検出・非ゼロ終了でCIゲート化可・凍結metric非接触。フィクスチャで正=通過/2Rズラし=検出(exit1)実証。docs/TRADINGVIEW_CDP.mdに切り分け記載。535テストgreen(1cd3c6b)。**次: inspectorを新スキーマfixtureで全4面横断＋CIゲート化／写真1の効果を次のUS実データで確認**。C86-C93は本番反映済(PR#60)。
 - **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
 - **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。

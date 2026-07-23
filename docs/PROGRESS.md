@@ -574,3 +574,11 @@
 - **修正（preset-config only・b6ab08a）**: `minervini`と`minervini_vcp`プリセットに **epsRating>=80**（業績リーダーシップ＝CANSLIMの"L"・null無し: code33が既に米ファンダ必須なので生存者はEPS Rating保有）と **ibdGroupRank<=50**（真の先導グループ＝上位1/4）を追加。スキャンエンジン/凍結metric無変更。弱い相場では候補が減る＝図3「弱い時は少なく」に忠実。プリセットテスト更新（23 pass）。
 - **本番反映（PR #60）**: mainは#59（C73-C83）止まり＝スマホは旧C83版。C86-C93をPR #60で統合予定。**Frontend CI（Playwright smoke）失敗を調査**: smokeはモックのvite devサーバ相手（backend無し）、当PRのグローバル変更2点はdev無効（SW登録=PROD∧static限定・precache plugin=apply:'build'）→当PR起因でない環境/flaky失敗と判定。失敗ジョブ再実行で切り分け中。
 - **重要（ユーザー向け）**: YouTube学習はこの環境ではYouTube遮断で不可＝「動画→文字起こし」をネットの通じる場所で行いテキストを貼れば反映可能。
+
+### C94 — 2026-07-23 tradingview-mcpのCDP技術を自前スクリーナーに適用（複数エージェント設計）
+- **依頼**: tradingview-mcp（TV DesktopをCDPで操作し78ツール化）を「この環境でどうやるか＋スクリーナー改善に」。ループ・複数エージェントで。
+- **事実確認**: 本番PWA(github.io)・YouTubeはこの環境から遮断(000)。だが**Chromium＋Playwright＝CDP（記事と同じ）は同梱**、localhostは非遮断。→技術は"自前アプリをlocalhostで動かせば"この環境で実行可能。TV本体操作だけは本人PC側。
+- **PoC実証**: 生CDPセッション（`newCDPSession`→`Runtime.evaluate`＋`Page.captureScreenshot`）で自前スクリーナー画面の判断データ（BUY NOW/STOP/PIVOT/2R/3R/トレンドテンプレ8/8/TVリンク）を読み取り＋スクショ取得を確認。
+- **複数エージェント設計（wf_79cf71cf・3並列・opus・エラー0）**: A=技術マップ（8機能中6は実行可・板情報は対象外・Pineコンパイルは本人PC）、B=inspector仕様、C=改善ランキング。**C1位＝クロスサーフェス整合ゲート**（買いカード/ラダー/フッターが別々に出すpivot/stop/2R/3Rの矛盾を検出＝matrixのcoherence risk解消・凍結metric非接触）。
+- **実装（1コミット 1cd3c6b）**: `frontend/tools/chart-inspector/`（checks.mjs＝純ルール＋8 vitestテスト、inspect.mjs＝CDPランナー、README）。ラダーstop==フッターstop・2R==pivot+2R・3R==pivot+3R・risk%==(pivot-stop)/pivot を検査、矛盾で非ゼロ終了＝CIゲート化可。フィクスチャで正=通過・2Rズラし=検出(exit1)を実証。`docs/TRADINGVIEW_CDP.md`に「この環境で可/本人PCで可」の切り分けとTV本体の起動手順を記載。535フロントテストgreen。
+- **残**: C86-C93は本番反映済（PR#60マージ＋scheduled rebuild成功）。次候補=inspectorを実データ（新スキーマfixture）で全4面（scorecard/watchlist/Pine）横断チェックへ拡張・CIゲート化。
