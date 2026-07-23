@@ -618,12 +618,19 @@ def metrics(curve, trades, start_equity=100_000.0):
     cagr = (1 + total) ** (1 / years) - 1
     dd = (eq / eq.cummax() - 1).min()
     sharpe = ret.mean() / ret.std() * np.sqrt(252) if ret.std() > 0 else 0.0
+    # Sortino only penalizes DOWNSIDE volatility, so — unlike Sharpe — it does
+    # not treat a big upside winner as "risk". That fits a right-tail-preserving
+    # trend strategy: we want to keep the fat upside, not be scored against it.
+    downside = ret[ret < 0]
+    dstd = downside.std()
+    sortino = ret.mean() / dstd * np.sqrt(252) if dstd and dstd > 0 else None
     wins = [t for t in trades if t.get("pnl", t["exit"] - t["entry"]) > 0]
     out = {
         "total_return_pct": round(100 * total, 1),
         "cagr_pct": round(100 * cagr, 1),
         "max_drawdown_pct": round(100 * dd, 1),
         "sharpe": round(float(sharpe), 2),
+        "sortino": round(float(sortino), 2) if sortino is not None else None,
         "trades": len(trades),
         "win_rate_pct": round(100 * len(wins) / len(trades), 1) if trades else None,
         "avg_r": round(float(np.mean([t["r"] for t in trades])), 2) if trades else None,
