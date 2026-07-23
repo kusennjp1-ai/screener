@@ -28,6 +28,7 @@ import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import TodaysBuysCard from '../components/TodaysBuysCard';
 import WatchlistCard from '../components/WatchlistCard';
+import StrategyScorecardCard from '../components/StrategyScorecardCard';
 import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
@@ -90,6 +91,22 @@ function StaticHomePage() {
     gcTime: Infinity,
   });
   const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
+  // Strategy scorecard (C95): a root-level backtest snapshot, shown in the
+  // agreed priority order. Independent of the daily market export and refreshed
+  // only when the tactics backtest reruns — fail soft to null so the card just
+  // disappears if the file is not published yet.
+  const scorecardQuery = useQuery({
+    queryKey: ['staticStrategyScorecard'],
+    queryFn: async () => {
+      try {
+        return await fetchStaticJson('strategy-scorecard.json');
+      } catch {
+        return null;
+      }
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
 
   // チャートモーダルはURL（?chart=銘柄）と同期させる。
   // モーダルを開くと履歴が1つ積まれるため、ブラウザ/アプリの「戻る」で自然に閉じる。
@@ -239,6 +256,11 @@ function StaticHomePage() {
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} />
+
+      {/* C95: the strategy's long-run scorecard in the agreed priority order
+          (CAGR > maxDD > risk-adjusted > expectancy > win rate) + the right-
+          tail concentration. Renders nothing until the backtest snapshot ships. */}
+      <StrategyScorecardCard data={scorecardQuery.data} />
 
       {/* C86: held/watched names first — the exit is the edge. Surfaces each
           watched symbol's exported sell action + stop, most-urgent first. */}
