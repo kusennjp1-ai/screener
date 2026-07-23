@@ -569,6 +569,47 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
     return v
 
 
+def payoff_distribution(trades):
+    """Make the asymmetric payoff visible: cut the left tail small, let the
+    right tail (a few big winners) run. Pure measurement — no strategy input,
+    no frozen metric. Reports expectancy, the winner/loser payoff ratio, the
+    R-multiple histogram, and how concentrated the gross gains are in the top
+    trades (the right-tail contribution the Minervini edge lives in)."""
+    if not trades:
+        return None
+    rs = [float(t["r"]) for t in trades]
+    pnls = [float(t.get("pnl", t["exit"] - t["entry"])) for t in trades]
+    win_r = [r for r in rs if r > 0]
+    loss_r = [r for r in rs if r <= 0]
+    # R-multiple histogram (the left tail should pile up near -1R, the right
+    # tail should have a thin but heavy set of >=3R / >=5R winners).
+    edges = [(-99, -1), (-1, 0), (0, 1), (1, 2), (2, 3), (3, 5), (5, 99)]
+    labels = ["<=-1R", "-1..0R", "0..1R", "1..2R", "2..3R", "3..5R", ">=5R"]
+    hist = {lab: sum(1 for r in rs if lo < r <= hi) for lab, (lo, hi) in zip(labels, edges)}
+    # right-tail concentration: share of total GROSS GAINS from the top trades.
+    gains = sorted((max(0.0, p) for p in pnls), reverse=True)
+    total_gain = sum(gains) or 1e-9
+    n = len(gains)
+    top5 = sum(gains[:max(1, round(n * 0.05))]) / total_gain
+    top10 = sum(gains[:max(1, round(n * 0.10))]) / total_gain
+    best_share = (gains[0] / total_gain) if gains else 0.0
+    return {
+        "expectancy_r": round(float(np.mean(rs)), 2),
+        "avg_win_r": round(float(np.mean(win_r)), 2) if win_r else None,
+        "avg_loss_r": round(float(np.mean(loss_r)), 2) if loss_r else None,
+        # payoff ratio > 1 with a sub-50% win rate is the SEPA signature.
+        "payoff_ratio": round(float(np.mean(win_r) / abs(np.mean(loss_r))), 2)
+        if win_r and loss_r and np.mean(loss_r) != 0 else None,
+        "max_r": round(max(rs), 2),
+        "median_r": round(float(np.median(rs)), 2),
+        "r_histogram": hist,
+        # if these are high, the edge depends on NOT capping winners.
+        "top5pct_gain_share": round(top5, 3),
+        "top10pct_gain_share": round(top10, 3),
+        "best_trade_gain_share": round(best_share, 3),
+    }
+
+
 def metrics(curve, trades, start_equity=100_000.0):
     eq = pd.Series([p["equity"] for p in curve], index=pd.to_datetime([p["date"] for p in curve]))
     ret = eq.pct_change().dropna()
@@ -593,6 +634,7 @@ def metrics(curve, trades, start_equity=100_000.0):
         gains = sum(max(0.0, t.get("pnl", t["exit"] - t["entry"])) for t in trades)
         losses = sum(max(0.0, -t.get("pnl", t["exit"] - t["entry"])) for t in trades)
         out["profit_factor"] = round(gains / losses, 2) if losses > 0 else None
+    out["payoff_distribution"] = payoff_distribution(trades)
     yearly = eq.resample("YE").last()
     prev = start_equity
     out["yearly_return_pct"] = {}
