@@ -582,3 +582,10 @@
 - **複数エージェント設計（wf_79cf71cf・3並列・opus・エラー0）**: A=技術マップ（8機能中6は実行可・板情報は対象外・Pineコンパイルは本人PC）、B=inspector仕様、C=改善ランキング。**C1位＝クロスサーフェス整合ゲート**（買いカード/ラダー/フッターが別々に出すpivot/stop/2R/3Rの矛盾を検出＝matrixのcoherence risk解消・凍結metric非接触）。
 - **実装（1コミット 1cd3c6b）**: `frontend/tools/chart-inspector/`（checks.mjs＝純ルール＋8 vitestテスト、inspect.mjs＝CDPランナー、README）。ラダーstop==フッターstop・2R==pivot+2R・3R==pivot+3R・risk%==(pivot-stop)/pivot を検査、矛盾で非ゼロ終了＝CIゲート化可。フィクスチャで正=通過・2Rズラし=検出(exit1)を実証。`docs/TRADINGVIEW_CDP.md`に「この環境で可/本人PCで可」の切り分けとTV本体の起動手順を記載。535フロントテストgreen。
 - **残**: C86-C93は本番反映済（PR#60マージ＋scheduled rebuild成功）。次候補=inspectorを実データ（新スキーマfixture）で全4面（scorecard/watchlist/Pine）横断チェックへ拡張・CIゲート化。
+
+### C95 — 2026-07-23 戦略見直し依頼への回答＋期待値/右テールの計測を追加
+- **依頼**: 「期待値が高い局面だけ参加・損失の左テールは8%程度で切る・利益の右テールはできるだけ残す（大勝ち数銘柄がEVを担う。20%利確固定はテールを切ってEVを壊す）」という考えを基に**戦略を改めるべきか**。
+- **監査（grep-first）**: `exit_signals.py`/`signals.py`に**利確固定・利益上限は存在しない**。優先順位 exit>sell_into_strength>tighten_stop>raise_stop_*>hold＝トレイリング（50DMA追従）で勝ちを走らせる設計。∴**ユーザーの考えは既存戦略と一致**。加えて執行チューニング族（機械的に利を早取り/上限）は**C71/76/80/82/85で5連続棄却＝両バックテスト窓で右テール（大勝ち）を切って総リターン崩壊**を実証済＝理論と実測が一致。
+- **結論**: **戦略の根本変更は不要**。変えるべきは「右テールを守れているか」の**計測と可視化**。
+- **実装（計測のみ・1コミット 7a4f14a）**: `backtest_minervini_tactics.py`の`metrics`に`payoff_distribution`ブロック追加＝expectancy(R)・avg win/loss R・payoff_ratio・Rヒストグラム(<=-1R..>=5R)・**gross gainのtop5%/top10%/最大1件の集中度**。将来「利益を静かに上限化する変更」が入れば右テール集中度の崩壊として検出できる。純レポート＝戦略ロジック・凍結metric無変更。合成データで検証（最大勝ち1件が総利益の72%＝右テール集中を可視化）。
+- **未反映の実行**: 6y/10yバンドルでの実測値埋め込みはローカル~35分 or CI `backtest-tactics.yml`（mainマージ後）。次サイクルで数値を取得しSTATEの凍結表・payoff行に記録。
