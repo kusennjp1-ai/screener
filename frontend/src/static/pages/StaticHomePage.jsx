@@ -149,6 +149,20 @@ function StaticHomePage() {
     }),
     [marketCapMin, scanDefaultFilters]
   );
+  // Backtest-aligned candidate list (C97): the SAME pool the +15.2% 6-year
+  // backtest (full_tactics) actually picks from — the strict 8-point Trend
+  // Template plus RS >= 70 — with NO fundamental/group gate, strongest RS first.
+  // Kept ALONGSIDE the quality-leader headline above (C93) so both views exist:
+  // the strict leaders the user asked for, and the exact names the backtest trades.
+  const backtestAlignedFilters = useMemo(
+    () => applyScanFilterDefaults({
+      ...scanDefaultFilters,
+      passesTemplate: true,
+      rsRating: { min: 70, max: null },
+      ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
+    }),
+    [marketCapMin, scanDefaultFilters]
+  );
   const scanRows = scanBundleQuery.data?.rows ?? EMPTY_RESULTS;
   const topResults = useMemo(() => {
     return sortStaticScanRows(
@@ -157,6 +171,13 @@ function StaticHomePage() {
       'desc'
     ).slice(0, DEFAULT_TOP_RESULTS);
   }, [scanRows, topCandidateFilters]);
+  const backtestAlignedRows = useMemo(() => {
+    return sortStaticScanRows(
+      filterStaticScanRows(scanRows, backtestAlignedFilters),
+      'rs_rating',
+      'desc'
+    ).slice(0, DEFAULT_TOP_RESULTS);
+  }, [scanRows, backtestAlignedFilters]);
   const leadingGroupScreen = useMemo(
     () => scanBundleQuery.data?.presetScreens?.find((screen) => screen.id === LEADERS_SCREEN_ID) ?? null,
     [scanBundleQuery.data?.presetScreens]
@@ -182,6 +203,10 @@ function StaticHomePage() {
   const leadingGroupNavigationSymbols = useMemo(
     () => leadingGroupRows.map((r) => r.symbol).filter((s) => chartEnabledSymbols.has(s)),
     [leadingGroupRows, chartEnabledSymbols],
+  );
+  const backtestAlignedNavigationSymbols = useMemo(
+    () => backtestAlignedRows.map((r) => r.symbol).filter((s) => chartEnabledSymbols.has(s)),
+    [backtestAlignedRows, chartEnabledSymbols],
   );
   const leadingGroupMinVolume = leadingGroupScreen?.filters?.minVolume;
   const leadingGroupSubtitle = leadingGroupMinVolume == null
@@ -404,6 +429,24 @@ function StaticHomePage() {
         navigationSymbols={leadingGroupNavigationSymbols}
         onOpenChart={handleRowClick}
         emptyMessage="現在のスナップショットに該当する主導銘柄はありません。"
+        showRs
+        priceSparklineWidth={195}
+        priceSparklineInnerWidth={150}
+      />
+
+      {/* C97: the exact pool the +15.2% 6-year backtest picks from — Trend
+          Template + RS>=70, strongest RS first, NO fundamental/group gate. Sits
+          beside the strict leaders list so both the quality view and the
+          backtest-faithful view are available. */}
+      <DailyScanRowsTable
+        testId="backtest-aligned-section"
+        title="バックテスト準拠候補（検証と同じ選び方）"
+        subtitle="トレンドテンプレート合格＋RS 70以上をRSの高い順に表示。6年検証（年率+15.2%）が実際に選ぶ母集団と同じ条件で、業績・業種の追加関門はかけていません。行をクリックするとチャートが開きます。"
+        rows={backtestAlignedRows}
+        chartEnabledSymbols={chartEnabledSymbols}
+        navigationSymbols={backtestAlignedNavigationSymbols}
+        onOpenChart={handleRowClick}
+        emptyMessage="現在の条件に一致する銘柄はありません。"
         showRs
         priceSparklineWidth={195}
         priceSparklineInnerWidth={150}
