@@ -603,3 +603,10 @@
 - **右テール実測**: 上位10%の勝ち=総利益の68.4%・最大1件14.2%・最大+12.23R・≥5R 9件・中央値-0.63R。=「負け小さく・少数の大勝ちが全体を担う」を数字で確認＝約束の妥当性を実証。**5指標すべてでSPY B&Hを上回った**（2022ベアを含む窓ゆえ防御が効く。強気5年窓ではB&H未勝の既知事実は不変＝OBJECTIVEに正直注記）。
 - **スマホ反映**: `strategy-scorecard.json`をpublicルート（tracked・static-data/はgitignore）に配置しアプリrootからfetch。`StrategyScorecardCard`が5指標＋右テールバーを表示。**375pxで実レンダリング確認（scorecard-375.png）**・console致命エラー無し。build/lint/5テストgreen。
 - **本番反映**: 未（feature branch上）。スマホ実機表示にはC93同様main merge＋静的サイト再ビルドが必要＝ユーザー判断待ち。
+
+### C97 — 2026-07-24 売り常時表示＋9年バックテスト（正直な弱点確認）＋スコアカード両窓化
+- **売りタイミング必ず表示（複数エージェント調査 wf_71e78942→実装）**: バックエンド=`compute_sell_plan`に常時`stop_level`（ラダー/初期stop無ければ price由来の保護stop=min(50DMA, -8%)）＋`targets`を追加（`stop_hit`/action不変）。exportの`_sell_index`を常時完全populate（stop=ladder→plan→risk_plan、2R/3R同梱、hold含む）、`_emit_chart`はnull sell/sell_plan欠落を排除（no_data明示）。フロント=共有`SellTiming`（null返さない・hold/no_data対応・単一語彙）をTodaysBuysCard全行・WatchlistCard（stale/前回フォールバック）・SignalBadges（hold時もstop表示）・SellPlanCard（hold描画）に配線。凍結metric非接触。backend77＋frontend547テストgreen。
+- **9年バックテスト（run 30064735759・2017-08〜2026-07・1233銘柄）**: full_tactics **CAGR+4.3% vs SPY+14.7%**・最大DD-25.8%(SPY-33.7%)・Sortino0.46(1.01)・期待値+0.14R・勝率34.8%・右テールtop10%=72.3%。**ほぼ上げ相場9年ではB&Hに大敗**（平均投資64.9%＝現金規律が機会損失）。下げ耐性のみ優位。STATE凍結表の既知事実（C60）を実測で再確認。
+- **スコアカード両窓化（正直さ）**: `strategy-scorecard.json`に`wider_window`(9y)＋`caveat`を追加、`StrategyScorecardCard`が6年ヘッドライン＋9年の弱点＋caveatを表示。375px実レンダ確認。**flatteringな6年だけを見せない**。
+- **スクリーニング一致（複数エージェント調査 wf_6a4bbf56・synth失敗→手動統合）**: バックテストfull_tacticsの実エントリー＝passesTemplate＋RS≥70＋(VCP or tight_base pivot)＋armed cross＋市場ゲート、**ファンダ/code33/group gateなし**。製品ヘッドラインは RS≥90＋code33＋group≤98（+minervini preset EPS≥80/group≤50）＝**バックテストより厳しくファンダ/group gateを追加**。∴「同じ銘柄」に厳密一致させるとC93で入れた品質ゲートを外すことになり、かつ9年ではその素の技術戦略はB&H未勝。**方針はユーザー判断案件**（下記質問）。
+- **本番反映**: PR #61（C94-C97）。CI: App.static.test（/static-data不変条件）を修正、Playイwright smokeはauth-login同時失敗＝環境flaky（PR#60同様）と判定。

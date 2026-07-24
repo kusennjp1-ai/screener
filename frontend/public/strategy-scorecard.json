@@ -41,5 +41,17 @@
     "sharpe": 0.77,
     "sortino": 1.06,
     "total_return_pct": 78.8
-  }
+  },
+  "wider_window": {
+    "window": { "start": "2017-08-04", "end": "2026-07-23", "years": 9 },
+    "cagr_pct": 4.3,
+    "max_drawdown_pct": -25.8,
+    "sortino": 0.46,
+    "expectancy_r": 0.14,
+    "win_rate_pct": 34.8,
+    "benchmark_cagr_pct": 14.7,
+    "benchmark_max_drawdown_pct": -33.7,
+    "note": "9年（ほぼ上げ相場）ではただS&P500を持ち続ける方が強い（年率4.3% vs 14.7%）。現金比率が高く上げに乗り切れないため。下げ耐性は優位（最大DDは浅く、2022年は-3.6% vs -18.2%）。"
+  },
+  "caveat": "上の6年はミネルヴィニ的な検証窓（高値圏スタート＋2022年の下げを含む）で市場平均を上回るが、9年のほぼ上げ相場ではS&P500ただ持ちに負ける（下記）。強みは下げ相場での守りと安定した期待値。"
 }

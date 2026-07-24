@@ -117,6 +117,32 @@ export default function StrategyScorecardCard({ data }) {
           meaning={m.trades != null ? `${m.trades}トレードで検証・勝率は最重視しない` : '勝率は最重視しない'} />
       </Box>
 
+      {/* honest window-dependence caveat + the wider (mostly-bull) window,
+          where just holding the index wins. Never hide the less flattering
+          number — the priority order judges CAGR first. */}
+      {(data.caveat || data.wider_window) && (
+        <Box sx={{ px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+          {data.caveat && (
+            <Typography sx={{ fontSize: 10.5, color: C.grey, lineHeight: 1.5, mb: data.wider_window ? 0.75 : 0 }}>
+              {data.caveat}
+            </Typography>
+          )}
+          {data.wider_window && (
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 800, color: C.inkStrong }}>
+                {data.wider_window.window?.years}年窓
+              </Typography>
+              <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: C.amber }}>
+                CAGR {fmtPct(data.wider_window.cagr_pct)}
+              </Typography>
+              <Typography sx={{ fontSize: 10.5, color: C.grey }}>
+                （S&P500 {fmtPct(data.wider_window.benchmark_cagr_pct)}）· 最大DD {fmtPct(data.wider_window.max_drawdown_pct)}
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      )}
+
       {/* right-tail concentration — why we never cap winners */}
       {top10 != null && (
         <Box sx={{ px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
