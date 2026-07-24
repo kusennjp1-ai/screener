@@ -5,7 +5,7 @@
 
 ## 現在
 
-- **サイクル**: C95完了（**戦略見直し依頼への回答＋期待値/右テール計測を追加・push済 7a4f14a**）。ユーザーの「期待値の高い局面だけ参加・左テール(損失)は8%で切る・右テール(大勝ち)は残す」思想＝**既存戦略と完全一致**（grep監査で利確固定・利益上限は不在／執行チューニング族は右テールを切ってC71/76/80/82/85で5連続棄却済）。∴戦略の根本変更は不要、変えるのは「右テールを守れているか」の計測。`backtest_minervini_tactics.py`の`metrics`に`payoff_distribution`（expectancy R・payoff_ratio・Rヒストグラム・gross gainのtop5%/10%/最大1件集中度）を追加＝純レポート・凍結metric非接触。合成データで検証済（最大勝ち1件が総利益72%を可視化）。**次: 6y/10yバンドルで実測値を埋め（ローカル35分 or CIバックテスト）STATEの凍結表に右テール行を記録／inspectorを新スキーマfixtureで全4面横断＋CIゲート化／写真1の効果を次のUS実データで確認**。C86-C94は本番反映済(PR#60)。C94: `frontend/tools/chart-inspector/`(CDP整合ゲート・535テストgreen 1cd3c6b)。
+- **サイクル**: C96完了（**「約束」＝目的関数の確定＋期待値/右テール計測を実測値で完成＋スマホ表示・push済 88a385a**）。ユーザーと**長期優先順位を合意**: (1)CAGR (2)最大DD (3)リスク調整後(**Sortino主・Sharpe従**＝Sharpeは大勝ちも罰する→右テール保存と矛盾) (4)期待値/トレード (5)勝率。`docs/OBJECTIVE.md`に約束として明文化（上位優先・上位犠牲の下位改善は不採用）。C95監査で利確固定・利益上限は不在＝思想は既存戦略と一致。**実測(6y run 30051701118・full_tactics・2021-08〜2026-07・1576銘柄)**: CAGR+15.2%(SPY+12.4%)・最大DD-13.9%(SPY-24.5%)・Sortino1.28(1.06)・期待値+0.53R/payoff3.4・勝率36.7%・**右テール=上位10%が総利益68.4%/最大+12.23R**＝**5指標すべてでSPY B&H超え**(2022ベア含む窓ゆえ防御が効く。強気5年窓ではB&H未勝は不変)。`backtest`に`payoff_distribution`+`sortino`追加(純レポート・凍結非接触)。スマホ: `StrategyScorecardCard`が5指標＋右テールバー表示・**375px実レンダ確認済**・`strategy-scorecard.json`(publicルート・tracked)。build/lint/5テストgreen。**次: 本番反映(main merge＋静的再ビルド=ユーザー判断待ち)／10y窓でも同計測／inspectorを新スキーマfixtureで全4面＋CIゲート化**。C86-C94は本番反映済(PR#60)。
 - **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
 - **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
 - **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。
@@ -18,6 +18,7 @@
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
 | 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%（SPY+83.6%超え）だが**9年窓では+78.2% vs SPY+251.8%＝一般化せず**（C60）。ベア防御のみ両窓で実証 | ローカル or CI `backtest-tactics.yml`（6y/10yバンドルはリリースに保存） |
+| 戦術バックテスト payoff（**C96実測・6y 2021-08〜2026-07・凍結外・参考**） | CAGR**+15.2%**(SPY+12.4%)・最大DD**-13.9%**(SPY-24.5%)・Sortino**1.28**(1.06)・期待値**+0.53R**/payoff3.4・勝率36.7%・右テール上位10%=総利益**68.4%**/最大+12.23R。**5指標すべてSPY超**（2022ベア含む窓）。強気5年窓ではB&H未勝は不変 | CI `backtest-tactics.yml`（run 30051701118） |
 
 **注意**: C55までの凍結metricは不変（バックテスト修正はscripts/のみ、本体サービス無変更）。
 **C56の+53.9%は非決定性バグの偶然の1試行＝無効**（BACKTEST_C54.md参照）。

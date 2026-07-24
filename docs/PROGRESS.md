@@ -597,3 +597,9 @@
   - `backtest_minervini_tactics.py`に`payoff_distribution`（expectancy_r/payoff_ratio/Rヒスト/右テール集中度top5/10/最大1件・7a4f14a）＋`sortino`（517c0b7）を追加。純レポート・凍結metric非接触。
   - スマホPWA: `StrategyScorecardCard`（cc645b3）＝5指標を優先順で表示＋右テール集中バー。`static-data/strategy-scorecard.json`をfail-softで読む。5テスト・build/lint green。StaticHomePageのMarketRegimeBanner直下に配置。
 - **実測取得（進行中）**: `backtest-tactics.yml`をブランチrefで6y dispatch（run 30051701118）。完了後にmetricsをstrategy-scorecard.jsonへ転記→スマホ実表示を375pxで確認→commit→STATE/OBJECTIVEに実測値記録。
+
+### C96続 — 実測バックテスト着弾＋スマホ反映（6年窓・run 30051701118 success）
+- **実測（full_tactics・2021-08〜2026-07・1576銘柄・147トレード）**: **CAGR+15.2%**（SPY+12.4%）・**最大DD-13.9%**（SPY-24.5%）・**Sortino1.28/Sharpe0.94**（SPY1.06/0.77）・**期待値+0.53R**・payoff比3.4（平均勝ち+2.9R÷平均負け-0.85R）・勝率36.7%・PF2.11。年別: 2022 -0.1%（SPY-18.2%＝ベア防御）/2024 +36.3%。
+- **右テール実測**: 上位10%の勝ち=総利益の68.4%・最大1件14.2%・最大+12.23R・≥5R 9件・中央値-0.63R。=「負け小さく・少数の大勝ちが全体を担う」を数字で確認＝約束の妥当性を実証。**5指標すべてでSPY B&Hを上回った**（2022ベアを含む窓ゆえ防御が効く。強気5年窓ではB&H未勝の既知事実は不変＝OBJECTIVEに正直注記）。
+- **スマホ反映**: `strategy-scorecard.json`をpublicルート（tracked・static-data/はgitignore）に配置しアプリrootからfetch。`StrategyScorecardCard`が5指標＋右テールバーを表示。**375pxで実レンダリング確認（scorecard-375.png）**・console致命エラー無し。build/lint/5テストgreen。
+- **本番反映**: 未（feature branch上）。スマホ実機表示にはC93同様main merge＋静的サイト再ビルドが必要＝ユーザー判断待ち。
