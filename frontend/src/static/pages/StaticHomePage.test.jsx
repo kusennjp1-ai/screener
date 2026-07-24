@@ -274,7 +274,10 @@ describe('StaticHomePage', () => {
 
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    expect(await screen.findByText('0700.HK')).toBeInTheDocument();
+    // 0700.HK now also appears in the backtest-aligned list (C97), so scope the
+    // assertion to the top-candidates section it is testing.
+    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
     expect(priceSparklineSpy).toHaveBeenCalledWith(expect.objectContaining({
       data: [20, 22, 24],
       width: 137,
@@ -286,10 +289,13 @@ describe('StaticHomePage', () => {
   it('loads top candidates from the static scan bundle, filters by market cap, and keeps chart navigation aligned', async () => {
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    expect(await screen.findByText('0700.HK')).toBeInTheDocument();
+    // Symbols can appear in both the top-candidates and backtest-aligned lists
+    // (C97), so scope every symbol assertion to the top-candidates section.
+    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
     expect(screen.getAllByText('時価総額').length).toBeGreaterThan(0);
-    expect(screen.getByText('$500.0M')).toBeInTheDocument();
-    expect(screen.queryByText('HK$3.9T')).not.toBeInTheDocument();
+    expect(within(topSection).getByText('$500.0M')).toBeInTheDocument();
+    expect(within(topSection).queryByText('HK$3.9T')).not.toBeInTheDocument();
     expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/manifest.json');
     expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/chunks/chunk-0001.json');
     expect(screen.queryByText('SUMMARYONLY')).not.toBeInTheDocument();
@@ -299,12 +305,12 @@ describe('StaticHomePage', () => {
     await user.click(await screen.findByRole('option', { name: '>$1B' }));
 
     await waitFor(() => {
-      expect(screen.queryByText('0700.HK')).not.toBeInTheDocument();
+      expect(within(topSection).queryByText('0700.HK')).not.toBeInTheDocument();
     });
-    expect(screen.getByText('NVDA')).toBeInTheDocument();
-    expect(screen.getByText('AAPL')).toBeInTheDocument();
+    expect(within(topSection).getByText('NVDA')).toBeInTheDocument();
+    expect(within(topSection).getByText('AAPL')).toBeInTheDocument();
 
-    await user.click(screen.getByText('NVDA'));
+    await user.click(within(topSection).getByText('NVDA'));
 
     await waitFor(() => {
       const props = modalSpy.mock.calls.at(-1)?.[0];
@@ -359,8 +365,11 @@ describe('StaticHomePage', () => {
 
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    expect(await screen.findByText('LOCALPASS')).toBeInTheDocument();
-    expect(screen.queryByText('TOOTHIN')).not.toBeInTheDocument();
+    // LOCALPASS passes RS>=70 so it also lists in the backtest-aligned section
+    // (C97); scope to the top-candidates section under test.
+    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    expect(await within(topSection).findByText('LOCALPASS')).toBeInTheDocument();
+    expect(within(topSection).queryByText('TOOTHIN')).not.toBeInTheDocument();
   });
 
   it('uses market liquidity defaults and composite ranking for leaders in leading groups', async () => {
