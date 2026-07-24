@@ -807,6 +807,16 @@ class StaticSiteExportService:
             m360 = self._compute_m360_signals(price_df, bands=bands, buy_points=buy_points)
             buy_summary = m360.pop("_buy_index", None)
             sell_summary = m360.pop("_sell_index", None)
+            # C97: never ship a charted name with no exit data. If the signal
+            # computation returned nothing (empty bars / swallowed error), emit
+            # an explicit "unavailable" state the UI renders instead of silently
+            # dropping the sell line — and make sure the payload carries a
+            # sell_plan key so the viewer's stop line / sell card always read one.
+            if sell_summary is None:
+                sell_summary = {"action": "no_data",
+                                "last_close": (stock_data or {}).get("last_close")}
+            if m360.get("sell_plan") is None:
+                m360["sell_plan"] = {"action": "no_data", "stop_level": None, "targets": None}
             trend_template = self._compute_trend_template(price_df, benchmark_df)
             self._write_json(
                 output_dir / rel_path,
@@ -2287,16 +2297,33 @@ class StaticSiteExportService:
             # a held name breaking its 50-DMA on volume is visible same-day even
             # when we never captured its buy signal. `stop`/`r_multiple` come
             # from the trailing ladder and are None until an entry is present.
-            sell = None
-            if sell_plan and sell_plan.get("action"):
-                trail = sell_plan.get("trailing") or {}
-                sell = {
-                    "action": sell_plan.get("action"),
-                    "stop": trail.get("stop"),
-                    "stop_basis": trail.get("basis"),
-                    "r_multiple": trail.get("r_multiple"),
-                    "last_close": round(last_close, 2),
-                }
+            # ALWAYS-present exit summary (C97): every name must show a sell
+            # plan, so this is never None when the bars computed. The stop falls
+            # back ladder -> plan display stop -> -8%-capped risk-plan stop; the
+            # 2R/3R targets ride along even for a hold so "where profit is taken"
+            # is always visible.
+            trail = (sell_plan.get("trailing") or {}) if sell_plan else {}
+            targets = {
+                "two_r": signal.get("target_price_2r") if signal else None,
+                "three_r": signal.get("target_price_3r") if signal else None,
+            }
+            if sell_plan is not None:
+                sell_plan["targets"] = targets
+            stop = trail.get("stop")
+            if stop is None and sell_plan:
+                stop = sell_plan.get("stop_level")
+            if stop is None:
+                stop = risk_plan.get("stop_loss")
+            sell = {
+                "action": (sell_plan or {}).get("action") or "hold",
+                "stop": round(stop, 2) if stop is not None else None,
+                "stop_basis": trail.get("basis") or risk_plan.get("stop_basis"),
+                "stop_pct": risk_plan.get("stop_pct"),
+                "r_multiple": trail.get("r_multiple"),
+                "target_2r": targets["two_r"],
+                "target_3r": targets["three_r"],
+                "last_close": round(last_close, 2),
+            }
             return {"signal": signal, "sell_plan": sell_plan,
                     "risk_plan": risk_plan, "_buy_index": buy, "_sell_index": sell}
         except Exception:  # noqa: BLE001 - signal cards must not break the export

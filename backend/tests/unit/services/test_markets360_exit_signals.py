@@ -177,3 +177,21 @@ def test_sell_plan_raise_stop_when_ladder_moves():
 def test_sell_plan_none_input_is_safe():
     plan = compute_sell_plan(None)
     assert plan["action"] == "hold"
+
+
+def test_sell_plan_always_carries_a_display_stop_for_hold_without_entry():
+    # A held/hold name with no recorded entry must STILL expose a stop the UI
+    # can render (C97), without changing the action.
+    df = _trend_frame(103)  # healthy uptrend, no entry/stop passed
+    plan = compute_sell_plan(df)
+    assert plan["action"] == "hold"
+    assert plan["stop_level"] is not None
+    assert plan["stop_level"] < float(df["Close"].iloc[-1])  # a real protective level
+    assert "targets" in plan  # populated by the export caller
+
+
+def test_display_stop_never_feeds_the_stop_hit_decision():
+    # The fallback display stop must not flip a hold into stop_hit.
+    df = _trend_frame(103)
+    plan = compute_sell_plan(df)
+    assert plan["action"] != "stop_hit"
