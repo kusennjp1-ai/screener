@@ -98,8 +98,13 @@ function StaticHomePage() {
   const scorecardQuery = useQuery({
     queryKey: ['staticStrategyScorecard'],
     queryFn: async () => {
+      // Baked into the app build as a tracked public asset (not the pipeline-
+      // generated static-data/), refreshed only when the tactics backtest reruns.
       try {
-        return await fetchStaticJson('strategy-scorecard.json');
+        const res = await fetch(`${import.meta.env.BASE_URL}strategy-scorecard.json`, {
+          headers: { Accept: 'application/json' },
+        });
+        return res.ok ? await res.json() : null;
       } catch {
         return null;
       }

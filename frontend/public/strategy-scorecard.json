@@ -1,0 +1,45 @@
+{
+  "as_of": "2026-07-23",
+  "source": "backtest-tactics.yml run 30051701118 (6y bundle, full_tactics variant)",
+  "window": { "start": "2021-08-05", "end": "2026-07-23", "years": 5 },
+  "universe_size": 1576,
+  "variant": "full_tactics",
+  "metrics": {
+    "total_return_pct": 102.2,
+    "cagr_pct": 15.2,
+    "max_drawdown_pct": -13.9,
+    "sharpe": 0.94,
+    "sortino": 1.28,
+    "trades": 147,
+    "win_rate_pct": 36.7,
+    "avg_r": 0.53,
+    "profit_factor": 2.11,
+    "avg_invested_pct": 61.1,
+    "payoff_distribution": {
+      "expectancy_r": 0.53,
+      "avg_win_r": 2.9,
+      "avg_loss_r": -0.85,
+      "payoff_ratio": 3.4,
+      "max_r": 12.23,
+      "median_r": -0.63,
+      "r_histogram": {
+        "<=-1R": 64, "-1..0R": 29, "0..1R": 14, "1..2R": 10,
+        "2..3R": 7, "3..5R": 14, ">=5R": 9
+      },
+      "top5pct_gain_share": 0.448,
+      "top10pct_gain_share": 0.684,
+      "best_trade_gain_share": 0.142
+    },
+    "yearly_return_pct": {
+      "2021": 1.8, "2022": -0.1, "2023": 17.9, "2024": 36.3, "2025": 2.7, "2026": 20.5
+    }
+  },
+  "benchmark": {
+    "label": "spy_buy_hold",
+    "cagr_pct": 12.4,
+    "max_drawdown_pct": -24.5,
+    "sharpe": 0.77,
+    "sortino": 1.06,
+    "total_return_pct": 78.8
+  }
+}
