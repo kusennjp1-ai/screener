@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
       css: false,
       testTimeout: 20000,
       hookTimeout: 20000,
-      include: ['src/**/*.test.{js,jsx}'],
+      include: ['src/**/*.test.{js,jsx}', 'tools/**/*.test.mjs'],
     },
     server: {
       port: 5173,

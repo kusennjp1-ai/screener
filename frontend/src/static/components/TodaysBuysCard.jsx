@@ -11,6 +11,7 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
+import SellTiming from './SellTiming';
 
 // 今日の買い候補 — the one-glance decision list (C83, graphical rebuild C87).
 //
@@ -292,6 +293,13 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
       )}
 
       {!expanded && buy?.trigger_price != null && verdict !== 'no_signal' && <MiniZone buy={buy} />}
+
+      {/* C97: the exit is ALWAYS shown, on every verdict — a buy candidate
+          firing a sell/climax signal, or an EXTENDED/WAIT name's protective
+          stop, must never be invisible. */}
+      <Box sx={{ mt: 0.6, pt: 0.6, borderTop: `1px solid ${C.track}` }}>
+        <SellTiming sell={entry.sell} />
+      </Box>
     </Box>
   );
 }

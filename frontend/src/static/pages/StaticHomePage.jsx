@@ -28,6 +28,7 @@ import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import TodaysBuysCard from '../components/TodaysBuysCard';
 import WatchlistCard from '../components/WatchlistCard';
+import StrategyScorecardCard from '../components/StrategyScorecardCard';
 import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
@@ -90,6 +91,27 @@ function StaticHomePage() {
     gcTime: Infinity,
   });
   const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
+  // Strategy scorecard (C95): a root-level backtest snapshot, shown in the
+  // agreed priority order. Independent of the daily market export and refreshed
+  // only when the tactics backtest reruns — fail soft to null so the card just
+  // disappears if the file is not published yet.
+  const scorecardQuery = useQuery({
+    queryKey: ['staticStrategyScorecard'],
+    queryFn: async () => {
+      // Baked into the app build as a tracked public asset (not the pipeline-
+      // generated static-data/), refreshed only when the tactics backtest reruns.
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}strategy-scorecard.json`, {
+          headers: { Accept: 'application/json' },
+        });
+        return res.ok ? await res.json() : null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
 
   // チャートモーダルはURL（?chart=銘柄）と同期させる。
   // モーダルを開くと履歴が1つ積まれるため、ブラウザ/アプリの「戻る」で自然に閉じる。
@@ -127,6 +149,20 @@ function StaticHomePage() {
     }),
     [marketCapMin, scanDefaultFilters]
   );
+  // Backtest-aligned candidate list (C97): the SAME pool the +15.2% 6-year
+  // backtest (full_tactics) actually picks from — the strict 8-point Trend
+  // Template plus RS >= 70 — with NO fundamental/group gate, strongest RS first.
+  // Kept ALONGSIDE the quality-leader headline above (C93) so both views exist:
+  // the strict leaders the user asked for, and the exact names the backtest trades.
+  const backtestAlignedFilters = useMemo(
+    () => applyScanFilterDefaults({
+      ...scanDefaultFilters,
+      passesTemplate: true,
+      rsRating: { min: 70, max: null },
+      ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
+    }),
+    [marketCapMin, scanDefaultFilters]
+  );
   const scanRows = scanBundleQuery.data?.rows ?? EMPTY_RESULTS;
   const topResults = useMemo(() => {
     return sortStaticScanRows(
@@ -135,6 +171,13 @@ function StaticHomePage() {
       'desc'
     ).slice(0, DEFAULT_TOP_RESULTS);
   }, [scanRows, topCandidateFilters]);
+  const backtestAlignedRows = useMemo(() => {
+    return sortStaticScanRows(
+      filterStaticScanRows(scanRows, backtestAlignedFilters),
+      'rs_rating',
+      'desc'
+    ).slice(0, DEFAULT_TOP_RESULTS);
+  }, [scanRows, backtestAlignedFilters]);
   const leadingGroupScreen = useMemo(
     () => scanBundleQuery.data?.presetScreens?.find((screen) => screen.id === LEADERS_SCREEN_ID) ?? null,
     [scanBundleQuery.data?.presetScreens]
@@ -160,6 +203,10 @@ function StaticHomePage() {
   const leadingGroupNavigationSymbols = useMemo(
     () => leadingGroupRows.map((r) => r.symbol).filter((s) => chartEnabledSymbols.has(s)),
     [leadingGroupRows, chartEnabledSymbols],
+  );
+  const backtestAlignedNavigationSymbols = useMemo(
+    () => backtestAlignedRows.map((r) => r.symbol).filter((s) => chartEnabledSymbols.has(s)),
+    [backtestAlignedRows, chartEnabledSymbols],
   );
   const leadingGroupMinVolume = leadingGroupScreen?.filters?.minVolume;
   const leadingGroupSubtitle = leadingGroupMinVolume == null
@@ -239,6 +286,11 @@ function StaticHomePage() {
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} />
+
+      {/* C95: the strategy's long-run scorecard in the agreed priority order
+          (CAGR > maxDD > risk-adjusted > expectancy > win rate) + the right-
+          tail concentration. Renders nothing until the backtest snapshot ships. */}
+      <StrategyScorecardCard data={scorecardQuery.data} />
 
       {/* C86: held/watched names first — the exit is the edge. Surfaces each
           watched symbol's exported sell action + stop, most-urgent first. */}
@@ -377,6 +429,24 @@ function StaticHomePage() {
         navigationSymbols={leadingGroupNavigationSymbols}
         onOpenChart={handleRowClick}
         emptyMessage="現在のスナップショットに該当する主導銘柄はありません。"
+        showRs
+        priceSparklineWidth={195}
+        priceSparklineInnerWidth={150}
+      />
+
+      {/* C97: the exact pool the +15.2% 6-year backtest picks from — Trend
+          Template + RS>=70, strongest RS first, NO fundamental/group gate. Sits
+          beside the strict leaders list so both the quality view and the
+          backtest-faithful view are available. */}
+      <DailyScanRowsTable
+        testId="backtest-aligned-section"
+        title="バックテスト準拠候補（検証と同じ選び方）"
+        subtitle="トレンドテンプレート合格＋RS 70以上をRSの高い順に表示。6年検証（年率+15.2%）が実際に選ぶ母集団と同じ条件で、業績・業種の追加関門はかけていません。行をクリックするとチャートが開きます。"
+        rows={backtestAlignedRows}
+        chartEnabledSymbols={chartEnabledSymbols}
+        navigationSymbols={backtestAlignedNavigationSymbols}
+        onOpenChart={handleRowClick}
+        emptyMessage="現在の条件に一致する銘柄はありません。"
         showRs
         priceSparklineWidth={195}
         priceSparklineInnerWidth={150}

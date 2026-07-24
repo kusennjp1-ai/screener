@@ -345,7 +345,11 @@ describe('App static mode', () => {
 
     const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
     expect(requestedUrls.length).toBeGreaterThan(0);
-    expect(requestedUrls.every((url) => url.includes('/static-data/') && !url.includes('/api'))).toBe(true);
+    // Every static-mode request must be a static source and never hit /api. The
+    // strategy scorecard is a tracked app-root static asset (not pipeline data),
+    // so it is a legitimate static source alongside the /static-data/ bundle.
+    const isStaticSource = (url) => url.includes('/static-data/') || url.includes('strategy-scorecard.json');
+    expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
   }, 15000);
 
   it('keeps scan controls read-only in the static route', async () => {

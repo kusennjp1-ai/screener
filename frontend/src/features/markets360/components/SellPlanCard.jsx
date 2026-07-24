@@ -50,6 +50,24 @@ const ACTION_META = {
     term: 'trailing_stop',
     pulse: false,
   },
+  // C97: a hold is no longer silent — it shows the protective stop + targets so
+  // "where I exit" is always on screen. no_data is an explicit unavailable state.
+  hold: {
+    color: '#787b86',
+    icon: VerticalAlignTopIcon,
+    title: '保有継続',
+    ja: 'トレンド継続中。損切りラインは維持（割れたら翌日撤退）。',
+    term: 'trailing_stop',
+    pulse: false,
+  },
+  no_data: {
+    color: '#4a4e57',
+    icon: VerticalAlignTopIcon,
+    title: 'エグジット未計算',
+    ja: 'この銘柄のエグジットは未計算です（データ不足）。',
+    term: 'trailing_stop',
+    pulse: false,
+  },
 };
 
 const CLIMAX_FLAG_JA = {
@@ -60,13 +78,17 @@ const CLIMAX_FLAG_JA = {
 };
 
 export default function SellPlanCard({ sellPlan }) {
+  if (!sellPlan) return null; // nothing at all to show
   const action = sellPlan?.action;
-  const meta = ACTION_META[action];
-  if (!meta) return null; // hold / missing -> stay quiet
+  const meta = ACTION_META[action] || ACTION_META.hold;
 
   const Icon = meta.icon;
   const climaxFlags = sellPlan?.climax?.flags || [];
   const trailing = sellPlan?.trailing || {};
+  // The always-present protective stop + 2R/3R targets (shown for hold too).
+  const stopLevel = sellPlan?.stop_level ?? trailing?.stop ?? null;
+  const t2 = sellPlan?.targets?.two_r ?? null;
+  const t3 = sellPlan?.targets?.three_r ?? null;
 
   return (
     <Box sx={{
@@ -124,6 +146,21 @@ export default function SellPlanCard({ sellPlan }) {
         <Typography sx={{ color: '#787b86', fontSize: 11.5, mt: 0.75 }}>
           出来高 平均比 {sellPlan.breakdown.volume_multiple}x · 確度 {Math.round((sellPlan.breakdown.confidence || 0) * 100)}%
         </Typography>
+      )}
+
+      {/* C97: protective stop + profit targets are ALWAYS on the card, so the
+          exit is visible even on a quiet hold. The prominent per-action lines
+          above already show a raised/stop-hit level; this is the baseline. */}
+      {(stopLevel != null || t2 != null || t3 != null) && (
+        <Box data-testid="sell-plan-levels"
+          sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mt: 1, pt: 1, borderTop: '1px solid #23262f' }}>
+          <Typography sx={{ color: '#d1d4dc', fontSize: 12, fontFamily: 'monospace' }}>
+            損切り {stopLevel != null ? Number(stopLevel).toFixed(2) : '—'}
+          </Typography>
+          <Typography sx={{ color: '#787b86', fontSize: 12, fontFamily: 'monospace' }}>
+            利確 {t2 != null ? Number(t2).toFixed(2) : '-'} / {t3 != null ? Number(t3).toFixed(2) : '-'}
+          </Typography>
+        </Box>
       )}
     </Box>
   );

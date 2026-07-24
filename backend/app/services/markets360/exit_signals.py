@@ -206,6 +206,25 @@ def compute_trailing_stop(
     return out
 
 
+def _display_stop(price_data: Optional[pd.DataFrame], last_close: Optional[float]) -> Optional[float]:
+    """A guaranteed protective stop for DISPLAY when no ladder/initial stop
+    exists yet (a held/hold name with no recorded entry). Never feeds the
+    ``stop_hit`` decision — it only ensures the UI always has a level to show.
+    Uses the tighter of the 50-DMA and last_close - 8% (Minervini's max loss)."""
+    last_close = _f(last_close)
+    if last_close is None:
+        return None
+    candidates = [last_close * 0.92]
+    if price_data is not None and "Close" in getattr(price_data, "columns", []) and len(price_data):
+        close = price_data["Close"].dropna()
+        if len(close):
+            ma50 = float(close.iloc[-50:].mean()) if len(close) >= 50 else float(close.mean())
+            # only use the 50-DMA as the stop when price is above it (a valid stop)
+            if ma50 > 0 and ma50 < last_close:
+                candidates.append(ma50)
+    return round(min(candidates), 2)
+
+
 def compute_sell_plan(
     price_data: Optional[pd.DataFrame],
     entry: Optional[float] = None,
@@ -250,9 +269,18 @@ def compute_sell_plan(
     else:
         action = "hold"
 
+    # DISPLAY-ONLY: a stop level that is ALWAYS present so no card can render a
+    # name without a stop. Falls back to a price-derived protective stop when
+    # there is no ladder/initial stop yet. Never influences `action`/`stop_hit`.
+    display_stop = stop_level if stop_level is not None else _display_stop(price_data, last)
+
     return {
         "action": action,
         "climax": climax,
         "breakdown": breakdown,
         "trailing": trail,
+        # top-level stop for the UI (resolved ladder stop, else a fallback);
+        # `targets` (2R/3R) is populated by the export caller that knows the pivot.
+        "stop_level": round(display_stop, 2) if display_stop is not None else None,
+        "targets": None,
     }

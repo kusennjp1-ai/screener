@@ -574,3 +574,39 @@
 - **修正（preset-config only・b6ab08a）**: `minervini`と`minervini_vcp`プリセットに **epsRating>=80**（業績リーダーシップ＝CANSLIMの"L"・null無し: code33が既に米ファンダ必須なので生存者はEPS Rating保有）と **ibdGroupRank<=50**（真の先導グループ＝上位1/4）を追加。スキャンエンジン/凍結metric無変更。弱い相場では候補が減る＝図3「弱い時は少なく」に忠実。プリセットテスト更新（23 pass）。
 - **本番反映（PR #60）**: mainは#59（C73-C83）止まり＝スマホは旧C83版。C86-C93をPR #60で統合予定。**Frontend CI（Playwright smoke）失敗を調査**: smokeはモックのvite devサーバ相手（backend無し）、当PRのグローバル変更2点はdev無効（SW登録=PROD∧static限定・precache plugin=apply:'build'）→当PR起因でない環境/flaky失敗と判定。失敗ジョブ再実行で切り分け中。
 - **重要（ユーザー向け）**: YouTube学習はこの環境ではYouTube遮断で不可＝「動画→文字起こし」をネットの通じる場所で行いテキストを貼れば反映可能。
+
+### C94 — 2026-07-23 tradingview-mcpのCDP技術を自前スクリーナーに適用（複数エージェント設計）
+- **依頼**: tradingview-mcp（TV DesktopをCDPで操作し78ツール化）を「この環境でどうやるか＋スクリーナー改善に」。ループ・複数エージェントで。
+- **事実確認**: 本番PWA(github.io)・YouTubeはこの環境から遮断(000)。だが**Chromium＋Playwright＝CDP（記事と同じ）は同梱**、localhostは非遮断。→技術は"自前アプリをlocalhostで動かせば"この環境で実行可能。TV本体操作だけは本人PC側。
+- **PoC実証**: 生CDPセッション（`newCDPSession`→`Runtime.evaluate`＋`Page.captureScreenshot`）で自前スクリーナー画面の判断データ（BUY NOW/STOP/PIVOT/2R/3R/トレンドテンプレ8/8/TVリンク）を読み取り＋スクショ取得を確認。
+- **複数エージェント設計（wf_79cf71cf・3並列・opus・エラー0）**: A=技術マップ（8機能中6は実行可・板情報は対象外・Pineコンパイルは本人PC）、B=inspector仕様、C=改善ランキング。**C1位＝クロスサーフェス整合ゲート**（買いカード/ラダー/フッターが別々に出すpivot/stop/2R/3Rの矛盾を検出＝matrixのcoherence risk解消・凍結metric非接触）。
+- **実装（1コミット 1cd3c6b）**: `frontend/tools/chart-inspector/`（checks.mjs＝純ルール＋8 vitestテスト、inspect.mjs＝CDPランナー、README）。ラダーstop==フッターstop・2R==pivot+2R・3R==pivot+3R・risk%==(pivot-stop)/pivot を検査、矛盾で非ゼロ終了＝CIゲート化可。フィクスチャで正=通過・2Rズラし=検出(exit1)を実証。`docs/TRADINGVIEW_CDP.md`に「この環境で可/本人PCで可」の切り分けとTV本体の起動手順を記載。535フロントテストgreen。
+- **残**: C86-C93は本番反映済（PR#60マージ＋scheduled rebuild成功）。次候補=inspectorを実データ（新スキーマfixture）で全4面（scorecard/watchlist/Pine）横断チェックへ拡張・CIゲート化。
+
+### C95 — 2026-07-23 戦略見直し依頼への回答＋期待値/右テールの計測を追加
+- **依頼**: 「期待値が高い局面だけ参加・損失の左テールは8%程度で切る・利益の右テールはできるだけ残す（大勝ち数銘柄がEVを担う。20%利確固定はテールを切ってEVを壊す）」という考えを基に**戦略を改めるべきか**。
+- **監査（grep-first）**: `exit_signals.py`/`signals.py`に**利確固定・利益上限は存在しない**。優先順位 exit>sell_into_strength>tighten_stop>raise_stop_*>hold＝トレイリング（50DMA追従）で勝ちを走らせる設計。∴**ユーザーの考えは既存戦略と一致**。加えて執行チューニング族（機械的に利を早取り/上限）は**C71/76/80/82/85で5連続棄却＝両バックテスト窓で右テール（大勝ち）を切って総リターン崩壊**を実証済＝理論と実測が一致。
+- **結論**: **戦略の根本変更は不要**。変えるべきは「右テールを守れているか」の**計測と可視化**。
+- **実装（計測のみ・1コミット 7a4f14a）**: `backtest_minervini_tactics.py`の`metrics`に`payoff_distribution`ブロック追加＝expectancy(R)・avg win/loss R・payoff_ratio・Rヒストグラム(<=-1R..>=5R)・**gross gainのtop5%/top10%/最大1件の集中度**。将来「利益を静かに上限化する変更」が入れば右テール集中度の崩壊として検出できる。純レポート＝戦略ロジック・凍結metric無変更。合成データで検証（最大勝ち1件が総利益の72%＝右テール集中を可視化）。
+- **未反映の実行**: 6y/10yバンドルでの実測値埋め込みはローカル~35分 or CI `backtest-tactics.yml`（mainマージ後）。次サイクルで数値を取得しSTATEの凍結表・payoff行に記録。
+
+### C96 — 2026-07-23 「約束」（目的関数）確定＋残処理実行（実測バックテスト＋スマホ表示）
+- **依頼**: 「残っていること（実測バックテストの数値）を実行し、スマホ画面でも見えるように」。さらに**長期戦略の優先順位を約束**として確定: (1)CAGR (2)最大DD (3)リスク調整後(Sharpe/Sortino) (4)期待値/トレード (5)勝率。
+- **約束の確定（docs/OBJECTIVE.md・2377d0d）**: 上記優先順を目的関数として明文化。判定は上位優先・上位を犠牲にした下位改善は不採用。**#3はSortino主・Sharpe従**（Sharpeは上振れ=大勝ちも罰する→右テール保存戦略と矛盾。Sortinoは下振れのみ罰する）。導出される不変ルール（右テール非切断・左テール~8%・勝率は目的化しない）を記載。
+- **計測の完成**:
+  - `backtest_minervini_tactics.py`に`payoff_distribution`（expectancy_r/payoff_ratio/Rヒスト/右テール集中度top5/10/最大1件・7a4f14a）＋`sortino`（517c0b7）を追加。純レポート・凍結metric非接触。
+  - スマホPWA: `StrategyScorecardCard`（cc645b3）＝5指標を優先順で表示＋右テール集中バー。`static-data/strategy-scorecard.json`をfail-softで読む。5テスト・build/lint green。StaticHomePageのMarketRegimeBanner直下に配置。
+- **実測取得（進行中）**: `backtest-tactics.yml`をブランチrefで6y dispatch（run 30051701118）。完了後にmetricsをstrategy-scorecard.jsonへ転記→スマホ実表示を375pxで確認→commit→STATE/OBJECTIVEに実測値記録。
+
+### C96続 — 実測バックテスト着弾＋スマホ反映（6年窓・run 30051701118 success）
+- **実測（full_tactics・2021-08〜2026-07・1576銘柄・147トレード）**: **CAGR+15.2%**（SPY+12.4%）・**最大DD-13.9%**（SPY-24.5%）・**Sortino1.28/Sharpe0.94**（SPY1.06/0.77）・**期待値+0.53R**・payoff比3.4（平均勝ち+2.9R÷平均負け-0.85R）・勝率36.7%・PF2.11。年別: 2022 -0.1%（SPY-18.2%＝ベア防御）/2024 +36.3%。
+- **右テール実測**: 上位10%の勝ち=総利益の68.4%・最大1件14.2%・最大+12.23R・≥5R 9件・中央値-0.63R。=「負け小さく・少数の大勝ちが全体を担う」を数字で確認＝約束の妥当性を実証。**5指標すべてでSPY B&Hを上回った**（2022ベアを含む窓ゆえ防御が効く。強気5年窓ではB&H未勝の既知事実は不変＝OBJECTIVEに正直注記）。
+- **スマホ反映**: `strategy-scorecard.json`をpublicルート（tracked・static-data/はgitignore）に配置しアプリrootからfetch。`StrategyScorecardCard`が5指標＋右テールバーを表示。**375pxで実レンダリング確認（scorecard-375.png）**・console致命エラー無し。build/lint/5テストgreen。
+- **本番反映**: 未（feature branch上）。スマホ実機表示にはC93同様main merge＋静的サイト再ビルドが必要＝ユーザー判断待ち。
+
+### C97 — 2026-07-24 売り常時表示＋9年バックテスト（正直な弱点確認）＋スコアカード両窓化
+- **売りタイミング必ず表示（複数エージェント調査 wf_71e78942→実装）**: バックエンド=`compute_sell_plan`に常時`stop_level`（ラダー/初期stop無ければ price由来の保護stop=min(50DMA, -8%)）＋`targets`を追加（`stop_hit`/action不変）。exportの`_sell_index`を常時完全populate（stop=ladder→plan→risk_plan、2R/3R同梱、hold含む）、`_emit_chart`はnull sell/sell_plan欠落を排除（no_data明示）。フロント=共有`SellTiming`（null返さない・hold/no_data対応・単一語彙）をTodaysBuysCard全行・WatchlistCard（stale/前回フォールバック）・SignalBadges（hold時もstop表示）・SellPlanCard（hold描画）に配線。凍結metric非接触。backend77＋frontend547テストgreen。
+- **9年バックテスト（run 30064735759・2017-08〜2026-07・1233銘柄）**: full_tactics **CAGR+4.3% vs SPY+14.7%**・最大DD-25.8%(SPY-33.7%)・Sortino0.46(1.01)・期待値+0.14R・勝率34.8%・右テールtop10%=72.3%。**ほぼ上げ相場9年ではB&Hに大敗**（平均投資64.9%＝現金規律が機会損失）。下げ耐性のみ優位。STATE凍結表の既知事実（C60）を実測で再確認。
+- **スコアカード両窓化（正直さ）**: `strategy-scorecard.json`に`wider_window`(9y)＋`caveat`を追加、`StrategyScorecardCard`が6年ヘッドライン＋9年の弱点＋caveatを表示。375px実レンダ確認。**flatteringな6年だけを見せない**。
+- **スクリーニング一致（複数エージェント調査 wf_6a4bbf56・synth失敗→手動統合）**: バックテストfull_tacticsの実エントリー＝passesTemplate＋RS≥70＋(VCP or tight_base pivot)＋armed cross＋市場ゲート、**ファンダ/code33/group gateなし**。製品ヘッドラインは RS≥90＋code33＋group≤98（+minervini preset EPS≥80/group≤50）＝**バックテストより厳しくファンダ/group gateを追加**。∴「同じ銘柄」に厳密一致させるとC93で入れた品質ゲートを外すことになり、かつ9年ではその素の技術戦略はB&H未勝。**方針＝加算的に解決（Option A）**: 既存の厳選リーダー一覧（C93）は温存し、その横に**「バックテスト準拠候補」一覧**（テンプレ合格＋RS≥70・ファンダ/group gateなし・RS降順）をStaticHomePageに新設（f271ca1・表示フィルタのみ・凍結非接触）。∴C93を壊さず「検証と同じ選び方」も見られる。9年でその素の戦略はB&H未勝という正直な事実も併記。
+- **本番反映**: PR #61（C94-C97）。CI: App.static.test（/static-data不変条件）を修正、Playイwright smokeはauth-login同時失敗＝環境flaky（PR#60同様）と判定。

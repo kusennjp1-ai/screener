@@ -4,11 +4,18 @@ import { renderWithProviders } from '../../../test/renderWithProviders';
 import SellPlanCard from './SellPlanCard';
 
 describe('SellPlanCard', () => {
-  it('renders nothing on hold or missing plan', () => {
-    const { container } = renderWithProviders(<SellPlanCard sellPlan={{ action: 'hold' }} />);
+  it('renders nothing only when the plan is entirely absent', () => {
+    const { container } = renderWithProviders(<SellPlanCard sellPlan={null} />);
     expect(container).toBeEmptyDOMElement();
-    const { container: c2 } = renderWithProviders(<SellPlanCard sellPlan={null} />);
-    expect(c2).toBeEmptyDOMElement();
+  });
+
+  it('shows a hold with its protective stop and targets (C97: exit never hidden)', () => {
+    renderWithProviders(
+      <SellPlanCard sellPlan={{ action: 'hold', stop_level: 118.25, targets: { two_r: 150, three_r: 165 } }} />
+    );
+    expect(screen.getByText('保有継続')).toBeInTheDocument();
+    expect(screen.getByTestId('sell-plan-levels')).toHaveTextContent('損切り 118.25');
+    expect(screen.getByTestId('sell-plan-levels')).toHaveTextContent('利確 150.00 / 165.00');
   });
 
   it('shows stop-hit as the top-urgency exit with the stop level', () => {
@@ -21,7 +28,8 @@ describe('SellPlanCard', () => {
       }} />
     );
     expect(screen.getByText('Sell — Stop Hit')).toBeInTheDocument();
-    expect(screen.getByText(/96\.00/)).toBeInTheDocument();
+    // the level appears on the urgent stop-hit line and the always-on footer
+    expect(screen.getAllByText(/96\.00/).length).toBeGreaterThan(0);
     // the green "new stop" raise line must NOT render under a stop-hit card
     expect(screen.queryByText(/new stop/)).not.toBeInTheDocument();
   });
