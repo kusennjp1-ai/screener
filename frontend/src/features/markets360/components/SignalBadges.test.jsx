@@ -12,11 +12,19 @@ const activeSignal = {
 };
 
 describe('SignalBadges', () => {
-  it('renders nothing when there is no active buy and no actionable sell', () => {
+  it('renders nothing only when there is neither a buy nor any sell plan', () => {
     const { container } = renderWithProviders(
-      <SignalBadges signal={{ active: false }} sellPlan={{ action: 'hold' }} />,
+      <SignalBadges signal={{ active: false }} sellPlan={null} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('always shows the protective stop on a hold (C97: the exit is never hidden)', () => {
+    renderWithProviders(
+      <SignalBadges signal={{ active: false }} sellPlan={{ action: 'hold', stop_level: 118.25 }} />,
+    );
+    expect(screen.getByTestId('signal-badge-hold')).toBeInTheDocument();
+    expect(screen.getByText('保有継続 @ 118.25')).toBeInTheDocument();
   });
 
   it('shows the buy badge for an active signal', () => {

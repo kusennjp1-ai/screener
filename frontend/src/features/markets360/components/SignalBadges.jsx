@@ -49,6 +49,21 @@ const SELL_META = {
     ja: '損切りラインを切り上げ（R倍数の利益を確保）',
     pulse: false,
   },
+  // C97: even with nothing actionable, the protective stop is ALWAYS shown so
+  // the chart never hides where the exit is. A hold reads as "保有継続 @ stop".
+  hold: {
+    color: '#787b86',
+    Icon: VerticalAlignTopIcon,
+    label: '保有継続',
+    ja: 'ホールド：トレンド継続中。損切りラインは維持（割れたら撤退）',
+    pulse: false,
+  },
+};
+
+// The resolved protective stop, from any sell-plan shape.
+const planStop = (sellPlan) => {
+  const s = sellPlan?.stop_level ?? sellPlan?.trailing?.stop;
+  return s != null ? Number(s) : null;
 };
 
 const badgeSx = (color, pulse, order) => ({
@@ -96,8 +111,8 @@ export default function SignalBadges({ signal, sellPlan, sx }) {
           <Chip
             size="small"
             icon={<sellMeta.Icon sx={{ fontSize: 16 }} />}
-            label={sellPlan?.trailing?.raised && sellPlan?.trailing?.stop != null
-              ? `${sellMeta.label} @ ${Number(sellPlan.trailing.stop).toFixed(2)}`
+            label={planStop(sellPlan) != null
+              ? `${sellMeta.label} @ ${planStop(sellPlan).toFixed(2)}`
               : sellMeta.label}
             data-testid={`signal-badge-${sellPlan.action}`}
             sx={badgeSx(sellMeta.color, sellMeta.pulse, order++)}

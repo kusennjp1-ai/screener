@@ -1,15 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import BlockIcon from '@mui/icons-material/Block';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import BoltIcon from '@mui/icons-material/Bolt';
-import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import RemoveIcon from '@mui/icons-material/Remove';
 import StarIcon from '@mui/icons-material/Star';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
+import { ACTION_META, DEFAULT_META } from './SellTiming';
 
 // 保有・監視リスト — same-day exit surfacing for names the user holds (C86,
 // graphical rebuild C87).
@@ -21,20 +17,14 @@ import { C } from '../designTokens';
 // that a held name breaking its 50-DMA was invisible unless you opened its chart.
 // Names not in today's export show a "no data" line rather than vanish.
 
-// Display precedence (rank) + the pill's MUI icon/color (one icon voice; the
-// △/▲ glyphs read as Japanese negative-number notation, so they're removed).
-// rank<=1 == "sell now".
-const ACTION_META = {
-  stop_hit: { label: 'ストップ割れ — 即売却', Icon: BlockIcon, color: C.red, rank: 0 },
-  exit: { label: '売り — 50日線割れ', Icon: TrendingDownIcon, color: C.red, rank: 1 },
-  sell_into_strength: { label: '強さへ利確 (climax)', Icon: BoltIcon, color: C.amber, rank: 2 },
-  tighten_stop: { label: 'ストップ引き上げ', Icon: KeyboardDoubleArrowUpIcon, color: C.amber, rank: 3 },
-  raise_stop: { label: 'ストップ上げ (利益ロック)', Icon: ArrowUpwardIcon, color: C.green, rank: 4 },
-  hold: { label: 'ホールド', Icon: RemoveIcon, color: C.grey, rank: 5 },
-};
-const DEFAULT_META = ACTION_META.hold;
-
+// Exit vocabulary (icons/colors/labels/ranks) is shared with SellTiming so the
+// watchlist and every other surface speak the same language. rank<=1 == sell now.
 const fmt = (v, d = 2) => (v == null ? '-' : Number(v).toFixed(d));
+
+const LAST_SELL_KEY = 'wlLastSell';
+const readLastSell = () => {
+  try { return JSON.parse(localStorage.getItem(LAST_SELL_KEY) || '{}') || {}; } catch { return {}; }
+};
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export function orderWatchRows(rows) {
@@ -87,8 +77,12 @@ function RBar({ r }) {
 }
 
 function WatchRow({ row, onOpenChart, onRemove }) {
-  const { symbol, sell, present } = row;
+  const { symbol, sell, present, lastKnown } = row;
   const meta = ACTION_META[sell?.action] || DEFAULT_META;
+  // A watched name absent from today's export still shows its LAST-KNOWN exit
+  // (offline/stale) rather than vanishing — the discipline must survive a
+  // missed refresh. Only falls to "no data" when nothing was ever recorded.
+  const staleMeta = lastKnown ? (ACTION_META[lastKnown.sell?.action] || DEFAULT_META) : null;
   return (
     <Box
       data-testid={`watchlist-row-${symbol}`}
@@ -105,6 +99,11 @@ function WatchRow({ row, onOpenChart, onRemove }) {
         <Box sx={{ flex: 1 }} />
         {present ? (
           <Box data-testid={`watchlist-action-${symbol}`}><ActionPill meta={meta} /></Box>
+        ) : staleMeta ? (
+          <Box data-testid={`watchlist-action-${symbol}`} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+            <Typography sx={{ fontSize: 9.5, color: C.dim, fontWeight: 700 }}>前回</Typography>
+            <ActionPill meta={staleMeta} />
+          </Box>
         ) : (
           <Typography sx={{ fontSize: 11.5, color: C.grey }}>本日データ未取得</Typography>
         )}
@@ -129,6 +128,11 @@ function WatchRow({ row, onOpenChart, onRemove }) {
           )}
         </Box>
       )}
+      {!present && lastKnown?.sell?.stop != null && (
+        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', mt: 0.5 }}>
+          前回 stop {fmt(lastKnown.sell.stop)}{lastKnown.date ? ` · ${String(lastKnown.date).slice(5, 10)}` : ''}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -144,15 +148,37 @@ export default function WatchlistCard({ indexData, onOpenChart }) {
     return map;
   }, [indexData]);
 
-  const rows = useMemo(
-    () => orderWatchRows(
+  // Persist each present name's exit so a later offline/stale load can still
+  // show its last-known sell timing instead of dropping the held name.
+  const asOfDate = indexData?.as_of_date || null;
+  useEffect(() => {
+    if (!bySymbol.size) return;
+    const store = readLastSell();
+    let changed = false;
+    for (const symbol of symbols) {
+      const entry = bySymbol.get(symbol);
+      if (entry?.sell) { store[symbol] = { sell: entry.sell, date: asOfDate }; changed = true; }
+    }
+    if (changed) {
+      try { localStorage.setItem(LAST_SELL_KEY, JSON.stringify(store)); } catch { /* quota — ignore */ }
+    }
+  }, [symbols, bySymbol, asOfDate]);
+
+  const rows = useMemo(() => {
+    const store = readLastSell();
+    return orderWatchRows(
       symbols.map((symbol) => {
         const entry = bySymbol.get(symbol);
-        return { symbol, sell: entry?.sell || null, present: Boolean(entry) };
+        const present = Boolean(entry);
+        return {
+          symbol,
+          sell: entry?.sell || null,
+          present,
+          lastKnown: present ? null : (store[symbol] || null),
+        };
       }),
-    ),
-    [symbols, bySymbol],
-  );
+    );
+  }, [symbols, bySymbol]);
 
   if (!symbols.length) return null;
 
