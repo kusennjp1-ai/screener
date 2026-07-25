@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:smoke": "vite optimize && playwright test"
+    "test:smoke": "playwright test"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",
