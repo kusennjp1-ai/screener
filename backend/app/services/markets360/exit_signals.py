@@ -35,6 +35,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from .risk import MAX_LOSS_PCT
 from .signals import detect_50dma_breakdown
 
 logger = logging.getLogger(__name__)
@@ -210,11 +211,18 @@ def _display_stop(price_data: Optional[pd.DataFrame], last_close: Optional[float
     """A guaranteed protective stop for DISPLAY when no ladder/initial stop
     exists yet (a held/hold name with no recorded entry). Never feeds the
     ``stop_hit`` decision — it only ensures the UI always has a level to show.
-    Uses the tighter of the 50-DMA and last_close - 8% (Minervini's max loss)."""
+
+    Takes the TIGHTER (higher) of the 50-DMA and the max-loss floor, i.e. the
+    50-DMA only while it sits inside the max-loss budget. The max-loss cap is
+    inviolable in Minervini's method, so an extended leader running far above
+    its 50-DMA must NOT be shown a 15-30% stop just because the average is
+    that far below — the displayed level is capped at MAX_LOSS_PCT.
+    """
     last_close = _f(last_close)
     if last_close is None:
         return None
-    candidates = [last_close * 0.92]
+    floor = last_close * (1.0 - MAX_LOSS_PCT)  # never risk more than the max loss
+    candidates = [floor]
     if price_data is not None and "Close" in getattr(price_data, "columns", []) and len(price_data):
         close = price_data["Close"].dropna()
         if len(close):
@@ -222,7 +230,7 @@ def _display_stop(price_data: Optional[pd.DataFrame], last_close: Optional[float
             # only use the 50-DMA as the stop when price is above it (a valid stop)
             if ma50 > 0 and ma50 < last_close:
                 candidates.append(ma50)
-    return round(min(candidates), 2)
+    return round(max(candidates), 2)
 
 
 def compute_sell_plan(
