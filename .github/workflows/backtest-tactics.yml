@@ -12,6 +12,10 @@ on:
         description: 'History depth to fetch (yfinance period; known-good: 6y, 10y, 20y)'
         type: string
         default: '6y'
+      extra_args:
+        description: 'Extra flags for the backtest (e.g. --pit-universe)'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -73,7 +77,7 @@ jobs:
           cd backend
           PYTHONPATH=. python scripts/backtest_minervini_tactics.py \
             --bundle "/tmp/bt/backtest-price-us-${{ github.event.inputs.period || '6y' }}.json.gz" \
-            --output /tmp/bt/report.json
+            --output /tmp/bt/report.json ${{ github.event.inputs.extra_args }}
           echo '## Tactics backtest report' >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/bt/report.json >> "$GITHUB_STEP_SUMMARY"
