@@ -655,6 +655,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--pit-universe", action="store_true",
+                    help="admit a symbol on the first day it clears the "
+                         "liquidity/price bar instead of freezing the tradable "
+                         "list at the first simulated bar — removes the "
+                         "listing-age bias that hides post-start IPOs (the young "
+                         "leaders this method targets) from long windows")
     ap.add_argument("--vcp-only", action="store_true",
                     help="diagnostic: drop the tight-base fallback from the "
                          "watchlist so only VCPDetector setups trade")
@@ -673,9 +679,9 @@ def main() -> int:
                     help="with --sell-into-strength, unload only HALF into the "
                          "climax and keep the rest on the trailing ladder")
     ap.add_argument("--no-correction-buys", action="store_true",
-                    help="treat a market correction as a hard no-buy (0% "
+                    help="treat a market correction as a hard no-buy (0%% "
                          "exposure, like a downtrend) instead of the residual "
-                         "20% cap — wait for the FTD before buying")
+                         "20%% cap — wait for the FTD before buying")
     ap.add_argument("--tiered-uptrend", action="store_true",
                     help="full 100%% exposure only in POWER trends (health>=80, "
                          "dist<2); mature confirmed uptrends run at the FTD "
@@ -690,7 +696,7 @@ def main() -> int:
                          "exposure when <40%% of the tradable universe holds "
                          "its 200DMA (breadth-divergence guard)")
     ap.add_argument("--breadth-confirm", action="store_true",
-                    help="under pressure: keep full exposure while >=60% of "
+                    help="under pressure: keep full exposure while >=60%% of "
                          "the tradable universe holds its 200DMA")
     ap.add_argument("--selective-pressure", action="store_true",
                     help="under pressure: only RS>=90 leaders may be bought, "
@@ -744,6 +750,22 @@ def main() -> int:
         and at_start[s] >= MIN_DOLLAR_VOL and px_start.get(s, 0) >= MIN_PRICE
     ]
     print(f"tradable universe: {len(tradable)} symbols; sim {sim_dates[0].date()} -> {sim_dates[-1].date()}", flush=True)
+
+    # Point-in-time universe (opt-in). The list above freezes eligibility at the
+    # FIRST simulated bar, so a company that lists later is invisible for the
+    # whole run — and the longer the window, the more of the young leaders this
+    # method is built to buy get excluded (a 9y run only ever sees names already
+    # listed 9 years ago). That biases long windows DOWN for reasons that have
+    # nothing to do with the strategy. With this flag a symbol becomes buyable on
+    # the first day it clears the same liquidity/price bar, which is what the live
+    # screener actually sees. Off by default so recorded runs stay reproducible.
+    pit_eligible = None
+    if args.pit_universe:
+        non_etf = [s for s in close.columns if s not in ETF_DENYLIST]
+        pit_eligible = (dollar_vol[non_etf] >= MIN_DOLLAR_VOL) & (close[non_etf] >= MIN_PRICE)
+        ever = int(pit_eligible.loc[sim_dates].any().sum())
+        print(f"point-in-time universe: {ever} symbols ever eligible "
+              f"(+{ever - len(tradable)} vs the frozen list)", flush=True)
 
     spy = fields["close"]["SPY"].to_frame("close").join(
         fields["open"]["SPY"].rename("open")).join(fields["high"]["SPY"].rename("high")).join(
@@ -838,8 +860,15 @@ def main() -> int:
         # per Minervini "buy the leaders". Iterating the raw set here made the
         # whole simulation nondeterministic (string-hash order varies per
         # process): two runs of the same bundle differed by tens of pp.
+        # Candidate pool: the frozen list, or (opt-in) whatever cleared the
+        # liquidity/price bar as of THIS date, so late listings can be bought.
+        if pit_eligible is not None:
+            elig_row = pit_eligible.iloc[idx]
+            pool = [s for s in pit_eligible.columns if bool(elig_row.get(s, False))]
+        else:
+            pool = tradable_set
         cands = sorted(
-            (s for s in tradable_set
+            (s for s in pool
              if bool(row_t.get(s, False)) and row_rs.get(s, 0) >= RS_MIN),
             key=lambda s: (-row_rs.get(s, 0), s),
         )
@@ -980,6 +1009,7 @@ def main() -> int:
         "as_of": as_of,
         "window": {"start": str(sim_dates[0].date()), "end": str(sim_dates[-1].date())},
         "universe_size": len(tradable),
+        "pit_universe": args.pit_universe,
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
         "no_correction_buys": args.no_correction_buys,
@@ -995,7 +1025,13 @@ def main() -> int:
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
             "daily bars: entries at next open (later than intraday pivot buys), 10bps/side costs",
-        ],
+        ] + ([] if args.pit_universe else [
+            "listing-age bias: the tradable list is frozen at the first simulated "
+            "bar, so companies that listed later are excluded for the entire run. "
+            "This penalises LONG windows specifically (a 9y run never sees a 2021 "
+            "IPO), and young leaders are exactly what this method buys. Re-run "
+            "with --pit-universe for the unbiased comparison."
+        ]),
         "results": {k: {"metrics": v["metrics"]} for k, v in results.items()},
     }
     Path(args.output).write_text(json.dumps(out, indent=2))

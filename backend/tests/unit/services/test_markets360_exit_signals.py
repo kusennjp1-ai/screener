@@ -1,12 +1,14 @@
 """Tests for the Markets 360 sell-timing engine (climax + trailing ladder)."""
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.services.markets360.exit_signals import (
     compute_sell_plan,
     compute_trailing_stop,
     detect_climax_run,
 )
+from app.services.markets360.risk import MAX_LOSS_PCT
 
 
 def _frame(close, volume=None, open_=None) -> pd.DataFrame:
@@ -195,3 +197,31 @@ def test_display_stop_never_feeds_the_stop_hit_decision():
     df = _trend_frame(103)
     plan = compute_sell_plan(df)
     assert plan["action"] != "stop_hit"
+
+
+def test_display_stop_is_capped_at_the_max_loss_for_an_extended_leader():
+    """An extended leader sits far above its 50-DMA. The displayed protective
+    stop must be capped by the max-loss rule, NOT dropped to the distant
+    average — a -15%/-30% 'protective' stop would violate Minervini's one
+    inviolable rule while being shown to the user as the level to honour."""
+    close = np.concatenate([np.linspace(50, 70, 150), np.linspace(70, 100, 50)])
+    df = _frame(close)
+    plan = compute_sell_plan(df)
+    last = float(close[-1])
+    stop = plan["stop_level"]
+    assert stop is not None
+    # 50-DMA is ~15% below here; the cap must bind.
+    assert stop == pytest.approx(last * (1 - MAX_LOSS_PCT), rel=1e-3)
+    assert (stop / last - 1) >= -MAX_LOSS_PCT - 1e-9
+
+
+def test_display_stop_uses_the_50dma_when_it_is_tighter_than_the_max_loss():
+    """A tight name riding its 50-DMA gets the tighter (higher) stop — the cap
+    is a floor on risk, not a replacement for a closer structural level."""
+    close = np.linspace(96.0, 100.0, 200)
+    df = _frame(close)
+    plan = compute_sell_plan(df)
+    last = float(close[-1])
+    ma50 = float(close[-50:].mean())
+    assert plan["stop_level"] == pytest.approx(round(ma50, 2), rel=1e-6)
+    assert plan["stop_level"] > last * (1 - MAX_LOSS_PCT)  # tighter than the cap

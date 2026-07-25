@@ -77,9 +77,17 @@ export default defineConfig(({ mode }) => {
         'react-dom',
         'react-router-dom',
         '@mui/material',
+        // Deep entries must be listed explicitly: lazily-routed code pulls them
+        // in AFTER the first page load, so Vite discovers them late, re-runs the
+        // optimizer, and the chunks the browser already holds go stale — which
+        // surfaces as `createTheme_default is not a function` and a blank #root.
+        '@mui/material/styles',
+        '@emotion/react',
+        '@emotion/styled',
         '@tanstack/react-query',
         '@tanstack/react-virtual',
         'recharts',
+        'lightweight-charts',
       ],
     },
   };
