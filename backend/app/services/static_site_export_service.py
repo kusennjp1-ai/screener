@@ -824,7 +824,9 @@ class StaticSiteExportService:
             # sell_plan key so the viewer's stop line / sell card always read one.
             if sell_summary is None:
                 sell_summary = {"action": "no_data",
-                                "last_close": (stock_data or {}).get("last_close")}
+                                # stock_data carries `current_price`; there is no
+                                # `last_close` key, so reading one always gave None.
+                                "last_close": (stock_data or {}).get("current_price")}
             if m360.get("sell_plan") is None:
                 m360["sell_plan"] = {"action": "no_data", "stop_level": None, "targets": None}
             trend_template = self._compute_trend_template(price_df, benchmark_df)

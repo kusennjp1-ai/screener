@@ -43,6 +43,9 @@ import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/commo
 const EMPTY_RESULTS = [];
 const DEFAULT_TOP_RESULTS = 20;
 const LEADERS_SCREEN_ID = 'leaders_in_leading_groups';
+// backtest_minervini_tactics.py::MIN_DOLLAR_VOL — the liquidity floor the
+// validated backtest actually applies to its candidate pool.
+const BACKTEST_MIN_DOLLAR_VOLUME = 5_000_000;
 
 const formatNumber = (value, digits = 0) => {
   if (value == null) return '-';
@@ -159,6 +162,10 @@ function StaticHomePage() {
       ...scanDefaultFilters,
       passesTemplate: true,
       rsRating: { min: 70, max: null },
+      // The market default is a USD 100M dollar-volume floor — 20x the
+      // backtest's own MIN_DOLLAR_VOL of 5M — so inheriting it would drop most
+      // of the pool this list claims to mirror. Match the backtest instead.
+      minVolume: BACKTEST_MIN_DOLLAR_VOLUME,
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),
     }),
     [marketCapMin, scanDefaultFilters]
@@ -441,7 +448,7 @@ function StaticHomePage() {
       <DailyScanRowsTable
         testId="backtest-aligned-section"
         title="バックテスト準拠候補（検証と同じ選び方）"
-        subtitle="トレンドテンプレート合格＋RS 70以上をRSの高い順に表示。6年検証（年率+15.2%）が実際に選ぶ母集団と同じ条件で、業績・業種の追加関門はかけていません。行をクリックするとチャートが開きます。"
+        subtitle="トレンドテンプレート合格＋RS 70以上＋売買代金 500万ドル以上を、RSの高い順に表示。過去データ検証が候補を選ぶときと同じ条件で、業績・業種の追加関門はかけていません（検証側はさらに値幅1.5%以上の条件も使うため、完全一致ではありません）。行をクリックするとチャートが開きます。"
         rows={backtestAlignedRows}
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={backtestAlignedNavigationSymbols}
