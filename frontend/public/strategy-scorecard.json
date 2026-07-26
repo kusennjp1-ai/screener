@@ -1,37 +1,37 @@
 {
-  "as_of": "2026-07-23",
-  "source": "backtest-tactics.yml run 30051701118 (6y bundle, full_tactics variant)",
-  "window": { "start": "2021-08-05", "end": "2026-07-23", "years": 5 },
-  "universe_size": 1576,
-  "variant": "full_tactics",
+  "as_of": "2026-07-25",
+  "source": "backtest-tactics.yml run 30167396207 (6y bundle, full_tactics, --pit-universe)",
+  "window": { "start": "2021-08-06", "end": "2026-07-23", "years": 5 },
+  "universe_size": 1936,
+  "variant": "full_tactics --pit-universe",
   "metrics": {
-    "total_return_pct": 102.2,
-    "cagr_pct": 15.2,
-    "max_drawdown_pct": -13.9,
-    "sharpe": 0.94,
-    "sortino": 1.28,
-    "trades": 147,
-    "win_rate_pct": 36.7,
-    "avg_r": 0.53,
-    "profit_factor": 2.11,
-    "avg_invested_pct": 61.1,
+    "total_return_pct": 63.3,
+    "cagr_pct": 10.4,
+    "max_drawdown_pct": -15.8,
+    "sharpe": 0.7,
+    "sortino": 0.94,
+    "trades": 159,
+    "win_rate_pct": 35.8,
+    "avg_r": 0.38,
+    "profit_factor": 1.7,
+    "avg_invested_pct": 60.3,
     "payoff_distribution": {
-      "expectancy_r": 0.53,
-      "avg_win_r": 2.9,
-      "avg_loss_r": -0.85,
-      "payoff_ratio": 3.4,
+      "expectancy_r": 0.38,
+      "avg_win_r": 2.63,
+      "avg_loss_r": -0.87,
+      "payoff_ratio": 3.01,
       "max_r": 12.23,
-      "median_r": -0.63,
+      "median_r": -0.71,
       "r_histogram": {
-        "<=-1R": 64, "-1..0R": 29, "0..1R": 14, "1..2R": 10,
-        "2..3R": 7, "3..5R": 14, ">=5R": 9
+        "<=-1R": 73, "-1..0R": 29, "0..1R": 17, "1..2R": 8,
+        "2..3R": 9, "3..5R": 18, ">=5R": 5
       },
-      "top5pct_gain_share": 0.448,
-      "top10pct_gain_share": 0.684,
-      "best_trade_gain_share": 0.142
+      "top5pct_gain_share": 0.451,
+      "top10pct_gain_share": 0.651,
+      "best_trade_gain_share": 0.143
     },
     "yearly_return_pct": {
-      "2021": 1.8, "2022": -0.1, "2023": 17.9, "2024": 36.3, "2025": 2.7, "2026": 20.5
+      "2021": 7.1, "2022": -10.5, "2023": 13.5, "2024": 24.7, "2025": -0.5, "2026": 21.0
     }
   },
   "benchmark": {
@@ -40,7 +40,7 @@
     "max_drawdown_pct": -24.5,
     "sharpe": 0.77,
     "sortino": 1.06,
-    "total_return_pct": 78.8
+    "total_return_pct": 78.5
   },
   "wider_window": {
     "window": { "start": "2017-08-04", "end": "2026-07-24", "years": 9 },
@@ -52,8 +52,8 @@
     "win_rate_pct": 39.1,
     "benchmark_cagr_pct": 14.8,
     "benchmark_max_drawdown_pct": -33.7,
-    "note": "9年（ほぼ上げ相場＝指数に極めて有利な期間）でも、年率は11.0%対14.8%とやや届かない一方、最大の落ち込みはほぼ半分（-18.6%対-33.7%）。リスクを揃えるとほぼ互角（Sortino 0.93対1.01）。",
-    "correction": "旧値は年率4.3%と表示していましたが、検証側の不具合（対象銘柄が開始時点で固定され、以後上場した銘柄が9年間見えない）で不当に低く出ていました。日々銘柄を入れ替える正しい条件（除外されていた708銘柄＝37%を回復）で測り直した値です。"
+    "note": "より長い9年でもほぼ同じ姿：年率は指数にやや届かない（11.0%対14.8%）が、最大の落ち込みはほぼ半分（-18.6%対-33.7%）。"
   },
-  "caveat": "上の6年はミネルヴィニ的な検証窓（高値圏スタート＋2022年の下げを含む）。より長い9年のほぼ上げ相場では年率は指数にやや届きませんが、下落の深さは約半分に抑えます（下記）。強みは「守りながら、プラスの期待値で生き残る」ことです。"
+  "correction": "以前このカードは年率+15.2%（市場超え）と表示していましたが、検証側の不具合で過大でした。対象銘柄が検証開始時点で固定され、その後に上場した銘柄を買えない設定だったためです。日々銘柄を入れ替える正しい条件で測り直した値に訂正しています（5年・9年とも同条件）。",
+  "caveat": "5年・9年のどちらでも結論は同じです。年率は指数にやや届きませんが、下落の深さは指数の6〜7割に収まります。この戦略の価値は『市場を上回ること』ではなく『大きく減らさずに、プラスの期待値で生き残ること』です。"
 }

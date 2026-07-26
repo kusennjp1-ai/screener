@@ -120,8 +120,17 @@ export default function StrategyScorecardCard({ data }) {
       {/* honest window-dependence caveat + the wider (mostly-bull) window,
           where just holding the index wins. Never hide the less flattering
           number — the priority order judges CAGR first. */}
-      {(data.caveat || data.wider_window) && (
+      {(data.caveat || data.wider_window || data.correction) && (
         <Box sx={{ px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+          {data.correction && (
+            <Typography data-testid="scorecard-correction"
+              sx={{
+                fontSize: 10.5, color: C.amber, lineHeight: 1.5, mb: 0.75,
+                borderLeft: `2px solid ${C.amber}`, pl: 0.75,
+              }}>
+              訂正: {data.correction}
+            </Typography>
+          )}
           {data.caveat && (
             <Typography sx={{ fontSize: 10.5, color: C.grey, lineHeight: 1.5, mb: data.wider_window ? 0.75 : 0 }}>
               {data.caveat}

@@ -53,6 +53,18 @@ describe('StrategyScorecardCard', () => {
     expect(screen.getByText(/最大の勝ち1件で利益の 19%/)).toBeInTheDocument();
   });
 
+  it('renders a correction notice when a number has been restated', () => {
+    const d = { ...sample, correction: '以前の値は検証側の不具合で過大でした。' };
+    renderWithProviders(<StrategyScorecardCard data={d} />);
+    expect(screen.getByTestId('scorecard-correction')).toHaveTextContent('訂正');
+    expect(screen.getByTestId('scorecard-correction')).toHaveTextContent('過大でした');
+  });
+
+  it('omits the correction notice when there is nothing to restate', () => {
+    renderWithProviders(<StrategyScorecardCard data={sample} />);
+    expect(screen.queryByTestId('scorecard-correction')).not.toBeInTheDocument();
+  });
+
   it('falls back to Sharpe when Sortino is null', () => {
     const d = { ...sample, metrics: { ...sample.metrics, sortino: null } };
     renderWithProviders(<StrategyScorecardCard data={d} />);
