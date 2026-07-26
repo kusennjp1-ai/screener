@@ -586,7 +586,11 @@ def payoff_distribution(trades):
     edges = [(-99, -1), (-1, 0), (0, 1), (1, 2), (2, 3), (3, 5), (5, 99)]
     labels = ["<=-1R", "-1..0R", "0..1R", "1..2R", "2..3R", "3..5R", ">=5R"]
     hist = {lab: sum(1 for r in rs if lo < r <= hi) for lab, (lo, hi) in zip(labels, edges)}
-    # right-tail concentration: share of total GROSS GAINS from the top trades.
+    # Right-tail concentration: share of total GROSS GAINS from the top trades.
+    # NOTE the denominator is ALL trades (losers enter `gains` as 0.0), so
+    # "top 5%/10%" means the top slice of the whole trade population, not of the
+    # winners — that is the meaningful claim ("a handful of all my trades carry
+    # the profits") and the UI label must say so.
     gains = sorted((max(0.0, p) for p in pnls), reverse=True)
     total_gain = sum(gains) or 1e-9
     n = len(gains)
@@ -621,9 +625,14 @@ def metrics(curve, trades, start_equity=100_000.0):
     # Sortino only penalizes DOWNSIDE volatility, so — unlike Sharpe — it does
     # not treat a big upside winner as "risk". That fits a right-tail-preserving
     # trend strategy: we want to keep the fat upside, not be scored against it.
-    downside = ret[ret < 0]
-    dstd = downside.std()
-    sortino = ret.mean() / dstd * np.sqrt(252) if dstd and dstd > 0 else None
+    #
+    # Downside deviation is the RMS of shortfalls below the target (0), averaged
+    # over ALL periods — not the std of the negative returns about their own
+    # mean, which measures how spread the losses are rather than how large, and
+    # divides by the count of down days instead of the whole sample.
+    shortfall = np.minimum(ret.to_numpy(dtype="float64"), 0.0)
+    dstd = float(np.sqrt(np.mean(np.square(shortfall)))) if len(shortfall) else 0.0
+    sortino = ret.mean() / dstd * np.sqrt(252) if dstd > 0 else None
     wins = [t for t in trades if t.get("pnl", t["exit"] - t["entry"]) > 0]
     out = {
         "total_return_pct": round(100 * total, 1),

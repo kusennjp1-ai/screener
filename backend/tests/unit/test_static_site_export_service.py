@@ -2845,3 +2845,29 @@ def test_earnings_line_points_are_price_scaled_and_well_formed(service_and_sessi
 
     # Fewer than two TTM anchors -> empty (cannot fit a baseline).
     assert service._earnings_line_points(df, pairs[:3]) == []  # noqa: SLF001
+
+
+def test_buy_targets_are_anchored_on_the_displayed_stop():
+    """2R/3R must be computed from the SAME stop the card renders.
+
+    The buy signal caps its own stop at signals.MAX_STOP_LOSS_PCT (10%) while
+    the exported/displayed stop is the risk plan's 8%-capped level, so taking
+    targets from the signal shipped a self-contradicting card: stop 92.00 next
+    to a "2R" of 119.00 when 2R from that stop is 116.00.
+    """
+    from app.services.markets360.risk import r_multiple_targets
+
+    entry, stop = 100.0, 92.0
+    risk_plan = {"targets": r_multiple_targets(entry, stop)}
+
+    two_r = export_module._target_price(risk_plan, 2.0)
+    three_r = export_module._target_price(risk_plan, 3.0)
+
+    assert two_r == pytest.approx(entry + 2 * (entry - stop))
+    assert three_r == pytest.approx(entry + 3 * (entry - stop))
+
+
+def test_target_price_degrades_to_none_without_a_risk_plan():
+    assert export_module._target_price(None, 2.0) is None
+    assert export_module._target_price({}, 2.0) is None
+    assert export_module._target_price({"targets": []}, 3.0) is None

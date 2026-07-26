@@ -158,7 +158,7 @@ export default function StrategyScorecardCard({ data }) {
           <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.5 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.inkStrong }}>大勝ちの効き（右テール）</Typography>
             <Tooltip title="利益の大半はごく一部の大勝ちが生む。だから途中で利確せず伸ばす（20%固定利確はこの効きを壊す）。">
-              <Typography sx={{ fontSize: 10, color: C.grey, cursor: 'help' }}>上位10%の勝ちが利益の {top10}%</Typography>
+              <Typography sx={{ fontSize: 10, color: C.grey, cursor: 'help' }}>全トレード上位10%が利益の {top10}%</Typography>
             </Tooltip>
           </Box>
           <Box sx={{ position: 'relative', height: 8, borderRadius: 4, bgcolor: C.track, overflow: 'hidden' }}>

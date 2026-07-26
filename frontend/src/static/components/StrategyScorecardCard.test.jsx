@@ -49,7 +49,9 @@ describe('StrategyScorecardCard', () => {
 
   it('renders the right-tail concentration when present', () => {
     renderWithProviders(<StrategyScorecardCard data={sample} />);
-    expect(screen.getByText(/上位10%の勝ちが利益の 64%/)).toBeInTheDocument();
+    // the share is computed over ALL trades (losers count as 0 gain), not over
+    // the winners, so the label must not claim "top 10% of the winners".
+    expect(screen.getByText(/全トレード上位10%が利益の 64%/)).toBeInTheDocument();
     expect(screen.getByText(/最大の勝ち1件で利益の 19%/)).toBeInTheDocument();
   });
 

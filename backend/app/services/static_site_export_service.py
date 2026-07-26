@@ -131,6 +131,16 @@ STATIC_GROUP_TABLE_FALLBACK_OFFSETS = {
     period: STATIC_GROUP_CHANGE_OFFSETS[period]
     for period in ("1w", "1m", "3m")
 }
+def _target_price(risk_plan: dict[str, Any] | None, r_multiple: float) -> float | None:
+    """The R-multiple target from the risk plan, i.e. anchored on the same
+    entry/stop pair whose stop the card displays. Keeping targets and stop on
+    one anchor is what makes `2R == pivot + 2*(pivot - stop)` hold on screen."""
+    for target in (risk_plan or {}).get("targets") or []:
+        if target and target.get("r_multiple") == r_multiple:
+            return target.get("price")
+    return None
+
+
 @dataclass(frozen=True)
 class StaticSiteExportResult:
     """Summary of one static-site export run."""
@@ -2279,8 +2289,15 @@ class StaticSiteExportService:
                     "stop_basis": risk_plan.get("stop_basis"),
                     "position_size_pct": risk_plan.get("position_size_pct"),
                     "account_risk_pct": ACCOUNT_RISK_PCT,
-                    "target_price_2r": signal.get("target_price_2r"),
-                    "target_price_3r": signal.get("target_price_3r"),
+                    # Targets must be anchored on the SAME stop the card shows.
+                    # The signal's own 2R/3R come off signals.MAX_STOP_LOSS_PCT
+                    # (10%) while the displayed stop is the risk plan's 8%-capped
+                    # level, so shipping the signal's targets made the card
+                    # self-contradicting: stop 92.00 next to a "2R" of 119.00
+                    # when 2R from that stop is 116.00. risk_plan["targets"] is
+                    # computed from this exact entry/stop pair.
+                    "target_price_2r": _target_price(risk_plan, 2.0),
+                    "target_price_3r": _target_price(risk_plan, 3.0),
                     "vcp_detected": bool(fp.get("detected")),
                     "vcp_source": fp.get("source"),
                     "distance_to_pivot_pct": fp.get("distance_to_pivot_pct"),
