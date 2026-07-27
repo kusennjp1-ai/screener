@@ -493,7 +493,7 @@ def _enrich_feature_run_with_composite_rating(
             "run_id": feature_run_id,
             "total_rows": len(rows),
             "updated_rows": updated_rows,
-            "rated_rows": len(ratings),
+            "rated_rows": len(scored),
         }
     except Exception:
         db.rollback()
