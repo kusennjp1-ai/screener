@@ -229,6 +229,13 @@ def _debounce(raw: List[str], hard: Optional[List[bool]], confirm: int) -> List[
     for deliberate fast transitions (crash/distribution/roll-over). Being causal
     (each bar depends only on earlier bars) the last element is a valid live
     badge with no look-ahead.
+
+    Warm-up: the state is seeded from ``raw[0]``, so callers must pass the raw
+    sequence from the START OF THE DATA and slice the display window off the
+    RESULT — never debounce a pre-sliced tail. Debouncing a tail re-seeds the
+    hysteresis at the window's first bar, which makes the colour of a given date
+    depend on where the frame ends (the same bar can be painted differently in a
+    252-bar and a 300-bar frame).
     """
     if not raw:
         return []
@@ -325,12 +332,15 @@ def compute_pressure(
             return "sell"
         return "neutral"
 
-    # Build the raw per-bar sequence over the chart window, then debounce it.
+    # Build the raw per-bar sequence over the WHOLE frame, debounce it, then keep
+    # the chart window — debouncing only the window would seed the hysteresis
+    # from the window's first bar, so the same date could be painted differently
+    # depending on where the frame happens to end (see _debounce's warm-up note).
     # Crash/distribution force "sell" and a fresh-high breakout forces "buy";
     # both flip the band hard (no confirmation delay). Sell wins a tie.
-    win = signal_series.tail(cfg.history_bars).fillna(0.0)
-    sell = sell_ov.tail(cfg.history_bars).tolist()
-    buy = buy_ov.tail(cfg.history_bars).tolist()
+    win = signal_series.fillna(0.0)
+    sell = sell_ov.tolist()
+    buy = buy_ov.tolist()
     raw = [_raw(float(v)) for v in win]
     hard = [False] * len(raw)
     for i in range(len(raw)):
@@ -338,7 +348,7 @@ def compute_pressure(
             raw[i], hard[i] = "sell", True
         elif buy[i]:
             raw[i], hard[i] = "buy", True
-    smoothed = _debounce(raw, hard, confirm_bars)
+    smoothed = _debounce(raw, hard, confirm_bars)[-cfg.history_bars:]
 
     out: Dict[str, object] = {
         "pressure_state": smoothed[-1],
@@ -376,6 +386,21 @@ def _vcp_contraction_pct(price_data: pd.DataFrame, window: int = 10) -> Optional
     return float((hi - lo) / last * 100)
 
 
+def _vcp_contraction_series(price_data: pd.DataFrame, window: int = 10) -> pd.Series:
+    """Per-bar version of ``_vcp_contraction_pct``: the trailing ``window``-bar
+    high-low range as % of THAT bar's close, using only bars up to it.
+
+    The scalar helper answers "is the base tight *now*"; painting a history needs
+    the same answer as of every past bar, otherwise a tight base forming today
+    would retro-colour bars from a year ago (look-ahead). At the last bar this
+    series equals the scalar helper exactly, so the live badge is unchanged.
+    """
+    close = price_data["Close"]
+    hi = price_data["High"].rolling(window).max()
+    lo = price_data["Low"].rolling(window).min()
+    return (hi - lo) / close.where(close > 0) * 100
+
+
 def _risk_from_extension(atr_distance: float, is_tight: bool) -> str:
     low_thr = BUYRISK_LOW_ATR + (1.0 if is_tight else 0.0)   # tight base widens "low" zone
     high_thr = BUYRISK_HIGH_ATR
@@ -407,7 +432,13 @@ def compute_buy_risk(
     atr_distance_series = (close - sma) / atr  # how many ATRs above the MA
 
     last_dist = float(atr_distance_series.iloc[-1])
-    is_tight = (_vcp_contraction_pct(price_data) or 999.0) < VCP_TIGHT_PCT
+    # Tightness is judged PER BAR from that bar's own trailing range. It used to
+    # be computed once from the tail of the whole frame and applied to every
+    # historical bar, which coloured 2023 bars with 2025 information; the strip
+    # then changed retroactively as new bars arrived (see the truncation-
+    # invariance test). NaN (warm-up / non-positive close) reads "not tight",
+    # matching the old scalar helper's None -> 999.0 fallback.
+    tight_series = (_vcp_contraction_series(price_data) < VCP_TIGHT_PCT).fillna(False)
     below = close < sma
     # Only a *broken* trend (below the long-trend MA too) makes being under the
     # 50DMA "high risk". A pullback under the 50DMA inside an intact Stage-2
@@ -416,21 +447,18 @@ def compute_buy_risk(
     # (verified bar-by-bar against the real IBB strip).
     broken = close < sma_trend
 
-    # Raw per-bar risk over the chart window, then debounce so a one-bar dip does
-    # not flicker the band.
+    # Raw per-bar risk over the WHOLE frame, then debounce, then keep the chart
+    # window (see _debounce's warm-up note: debouncing only the window would seed
+    # the hysteresis from whichever bar happens to start the window).
     raw = []
-    for d, b, br in zip(
-        atr_distance_series.tail(cfg.history_bars),
-        below.tail(cfg.history_bars),
-        broken.tail(cfg.history_bars),
-    ):
+    for d, b, br, t in zip(atr_distance_series, below, broken, tight_series):
         if pd.isna(d):
             raw.append("high")
         elif bool(b) and bool(br):
             raw.append("high")                              # below 50DMA in a broken trend
         else:
-            raw.append(_risk_from_extension(float(d), is_tight))  # else extension-driven
-    smoothed = _debounce(raw, None, confirm_bars)
+            raw.append(_risk_from_extension(float(d), bool(t)))  # else extension-driven
+    smoothed = _debounce(raw, None, confirm_bars)[-cfg.history_bars:]
 
     out: Dict[str, object] = {
         "buy_risk_state": smoothed[-1],
@@ -484,34 +512,7 @@ def compute_tpr(
         return sum(bool(x) for x in conds)
 
     sma50_slope = sma50 - sma50.shift(cfg.tpr_dir_slope_bars)
-
-    def _color_from_score(i: int, s7: int) -> str:
-        """7-cond template level, with trend direction splitting the borderline
-        (5-6) zone between strong and weak (see TPR color notes)."""
-        if s7 >= TPR_STRONG_RAW:
-            return "strong"
-        if s7 <= TPR_WEAK_RAW:
-            return "weak"
-        above = close.iloc[i] > sma50.iloc[i]
-        rising = sma50_slope.iloc[i] > 0
-        near_high = close.iloc[i] >= hi52.iloc[i] * TPR_STRONG_NEAR_HIGH
-        if above and rising and near_high:
-            return "strong"
-        if (not above) and (not rising):
-            return "weak"
-        return "transition"
-
     r5, r10 = cfg.tpr_demote_r5_bars, cfg.tpr_demote_r10_bars
-
-    def _rolling_over(i: int) -> bool:
-        """A perfect-template bar fading from highs: a material short- and
-        medium-window pullback (thresholds keep the strip smooth, not flickery)."""
-        if i - r10 < 0:
-            return False
-        p5, p10 = close.iloc[i - r5], close.iloc[i - r10]
-        if p5 <= 0 or p10 <= 0:
-            return False
-        return (close.iloc[i] / p5 - 1) <= TPR_DEMOTE_R5 and (close.iloc[i] / p10 - 1) <= TPR_DEMOTE_R10
 
     # 8th condition (RS) as a per-bar series so the band history and the live
     # badge use identical logic (previously RS was current-bar only).
@@ -530,19 +531,56 @@ def compute_tpr(
             s += 1
         return s
 
+    # Score every bar of the frame, debounce, then keep the chart window — the
+    # hysteresis must warm up from the start of the data, not from whichever bar
+    # the 252-bar window happens to begin on (see _debounce's warm-up note).
+    # Vectorised so scoring the WHOLE frame stays cheaper than the old 252-bar
+    # Python loop; every expression is a rolling/shifted window ending at its own
+    # bar, so each bar's colour uses only data up to that bar.
     n = len(close)
-    start = max(0, n - cfg.history_bars)
-    raw: List[str] = []
-    hard: List[bool] = []
-    for i in range(start, n):
-        s7 = score_at(i)                       # 7-cond level drives the COLOR
-        st = _color_from_score(i, s7)
-        roll = st == "strong" and s7 >= TPR_STRONG_RAW and _rolling_over(i)
-        if roll:
-            st = "transition"
-        raw.append(st)
-        hard.append(roll)
-    smoothed = _debounce(raw, hard, confirm_bars)
+    ma_ok = ~(sma50.isna() | sma150.isna() | sma200.isna())
+    conds = [
+        (close > sma150) & (close > sma200),                # 1 price above mid & slow
+        sma150 > sma200,                                    # 2 mid above slow
+        sma200 > sma200.shift(slow_slope_bars),             # 3 slow rising (NaN -> False)
+        (sma50 > sma150) & (sma50 > sma200),                # 4 fast above mid & slow
+        close > sma50,                                      # 5 price above fast
+        close >= lo52 * 1.30,                               # 6 >=30% above 52w low
+        (close <= hi52) & (close >= hi52 * 0.75),           # 7 within 25% of 52w high
+    ]
+    s7_series = sum(c.astype(int) for c in conds).where(ma_ok, 0)
+
+    # Colour = 7-cond template level, with trend direction splitting the
+    # borderline (5-6) zone between strong and weak (see TPR color notes).
+    above = close > sma50
+    rising = sma50_slope > 0
+    near_high = close >= hi52 * TPR_STRONG_NEAR_HIGH
+    colors = np.where(
+        s7_series >= TPR_STRONG_RAW, "strong",
+        np.where(
+            s7_series <= TPR_WEAK_RAW, "weak",
+            np.where(
+                above & rising & near_high, "strong",
+                np.where(~above & ~rising, "weak", "transition"),
+            ),
+        ),
+    )
+
+    # Roll-over demotion: a perfect-template bar fading from highs — a material
+    # short- AND medium-window pullback (thresholds keep the strip smooth, not
+    # flickery). Flips hard (no confirmation delay).
+    p5, p10 = close.shift(r5), close.shift(r10)
+    rolling_over = (
+        (p5 > 0) & (p10 > 0)
+        & ((close / p5 - 1) <= TPR_DEMOTE_R5)
+        & ((close / p10 - 1) <= TPR_DEMOTE_R10)
+    )
+    roll_mask = (colors == "strong") & (s7_series >= TPR_STRONG_RAW).to_numpy() & rolling_over.to_numpy()
+    colors = np.where(roll_mask, "transition", colors)
+
+    raw: List[str] = colors.tolist()
+    hard: List[bool] = roll_mask.tolist()
+    smoothed = _debounce(raw, hard, confirm_bars)[-cfg.history_bars:]
 
     out: Dict[str, object] = {
         "tpr_state": smoothed[-1],

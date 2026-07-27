@@ -7,6 +7,7 @@ the right length with only valid labels.
 """
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.services.minervini_bands import (
     BAND_HISTORY_BARS,
@@ -43,6 +44,43 @@ def _strong_uptrend(n=300) -> pd.DataFrame:
 
 def _downtrend(n=300) -> pd.DataFrame:
     return _ohlcv(np.linspace(150.0, 50.0, n))
+
+
+def _noisy_tape(n=460, seed=7, tight_tail=15) -> pd.DataFrame:
+    """A realistic tape: random walk with two injected regime changes (so all
+    three bands change state several times), ending in a TIGHT consolidation.
+
+    The tight tail matters: Buy Risk widens its "low" zone on a contracting
+    base, so a tight *ending* is exactly the whole-series fact that must not be
+    allowed to leak backwards onto older bars.
+    """
+    rng = np.random.default_rng(seed)
+    steps = rng.normal(0.0007, 0.017, n)
+    steps[180:240] -= 0.007          # a distribution phase
+    steps[300:340] += 0.009          # a breakout leg
+    if tight_tail:
+        steps[-tight_tail:] = rng.normal(0.0, 0.0015, tight_tail)
+    close = 60.0 * np.exp(np.cumsum(steps))
+    idx = pd.date_range("2023-01-02", periods=n, freq="B")
+    span = np.abs(rng.normal(0.012, 0.006, n)) * close
+    if tight_tail:
+        span[-tight_tail:] = np.abs(rng.normal(0.002, 0.001, tight_tail)) * close[-tight_tail:]
+    return pd.DataFrame(
+        {
+            "Open": close,
+            "High": close + span,
+            "Low": close - span,
+            "Close": close,
+            "Volume": rng.uniform(0.6e6, 2.4e6, n),
+        },
+        index=idx,
+    )
+
+
+def _noisy_benchmark(n=460, seed=11) -> pd.Series:
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2023-01-02", periods=n, freq="B")
+    return pd.Series(400.0 * np.exp(np.cumsum(rng.normal(0.0003, 0.008, n))), index=idx)
 
 
 def _benchmark(n=300) -> pd.Series:
@@ -162,3 +200,62 @@ def test_calculate_bands_omits_history_by_default():
 
 def test_calculate_bands_empty_frame_returns_empty():
     assert calculate_bands(pd.DataFrame()) == {}
+
+
+# --- causality (no look-ahead) ---------------------------------------------
+#
+# The band strips are a HISTORY: the color painted above a 2023 bar claims to be
+# what an operator would have seen live on that bar. That only holds if every
+# bar's color depends solely on data up to that bar. The operational test is
+# truncation-invariance: computing the bands on a prefix of the tape must give
+# the same color on every date the two runs share. Anything computed once over
+# the whole series and applied to every bar (e.g. a single VCP tightness flag)
+# breaks this — a 2023 bar would be colored using 2024 information.
+
+_HISTORY_KEYS = ("pressure_history", "buy_risk_history", "tpr_history")
+
+
+def _histories_by_date(df: pd.DataFrame, bench: pd.Series) -> dict:
+    """{band_key: {date: color}} for one run, so two runs can be date-aligned."""
+    bands = calculate_bands(df, benchmark_close=bench, with_history=True)
+    out = {}
+    for key in _HISTORY_KEYS:
+        hist = bands.get(key)
+        assert hist, f"{key} missing/empty"
+        out[key] = dict(zip(df.index[-len(hist):], hist))
+    return out
+
+
+@pytest.mark.parametrize("seed", [7, 14, 35])
+def test_band_history_is_causal_under_truncation(seed):
+    df = _noisy_tape(seed=seed)
+    bench = _noisy_benchmark()
+    full = _histories_by_date(df, bench)
+
+    for k in (380, 420):
+        prefix = _histories_by_date(df.iloc[:k], bench.iloc[:k])
+        for key in _HISTORY_KEYS:
+            shared = sorted(set(full[key]) & set(prefix[key]))
+            assert len(shared) > 100, f"{key}: prefix k={k} shares too few dates"
+            mismatches = [
+                (d.date(), prefix[key][d], full[key][d])
+                for d in shared
+                if prefix[key][d] != full[key][d]
+            ]
+            assert not mismatches, (
+                f"{key}: look-ahead — {len(mismatches)}/{len(shared)} shared bars change "
+                f"colour when later data is appended (k={k}, seed={seed}); "
+                f"first 5 (date, live, restated): {mismatches[:5]}"
+            )
+
+
+def test_live_badge_equals_last_history_bar_at_every_endpoint():
+    """The current-state badge must be exactly the last painted history bar, at
+    any endpoint — i.e. the strip is a record of past live badges."""
+    df = _noisy_tape()
+    bench = _noisy_benchmark()
+    for k in (380, 420, len(df)):
+        bands = calculate_bands(df.iloc[:k], benchmark_close=bench.iloc[:k], with_history=True)
+        assert bands["pressure_state"] == bands["pressure_history"][-1]
+        assert bands["buy_risk_state"] == bands["buy_risk_history"][-1]
+        assert bands["tpr_state"] == bands["tpr_history"][-1]
