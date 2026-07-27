@@ -145,7 +145,10 @@ function StaticHomePage() {
       // headline list is a tight leaders-in-leading-groups short-list.
       passesTemplate: true,
       rsRating: { min: 90, max: null },
-      week52HighDistance: { min: -10, max: null },
+      // Distance below the 52-week high is stored as a POSITIVE percent, so
+      // "within 10% of the high" is an upper bound. A lower bound of -10 passed
+      // every row and silently disabled this Trend Template leg.
+      week52HighDistance: { min: null, max: 10 },
       ibdGroupRank: { min: null, max: 98 },
       code33: true,
       ...(marketCapMin !== '' ? { marketCapUsd: { min: Number(marketCapMin), max: null } } : {}),

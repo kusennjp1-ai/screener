@@ -275,7 +275,16 @@ class FinvizParser:
             parts = finviz_data['52W High'].split()
             if len(parts) >= 2:
                 normalized['week_52_high'] = cls.parse_ratio(parts[0])
-                normalized['week_52_high_distance'] = cls.parse_percentage(parts[1])
+                # Finviz reports this as a SIGNED move from the high ("-9.10%").
+                # The scanner's own field is the unsigned distance BELOW the high
+                # ((high-price)/high*100, always >= 0), and the presets filter it
+                # as an upper bound ("within N% of the high"). Two sources with
+                # opposite signs silently disabled that leg for scanner-sourced
+                # rows, so normalise here to the canonical positive convention.
+                raw_distance = cls.parse_percentage(parts[1])
+                normalized['week_52_high_distance'] = (
+                    None if raw_distance is None else max(0.0, -float(raw_distance))
+                )
 
         if '52W Low' in finviz_data:
             parts = finviz_data['52W Low'].split()

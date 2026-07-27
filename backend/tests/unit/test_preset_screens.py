@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.preset_screens import (
     PRESET_SCREENS,
     _matches_preset_filters,
@@ -113,7 +115,7 @@ def test_minervini_preset_gates_on_strict_template_flag():
     assert screen["filters"]["passesTemplate"] is True
     assert screen["filters"]["rsRating"] == {"min": 90, "max": None}
     assert screen["filters"]["epsRating"] == {"min": 80, "max": None}
-    assert screen["filters"]["week52HighDistance"] == {"min": -10, "max": None}
+    assert screen["filters"]["week52HighDistance"] == {"min": None, "max": 10}
     assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 50}
     assert screen["filters"]["code33"] is True
 
@@ -122,7 +124,7 @@ def test_minervini_preset_gates_on_strict_template_flag():
         "passes_template": True,
         "rs_rating": 93,
         "eps_rating": 88,
-        "week_52_high_distance": -6,
+        "week_52_high_distance": 6,
         "ibd_group_rank": 25,
         "code33": True,
     }
@@ -144,7 +146,7 @@ def test_minervini_preset_gates_on_strict_template_flag():
     ) is False
     # Passes the template but extended >10% below the highs -> excluded.
     assert _matches_preset_filters(
-        {**leader, "week_52_high_distance": -14}, screen["filters"]
+        {**leader, "week_52_high_distance": 14}, screen["filters"]
     ) is False
     # Passes the template but sits below a genuinely leading group (rank 60,
     # outside the top quartile) -> excluded.
@@ -177,7 +179,7 @@ def test_minervini_vcp_preset_is_minervini_subset_requiring_a_vcp():
         "passes_template": True,
         "rs_rating": 93,
         "eps_rating": 88,
-        "week_52_high_distance": -6,
+        "week_52_high_distance": 6,
         "ibd_group_rank": 25,
         "code33": True,
         "vcp_detected": True,
@@ -201,7 +203,7 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
 
     assert screen["filters"]["passesTemplate"] is True
     assert screen["filters"]["ibdGroupRank"] == {"min": None, "max": 40}
-    assert screen["filters"]["week52HighDistance"] == {"min": -5, "max": None}
+    assert screen["filters"]["week52HighDistance"] == {"min": None, "max": 5}
     assert screen["filters"]["perf6m"] == {"min": 25, "max": None}
     assert screen["filters"]["adrPercent"] == {"min": 2.5, "max": 6.0}
     assert screen["sort_by"] == "perf_6m"
@@ -210,7 +212,7 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
         "symbol": "RUN",
         "passes_template": True,
         "ibd_group_rank": 12,           # leading group
-        "week_52_high_distance": -2.0,  # tight to the high
+        "week_52_high_distance": 2.0,  # tight to the high
         "perf_6m": 60.0,                # strong prior momentum
         "adr_percent": 3.8,
     }
@@ -218,7 +220,7 @@ def test_minervini_usic_preset_gates_on_momentum_tight_to_highs():
     # A template-passer with weak momentum is excluded (the distinguishing leg).
     assert _matches_preset_filters({**usic_style, "perf_6m": 5.0}, screen["filters"]) is False
     # Too far below the highs is excluded.
-    assert _matches_preset_filters({**usic_style, "week_52_high_distance": -12.0}, screen["filters"]) is False
+    assert _matches_preset_filters({**usic_style, "week_52_high_distance": 12.0}, screen["filters"]) is False
     # Too low / too high ADR is excluded.
     assert _matches_preset_filters({**usic_style, "adr_percent": 1.0}, screen["filters"]) is False
     # Outside a leading industry group is excluded (Minervini's group-strength leg).
@@ -252,8 +254,8 @@ def test_canslim_preset_enforces_annual_eps_and_new_high():
     filters = screen["filters"]
 
     assert filters["epsGrowthYy"] == {"min": 25, "max": None}
-    # week_52_high_distance is % BELOW the high (negative); >= -15 == within 15%.
-    assert filters["week52HighDistance"] == {"min": -15, "max": None}
+    # week_52_high_distance is the % BELOW the high (positive); <= 15 == within 15%.
+    assert filters["week52HighDistance"] == {"min": None, "max": 15}
 
     near_high_grower = {
         "symbol": "OK",
@@ -261,14 +263,14 @@ def test_canslim_preset_enforces_annual_eps_and_new_high():
         "eps_growth_qq": 30,
         "eps_growth_yy": 30,
         "rs_rating": 85,
-        "week_52_high_distance": -5,
+        "week_52_high_distance": 5,
     }
     assert _matches_preset_filters(near_high_grower, filters) is True
     assert _matches_preset_filters(
         {**near_high_grower, "eps_growth_yy": 10}, filters
     ) is False  # weak annual earnings
     assert _matches_preset_filters(
-        {**near_high_grower, "week_52_high_distance": -40}, filters
+        {**near_high_grower, "week_52_high_distance": 40}, filters
     ) is False  # far below the 52-week high
 
 
@@ -286,3 +288,38 @@ def test_vcp_preset_requires_passing_trend_template():
         {"symbol": "NOTREND", "vcp_detected": True, "passes_template": False},
         filters,
     ) is False
+
+
+def test_52w_high_distance_is_an_upper_bound_in_every_preset():
+    """The field is the distance BELOW the 52-week high as a POSITIVE percent
+    (minervini_scanner: (high-price)/high*100), so "within N% of the high" must
+    be expressed as an upper bound. A lower bound of -N passed every row and
+    silently disabled this Trend Template leg across seven presets.
+    """
+    from app.services.preset_screens import PRESET_SCREENS
+
+    seen = 0
+    for preset in PRESET_SCREENS:
+        rng = (preset.get("filters") or {}).get("week52HighDistance")
+        if not rng:
+            continue
+        seen += 1
+        assert rng.get("max") is not None, f"{preset['id']} must bound the distance from above"
+        assert rng["max"] > 0, f"{preset['id']} upper bound must be a positive distance"
+        assert rng.get("min") is None or rng["min"] >= 0, (
+            f"{preset['id']} must not use a negative lower bound (the field is never negative)"
+        )
+    assert seen >= 7, f"expected the leg on at least 7 presets, found {seen}"
+
+
+def test_finviz_52w_high_distance_is_normalised_to_the_positive_convention():
+    """Finviz reports a signed move from the high ("-9.10%"); the canonical
+    field is the unsigned distance below it, so the parser must flip the sign.
+    """
+    from app.services.finviz_parser import FinvizParser
+
+    out = FinvizParser.normalize_fundamentals({"52W High": "288.62 -9.10%"})
+    assert out["week_52_high_distance"] == pytest.approx(9.10)
+
+    at_high = FinvizParser.normalize_fundamentals({"52W High": "288.62 0.00%"})
+    assert at_high["week_52_high_distance"] == pytest.approx(0.0)
