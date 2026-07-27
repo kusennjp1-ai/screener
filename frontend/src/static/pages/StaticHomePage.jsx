@@ -179,11 +179,17 @@ function StaticHomePage() {
     ).slice(0, DEFAULT_TOP_RESULTS);
   }, [scanRows, topCandidateFilters]);
   const backtestAlignedRows = useMemo(() => {
-    return sortStaticScanRows(
-      filterStaticScanRows(scanRows, backtestAlignedFilters),
-      'rs_rating',
-      'desc'
-    ).slice(0, DEFAULT_TOP_RESULTS);
+    // Order the way the ADOPTED backtest configuration fills its limited slots
+    // (--quality-rank, confirmed on both windows: CAGR 10.4->10.7 over 5y and
+    // 11.0->11.5 over 9y with no drawdown cost): a detected VCP base outranks
+    // the looser fallback bases, ties broken by RS descending. Sorting by RS
+    // alone mirrored the pre-adoption default.
+    const filtered = filterStaticScanRows(scanRows, backtestAlignedFilters);
+    const rank = (row) => (row?.vcp_detected ? 0 : 1);
+    const rs = (row) => (row?.rs_rating == null ? -Infinity : Number(row.rs_rating));
+    return [...filtered]
+      .sort((a, b) => rank(a) - rank(b) || rs(b) - rs(a) || String(a.symbol).localeCompare(String(b.symbol)))
+      .slice(0, DEFAULT_TOP_RESULTS);
   }, [scanRows, backtestAlignedFilters]);
   const leadingGroupScreen = useMemo(
     () => scanBundleQuery.data?.presetScreens?.find((screen) => screen.id === LEADERS_SCREEN_ID) ?? null,
@@ -448,7 +454,7 @@ function StaticHomePage() {
       <DailyScanRowsTable
         testId="backtest-aligned-section"
         title="バックテスト準拠候補（検証と同じ選び方）"
-        subtitle="トレンドテンプレート合格＋RS 70以上＋売買代金 500万ドル以上を、RSの高い順に表示。過去データ検証が候補を選ぶときと同じ条件で、業績・業種の追加関門はかけていません（検証側はさらに値幅1.5%以上の条件も使うため、完全一致ではありません）。行をクリックするとチャートが開きます。"
+        subtitle="トレンドテンプレート合格＋RS 70以上＋売買代金 500万ドル以上を、VCP検出を優先しRSの高い順に表示（検証で採用した並び順）。過去データ検証が候補を選ぶときと同じ条件で、業績・業種の追加関門はかけていません（検証側はさらに値幅1.5%以上の条件も使うため、完全一致ではありません）。行をクリックするとチャートが開きます。"
         rows={backtestAlignedRows}
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={backtestAlignedNavigationSymbols}
