@@ -45,6 +45,16 @@ const RANGE_FILTER_TO_FIELD = {
   pctMonth: 'pct_month',
 };
 
+// The three Minervini condition bands the chart already renders. They ride on
+// every serialized scan row but were not screenable, so the product's signature
+// readout could be looked at one symbol at a time and never searched across the
+// universe. Values are the engine's own state strings.
+const BAND_FILTER_TO_FIELD = {
+  pressureState: 'pressure_state',
+  buyRiskState: 'buy_risk_state',
+  tprState: 'tpr_state',
+};
+
 const BOOLEAN_FILTER_TO_FIELD = {
   seSetupReady: 'se_setup_ready',
   seRsLineNewHigh: 'se_rs_line_new_high',
@@ -159,6 +169,19 @@ export const filterStaticScanRows = (rows, filters) => {
 
     if (!matchesCategoricalFilter(row.ibd_industry_group, filters.ibdIndustries)) {
       return false;
+    }
+
+    // Condition-band screening: a filter may be a plain state string
+    // ('buy') or the categorical {values, mode} shape used elsewhere.
+    for (const [filterKey, field] of Object.entries(BAND_FILTER_TO_FIELD)) {
+      const wanted = filters[filterKey];
+      if (wanted == null) continue;
+      const actual = row[field];
+      if (typeof wanted === 'string') {
+        if (actual !== wanted) return false;
+      } else if (!matchesCategoricalFilter(actual, wanted)) {
+        return false;
+      }
     }
 
     if (!matchesCategoricalFilter(row.gics_sector, filters.gicsSectors)) {

@@ -281,3 +281,40 @@ describe('static scan client', () => {
     expect(sorted.map((row) => row.symbol)).toEqual(['AIPO', 'ZFULL']);
   });
 });
+
+describe('condition-band screening', () => {
+  const rows = [
+    { symbol: 'GREEN', pressure_state: 'buy', buy_risk_state: 'low', tpr_state: 'strong' },
+    { symbol: 'MIXED', pressure_state: 'buy', buy_risk_state: 'high', tpr_state: 'strong' },
+    { symbol: 'RED', pressure_state: 'sell', buy_risk_state: 'high', tpr_state: 'weak' },
+    { symbol: 'UNKNOWN', pressure_state: null, buy_risk_state: null, tpr_state: null },
+  ];
+
+  it('filters on a single band state', () => {
+    const out = filterStaticScanRows(rows, { pressureState: 'buy' });
+    expect(out.map((r) => r.symbol)).toEqual(['GREEN', 'MIXED']);
+  });
+
+  it('combines the three bands (the triple-green readout)', () => {
+    const out = filterStaticScanRows(rows, {
+      pressureState: 'buy', buyRiskState: 'low', tprState: 'strong',
+    });
+    expect(out.map((r) => r.symbol)).toEqual(['GREEN']);
+  });
+
+  it('accepts the categorical {values, mode} shape', () => {
+    const out = filterStaticScanRows(rows, {
+      buyRiskState: { values: ['low', 'medium'], mode: 'include' },
+    });
+    expect(out.map((r) => r.symbol)).toEqual(['GREEN']);
+  });
+
+  it('excludes rows whose band state is unknown rather than passing them', () => {
+    const out = filterStaticScanRows(rows, { tprState: 'strong' });
+    expect(out.map((r) => r.symbol)).not.toContain('UNKNOWN');
+  });
+
+  it('is inert when no band filter is set', () => {
+    expect(filterStaticScanRows(rows, {}).length).toBe(rows.length);
+  });
+});
