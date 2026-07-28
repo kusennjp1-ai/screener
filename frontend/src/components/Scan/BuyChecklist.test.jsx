@@ -62,3 +62,46 @@ describe('BuyChecklist', () => {
     expect(screen.getByText('未点灯（2/3 バレル）')).toBeInTheDocument();
   });
 });
+
+describe('Trend Template row agrees with the 8/8 scorecard', () => {
+  const bands = { tpr_state: 'strong', pressure_state: 'buy', buy_risk_state: 'low' };
+  const ctx = { available: true, bands, signal: { barrels: {} } };
+
+  it('reads the chart payload, not the scan row, so one screen cannot contradict itself', () => {
+    // The scan row says the template failed; the chart payload (the same object
+    // TrendTemplateScorecard renders as 8/8) says every condition passed.
+    const trendTemplate = {
+      score: 8,
+      max: 8,
+      conditions: Array.from({ length: 8 }, (_, i) => ({ key: `c${i}`, label: `c${i}`, passed: true })),
+    };
+    renderWithProviders(
+      <BuyChecklist
+        buyContext={ctx}
+        stockData={{ passes_template: false, ma_alignment: false }}
+        trendTemplate={trendTemplate}
+      />,
+    );
+    expect(screen.getByText('8/8')).toBeInTheDocument();
+    expect(screen.queryByText('fail')).not.toBeInTheDocument();
+  });
+
+  it('shows the real count when the template is only partly met', () => {
+    const trendTemplate = {
+      score: 6,
+      max: 8,
+      conditions: Array.from({ length: 8 }, (_, i) => ({ key: `c${i}`, label: `c${i}`, passed: i < 6 })),
+    };
+    renderWithProviders(
+      <BuyChecklist buyContext={ctx} stockData={{ passes_template: true }} trendTemplate={trendTemplate} />,
+    );
+    expect(screen.getByText('6/8')).toBeInTheDocument();
+  });
+
+  it('falls back to the scan row when no breakdown shipped', () => {
+    renderWithProviders(
+      <BuyChecklist buyContext={ctx} stockData={{ passes_template: true }} trendTemplate={null} />,
+    );
+    expect(screen.getByText('pass')).toBeInTheDocument();
+  });
+});

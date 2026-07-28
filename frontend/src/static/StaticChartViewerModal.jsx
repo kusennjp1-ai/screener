@@ -569,6 +569,7 @@ function StaticChartViewerModal({
               {/* 買い点灯条件 — same checklist as the live scan viewer, fed
                   from the static payload's bands + signal blocks. */}
               <BuyChecklist
+                trendTemplate={chartPayload?.trend_template || null}
                 buyContext={{
                   available: Boolean(chartPayload?.bands || chartPayload?.signal),
                   bands: chartPayload?.bands || {},

@@ -39,7 +39,7 @@ function Row({ met, term, label, detail, index }) {
   );
 }
 
-export default function BuyChecklist({ buyContext, stockData }) {
+export default function BuyChecklist({ buyContext, stockData, trendTemplate = null }) {
   if (!buyContext?.available) return null;
   const bands = buyContext.bands || {};
   const signal = buyContext.signal || {};
@@ -47,7 +47,23 @@ export default function BuyChecklist({ buyContext, stockData }) {
 
   const rs = stockData?.rs_rating ?? null;
   const eps = stockData?.eps_rating ?? null;
-  const passesTemplate = stockData?.passes_template ?? stockData?.ma_alignment ?? null;
+  // The Trend Template is Minervini's mandatory gate, and it must be read from
+  // the SAME payload the 8/8 scorecard renders further down this modal. Reading
+  // the scan row here let one screen show "必須: fail" above "8/8" in green — a
+  // product contradicting itself on its most important condition. The chart
+  // payload wins; the scan row is only a fallback when no breakdown shipped.
+  const ttScore = trendTemplate?.score
+    ?? (Array.isArray(trendTemplate?.conditions)
+      ? trendTemplate.conditions.filter((c) => c.passed).length
+      : null);
+  const ttMax = trendTemplate?.max
+    ?? (Array.isArray(trendTemplate?.conditions) ? trendTemplate.conditions.length : null);
+  const passesTemplate = ttScore != null && ttMax != null
+    ? ttScore >= ttMax
+    : (stockData?.passes_template ?? stockData?.ma_alignment ?? null);
+  const templateDetail = ttScore != null && ttMax != null
+    ? `${ttScore}/${ttMax}`
+    : (passesTemplate == null ? '—' : passesTemplate ? 'pass' : 'fail');
   // Prefer buy-context's live code33 (from cached EDGAR flag); fall back to the
   // scan row (static export stamps it there).
   const code33 = buyContext?.code33 ?? stockData?.code33 ?? null;
@@ -76,7 +92,7 @@ export default function BuyChecklist({ buyContext, stockData }) {
       <Row index={0} met={barrels.trend ?? null} term="tpr" label="Trend — TPRバンドが緑（strong）" detail={bands.tpr_state ?? '—'} />
       <Row index={1} met={barrels.pressure ?? null} term="pressure" label="Pressure — 買い圧力バンドが緑（buy）" detail={bands.pressure_state ?? '—'} />
       <Row index={2} met={barrels.breakout ?? null} term="pivot" label="Breakout — ピボット突破＋Buy Riskが緑/黄" detail={bands.buy_risk_state ?? '—'} />
-      <Row index={3} met={passesTemplate} term="trend_template" label="Trend Template — 8条件（必須）" detail={passesTemplate == null ? '—' : passesTemplate ? 'pass' : 'fail'} />
+      <Row index={3} met={passesTemplate} term="trend_template" label="Trend Template — 8条件（必須）" detail={templateDetail} />
       <Row index={4} met={rs == null ? null : rs >= 70} term="rs_rating" label="RS Rating ≥ 70（必須・90+が理想）" detail={rs == null ? '—' : Number(rs).toFixed(0)} />
       <Row index={5} met={eps == null ? null : eps >= 80} term="eps_rating" label="EPS Rating ≥ 80（推奨）" detail={eps == null ? '—' : Number(eps).toFixed(0)} />
       <Row index={6} met={code33 == null ? null : Boolean(code33)} term="code33" label="Code 33（ボーナス・レア）" detail={code33 == null ? '—' : code33 ? '点灯' : '消灯'} />
