@@ -115,8 +115,48 @@ describe('TodaysBuysCard', () => {
         scanRows={uptrendRows}
       />,
     );
-    expect(screen.getByText(/データ未更新/)).toBeInTheDocument();
+    expect(screen.getAllByText(/データ未更新/).length).toBeGreaterThan(0);
     expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
+  });
+
+  // Staleness is counted in trading sessions. The old 4-calendar-day constant
+  // called a Friday snapshot fresh on the following Tuesday.
+  describe('trading-session staleness', () => {
+    // 2026-07-24 Fri · 2026-07-25 Sat · 2026-07-27 Mon · 2026-07-28 Tue
+    const FRIDAY = '2026-07-24';
+    const et = (iso) => new Date(`${iso}-04:00`); // July = EDT (UTC-4)
+    const fridaySnapshot = { as_of_date: FRIDAY, symbols: [{ symbol: 'NVDA', rank: 1, buy: buyBlock() }] };
+
+    it('keeps a Friday snapshot buyable over the weekend', () => {
+      renderWithProviders(
+        <TodaysBuysCard indexData={fridaySnapshot} scanRows={uptrendRows} market="US" now={et('2026-07-25T12:00:00')} />,
+      );
+      expect(screen.getByText('BUY NOW')).toBeInTheDocument();
+      expect(screen.queryByTestId('todays-buys-stale')).not.toBeInTheDocument();
+    });
+
+    it('keeps it buyable on Monday morning, before Monday has closed', () => {
+      renderWithProviders(
+        <TodaysBuysCard indexData={fridaySnapshot} scanRows={uptrendRows} market="US" now={et('2026-07-27T10:00:00')} />,
+      );
+      expect(screen.getByText('BUY NOW')).toBeInTheDocument();
+    });
+
+    it('downgrades every row once a completed session has gone by', () => {
+      renderWithProviders(
+        <TodaysBuysCard indexData={fridaySnapshot} scanRows={uptrendRows} market="US" now={et('2026-07-28T10:00:00')} />,
+      );
+      expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
+      expect(screen.getByTestId('todays-buys-stale')).toHaveTextContent('取引1日分遅れています');
+      expect(screen.getByTestId('todays-buys-verdict-NVDA')).toHaveTextContent('データ未更新');
+    });
+
+    it('does not flash stale during the post-close publish window', () => {
+      renderWithProviders(
+        <TodaysBuysCard indexData={fridaySnapshot} scanRows={uptrendRows} market="US" now={et('2026-07-27T16:30:00')} />,
+      );
+      expect(screen.getByText('BUY NOW')).toBeInTheDocument();
+    });
   });
 
   it('shows exact share count once equity is set', () => {

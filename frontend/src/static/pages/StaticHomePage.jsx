@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Alert,
   Box,
   CircularProgress,
   Grid,
@@ -27,6 +26,7 @@ import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import TodaysBuysCard from '../components/TodaysBuysCard';
+import StaticDataStatusBanner from '../components/StaticDataStatusBanner';
 import WatchlistCard from '../components/WatchlistCard';
 import StrategyScorecardCard from '../components/StrategyScorecardCard';
 import { MOTION, enterSlideFade } from '../../theme/motion';
@@ -225,23 +225,53 @@ function StaticHomePage() {
     [backtestAlignedRows, chartEnabledSymbols],
   );
   const leadingGroupMinVolume = leadingGroupScreen?.filters?.minVolume;
+  // The scan bundle feeds every candidate table, so its state — loading, failed,
+  // or simply empty — has to be told apart in the table's own empty slot.
+  const scanEmptyMessage = scanBundleQuery.isError
+    ? 'スキャン結果を読み込めませんでした。上の再試行を押してください。'
+    : scanBundleQuery.isLoading
+      ? '読み込み中…'
+      : '現在の条件に一致する銘柄はありません。';
   const leadingGroupSubtitle = leadingGroupMinVolume == null
     ? '上位20銘柄: グループ順位40位以内、RS 80以上。'
     : `上位20銘柄: グループ順位40位以内、RS 80以上、売買代金 ${formatNumber(leadingGroupMinVolume)} 以上。`;
 
-  if (manifestQuery.isLoading || homeQuery.isLoading || scanBundleQuery.isLoading) {
+  // C98 — partial degradation. A failed fetch must cost the user exactly the
+  // sections it feeds, never the whole page: the old code returned a single red
+  // line and the entire product disappeared. Spin only while NOTHING has landed
+  // yet; after that every section renders from whatever data it has.
+  const dataPending = manifestQuery.isLoading || (homeQuery.isLoading && scanBundleQuery.isLoading);
+  const failures = [];
+  if (manifestQuery.isError) {
+    failures.push({
+      key: 'manifest',
+      label: 'マーケット一覧',
+      impact: '市場の切り替えと、各データの保存場所が読めません。',
+      retry: manifestQuery.refetch,
+    });
+  }
+  if (homeQuery.isError) {
+    failures.push({
+      key: 'home',
+      label: '主要指数と業種グループ',
+      impact: '指数カードと業種グループ トップ10は空になります。',
+      retry: homeQuery.refetch,
+    });
+  }
+  if (scanBundleQuery.isError) {
+    failures.push({
+      key: 'scan',
+      label: 'スキャン結果',
+      impact: '候補リストと地合い判定は空になります。',
+      retry: scanBundleQuery.refetch,
+    });
+  }
+
+  if (dataPending && !failures.length) {
     return (
       <Box display="flex" justifyContent="center" py={8}>
         <CircularProgress />
       </Box>
-    );
-  }
-
-  if (manifestQuery.isError || homeQuery.isError || scanBundleQuery.isError) {
-    return (
-      <Alert severity="error">
-        日次スナップショットの読み込みに失敗しました。
-      </Alert>
     );
   }
 
@@ -262,6 +292,14 @@ function StaticHomePage() {
       month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
   })();
+
+  // The date the whole snapshot speaks for. Prefer the scan date the export
+  // stamps; fall back to the manifest / chart index so the freshness check still
+  // works when the home payload is the thing that failed.
+  const snapshotAsOfDate = freshness.scan_as_of_date
+    || marketEntry.as_of_date
+    || chartIndexQuery.data?.as_of_date
+    || null;
 
   const handleRowClick = (symbol, navigationSymbols) => {
     if (chartEnabledSymbols.has(symbol)) {
@@ -299,6 +337,14 @@ function StaticHomePage() {
         </Typography>
       </Box>
 
+      {/* C98: what failed, what it costs, how to retry — plus the offline /
+          stale-snapshot warning. Renders nothing when everything is healthy. */}
+      <StaticDataStatusBanner
+        failures={failures}
+        asOfDate={snapshotAsOfDate}
+        market={marketEntry.market}
+      />
+
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} />
@@ -319,12 +365,13 @@ function StaticHomePage() {
           risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
       <TodaysBuysCard
         indexData={chartIndexQuery.data}
+        market={marketEntry.market}
         scanRows={scanRows}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
       />
 
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        {(home.key_markets || [])
+        {(home?.key_markets || [])
           .map((item) => ({
             ...item,
             _closes: (item.history || []).map((h) => h.close).filter((c) => c != null),
@@ -412,7 +459,7 @@ function StaticHomePage() {
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={topNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="現在の条件に一致する銘柄はありません。"
+        emptyMessage={scanEmptyMessage}
         showRating
         action={(
           <TextField
@@ -444,7 +491,9 @@ function StaticHomePage() {
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={leadingGroupNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="現在のスナップショットに該当する主導銘柄はありません。"
+        emptyMessage={scanBundleQuery.isError || scanBundleQuery.isLoading
+          ? scanEmptyMessage
+          : '現在のスナップショットに該当する主導銘柄はありません。'}
         showRs
         priceSparklineWidth={195}
         priceSparklineInnerWidth={150}
@@ -462,16 +511,23 @@ function StaticHomePage() {
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={backtestAlignedNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="現在の条件に一致する銘柄はありません。"
+        emptyMessage={scanEmptyMessage}
         showRs
         priceSparklineWidth={195}
         priceSparklineInnerWidth={150}
       />
 
-      <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }}>
+      <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }} data-testid="top-groups-section">
         <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
           業種グループ トップ10
         </Typography>
+        {topGroups.length === 0 && (
+          <Typography variant="caption" color="text.secondary">
+            {homeQuery.isError
+              ? '業種グループを読み込めませんでした。上の再試行を押してください。'
+              : homeQuery.isLoading ? '読み込み中…' : '業種グループのデータがありません。'}
+          </Typography>
+        )}
         <TableContainer>
           <Table size="small">
             <TableHead>

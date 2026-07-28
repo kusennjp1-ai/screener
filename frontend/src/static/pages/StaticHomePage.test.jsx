@@ -16,12 +16,17 @@ const priceSparklineSpy = vi.fn();
 vi.mock('../dataClient', () => ({
   fetchStaticJson: (...args) => fetchStaticJson(...args),
   useStaticManifest: (...args) => useStaticManifest(...args),
-  resolveStaticMarketEntry: (manifest, selectedMarket) => ({
-    market: selectedMarket,
-    display_name: manifest.markets[selectedMarket].display_name,
-    pages: manifest.markets[selectedMarket].pages,
-    assets: manifest.markets[selectedMarket].assets,
-  }),
+  // Mirrors the real resolver's tolerance of a missing manifest — the page must
+  // survive the manifest itself failing to load.
+  resolveStaticMarketEntry: (manifest, selectedMarket) => {
+    const entry = manifest?.markets?.[selectedMarket];
+    return {
+      market: selectedMarket,
+      display_name: entry?.display_name || selectedMarket,
+      pages: entry?.pages || {},
+      assets: entry?.assets || {},
+    };
+  },
 }));
 
 vi.mock('../chartClient', () => ({
@@ -528,6 +533,104 @@ describe('StaticHomePage', () => {
 
     const line = await screen.findByText(/スキャン 2026-04-24/);
     expect(line.textContent).not.toContain('価格更新');
+  });
+
+  // C98 — one failed fetch used to blank the entire product: the page returned a
+  // single red line and every loaded section disappeared with it.
+  describe('partial degradation', () => {
+    const OLD_ERROR = '日次スナップショットの読み込みに失敗しました。';
+
+    it('keeps the scan sections when the home payload fails', async () => {
+      fetchStaticJson.mockImplementation(async (path) => {
+        if (path === 'markets/us/home.json') throw new Error('home 404');
+        if (path === 'markets/us/scan/manifest.json') return scanManifestPayload;
+        if (path === 'markets/us/scan/chunks/chunk-0001.json') return scanChunkPayload;
+        throw new Error(`Unexpected static path: ${path}`);
+      });
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const topSection = await screen.findByTestId('top-scan-candidates-section');
+      expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
+      expect(screen.getByTestId('backtest-aligned-section')).toBeInTheDocument();
+      expect(screen.getByTestId('leaders-in-leading-groups-section')).toBeInTheDocument();
+      expect(screen.queryByText(OLD_ERROR)).not.toBeInTheDocument();
+
+      const banner = screen.getByTestId('static-data-error-banner');
+      expect(within(banner).getByTestId('static-data-failure-home')).toHaveTextContent('主要指数と業種グループ');
+      expect(within(banner).queryByTestId('static-data-failure-scan')).not.toBeInTheDocument();
+      expect(screen.getByTestId('top-groups-section')).toHaveTextContent('業種グループを読み込めませんでした');
+    });
+
+    it('keeps the index cards and group table when the scan bundle fails', async () => {
+      homePayload.key_markets = [{
+        symbol: 'SPY',
+        display_name: 'S&P 500',
+        currency: 'USD',
+        latest_close: 500,
+        change_1d: 0.5,
+        history: [{ close: 495 }, { close: 500 }],
+      }];
+      homePayload.top_groups = [{
+        industry_group: 'Semiconductors', rank: 1, rank_change_1w: 2, rank_change_1m: 5, top_symbol: 'NVDA',
+      }];
+      fetchStaticJson.mockImplementation(async (path) => {
+        if (path === 'markets/us/home.json') return homePayload;
+        throw new Error(`scan unavailable: ${path}`);
+      });
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      expect(await screen.findByText('SPY')).toBeInTheDocument();
+      expect(screen.getByText('Semiconductors')).toBeInTheDocument();
+      expect(screen.queryByText(OLD_ERROR)).not.toBeInTheDocument();
+      expect(screen.getByTestId('static-data-failure-scan')).toHaveTextContent('スキャン結果');
+      expect(screen.getByTestId('top-scan-candidates-section'))
+        .toHaveTextContent('スキャン結果を読み込めませんでした');
+    });
+
+    it('still renders the page shell when the manifest itself fails', async () => {
+      useStaticManifest.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        refetch: vi.fn(),
+      });
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      expect(await screen.findByText(/スナップショット$/)).toBeInTheDocument();
+      expect(screen.getByTestId('static-data-failure-manifest')).toBeInTheDocument();
+      expect(screen.getByTestId('top-groups-section')).toBeInTheDocument();
+      expect(screen.queryByText(OLD_ERROR)).not.toBeInTheDocument();
+    });
+
+    it('recovers the failed section when 再試行 is tapped', async () => {
+      let homeFails = true;
+      fetchStaticJson.mockImplementation(async (path) => {
+        if (path === 'markets/us/home.json') {
+          if (homeFails) throw new Error('home 404');
+          return homePayload;
+        }
+        if (path === 'markets/us/scan/manifest.json') return scanManifestPayload;
+        if (path === 'markets/us/scan/chunks/chunk-0001.json') return scanChunkPayload;
+        throw new Error(`Unexpected static path: ${path}`);
+      });
+      homePayload.top_groups = [{
+        industry_group: 'Semiconductors', rank: 1, rank_change_1w: 2, rank_change_1m: 5, top_symbol: 'NVDA',
+      }];
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      await screen.findByTestId('static-data-error-banner');
+      homeFails = false;
+      await userEvent.setup().click(screen.getByTestId('static-data-retry'));
+
+      expect(await screen.findByText('Semiconductors')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByTestId('static-data-error-banner')).not.toBeInTheDocument();
+      });
+    });
   });
 
   it('shows the shared market-regime banner when scan rows carry regime fields', async () => {

@@ -11,6 +11,7 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
+import { evaluateSnapshotFreshness } from './StaticDataStatusBanner';
 import SellTiming from './SellTiming';
 
 // 今日の買い候補 — the one-glance decision list (C83, graphical rebuild C87).
@@ -304,7 +305,7 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
   );
 }
 
-export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
+export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, market = 'US', now }) {
   const [showAll, setShowAll] = useState(false);
   const { has: isWatched, toggle: toggleWatch } = useWatchlist();
   const [equity, setEquity] = useState(() => {
@@ -323,10 +324,15 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
 
   const entries = indexData?.symbols || [];
   const asOf = indexData?.as_of_date;
-  const stale = useMemo(() => {
-    if (!asOf) return false;
-    return (Date.now() - new Date(`${asOf}T00:00:00Z`).getTime()) > 4 * 86400e3;
-  }, [asOf]);
+  // Staleness is counted in TRADING SESSIONS, not calendar days. The old
+  // 4-calendar-day constant called a Friday snapshot fresh on the following
+  // Tuesday; one completed session behind is already too old to buy on.
+  const freshness = useMemo(
+    () => evaluateSnapshotFreshness({ asOfDate: asOf, market, now: now || new Date() }),
+    [asOf, market, now],
+  );
+  const stale = freshness.stale;
+  const sessionsBehind = freshness.sessionsBehind;
 
   const classified = useMemo(() => {
     const groups = { buy_now: [], not_triggered: [], extended: [], stale: [], no_signal: [] };
@@ -375,6 +381,18 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
           {equity > 0 ? `資金 $${equity.toLocaleString()}` : '[資金を設定]'}
         </Typography>
       </Box>
+
+      {stale && (
+        <Box sx={{ p: 1, mb: 1, borderRadius: 1.5, border: `1px solid ${C.amber}`, bgcolor: 'rgba(224,165,46,0.08)' }}
+          data-testid="todays-buys-stale">
+          <Typography sx={{ color: C.amber, fontWeight: 700, fontSize: 12.5 }}>
+            データ未更新 — 買い判定は出しません
+          </Typography>
+          <Typography sx={{ color: C.grey, fontSize: 11, mt: 0.25 }}>
+            {asOf} 時点のデータで、直近の立会日から取引{sessionsBehind}日分遅れています。価格が動いているため、この画面の値で発注しないでください。
+          </Typography>
+        </Box>
+      )}
 
       {marketRed ? (
         <Box sx={{ p: 1.25, borderRadius: 1.5, border: `1px solid ${C.red}`, bgcolor: 'rgba(242,54,69,0.08)' }}
