@@ -79,6 +79,16 @@ const badgeSx = (color, pulse, order) => ({
 
 export default function SignalBadges({ signal, sellPlan, sx }) {
   const buyActive = Boolean(signal?.active);
+  // "Buying Now!" is the Triple Barrel state — all three behavioural barrels
+  // lit. The engine can mark a signal active off a recent breakout annotation
+  // with only 2 of 3, which rendered a lit BUY directly above a red X on the
+  // failed barrel and a caption reading 「3バレル全点灯＝Triple Barrel買い」.
+  // Name the real state instead of overclaiming.
+  const barrelsPassed = signal?.barrels_passed ?? null;
+  const tripleBarrel = barrelsPassed == null || barrelsPassed >= 3;
+  const buyLabel = tripleBarrel
+    ? (signal?.headline || 'Buying Now!')
+    : `あと${3 - barrelsPassed}条件（${barrelsPassed}/3）`;
   const sellMeta = SELL_META[sellPlan?.action];
   if (!buyActive && !sellMeta) return null;
 
@@ -100,9 +110,9 @@ export default function SignalBadges({ signal, sellPlan, sx }) {
           <Chip
             size="small"
             icon={<BoltIcon sx={{ fontSize: 16 }} />}
-            label={signal.headline || 'Buying Now!'}
+            label={buyLabel}
             data-testid="signal-badge-buy"
-            sx={badgeSx('#3aa0ff', true, order++)}
+            sx={badgeSx(tripleBarrel ? '#3aa0ff' : '#e0a52e', tripleBarrel, order++)}
           />
         </Tooltip>
       )}

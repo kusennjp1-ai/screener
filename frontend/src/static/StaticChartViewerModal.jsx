@@ -174,7 +174,9 @@ function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
         {i.passesTemplate != null && (
           <span style={{ color: i.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: 700 }}>
-            {i.passesTemplate ? '✓ テンプレート合格' : '✗ テンプレート不合格'}
+            {i.templateScore != null && i.templateMax != null
+              ? `テンプレート ${i.templateScore}/${i.templateMax}`
+              : (i.passesTemplate ? '✓ テンプレート合格' : '✗ テンプレート不合格')}
           </span>
         )}
         {i.rsRating != null && (
@@ -355,11 +357,28 @@ function StaticChartViewerModal({
   const pivotLabel = stockData?.vcp_pivot != null ? 'VCP Pivot' : 'Pivot';
   const stage = stockData?.stage ?? null;
   const vcpDetected = stockData?.vcp_detected === true;
+  // One payload, one answer: the same block TrendTemplateScorecard and
+  // BuyChecklist render, so the legend can never disagree with them.
+  const trendTemplate = chartPayload?.trend_template || null;
   // Minervini trend-template readout drawn on the chart itself.
   const minerviniInfo = useMemo(() => {
     if (!stockData) return null;
+    // The Trend Template must come from the SAME payload the 8/8 scorecard and
+    // the buy checklist read. Deriving it from the scan row here put a magenta
+    // "✗ テンプレート不合格" in the chart legend while "8/8" rendered in green
+    // twice below it — one screen, opposite answers, on the mandatory gate.
+    const ttScore = trendTemplate?.score
+      ?? (Array.isArray(trendTemplate?.conditions)
+        ? trendTemplate.conditions.filter((c) => c.passed).length
+        : null);
+    const ttMax = trendTemplate?.max
+      ?? (Array.isArray(trendTemplate?.conditions) ? trendTemplate.conditions.length : null);
     return {
-      passesTemplate: stockData.passes_template ?? null,
+      passesTemplate: ttScore != null && ttMax != null
+        ? ttScore >= ttMax
+        : (stockData.passes_template ?? null),
+      templateScore: ttScore,
+      templateMax: ttMax,
       rsRating: stockData.rs_rating ?? null,
       stage: stockData.stage ?? null,
       maStackOk: stockData.ma_alignment ?? null,
@@ -369,7 +388,7 @@ function StaticChartViewerModal({
       vcpDetected,
       executionState: stockData.execution_state ?? null,
     };
-  }, [stockData, pivotPrice, vcpDetected]);
+  }, [stockData, pivotPrice, vcpDetected, trendTemplate]);
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルでは価格パネル（ロウソク＋出来高）そのものに 55vh を最低保証する。
   // 以前は上部のストリップ類も含めて 55vh だったため、実際のチャートは 43vh

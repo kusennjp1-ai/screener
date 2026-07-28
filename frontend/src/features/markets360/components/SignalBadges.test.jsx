@@ -53,3 +53,20 @@ describe('SignalBadges', () => {
     expect(screen.getByText('SELL')).toBeInTheDocument();
   });
 });
+
+describe('the buy badge never overclaims Triple Barrel', () => {
+  it('names the real state when only 2 of 3 barrels are lit', () => {
+    renderWithProviders(
+      <SignalBadges signal={{ active: true, headline: 'Buying Now!', barrels_passed: 2 }} sellPlan={null} />,
+    );
+    expect(screen.getByText('あと1条件（2/3）')).toBeInTheDocument();
+    expect(screen.queryByText('Buying Now!')).not.toBeInTheDocument();
+  });
+
+  it('shows the headline only on a full Triple Barrel', () => {
+    renderWithProviders(
+      <SignalBadges signal={{ active: true, headline: 'Buying Now!', barrels_passed: 3 }} sellPlan={null} />,
+    );
+    expect(screen.getByText('Buying Now!')).toBeInTheDocument();
+  });
+});
