@@ -24,7 +24,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import StaticChartViewerModal from '../StaticChartViewerModal';
 import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
-import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
+import MarketRegimeBand from '../components/MarketRegimeBand';
 import TodaysBuysCard from '../components/TodaysBuysCard';
 import StaticDataStatusBanner from '../components/StaticDataStatusBanner';
 import WatchlistCard from '../components/WatchlistCard';
@@ -39,6 +39,7 @@ import { filterStaticScanRows, sortStaticScanRows } from '../scanClient';
 import DailyScanRowsTable from '../components/DailyScanRowsTable';
 import { buildFiltersFromPreset } from '../hooks/usePresetScreens';
 import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
+import { C } from '../designTokens';
 
 const EMPTY_RESULTS = [];
 const DEFAULT_TOP_RESULTS = 20;
@@ -54,6 +55,135 @@ const formatNumber = (value, digits = 0) => {
     minimumFractionDigits: digits,
   });
 };
+
+const fmtPct = (value, digits = 1) => (
+  value == null || Number.isNaN(Number(value))
+    ? '—'
+    : `${Number(value) > 0 ? '+' : ''}${Number(value).toFixed(digits)}%`
+);
+
+/**
+ * A section with nothing in it earns a 36px title bar, not a card full of
+ * chrome around an empty table. Four of these used to render simultaneously —
+ * ~1100px of borders and prose wrapped around zero rows, with the empty message
+ * itself cut off because a 540px <table> sat inside a 317px scroller.
+ *
+ * A zero-row snapshot collapses (tap to read why); a FAILED or still-loading
+ * fetch stays open, because that message is the whole point of the section.
+ */
+function EmptySectionBar({ testId, title, statusLabel, message, note, alwaysOpen = false }) {
+  const [open, setOpen] = useState(false);
+  const expanded = alwaysOpen || open;
+  return (
+    <Paper
+      data-testid={testId}
+      elevation={0}
+      sx={{ mb: 1, border: '1px solid', borderColor: 'divider' }}
+    >
+      <Box
+        component={alwaysOpen ? 'div' : 'button'}
+        type={alwaysOpen ? undefined : 'button'}
+        onClick={alwaysOpen ? undefined : () => setOpen((value) => !value)}
+        aria-expanded={alwaysOpen ? undefined : expanded}
+        data-testid={`${testId}-toggle`}
+        sx={{
+          width: '100%',
+          minHeight: 36,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          px: 1.25,
+          py: 0.5,
+          background: 'none',
+          border: 0,
+          font: 'inherit',
+          color: 'inherit',
+          textAlign: 'left',
+          cursor: alwaysOpen ? 'default' : 'pointer',
+        }}
+      >
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.inkStrong, lineHeight: 1.3, minWidth: 0 }}>
+          {title}
+        </Typography>
+        <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: C.grey, flexShrink: 0 }}>
+          — {statusLabel}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {!alwaysOpen && (
+          <Typography sx={{ fontSize: 11, color: C.grey, flexShrink: 0 }}>
+            {expanded ? '▾' : '▸'}
+          </Typography>
+        )}
+      </Box>
+      {expanded && (
+        <Box sx={{ px: 1.25, pb: 1.25 }}>
+          <Typography sx={{ fontSize: 11.5, color: C.ink, lineHeight: 1.6 }}>{message}</Typography>
+          {note && (
+            <Typography sx={{ fontSize: 10, color: C.dim, lineHeight: 1.5, mt: 0.5 }}>{note}</Typography>
+          )}
+        </Box>
+      )}
+    </Paper>
+  );
+}
+
+/**
+ * The strategy scorecard is a 568px receipt for a claim the user already
+ * accepted; it does not belong between the market verdict and today's buys.
+ * It now lives BELOW the buy list behind this one-line summary — the headline
+ * numbers stay visible, the detail (including the 訂正) is one tap away.
+ */
+function ScorecardSummaryRow({ data }) {
+  const [open, setOpen] = useState(false);
+  const m = data?.metrics;
+  if (!m) return null;
+  const expectancy = m.payoff_distribution?.expectancy_r;
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Box
+        component="button"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-label="検証実績の詳細（訂正を含む）"
+        data-testid="scorecard-summary-row"
+        sx={{
+          width: '100%',
+          minHeight: 36,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          px: 1.25,
+          py: 0.5,
+          borderRadius: 1.5,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: C.panel,
+          font: 'inherit',
+          color: 'inherit',
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        <Typography sx={{ fontSize: 11.5, fontWeight: 800, color: C.inkStrong, flexShrink: 0 }}>
+          検証実績 {open ? '▾' : '▸'}
+        </Typography>
+        <Typography sx={{
+          fontSize: 10, fontFamily: 'monospace', color: C.grey, lineHeight: 1.4,
+          minWidth: 0, whiteSpace: 'nowrap',
+        }}>
+          {`CAGR ${fmtPct(m.cagr_pct)} · 最大DD ${fmtPct(m.max_drawdown_pct)}`}
+          {expectancy != null ? ` · 期待値 ${Number(expectancy).toFixed(2)}R` : ''}
+        </Typography>
+      </Box>
+      {open && (
+        <Box sx={{ mt: 1 }}>
+          <StrategyScorecardCard data={data} />
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 function StaticHomePage() {
   const manifestQuery = useStaticManifest();
@@ -235,6 +365,16 @@ function StaticHomePage() {
   const leadingGroupSubtitle = leadingGroupMinVolume == null
     ? '上位20銘柄: グループ順位40位以内、RS 80以上。'
     : `上位20銘柄: グループ順位40位以内、RS 80以上、売買代金 ${formatNumber(leadingGroupMinVolume)} 以上。`;
+  const topCandidateSubtitle = topCandidateFilters.minVolume == null
+    ? 'ミネルヴィニのトレンドテンプレート合格銘柄を合成スコア順に表示。行をクリックするとチャートが開きます。'
+    : `トレンドテンプレート合格＋売買代金 ${formatNumber(topCandidateFilters.minVolume)} 以上。行をクリックするとチャートが開きます。`;
+  const backtestAlignedSubtitle = 'トレンドテンプレート合格＋RS 70以上＋売買代金 500万ドル以上を、VCP検出を優先しRSの高い順に表示（検証で採用した並び順）。過去データ検証が候補を選ぶときと同じ条件で、業績・業種の追加関門はかけていません（検証側はさらに値幅1.5%以上の条件も使うため、完全一致ではありません）。行をクリックするとチャートが開きます。';
+  // A zero-row section collapses to a title bar; a failed or still-loading
+  // fetch keeps its message open, because that message IS the content.
+  const scanFetchUnresolved = scanBundleQuery.isError || scanBundleQuery.isLoading;
+  const scanStatusLabel = scanBundleQuery.isError
+    ? '読み込み失敗'
+    : scanBundleQuery.isLoading ? '読み込み中' : '0件';
 
   // C98 — partial degradation. A failed fetch must cost the user exactly the
   // sections it feeds, never the whole page: the old code returned a single red
@@ -293,6 +433,15 @@ function StaticHomePage() {
     });
   })();
 
+  // One line, only the fields this snapshot actually has. Printing "騰落 - ·
+  // グループ -" wrapped the header onto a second row to say nothing.
+  const freshnessLabel = [
+    pricesUpdatedLabel ? `価格 ${pricesUpdatedLabel}` : null,
+    freshness.scan_as_of_date ? `スキャン ${freshness.scan_as_of_date}` : null,
+    freshness.breadth_latest_date ? `騰落 ${freshness.breadth_latest_date}` : null,
+    freshness.groups_latest_date ? `グループ ${freshness.groups_latest_date}` : null,
+  ].filter(Boolean).join(' · ') || 'データ日付 不明';
+
   // The date the whole snapshot speaks for. Prefer the scan date the export
   // stamps; fall back to the manifest / chart index so the freshness check still
   // works when the home payload is the thing that failed.
@@ -314,28 +463,34 @@ function StaticHomePage() {
 
   return (
     <Box>
+      {/* One compact header line — the old h5 + 4-field freshness string cost
+          100px of the first screen and pushed the buy list under the fold. */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'baseline',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          columnGap: 2,
-          rowGap: 0.5,
-          mb: 2,
+          columnGap: 1.5,
+          rowGap: 0.25,
+          mb: 1,
         }}
       >
-        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px' }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '16.5px', letterSpacing: '-0.3px', lineHeight: 1.3 }}>
           {flag ? `${flag}  ` : ''}{marketDisplay} スナップショット
         </Typography>
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ fontFamily: 'monospace', fontSize: '11px' }}
+          sx={{ fontFamily: 'monospace', fontSize: '10px' }}
         >
-          {`${pricesUpdatedLabel ? `価格更新 ${pricesUpdatedLabel} · ` : ''}スキャン ${freshness.scan_as_of_date || '-'} · 騰落 ${freshness.breadth_latest_date || '-'} · グループ ${freshness.groups_latest_date || '-'}`}
+          {freshnessLabel}
         </Typography>
       </Box>
+
+      {/* Minervini rule 1, stated before anything else: is the market buyable
+          today? Reads the regime fields that ride on every scan row. */}
+      <MarketRegimeBand results={scanRows} />
 
       {/* C98: what failed, what it costs, how to retry — plus the offline /
           stale-snapshot warning. Renders nothing when everything is healthy. */}
@@ -345,30 +500,30 @@ function StaticHomePage() {
         market={marketEntry.market}
       />
 
-      {/* Minervini rule 1 — same market-regime banner as the PC scan page,
-          read off the loaded scan rows (regime fields ride on every row). */}
-      <MarketRegimeBanner results={scanRows} />
+      {/* The decision block — everything above it is a gate, everything below
+          it is evidence. Nothing may be inserted before this slot. */}
+      <Box data-testid="buy-list-slot">
+        {/* C86: held/watched names first — the exit is the edge. Surfaces each
+            watched symbol's exported sell action + stop, most-urgent first. */}
+        <WatchlistCard
+          indexData={chartIndexQuery.data}
+          onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
+        />
 
-      {/* C95: the strategy's long-run scorecard in the agreed priority order
-          (CAGR > maxDD > risk-adjusted > expectancy > win rate) + the right-
-          tail concentration. Renders nothing until the backtest snapshot ships. */}
-      <StrategyScorecardCard data={scorecardQuery.data} />
+        {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
+            risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
+        <TodaysBuysCard
+          indexData={chartIndexQuery.data}
+          market={marketEntry.market}
+          scanRows={scanRows}
+          onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
+        />
+      </Box>
 
-      {/* C86: held/watched names first — the exit is the edge. Surfaces each
-          watched symbol's exported sell action + stop, most-urgent first. */}
-      <WatchlistCard
-        indexData={chartIndexQuery.data}
-        onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
-      />
-
-      {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
-          risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
-      <TodaysBuysCard
-        indexData={chartIndexQuery.data}
-        market={marketEntry.market}
-        scanRows={scanRows}
-        onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
-      />
+      {/* C95: the strategy's long-run scorecard (CAGR > maxDD > risk-adjusted >
+          expectancy > win rate, plus the 訂正). Now BELOW the buy list behind a
+          one-line summary — it is a receipt, not a decision. */}
+      <ScorecardSummaryRow data={scorecardQuery.data} />
 
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {(home?.key_markets || [])
@@ -447,87 +602,120 @@ function StaticHomePage() {
         })}
       </Grid>
 
-      <DailyScanRowsTable
-        testId="top-scan-candidates-section"
-        title="ミネルヴィニ合格 注目銘柄 トップ20"
-        subtitle={
-          topCandidateFilters.minVolume == null
-            ? 'ミネルヴィニのトレンドテンプレート合格銘柄を合成スコア順に表示。行をクリックするとチャートが開きます。'
-            : `トレンドテンプレート合格＋売買代金 ${formatNumber(topCandidateFilters.minVolume)} 以上。行をクリックするとチャートが開きます。`
-        }
-        rows={topResults}
-        chartEnabledSymbols={chartEnabledSymbols}
-        navigationSymbols={topNavigationSymbols}
-        onOpenChart={handleRowClick}
-        emptyMessage={scanEmptyMessage}
-        showRating
-        action={(
-          <TextField
-            select
-            size="small"
-            label="時価総額（下限）"
-            value={marketCapMin}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              setMarketCapMin(nextValue === '' ? '' : Number(nextValue));
-            }}
-            sx={{ minWidth: 150 }}
-          >
-            <MenuItem value="">指定なし</MenuItem>
-            {MARKET_CAP_OPTIONS.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>
-        )}
-      />
+      {topResults.length === 0 ? (
+        <EmptySectionBar
+          testId="top-scan-candidates-section"
+          title="ミネルヴィニ合格 注目銘柄 トップ20"
+          statusLabel={scanStatusLabel}
+          message={scanEmptyMessage}
+          note={topCandidateSubtitle}
+          alwaysOpen={scanFetchUnresolved}
+        />
+      ) : (
+        <DailyScanRowsTable
+          testId="top-scan-candidates-section"
+          title="ミネルヴィニ合格 注目銘柄 トップ20"
+          subtitle={topCandidateSubtitle}
+          rows={topResults}
+          chartEnabledSymbols={chartEnabledSymbols}
+          navigationSymbols={topNavigationSymbols}
+          onOpenChart={handleRowClick}
+          emptyMessage={scanEmptyMessage}
+          showRating
+          action={(
+            <TextField
+              select
+              size="small"
+              label="時価総額（下限）"
+              value={marketCapMin}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setMarketCapMin(nextValue === '' ? '' : Number(nextValue));
+              }}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="">指定なし</MenuItem>
+              {MARKET_CAP_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+        />
+      )}
 
-      <DailyScanRowsTable
-        testId="leaders-in-leading-groups-section"
-        title="主導業種グループの主導銘柄"
-        subtitle={leadingGroupSubtitle}
-        rows={leadingGroupRows}
-        chartEnabledSymbols={chartEnabledSymbols}
-        navigationSymbols={leadingGroupNavigationSymbols}
-        onOpenChart={handleRowClick}
-        emptyMessage={scanBundleQuery.isError || scanBundleQuery.isLoading
-          ? scanEmptyMessage
-          : '現在のスナップショットに該当する主導銘柄はありません。'}
-        showRs
-        priceSparklineWidth={195}
-        priceSparklineInnerWidth={150}
-      />
+      {leadingGroupRows.length === 0 ? (
+        <EmptySectionBar
+          testId="leaders-in-leading-groups-section"
+          title="主導業種グループの主導銘柄"
+          statusLabel={scanStatusLabel}
+          message={scanFetchUnresolved
+            ? scanEmptyMessage
+            : '現在のスナップショットに該当する主導銘柄はありません。'}
+          note={leadingGroupSubtitle}
+          alwaysOpen={scanFetchUnresolved}
+        />
+      ) : (
+        <DailyScanRowsTable
+          testId="leaders-in-leading-groups-section"
+          title="主導業種グループの主導銘柄"
+          subtitle={leadingGroupSubtitle}
+          rows={leadingGroupRows}
+          chartEnabledSymbols={chartEnabledSymbols}
+          navigationSymbols={leadingGroupNavigationSymbols}
+          onOpenChart={handleRowClick}
+          emptyMessage={scanEmptyMessage}
+          showRs
+          priceSparklineWidth={195}
+          priceSparklineInnerWidth={150}
+        />
+      )}
 
       {/* C97: the exact pool the +15.2% 6-year backtest picks from — Trend
           Template + RS>=70, strongest RS first, NO fundamental/group gate. Sits
           beside the strict leaders list so both the quality view and the
           backtest-faithful view are available. */}
-      <DailyScanRowsTable
-        testId="backtest-aligned-section"
-        title="バックテスト準拠候補（検証と同じ選び方）"
-        subtitle="トレンドテンプレート合格＋RS 70以上＋売買代金 500万ドル以上を、VCP検出を優先しRSの高い順に表示（検証で採用した並び順）。過去データ検証が候補を選ぶときと同じ条件で、業績・業種の追加関門はかけていません（検証側はさらに値幅1.5%以上の条件も使うため、完全一致ではありません）。行をクリックするとチャートが開きます。"
-        rows={backtestAlignedRows}
-        chartEnabledSymbols={chartEnabledSymbols}
-        navigationSymbols={backtestAlignedNavigationSymbols}
-        onOpenChart={handleRowClick}
-        emptyMessage={scanEmptyMessage}
-        showRs
-        priceSparklineWidth={195}
-        priceSparklineInnerWidth={150}
-      />
+      {backtestAlignedRows.length === 0 ? (
+        <EmptySectionBar
+          testId="backtest-aligned-section"
+          title="バックテスト準拠候補（検証と同じ選び方）"
+          statusLabel={scanStatusLabel}
+          message={scanEmptyMessage}
+          note={backtestAlignedSubtitle}
+          alwaysOpen={scanFetchUnresolved}
+        />
+      ) : (
+        <DailyScanRowsTable
+          testId="backtest-aligned-section"
+          title="バックテスト準拠候補（検証と同じ選び方）"
+          subtitle={backtestAlignedSubtitle}
+          rows={backtestAlignedRows}
+          chartEnabledSymbols={chartEnabledSymbols}
+          navigationSymbols={backtestAlignedNavigationSymbols}
+          onOpenChart={handleRowClick}
+          emptyMessage={scanEmptyMessage}
+          showRs
+          priceSparklineWidth={195}
+          priceSparklineInnerWidth={150}
+        />
+      )}
 
+      {topGroups.length === 0 ? (
+        <EmptySectionBar
+          testId="top-groups-section"
+          title="業種グループ トップ10"
+          statusLabel={homeQuery.isError ? '読み込み失敗' : homeQuery.isLoading ? '読み込み中' : '0件'}
+          message={homeQuery.isError
+            ? '業種グループを読み込めませんでした。上の再試行を押してください。'
+            : homeQuery.isLoading ? '読み込み中…' : '業種グループのデータがありません。'}
+          alwaysOpen={homeQuery.isError || homeQuery.isLoading}
+        />
+      ) : (
       <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }} data-testid="top-groups-section">
         <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
           業種グループ トップ10
         </Typography>
-        {topGroups.length === 0 && (
-          <Typography variant="caption" color="text.secondary">
-            {homeQuery.isError
-              ? '業種グループを読み込めませんでした。上の再試行を押してください。'
-              : homeQuery.isLoading ? '読み込み中…' : '業種グループのデータがありません。'}
-          </Typography>
-        )}
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -555,6 +743,7 @@ function StaticHomePage() {
           </Table>
         </TableContainer>
       </Paper>
+      )}
 
       <StaticChartViewerModal
         open={chartModalOpen}

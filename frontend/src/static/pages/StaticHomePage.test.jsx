@@ -516,12 +516,12 @@ describe('StaticHomePage', () => {
     });
   });
 
-  it('shows 価格更新 from freshness.prices_generated_at ahead of the scan date', async () => {
+  it('shows the price timestamp from freshness.prices_generated_at ahead of the scan date', async () => {
     homePayload.freshness.prices_generated_at = '2026-04-24T20:35:00Z';
 
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    const line = await screen.findByText(/価格更新 .+ · スキャン 2026-04-24/);
+    const line = await screen.findByText(/価格 .+ · スキャン 2026-04-24/);
     expect(line).toBeInTheDocument();
   });
 
@@ -532,7 +532,19 @@ describe('StaticHomePage', () => {
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     const line = await screen.findByText(/スキャン 2026-04-24/);
-    expect(line.textContent).not.toContain('価格更新');
+    expect(line.textContent).not.toContain('価格 ');
+  });
+
+  // The header used to print "騰落 - · グループ -" and wrap onto a second row to
+  // say nothing — 100px of the first screen spent on placeholders.
+  it('drops freshness fields the snapshot does not carry', async () => {
+    homePayload.freshness = { scan_as_of_date: '2026-04-24' };
+    delete homePayload.generated_at;
+
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+    const line = await screen.findByText(/スキャン 2026-04-24/);
+    expect(line.textContent).toBe('スキャン 2026-04-24');
   });
 
   // C98 — one failed fetch used to blank the entire product: the page returned a
@@ -633,14 +645,132 @@ describe('StaticHomePage', () => {
     });
   });
 
-  it('shows the shared market-regime banner when scan rows carry regime fields', async () => {
-    scanChunkPayload.rows[0].market_regime = 'correction';
-    scanChunkPayload.rows[0].market_health = 54;
-    scanChunkPayload.rows[0].market_exposure_pct = 20;
+  // (A) The page never used to state whether the market was buyable; you had to
+  // scroll past every candidate to find two 1-day percentages.
+  describe('market regime band', () => {
+    it('states the verdict from the regime fields riding on the scan rows', async () => {
+      scanChunkPayload.rows[0].market_regime = 'correction';
+      scanChunkPayload.rows[0].market_health = 54;
+      scanChunkPayload.rows[0].market_exposure_pct = 20;
+      scanChunkPayload.rows[0].market_distribution_days = 6;
 
-    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
-    expect(await screen.findByText('Correction')).toBeInTheDocument();
-    expect(screen.getByText(/Health 54\/100/)).toBeInTheDocument();
+      const band = await screen.findByTestId('market-regime-band');
+      expect(within(band).getByTestId('market-regime-verdict')).toHaveTextContent('待機');
+      expect(within(band).getByTestId('market-regime-inputs'))
+        .toHaveTextContent('健全度 54/100 · 売り抜け 6日');
+      expect(within(band).getByTestId('market-regime-exposure')).toHaveTextContent('推奨 20%');
+    });
+
+    it('is the first element under the title, ahead of the buy list', async () => {
+      scanChunkPayload.rows[0].market_regime = 'confirmed_uptrend';
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const band = await screen.findByTestId('market-regime-band');
+      const topSection = screen.getByTestId('top-scan-candidates-section');
+      expect(within(band).getByTestId('market-regime-verdict')).toHaveTextContent('買い場');
+      expect(
+        band.compareDocumentPosition(topSection) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('says 判定不能 rather than inventing a verdict when no row carries a regime', async () => {
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const band = await screen.findByTestId('market-regime-band');
+      expect(within(band).getByTestId('market-regime-verdict')).toHaveTextContent('判定不能');
+      expect(within(band).getByTestId('market-regime-inputs'))
+        .toHaveTextContent('スキャン出力に地合いデータが含まれていません');
+      expect(within(band).queryByText('買い場')).not.toBeInTheDocument();
+      expect(within(band).queryByText('慎重')).not.toBeInTheDocument();
+    });
+  });
+
+  // (B) 1200px of dead weight used to sit above the fold: the scorecard alone was
+  // 568px of backtest receipts between the market verdict and today's buys.
+  describe('strategy scorecard placement', () => {
+    const scorecard = {
+      metrics: {
+        cagr_pct: 10.4,
+        max_drawdown_pct: -15.8,
+        payoff_distribution: { expectancy_r: 0.38 },
+      },
+      correction: '以前このカードは年率+15.2%と表示していましたが、検証側の不具合で過大でした。',
+    };
+
+    beforeEach(() => {
+      globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => scorecard }));
+    });
+
+    it('collapses to a one-line summary that sits below the buy list', async () => {
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const row = await screen.findByTestId('scorecard-summary-row');
+      expect(row).toHaveTextContent('検証実績');
+      expect(row).toHaveTextContent('CAGR +10.4% · 最大DD -15.8% · 期待値 0.38R');
+      expect(screen.queryByTestId('strategy-scorecard')).not.toBeInTheDocument();
+
+      const buyListSlot = screen.getByTestId('buy-list-slot');
+      expect(
+        buyListSlot.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('keeps the 訂正 — one tap away, never deleted', async () => {
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const row = await screen.findByTestId('scorecard-summary-row');
+      expect(screen.queryByTestId('scorecard-correction')).not.toBeInTheDocument();
+
+      await userEvent.setup().click(row);
+
+      expect(await screen.findByTestId('strategy-scorecard')).toBeInTheDocument();
+      expect(screen.getByTestId('scorecard-correction')).toHaveTextContent('訂正');
+    });
+  });
+
+  // (C) Four sections used to render an empty 540px <table> inside a 317px
+  // scroller at once — ~1100px of chrome around nothing, empty message clipped.
+  describe('zero-row sections', () => {
+    it('collapses every empty section to a title bar and hides its prose', async () => {
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const groups = await screen.findByTestId('top-groups-section');
+      expect(within(groups).getByTestId('top-groups-section-toggle')).toHaveTextContent('0件');
+      // No table chrome at all — the headers used to render around zero rows.
+      expect(within(groups).queryByRole('table')).not.toBeInTheDocument();
+      expect(within(groups).queryByText('業種グループのデータがありません。')).not.toBeInTheDocument();
+    });
+
+    it('reveals the full untruncated empty message on tap', async () => {
+      scanManifestPayload.initial_rows = [];
+      scanManifestPayload.chunks = [];
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const section = await screen.findByTestId('top-scan-candidates-section');
+      expect(within(section).queryByText('現在の条件に一致する銘柄はありません。')).not.toBeInTheDocument();
+
+      await userEvent.setup().click(within(section).getByTestId('top-scan-candidates-section-toggle'));
+
+      expect(within(section).getByText('現在の条件に一致する銘柄はありません。')).toBeInTheDocument();
+      expect(within(section).getByText(/トレンドテンプレート合格/)).toBeInTheDocument();
+    });
+
+    it('keeps a failed section open, because the failure message is the content', async () => {
+      fetchStaticJson.mockImplementation(async (path) => {
+        if (path === 'markets/us/home.json') return homePayload;
+        throw new Error(`scan unavailable: ${path}`);
+      });
+
+      renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+
+      const section = await screen.findByTestId('top-scan-candidates-section');
+      expect(within(section).getByTestId('top-scan-candidates-section-toggle'))
+        .toHaveTextContent('読み込み失敗');
+      expect(section).toHaveTextContent('スキャン結果を読み込めませんでした。上の再試行を押してください。');
+    });
   });
 });
