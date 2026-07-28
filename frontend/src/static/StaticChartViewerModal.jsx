@@ -36,6 +36,20 @@ import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
 
 const CHART_INFO_STRIP_HEIGHT = 34;
 
+// 共有された ?chart=XXX（ハッシュより前のクエリ）をハッシュ形式に書き換える。
+// アプリは HashRouter なので、この形のリンクはそのままだとホームに落ちる。
+// import 時に一度だけ走らせる（モーダル自身はマウントされないため）。
+export function redirectLegacyChartQuery(loc = typeof window === 'undefined' ? null : window.location) {
+  if (!loc || !loc.search || !loc.search.includes('chart=')) return false;
+  if ((loc.hash || '').includes('chart=')) return false;
+  const symbol = new URLSearchParams(loc.search).get('chart');
+  if (!symbol) return false;
+  loc.replace(`${loc.pathname}#/?chart=${encodeURIComponent(symbol)}`);
+  return true;
+}
+
+redirectLegacyChartQuery();
+
 // MA colours must match createPriceChartSeries.js.
 const MA_LEGEND = [
   ['EMA10', '#E0E0E0'],
@@ -89,7 +103,47 @@ function BandLegend() {
   );
 }
 
-function ChartInfoStrip({ minerviniInfo }) {
+// チャートに重ねる補助ラインのオン/オフ。モバイルは既定オフ——RSラインは
+// 価格パネルの中に描かれるためロウソクと交差して読みにくい。
+function OverlayToggles({ rsOn, epsOn, onToggleRs, onToggleEps }) {
+  return (
+    <Box
+      sx={{
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1,
+        py: 0.5,
+        borderBottom: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.default',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>重ね表示:</Typography>
+      <Chip
+        label="RSライン"
+        size="small"
+        variant={rsOn ? 'filled' : 'outlined'}
+        color={rsOn ? 'primary' : 'default'}
+        onClick={onToggleRs}
+        sx={{ height: 22, fontSize: 11 }}
+      />
+      <Chip
+        label="収益ライン"
+        size="small"
+        variant={epsOn ? 'filled' : 'outlined'}
+        color={epsOn ? 'primary' : 'default'}
+        onClick={onToggleEps}
+        sx={{ height: 22, fontSize: 11 }}
+      />
+    </Box>
+  );
+}
+
+function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
   const i = minerviniInfo || {};
   return (
     <Box
@@ -110,7 +164,7 @@ function ChartInfoStrip({ minerviniInfo }) {
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        {MA_LEGEND.map(([label, color]) => (
+        {MA_LEGEND.filter(([label]) => showEpsLine || label !== '収益').map(([label, color]) => (
           <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
             <Box sx={{ width: 12, height: 2, bgcolor: color, borderRadius: 1 }} />
             <span style={{ color: '#cfcfcf' }}>{label}</span>
@@ -130,7 +184,7 @@ function ChartInfoStrip({ minerviniInfo }) {
         )}
         {i.stage != null && (
           <span style={{ color: i.stage === 2 ? '#4CF64D' : '#bbb' }}>
-            <GlossaryLabel term="stage">Stage</GlossaryLabel> {i.stage}
+            <GlossaryLabel term="stage">ステージ</GlossaryLabel> {i.stage}
           </span>
         )}
         {i.maStackOk != null && (
@@ -150,7 +204,7 @@ function ChartInfoStrip({ minerviniInfo }) {
         )}
         {i.pivot != null && (
           <span style={{ color: '#FFA726' }}>
-            <GlossaryLabel term="pivot">Pivot</GlossaryLabel> {Number(i.pivot).toFixed(2)}
+            <GlossaryLabel term="pivot">ピボット</GlossaryLabel> {Number(i.pivot).toFixed(2)}
           </span>
         )}
         {i.vcpDetected && (
@@ -180,6 +234,11 @@ function StaticChartViewerModal({
   const theme = useTheme();
   // モバイルでは縦積みレイアウト（チャート上・指標下）＋画面上の前後ボタンに切り替える
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // 重ね表示のオン/オフ。null = 既定（モバイルは狭いのでオフ）。
+  const [rsOverlay, setRsOverlay] = useState(null);
+  const [epsOverlay, setEpsOverlay] = useState(null);
+  const showRsLine = rsOverlay ?? !isMobile;
+  const showEpsLine = epsOverlay ?? !isMobile;
   const { selectedMarket } = useStaticMarket() || {};
 
   const entries = useMemo(() => chartIndex?.symbols || [], [chartIndex]);
@@ -312,10 +371,13 @@ function StaticChartViewerModal({
     };
   }, [stockData, pivotPrice, vcpDetected]);
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
-  // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
-  const chartHeight = isMobile
-    ? Math.max(Math.round(viewportHeight * 0.55), 300)
-    : Math.max(viewportHeight - 60, 500);
+  // モバイルでは価格パネル（ロウソク＋出来高）そのものに 55vh を最低保証する。
+  // 以前は上部のストリップ類も含めて 55vh だったため、実際のチャートは 43vh
+  // しか無かった。ヘッダー/凡例はこの上に積み、縦スクロールで読む。
+  const pricePaneHeight = isMobile
+    ? Math.max(Math.round(viewportHeight * 0.55), 320)
+    : Math.max(viewportHeight - 60 - CHART_INFO_STRIP_HEIGHT, 440);
+  const chartHeight = isMobile ? pricePaneHeight : Math.max(viewportHeight - 60, 500);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
 
   return (
@@ -368,11 +430,11 @@ function StaticChartViewerModal({
               }}
             >
               <Typography variant="h5" fontWeight="bold" sx={{ flexShrink: 0, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
-                {currentSymbol || 'Loading...'}
+                {currentSymbol || '読み込み中…'}
               </Typography>
               {isLoading ? <CircularProgress size={18} /> : null}
 
-              {stockData?.ibd_industry_group ? (
+              {stockData?.ibd_industry_group && groupRank != null ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                   <Box
                     sx={{
@@ -389,11 +451,11 @@ function StaticChartViewerModal({
                       noWrap
                       sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
                     >
-                      {groupRank ?? '-'}
+                      {groupRank}
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="grp_rank">Grp Rnk</GlossaryLabel>
+                    <GlossaryLabel term="grp_rank">業種順位</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -452,7 +514,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="eps_rating">EPS Rtg</GlossaryLabel>
+                    <GlossaryLabel term="eps_rating">EPSレート</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -474,7 +536,7 @@ function StaticChartViewerModal({
                     </Typography>
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="stage">Stage</GlossaryLabel>
+                    <GlossaryLabel term="stage">ステージ</GlossaryLabel>
                   </Typography>
                 </Box>
               ) : null}
@@ -504,10 +566,10 @@ function StaticChartViewerModal({
               {stockData ? (
                 <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 1.5, ml: 1 }}>
                   {[
-                    ['IBD', stockData.ibd_industry_group],
-                    ['Sector', stockData.gics_sector],
-                    ['Industry', stockData.gics_industry],
-                  ].map(([label, value]) => (
+                    ['IBD業種', stockData.ibd_industry_group],
+                    ['セクター', stockData.gics_sector],
+                    ['業種', stockData.gics_industry],
+                  ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
                     <Box key={label} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <Box
                         sx={{
@@ -523,7 +585,7 @@ function StaticChartViewerModal({
                         }}
                       >
                         <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem' }}>
-                          {value || '-'}
+                          {value}
                         </Typography>
                       </Box>
                       <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
@@ -606,31 +668,45 @@ function StaticChartViewerModal({
                   <CircularProgress size={56} />
                 </Box>
               ) : currentSymbol ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', height: chartHeight }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', height: { xs: 'auto', md: chartHeight } }}>
                   {/* Info strip ABOVE the chart so the moving-average legend and
                       Minervini readout never cover the candles (a leader near
                       new highs prints at the top-right). One line, scrolls
                       horizontally on narrow screens. */}
-                  <ChartInfoStrip minerviniInfo={minerviniInfo} />
+                  <ChartInfoStrip minerviniInfo={minerviniInfo} showEpsLine={showEpsLine} />
                   <BandLegend />
+                  <OverlayToggles
+                    rsOn={showRsLine}
+                    epsOn={showEpsLine}
+                    onToggleRs={() => setRsOverlay(!showRsLine)}
+                    onToggleEps={() => setEpsOverlay(!showEpsLine)}
+                  />
                   {isMobile && (
                     <SignalBadges
                       signal={chartPayload?.signal}
                       sellPlan={chartPayload?.sell_plan}
                     />
                   )}
-                  <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                  <Box
+                    data-testid="chart-price-pane"
+                    sx={{
+                      flex: { xs: '0 0 auto', md: 1 },
+                      height: { xs: pricePaneHeight, md: 'auto' },
+                      minHeight: { xs: '55vh', md: 0 },
+                      position: 'relative',
+                    }}
+                  >
                     <CandlestickChart
                       symbol={currentSymbol}
                       period="6mo"
-                      height={Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT, 240)}
+                      height={isMobile ? pricePaneHeight : Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT, 240)}
                       visibleRange={visibleRange}
                       onVisibleRangeChange={setVisibleRange}
                       priceData={chartPayload?.bars || []}
-                      rsLineData={chartPayload?.rs_line || null}
+                      rsLineData={showRsLine ? (chartPayload?.rs_line || null) : null}
                       rsRatingValue={stockData?.rs_rating ?? null}
-                      epsLine={chartPayload?.eps_line || null}
-                      blueDots={chartPayload?.blue_dots || null}
+                      epsLine={showEpsLine ? (chartPayload?.eps_line || null) : null}
+                      blueDots={showRsLine ? (chartPayload?.blue_dots || null) : null}
                       dataUpdatedAtOverride={dataUpdatedAtOverride}
                       hideOhlcLegend={isMobile}
                       hideTimeframeToggle={isMobile}

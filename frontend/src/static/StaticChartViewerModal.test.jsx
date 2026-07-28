@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import StaticChartViewerModal from './StaticChartViewerModal';
+import StaticChartViewerModal, { redirectLegacyChartQuery } from './StaticChartViewerModal';
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -166,4 +166,69 @@ describe('StaticChartViewerModal', () => {
     expect(screen.getByText('Raise Stop')).toBeInTheDocument();
     expect(screen.getByText('101.30')).toBeInTheDocument(); // ladder's raised stop
   }, 10000);
+
+  it('toggles the RS overlay out of the price pane', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        generated_at: '2026-04-03T20:10:00Z',
+        symbol: 'NVDA',
+        bars: [{ date: '2026-04-01', open: 100, high: 105, low: 99, close: 104, volume: 10 }],
+        rs_line: [{ date: '2026-04-01', value: 1.02 }],
+        eps_line: [{ date: '2026-04-01', value: 3.1 }],
+        stock_data: { symbol: 'NVDA' },
+        fundamentals: { symbol: 'NVDA' },
+      }),
+    }));
+
+    renderModal({
+      open: true,
+      onClose: vi.fn(),
+      initialSymbol: 'NVDA',
+      chartIndex: { symbols: [{ symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' }] },
+    });
+
+    // Desktop default (jsdom matchMedia reports "not mobile"): overlay on.
+    await waitFor(() => {
+      expect(chartSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ rsLineData: expect.arrayContaining([expect.anything()]) })
+      );
+    });
+
+    fireEvent.click(screen.getByText('RSライン'));
+
+    await waitFor(() => {
+      const last = chartSpy.mock.calls[chartSpy.mock.calls.length - 1][0];
+      expect(last.rsLineData).toBeNull();
+      expect(last.blueDots).toBeNull();
+    });
+  }, 10000);
+});
+
+describe('redirectLegacyChartQuery', () => {
+  const makeLoc = (search, hash) => ({
+    pathname: '/',
+    search,
+    hash,
+    replace: vi.fn(),
+  });
+
+  it('rewrites ?chart=FTNT to the hash route the app actually reads', () => {
+    const loc = makeLoc('?chart=FTNT', '');
+    expect(redirectLegacyChartQuery(loc)).toBe(true);
+    expect(loc.replace).toHaveBeenCalledWith('/#/?chart=FTNT');
+  });
+
+  it('does nothing when the hash already carries the symbol (no redirect loop)', () => {
+    const loc = makeLoc('?chart=FTNT', '#/?chart=FTNT');
+    expect(redirectLegacyChartQuery(loc)).toBe(false);
+    expect(loc.replace).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for an ordinary URL', () => {
+    const loc = makeLoc('', '#/');
+    expect(redirectLegacyChartQuery(loc)).toBe(false);
+    expect(loc.replace).not.toHaveBeenCalled();
+  });
 });
