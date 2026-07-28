@@ -5,8 +5,7 @@ import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import UpdateIcon from '@mui/icons-material/Update';
-import RemoveIcon from '@mui/icons-material/Remove';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { useWatchlist } from '../hooks/useWatchlist';
@@ -14,47 +13,99 @@ import { C } from '../designTokens';
 import { evaluateSnapshotFreshness } from './StaticDataStatusBanner';
 import SellTiming from './SellTiming';
 
-// 今日の買い候補 — the one-glance decision list (C83, graphical rebuild C87).
+// 今日の買い候補 — the one-glance decision list (C83, graphical rebuild C87,
+// candidate-only rebuild C99).
 //
-// Answers, per symbol, the only questions that matter at the open:
-//   is the MARKET buyable today? (collapses the list when red)
-//   WHAT price is the buy? (trigger .. trigger*1.05 chase cap = the valid zone)
-//   WHERE is the stop / how big / what's the reward? (one risk→reward ladder:
-//   stop · pivot · 2R · 3R with the live price marker — the numbers are kept as
-//   tick labels, but the SHAPE of the trade is now visual)
-//
-// Verdict precedence (first match wins): MARKET-RED -> STALE -> EXTENDED
-// (past the +5% chase cap) -> BUY NOW (active + in zone) -> NOT TRIGGERED.
-// Rows with buy=null degrade to a pivot-only line — the UI never fabricates a
-// trigger. No performance claims on the card.
+// The card answers ONE question: what may I buy at today's open? So it shows
+// ONLY genuine buy candidates (in the pivot..+5% zone, confirmed, market green,
+// data fresh), best first. Everything else is demoted:
+//   · extended / not-yet-triggered  -> collapsed 監視中 (n) disclosure
+//   · no computed signal            -> not on this card at all
+//   · benchmarks / index ETFs       -> never a candidate (they are the index
+//     strip; "buy the S&P 500, which is also a sell" is not a stock pick)
+// When nothing qualifies the card says so in one line — 0件 is the answer, not
+// a wall of empty rows.
 const CHASE_CAP = 1.05; // pivot +5% — Minervini's chase limit (signals.py)
 // A bare breakout with none of the three behavioural barrels (trend / buy
 // pressure / volume-confirmed breakout) is NOT a "BUY NOW". Minervini buys the
 // confirmed setup, not any new high — require at least 2 of 3 barrels.
 const MIN_BARRELS_FOR_BUY = 2;
+const MAX_BUY_ROWS = 12;
+
+// Benchmarks, broad-market index proxies and their leveraged/inverse siblings.
+// These are market context, never stock picks — the classifier drops them.
+const BENCHMARK_SYMBOLS = new Set([
+  // US broad market
+  'SPY', 'SPX', 'VOO', 'IVV', 'SPLG', 'VTI', 'ITOT', 'SCHB', 'SCHX', 'VT', 'RSP', 'MDY',
+  'QQQ', 'QQQM', 'NDX', 'ONEQ',
+  'IWM', 'IWB', 'IWV', 'RUT',
+  'DIA', 'DJI',
+  // leveraged / inverse index products
+  'SSO', 'UPRO', 'SPXL', 'SDS', 'SPXS', 'SPXU', 'SH',
+  'QLD', 'TQQQ', 'SQQQ', 'PSQ',
+  'TNA', 'TZA', 'RWM', 'DDM', 'DOG',
+  // volatility
+  'VIX', 'VXX', 'UVXY', 'VIXY', 'SVXY',
+  // index trackers for the other exported markets
+  '1306', '1321', '1330', '1570', '2800', '2833', '0050', '006208',
+]);
+
+/** SPY / 1306.T / ^GSPC … — market context, never a buy candidate. */
+export function isBenchmarkSymbol(symbol) {
+  const raw = String(symbol || '').trim().toUpperCase();
+  if (!raw) return false;
+  if (raw.startsWith('^')) return true; // ^GSPC, ^IXIC, ^N225 …
+  return BENCHMARK_SYMBOLS.has(raw.split('.')[0]);
+}
+
+// Engineering enums never reach the screen. Anything unmapped renders as
+// nothing rather than leaking a raw identifier next to a price.
+export const STOP_BASIS_JA = {
+  initial: '初期ストップ',
+  half_risk: '半分利食い後',
+  max_loss_cap: '最大損失ライン',
+  base_low: 'ベース安値',
+  breakeven: '建値',
+  lock_1r: '+1R確保',
+  trail_50dma: '50日線トレール',
+  trail_20bar_low: '直近20日安値トレール',
+};
+
+export const stopBasisLabel = (basis) => STOP_BASIS_JA[basis] || null;
+
+/** Same sell block with its stop basis already in Japanese (SellTiming prints it verbatim). */
+export function localizeSell(sell) {
+  if (!sell) return sell;
+  return { ...sell, stop_basis: stopBasisLabel(sell.stop_basis) };
+}
 
 // One MUI icon voice (matches the rest of the app) — never emoji/glyphs.
 const VERDICT_META = {
-  buy_now: { label: 'BUY NOW', Icon: CheckCircleIcon, color: C.green },
-  not_triggered: { label: 'WAIT', Icon: ScheduleIcon, color: C.grey },
-  extended: { label: 'EXTENDED', Icon: WarningAmberIcon, color: C.amber },
-  stale: { label: 'データ未更新', Icon: UpdateIcon, color: C.amber },
-  no_signal: { label: 'シグナル未計算', Icon: RemoveIcon, color: C.grey },
+  buy_now: { label: 'ゾーン内 — 買い', Icon: CheckCircleIcon, color: C.green },
+  not_triggered: { label: '待機', Icon: ScheduleIcon, color: C.grey },
+  extended: { label: '伸びすぎ', Icon: WarningAmberIcon, color: C.amber },
 };
 
 const SOURCE_LABEL = { vcp: 'VCP', ma_tight: 'MA-TIGHT', vol_contract: 'VOL-CTR' };
 
-export function classifyEntry(entry, { marketRed, stale }) {
+/**
+ * buy_now | extended | not_triggered | no_signal | benchmark
+ *
+ * A stale snapshot or a red market can only ever DEMOTE a row to 待機 — the card
+ * never issues a buy off data it does not trust.
+ */
+export function classifyEntry(entry, { marketRed, stale } = {}) {
+  if (isBenchmarkSymbol(entry?.symbol)) return 'benchmark';
   const buy = entry?.buy;
   if (!buy || buy.trigger_price == null) return 'no_signal';
-  if (stale) return 'stale';
   const zoneHi = buy.trigger_price * CHASE_CAP;
   const px = buy.last_close;
   if (px != null && px > zoneHi) return 'extended';
   // Unknown barrel count (older export) keeps the old behaviour; a known count
   // below the threshold downgrades the row from BUY NOW to WAIT.
   const confirmed = buy.barrels_passed == null || buy.barrels_passed >= MIN_BARRELS_FOR_BUY;
-  if (!marketRed && buy.active && confirmed && px != null && px >= buy.trigger_price && px <= zoneHi) {
+  if (!marketRed && !stale && buy.active && confirmed
+    && px != null && px >= buy.trigger_price && px <= zoneHi) {
     return 'buy_now';
   }
   return 'not_triggered';
@@ -62,6 +113,37 @@ export function classifyEntry(entry, { marketRed, stale }) {
 
 const fmt = (v, digits = 2) => (v == null ? '-' : Number(v).toFixed(digits));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// Best first: more confirmation barrels, then stronger RS, then the entry that
+// is closest to its pivot (least chased).
+const buyOrderKey = (e) => {
+  const b = e.buy || {};
+  const barrels = b.barrels_passed == null ? MIN_BARRELS_FOR_BUY : b.barrels_passed;
+  const rs = e.rs_rating == null ? 0 : e.rs_rating;
+  const chase = b.last_close != null && b.trigger_price > 0 ? b.last_close / b.trigger_price - 1 : 1;
+  return [-barrels, -rs, chase];
+};
+
+// Watch list: nearest to a tradable zone first.
+const distanceToZone = (e) => {
+  const b = e.buy || {};
+  const lo = b.trigger_price;
+  const px = b.last_close;
+  if (lo == null || lo <= 0 || px == null) return Number.POSITIVE_INFINITY;
+  const hi = lo * CHASE_CAP;
+  if (px < lo) return (lo - px) / lo;
+  if (px > hi) return (px - hi) / hi;
+  return 0;
+};
+
+const byKey = (keyFn) => (a, b) => {
+  const ka = keyFn(a);
+  const kb = keyFn(b);
+  for (let i = 0; i < ka.length; i += 1) {
+    if (ka[i] !== kb[i]) return ka[i] < kb[i] ? -1 : 1;
+  }
+  return String(a.symbol).localeCompare(String(b.symbol));
+};
 
 // A status icon + verdict word — the at-a-glance chip.
 function VerdictBadge({ meta, suffix }) {
@@ -150,25 +232,32 @@ function RiskRewardLadder({ buy }) {
           <Box sx={{ position: 'absolute', left: `${pxPct}%`, top: -1, bottom: -1, width: 3, borderRadius: 1, bgcolor: inZone ? C.inkStrong : C.amber, transform: 'translateX(-50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.6)' }} />
         )}
       </Box>
-      {/* tick labels */}
+      {/* tick labels — a pivot sitting close to the stop is nudged right and
+          left-aligned so the two prices never collide at 375px */}
       <Box sx={{ position: 'relative', height: 26, mt: 0.25 }}>
-        <Tick p={0} label="STOP" sub={fmt(stop)} color={C.red} align="start" />
-        <Tick p={pivotPct} label="PIVOT" sub={fmt(pivot)} color={C.inkStrong} align="mid" />
+        <Tick p={0} label="損切り" sub={fmt(stop)} color={C.red} align="start" />
+        <Tick
+          p={pivotPct == null ? null : Math.max(pivotPct, 26)}
+          label="ピボット"
+          sub={fmt(pivot)}
+          color={C.inkStrong}
+          align={pivotPct != null && pivotPct < 26 ? 'start' : 'mid'}
+        />
         {pct(t2) != null && <Tick p={pct(t2)} label="2R" sub={fmt(t2)} color={C.green} align="mid" />}
         <Tick p={100} label="3R" sub={fmt(t3 ?? t2)} color={C.green} align="end" />
       </Box>
       {/* live read line */}
       {px != null && (
         <Typography sx={{ fontSize: 11.5, color: inZone ? C.green : C.amber, fontFamily: 'monospace', mt: 0.25 }}>
-          ● now {fmt(px)} {inZone ? `— ゾーン内 (+${delta}%)` : `(${delta > 0 ? '+' : ''}${delta}%)`}
-          {buy.stop_pct != null && <Box component="span" sx={{ color: C.red, ml: 1 }}>risk −{fmt(buy.stop_pct, 1)}%</Box>}
+          ● 現在値 {fmt(px)} {inZone ? `— ゾーン内 (+${delta}%)` : `(${delta > 0 ? '+' : ''}${delta}%)`}
+          {buy.stop_pct != null && <Box component="span" sx={{ color: C.red, ml: 1 }}>損失幅 −{fmt(buy.stop_pct, 1)}%</Box>}
         </Typography>
       )}
     </Box>
   );
 }
 
-// A slim pivot bar for non-BUY-NOW rows: just the zone + where price sits.
+// A slim pivot bar for watch rows: just the zone + where price sits.
 function MiniZone({ buy }) {
   const lo = buy.trigger_price;
   const hi = lo * CHASE_CAP;
@@ -180,11 +269,11 @@ function MiniZone({ buy }) {
     <Box sx={{ mt: 0.5 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>
-          pivot <b style={{ color: C.ink }}>{fmt(lo)}</b> … +5% {fmt(hi)}
+          ピボット <b style={{ color: C.ink }}>{fmt(lo)}</b> … +5% {fmt(hi)}
         </Typography>
         {px != null && (
           <Typography sx={{ fontSize: 11, color: within ? C.green : C.amber, fontFamily: 'monospace' }}>
-            now {fmt(px)} ({delta > 0 ? '+' : ''}{delta}%)
+            現在値 {fmt(px)} ({delta > 0 ? '+' : ''}{delta}%)
           </Typography>
         )}
       </Box>
@@ -211,16 +300,16 @@ function SizeAndBarrels({ buy, shares }) {
             <Box sx={{ width: `${sizePct}%`, height: '100%', bgcolor: C.blue }} />
           </Box>
           <Typography sx={{ fontSize: 11.5, color: C.ink, fontFamily: 'monospace' }}>
-            size {fmt(size, 1)}%{shares != null ? ` · ${shares}株` : ''}
+            比率 {fmt(size, 1)}%{shares != null ? ` · ${shares}株` : ''}
           </Typography>
         </Box>
       )}
       <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>
-        risk {fmt(buy.account_risk_pct, 2)}%/回
+        1回のリスク {fmt(buy.account_risk_pct, 2)}%
       </Typography>
       {barrels != null && (
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, ml: 'auto' }}>
-          <Typography sx={{ fontSize: 10.5, color: C.grey }}>barrels</Typography>
+          <Typography sx={{ fontSize: 10.5, color: C.grey }}>確認</Typography>
           {[0, 1, 2].map((i) => (
             <Box key={i} sx={{ width: 7, height: 7, borderRadius: '50%',
               bgcolor: i < barrels ? C.green : 'transparent', border: `1px solid ${i < barrels ? C.green : C.dim}` }} />
@@ -231,15 +320,16 @@ function SizeAndBarrels({ buy, shares }) {
   );
 }
 
-function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch }) {
+function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWatch }) {
   const buy = entry.buy;
-  const meta = VERDICT_META[verdict];
+  const meta = VERDICT_META[verdict] || VERDICT_META.not_triggered;
   const expanded = verdict === 'buy_now';
   const shares = expanded && equity > 0 && buy?.position_size_pct != null && buy?.last_close > 0
     ? Math.floor((equity * buy.position_size_pct / 100) / buy.last_close)
     : null;
   const suffix = verdict === 'extended' && buy?.last_close != null && buy?.trigger_price > 0
     ? ` +${((buy.last_close / buy.trigger_price - 1) * 100).toFixed(1)}%` : '';
+  const basis = stopBasisLabel(buy?.stop_basis);
   return (
     <Box
       onClick={() => onOpenChart?.(entry.symbol)}
@@ -253,7 +343,13 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: meta.color, flexShrink: 0 }} />
+        {rank != null ? (
+          <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.green, fontFamily: 'monospace', flexShrink: 0 }}>
+            {rank}
+          </Typography>
+        ) : (
+          <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: meta.color, flexShrink: 0 }} />
+        )}
         <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>{entry.symbol}</Typography>
         {buy?.vcp_detected && buy?.vcp_source && (
           <Chip size="small" label={SOURCE_LABEL[buy.vcp_source] || buy.vcp_source}
@@ -276,37 +372,32 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
         </Box>
       </Box>
 
-      {verdict === 'no_signal' && (
-        <Typography sx={{ fontSize: 11.5, color: C.grey, mt: 0.5 }}>
-          pivot情報なし — チャートで確認
-        </Typography>
-      )}
-
       {expanded && buy && (
         <>
           <RiskRewardLadder buy={buy} />
           <SizeAndBarrels buy={buy} shares={shares} />
           <Typography sx={{ fontSize: 10, color: C.grey, fontFamily: 'monospace', mt: 0.4 }}>
-            stop {fmt(buy.stop_loss)}{buy.stop_basis ? ` · ${buy.stop_basis}` : ''}
-            {buy.signal_as_of ? ` · signal ${String(buy.signal_as_of).slice(0, 10)}` : ''}
+            損切り {fmt(buy.stop_loss)}{basis ? ` · ${basis}` : ''}
+            {buy.signal_as_of ? ` · 判定日 ${String(buy.signal_as_of).slice(0, 10)}` : ''}
           </Typography>
         </>
       )}
 
-      {!expanded && buy?.trigger_price != null && verdict !== 'no_signal' && <MiniZone buy={buy} />}
+      {!expanded && buy?.trigger_price != null && <MiniZone buy={buy} />}
 
       {/* C97: the exit is ALWAYS shown, on every verdict — a buy candidate
-          firing a sell/climax signal, or an EXTENDED/WAIT name's protective
+          firing a sell/climax signal, or an 伸びすぎ/待機 name's protective
           stop, must never be invisible. */}
       <Box sx={{ mt: 0.6, pt: 0.6, borderTop: `1px solid ${C.track}` }}>
-        <SellTiming sell={entry.sell} />
+        <SellTiming sell={localizeSell(entry.sell)} />
       </Box>
     </Box>
   );
 }
 
 export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, market = 'US', now }) {
-  const [showAll, setShowAll] = useState(false);
+  const [showAllBuys, setShowAllBuys] = useState(false);
+  const [showWatch, setShowWatch] = useState(false);
   const { has: isWatched, toggle: toggleWatch } = useWatchlist();
   const [equity, setEquity] = useState(() => {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('todaysBuysEquity') : null;
@@ -332,37 +423,38 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
     [asOf, market, now],
   );
   const stale = freshness.stale;
-  const sessionsBehind = freshness.sessionsBehind;
 
-  const classified = useMemo(() => {
-    const groups = { buy_now: [], not_triggered: [], extended: [], stale: [], no_signal: [] };
+  // Two lists only: today's candidates, and the names worth watching. Rows with
+  // no computed signal and every benchmark/index ticker are dropped outright.
+  const { buys, watch } = useMemo(() => {
+    const buyList = [];
+    const watchList = [];
     for (const e of entries) {
-      groups[classifyEntry(e, { marketRed, stale })].push(e);
+      const verdict = classifyEntry(e, { marketRed, stale });
+      if (verdict === 'buy_now') buyList.push(e);
+      else if (verdict === 'extended' || verdict === 'not_triggered') watchList.push(e);
     }
-    return groups;
+    buyList.sort(byKey(buyOrderKey));
+    watchList.sort(byKey((e) => [distanceToZone(e)]));
+    return { buys: buyList, watch: watchList };
   }, [entries, marketRed, stale]);
 
   // Pre-v2 indexes carry no buy blocks at all — render nothing.
   if (!entries.length || !entries.some((e) => e?.buy)) return null;
 
-  const ordered = [
-    ...classified.buy_now.map((e) => [e, stale ? 'stale' : 'buy_now']),
-    ...classified.not_triggered.map((e) => [e, stale ? 'stale' : 'not_triggered']),
-    ...classified.extended.map((e) => [e, stale ? 'stale' : 'extended']),
-    ...classified.stale.map((e) => [e, 'stale']),
-    ...classified.no_signal.map((e) => [e, 'no_signal']),
-  ];
-  const buyNowCount = stale ? 0 : classified.buy_now.length;
-  const visible = showAll ? ordered : ordered.slice(0, 20);
+  const visibleBuys = showAllBuys ? buys : buys.slice(0, MAX_BUY_ROWS);
+  const emptyReason = stale
+    ? 'データが最新ではないため判定は出していません'
+    : watch.length > 0 ? `ゾーン内の銘柄はありません（監視中 ${watch.length}件）` : null;
 
   return (
     <Box sx={{ mb: 2 }} data-testid="todays-buys-card">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
         <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
-        {buyNowCount > 0 && (
+        {buys.length > 0 && (
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
             <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: C.green }} />
-            <Typography sx={{ fontSize: 11.5, color: C.green, fontWeight: 700 }}>買い{buyNowCount}</Typography>
+            <Typography sx={{ fontSize: 11.5, color: C.green, fontWeight: 700 }}>買い{buys.length}</Typography>
           </Box>
         )}
         <Box sx={{ flex: 1, minWidth: 0 }} />
@@ -382,18 +474,6 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
         </Typography>
       </Box>
 
-      {stale && (
-        <Box sx={{ p: 1, mb: 1, borderRadius: 1.5, border: `1px solid ${C.amber}`, bgcolor: 'rgba(224,165,46,0.08)' }}
-          data-testid="todays-buys-stale">
-          <Typography sx={{ color: C.amber, fontWeight: 700, fontSize: 12.5 }}>
-            データ未更新 — 買い判定は出しません
-          </Typography>
-          <Typography sx={{ color: C.grey, fontSize: 11, mt: 0.25 }}>
-            {asOf} 時点のデータで、直近の立会日から取引{sessionsBehind}日分遅れています。価格が動いているため、この画面の値で発注しないでください。
-          </Typography>
-        </Box>
-      )}
-
       {marketRed ? (
         <Box sx={{ p: 1.25, borderRadius: 1.5, border: `1px solid ${C.red}`, bgcolor: 'rgba(242,54,69,0.08)' }}
           data-testid="todays-buys-market-red">
@@ -401,7 +481,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
             新規買い停止 — 地合い{regime === 'correction' ? '調整入り' : '下降トレンド'}（FTD待ち）
           </Typography>
           <Typography sx={{ color: C.grey, fontSize: 11.5, mt: 0.25 }}>
-            SEPAルール1: 確認済み上昇トレンド以外で新規買いはしない。候補{ordered.length}件は待機。
+            SEPAルール1: 確認済み上昇トレンド以外で新規買いはしない。候補{watch.length}件は待機。
           </Typography>
         </Box>
       ) : (
@@ -417,17 +497,57 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
               </Typography>
             </Box>
           )}
-          {visible.map(([e, v]) => (
-            <BuyRow key={e.symbol} entry={e} verdict={v} equity={equity} onOpenChart={onOpenChart}
-              watched={isWatched(e.symbol)} onToggleWatch={toggleWatch} />
+
+          {visibleBuys.map((e, i) => (
+            <BuyRow key={e.symbol} entry={e} verdict="buy_now" rank={i + 1} equity={equity}
+              onOpenChart={onOpenChart} watched={isWatched(e.symbol)} onToggleWatch={toggleWatch} />
           ))}
-          {ordered.length > 20 && !showAll && (
-            <Typography onClick={() => setShowAll(true)}
-              sx={{ fontSize: 12, color: C.blue, cursor: 'pointer', textAlign: 'center' }}>
-              すべて表示（{ordered.length}件）
+          {buys.length > MAX_BUY_ROWS && !showAllBuys && (
+            <Typography onClick={() => setShowAllBuys(true)}
+              sx={{ fontSize: 12, color: C.blue, cursor: 'pointer', textAlign: 'center', mb: 1 }}>
+              すべて表示（{buys.length}件）
             </Typography>
           )}
+
+          {buys.length === 0 && (
+            <Box data-testid="todays-buys-empty"
+              sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, flexWrap: 'wrap',
+                p: 1.25, borderRadius: 1.5, border: `1px solid ${C.track}`, bgcolor: C.panel }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
+                本日の新規買い候補: 0件
+              </Typography>
+              {emptyReason && (
+                <Typography sx={{ fontSize: 11, color: C.grey }}>{emptyReason}</Typography>
+              )}
+            </Box>
+          )}
         </>
+      )}
+
+      {watch.length > 0 && (
+        <Box sx={{ mt: 1 }} data-testid="todays-buys-watch-section">
+          <Box
+            role="button"
+            aria-expanded={showWatch}
+            data-testid="todays-buys-watch-toggle"
+            onClick={() => setShowWatch((v) => !v)}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, cursor: 'pointer', py: 0.25 }}
+          >
+            <ChevronRightIcon sx={{ fontSize: 16, color: C.grey, transform: showWatch ? 'rotate(90deg)' : 'none' }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.grey }}>
+              監視中 ({watch.length})
+            </Typography>
+          </Box>
+          {showWatch && (
+            <Box sx={{ mt: 0.75 }}>
+              {watch.map((e) => (
+                <BuyRow key={e.symbol} entry={e} verdict={classifyEntry(e, { marketRed, stale })}
+                  equity={equity} onOpenChart={onOpenChart}
+                  watched={isWatched(e.symbol)} onToggleWatch={toggleWatch} />
+              ))}
+            </Box>
+          )}
+        </Box>
       )}
     </Box>
   );
