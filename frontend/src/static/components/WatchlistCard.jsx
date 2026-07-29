@@ -6,6 +6,7 @@ import StarIcon from '@mui/icons-material/Star';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
 import { ACTION_META, DEFAULT_META } from './SellTiming';
+import { stopBasisLabel } from './TodaysBuysCard';
 
 // 保有・監視リスト — same-day exit surfacing for names the user holds (C86,
 // graphical rebuild C87).
@@ -26,6 +27,14 @@ const readLastSell = () => {
   try { return JSON.parse(localStorage.getItem(LAST_SELL_KEY) || '{}') || {}; } catch { return {}; }
 };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// 44x44 minimum tap target (WCAG 2.5.5 AAA / iOS HIG). The star keeps its drawn
+// size; the box grows around it and negative margins absorb the growth, so the
+// row rhythm is unchanged while the finger gets a real target.
+const TAP = {
+  minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center',
+  justifyContent: 'center', flexShrink: 0, cursor: 'pointer',
+};
 
 export function orderWatchRows(rows) {
   return [...rows].sort((a, b) => {
@@ -112,25 +121,41 @@ function WatchRow({ row, onOpenChart, onRemove }) {
           role="button"
           data-testid={`watchlist-remove-${symbol}`}
           onClick={(e) => { e.stopPropagation(); onRemove?.(symbol); }}
-          sx={{ display: 'inline-flex', color: C.amber, cursor: 'pointer', ml: 0.5 }}
+          sx={{ ...TAP, my: '-11px', mr: '-9px', color: C.amber }}
           aria-label={`${symbol}を監視リストから外す`}
         >
           <StarIcon sx={{ fontSize: 16 }} />
         </Box>
       </Box>
       {present && sell && (sell.stop != null || sell.r_multiple != null) && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+        // Grid, not an inline run: with a 4-digit stop the old flex row could
+        // wrap between 「損切り」 and its number. A cell moves whole or not at all.
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: sell.r_multiple != null ? 'minmax(96px, 1fr) auto' : '1fr',
+          alignItems: 'center', columnGap: 1, mt: 0.5,
+        }}>
           <RBar r={sell.r_multiple} />
           {sell.stop != null && (
-            <Typography sx={{ fontSize: 11, color: C.ink, fontFamily: 'monospace' }}>
-              stop {fmt(sell.stop)}{sell.stop_basis ? ` · ${sell.stop_basis}` : ''}
-            </Typography>
+            <Box sx={{
+              display: 'flex', alignItems: 'baseline', gap: 0.5, minWidth: 0,
+              justifySelf: sell.r_multiple != null ? 'end' : 'start',
+            }}>
+              <Typography noWrap sx={{ fontSize: 11, color: C.ink, fontFamily: 'monospace', flexShrink: 0 }}>
+                損切り {fmt(sell.stop)}
+              </Typography>
+              {stopBasisLabel(sell.stop_basis) && (
+                <Typography noWrap sx={{ fontSize: 10.5, color: C.grey, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  · {stopBasisLabel(sell.stop_basis)}
+                </Typography>
+              )}
+            </Box>
           )}
         </Box>
       )}
       {!present && lastKnown?.sell?.stop != null && (
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', mt: 0.5 }}>
-          前回 stop {fmt(lastKnown.sell.stop)}{lastKnown.date ? ` · ${String(lastKnown.date).slice(5, 10)}` : ''}
+        <Typography noWrap sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', mt: 0.5 }}>
+          前回 損切り {fmt(lastKnown.sell.stop)}{lastKnown.date ? ` · ${String(lastKnown.date).slice(5, 10)}` : ''}
         </Typography>
       )}
     </Box>

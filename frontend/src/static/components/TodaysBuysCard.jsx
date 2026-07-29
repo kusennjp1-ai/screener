@@ -8,6 +8,10 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import BlockIcon from '@mui/icons-material/Block';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import BoltIcon from '@mui/icons-material/Bolt';
+import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
 import { evaluateSnapshotFreshness } from './StaticDataStatusBanner';
@@ -87,6 +91,30 @@ const VERDICT_META = {
 };
 
 const SOURCE_LABEL = { vcp: 'VCP', ma_tight: 'MA-TIGHT', vol_contract: 'VOL-CTR' };
+
+// 44x44 minimum tap target (WCAG 2.5.5 AAA / iOS HIG). The drawn icon keeps its
+// size; the box grows around it and negative margins absorb the growth, so the
+// row rhythm is unchanged while the finger gets a real target.
+const TAP_MIN = 44;
+const TAP = {
+  minWidth: TAP_MIN, minHeight: TAP_MIN, display: 'inline-flex',
+  alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer',
+};
+
+// A candidate is NOT a position. Position-management verbs (保有継続 /
+// ストップ上げ / 半分利食い後) only mean something for stock you own, so a row
+// the user does not hold shows the ENTRY plan instead. The exit engine is still
+// read — but as a reason NOT to buy, phrased for someone with no position.
+export const ENTRY_BLOCK_META = {
+  stop_hit: { label: 'ストップ水準割れ — 新規買い見送り', Icon: BlockIcon, color: C.red },
+  exit: { label: '50日線割れ — 新規買い見送り', Icon: TrendingDownIcon, color: C.red },
+  sell_into_strength: { label: 'クライマックス — 新規買い見送り', Icon: BoltIcon, color: C.amber },
+};
+
+/** The entry-side reading of an exit action: a warning, or null (nothing blocks entry). */
+export function entryBlock(sell) {
+  return ENTRY_BLOCK_META[sell?.action] || null;
+}
 
 /**
  * buy_now | extended | not_triggered | no_signal | benchmark
@@ -257,7 +285,31 @@ function RiskRewardLadder({ buy }) {
   );
 }
 
+// One labelled number. Label and value live in the SAME grid cell and both are
+// noWrap, so the pair can never be split across lines by a long neighbour.
+function ZoneCell({ label, value, note, color, align = 'start' }) {
+  const justify = align === 'end' ? 'flex-end' : align === 'mid' ? 'center' : 'flex-start';
+  return (
+    <Box sx={{ minWidth: 0, textAlign: align === 'end' ? 'right' : align === 'mid' ? 'center' : 'left' }}>
+      <Typography noWrap sx={{ fontSize: 10, color: C.grey, lineHeight: 1.25 }}>{label}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4, justifyContent: justify }}>
+        <Typography noWrap sx={{ fontSize: 11.5, fontWeight: 700, color, fontFamily: 'monospace', lineHeight: 1.3 }}>
+          {value}
+        </Typography>
+        {note != null && (
+          <Typography noWrap sx={{ fontSize: 10, color, fontFamily: 'monospace', lineHeight: 1.3 }}>{note}</Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 // A slim pivot bar for watch rows: just the zone + where price sits.
+//
+// Laid out as a 3-column GRID, not an inline run. With 4-digit prices (LLY
+// 1160.95, GEV 1118.96) the old inline flex row wrapped mid-sentence and
+// orphaned「+5%」from its number and「(+4.1%)」from its price. A grid cell can
+// only ever move as a whole.
 function MiniZone({ buy }) {
   const lo = buy.trigger_price;
   const hi = lo * CHASE_CAP;
@@ -266,18 +318,24 @@ function MiniZone({ buy }) {
   const posPct = px == null ? null : clamp(((px - lo) / (hi - lo)) * 100, 0, 100);
   const delta = px != null && lo > 0 ? ((px / lo - 1) * 100).toFixed(1) : null;
   return (
-    <Box sx={{ mt: 0.5 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>
-          ピボット <b style={{ color: C.ink }}>{fmt(lo)}</b> … +5% {fmt(hi)}
-        </Typography>
+    <Box sx={{ mt: 0.6 }}>
+      <Box
+        data-testid="mini-zone-grid"
+        sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: 0.75, alignItems: 'end' }}
+      >
+        <ZoneCell label="ピボット" value={fmt(lo)} color={C.inkStrong} />
+        <ZoneCell label="+5%上限" value={fmt(hi)} color={C.grey} align="mid" />
         {px != null && (
-          <Typography sx={{ fontSize: 11, color: within ? C.green : C.amber, fontFamily: 'monospace' }}>
-            現在値 {fmt(px)} ({delta > 0 ? '+' : ''}{delta}%)
-          </Typography>
+          <ZoneCell
+            label="現在値"
+            value={fmt(px)}
+            note={`${delta > 0 ? '+' : ''}${delta}%`}
+            color={within ? C.green : C.amber}
+            align="end"
+          />
         )}
       </Box>
-      <Box sx={{ position: 'relative', height: 5, mt: 0.4, borderRadius: 3, bgcolor: C.track }}>
+      <Box sx={{ position: 'relative', height: 5, mt: 0.5, borderRadius: 3, bgcolor: C.track }}>
         <Box sx={{ position: 'absolute', inset: 0, borderRadius: 3, bgcolor: within ? 'rgba(34,171,148,0.35)' : 'rgba(120,123,134,0.25)' }} />
         {posPct != null && (
           <Box sx={{ position: 'absolute', top: -2, left: `${posPct}%`, width: 3, height: 9, borderRadius: 1, bgcolor: within ? C.green : C.amber, transform: 'translateX(-50%)' }} />
@@ -315,6 +373,43 @@ function SizeAndBarrels({ buy, shares }) {
               bgcolor: i < barrels ? C.green : 'transparent', border: `1px solid ${i < barrels ? C.green : C.dim}` }} />
           ))}
         </Box>
+      )}
+    </Box>
+  );
+}
+
+// The entry-side footer for a name the user does NOT hold: the stop you would
+// set on the day you buy, plus any reason not to buy at all.
+function EntryPlan({ buy, sell, showStop }) {
+  const block = entryBlock(sell);
+  const basis = stopBasisLabel(buy?.stop_basis);
+  const stop = buy?.stop_loss;
+  const withStop = showStop && stop != null;
+  if (!block && !withStop) return null;
+  const BlockIconEl = block?.Icon;
+  return (
+    <Box data-testid="entry-plan" data-entry-block={block ? sell.action : ''}
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', rowGap: 0.25 }}>
+      {block ? (
+        <Box sx={{
+          display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
+          borderRadius: 1, bgcolor: `${block.color}22`, border: `1px solid ${block.color}`,
+        }}>
+          <BlockIconEl sx={{ fontSize: 13, color: block.color }} />
+          <Typography sx={{ fontWeight: 800, fontSize: 11, color: block.color, lineHeight: 1.2 }}>
+            {block.label}
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+          <FlagOutlinedIcon sx={{ fontSize: 13, color: C.grey }} />
+          <Typography sx={{ fontSize: 11, color: C.grey, fontWeight: 700 }}>買う場合</Typography>
+        </Box>
+      )}
+      {withStop && (
+        <Typography noWrap sx={{ fontSize: 11.5, color: C.ink, fontFamily: 'monospace' }}>
+          損切り {fmt(stop)}{basis ? ` · ${basis}` : ''}
+        </Typography>
       )}
     </Box>
   );
@@ -365,7 +460,7 @@ function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWa
           role="button"
           data-testid={`todays-buys-watch-${entry.symbol}`}
           onClick={(e) => { e.stopPropagation(); onToggleWatch?.(entry.symbol); }}
-          sx={{ display: 'inline-flex', cursor: 'pointer', color: watched ? C.amber : C.dim }}
+          sx={{ ...TAP, my: '-11px', mr: '-10px', color: watched ? C.amber : C.dim }}
           aria-label={watched ? `${entry.symbol}を監視リストから外す` : `${entry.symbol}を監視リストに追加`}
         >
           {watched ? <StarIcon sx={{ fontSize: 17 }} /> : <StarBorderIcon sx={{ fontSize: 17 }} />}
@@ -385,12 +480,24 @@ function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWa
 
       {!expanded && buy?.trigger_price != null && <MiniZone buy={buy} />}
 
-      {/* C97: the exit is ALWAYS shown, on every verdict — a buy candidate
-          firing a sell/climax signal, or an 伸びすぎ/待機 name's protective
-          stop, must never be invisible. */}
-      <Box sx={{ mt: 0.6, pt: 0.6, borderTop: `1px solid ${C.track}` }}>
-        <SellTiming sell={localizeSell(entry.sell)} />
-      </Box>
+      {/* C97: risk is ALWAYS shown, on every verdict — but in the right voice.
+          A name the user HOLDS (it is on the watchlist) gets position
+          management: 保有継続 / ストップ上げ / 半分利食い後. A name he merely
+          might buy gets the ENTRY plan — a candidate cannot be "after taking
+          half profits". */}
+      {watched ? (
+        <Box data-testid={`todays-buys-held-${entry.symbol}`}
+          sx={{ mt: 0.6, pt: 0.6, borderTop: `1px solid ${C.track}` }}>
+          <Typography sx={{ fontSize: 10, color: C.grey, fontWeight: 700, mb: 0.25 }}>保有・監視中の建玉</Typography>
+          <SellTiming sell={localizeSell(entry.sell)} />
+        </Box>
+      ) : (
+        (entryBlock(entry.sell) || (!expanded && buy?.stop_loss != null)) && (
+          <Box sx={{ mt: 0.6, pt: 0.6, borderTop: `1px solid ${C.track}` }}>
+            <EntryPlan buy={buy} sell={entry.sell} showStop={!expanded} />
+          </Box>
+        )
+      )}
     </Box>
   );
 }
@@ -459,7 +566,10 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
         )}
         <Box sx={{ flex: 1, minWidth: 0 }} />
         <Typography noWrap sx={{ fontSize: 10.5, color: C.grey, fontFamily: 'monospace', flexShrink: 1, minWidth: 0 }}>{asOf || '-'}</Typography>
-        <Typography
+        <Box
+          component="span"
+          role="button"
+          data-testid="todays-buys-equity"
           onClick={() => {
             const raw = window.prompt('運用資金（ドル）を入力（株数の目安表示に使用・端末内保存）', equity || '');
             const v = Number(raw);
@@ -468,10 +578,12 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
               localStorage.setItem('todaysBuysEquity', String(v));
             }
           }}
-          sx={{ fontSize: 11, color: C.blue, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+          sx={{ ...TAP, my: '-13px', mr: '-4px', px: 0.5, whiteSpace: 'nowrap' }}
         >
-          {equity > 0 ? `資金 $${equity.toLocaleString()}` : '[資金を設定]'}
-        </Typography>
+          <Typography sx={{ fontSize: 11, color: C.blue }}>
+            {equity > 0 ? `資金 $${equity.toLocaleString()}` : '[資金を設定]'}
+          </Typography>
+        </Box>
       </Box>
 
       {marketRed ? (
@@ -503,10 +615,10 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
               onOpenChart={onOpenChart} watched={isWatched(e.symbol)} onToggleWatch={toggleWatch} />
           ))}
           {buys.length > MAX_BUY_ROWS && !showAllBuys && (
-            <Typography onClick={() => setShowAllBuys(true)}
-              sx={{ fontSize: 12, color: C.blue, cursor: 'pointer', textAlign: 'center', mb: 1 }}>
-              すべて表示（{buys.length}件）
-            </Typography>
+            <Box role="button" data-testid="todays-buys-show-all" onClick={() => setShowAllBuys(true)}
+              sx={{ ...TAP, width: '100%', mb: 1 }}>
+              <Typography sx={{ fontSize: 12, color: C.blue }}>すべて表示（{buys.length}件）</Typography>
+            </Box>
           )}
 
           {buys.length === 0 && (
@@ -531,7 +643,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
             aria-expanded={showWatch}
             data-testid="todays-buys-watch-toggle"
             onClick={() => setShowWatch((v) => !v)}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, cursor: 'pointer', py: 0.25 }}
+            sx={{ ...TAP, justifyContent: 'flex-start', gap: 0.25, pr: 1.5, my: '-8px' }}
           >
             <ChevronRightIcon sx={{ fontSize: 16, color: C.grey, transform: showWatch ? 'rotate(90deg)' : 'none' }} />
             <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.grey }}>

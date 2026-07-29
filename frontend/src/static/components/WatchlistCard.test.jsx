@@ -52,8 +52,32 @@ describe('WatchlistCard', () => {
       ])} />,
     );
     expect(screen.getByTestId('watchlist-action-NVDA')).toHaveTextContent('50日線割れ');
-    expect(screen.getByTestId('watchlist-row-NVDA')).toHaveTextContent('stop 122.50');
+    expect(screen.getByTestId('watchlist-row-NVDA')).toHaveTextContent('損切り 122.50');
     expect(screen.getByTestId('watchlist-alert-count')).toHaveTextContent('要売却 1件');
+  });
+
+  it('writes the stop basis in Japanese, never the raw enum', () => {
+    seedWatchlist(['NVDA']);
+    renderWithProviders(
+      <WatchlistCard indexData={indexData([
+        { symbol: 'NVDA', sell: sell({ action: 'hold', stop: 1044.86, stop_basis: 'half_risk' }) },
+      ])} />,
+    );
+    const row = screen.getByTestId('watchlist-row-NVDA');
+    expect(row).toHaveTextContent('損切り 1044.86');
+    expect(row).toHaveTextContent('半分利食い後');
+    ['half_risk', 'max_loss_cap', 'base_low', 'initial', 'stop '].forEach((raw) => {
+      expect(row).not.toHaveTextContent(raw);
+    });
+  });
+
+  it('gives the remove star a 44x44 minimum tap target', () => {
+    seedWatchlist(['NVDA']);
+    renderWithProviders(<WatchlistCard indexData={indexData([{ symbol: 'NVDA', sell: sell() }])} />);
+    const star = screen.getByTestId('watchlist-remove-NVDA');
+    // jsdom has no layout, so assert the declared floor rather than a rect.
+    expect(getComputedStyle(star).minWidth).toBe('44px');
+    expect(getComputedStyle(star).minHeight).toBe('44px');
   });
 
   it('orders the most urgent exit to the top', () => {

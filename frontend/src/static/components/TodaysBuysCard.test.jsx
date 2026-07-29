@@ -149,6 +149,7 @@ describe('TodaysBuysCard', () => {
   });
 
   it('never prints a raw stop_basis enum', () => {
+    localStorage.setItem('todaysWatchlist', JSON.stringify(['NVDA'])); // held -> position voice
     renderWithProviders(
       <TodaysBuysCard
         indexData={indexData([{
@@ -164,6 +165,116 @@ describe('TodaysBuysCard', () => {
     expect(card).toHaveTextContent('半分利食い後');
     ['initial', 'half_risk', 'max_loss_cap', 'base_low'].forEach((raw) => {
       expect(card).not.toHaveTextContent(raw);
+    });
+    localStorage.removeItem('todaysWatchlist');
+  });
+
+  // A watch candidate is not a position. 「保有継続」「ストップ上げ (利益ロック)」
+  // 「半分利食い後」 describe managing stock you already own.
+  describe('entry voice vs position voice', () => {
+    const heldWords = ['保有継続', 'ストップ上げ', '半分利食い後', '建値', '+1R確保'];
+
+    it('never puts position-management wording on a candidate the user does not hold', () => {
+      localStorage.removeItem('todaysWatchlist');
+      renderWithProviders(
+        <TodaysBuysCard
+          indexData={indexData([
+            { symbol: 'LLY', buy: buyBlock({ trigger_price: 1160.95, last_close: 1208.12, stop_loss: 1078.14, stop_basis: 'base_low' }),
+              sell: { action: 'hold', stop: 1044.86, stop_basis: 'initial', r_multiple: 0.41 } },
+            { symbol: 'GEV', buy: buyBlock({ trigger_price: 1118.96, last_close: 1045.17, stop_loss: 1037.38, stop_basis: 'max_loss_cap' }),
+              sell: { action: 'raise_stop', stop: 1039.78, stop_basis: 'half_risk', r_multiple: -0.93 } },
+          ])}
+          scanRows={uptrendRows}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('todays-buys-watch-toggle'));
+      const card = screen.getByTestId('todays-buys-card');
+      heldWords.forEach((w) => expect(card).not.toHaveTextContent(w));
+      // …and the entry plan is what it shows instead: the stop you would set on entry
+      expect(card).toHaveTextContent('買う場合');
+      expect(screen.getByTestId('todays-buys-row-LLY')).toHaveTextContent('損切り 1078.14');
+      expect(screen.getByTestId('todays-buys-row-GEV')).toHaveTextContent('損切り 1037.38');
+      expect(screen.queryByTestId('todays-buys-held-LLY')).toBeNull();
+    });
+
+    it('shows position management only for a symbol on the watchlist', () => {
+      localStorage.setItem('todaysWatchlist', JSON.stringify(['GEV']));
+      renderWithProviders(
+        <TodaysBuysCard
+          indexData={indexData([
+            { symbol: 'LLY', buy: buyBlock({ last_close: 120.0 }), sell: { action: 'hold', stop: 111.0 } },
+            { symbol: 'GEV', buy: buyBlock({ last_close: 120.0 }), sell: { action: 'raise_stop', stop: 111.0, stop_basis: 'half_risk' } },
+          ])}
+          scanRows={uptrendRows}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('todays-buys-watch-toggle'));
+      expect(screen.getByTestId('todays-buys-held-GEV')).toHaveTextContent('ストップ上げ');
+      expect(screen.getByTestId('todays-buys-held-GEV')).toHaveTextContent('半分利食い後');
+      expect(screen.queryByTestId('todays-buys-held-LLY')).toBeNull();
+      expect(screen.getByTestId('todays-buys-row-LLY')).not.toHaveTextContent('保有継続');
+      localStorage.removeItem('todaysWatchlist');
+    });
+
+    it('turns a sell signal on an unheld candidate into a do-not-buy warning', () => {
+      localStorage.removeItem('todaysWatchlist');
+      renderWithProviders(
+        <TodaysBuysCard
+          indexData={indexData([
+            { symbol: 'MRVL', buy: buyBlock({ last_close: 120.0 }), sell: { action: 'sell_into_strength', stop: 111.0 } },
+          ])}
+          scanRows={uptrendRows}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('todays-buys-watch-toggle'));
+      const row = screen.getByTestId('todays-buys-row-MRVL');
+      expect(row).toHaveTextContent('新規買い見送り');
+      expect(row).not.toHaveTextContent('強さへ利確');
+    });
+  });
+
+  it('keeps every label glued to its number in the watch-row zone grid', () => {
+    localStorage.removeItem('todaysWatchlist');
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([
+          // barrels 0 -> demoted to 監視中, which is where the mini zone renders
+          { symbol: 'LLY', buy: buyBlock({ trigger_price: 1160.95, last_close: 1208.12, barrels_passed: 0 }) },
+        ])}
+        scanRows={uptrendRows}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('todays-buys-watch-toggle'));
+    const grid = within(screen.getByTestId('todays-buys-row-LLY')).getByTestId('mini-zone-grid');
+    expect(getComputedStyle(grid).display).toBe('grid');
+    // three self-contained cells: pivot / +5% cap / live price
+    expect(grid.children).toHaveLength(3);
+    [...grid.children].forEach((cell) => {
+      // every cell carries BOTH a label and its number, so neither can be orphaned
+      expect(cell.textContent).toMatch(/[ピボット+5%上限現在値]/);
+      expect(cell.textContent).toMatch(/\d/);
+    });
+    expect(grid.children[0]).toHaveTextContent('ピボット1160.95');
+    expect(grid.children[1]).toHaveTextContent('+5%上限1219.00');
+    expect(grid.children[2]).toHaveTextContent('現在値1208.12+4.1%');
+  });
+
+  it('gives every tappable control a 44x44 minimum', () => {
+    localStorage.removeItem('todaysWatchlist');
+    renderWithProviders(
+      <TodaysBuysCard
+        indexData={indexData([
+          { symbol: 'NVDA', rank: 1, buy: buyBlock() },
+          { symbol: 'GEV', buy: buyBlock({ last_close: 120.0 }) },
+        ])}
+        scanRows={uptrendRows}
+      />,
+    );
+    // jsdom has no layout engine, so assert the declared floor rather than a rect.
+    ['todays-buys-watch-NVDA', 'todays-buys-equity', 'todays-buys-watch-toggle'].forEach((id) => {
+      const el = screen.getByTestId(id);
+      expect(getComputedStyle(el).minWidth).toBe('44px');
+      expect(getComputedStyle(el).minHeight).toBe('44px');
     });
   });
 
