@@ -6,6 +6,7 @@ import StaticDataStatusBanner, {
   lastCompletedTradingSession,
   tradingSessionsBetween,
 } from './StaticDataStatusBanner';
+import { T, TEXT_MIN_PX } from '../designTokens';
 
 // Fixed calendar anchors used throughout (verified weekdays):
 //   2026-07-23 Thu · 2026-07-24 Fri · 2026-07-25 Sat · 2026-07-27 Mon · 2026-07-28 Tue
@@ -150,5 +151,52 @@ describe('StaticDataStatusBanner', () => {
     const line = screen.getByTestId('static-data-stale-line');
     expect(line).toHaveTextContent('2026-07-27');
     expect(line).toHaveTextContent('取引1日分遅れています');
+  });
+});
+
+// Every rendered text node, with the font size the cascade actually gives it.
+const textSizes = (root) => {
+  const out = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const text = (node.textContent || '').trim();
+    if (text) {
+      out.push({ text, size: parseFloat(window.getComputedStyle(node.parentElement).fontSize) });
+    }
+    node = walker.nextNode();
+  }
+  return out;
+};
+
+const bothBanners = () => renderWithProviders(
+  <StaticDataStatusBanner
+    failures={[{ key: 'home', label: '主要指数と業種グループ', impact: '指数カードは空になります。', retry: vi.fn() }]}
+    asOfDate={FRIDAY}
+    market="US"
+    now={et('2026-07-28T10:00:00')}
+  />,
+);
+
+describe('StaticDataStatusBanner type scale (B6/B11)', () => {
+  it('renders no text below the 12px floor in either banner', () => {
+    const { container } = bothBanners();
+    const under = textSizes(container).filter((n) => n.size < TEXT_MIN_PX);
+    expect(under).toEqual([]);
+  });
+
+  it('draws only from the exported scale — one title step, one body step', () => {
+    const { container } = bothBanners();
+    const sizes = [...new Set(textSizes(container).map((n) => n.size))].sort((a, b) => a - b);
+    const steps = new Set(Object.values(T));
+    expect(sizes.filter((s) => !steps.has(s))).toEqual([]);
+    expect(sizes).toEqual([T.body, T.strong]);
+  });
+
+  it('tones the error banner with the one semantic down colour', () => {
+    bothBanners();
+    // C.down #f23645 — 4.75:1 on the tinted banner surface; MUI error.main would be 3.9:1.
+    expect(window.getComputedStyle(screen.getByText('一部のデータを読み込めませんでした')).color)
+      .toBe('rgb(242, 54, 69)');
   });
 });

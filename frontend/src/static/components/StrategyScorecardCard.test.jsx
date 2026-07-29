@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import StrategyScorecardCard from './StrategyScorecardCard';
+import { T, TEXT_MIN_PX } from '../designTokens';
 
 const sample = {
   as_of: '2026-07-23',
@@ -71,5 +72,64 @@ describe('StrategyScorecardCard', () => {
     const d = { ...sample, metrics: { ...sample.metrics, sortino: null } };
     renderWithProviders(<StrategyScorecardCard data={d} />);
     expect(screen.getByText(/リスク1あたりのリターン/)).toBeInTheDocument();
+  });
+});
+
+// Every rendered text node, with the font size the cascade actually gives it.
+const textSizes = (root) => {
+  const out = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const text = (node.textContent || '').trim();
+    if (text) {
+      out.push({ text, size: parseFloat(window.getComputedStyle(node.parentElement).fontSize) });
+    }
+    node = walker.nextNode();
+  }
+  return out;
+};
+
+const full = {
+  ...sample,
+  correction: '以前の値は検証側の不具合で過大でした。',
+  caveat: '窓の取り方で結論は変わりません。',
+  wider_window: {
+    window: { years: 9 }, cagr_pct: 11.0, benchmark_cagr_pct: 14.8, max_drawdown_pct: -18.6,
+  },
+};
+
+describe('StrategyScorecardCard type scale (B6/B11)', () => {
+  it('renders no text below the 12px floor, even in the caveat/correction block', () => {
+    renderWithProviders(<StrategyScorecardCard data={full} />);
+    const under = textSizes(screen.getByTestId('strategy-scorecard')).filter((n) => n.size < TEXT_MIN_PX);
+    expect(under).toEqual([]);
+  });
+
+  it('draws only from the exported scale', () => {
+    renderWithProviders(<StrategyScorecardCard data={full} />);
+    const sizes = textSizes(screen.getByTestId('strategy-scorecard')).map((n) => n.size);
+    const steps = new Set(Object.values(T));
+    expect(sizes.filter((s) => !steps.has(s))).toEqual([]);
+    expect([...new Set(sizes)].sort((a, b) => a - b)).toEqual([T.micro, T.body, T.strong, T.heading]);
+  });
+
+  it('keeps the card title above every item inside it', () => {
+    renderWithProviders(<StrategyScorecardCard data={full} />);
+    const sizeOf = (el) => parseFloat(window.getComputedStyle(el).fontSize);
+    const title = sizeOf(screen.getByText('戦略スコアカード'));
+    const value = sizeOf(screen.getByText('+24.3%'));
+    expect(title).toBe(T.heading);
+    expect(value).toBeLessThan(title);
+  });
+
+  it('colours gains and losses from the one semantic pair', () => {
+    renderWithProviders(<StrategyScorecardCard data={full} />);
+    // C.up / C.down — 6.37:1 and 4.69:1 on #12151b, both AA.
+    expect(window.getComputedStyle(screen.getByText('+24.3%')).color).toBe('rgb(34, 171, 148)');
+    const loss = { ...full, metrics: { ...full.metrics, cagr_pct: -3.2 } };
+    const { unmount } = renderWithProviders(<StrategyScorecardCard data={loss} />);
+    expect(window.getComputedStyle(screen.getByText('-3.2%')).color).toBe('rgb(242, 54, 69)');
+    unmount();
   });
 });

@@ -7,7 +7,7 @@ import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import RemoveIcon from '@mui/icons-material/Remove';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 // Shared, fallback-safe sell-timing renderer (C97). The promise is that EVERY
 // name the user sees always shows its exit: an action pill + a protective stop
@@ -18,11 +18,11 @@ import { C } from '../designTokens';
 
 // rank drives urgency ordering; rank<=1 == sell now.
 export const ACTION_META = {
-  stop_hit: { label: 'ストップ割れ — 即売却', Icon: BlockIcon, color: C.red, rank: 0 },
-  exit: { label: '売り — 50日線割れ', Icon: TrendingDownIcon, color: C.red, rank: 1 },
+  stop_hit: { label: 'ストップ割れ — 即売却', Icon: BlockIcon, color: C.down, rank: 0 },
+  exit: { label: '売り — 50日線割れ', Icon: TrendingDownIcon, color: C.down, rank: 1 },
   sell_into_strength: { label: '強さへ利確 (climax)', Icon: BoltIcon, color: C.amber, rank: 2 },
   tighten_stop: { label: 'ストップ引き上げ', Icon: KeyboardDoubleArrowUpIcon, color: C.amber, rank: 3 },
-  raise_stop: { label: 'ストップ上げ (利益ロック)', Icon: ArrowUpwardIcon, color: C.green, rank: 4 },
+  raise_stop: { label: 'ストップ上げ (利益ロック)', Icon: ArrowUpwardIcon, color: C.up, rank: 4 },
   hold: { label: '保有継続', Icon: RemoveIcon, color: C.grey, rank: 5 },
   no_data: { label: 'エグジット未計算', Icon: HelpOutlineIcon, color: C.dim, rank: 6 },
 };
@@ -48,15 +48,26 @@ export function normalizeSell(sell) {
   };
 }
 
+// The pill used to fill itself with a 13% tint of its own colour, which dragged
+// the red label down to 4.19:1 — below AA. Two treatments now, and both measure
+// >= 4.5:1 (see designTokens.test.js):
+//   · rank <= 1 (即売却 / 売り): SOLID fill, near-black label — 5.01:1, and it
+//     shouts, which is exactly what an exit that cannot wait should do.
+//   · everything else: no fill, coloured label on the card itself — 4.69:1 for
+//     red, 6.37:1 green, 8.35:1 amber, 6.96:1 grey, 4.75:1 dim.
 function Pill({ meta, compact }) {
   const Icon = meta.Icon;
+  const solid = meta.rank <= 1;
+  const fg = solid ? C.onSolid : meta.color;
   return (
     <Box sx={{
-      display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
-      borderRadius: 1, bgcolor: `${meta.color}22`, border: `1px solid ${meta.color}`,
+      display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '2px',
+      borderRadius: 1,
+      bgcolor: solid ? meta.color : 'transparent',
+      border: `1px solid ${meta.color}`,
     }}>
-      <Icon sx={{ fontSize: compact ? 12 : 13, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: compact ? 10 : 11, color: meta.color, lineHeight: 1.2 }}>
+      <Icon sx={{ fontSize: px(compact ? T.micro : T.body), color: fg }} />
+      <Typography sx={{ fontWeight: W.bold, fontSize: px(T.micro), color: fg, lineHeight: 1.3 }}>
         {meta.label}
       </Typography>
     </Box>
@@ -74,20 +85,20 @@ export default function SellTiming({ sell, compact = false, stale = false, curre
     <Box data-testid="sell-timing" data-action={n.action}
       sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', rowGap: 0.25 }}>
       {stale && (
-        <Typography sx={{ fontSize: 9.5, color: C.dim, fontWeight: 700 }}>前回</Typography>
+        <Typography sx={{ fontSize: px(T.micro), color: C.dim, fontWeight: W.bold }}>前回</Typography>
       )}
       <Pill meta={meta} compact={compact} />
       {n.stop != null ? (
-        <Typography sx={{ fontSize: compact ? 10.5 : 11.5, color: C.ink, fontFamily: 'monospace' }}>
+        <Typography sx={{ fontSize: px(compact ? T.micro : T.body), color: C.ink, fontFamily: 'monospace' }}>
           損切り {money(n.stop)}{n.stopBasis && !compact ? ` · ${n.stopBasis}` : ''}
         </Typography>
       ) : (
-        <Typography sx={{ fontSize: compact ? 10.5 : 11.5, color: C.grey }}>
+        <Typography sx={{ fontSize: px(compact ? T.micro : T.body), color: C.grey }}>
           {n.action === 'no_data' ? 'チャートで確認' : '損切り —'}
         </Typography>
       )}
       {!compact && (n.target2r != null || n.target3r != null) && (
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>
+        <Typography sx={{ fontSize: px(T.micro), color: C.grey, fontFamily: 'monospace' }}>
           利確 {n.target2r != null ? money(n.target2r) : '-'} / {n.target3r != null ? money(n.target3r) : '-'}
         </Typography>
       )}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import C, { CARD_BG, NAV_HEIGHT, T, W, px } from './designTokens';
+import C, { CARD_BG, NAV_HEIGHT, PAGE_BG, T, TEXT_MIN_PX, W, px } from './designTokens';
 
 const toRgb = (hexValue) => [1, 3, 5].map((i) => parseInt(hexValue.slice(i, i + 2), 16));
 
@@ -54,9 +54,50 @@ describe('designTokens palette contrast', () => {
   });
 });
 
+describe('designTokens direction pair (B7)', () => {
+  it('ships exactly ONE up colour and ONE down colour', () => {
+    expect(C.up).toBe('#22ab94');
+    expect(C.down).toBe('#f23645');
+    // the legacy names must be the same two hexes, not a second red/green.
+    expect(C.green).toBe(C.up);
+    expect(C.red).toBe(C.down);
+  });
+
+  it('the down colour is the same red the TradingView chart paints', () => {
+    // charts config uses #f23645 for falling candles; the number beside the
+    // chart must not be a different red.
+    expect(C.down).toBe('#f23645');
+  });
+
+  it('refuses the MUI error.main red that was leaking onto the index cards', () => {
+    // measured: #d32f2f is 3.67:1 on #12151b and 3.92:1 on the page — below AA.
+    expect(contrastRatio('#d32f2f', CARD_BG)).toBeLessThan(AA_NORMAL);
+    expect(C.down).not.toBe('#d32f2f');
+  });
+
+  it.each([
+    ['up on the card', C.up, CARD_BG, 6.37],
+    ['down on the card', C.down, CARD_BG, 4.69],
+    ['up on the page', C.up, PAGE_BG, 6.8],
+    ['down on the page', C.down, PAGE_BG, 5.01],
+  ])('%s measures %s -> %s at ~%s:1 and clears AA', (_label, fg, bg, expected) => {
+    const measured = contrastRatio(fg, bg);
+    expect(measured).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(measured).toBeCloseTo(expected, 1);
+  });
+
+  it('onSolid is dark enough to label a filled semantic chip', () => {
+    // a solid urgency pill: near-black text on the semantic fill.
+    expect(contrastRatio(C.onSolid, C.down)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(C.onSolid, C.up)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(C.onSolid, C.amber)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(C.onSolid, C.down)).toBeCloseTo(5.01, 1);
+  });
+});
+
 describe('designTokens type scale', () => {
-  it('exposes exactly the five documented steps', () => {
-    expect(Object.values(T)).toEqual([11, 12, 14, 16, 22]);
+  it('exposes exactly the six documented steps', () => {
+    expect(Object.values(T)).toEqual([12, 13, 15, 17, 22, 26]);
   });
 
   it('uses integers only, so Japanese glyphs never sub-pixel-render', () => {
@@ -65,13 +106,20 @@ describe('designTokens type scale', () => {
   });
 
   it('ranks strictly ascending: an item can never outrank its card title', () => {
-    const ordered = [T.micro, T.body, T.strong, T.heading, T.display];
+    const ordered = [T.micro, T.body, T.strong, T.heading, T.display, T.hero];
     expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
     expect(T.strong).toBeLessThan(T.heading);
+    expect(T.heading).toBeLessThan(T.hero);
+  });
+
+  it('puts the whole scale on or above the 12px readability floor', () => {
+    expect(TEXT_MIN_PX).toBe(12);
+    expect(Math.min(...Object.values(T))).toBeGreaterThanOrEqual(TEXT_MIN_PX);
+    expect(T.micro).toBe(TEXT_MIN_PX);
   });
 
   it('px() appends the unit', () => {
-    expect(px(T.body)).toBe('12px');
+    expect(px(T.body)).toBe('13px');
   });
 });
 

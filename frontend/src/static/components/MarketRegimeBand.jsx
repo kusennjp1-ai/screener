@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 // 地合いバンド — Minervini's rule 1, stated before anything else on the page.
 //
@@ -18,10 +18,10 @@ import { C } from '../designTokens';
 // When no row carries a regime, it says 判定不能 rather than inventing one.
 
 const VERDICT = {
-  confirmed_uptrend: { verdict: '買い場', color: C.green, advice: '新規買い可。' },
+  confirmed_uptrend: { verdict: '買い場', color: C.up, advice: '新規買い可。' },
   uptrend_under_pressure: { verdict: '慎重', color: C.amber, advice: 'ロットを落とす。' },
-  correction: { verdict: '待機', color: C.red, advice: '新規買いは見送り。' },
-  downtrend: { verdict: '待機', color: C.red, advice: '監視のみ。' },
+  correction: { verdict: '待機', color: C.down, advice: '新規買いは見送り。' },
+  downtrend: { verdict: '待機', color: C.down, advice: '監視のみ。' },
 };
 
 const UNKNOWN = {
@@ -85,17 +85,22 @@ export default function MarketRegimeBand({ results }) {
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, flexWrap: 'wrap' }}>
         <Typography
           data-testid="market-regime-verdict"
-          sx={{ fontSize: 19, fontWeight: 800, lineHeight: 1.15, color: meta.color, whiteSpace: 'nowrap' }}
+          sx={{
+            fontSize: px(T.hero), fontWeight: W.bold, lineHeight: 1.15,
+            color: meta.color, whiteSpace: 'nowrap',
+          }}
         >
           {meta.verdict}
         </Typography>
-        <Typography sx={{ fontSize: 11.5, color: C.ink, lineHeight: 1.3, minWidth: 0 }}>
+        <Typography sx={{ fontSize: px(T.body), color: C.ink, lineHeight: 1.3, minWidth: 0 }}>
           {meta.advice}
         </Typography>
         {known && row.market_exposure_pct != null && (
           <Typography
             data-testid="market-regime-exposure"
-            sx={{ fontSize: 11.5, fontWeight: 700, color: meta.color, whiteSpace: 'nowrap' }}
+            sx={{
+              fontSize: px(T.body), fontWeight: W.bold, color: meta.color, whiteSpace: 'nowrap',
+            }}
           >
             {`推奨 ${Math.round(row.market_exposure_pct)}%`}
           </Typography>
@@ -103,7 +108,7 @@ export default function MarketRegimeBand({ results }) {
       </Box>
       <Typography
         data-testid="market-regime-inputs"
-        sx={{ fontSize: 11, fontFamily: 'monospace', color: C.grey, lineHeight: 1.35 }}
+        sx={{ fontSize: px(T.micro), fontFamily: 'monospace', color: C.grey, lineHeight: 1.35 }}
       >
         {inputsLine}
       </Typography>

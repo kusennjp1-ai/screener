@@ -5,7 +5,7 @@ import CloudOffIcon from '@mui/icons-material/CloudOff';
 import UpdateIcon from '@mui/icons-material/Update';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 // データ状態バナー (C98) — the single place the static PWA admits that what it
 // is showing is incomplete or old.
@@ -155,12 +155,12 @@ function Notice({ testId, tone, Icon, title, children, action }) {
         mb: 1.5,
         borderRadius: 1.5,
         border: `1px solid ${tone}`,
-        bgcolor: tone === C.red ? 'rgba(242,54,69,0.08)' : 'rgba(224,165,46,0.08)',
+        bgcolor: tone === C.down ? 'rgba(242,54,69,0.08)' : 'rgba(224,165,46,0.08)',
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
-        <Icon sx={{ fontSize: 16, color: tone }} />
-        <Typography sx={{ color: tone, fontWeight: 700, fontSize: 13 }}>{title}</Typography>
+        <Icon sx={{ fontSize: px(T.heading), color: tone }} />
+        <Typography sx={{ color: tone, fontWeight: W.bold, fontSize: px(T.strong) }}>{title}</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         {action}
       </Box>
@@ -169,7 +169,7 @@ function Notice({ testId, tone, Icon, title, children, action }) {
   );
 }
 
-const bodySx = { color: C.grey, fontSize: 11.5, lineHeight: 1.5 };
+const bodySx = { color: C.grey, fontSize: px(T.body), lineHeight: 1.5 };
 
 export default function StaticDataStatusBanner({
   failures = [],
@@ -200,7 +200,7 @@ export default function StaticDataStatusBanner({
       {failures.length > 0 && (
         <Notice
           testId="static-data-error-banner"
-          tone={C.red}
+          tone={C.down}
           Icon={ReportProblemIcon}
           title="一部のデータを読み込めませんでした"
           action={(
@@ -221,11 +221,14 @@ export default function StaticDataStatusBanner({
                 bgcolor: 'transparent',
                 color: retrying ? C.dim : C.blue,
                 border: `1px solid ${retrying ? C.dim : C.blue}`,
-                font: 'inherit',
-                fontSize: 11.5,
+                // NOT the `font` shorthand: it resets size/weight/family at once
+                // and left this label inheriting an unpredictable size.
+                fontFamily: 'inherit',
+                fontSize: px(T.body),
+                fontWeight: W.medium,
               }}
             >
-              <RefreshIcon sx={{ fontSize: 14 }} />
+              <RefreshIcon sx={{ fontSize: px(T.strong) }} />
               {retrying ? '再読み込み中' : '再試行'}
             </Box>
           )}

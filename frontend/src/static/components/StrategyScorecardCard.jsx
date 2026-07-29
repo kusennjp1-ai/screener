@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 // Strategy scorecard (C95) — the "約束" made visible on the phone.
 //
@@ -23,18 +23,21 @@ function Row({ rank, value, valueColor, label, meaning }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.6 }}>
       <Box sx={{
-        flexShrink: 0, width: 20, height: 20, borderRadius: '50%',
+        flexShrink: 0, width: 22, height: 22, borderRadius: '50%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        bgcolor: C.track, color: C.grey, fontSize: 11, fontWeight: 800, fontFamily: 'monospace',
+        bgcolor: C.track, color: C.grey, fontSize: px(T.micro), fontWeight: W.bold, fontFamily: 'monospace',
       }}>{rank}</Box>
-      <Box sx={{ minWidth: 92, textAlign: 'right' }}>
-        <Typography sx={{ fontSize: 18, fontWeight: 800, fontFamily: 'monospace', color: valueColor, lineHeight: 1.1 }}>
+      <Box sx={{ minWidth: 84, textAlign: 'right' }}>
+        <Typography sx={{
+          fontSize: px(T.strong), fontWeight: W.bold, fontFamily: 'monospace',
+          color: valueColor, lineHeight: 1.2,
+        }}>
           {value}
         </Typography>
       </Box>
       <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: C.inkStrong, lineHeight: 1.2 }}>{label}</Typography>
-        <Typography sx={{ fontSize: 10.5, color: C.grey, lineHeight: 1.2 }}>{meaning}</Typography>
+        <Typography sx={{ fontSize: px(T.body), fontWeight: W.bold, color: C.inkStrong, lineHeight: 1.3 }}>{label}</Typography>
+        <Typography sx={{ fontSize: px(T.micro), color: C.grey, lineHeight: 1.35 }}>{meaning}</Typography>
       </Box>
     </Box>
   );
@@ -74,15 +77,15 @@ export default function StrategyScorecardCard({ data }) {
       {/* header */}
       <Box sx={{ px: 1.5, pt: 1.25, pb: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, flexWrap: 'wrap' }}>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: C.inkStrong, letterSpacing: 0.2 }}>
+          <Typography sx={{ fontSize: px(T.heading), fontWeight: W.bold, color: C.inkStrong, letterSpacing: 0.2 }}>
             戦略スコアカード
           </Typography>
-          <Typography sx={{ fontSize: 10.5, color: C.grey }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey }}>
             過去データ検証・この優先順位で磨きます
           </Typography>
         </Box>
         {windowLabel && (
-          <Typography sx={{ fontSize: 10, color: C.dim, fontFamily: 'monospace', mt: 0.25 }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.dim, fontFamily: 'monospace', mt: 0.25 }}>
             {windowLabel}{data?.universe_size ? ` · 米国${data.universe_size}銘柄` : ''}
           </Typography>
         )}
@@ -92,7 +95,7 @@ export default function StrategyScorecardCard({ data }) {
       <Box sx={{ px: 1.5, py: 0.75 }}>
         <Row rank={1}
           value={fmtPct(m.cagr_pct)}
-          valueColor={Number(m.cagr_pct) >= 0 ? C.green : C.red}
+          valueColor={Number(m.cagr_pct) >= 0 ? C.up : C.down}
           label="年率リターン (CAGR)"
           meaning={bench?.cagr_pct != null ? `S&P500は ${fmtPct(bench.cagr_pct)}／年` : '複利で資産が増える速さ'} />
         <Row rank={2}
@@ -107,7 +110,7 @@ export default function StrategyScorecardCard({ data }) {
           meaning={riskAdjMeaning} />
         <Row rank={4}
           value={expectancy}
-          valueColor={Number(pd.expectancy_r) >= 0 ? C.green : C.red}
+          valueColor={Number(pd.expectancy_r) >= 0 ? C.up : C.down}
           label="期待値 (1トレード)"
           meaning={payoffRatio} />
         <Row rank={5}
@@ -125,26 +128,26 @@ export default function StrategyScorecardCard({ data }) {
           {data.correction && (
             <Typography data-testid="scorecard-correction"
               sx={{
-                fontSize: 10.5, color: C.amber, lineHeight: 1.5, mb: 0.75,
+                fontSize: px(T.micro), color: C.amber, lineHeight: 1.5, mb: 0.75,
                 borderLeft: `2px solid ${C.amber}`, pl: 0.75,
               }}>
               訂正: {data.correction}
             </Typography>
           )}
           {data.caveat && (
-            <Typography sx={{ fontSize: 10.5, color: C.grey, lineHeight: 1.5, mb: data.wider_window ? 0.75 : 0 }}>
+            <Typography sx={{ fontSize: px(T.micro), color: C.grey, lineHeight: 1.5, mb: data.wider_window ? 0.75 : 0 }}>
               {data.caveat}
             </Typography>
           )}
           {data.wider_window && (
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
-              <Typography sx={{ fontSize: 10.5, fontWeight: 800, color: C.inkStrong }}>
+              <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color: C.inkStrong }}>
                 {data.wider_window.window?.years}年窓
               </Typography>
-              <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: C.amber }}>
+              <Typography sx={{ fontSize: px(T.micro), fontFamily: 'monospace', color: C.amber }}>
                 CAGR {fmtPct(data.wider_window.cagr_pct)}
               </Typography>
-              <Typography sx={{ fontSize: 10.5, color: C.grey }}>
+              <Typography sx={{ fontSize: px(T.micro), color: C.grey }}>
                 （S&P500 {fmtPct(data.wider_window.benchmark_cagr_pct)}）· 最大DD {fmtPct(data.wider_window.max_drawdown_pct)}
               </Typography>
             </Box>
@@ -156,18 +159,18 @@ export default function StrategyScorecardCard({ data }) {
       {top10 != null && (
         <Box sx={{ px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.inkStrong }}>大勝ちの効き（右テール）</Typography>
+            <Typography sx={{ fontSize: px(T.body), fontWeight: W.bold, color: C.inkStrong }}>大勝ちの効き（右テール）</Typography>
             <Tooltip title="利益の大半はごく一部の大勝ちが生む。だから途中で利確せず伸ばす（20%固定利確はこの効きを壊す）。">
-              <Typography sx={{ fontSize: 10, color: C.grey, cursor: 'help' }}>全トレード上位10%が利益の {top10}%</Typography>
+              <Typography sx={{ fontSize: px(T.micro), color: C.grey, cursor: 'help' }}>全トレード上位10%が利益の {top10}%</Typography>
             </Tooltip>
           </Box>
           <Box sx={{ position: 'relative', height: 8, borderRadius: 4, bgcolor: C.track, overflow: 'hidden' }}>
-            <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(100, top10)}%`, bgcolor: C.green, opacity: 0.85 }} />
+            <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(100, top10)}%`, bgcolor: C.up, opacity: 0.85 }} />
             {best != null && (
-              <Box sx={{ position: 'absolute', top: 0, bottom: 0, width: `${Math.min(100, best)}%`, bgcolor: C.green }} />
+              <Box sx={{ position: 'absolute', top: 0, bottom: 0, width: `${Math.min(100, best)}%`, bgcolor: C.up }} />
             )}
           </Box>
-          <Typography sx={{ fontSize: 10, color: C.grey, mt: 0.5 }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey, mt: 0.5 }}>
             {best != null ? `濃い部分＝最大の勝ち1件で利益の ${best}%。` : ''}少数の大勝ちを切らないのが要。
           </Typography>
         </Box>
