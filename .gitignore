@@ -15,6 +15,9 @@ frontend/node_modules
 
 # Build artifacts
 frontend/dist
+# 視覚検証で `vite build --outDir dist-<用途>` を並行して回すため、
+# dist で始まる出力先はすべて成果物として扱う。
+frontend/dist-*
 frontend/public/static-data/
 
 # Environment variables (keep .example files)
