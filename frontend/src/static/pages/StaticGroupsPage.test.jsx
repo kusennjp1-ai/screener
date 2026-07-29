@@ -93,7 +93,7 @@ describe('StaticGroupsPage', () => {
   it('renders 1W movers and the 1W rank-change column', async () => {
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'US 業種グループランキング' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '米国 業種グループランキング' })).toBeInTheDocument();
     expect(screen.getByText('上昇グループ（1W）')).toBeInTheDocument();
     expect(screen.getByText('下落グループ（1W）')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '1週' })).toBeInTheDocument();
@@ -165,10 +165,67 @@ describe('StaticGroupsPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'US 業種グループランキング' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '米国 業種グループランキング' })).toBeInTheDocument();
     // Switch from the table view to the Relative Rotation Graph.
     fireEvent.click(screen.getByRole('button', { name: 'RRG' }));
     expect(await screen.findByText(/Relative Rotation Graph/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sectors' })).not.toBeInTheDocument();
+  });
+  it('explains the missing group rankings in Japanese instead of leaking the backend exception', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            markets: {
+              US: {
+                market: 'US',
+                display_name: 'United States',
+                as_of_date: '2026-07-24',
+                features: { breadth: false, groups: false, scan: true, charts: true },
+                freshness: { scan_as_of_date: '2026-07-24' },
+                assets: { charts: { path: 'charts/index.json', symbols_total: 13 } },
+                pages: { groups: { path: 'groups.json' } },
+              },
+            },
+            default_market: 'US',
+            supported_markets: ['US'],
+            pages: { groups: { path: 'groups.json' } },
+          }),
+        };
+      }
+      if (path === 'groups.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            available: false,
+            expected_as_of_date: '2026-07-24',
+            message: 'No group rankings are available for static-site export date 2026-07-24.',
+            payload: {},
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+
+    renderPage();
+
+    expect(await screen.findByTestId('groups-unavailable')).toBeInTheDocument();
+    expect(screen.getByText('業種グループランキングはこの日には入っていません')).toBeInTheDocument();
+    expect(
+      screen.getByText(/基準日の業種グループランキングがスナップショットに入っていません/)
+    ).toBeInTheDocument();
+    // 生のバックエンド文字列は、言語を問わず絶対に画面に出さない。
+    expect(document.body.textContent).not.toMatch(/No group rankings/);
+    expect(document.body.textContent).not.toMatch(/static-site export date/);
+    // 市場名も日本語にする（マニフェストの display_name は英語）。
+    expect(screen.getByRole('heading', { name: '米国 業種グループランキング' })).toBeInTheDocument();
+    // スナップショットに何が入っているかと、次にできることを示す。
+    expect(screen.getByText('このスナップショットの中身')).toBeInTheDocument();
+    expect(screen.getByText('13 銘柄')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'デイリーで相場判定を見る' })).toBeInTheDocument();
   });
 });

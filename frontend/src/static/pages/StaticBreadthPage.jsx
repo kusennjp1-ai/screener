@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Alert,
   Box,
   CircularProgress,
   Grid,
@@ -23,8 +22,27 @@ import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/commo
 import { hasGlossaryEntry } from '../../constants/metricGlossary';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
 import { useStaticMarket } from '../StaticMarketContext';
+import { C, T, px } from '../designTokens';
+import { SnapshotGapPanel, buildSnapshotFacts, marketDisplayNameJa } from './SnapshotGapPanel';
 
 const RANGE_DAYS = { '1M': 31, '3M': 90 };
+
+/**
+ * 書き出しに騰落データが無いとき、バックエンドの英語メッセージを
+ * そのまま出していた（"No benchmark trading session is available…"）。
+ * 生の英語例外はユーザー向けの文言ではないので、原因のカテゴリだけを
+ * 見て日本語の説明に置き換える。未知の原因でも生文字列は絶対に返さない。
+ */
+function describeBreadthGap(message) {
+  const text = String(message || '');
+  if (/benchmark .*session|trading session/i.test(text)) {
+    return 'この日はベンチマーク（米国市場は SPY）の取引データがスナップショットに入っていません。騰落はベンチマークの営業日を基準に集計するため、この日は計算できませんでした。';
+  }
+  if (/breadth/i.test(text)) {
+    return 'この日の騰落データがスナップショットに入っていません。書き出しの時点で必要な日足が揃っていなかったためです。';
+  }
+  return 'この日の騰落データがスナップショットに入っていません。書き出しの時点でデータが揃っていなかったためです。';
+}
 
 function MetricCard({ label, value, glossaryId, openInfo }) {
   const clickable = Boolean(glossaryId && openInfo && hasGlossaryEntry(glossaryId));
@@ -92,7 +110,7 @@ function StaticBreadthPage() {
   const payload = breadthQuery.data?.payload || {};
   const groupAttribution = payload.group_attribution || null;
   const attributionAvailable = Boolean(groupAttribution?.available);
-  const displayName = marketEntry.display_name;
+  const displayName = marketDisplayNameJa(marketEntry);
   const filteredChartData = useMemo(() => {
     const allData = payload.chart_data || payload.history_90d || [];
     return allData.slice(-(RANGE_DAYS[timeRange] || 31));
@@ -102,6 +120,7 @@ function StaticBreadthPage() {
     return allSpy.slice(-(RANGE_DAYS[timeRange] || 31));
   }, [payload.benchmark_overlay, payload.spy_overlay, timeRange]);
   const benchmarkLabel = payload.benchmark_symbol || (marketEntry.market === 'US' ? 'SPY' : 'Benchmark');
+  const snapshotFacts = useMemo(() => buildSnapshotFacts(marketEntry), [marketEntry]);
 
   if (manifestQuery.isLoading || breadthQuery.isLoading) {
     return (
@@ -112,11 +131,48 @@ function StaticBreadthPage() {
   }
 
   if (manifestQuery.isError || breadthQuery.isError) {
-    return <Alert severity="error">騰落データの読み込みに失敗しました。</Alert>;
+    return (
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 2 }}>
+          {displayName} 騰落状況（ブレッドス）
+        </Typography>
+        <SnapshotGapPanel
+          testId="breadth-fetch-failed"
+          title="騰落データを読み込めませんでした"
+          statusLabel="読み込み失敗"
+          reason="スナップショットの騰落ファイルを取得できませんでした。通信が切れているか、公開途中の可能性があります。"
+          actions={[
+            { to: '/', label: 'デイリーに戻る' },
+            { to: '/scan', label: 'スキャンを見る' },
+          ]}
+          footnote="ページを再読み込みしても直らない場合は、次のスナップショット公開までお待ちください。"
+        />
+      </Box>
+    );
   }
 
   if (breadthQuery.data?.available === false) {
-    return <Alert severity="info">{breadthQuery.data?.message || '騰落スナップショットがありません。'}</Alert>;
+    return (
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+          {displayName} 騰落状況（ブレッドス）
+        </Typography>
+        <Typography sx={{ fontSize: px(T.body), color: C.grey, mb: 2 }}>
+          基準日 {breadthQuery.data.expected_as_of_date || marketEntry.as_of_date || '-'}
+        </Typography>
+        <SnapshotGapPanel
+          testId="breadth-unavailable"
+          title="騰落データはこの日には入っていません"
+          reason={describeBreadthGap(breadthQuery.data.message)}
+          facts={snapshotFacts}
+          actions={[
+            { to: '/', label: 'デイリーで相場判定を見る' },
+            { to: '/scan', label: 'スキャンで銘柄を絞る' },
+          ]}
+          footnote="騰落は次回のスナップショットにデータが揃えば、この画面に自動で表示されます。設定は必要ありません。"
+        />
+      </Box>
+    );
   }
 
   const current = payload.current || {};

@@ -47,7 +47,7 @@ describe('StaticBreadthPage', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders an info alert when the exported breadth bundle is unavailable', async () => {
+  it('explains the missing breadth snapshot in Japanese instead of leaking the backend exception', async () => {
     globalThis.fetch = vi.fn(async (url) => {
       const path = String(url).split('/static-data/')[1];
 
@@ -86,10 +86,19 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
+    expect(await screen.findByTestId('breadth-unavailable')).toBeInTheDocument();
+    expect(screen.getByText('騰落データはこの日には入っていません')).toBeInTheDocument();
     expect(
-      await screen.findByText('No breadth snapshot is available for static-site export date 2026-04-02.')
+      screen.getByText(/この日の騰落データがスナップショットに入っていません/)
     ).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Market Breadth' })).not.toBeInTheDocument();
+    // 生のバックエンド文字列は、言語を問わず絶対に画面に出さない。
+    expect(
+      screen.queryByText('No breadth snapshot is available for static-site export date 2026-04-02.')
+    ).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/static-site export date/);
+    // 「代わりに何ができるか」まで示す。
+    expect(screen.getByRole('link', { name: 'デイリーで相場判定を見る' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'スキャンで銘柄を絞る' })).toBeInTheDocument();
   });
 
   it('passes non-US benchmark labels and overlays to the chart', async () => {
@@ -151,7 +160,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage('/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '香港 騰落状況（ブレッドス）' })).toBeInTheDocument();
     expect(screen.getByTestId('breadth-chart')).toHaveTextContent('^HSI:1');
   });
 
@@ -256,7 +265,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '米国 騰落状況（ブレッドス）' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
 
@@ -345,7 +354,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage('/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '香港 騰落状況（ブレッドス）' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
     expect(
       await screen.findByText('Group attribution is not yet supported for market HK.')
@@ -430,7 +439,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '米国 騰落状況（ブレッドス）' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
 
     // The empty-session message is shown but the date picker remains usable.

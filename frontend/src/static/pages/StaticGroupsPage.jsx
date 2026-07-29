@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Alert,
   Box,
   CircularProgress,
   Grid,
@@ -30,6 +29,26 @@ import RankChangeCell from '../../components/shared/RankChangeCell';
 import TickerCell from '../../components/common/TickerCell';
 import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 import { useStaticMarket } from '../StaticMarketContext';
+import { C, T, px } from '../designTokens';
+import { SnapshotGapPanel, buildSnapshotFacts, marketDisplayNameJa } from './SnapshotGapPanel';
+
+/**
+ * 書き出しに業種グループランキングが無いとき、バックエンドの英語メッセージ
+ * （"No group rankings are available for static-site export date …"）を
+ * そのまま出していた。生のバックエンド文字列はユーザー向けの文言ではないので、
+ * 原因のカテゴリだけを見て日本語の説明に置き換える。
+ * 未知の原因でも生文字列は絶対に返さない。
+ */
+function describeGroupsGap(message) {
+  const text = String(message || '');
+  if (/group rank/i.test(text)) {
+    return '基準日の業種グループランキングがスナップショットに入っていません。ランキングは市場全体の銘柄をまとめて順位づけするため、対象銘柄が揃わない書き出しでは作成されません。';
+  }
+  if (/rrg/i.test(text)) {
+    return '基準日の RRG（相対強弱ローテーション）を計算できませんでした。順位の履歴が足りていないためです。';
+  }
+  return '基準日の業種グループランキングがスナップショットに入っていません。書き出しの時点でデータが揃っていなかったためです。';
+}
 
 function MoversCard({ title, rows, openInfo }) {
   return (
@@ -173,6 +192,7 @@ function StaticGroupsPage() {
     });
   }, [setSearchParams]);
   const [rrgScope, setRrgScope] = useState('groups'); // 'groups' | 'sectors'
+  const snapshotFacts = useMemo(() => buildSnapshotFacts(marketEntry), [marketEntry]);
   const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
   const { availableScopes: availableRrgScopes } = useRRGScopeSelection({
     view,
@@ -192,11 +212,48 @@ function StaticGroupsPage() {
   }
 
   if (manifestQuery.isError || groupsQuery.isError) {
-    return <Alert severity="error">業種グループランキングの読み込みに失敗しました。</Alert>;
+    return (
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 2 }}>
+          {marketDisplayNameJa(marketEntry)} 業種グループランキング
+        </Typography>
+        <SnapshotGapPanel
+          testId="groups-fetch-failed"
+          title="業種グループランキングを読み込めませんでした"
+          statusLabel="読み込み失敗"
+          reason="スナップショットのランキングファイルを取得できませんでした。通信が切れているか、公開途中の可能性があります。"
+          actions={[
+            { to: '/', label: 'デイリーに戻る' },
+            { to: '/scan', label: 'スキャンを見る' },
+          ]}
+          footnote="ページを再読み込みしても直らない場合は、次のスナップショット公開までお待ちください。"
+        />
+      </Box>
+    );
   }
 
   if (!groupsQuery.data?.available) {
-    return <Alert severity="info">{groupsQuery.data?.message || '業種グループランキングがありません。'}</Alert>;
+    return (
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+          {marketDisplayNameJa(marketEntry)} 業種グループランキング
+        </Typography>
+        <Typography sx={{ fontSize: px(T.body), color: C.grey, mb: 2 }}>
+          基準日 {groupsQuery.data?.expected_as_of_date || marketEntry.as_of_date || '-'}
+        </Typography>
+        <SnapshotGapPanel
+          testId="groups-unavailable"
+          title="業種グループランキングはこの日には入っていません"
+          reason={describeGroupsGap(groupsQuery.data?.message)}
+          facts={snapshotFacts}
+          actions={[
+            { to: '/', label: 'デイリーで相場判定を見る' },
+            { to: '/scan', label: 'スキャンで銘柄を絞る' },
+          ]}
+          footnote="ランキングは次回のスナップショットにデータが揃えば、この画面に自動で表示されます。個別銘柄の業種は「スキャン」の各行から確認できます。"
+        />
+      </Box>
+    );
   }
 
   const payload = groupsQuery.data.payload || {};
@@ -208,7 +265,7 @@ function StaticGroupsPage() {
   return (
     <Box>
       <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
-        {marketEntry.display_name} 業種グループランキング
+        {marketDisplayNameJa(marketEntry)} 業種グループランキング
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
         最新ランキング日付: {payload.rankings?.date || '-'}

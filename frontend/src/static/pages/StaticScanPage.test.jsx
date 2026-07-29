@@ -413,9 +413,9 @@ describe('StaticScanPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Leaders (2)')).toBeInTheDocument();
+    expect(await screen.findByText('主導グループ (2)')).toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(screen.getByText('Leaders (2)'));
+    await user.click(screen.getByText('主導グループ (2)'));
 
     await waitFor(() => {
       expect(screen.getByTestId('results-table-rows')).toHaveTextContent('IPOLEAD,LEAD');
@@ -886,6 +886,168 @@ describe('StaticScanPage', () => {
 
     expect(await screen.findByText(/バックグラウンドのデータ読み込みに失敗しました/i)).toBeInTheDocument();
     expect(screen.getByTestId('results-table-rows')).toHaveTextContent('NVDA,MSFT,AAPL');
-    expect(screen.getByText(/チャート 143 銘柄/i)).toBeInTheDocument();
+    // 見出しの数字は「該当した銘柄数」ひとつだけ。全件数やチャート本数を
+    // 並べた説明のない 3 連数字はもう出さない。
+    expect(screen.getByTestId('scan-result-count')).toHaveTextContent('3');
+    expect(screen.queryByText(/チャート 143 銘柄/i)).not.toBeInTheDocument();
+  });
+  it('renders the preset screens, the count and the filter chrome in Japanese, and a real empty state', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ pages: { scan: { path: 'scan/manifest.json' } } }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-07-27T13:19:07Z',
+            as_of_date: '2026-07-24',
+            run_id: 1,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 10,
+            // 既定のフィルタだけで 0 件になる（実際の書き出しと同じ状況）。
+            default_filters: { minVolume: 100000000 },
+            filter_options: { ibd_industries: [], gics_sectors: [], ratings: [] },
+            initial_rows: [
+              { symbol: 'AA', company_name: 'Alcoa', composite_score: 50, volume: 1000 },
+            ],
+            preset_screens: [
+              {
+                id: 'minervini',
+                name: 'Minervini Trend Template',
+                short_name: 'Minervini',
+                description: 'Stage 2 growth leaders in leading groups',
+                tier: 1,
+                filters: { rsRating: { min: 90, max: null } },
+                sort_by: 'minervini_score',
+                sort_order: 'desc',
+              },
+              {
+                id: 'club_97',
+                name: '97 Club',
+                short_name: '97 Club',
+                description: 'Top 3% movers',
+                tier: 3,
+                filters: { pctDay: { min: 3, max: null } },
+                sort_by: 'price_change_1d',
+                sort_order: 'desc',
+              },
+            ],
+            chunks: [],
+            charts: { path: 'charts/index.json', limit: 200, symbols_total: 13, available: true },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ symbols: [{ symbol: 'AA', rank: 1, path: 'charts/AA.json' }] }),
+        };
+      }
+
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+
+    renderPage();
+
+    // プリセットのチップはバックエンドの英語名ではなく日本語で出す。
+    expect(await screen.findByText('ミネルヴィニ (0)')).toBeInTheDocument();
+    expect(screen.getByText('97クラブ (0)')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Minervini Trend Template/);
+    expect(document.body.textContent).not.toMatch(/97 Club/);
+
+    // 名前＋短い説明を本文で見せる（ツールチップはスマートフォンで開けない）。
+    expect(screen.getByTestId('scan-active-screen')).toHaveTextContent('全銘柄');
+    expect(screen.getByTestId('scan-active-screen')).toHaveTextContent('絞り込み条件だけを適用');
+
+    // 説明のない 3 連数字ではなく、ラベル付きの数字ひとつ。
+    const countCard = screen.getByTestId('scan-result-count');
+    expect(countCard).toHaveTextContent('0');
+    expect(countCard).toHaveTextContent('0銘柄が該当');
+    expect(document.body.textContent).not.toMatch(/全 10 件/);
+
+    // 絞り込みバーは日本語、条件チップも日本語。
+    expect(screen.getByTestId('scan-filter-bar-toggle')).toHaveTextContent('絞り込み');
+    expect(screen.getAllByText('売買代金 1億ドル以上').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '条件をリセット' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Dollar Vol/);
+
+    // 0 件のときは共有テーブルの "No results found" ではなく、
+    // 理由と次の一手まで書いた日本語の空状態を出す。
+    expect(screen.getByTestId('scan-no-matches')).toBeInTheDocument();
+    expect(screen.getByText('条件に合う銘柄がありません')).toBeInTheDocument();
+    expect(
+      screen.getByText(/いまの絞り込み条件に合う銘柄は、このスナップショットの 10 銘柄の中にありませんでした。/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '絞り込みを外す' })).toBeInTheDocument();
+    expect(screen.queryByTestId('results-table-rows')).not.toBeInTheDocument();
+  });
+
+  it('clears the filters from the empty state so the user can get back to rows', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url).split('/static-data/')[1];
+
+      if (path === 'manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ pages: { scan: { path: 'scan/manifest.json' } } }),
+        };
+      }
+
+      if (path === 'scan/manifest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            generated_at: '2026-07-27T13:19:07Z',
+            as_of_date: '2026-07-24',
+            run_id: 1,
+            sort: { field: 'composite_score', order: 'desc' },
+            default_page_size: 50,
+            rows_total: 1,
+            default_filters: { minVolume: 100000000 },
+            filter_options: { ibd_industries: [], gics_sectors: [], ratings: [] },
+            initial_rows: [
+              { symbol: 'AA', company_name: 'Alcoa', composite_score: 50, volume: 1000 },
+            ],
+            chunks: [],
+            charts: { path: 'charts/index.json', limit: 200, symbols_total: 1, available: true },
+          }),
+        };
+      }
+
+      if (path === 'charts/index.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ symbols: [{ symbol: 'AA', rank: 1, path: 'charts/AA.json' }] }),
+        };
+      }
+
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findByTestId('scan-no-matches');
+    await user.click(screen.getByRole('button', { name: '絞り込みを外す' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('results-table-rows')).toHaveTextContent('AA');
+    });
+    expect(screen.queryByTestId('scan-no-matches')).not.toBeInTheDocument();
   });
 });
