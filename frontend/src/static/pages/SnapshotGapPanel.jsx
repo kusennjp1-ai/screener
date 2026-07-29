@@ -135,30 +135,9 @@ export function SnapshotGapPanel({
   );
 }
 
-/**
- * マニフェストの display_name はバックエンド由来の英語（"United States"）。
- * 日本語画面の見出しに英語の国名が出るのを避けるため、市場コードから
- * 日本語名に置き換える。未知のコードのときだけ元の表記に戻す。
- */
-const MARKET_NAMES_JA = {
-  US: '米国',
-  HK: '香港',
-  IN: 'インド',
-  JP: '日本',
-  KR: '韓国',
-  TW: '台湾',
-  CN: '中国',
-  DE: 'ドイツ',
-  CA: 'カナダ',
-  SG: 'シンガポール',
-  MY: 'マレーシア',
-  AU: 'オーストラリア',
-};
-
-export function marketDisplayNameJa(marketEntry) {
-  const code = String(marketEntry?.market || '').toUpperCase();
-  return MARKET_NAMES_JA[code] || marketEntry?.display_name || code || '';
-}
+// 市場名の日本語化は ../marketNames が唯一の出どころ。ここは既存の
+// import 先を壊さないための再輸出のみ。
+export { marketDisplayNameJa } from '../marketNames';
 
 /**
  * マニフェストが実際に持っている値だけを並べた「中身」リスト。

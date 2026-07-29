@@ -21,6 +21,7 @@ import { ColorModeContext } from '../contexts/ColorModeContext';
 import { useStaticMarket } from './StaticMarketContext';
 import { getStaticSupportedMarkets, resolveStaticMarketEntry, useStaticManifest } from './dataClient';
 import { marketFlag } from './marketFlags';
+import { marketNameJa } from './marketNames';
 import { NAV_HEIGHT, T, W, px } from './designTokens';
 
 const NAV_ITEMS = [
@@ -106,10 +107,10 @@ function StaticLayout({ children }) {
                     color: 'inherit',
                   },
                 }}
-                inputProps={{ 'aria-label': 'Static market selector' }}
+                inputProps={{ 'aria-label': '市場を選択' }}
               >
                 {supportedMarkets.map((market) => {
-                  const label = manifestQuery.data?.markets?.[market]?.display_name || market;
+                  const label = marketNameJa(market, manifestQuery.data?.markets?.[market]?.display_name);
                   const flag = marketFlag(market);
                   return (
                     <MenuItem key={market} value={market}>

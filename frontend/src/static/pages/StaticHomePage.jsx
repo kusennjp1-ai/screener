@@ -33,6 +33,7 @@ import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
 import { marketFlag } from '../marketFlags';
+import { marketNameJa } from '../marketNames';
 import { MARKET_CAP_OPTIONS } from '../../features/scan/components/filterPanel/constants';
 import { applyScanFilterDefaults } from '../../features/scan/defaultFilters';
 import { filterStaticScanRows, sortStaticScanRows } from '../scanClient';
@@ -417,7 +418,10 @@ function StaticHomePage() {
 
   const home = homeQuery.data;
   const freshness = home?.freshness || {};
-  const marketDisplay = home?.market_display_name || marketEntry.display_name;
+  // home.market_display_name もバックエンド由来の英語なので、見出しには使わない。
+  // 市場名は marketNames の 1 か所だけで日本語化する（ブレッドス・業種グループ
+  // の見出しと必ず同じ表記になる）。
+  const marketDisplay = marketNameJa(marketEntry.market, home?.market_display_name || marketEntry.display_name);
   const flag = marketFlag(marketEntry.market);
 
   // When prices were last refreshed into this bundle. The fast post-close
