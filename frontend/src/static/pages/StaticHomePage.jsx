@@ -40,7 +40,7 @@ import { filterStaticScanRows, sortStaticScanRows } from '../scanClient';
 import DailyScanRowsTable from '../components/DailyScanRowsTable';
 import { buildFiltersFromPreset } from '../hooks/usePresetScreens';
 import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 const EMPTY_RESULTS = [];
 const DEFAULT_TOP_RESULTS = 20;
@@ -89,7 +89,9 @@ function EmptySectionBar({ testId, title, statusLabel, message, note, alwaysOpen
         data-testid={`${testId}-toggle`}
         sx={{
           width: '100%',
-          minHeight: 36,
+          // A collapsed section is still a control the finger must hit: 44px
+          // (WCAG 2.5.5), not the 36px that only suited the label's height.
+          minHeight: 44,
           display: 'flex',
           alignItems: 'center',
           gap: 0.75,
@@ -103,24 +105,24 @@ function EmptySectionBar({ testId, title, statusLabel, message, note, alwaysOpen
           cursor: alwaysOpen ? 'default' : 'pointer',
         }}
       >
-        <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.inkStrong, lineHeight: 1.3, minWidth: 0 }}>
+        <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color: C.inkStrong, lineHeight: 1.3, minWidth: 0 }}>
           {title}
         </Typography>
-        <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: C.grey, flexShrink: 0 }}>
+        <Typography sx={{ fontSize: px(T.micro), fontFamily: 'monospace', color: C.grey, flexShrink: 0 }}>
           — {statusLabel}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {!alwaysOpen && (
-          <Typography sx={{ fontSize: 11, color: C.grey, flexShrink: 0 }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey, flexShrink: 0 }}>
             {expanded ? '▾' : '▸'}
           </Typography>
         )}
       </Box>
       {expanded && (
         <Box sx={{ px: 1.25, pb: 1.25 }}>
-          <Typography sx={{ fontSize: 11.5, color: C.ink, lineHeight: 1.6 }}>{message}</Typography>
+          <Typography sx={{ fontSize: px(T.micro), color: C.ink, lineHeight: 1.6 }}>{message}</Typography>
           {note && (
-            <Typography sx={{ fontSize: 10, color: C.dim, lineHeight: 1.5, mt: 0.5 }}>{note}</Typography>
+            <Typography sx={{ fontSize: px(T.micro), color: C.dim, lineHeight: 1.5, mt: 0.5 }}>{note}</Typography>
           )}
         </Box>
       )}
@@ -150,9 +152,14 @@ function ScorecardSummaryRow({ data }) {
         data-testid="scorecard-summary-row"
         sx={{
           width: '100%',
-          minHeight: 36,
+          // 44px so the row is a real tap target (WCAG 2.5.5), and wrapping so
+          // the three metrics can take a second line rather than pushing the
+          // page 7px wider than the phone — at 12px they no longer fit on one.
+          minHeight: 44,
           display: 'flex',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          rowGap: 0.25,
           gap: 0.75,
           px: 1.25,
           py: 0.5,
@@ -166,12 +173,12 @@ function ScorecardSummaryRow({ data }) {
           cursor: 'pointer',
         }}
       >
-        <Typography sx={{ fontSize: 11.5, fontWeight: 800, color: C.inkStrong, flexShrink: 0 }}>
+        <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color: C.inkStrong, flexShrink: 0 }}>
           検証実績 {open ? '▾' : '▸'}
         </Typography>
         <Typography sx={{
-          fontSize: 10, fontFamily: 'monospace', color: C.grey, lineHeight: 1.4,
-          minWidth: 0, whiteSpace: 'nowrap',
+          fontSize: px(T.micro), fontFamily: 'monospace', color: C.grey, lineHeight: 1.4,
+          minWidth: 0,
         }}>
           {`CAGR ${fmtPct(m.cagr_pct)} · 最大DD ${fmtPct(m.max_drawdown_pct)}`}
           {expectancy != null ? ` · 期待値 ${Number(expectancy).toFixed(2)}R` : ''}
@@ -480,13 +487,13 @@ function StaticHomePage() {
           mb: 1,
         }}
       >
-        <Typography sx={{ fontWeight: 700, fontSize: '16.5px', letterSpacing: '-0.3px', lineHeight: 1.3 }}>
+        <Typography sx={{ fontWeight: W.bold, fontSize: px(T.heading), letterSpacing: '-0.3px', lineHeight: 1.3 }}>
           {flag ? `${flag}  ` : ''}{marketDisplay} スナップショット
         </Typography>
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ fontFamily: 'monospace', fontSize: '10px' }}
+          sx={{ fontFamily: 'monospace', fontSize: px(T.micro) }}
         >
           {freshnessLabel}
         </Typography>
@@ -563,25 +570,25 @@ function StaticHomePage() {
                 }}
               >
                 <Box sx={{ flex: '0 0 auto', minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px' }}>
+                  <Typography variant="body2" sx={{ fontWeight: W.semibold, fontSize: px(T.body) }}>
                     {item.symbol}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '10px' }}>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: px(T.micro) }}>
                     {item.display_name}
                   </Typography>
-                  <Typography variant="body1" sx={{ mt: 0.5, fontFamily: 'monospace', fontWeight: 600 }}>
+                  <Typography variant="body1" sx={{ mt: 0.5, fontFamily: 'monospace', fontWeight: W.semibold }}>
                     {formatLocalCurrency(item.latest_close, item.currency)}
                   </Typography>
                   <Box display="flex" alignItems="center" sx={{ mt: 0.5 }}>
-                    {item.change_1d > 0 && <TrendingUpIcon sx={{ fontSize: 14, mr: 0.25, color: 'success.main' }} />}
-                    {item.change_1d < 0 && <TrendingDownIcon sx={{ fontSize: 14, mr: 0.25, color: 'error.main' }} />}
+                    {item.change_1d > 0 && <TrendingUpIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'success.main' }} />}
+                    {item.change_1d < 0 && <TrendingDownIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'error.main' }} />}
                     <Typography
                       variant="body2"
                       sx={{
                         color: item.change_1d > 0 ? 'success.main' : item.change_1d < 0 ? 'error.main' : 'text.secondary',
                         fontFamily: 'monospace',
-                        fontWeight: 600,
-                        fontSize: '12px',
+                        fontWeight: W.semibold,
+                        fontSize: px(T.micro),
                       }}
                     >
                       {item.change_1d != null
@@ -717,7 +724,7 @@ function StaticHomePage() {
         />
       ) : (
       <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }} data-testid="top-groups-section">
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: W.semibold, fontSize: px(T.body), letterSpacing: '0.5px', mb: 0.5 }}>
           業種グループ トップ10
         </Typography>
         <TableContainer>
@@ -734,7 +741,7 @@ function StaticHomePage() {
             <TableBody>
               {topGroups.map((group) => (
                 <TableRow key={group.industry_group}>
-                  <TableCell align="center" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{group.rank}</TableCell>
+                  <TableCell align="center" sx={{ fontFamily: 'monospace', fontWeight: W.semibold }}>{group.rank}</TableCell>
                   <TableCell>{group.industry_group}</TableCell>
                   <TableCell align="right"><RankChangeCell value={group.rank_change_1w} /></TableCell>
                   <TableCell align="right"><RankChangeCell value={group.rank_change_1m} /></TableCell>

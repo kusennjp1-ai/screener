@@ -13,7 +13,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import BoltIcon from '@mui/icons-material/Bolt';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import { useWatchlist } from '../hooks/useWatchlist';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 import { evaluateSnapshotFreshness } from './StaticDataStatusBanner';
 import SellTiming from './SellTiming';
 
@@ -127,13 +127,13 @@ export function classifyEntry(entry, { marketRed, stale } = {}) {
   const buy = entry?.buy;
   if (!buy || buy.trigger_price == null) return 'no_signal';
   const zoneHi = buy.trigger_price * CHASE_CAP;
-  const px = buy.last_close;
-  if (px != null && px > zoneHi) return 'extended';
+  const last = buy.last_close;
+  if (last != null && last > zoneHi) return 'extended';
   // Unknown barrel count (older export) keeps the old behaviour; a known count
   // below the threshold downgrades the row from BUY NOW to WAIT.
   const confirmed = buy.barrels_passed == null || buy.barrels_passed >= MIN_BARRELS_FOR_BUY;
   if (!marketRed && !stale && buy.active && confirmed
-    && px != null && px >= buy.trigger_price && px <= zoneHi) {
+    && last != null && last >= buy.trigger_price && last <= zoneHi) {
     return 'buy_now';
   }
   return 'not_triggered';
@@ -156,11 +156,11 @@ const buyOrderKey = (e) => {
 const distanceToZone = (e) => {
   const b = e.buy || {};
   const lo = b.trigger_price;
-  const px = b.last_close;
-  if (lo == null || lo <= 0 || px == null) return Number.POSITIVE_INFINITY;
+  const last = b.last_close;
+  if (lo == null || lo <= 0 || last == null) return Number.POSITIVE_INFINITY;
   const hi = lo * CHASE_CAP;
-  if (px < lo) return (lo - px) / lo;
-  if (px > hi) return (px - hi) / hi;
+  if (last < lo) return (lo - last) / lo;
+  if (last > hi) return (last - hi) / hi;
   return 0;
 };
 
@@ -178,8 +178,8 @@ function VerdictBadge({ meta, suffix }) {
   const Icon = meta.Icon;
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-      <Icon sx={{ fontSize: 15, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: 12.5, color: meta.color }}>
+      <Icon sx={{ fontSize: px(T.strong), color: meta.color }} />
+      <Typography sx={{ fontWeight: W.bold, fontSize: px(T.micro), color: meta.color }}>
         {meta.label}{suffix}
       </Typography>
     </Box>
@@ -196,7 +196,7 @@ function RsPill({ value }) {
       <Box sx={{ width: 26, height: 4, borderRadius: 2, bgcolor: C.track, overflow: 'hidden' }}>
         <Box sx={{ width: `${v}%`, height: '100%', bgcolor: col }} />
       </Box>
-      <Typography sx={{ fontSize: 10.5, color: col, fontFamily: 'monospace' }}>RS {v}</Typography>
+      <Typography sx={{ fontSize: px(T.micro), color: col, fontFamily: 'monospace' }}>RS {v}</Typography>
     </Box>
   );
 }
@@ -210,7 +210,7 @@ function RiskRewardLadder({ buy }) {
   const zoneHi = pivot != null ? pivot * CHASE_CAP : null;
   const t2 = buy.target_price_2r;
   const t3 = buy.target_price_3r;
-  const px = buy.last_close;
+  const last = buy.last_close;
   // axis spans stop..3R (fall back to zoneHi if targets missing)
   const lo = stop;
   const hi = t3 ?? t2 ?? zoneHi;
@@ -218,9 +218,9 @@ function RiskRewardLadder({ buy }) {
   const pct = (v) => (v == null || !ok ? null : clamp(((v - lo) / (hi - lo)) * 100, 0, 100));
   const pivotPct = pct(pivot);
   const zoneHiPct = pct(zoneHi);
-  const pxPct = pct(px);
-  const inZone = px != null && pivot != null && zoneHi != null && px >= pivot && px <= zoneHi;
-  const delta = px != null && pivot > 0 ? ((px / pivot - 1) * 100).toFixed(1) : null;
+  const pxPct = pct(last);
+  const inZone = last != null && pivot != null && zoneHi != null && last >= pivot && last <= zoneHi;
+  const delta = last != null && pivot > 0 ? ((last / pivot - 1) * 100).toFixed(1) : null;
 
   const Tick = ({ p, label, sub, color, align }) => (
     p == null ? null : (
@@ -229,8 +229,8 @@ function RiskRewardLadder({ buy }) {
         transform: align === 'end' ? 'translateX(-100%)' : align === 'mid' ? 'translateX(-50%)' : 'none',
         textAlign: align === 'end' ? 'right' : align === 'mid' ? 'center' : 'left', whiteSpace: 'nowrap',
       }}>
-        <Typography sx={{ fontSize: 9.5, color: C.grey, lineHeight: 1.1 }}>{label}</Typography>
-        <Typography sx={{ fontSize: 11, fontWeight: 700, color, fontFamily: 'monospace', lineHeight: 1.15 }}>{sub}</Typography>
+        <Typography sx={{ fontSize: px(T.micro), color: C.grey, lineHeight: 1.1 }}>{label}</Typography>
+        <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color, fontFamily: 'monospace', lineHeight: 1.15 }}>{sub}</Typography>
       </Box>
     )
   );
@@ -275,9 +275,9 @@ function RiskRewardLadder({ buy }) {
         <Tick p={100} label="3R" sub={fmt(t3 ?? t2)} color={C.green} align="end" />
       </Box>
       {/* live read line */}
-      {px != null && (
-        <Typography sx={{ fontSize: 11.5, color: inZone ? C.green : C.amber, fontFamily: 'monospace', mt: 0.25 }}>
-          ● 現在値 {fmt(px)} {inZone ? `— ゾーン内 (+${delta}%)` : `(${delta > 0 ? '+' : ''}${delta}%)`}
+      {last != null && (
+        <Typography sx={{ fontSize: px(T.micro), color: inZone ? C.green : C.amber, fontFamily: 'monospace', mt: 0.25 }}>
+          ● 現在値 {fmt(last)} {inZone ? `— ゾーン内 (+${delta}%)` : `(${delta > 0 ? '+' : ''}${delta}%)`}
           {buy.stop_pct != null && <Box component="span" sx={{ color: C.red, ml: 1 }}>損失幅 −{fmt(buy.stop_pct, 1)}%</Box>}
         </Typography>
       )}
@@ -291,13 +291,13 @@ function ZoneCell({ label, value, note, color, align = 'start' }) {
   const justify = align === 'end' ? 'flex-end' : align === 'mid' ? 'center' : 'flex-start';
   return (
     <Box sx={{ minWidth: 0, textAlign: align === 'end' ? 'right' : align === 'mid' ? 'center' : 'left' }}>
-      <Typography noWrap sx={{ fontSize: 10, color: C.grey, lineHeight: 1.25 }}>{label}</Typography>
+      <Typography noWrap sx={{ fontSize: px(T.micro), color: C.grey, lineHeight: 1.25 }}>{label}</Typography>
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4, justifyContent: justify }}>
-        <Typography noWrap sx={{ fontSize: 11.5, fontWeight: 700, color, fontFamily: 'monospace', lineHeight: 1.3 }}>
+        <Typography noWrap sx={{ fontSize: px(T.micro), fontWeight: W.bold, color, fontFamily: 'monospace', lineHeight: 1.3 }}>
           {value}
         </Typography>
         {note != null && (
-          <Typography noWrap sx={{ fontSize: 10, color, fontFamily: 'monospace', lineHeight: 1.3 }}>{note}</Typography>
+          <Typography noWrap sx={{ fontSize: px(T.micro), color, fontFamily: 'monospace', lineHeight: 1.3 }}>{note}</Typography>
         )}
       </Box>
     </Box>
@@ -313,10 +313,10 @@ function ZoneCell({ label, value, note, color, align = 'start' }) {
 function MiniZone({ buy }) {
   const lo = buy.trigger_price;
   const hi = lo * CHASE_CAP;
-  const px = buy.last_close;
-  const within = px != null && px >= lo && px <= hi;
-  const posPct = px == null ? null : clamp(((px - lo) / (hi - lo)) * 100, 0, 100);
-  const delta = px != null && lo > 0 ? ((px / lo - 1) * 100).toFixed(1) : null;
+  const last = buy.last_close;
+  const within = last != null && last >= lo && last <= hi;
+  const posPct = last == null ? null : clamp(((last - lo) / (hi - lo)) * 100, 0, 100);
+  const delta = last != null && lo > 0 ? ((last / lo - 1) * 100).toFixed(1) : null;
   return (
     <Box sx={{ mt: 0.6 }}>
       <Box
@@ -325,10 +325,10 @@ function MiniZone({ buy }) {
       >
         <ZoneCell label="ピボット" value={fmt(lo)} color={C.inkStrong} />
         <ZoneCell label="+5%上限" value={fmt(hi)} color={C.grey} align="mid" />
-        {px != null && (
+        {last != null && (
           <ZoneCell
             label="現在値"
-            value={fmt(px)}
+            value={fmt(last)}
             note={`${delta > 0 ? '+' : ''}${delta}%`}
             color={within ? C.green : C.amber}
             align="end"
@@ -357,17 +357,17 @@ function SizeAndBarrels({ buy, shares }) {
           <Box sx={{ width: 40, height: 6, borderRadius: 3, bgcolor: C.track, overflow: 'hidden' }}>
             <Box sx={{ width: `${sizePct}%`, height: '100%', bgcolor: C.blue }} />
           </Box>
-          <Typography sx={{ fontSize: 11.5, color: C.ink, fontFamily: 'monospace' }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.ink, fontFamily: 'monospace' }}>
             比率 {fmt(size, 1)}%{shares != null ? ` · ${shares}株` : ''}
           </Typography>
         </Box>
       )}
-      <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>
+      <Typography sx={{ fontSize: px(T.micro), color: C.grey, fontFamily: 'monospace' }}>
         1回のリスク {fmt(buy.account_risk_pct, 2)}%
       </Typography>
       {barrels != null && (
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, ml: 'auto' }}>
-          <Typography sx={{ fontSize: 10.5, color: C.grey }}>確認</Typography>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey }}>確認</Typography>
           {[0, 1, 2].map((i) => (
             <Box key={i} sx={{ width: 7, height: 7, borderRadius: '50%',
               bgcolor: i < barrels ? C.green : 'transparent', border: `1px solid ${i < barrels ? C.green : C.dim}` }} />
@@ -395,19 +395,19 @@ function EntryPlan({ buy, sell, showStop }) {
           display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
           borderRadius: 1, bgcolor: `${block.color}22`, border: `1px solid ${block.color}`,
         }}>
-          <BlockIconEl sx={{ fontSize: 13, color: block.color }} />
-          <Typography sx={{ fontWeight: 800, fontSize: 11, color: block.color, lineHeight: 1.2 }}>
+          <BlockIconEl sx={{ fontSize: px(T.body), color: block.color }} />
+          <Typography sx={{ fontWeight: W.bold, fontSize: px(T.micro), color: block.color, lineHeight: 1.2 }}>
             {block.label}
           </Typography>
         </Box>
       ) : (
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-          <FlagOutlinedIcon sx={{ fontSize: 13, color: C.grey }} />
-          <Typography sx={{ fontSize: 11, color: C.grey, fontWeight: 700 }}>買う場合</Typography>
+          <FlagOutlinedIcon sx={{ fontSize: px(T.body), color: C.grey }} />
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey, fontWeight: W.bold }}>買う場合</Typography>
         </Box>
       )}
       {withStop && (
-        <Typography noWrap sx={{ fontSize: 11.5, color: C.ink, fontFamily: 'monospace' }}>
+        <Typography noWrap sx={{ fontSize: px(T.micro), color: C.ink, fontFamily: 'monospace' }}>
           損切り {fmt(stop)}{basis ? ` · ${basis}` : ''}
         </Typography>
       )}
@@ -439,16 +439,16 @@ function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWa
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         {rank != null ? (
-          <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.green, fontFamily: 'monospace', flexShrink: 0 }}>
+          <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color: C.green, fontFamily: 'monospace', flexShrink: 0 }}>
             {rank}
           </Typography>
         ) : (
           <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: meta.color, flexShrink: 0 }} />
         )}
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>{entry.symbol}</Typography>
+        <Typography sx={{ fontWeight: W.bold, color: C.inkStrong, fontSize: px(T.strong) }}>{entry.symbol}</Typography>
         {buy?.vcp_detected && buy?.vcp_source && (
           <Chip size="small" label={SOURCE_LABEL[buy.vcp_source] || buy.vcp_source}
-            sx={{ height: 18, fontSize: 10, color: C.blue, border: `1px solid ${C.blue}`, bgcolor: 'transparent' }} />
+            sx={{ height: 18, fontSize: px(T.micro), color: C.blue, border: `1px solid ${C.blue}`, bgcolor: 'transparent' }} />
         )}
         <RsPill value={entry.rs_rating} />
         <Box sx={{ flex: 1 }} />
@@ -463,7 +463,7 @@ function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWa
           sx={{ ...TAP, my: '-11px', mr: '-10px', color: watched ? C.amber : C.dim }}
           aria-label={watched ? `${entry.symbol}を監視リストから外す` : `${entry.symbol}を監視リストに追加`}
         >
-          {watched ? <StarIcon sx={{ fontSize: 17 }} /> : <StarBorderIcon sx={{ fontSize: 17 }} />}
+          {watched ? <StarIcon sx={{ fontSize: px(T.heading) }} /> : <StarBorderIcon sx={{ fontSize: px(T.heading) }} />}
         </Box>
       </Box>
 
@@ -471,7 +471,7 @@ function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWa
         <>
           <RiskRewardLadder buy={buy} />
           <SizeAndBarrels buy={buy} shares={shares} />
-          <Typography sx={{ fontSize: 10, color: C.grey, fontFamily: 'monospace', mt: 0.4 }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey, fontFamily: 'monospace', mt: 0.4 }}>
             損切り {fmt(buy.stop_loss)}{basis ? ` · ${basis}` : ''}
             {buy.signal_as_of ? ` · 判定日 ${String(buy.signal_as_of).slice(0, 10)}` : ''}
           </Typography>
@@ -488,7 +488,7 @@ function BuyRow({ entry, verdict, rank, equity, onOpenChart, watched, onToggleWa
       {watched ? (
         <Box data-testid={`todays-buys-held-${entry.symbol}`}
           sx={{ mt: 0.6, pt: 0.6, borderTop: `1px solid ${C.track}` }}>
-          <Typography sx={{ fontSize: 10, color: C.grey, fontWeight: 700, mb: 0.25 }}>保有・監視中の建玉</Typography>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey, fontWeight: W.bold, mb: 0.25 }}>保有・監視中の建玉</Typography>
           <SellTiming sell={localizeSell(entry.sell)} />
         </Box>
       ) : (
@@ -556,16 +556,21 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
 
   return (
     <Box sx={{ mb: 2 }} data-testid="todays-buys-card">
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
+      {/* Wraps: at T.heading the title plus the date plus 資金を設定 no longer fit
+          on one 343px line, and an unwrappable header pushes the whole page
+          wider than the phone. A second line is always better than a sideways
+          scroll. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5, gap: 1, mb: 0.75 }}>
+        {/* card title — must outrank the tickers inside it (T.strong), so T.heading */}
+        <Typography sx={{ fontWeight: W.bold, color: C.inkStrong, fontSize: px(T.heading), whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
         {buys.length > 0 && (
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
             <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: C.green }} />
-            <Typography sx={{ fontSize: 11.5, color: C.green, fontWeight: 700 }}>買い{buys.length}</Typography>
+            <Typography sx={{ fontSize: px(T.micro), color: C.green, fontWeight: W.bold }}>買い{buys.length}</Typography>
           </Box>
         )}
         <Box sx={{ flex: 1, minWidth: 0 }} />
-        <Typography noWrap sx={{ fontSize: 10.5, color: C.grey, fontFamily: 'monospace', flexShrink: 1, minWidth: 0 }}>{asOf || '-'}</Typography>
+        <Typography noWrap sx={{ fontSize: px(T.micro), color: C.grey, fontFamily: 'monospace', flexShrink: 1, minWidth: 0 }}>{asOf || '-'}</Typography>
         <Box
           component="span"
           role="button"
@@ -580,7 +585,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
           }}
           sx={{ ...TAP, my: '-13px', mr: '-4px', px: 0.5, whiteSpace: 'nowrap' }}
         >
-          <Typography sx={{ fontSize: 11, color: C.blue }}>
+          <Typography sx={{ fontSize: px(T.micro), color: C.blue }}>
             {equity > 0 ? `資金 $${equity.toLocaleString()}` : '[資金を設定]'}
           </Typography>
         </Box>
@@ -589,10 +594,10 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
       {marketRed ? (
         <Box sx={{ p: 1.25, borderRadius: 1.5, border: `1px solid ${C.red}`, bgcolor: 'rgba(242,54,69,0.08)' }}
           data-testid="todays-buys-market-red">
-          <Typography sx={{ color: C.red, fontWeight: 700, fontSize: 13 }}>
+          <Typography sx={{ color: C.red, fontWeight: W.bold, fontSize: px(T.body) }}>
             新規買い停止 — 地合い{regime === 'correction' ? '調整入り' : '下降トレンド'}（FTD待ち）
           </Typography>
-          <Typography sx={{ color: C.grey, fontSize: 11.5, mt: 0.25 }}>
+          <Typography sx={{ color: C.grey, fontSize: px(T.micro), mt: 0.25 }}>
             SEPAルール1: 確認済み上昇トレンド以外で新規買いはしない。候補{watch.length}件は待機。
           </Typography>
         </Box>
@@ -601,10 +606,10 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
           {underPressure && !stale && (
             <Box sx={{ p: 1, mb: 1, borderRadius: 1.5, border: `1px solid ${C.amber}`, bgcolor: 'rgba(224,165,46,0.08)' }}
               data-testid="todays-buys-under-pressure">
-              <Typography sx={{ color: C.amber, fontWeight: 700, fontSize: 12.5 }}>
+              <Typography sx={{ color: C.amber, fontWeight: W.bold, fontSize: px(T.micro) }}>
                 地合いに売り圧力 — 数を絞る{distDays != null ? `（分配日 ${distDays}）` : ''}
               </Typography>
-              <Typography sx={{ color: C.grey, fontSize: 11, mt: 0.25 }}>
+              <Typography sx={{ color: C.grey, fontSize: px(T.micro), mt: 0.25 }}>
                 上昇は続くが押し戻され気味。ミネルヴィニの「弱い時は少なく」。最も締まった候補だけに絞り、枚数と金額を控えめに。
               </Typography>
             </Box>
@@ -617,7 +622,7 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
           {buys.length > MAX_BUY_ROWS && !showAllBuys && (
             <Box role="button" data-testid="todays-buys-show-all" onClick={() => setShowAllBuys(true)}
               sx={{ ...TAP, width: '100%', mb: 1 }}>
-              <Typography sx={{ fontSize: 12, color: C.blue }}>すべて表示（{buys.length}件）</Typography>
+              <Typography sx={{ fontSize: px(T.micro), color: C.blue }}>すべて表示（{buys.length}件）</Typography>
             </Box>
           )}
 
@@ -625,11 +630,11 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
             <Box data-testid="todays-buys-empty"
               sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, flexWrap: 'wrap',
                 p: 1.25, borderRadius: 1.5, border: `1px solid ${C.track}`, bgcolor: C.panel }}>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
+              <Typography sx={{ fontSize: px(T.body), fontWeight: W.bold, color: C.ink }}>
                 本日の新規買い候補: 0件
               </Typography>
               {emptyReason && (
-                <Typography sx={{ fontSize: 11, color: C.grey }}>{emptyReason}</Typography>
+                <Typography sx={{ fontSize: px(T.micro), color: C.grey }}>{emptyReason}</Typography>
               )}
             </Box>
           )}
@@ -645,8 +650,8 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart, marke
             onClick={() => setShowWatch((v) => !v)}
             sx={{ ...TAP, justifyContent: 'flex-start', gap: 0.25, pr: 1.5, my: '-8px' }}
           >
-            <ChevronRightIcon sx={{ fontSize: 16, color: C.grey, transform: showWatch ? 'rotate(90deg)' : 'none' }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.grey }}>
+            <ChevronRightIcon sx={{ fontSize: px(T.strong), color: C.grey, transform: showWatch ? 'rotate(90deg)' : 'none' }} />
+            <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color: C.grey }}>
               監視中 ({watch.length})
             </Typography>
           </Box>

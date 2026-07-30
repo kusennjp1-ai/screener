@@ -4,7 +4,7 @@ import Typography from '@mui/material/Typography';
 import BlockIcon from '@mui/icons-material/Block';
 import StarIcon from '@mui/icons-material/Star';
 import { useWatchlist } from '../hooks/useWatchlist';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 import { ACTION_META, DEFAULT_META } from './SellTiming';
 import { stopBasisLabel } from './TodaysBuysCard';
 
@@ -52,8 +52,8 @@ function ActionPill({ meta }) {
       display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
       borderRadius: 1, bgcolor: `${meta.color}22`, border: `1px solid ${meta.color}`,
     }}>
-      <Icon sx={{ fontSize: 13, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: 11, color: meta.color, lineHeight: 1.2 }}>{meta.label}</Typography>
+      <Icon sx={{ fontSize: px(T.body), color: meta.color }} />
+      <Typography sx={{ fontWeight: W.bold, fontSize: px(T.micro), color: meta.color, lineHeight: 1.2 }}>{meta.label}</Typography>
     </Box>
   );
 }
@@ -78,7 +78,7 @@ function RBar({ r }) {
         {/* marker */}
         <Box sx={{ position: 'absolute', left: `${pos}%`, top: -2, width: 3, height: 10, borderRadius: 1, bgcolor: col, transform: 'translateX(-50%)' }} />
       </Box>
-      <Typography sx={{ fontSize: 11, fontWeight: 700, color: col, fontFamily: 'monospace' }}>
+      <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, color: col, fontFamily: 'monospace' }}>
         {r >= 0 ? '+' : ''}{fmt(r, 1)}R
       </Typography>
     </Box>
@@ -104,17 +104,17 @@ function WatchRow({ row, onOpenChart, onRemove }) {
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: present ? meta.color : C.dim, flexShrink: 0 }} />
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 14.5 }}>{symbol}</Typography>
+        <Typography sx={{ fontWeight: W.bold, color: C.inkStrong, fontSize: px(T.strong) }}>{symbol}</Typography>
         <Box sx={{ flex: 1 }} />
         {present ? (
           <Box data-testid={`watchlist-action-${symbol}`}><ActionPill meta={meta} /></Box>
         ) : staleMeta ? (
           <Box data-testid={`watchlist-action-${symbol}`} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-            <Typography sx={{ fontSize: 9.5, color: C.dim, fontWeight: 700 }}>前回</Typography>
+            <Typography sx={{ fontSize: px(T.micro), color: C.dim, fontWeight: W.bold }}>前回</Typography>
             <ActionPill meta={staleMeta} />
           </Box>
         ) : (
-          <Typography sx={{ fontSize: 11.5, color: C.grey }}>本日データ未取得</Typography>
+          <Typography sx={{ fontSize: px(T.micro), color: C.grey }}>本日データ未取得</Typography>
         )}
         <Box
           component="span"
@@ -124,7 +124,7 @@ function WatchRow({ row, onOpenChart, onRemove }) {
           sx={{ ...TAP, my: '-11px', mr: '-9px', color: C.amber }}
           aria-label={`${symbol}を監視リストから外す`}
         >
-          <StarIcon sx={{ fontSize: 16 }} />
+          <StarIcon sx={{ fontSize: px(T.strong) }} />
         </Box>
       </Box>
       {present && sell && (sell.stop != null || sell.r_multiple != null) && (
@@ -141,11 +141,11 @@ function WatchRow({ row, onOpenChart, onRemove }) {
               display: 'flex', alignItems: 'baseline', gap: 0.5, minWidth: 0,
               justifySelf: sell.r_multiple != null ? 'end' : 'start',
             }}>
-              <Typography noWrap sx={{ fontSize: 11, color: C.ink, fontFamily: 'monospace', flexShrink: 0 }}>
+              <Typography noWrap sx={{ fontSize: px(T.micro), color: C.ink, fontFamily: 'monospace', flexShrink: 0 }}>
                 損切り {fmt(sell.stop)}
               </Typography>
               {stopBasisLabel(sell.stop_basis) && (
-                <Typography noWrap sx={{ fontSize: 10.5, color: C.grey, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Typography noWrap sx={{ fontSize: px(T.micro), color: C.grey, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   · {stopBasisLabel(sell.stop_basis)}
                 </Typography>
               )}
@@ -154,7 +154,7 @@ function WatchRow({ row, onOpenChart, onRemove }) {
         </Box>
       )}
       {!present && lastKnown?.sell?.stop != null && (
-        <Typography noWrap sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', mt: 0.5 }}>
+        <Typography noWrap sx={{ fontSize: px(T.micro), color: C.grey, fontFamily: 'monospace', mt: 0.5 }}>
           前回 損切り {fmt(lastKnown.sell.stop)}{lastKnown.date ? ` · ${String(lastKnown.date).slice(5, 10)}` : ''}
         </Typography>
       )}
@@ -212,16 +212,17 @@ export default function WatchlistCard({ indexData, onOpenChart }) {
   return (
     <Box sx={{ mb: 2 }} data-testid="watchlist-card">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>保有・監視リスト</Typography>
+        {/* card title — must outrank the tickers inside it (T.strong), so T.heading */}
+        <Typography sx={{ fontWeight: W.bold, color: C.inkStrong, fontSize: px(T.heading) }}>保有・監視リスト</Typography>
         {alertCount > 0 && (
           <Box data-testid="watchlist-alert-count"
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px', borderRadius: 1, bgcolor: `${C.red}22`, border: `1px solid ${C.red}` }}>
-            <BlockIcon sx={{ fontSize: 12, color: C.red }} />
-            <Typography sx={{ fontSize: 11, color: C.red, fontWeight: 800 }}>要売却 {alertCount}件</Typography>
+            <BlockIcon sx={{ fontSize: px(T.micro), color: C.red }} />
+            <Typography sx={{ fontSize: px(T.micro), color: C.red, fontWeight: W.bold }}>要売却 {alertCount}件</Typography>
           </Box>
         )}
         <Box sx={{ flex: 1 }} />
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>{rows.length}銘柄</Typography>
+        <Typography sx={{ fontSize: px(T.micro), color: C.grey, fontFamily: 'monospace' }}>{rows.length}銘柄</Typography>
       </Box>
       {rows.map((row) => (
         <WatchRow key={row.symbol} row={row} onOpenChart={onOpenChart} onRemove={toggle} />

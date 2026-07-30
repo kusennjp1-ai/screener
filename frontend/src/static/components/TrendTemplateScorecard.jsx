@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import { C } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 // Minervini 8-point Trend Template scorecard (C91).
 //
@@ -24,21 +24,21 @@ export default function TrendTemplateScorecard({ trendTemplate }) {
     <Box data-testid="trend-template-scorecard"
       sx={{ p: 1.25, borderTop: '1px solid', borderColor: 'divider' }}>
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.75 }}>
-        <Typography sx={{ fontSize: 11, color: 'text.disabled', fontWeight: 700, letterSpacing: 0.3 }}>
+        <Typography sx={{ fontSize: px(T.micro), color: 'text.disabled', fontWeight: W.bold, letterSpacing: 0.3 }}>
           トレンドテンプレート
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Typography data-testid="trend-template-score"
-          sx={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', color: allPass ? C.green : C.amber }}>
+          sx={{ fontSize: px(T.micro), fontWeight: W.bold, fontFamily: 'monospace', color: allPass ? C.green : C.amber }}>
           {score}/{max}
         </Typography>
       </Box>
       {conditions.map((c) => (
         <Box key={c.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.6, py: 0.15 }}>
           {c.passed
-            ? <CheckCircleIcon sx={{ fontSize: 15, color: C.green, flexShrink: 0 }} />
-            : <CancelIcon sx={{ fontSize: 15, color: C.dim, flexShrink: 0 }} />}
-          <Typography sx={{ fontSize: 12, color: c.passed ? C.ink : C.grey }}>{c.label}</Typography>
+            ? <CheckCircleIcon sx={{ fontSize: px(T.strong), color: C.green, flexShrink: 0 }} />
+            : <CancelIcon sx={{ fontSize: px(T.strong), color: C.dim, flexShrink: 0 }} />}
+          <Typography sx={{ fontSize: px(T.micro), color: c.passed ? C.ink : C.grey }}>{c.label}</Typography>
         </Box>
       ))}
     </Box>

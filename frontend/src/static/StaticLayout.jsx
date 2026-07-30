@@ -22,7 +22,7 @@ import { useStaticMarket } from './StaticMarketContext';
 import { getStaticSupportedMarkets, resolveStaticMarketEntry, useStaticManifest } from './dataClient';
 import { marketFlag } from './marketFlags';
 import { marketNameJa } from './marketNames';
-import { NAV_HEIGHT, T, W, px } from './designTokens';
+import { C, T, W, px, NAV_HEIGHT } from './designTokens';
 
 const NAV_ITEMS = [
   { path: '/', label: 'デイリー' },
@@ -65,7 +65,7 @@ function StaticLayout({ children }) {
             gap: 0.5,
           }}
         >
-          <ShowChartIcon sx={{ fontSize: 20, flexShrink: 0, display: { xs: 'none', sm: 'block' } }} />
+          <ShowChartIcon sx={{ fontSize: px(T.heading), flexShrink: 0, display: { xs: 'none', sm: 'block' } }} />
           <Typography
             component="div"
             sx={{
@@ -176,7 +176,10 @@ function StaticLayout({ children }) {
             title={theme.palette.mode === 'dark' ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
             aria-label={theme.palette.mode === 'dark' ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
             size="small"
-            sx={{ flexShrink: 0 }}
+            // MUI's size="small" draws a 23x23 hit box. The glyph stays small,
+            // but the target is 44x44 (WCAG 2.5.5); negative margins absorb the
+            // growth so the 44px-capped nav bar keeps its height.
+            sx={{ flexShrink: 0, width: 44, height: 44, my: '-11px', mr: '-8px' }}
           >
             {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
           </IconButton>

@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import CandlestickChart from '../components/Charts/CandlestickChart';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
+import { T, W, px } from './designTokens';
 
 const MAX_SYMBOLS = 50;
 const CHART_HEIGHT = 360;
@@ -29,11 +30,11 @@ function StatBadge({ value, label, bgcolor }) {
           bgcolor,
         }}
       >
-        <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
+        <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}>
           {value}
         </Typography>
       </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
         {label}
       </Typography>
     </Box>
@@ -126,11 +127,11 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <Box>
-            <Typography variant="h6" sx={{ fontFamily: 'monospace', fontWeight: 700, lineHeight: 1.1 }}>
+            <Typography variant="h6" sx={{ fontFamily: 'monospace', fontWeight: W.bold, lineHeight: 1.1 }}>
               {symbol}
             </Typography>
             {companyName ? (
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro) }}>
                 {companyName}
               </Typography>
             ) : null}
@@ -147,7 +148,7 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {lastClose != null ? (
-            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: W.semibold }}>
               {lastClose.toFixed(2)}
             </Typography>
           ) : null}
@@ -263,7 +264,7 @@ function StaticGroupChartsGrid({ symbols = [], chartIndex = null }) {
                       bgcolor: 'background.default',
                     }}
                   >
-                    <Typography variant="h6" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                    <Typography variant="h6" sx={{ fontFamily: 'monospace', fontWeight: W.bold }}>
                       {sym}
                     </Typography>
                   </Box>

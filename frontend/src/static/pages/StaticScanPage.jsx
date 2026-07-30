@@ -792,7 +792,7 @@ function StaticScanPage() {
   if (manifestQuery.isError || scanManifestQuery.isError) {
     return (
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: W.bold, letterSpacing: '-0.5px', mb: 2 }}>
           デイリースキャン
         </Typography>
         <SnapshotGapPanel
@@ -816,7 +816,7 @@ function StaticScanPage() {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+      <Typography variant="h5" sx={{ fontWeight: W.bold, letterSpacing: '-0.5px', mb: 0.5 }}>
         デイリースキャン
       </Typography>
       <Typography sx={{ fontSize: px(T.body), color: C.grey, mb: 2 }}>

@@ -17,6 +17,7 @@ import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/commo
 import { getGroupRankColor } from '../../utils/colorUtils';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { resolveMarketCapDisplay } from '../../utils/marketCapUtils';
+import { T, W, px } from '../designTokens';
 
 const formatNumber = (value, digits = 0) => {
   if (value == null) return '-';
@@ -67,10 +68,10 @@ function DailyScanRowsTable({
         }}
       >
         <Box>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: W.semibold, fontSize: px(T.body), letterSpacing: '0.5px', mb: 0.5 }}>
             {title}
           </Typography>
-          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '10px' }}>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: px(T.micro) }}>
             {subtitle}
           </Typography>
         </Box>
@@ -148,7 +149,7 @@ function DailyScanRowsTable({
                     ) : '-'}
                   </TableCell>
                   <TableCell align="center" sx={{
-                    color: 'text.secondary', fontSize: '12px',
+                    color: 'text.secondary', fontSize: px(T.micro),
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140,
                   }}>
                     {row.ibd_industry_group || '-'}

@@ -22,7 +22,7 @@ import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/commo
 import { hasGlossaryEntry } from '../../constants/metricGlossary';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
 import { useStaticMarket } from '../StaticMarketContext';
-import { C, T, px } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 import { SnapshotGapPanel, buildSnapshotFacts, marketDisplayNameJa } from './SnapshotGapPanel';
 
 const RANGE_DAYS = { '1M': 31, '3M': 90 };
@@ -62,7 +62,7 @@ function MetricCard({ label, value, glossaryId, openInfo }) {
       <Typography
         variant="caption"
         sx={{
-          fontSize: '10px',
+          fontSize: px(T.micro),
           letterSpacing: '0.5px',
           color: 'text.disabled',
           ...(clickable ? { textDecoration: 'underline dotted', textUnderlineOffset: '3px' } : {}),
@@ -70,7 +70,7 @@ function MetricCard({ label, value, glossaryId, openInfo }) {
       >
         {label}
       </Typography>
-      <Typography variant="body1" sx={{ mt: 0.25, fontFamily: 'monospace', fontWeight: 600 }}>
+      <Typography variant="body1" sx={{ mt: 0.25, fontFamily: 'monospace', fontWeight: W.semibold }}>
         {value ?? '-'}
       </Typography>
     </Paper>
@@ -133,7 +133,7 @@ function StaticBreadthPage() {
   if (manifestQuery.isError || breadthQuery.isError) {
     return (
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: W.bold, letterSpacing: '-0.5px', mb: 2 }}>
           {displayName} 騰落状況（ブレッドス）
         </Typography>
         <SnapshotGapPanel
@@ -154,7 +154,7 @@ function StaticBreadthPage() {
   if (breadthQuery.data?.available === false) {
     return (
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+        <Typography variant="h5" sx={{ fontWeight: W.bold, letterSpacing: '-0.5px', mb: 0.5 }}>
           {displayName} 騰落状況（ブレッドス）
         </Typography>
         <Typography sx={{ fontSize: px(T.body), color: C.grey, mb: 2 }}>
@@ -180,10 +180,10 @@ function StaticBreadthPage() {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+      <Typography variant="h5" sx={{ fontWeight: W.bold, letterSpacing: '-0.5px', mb: 0.5 }}>
         {displayName} 騰落状況（ブレッドス）
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: px(T.micro) }}>
         スナップショット公開: {breadthQuery.data.published_at || breadthQuery.data.generated_at}
       </Typography>
 
@@ -192,10 +192,10 @@ function StaticBreadthPage() {
         onChange={handleTabChange}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', minHeight: 36 }}
       >
-        <Tab label="概要" sx={{ minHeight: 36, fontSize: '12px' }} />
+        <Tab label="概要" sx={{ minHeight: 36, fontSize: px(T.micro) }} />
         <Tab
           label="業種グループ別"
-          sx={{ minHeight: 36, fontSize: '12px' }}
+          sx={{ minHeight: 36, fontSize: px(T.micro) }}
           disabled={!attributionAvailable && groupAttribution == null}
         />
       </Tabs>
@@ -229,7 +229,7 @@ function StaticBreadthPage() {
           />
 
           <Paper elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: W.semibold, fontSize: px(T.body), letterSpacing: '0.5px', mb: 0.5 }}>
               直近の営業日
             </Typography>
             <TableContainer>

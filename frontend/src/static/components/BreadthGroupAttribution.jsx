@@ -34,6 +34,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { T, W, px } from '../designTokens';
 
 const UP_COLOR = '#4caf50';
 const DOWN_COLOR = '#f44336';
@@ -57,8 +58,8 @@ function StockList({ title, stocks, color }) {
       <Typography
         variant="caption"
         sx={{
-          fontSize: '10px',
-          fontWeight: 600,
+          fontSize: px(T.micro),
+          fontWeight: W.semibold,
           color,
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
@@ -70,15 +71,15 @@ function StockList({ title, stocks, color }) {
         <TableBody>
           {stocks.map((stock) => (
             <TableRow key={stock.symbol}>
-              <TableCell sx={{ py: 0.25, fontFamily: 'monospace', fontWeight: 600, width: 70 }}>
+              <TableCell sx={{ py: 0.25, fontFamily: 'monospace', fontWeight: W.semibold, width: 70 }}>
                 {stock.symbol}
               </TableCell>
-              <TableCell sx={{ py: 0.25, fontSize: '11px', color: 'text.secondary' }}>
+              <TableCell sx={{ py: 0.25, fontSize: px(T.micro), color: 'text.secondary' }}>
                 {stock.name || ''}
               </TableCell>
               <TableCell
                 align="right"
-                sx={{ py: 0.25, fontFamily: 'monospace', color, fontWeight: 600, width: 80 }}
+                sx={{ py: 0.25, fontFamily: 'monospace', color, fontWeight: W.semibold, width: 80 }}
               >
                 {formatPct(stock.pct_change)}
               </TableCell>
@@ -140,7 +141,7 @@ function NetTrendSparkline({ data }) {
           alignItems: 'center',
           justifyContent: 'center',
           color: 'text.disabled',
-          fontSize: 10,
+          fontSize: px(T.micro),
         }}
       >
         -
@@ -181,13 +182,13 @@ function HeroBarChartTooltip({ active, payload }) {
       sx={{
         px: 1.5,
         py: 1,
-        fontSize: 11,
+        fontSize: px(T.micro),
         fontFamily: 'monospace',
         border: '1px solid',
         borderColor: 'divider',
       }}
     >
-      <Typography sx={{ fontSize: 11, fontWeight: 700, mb: 0.5 }}>{entry.group}</Typography>
+      <Typography sx={{ fontSize: px(T.micro), fontWeight: W.bold, mb: 0.5 }}>{entry.group}</Typography>
       <Box sx={{ color: UP_COLOR }}>Up 4%+: {entry.up_count}</Box>
       <Box sx={{ color: DOWN_COLOR }}>Down 4%+: {entry.down_count}</Box>
       <Box sx={{ color: entry.net >= 0 ? UP_COLOR : DOWN_COLOR }}>
@@ -214,8 +215,8 @@ function GroupActivityBarChart({ topGroups, date }) {
       <Typography
         variant="caption"
         sx={{
-          fontSize: 11,
-          fontWeight: 600,
+          fontSize: px(T.micro),
+          fontWeight: W.semibold,
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
           color: 'text.secondary',
@@ -234,11 +235,11 @@ function GroupActivityBarChart({ topGroups, date }) {
             barCategoryGap={4}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#eeeeee" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+            <XAxis type="number" tick={{ fontSize: px(T.micro) }} allowDecimals={false} />
             <YAxis
               type="category"
               dataKey="group"
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: px(T.micro) }}
               width={170}
               interval={0}
             />
@@ -286,19 +287,19 @@ function GroupRow({ row, maxAbsNet, trendData }) {
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
-        <TableCell sx={{ fontWeight: 600 }}>{row.group}</TableCell>
+        <TableCell sx={{ fontWeight: W.semibold }}>{row.group}</TableCell>
         <TableCell sx={{ width: 96 }}>
           <SplitBar upCount={row.up_count} downCount={row.down_count} />
         </TableCell>
         <TableCell
           align="right"
-          sx={{ fontFamily: 'monospace', color: 'success.main', fontWeight: 600 }}
+          sx={{ fontFamily: 'monospace', color: 'success.main', fontWeight: W.semibold }}
         >
           {row.up_count}
         </TableCell>
         <TableCell
           align="right"
-          sx={{ fontFamily: 'monospace', color: 'error.main', fontWeight: 600 }}
+          sx={{ fontFamily: 'monospace', color: 'error.main', fontWeight: W.semibold }}
         >
           {row.down_count}
         </TableCell>
@@ -306,7 +307,7 @@ function GroupRow({ row, maxAbsNet, trendData }) {
           align="right"
           sx={{
             fontFamily: 'monospace',
-            fontWeight: 700,
+            fontWeight: W.bold,
             color: row.net > 0 ? 'success.main' : row.net < 0 ? 'error.main' : 'text.primary',
             backgroundColor: netBgColor,
           }}
@@ -437,7 +438,7 @@ function BreadthGroupAttribution({ attribution }) {
 
   if (!attribution || attribution.available === false) {
     return (
-      <Alert severity="info" sx={{ fontSize: '12px' }}>
+      <Alert severity="info" sx={{ fontSize: px(T.micro) }}>
         {attribution?.reason || 'この市場ではグループ別の集計はまだ利用できません。'}
       </Alert>
     );
@@ -445,7 +446,7 @@ function BreadthGroupAttribution({ attribution }) {
 
   if (!selectedDay) {
     return (
-      <Alert severity="info" sx={{ fontSize: '12px' }}>
+      <Alert severity="info" sx={{ fontSize: px(T.micro) }}>
         対象期間に4%以上変動した銘柄の集計はありません。
       </Alert>
     );
@@ -496,12 +497,12 @@ function BreadthGroupAttribution({ attribution }) {
           <Chip
             size="small"
             label={`4%超 上昇: ${selectedDay.stocks_up_4pct}`}
-            sx={{ bgcolor: 'rgba(76,175,80,0.16)', color: 'success.main', fontWeight: 600 }}
+            sx={{ bgcolor: 'rgba(76,175,80,0.16)', color: 'success.main', fontWeight: W.semibold }}
           />
           <Chip
             size="small"
             label={`4%超 下落: ${selectedDay.stocks_down_4pct}`}
-            sx={{ bgcolor: 'rgba(244,67,54,0.16)', color: 'error.main', fontWeight: 600 }}
+            sx={{ bgcolor: 'rgba(244,67,54,0.16)', color: 'error.main', fontWeight: W.semibold }}
           />
           <Chip
             size="small"
@@ -549,7 +550,7 @@ function BreadthGroupAttribution({ attribution }) {
           </Typography>
         </>
       ) : (
-        <Alert severity="info" sx={{ fontSize: '12px' }}>
+        <Alert severity="info" sx={{ fontSize: px(T.micro) }}>
           No 4%+ movers were attributed for {selectedDay.date}. Pick another session above to see
           the groups that drove its breadth.
         </Alert>

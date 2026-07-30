@@ -114,6 +114,9 @@ export function SnapshotGapPanel({
                     color: C.ink,
                     borderColor: C.track,
                     textTransform: 'none',
+                    // 44px minimum tap target (WCAG 2.5.5). These are the only
+                    // way out of an empty snapshot, so they must be easy to hit.
+                    minHeight: 44,
                     py: 0.4,
                     '&:hover': { borderColor: C.grey, backgroundColor: 'transparent' },
                   }}

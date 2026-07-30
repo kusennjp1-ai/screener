@@ -33,6 +33,7 @@ import GlossaryLabel from '../components/common/GlossaryLabel';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
+import { T, W, px } from './designTokens';
 
 const CHART_INFO_STRIP_HEIGHT = 34;
 
@@ -95,7 +96,7 @@ function BandLegend() {
             label={label}
             size="small"
             variant="outlined"
-            sx={{ height: 20, fontSize: 11, cursor: 'pointer' }}
+            sx={{ height: 20, fontSize: px(T.micro), cursor: 'pointer' }}
           />
         </Tooltip>
       ))}
@@ -129,7 +130,7 @@ function OverlayToggles({ rsOn, epsOn, onToggleRs, onToggleEps }) {
         variant={rsOn ? 'filled' : 'outlined'}
         color={rsOn ? 'primary' : 'default'}
         onClick={onToggleRs}
-        sx={{ height: 22, fontSize: 11 }}
+        sx={{ height: 22, fontSize: px(T.micro) }}
       />
       <Chip
         label="収益ライン"
@@ -137,7 +138,7 @@ function OverlayToggles({ rsOn, epsOn, onToggleRs, onToggleEps }) {
         variant={epsOn ? 'filled' : 'outlined'}
         color={epsOn ? 'primary' : 'default'}
         onClick={onToggleEps}
-        sx={{ height: 22, fontSize: 11 }}
+        sx={{ height: 22, fontSize: px(T.micro) }}
       />
     </Box>
   );
@@ -160,7 +161,7 @@ function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
         overflowX: 'auto',
         whiteSpace: 'nowrap',
         fontFamily: 'monospace',
-        fontSize: '0.66rem',
+        fontSize: px(T.micro),
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
@@ -173,7 +174,7 @@ function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
         {i.passesTemplate != null && (
-          <span style={{ color: i.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: 700 }}>
+          <span style={{ color: i.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: W.bold }}>
             {i.templateScore != null && i.templateMax != null
               ? `テンプレート ${i.templateScore}/${i.templateMax}`
               : (i.passesTemplate ? '✓ テンプレート合格' : '✗ テンプレート不合格')}
@@ -213,7 +214,7 @@ function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
           <span style={{ color: '#4CF64D' }}><GlossaryLabel term="vcp">VCP</GlossaryLabel>✓</span>
         )}
         {i.executionState && i.executionState !== 'unknown' && (
-          <span style={{ color: EXECUTION_STATE_COLOR[i.executionState] || '#bbb', fontWeight: 700 }}>
+          <span style={{ color: EXECUTION_STATE_COLOR[i.executionState] || '#bbb', fontWeight: W.bold }}>
             <GlossaryLabel term={i.executionState} kind="execution">
               {EXECUTION_STATE_LABEL[i.executionState] || i.executionState}
             </GlossaryLabel>
@@ -468,12 +469,12 @@ function StaticChartViewerModal({
                     <Typography
                       variant="body2"
                       noWrap
-                      sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
+                      sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}
                     >
                       {groupRank}
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
                     <GlossaryLabel term="grp_rank">業種順位</GlossaryLabel>
                   </Typography>
                 </Box>
@@ -497,12 +498,12 @@ function StaticChartViewerModal({
                     <Typography
                       variant="body2"
                       noWrap
-                      sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
+                      sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}
                     >
                       {Number(adrValue).toFixed(1)}%
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
                     <GlossaryLabel term="adr">ADR</GlossaryLabel>
                   </Typography>
                 </Box>
@@ -527,12 +528,12 @@ function StaticChartViewerModal({
                     <Typography
                       variant="body2"
                       noWrap
-                      sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
+                      sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}
                     >
                       {epsRating}
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
                     <GlossaryLabel term="eps_rating">EPSレート</GlossaryLabel>
                   </Typography>
                 </Box>
@@ -550,11 +551,11 @@ function StaticChartViewerModal({
                       bgcolor: stage === 2 ? 'success.main' : 'grey.600',
                     }}
                   >
-                    <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
+                    <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}>
                       {stage}
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
                     <GlossaryLabel term="stage">ステージ</GlossaryLabel>
                   </Typography>
                 </Box>
@@ -572,11 +573,11 @@ function StaticChartViewerModal({
                       bgcolor: 'success.main',
                     }}
                   >
-                    <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
+                    <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}>
                       ✓
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
                     <GlossaryLabel term="vcp">VCP</GlossaryLabel>
                   </Typography>
                 </Box>
@@ -603,11 +604,11 @@ function StaticChartViewerModal({
                           bgcolor: 'background.paper',
                         }}
                       >
-                        <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem' }}>
+                        <Typography variant="body2" noWrap sx={{ fontSize: px(T.body) }}>
                           {value}
                         </Typography>
                       </Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: px(T.micro), mt: 0.25 }}>
                         {label}
                       </Typography>
                     </Box>
@@ -781,7 +782,7 @@ function StaticChartViewerModal({
                 <Button
                   variant="outlined"
                   size="small"
-                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 14 }} />}
+                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: px(T.strong) }} />}
                   onClick={goPrevious}
                   sx={{ minWidth: 96 }}
                 >
@@ -790,7 +791,7 @@ function StaticChartViewerModal({
                 <Button
                   variant="outlined"
                   size="small"
-                  endIcon={<ArrowForwardIosIcon sx={{ fontSize: 14 }} />}
+                  endIcon={<ArrowForwardIosIcon sx={{ fontSize: px(T.strong) }} />}
                   onClick={goNext}
                   sx={{ minWidth: 96 }}
                 >

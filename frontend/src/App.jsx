@@ -82,30 +82,40 @@ const getDesignTokens = (mode) => ({
   shape: {
     borderRadius: 10,
   },
+  // Typography is pinned to the same six-step scale the static cards use
+  // (src/static/designTokens.js: 12/13/15/17/22/26) and every step is an
+  // explicit integer px.
+  //
+  // Two problems this fixes. (1) `caption` at 11px and the table head at 10px
+  // are below the 12px floor — at those sizes Japanese glyphs sub-pixel-render
+  // and smear on a phone. (2) Any variant left on MUI's rem defaults was
+  // resolved against `fontSize: 13` and came out FRACTIONAL: h5 measured
+  // 22.2857px on the breadth and group pages. Fractional sizes are what make
+  // text look faintly out of focus. Declaring px for h1–h6 removes the whole
+  // class of them.
   typography: {
     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     fontSize: 13,
-    body1: {
-      fontSize: '14px',
-    },
-    body2: {
-      fontSize: '13px',
-      lineHeight: 1.5,
-    },
-    caption: {
-      fontSize: '11px',
-    },
-    h6: {
-      fontSize: '15px',
-      fontWeight: 600,
-    },
+    body1: { fontSize: '13px' },
+    body2: { fontSize: '13px', lineHeight: 1.5 },
+    caption: { fontSize: '12px' },
+    subtitle1: { fontSize: '15px' },
+    subtitle2: { fontSize: '13px' },
+    button: { fontSize: '13px' },
+    overline: { fontSize: '12px' },
+    h1: { fontSize: '26px', fontWeight: 700 },
+    h2: { fontSize: '26px', fontWeight: 700 },
+    h3: { fontSize: '22px', fontWeight: 700 },
+    h4: { fontSize: '22px', fontWeight: 700 },
+    h5: { fontSize: '17px', fontWeight: 700 },
+    h6: { fontSize: '15px', fontWeight: 600 },
   },
   components: {
     MuiTableCell: {
       styleOverrides: {
         root: {
           padding: '4px 6px',
-          fontSize: '11px',
+          fontSize: '12px',
           lineHeight: 1.3,
           borderBottom: mode === 'light' ? '1px solid #e0e0e0' : '1px solid #333',
         },
@@ -113,7 +123,9 @@ const getDesignTokens = (mode) => ({
           backgroundColor: '#1a1a2e',
           color: '#ffffff',
           fontWeight: 600,
-          fontSize: '10px',
+          // was 10px: an uppercase, letter-spaced header at 10px is the least
+          // legible text in the product. 12px is the floor for every surface.
+          fontSize: '12px',
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
           padding: '6px 6px',
@@ -166,8 +178,11 @@ const getDesignTokens = (mode) => ({
     MuiChip: {
       styleOverrides: {
         sizeSmall: {
-          height: 18,
-          fontSize: '10px',
+          // 18px tall with a 10px label made the scan page's 30 preset chips
+          // both unreadable and untappable. 22px/12px keeps them compact while
+          // clearing the type floor; the tap target is enlarged at the call site.
+          height: 22,
+          fontSize: '12px',
         },
         labelSmall: {
           padding: '0 6px',

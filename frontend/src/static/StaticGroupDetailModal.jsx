@@ -33,6 +33,7 @@ import PriceSparkline from '../components/Scan/PriceSparkline';
 import RSSparkline from '../components/Scan/RSSparkline';
 import TickerCell from '../components/common/TickerCell';
 import StaticGroupChartsGrid from './StaticGroupChartsGrid';
+import { T, W, px } from './designTokens';
 
 const CHARTS_TOP_N_GROUPS = 50;
 
@@ -160,7 +161,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                       <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                       <XAxis
                         dataKey="displayDate"
-                        tick={{ fontSize: 11 }}
+                        tick={{ fontSize: px(T.micro) }}
                         interval={Math.floor(chartData.length / 6)}
                         angle={-45}
                         textAnchor="end"
@@ -170,7 +171,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                         scale="log"
                         domain={[1, 200]}
                         reversed
-                        tick={{ fontSize: 10 }}
+                        tick={{ fontSize: px(T.micro) }}
                         tickFormatter={(value) => value}
                         ticks={[1, 5, 10, 20, 50, 100, 197]}
                       />
@@ -179,7 +180,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                           backgroundColor: 'rgba(0, 0, 0, 0.8)',
                           border: 'none',
                           borderRadius: 4,
-                          fontSize: 12,
+                          fontSize: px(T.micro),
                         }}
                         labelStyle={{ color: '#fff' }}
                         itemStyle={{ color: '#fff' }}
@@ -216,7 +217,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             {/* Constituent Stocks Table */}
             {detail.stocks && detail.stocks.length > 0 && (
               <Box mb={2}>
-                <Box sx={{ fontSize: '12px', fontWeight: 600, mb: 0.5 }}>
+                <Box sx={{ fontSize: px(T.micro), fontWeight: W.semibold, mb: 0.5 }}>
                   構成銘柄（{detail.stocks.length}）
                 </Box>
                 <TableContainer sx={{ maxHeight: 300 }}>
@@ -265,7 +266,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                             {stock.price?.toFixed(2) || '-'}
                           </TableCell>
                           <TableCell align="right" sx={{
-                            fontFamily: 'monospace', fontWeight: 600,
+                            fontFamily: 'monospace', fontWeight: W.semibold,
                             color: stock.rs_rating == null ? 'text.primary'
                               : stock.rs_rating >= 80 ? 'success.main'
                               : stock.rs_rating <= 30 ? 'error.main' : 'text.primary',
@@ -289,7 +290,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                           <TableCell align="center">
                             <Box component="span" sx={{
                               backgroundColor: stock.stage === 2 ? 'success.main' : 'grey.400',
-                              color: 'white', padding: '1px 4px', borderRadius: '2px', fontSize: '10px', fontWeight: 500,
+                              color: 'white', padding: '1px 4px', borderRadius: '2px', fontSize: px(T.micro), fontWeight: W.medium,
                             }}>
                               S{stock.stage || '-'}
                             </Box>
@@ -305,7 +306,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             {/* History Table */}
             {detail.history && detail.history.length > 0 && (
               <>
-                <Box sx={{ fontSize: '12px', fontWeight: 600, mb: 0.5 }}>順位の推移</Box>
+                <Box sx={{ fontSize: px(T.micro), fontWeight: W.semibold, mb: 0.5 }}>順位の推移</Box>
                 <TableContainer sx={{ maxHeight: 180 }}>
                   <Table size="small" stickyHeader>
                     <TableHead>

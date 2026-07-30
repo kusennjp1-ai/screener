@@ -5,6 +5,7 @@ import Link from '@mui/material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { tradingViewUrl, buildPineScript } from '../tradingView';
+import { T, W, px } from '../designTokens';
 
 // TradingView bridge panel (C89) — hands the user's own TradingView the plan the
 // screener computed. Two ToS-clean affordances, no dependency / no scraping:
@@ -44,7 +45,7 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
   return (
     <Box data-testid="tradingview-bridge"
       sx={{ p: 1.25, borderTop: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-      <Typography sx={{ fontSize: 11, color: 'text.disabled', fontWeight: 700, letterSpacing: 0.3 }}>
+      <Typography sx={{ fontSize: px(T.micro), color: 'text.disabled', fontWeight: W.bold, letterSpacing: 0.3 }}>
         TRADINGVIEW
       </Typography>
       {url && (
@@ -54,9 +55,9 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
           target="_blank"
           rel="noopener noreferrer"
           underline="none"
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, color: '#4f8cff', fontWeight: 600 }}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: px(T.body), color: '#4f8cff', fontWeight: W.semibold }}
         >
-          <OpenInNewIcon sx={{ fontSize: 15 }} />
+          <OpenInNewIcon sx={{ fontSize: px(T.strong) }} />
           TradingViewで開く
         </Link>
       )}
@@ -67,13 +68,13 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
           tabIndex={0}
           onClick={copyPine}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') copyPine(); }}
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, color: copied ? '#22ab94' : '#4f8cff', fontWeight: 600, cursor: 'pointer' }}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: px(T.body), color: copied ? '#22ab94' : '#4f8cff', fontWeight: W.semibold, cursor: 'pointer' }}
         >
-          <ContentCopyIcon sx={{ fontSize: 15 }} />
+          <ContentCopyIcon sx={{ fontSize: px(T.strong) }} />
           {copied ? 'コピーしました' : 'Pineオーバーレイをコピー'}
         </Box>
       )}
-      <Typography sx={{ fontSize: 10.5, color: 'text.disabled' }}>
+      <Typography sx={{ fontSize: px(T.micro), color: 'text.disabled' }}>
         ピボット・ストップ・2R/3R・買いゾーンを自分のTradingViewチャートに重ねて表示（要Pineエディタ貼付）。
       </Typography>
     </Box>
