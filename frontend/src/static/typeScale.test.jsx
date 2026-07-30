@@ -41,25 +41,39 @@ describe('static-site type scale', () => {
     expect(new Set(steps).size).toBe(6);
   });
 
+  // Both guards scan to the end of the VALUE, not just its first character,
+  // because the first version only matched a literal directly after the colon
+  // and sailed straight past `fontWeight: isActive ? 600 : 400` — a real
+  // violation that shipped while the test was green.
+  const valueOf = (prop) => new RegExp(`${prop}:\\s*([^,}\\n]+)`, 'g');
+  const violations = (prop, isBad) => sourceFiles()
+    .flatMap(({ file, text }) => [...text.matchAll(valueOf(prop))]
+      .filter((m) => isBad(m[1]))
+      .map((m) => `${file}: ${prop}: ${m[1].trim()}`));
+
+  // A value is bad when a LITERAL reaches the property — either a quoted value
+  // carrying a unit, or a branch of the expression that is just a number.
+  //
+  // Testing "does the value contain a digit" is too blunt: it condemns
+  // `fontWeight: rank <= 20 ? W.semibold : W.regular`, where the 20 is a rank
+  // threshold and both branches are correct. Split on the ternary and judge
+  // each branch on its own.
+  const hasLiteral = (value) =>
+    /['"]\s*\d+(?:\.\d+)?(?:px|rem|em)\s*['"]/.test(value)
+    || value.split(/[?:]/).some((branch) => /^\s*\d+(?:\.\d+)?\s*$/.test(branch));
+
   it('no source writes a raw numeric font size', () => {
     // `fontSize: 11` / `fontSize: '11px'` / `fontSize: '0.65rem'` — every form
-    // that bypasses the scale. Chart-library tick props are included on
-    // purpose: they render HTML text in this app, not canvas.
-    const raw = /fontSize:\s*(?:\d|'[\d.]+(?:px|rem|em)')/;
-    const offenders = sourceFiles()
-      .filter(({ text }) => raw.test(text))
-      .map(({ file }) => file);
-    expect(offenders).toEqual([]);
+    // that bypasses the scale, including inside a responsive `{ xs, md }`
+    // object. Chart-library tick props count too: they render HTML text in
+    // this app, not canvas.
+    expect(violations('fontSize', hasLiteral)).toEqual([]);
   });
 
   it('no source writes a raw numeric font weight', () => {
     // Weight is the secondary signal; size carries the hierarchy. 700 (W.bold)
     // is the ceiling — 800 everywhere made every level shout at once.
-    const raw = /fontWeight:\s*\d/;
-    const offenders = sourceFiles()
-      .filter(({ text }) => raw.test(text))
-      .map(({ file }) => file);
-    expect(offenders).toEqual([]);
+    expect(violations('fontWeight', hasLiteral)).toEqual([]);
   });
 
   it('caps weight at 700', () => {

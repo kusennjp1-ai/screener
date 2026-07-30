@@ -155,7 +155,7 @@ function DailyScanRowsTable({
                     {row.ibd_industry_group || '-'}
                   </TableCell>
                   <TableCell align="center" sx={{
-                    fontFamily: 'monospace', fontWeight: row.ibd_group_rank != null && row.ibd_group_rank <= 20 ? 600 : 400,
+                    fontFamily: 'monospace', fontWeight: row.ibd_group_rank != null && row.ibd_group_rank <= 20 ? W.semibold : W.regular,
                     color: getGroupRankColor(row.ibd_group_rank),
                   }}>
                     {row.ibd_group_rank ?? '-'}

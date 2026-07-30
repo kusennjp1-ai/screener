@@ -388,7 +388,8 @@ function ScanFilterBar({ activeFilters, expanded, onToggle, onReset, children })
         data-testid="scan-filter-bar-toggle"
         sx={{
           width: '100%',
-          minHeight: 40,
+          // 44px tap target (WCAG 2.5.5) — this row is how the filter panel opens.
+          minHeight: 44,
           display: 'flex',
           alignItems: 'center',
           gap: 0.75,
@@ -440,7 +441,11 @@ function ScanFilterBar({ activeFilters, expanded, onToggle, onReset, children })
               fontWeight: W.medium,
               color: C.blue,
               textTransform: 'none',
+              // 44px tall so the finger can reach it; negative margins keep the
+              // chip row's rhythm unchanged (WCAG 2.5.5).
               minWidth: 0,
+              minHeight: 44,
+              my: '-11px',
               px: 0.75,
               py: 0.25,
               '&:hover': { backgroundColor: 'transparent' },

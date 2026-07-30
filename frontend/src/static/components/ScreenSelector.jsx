@@ -1,10 +1,13 @@
 import { Box, Chip, Divider, Tooltip } from '@mui/material';
-import { T, px } from '../designTokens';
+import { T, W, px } from '../designTokens';
 
 const chipSx = (isActive) => ({
   fontSize: px(T.micro),
-  fontWeight: isActive ? 600 : 400,
+  fontWeight: isActive ? W.semibold : W.regular,
   cursor: 'pointer',
+  // 44px tap target (WCAG 2.5.5). The strip scrolls horizontally, so a
+  // taller chip costs one row of height once, not once per preset.
+  minHeight: 44,
   '& .MuiChip-label': { px: 1 },
 });
 

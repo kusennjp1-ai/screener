@@ -449,7 +449,10 @@ function StaticChartViewerModal({
                 scrollbarWidth: 'none',
               }}
             >
-              <Typography variant="h5" fontWeight="bold" sx={{ flexShrink: 0, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
+              {/* The ticker is the drill-in's headline — the one thing you must
+                  read first — so it takes the page-level step, not a rem value
+                  (1.25rem/1.5rem = 20/24px, neither of which is on the scale). */}
+              <Typography variant="h5" sx={{ flexShrink: 0, fontWeight: W.bold, fontSize: { xs: px(T.display), md: px(T.hero) } }}>
                 {currentSymbol || '読み込み中…'}
               </Typography>
               {isLoading ? <CircularProgress size={18} /> : null}
