@@ -52,6 +52,7 @@ export function redirectLegacyChartQuery(loc = typeof window === 'undefined' ? n
 redirectLegacyChartQuery();
 
 // MA colours must match createPriceChartSeries.js.
+const SHORT_EMA_LABELS = new Set(['EMA10', 'EMA20', 'EMA50']);
 const MA_LEGEND = [
   ['EMA10', '#E0E0E0'],
   ['EMA20', '#4DD0E1'],
@@ -106,7 +107,7 @@ function BandLegend() {
 
 // チャートに重ねる補助ラインのオン/オフ。モバイルは既定オフ——RSラインは
 // 価格パネルの中に描かれるためロウソクと交差して読みにくい。
-function OverlayToggles({ rsOn, epsOn, onToggleRs, onToggleEps }) {
+function OverlayToggles({ rsOn, epsOn, emaOn, onToggleRs, onToggleEps, onToggleEma }) {
   return (
     <Box
       sx={{
@@ -130,7 +131,7 @@ function OverlayToggles({ rsOn, epsOn, onToggleRs, onToggleEps }) {
         variant={rsOn ? 'filled' : 'outlined'}
         color={rsOn ? 'primary' : 'default'}
         onClick={onToggleRs}
-        sx={{ height: 22, fontSize: px(T.micro) }}
+        sx={{ height: 22, minHeight: 44, fontSize: px(T.micro) }}
       />
       <Chip
         label="収益ライン"
@@ -138,13 +139,21 @@ function OverlayToggles({ rsOn, epsOn, onToggleRs, onToggleEps }) {
         variant={epsOn ? 'filled' : 'outlined'}
         color={epsOn ? 'primary' : 'default'}
         onClick={onToggleEps}
-        sx={{ height: 22, fontSize: px(T.micro) }}
+        sx={{ height: 22, minHeight: 44, fontSize: px(T.micro) }}
+      />
+      <Chip
+        label="短期線 10/20/50"
+        size="small"
+        variant={emaOn ? 'filled' : 'outlined'}
+        color={emaOn ? 'primary' : 'default'}
+        onClick={onToggleEma}
+        sx={{ height: 22, minHeight: 44, fontSize: px(T.micro) }}
       />
     </Box>
   );
 }
 
-function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
+function ChartInfoStrip({ minerviniInfo, showEpsLine = true, showShortEmas = true }) {
   const i = minerviniInfo || {};
   return (
     <Box
@@ -165,7 +174,10 @@ function ChartInfoStrip({ minerviniInfo, showEpsLine = true }) {
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        {MA_LEGEND.filter(([label]) => showEpsLine || label !== '収益').map(([label, color]) => (
+        {MA_LEGEND
+          .filter(([label]) => showEpsLine || label !== '収益')
+          .filter(([label]) => showShortEmas || !SHORT_EMA_LABELS.has(label))
+          .map(([label, color]) => (
           <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
             <Box sx={{ width: 12, height: 2, bgcolor: color, borderRadius: 1 }} />
             <span style={{ color: '#cfcfcf' }}>{label}</span>
@@ -240,8 +252,13 @@ function StaticChartViewerModal({
   // 重ね表示のオン/オフ。null = 既定（モバイルは狭いのでオフ）。
   const [rsOverlay, setRsOverlay] = useState(null);
   const [epsOverlay, setEpsOverlay] = useState(null);
+  // 短期EMA(10/20/50)。ミネルヴィニのテンプレートが採点するのは SMA 50/150/200
+  // で、EMA50 は SMA50 と同じ期間の二重描画。375px に6本は読めないので、
+  // スマートフォンでは既定オフ（トグルで出せる）。
+  const [emaOverlay, setEmaOverlay] = useState(null);
   const showRsLine = rsOverlay ?? !isMobile;
   const showEpsLine = epsOverlay ?? !isMobile;
+  const showShortEmas = emaOverlay ?? !isMobile;
   const { selectedMarket } = useStaticMarket() || {};
 
   const entries = useMemo(() => chartIndex?.symbols || [], [chartIndex]);
@@ -696,13 +713,15 @@ function StaticChartViewerModal({
                       Minervini readout never cover the candles (a leader near
                       new highs prints at the top-right). One line, scrolls
                       horizontally on narrow screens. */}
-                  <ChartInfoStrip minerviniInfo={minerviniInfo} showEpsLine={showEpsLine} />
+                  <ChartInfoStrip minerviniInfo={minerviniInfo} showEpsLine={showEpsLine} showShortEmas={showShortEmas} />
                   <BandLegend />
                   <OverlayToggles
                     rsOn={showRsLine}
                     epsOn={showEpsLine}
                     onToggleRs={() => setRsOverlay(!showRsLine)}
                     onToggleEps={() => setEpsOverlay(!showEpsLine)}
+                    emaOn={showShortEmas}
+                    onToggleEma={() => setEmaOverlay(!showShortEmas)}
                   />
                   {isMobile && (
                     <SignalBadges
@@ -730,6 +749,7 @@ function StaticChartViewerModal({
                       rsRatingValue={stockData?.rs_rating ?? null}
                       epsLine={showEpsLine ? (chartPayload?.eps_line || null) : null}
                       blueDots={showRsLine ? (chartPayload?.blue_dots || null) : null}
+                      showShortEmas={showShortEmas}
                       dataUpdatedAtOverride={dataUpdatedAtOverride}
                       hideOhlcLegend={isMobile}
                       hideTimeframeToggle={isMobile}
@@ -787,7 +807,7 @@ function StaticChartViewerModal({
                   size="small"
                   startIcon={<ArrowBackIosNewIcon sx={{ fontSize: px(T.strong) }} />}
                   onClick={goPrevious}
-                  sx={{ minWidth: 96 }}
+                  sx={{ minWidth: 96, minHeight: 44 }}
                 >
                   前の銘柄
                 </Button>
@@ -796,7 +816,7 @@ function StaticChartViewerModal({
                   size="small"
                   endIcon={<ArrowForwardIosIcon sx={{ fontSize: px(T.strong) }} />}
                   onClick={goNext}
-                  sx={{ minWidth: 96 }}
+                  sx={{ minWidth: 96, minHeight: 44 }}
                 >
                   次の銘柄
                 </Button>

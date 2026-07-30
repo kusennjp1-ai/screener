@@ -40,9 +40,11 @@ describe('BuyChecklist', () => {
     expect(screen.getByTestId('buy-check-eps_rating')).toHaveAttribute('data-met', 'true');
     expect(screen.getByTestId('buy-check-code33')).toHaveAttribute('data-met', 'unknown');
     // The active signal headline with its trigger.
-    expect(screen.getByText('Buy Point @ 149.67')).toBeInTheDocument();
+    // the stage is translated, never printed as the raw backend string
+    expect(screen.getByText('買い点 @ 149.67')).toBeInTheDocument();
+    expect(screen.queryByText(/Buy Point/)).not.toBeInTheDocument();
     // The rule is printed, not implied.
-    expect(screen.getByText(/3バレル全点灯＝Triple Barrel買い/)).toBeInTheDocument();
+    expect(screen.getByText(/3バレル全点灯＝トリプルバレル買い/)).toBeInTheDocument();
   });
 
   it('lights Code 33 from buy-context (live) over the scan row', () => {
@@ -102,6 +104,40 @@ describe('Trend Template row agrees with the 8/8 scorecard', () => {
     renderWithProviders(
       <BuyChecklist buyContext={ctx} stockData={{ passes_template: true }} trendTemplate={null} />,
     );
-    expect(screen.getByText('pass')).toBeInTheDocument();
+    expect(screen.getByText('合格')).toBeInTheDocument();
+  });
+  it('never prints a raw backend enum in the value column', () => {
+    // The states arrive as English enums (buy / low / transition). Printed
+    // verbatim they read as verdicts to someone who does not know the scale —
+    // "low" beside a FAILED breakout row looks like good news.
+    renderWithProviders(
+      <BuyChecklist buyContext={buyContext} stockData={stockData} trendTemplate={null} />,
+    );
+    expect(screen.getByText('買い優勢')).toBeInTheDocument();   // pressure: buy
+    expect(screen.getByText('低い')).toBeInTheDocument();       // buy_risk: low
+    expect(screen.getByText('移行中')).toBeInTheDocument();     // tpr: transition
+    ['buy', 'low', 'transition'].forEach((raw) => {
+      expect(screen.queryByText(raw)).not.toBeInTheDocument();
+    });
+  });
+
+  it('translates every staged signal label the engine can emit', () => {
+    // markets360/signals.py emits four distinct stages; each must survive
+    // translation as a DIFFERENT word, because the stage is the decision.
+    const stages = {
+      'SEPA Buy Point': 'SEPA買い点',
+      'Buy Point': '買い点',
+      'Buy Ready': '買い準備',
+      'Buy Alert': '買い接近',
+    };
+    Object.entries(stages).forEach(([raw, ja]) => {
+      const ctxStage = { ...buyContext, signal: { ...buyContext.signal, label: raw, trigger_price: null } };
+      const { unmount } = renderWithProviders(
+        <BuyChecklist buyContext={ctxStage} stockData={stockData} trendTemplate={null} />,
+      );
+      expect(screen.getByText(ja)).toBeInTheDocument();
+      unmount();
+    });
+    expect(new Set(Object.values(stages)).size).toBe(4);
   });
 });

@@ -18,6 +18,7 @@ import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../Charts/executio
 import GlossaryLabel from '../common/GlossaryLabel';
 import { INDICATOR_GLOSSARY } from '../../utils/indicatorGlossary';
 import { enterSlideFade } from '../../theme/motion';
+import { T, px } from '../../static/designTokens';
 
 // Alias for this component's usage (uses hex colors)
 const getGrowthColor = getGrowthColorHex;
@@ -55,17 +56,17 @@ const LOCAL_HINTS = {
  * RS Trend icon component
  */
 const RSTrendIcon = ({ trend }) => {
-  if (trend === 1) return <TrendingUpIcon sx={{ fontSize: 16, color: 'success.main' }} />;
-  if (trend === -1) return <TrendingDownIcon sx={{ fontSize: 16, color: 'error.main' }} />;
-  return <TrendingFlatIcon sx={{ fontSize: 16, color: 'text.disabled' }} />;
+  if (trend === 1) return <TrendingUpIcon sx={{ fontSize: px(T.strong), color: 'success.main' }} />;
+  if (trend === -1) return <TrendingDownIcon sx={{ fontSize: px(T.strong), color: 'error.main' }} />;
+  return <TrendingFlatIcon sx={{ fontSize: px(T.strong), color: 'text.disabled' }} />;
 };
 
 /**
  * Boolean indicator (checkmark or X)
  */
 const BoolIndicator = ({ value }) => {
-  if (value) return <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />;
-  return <CancelIcon sx={{ fontSize: 16, color: 'text.disabled' }} />;
+  if (value) return <CheckCircleIcon sx={{ fontSize: px(T.strong), color: 'success.main' }} />;
+  return <CancelIcon sx={{ fontSize: px(T.strong), color: 'text.disabled' }} />;
 };
 
 /**
@@ -78,7 +79,7 @@ const MetricLabel = ({ label, term, hint }) => {
       component="span"
       variant="caption"
       color="text.secondary"
-      sx={{ fontSize: '0.75rem' }}
+      sx={{ fontSize: px(T.micro) }}
     >
       {label}
     </Typography>
@@ -123,7 +124,7 @@ const MetricRow = ({ label, value, color, term, hint }) => (
     <Typography
       variant="body2"
       fontWeight="medium"
-      sx={{ color: color || 'text.primary', fontSize: '0.8rem', flexShrink: 0 }}
+      sx={{ color: color || 'text.primary', fontSize: px(T.body), flexShrink: 0 }}
     >
       {value}
     </Typography>
@@ -166,7 +167,7 @@ const FundamentalBonusBreakdown = ({ bonus, detail }) => {
         <Typography
           variant="body2"
           fontWeight="medium"
-          sx={{ fontSize: '0.8rem', color: bonus > 0 ? 'success.main' : 'text.secondary' }}
+          sx={{ fontSize: px(T.body), color: bonus > 0 ? 'success.main' : 'text.secondary' }}
         >
           {bonus > 0 ? `+${Number(bonus).toFixed(1)}` : '0'} / 10
         </Typography>
@@ -182,7 +183,7 @@ const FundamentalBonusBreakdown = ({ bonus, detail }) => {
                 label={comp.met ? `${meta.label} +${comp.points}` : meta.label}
                 sx={{
                   height: 20,
-                  fontSize: '0.65rem',
+                  fontSize: px(T.micro),
                   fontWeight: comp.met ? 600 : 400,
                   bgcolor: comp.met ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
                   color: comp.met ? 'success.main' : 'text.disabled',
@@ -205,7 +206,7 @@ const SectionHeader = ({ children }) => (
   <Typography
     variant="caption"
     color="text.secondary"
-    sx={{ fontWeight: 'bold', letterSpacing: 0.5, fontSize: '0.7rem', mb: 0.5, display: 'block' }}
+    sx={{ fontWeight: 'bold', letterSpacing: 0.5, fontSize: px(T.micro), mb: 0.5, display: 'block' }}
   >
     {children}
   </Typography>
@@ -251,7 +252,7 @@ const EmptyMetrics = () => (
     data-testid="metrics-empty"
     sx={{ height: 40, display: 'flex', alignItems: 'center' }}
   >
-    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+    <Typography variant="body2" color="text.secondary" sx={{ fontSize: px(T.body) }}>
       ファンダメンタルデータ未取得
     </Typography>
   </Box>
@@ -314,7 +315,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
               variant="body2"
               color="text.secondary"
               sx={{
-                fontSize: '0.75rem',
+                fontSize: px(T.micro),
                 lineHeight: 1.5,
                 overflow: 'hidden',
                 display: '-webkit-box',
@@ -426,7 +427,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
                 color={getRatingColor(stockData.rating)}
                 size="small"
                 variant={getRatingColor(stockData.rating) === 'default' ? 'outlined' : 'filled'}
-                sx={{ fontSize: '0.7rem', height: 22, fontWeight: 600 }}
+                sx={{ fontSize: px(T.micro), height: 22, fontWeight: 600 }}
               />
             )}
             {/* Execution state directly under the rating ("break out" etc.), so the
@@ -437,7 +438,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
                 size="small"
                 variant="outlined"
                 sx={{
-                  fontSize: '0.65rem',
+                  fontSize: px(T.micro),
                   height: 20,
                   fontWeight: 700,
                   color: EXECUTION_STATE_COLOR[stockData.execution_state] || 'text.secondary',
@@ -457,7 +458,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
             variant="body2"
             color="text.secondary"
             sx={{
-              fontSize: '0.75rem',
+              fontSize: px(T.micro),
               lineHeight: 1.5,
               overflow: 'hidden',
               display: '-webkit-box',
@@ -517,7 +518,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 0.5 }}>
                 <MetricLabel label="RSレート" term="rs_rating" />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                  <Typography variant="body2" fontWeight="medium" sx={{ fontSize: '0.8rem' }}>
+                  <Typography variant="body2" fontWeight="medium" sx={{ fontSize: px(T.body) }}>
                     {stockData.rs_rating?.toFixed(1) || '-'}
                   </Typography>
                   <RSTrendIcon trend={stockData.rs_trend} />
@@ -680,7 +681,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
                     fullWidth
                     startIcon={<InfoOutlinedIcon />}
                     onClick={onViewSetupDetails}
-                    sx={{ textTransform: 'none', mt: 1, fontSize: '0.75rem' }}
+                    sx={{ textTransform: 'none', mt: 1, fontSize: px(T.micro) }}
                   >
                     セットアップ詳細を見る
                   </Button>
@@ -709,14 +710,14 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
                     sx={{
                       backgroundColor: getStageColor(stockData.stage),
                       color: 'white',
-                      fontSize: '0.65rem',
+                      fontSize: px(T.micro),
                       height: 18,
                       flexShrink: 0,
                       '& .MuiChip-label': { px: 0.75 },
                     }}
                   />
                 ) : (
-                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>-</Typography>
+                  <Typography variant="body2" sx={{ fontSize: px(T.body) }}>-</Typography>
                 )}
               </Box>
               <BoolRow label="MA整列" term="ma_stack" value={stockData.ma_alignment} />

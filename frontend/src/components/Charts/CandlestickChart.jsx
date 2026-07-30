@@ -9,6 +9,7 @@ import { fetchPriceHistory, fetchRSLine, priceHistoryKeys, PRICE_HISTORY_STALE_T
 import { rsBandForRange } from './rsBand';
 import ChartSkeleton from './ChartSkeleton';
 import { transformToCandlestickData } from './candlestickData';
+import { T, px } from '../../static/designTokens';
 
 // Debounce utility
 const debounce = (fn, ms) => {
@@ -59,6 +60,12 @@ function CandlestickChart({
   vcpBoxes = null,
   bands = null,
   buyPoints = null,
+  // Short-term EMA guides (10 / 20 / 50). Six moving averages at once is more
+  // ink than a 375px chart can carry, and three of the six duplicate periods
+  // the Minervini template already scores on the SMA stack (EMA50 vs SMA50 is
+  // literally the same period drawn twice). Defaults to true so the desktop
+  // chart is unchanged; the phone drill-in turns them off and offers a toggle.
+  showShortEmas = true,
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -165,10 +172,14 @@ function CandlestickChart({
     const diffMin = Math.floor(diffSec / 60);
     const diffHr = Math.floor(diffMin / 60);
 
-    if (diffSec < 60) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
-    if (diffHr < 24) return `${diffHr}h ago`;
-    return new Date(effectiveDataUpdatedAt).toLocaleDateString();
+    if (diffSec < 60) return 'たった今';
+    if (diffMin < 60) return `${diffMin}分前`;
+    if (diffHr < 24) return `${diffHr}時間前`;
+    // toLocaleDateString() with no locale renders 7/27/2026 — a US date format
+    // on a Japanese screen. Pin the locale AND the pattern.
+    return new Date(effectiveDataUpdatedAt).toLocaleDateString('ja-JP', {
+      year: 'numeric', month: 'numeric', day: 'numeric',
+    });
   }, [effectiveDataUpdatedAt]);
 
   // When the timeframe toggle is hidden, force daily so the chart can't
@@ -397,7 +408,8 @@ function CandlestickChart({
       candlestickSeriesRef.current.setData(chartData.candlesticks);
     }
 
-    // Update EMAs
+    // Update EMAs. Data is always set (so a later toggle-on has something to
+    // draw); `visible` is what the caller controls.
     if (ema10SeriesRef.current && chartData.ema10.length > 0) {
       ema10SeriesRef.current.setData(chartData.ema10);
     }
@@ -408,6 +420,10 @@ function CandlestickChart({
 
     if (ema50SeriesRef.current && chartData.ema50.length > 0) {
       ema50SeriesRef.current.setData(chartData.ema50);
+    }
+
+    for (const ref of [ema10SeriesRef, ema20SeriesRef, ema50SeriesRef]) {
+      if (ref.current) ref.current.applyOptions({ visible: showShortEmas });
     }
 
     // Minervini SMA 50/150/200 stack — full chart only; compact grid tiles stay
@@ -478,7 +494,7 @@ function CandlestickChart({
   // setDefaultVisibleWindow is stable (defined below from refs); excluded to
   // keep this effect keyed only on data/range changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, visibleRange, effectiveTimeframe]);
+  }, [chartData, visibleRange, effectiveTimeframe, showShortEmas]);
 
   // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
   // candlestick series. This is the key actionable level for VCP / Minervini
@@ -915,8 +931,8 @@ function CandlestickChart({
             py: 0.25,
           }}
         >
-          <Typography variant="caption" sx={{ color: '#999', fontSize: '0.65rem' }}>
-            Updated {lastUpdatedText}
+          <Typography variant="caption" sx={{ color: '#999', fontSize: px(T.micro) }}>
+            更新 {lastUpdatedText}
           </Typography>
         </Box>
       )}

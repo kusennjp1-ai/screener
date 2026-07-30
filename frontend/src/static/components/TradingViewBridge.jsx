@@ -5,7 +5,7 @@ import Link from '@mui/material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { tradingViewUrl, buildPineScript } from '../tradingView';
-import { T, W, px } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
 
 // TradingView bridge panel (C89) — hands the user's own TradingView the plan the
 // screener computed. Two ToS-clean affordances, no dependency / no scraping:
@@ -55,7 +55,7 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
           target="_blank"
           rel="noopener noreferrer"
           underline="none"
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: px(T.body), color: '#4f8cff', fontWeight: W.semibold }}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minHeight: 44, fontSize: px(T.body), color: C.blue, fontWeight: W.semibold }}
         >
           <OpenInNewIcon sx={{ fontSize: px(T.strong) }} />
           TradingViewで開く
@@ -68,7 +68,7 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
           tabIndex={0}
           onClick={copyPine}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') copyPine(); }}
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: px(T.body), color: copied ? '#22ab94' : '#4f8cff', fontWeight: W.semibold, cursor: 'pointer' }}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minHeight: 44, fontSize: px(T.body), color: copied ? C.up : C.blue, fontWeight: W.semibold, cursor: 'pointer' }}
         >
           <ContentCopyIcon sx={{ fontSize: px(T.strong) }} />
           {copied ? 'コピーしました' : 'Pineオーバーレイをコピー'}

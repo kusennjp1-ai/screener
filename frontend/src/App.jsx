@@ -175,6 +175,14 @@ const getDesignTokens = (mode) => ({
         },
       },
     },
+    MuiButton: {
+      styleOverrides: {
+        // MUI derives the small button's label from a rem value that resolved
+        // to a FRACTIONAL 12.0714px against this theme's 13px base. Pin it.
+        sizeSmall: { fontSize: '13px' },
+        root: { fontSize: '13px' },
+      },
+    },
     MuiChip: {
       styleOverrides: {
         sizeSmall: {
