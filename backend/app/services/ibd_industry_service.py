@@ -99,6 +99,22 @@ class IBDIndustryService:
 
         logger.info(f"Loading IBD industry groups from {csv_path}")
 
+        # The source file spells "this symbol has no industry group" as a
+        # literal group NAME. Loaded verbatim it becomes a rankable group: it
+        # was showing up 5th in the industry-group leaderboard, with real
+        # tickers listed under it, as if "Group not available" were a sector.
+        # A placeholder is an absence, so it is dropped here rather than
+        # special-cased in every consumer.
+        PLACEHOLDER_GROUPS = {
+            "group not available",
+            "not available",
+            "n/a",
+            "na",
+            "none",
+            "unknown",
+            "-",
+        }
+
         # Parse the full CSV up front so we know which symbols the curated file
         # claims before we mutate the table.
         parsed: dict[str, str] = {}
@@ -110,6 +126,8 @@ class IBDIndustryService:
                 symbol = symbol.strip().upper()
                 industry_group = industry_group.strip()
                 if not symbol or not industry_group:
+                    continue
+                if industry_group.casefold() in PLACEHOLDER_GROUPS:
                     continue
                 parsed[symbol] = industry_group  # last write wins on dup symbol
 

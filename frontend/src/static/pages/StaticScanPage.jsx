@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import FilterPanel from '../../components/Scan/FilterPanel';
 import ResultsTable from '../../components/Scan/ResultsTable';
+import ScanResultCards from '../components/ScanResultCards';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
@@ -951,6 +952,15 @@ function StaticScanPage() {
           footnote="このスナップショットは収録銘柄が少ないため、条件の厳しいスクリーンでは該当が出ないことがあります。"
         />
       ) : (
+      isMobile ? (
+        // 375px に 40 列の表は入らない。スマートフォンではカード表示に切り替える
+        // （デスクトップは従来どおり ResultsTable）。
+        <ScanResultCards
+          rows={pagedRows}
+          onOpenChart={chartsAvailable ? handleOpenChart : undefined}
+          isChartEnabled={isChartEnabled}
+        />
+      ) : (
       <ResultsTable
         results={pagedRows}
         total={hydrationComplete ? cappedRows.length : pagedRows.length}
@@ -975,6 +985,7 @@ function StaticScanPage() {
         isChartEnabled={isChartEnabled}
         sortingEnabled={hydrationComplete}
       />
+      )
       )}
 
       <StaticChartViewerModal

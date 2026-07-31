@@ -1,6 +1,7 @@
 import { useMemo, memo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { Box, Tooltip, Typography } from '@mui/material';
+import { T, px } from '../../static/designTokens';
 
 /**
  * Price Sparkline Component
@@ -100,7 +101,7 @@ function PriceSparkline({
           alignItems: 'center',
           justifyContent: 'center',
           color: 'text.disabled',
-          fontSize: 10,
+          fontSize: px(T.micro),
         }}
       >
         -
@@ -150,7 +151,7 @@ function PriceSparkline({
         {showChange && changeText && (
           <Typography
             sx={{
-              fontSize: 10,
+              fontSize: px(T.micro),
               fontWeight: 600,
               fontFamily: 'monospace',
               color: changeColor,

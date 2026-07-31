@@ -25,10 +25,10 @@ describe('MarketRegimeBanner', () => {
       },
     ];
     renderWithProviders(<MarketRegimeBanner results={results} />);
-    expect(screen.getByText('Confirmed Uptrend')).toBeInTheDocument();
-    expect(screen.getByText(/Health 89\/100/)).toBeInTheDocument();
+    expect(screen.getByText('上昇トレンド確認')).toBeInTheDocument();
+    expect(screen.getByText(/健全度 89\/100/)).toBeInTheDocument();
     expect(screen.getByText(/100%/)).toBeInTheDocument();
-    expect(screen.getByText(/1 distribution day$/)).toBeInTheDocument();
+    expect(screen.getByText(/売り抜け 1日$/)).toBeInTheDocument();
   });
 
   it('falls back to the raw regime string for an unknown regime', () => {
@@ -43,7 +43,7 @@ describe('MarketRegimeBanner', () => {
       market_ftd_date: '2026-06-30',
       market_ftd_days_since: 3,
     }]} />);
-    expect(screen.getByText('FTD 2026-06-30 (+3d)')).toBeInTheDocument();
+    expect(screen.getByText('フォロースルー 2026-06-30（+3日）')).toBeInTheDocument();
     expect(screen.getByText(/25%/)).toBeInTheDocument();
   });
 
@@ -82,7 +82,7 @@ describe('MarketRegimeBanner', () => {
     renderWithProviders(<MarketRegimeBanner results={[{
       market_regime: 'uptrend_under_pressure', market_distribution_days: 6,
     }]} />);
-    const chip = screen.getByText('6 distribution days').closest('.MuiChip-root');
+    const chip = screen.getByText('売り抜け 6日').closest('.MuiChip-root');
     expect(chip.className).toContain('MuiChip-colorError');
   });
 });

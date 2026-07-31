@@ -145,3 +145,29 @@ def test_curated_market_still_delegates_to_taxonomy(monkeypatch):
     assert IBDIndustryService.get_all_groups(session, market="HK") == ["Curated-Group"]
     assert IBDIndustryService.get_group_symbols(
         session, "Curated-Group", market="HK") == ["CURATED.HK"]
+
+
+def test_placeholder_group_names_are_dropped_not_loaded(tmp_path):
+    """The source file spells "no group" as a group NAME.
+
+    Loaded verbatim, "Group not available" became a rankable industry group —
+    it appeared 5th in the group leaderboard with real tickers under it. A
+    placeholder is an absence: the symbol must simply carry no group.
+    """
+    session = _make_session()
+    csv_path = _write_csv(tmp_path, [
+        ("AAPL", "Computers-Large"),
+        ("AATC", "Group not available"),
+        ("AFIIQ", "group not available"),   # casing must not smuggle it through
+        ("ZZZZ", "N/A"),
+        ("YYYY", "Unknown"),
+        ("XXXX", "-"),
+    ])
+
+    loaded = IBDIndustryService.load_from_csv(session, csv_path)
+
+    assert loaded == 1
+    symbols = {r.symbol for r in session.query(IBDIndustryGroup).all()}
+    assert symbols == {"AAPL"}
+    groups = {r.industry_group for r in session.query(IBDIndustryGroup).all()}
+    assert not any("available" in g.casefold() for g in groups)

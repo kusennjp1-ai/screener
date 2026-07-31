@@ -7,25 +7,25 @@ import { MOTION, enterSlideFade, pulseRing } from '../../../theme/motion';
 // it off the first result and show a single banner above the table.
 const REGIME_META = {
   confirmed_uptrend: {
-    label: 'Confirmed Uptrend',
+    label: '上昇トレンド確認',
     color: 'success',
     pulse: '#4caf50',
     hint: 'General market in a confirmed uptrend — full exposure warranted.（上昇トレンド確認済み — フル投資が正当化される局面）',
   },
   uptrend_under_pressure: {
-    label: 'Uptrend Under Pressure',
+    label: '上昇トレンドに圧力',
     color: 'warning',
     pulse: null,
     hint: 'Distribution building — trade smaller, tighten stops.（機関の売りが積み上がり中 — ロットを落とし損切りを引き締める）',
   },
   correction: {
-    label: 'Correction',
+    label: '調整',
     color: 'warning',
     pulse: null,
     hint: 'Market in correction — raise cash, only pilot buys.（市場は調整中 — 現金比率を上げ、試し玉のみ）',
   },
   downtrend: {
-    label: 'Downtrend',
+    label: '下落トレンド',
     color: 'error',
     pulse: '#f44336',
     hint: "Downtrend — don't fight the tape; setups are watchlist-only.（下落トレンド — 逆らわない。監視リスト入りに留める）",
@@ -49,7 +49,7 @@ const HealthMeter = ({ health }) => {
     <GlossaryLabel term="market_health">
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
         <Typography component="span" variant="body2" color="text.secondary">
-          Health {value}/100
+          健全度 {value}/100
         </Typography>
         <Box
           data-testid="health-meter"
@@ -95,7 +95,7 @@ const ExposureLadder = ({ exposure }) => {
     <GlossaryLabel term="exposure">
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'flex-end', gap: 0.75 }}>
         <Typography component="span" variant="body2" color="text.secondary">
-          Suggested exposure <strong>{value}%</strong>
+          推奨エクスポージャー <strong>{value}%</strong>
         </Typography>
         <Box
           data-testid="exposure-ladder"
@@ -170,7 +170,7 @@ export default function MarketRegimeBanner({ results }) {
     >
       <GlossaryLabel term="market_regime">
         <Typography component="span" variant="subtitle2" sx={{ fontWeight: 700 }}>
-          Market
+          地合い
         </Typography>
       </GlossaryLabel>
       <Tooltip title={meta.hint} arrow>
@@ -187,7 +187,7 @@ export default function MarketRegimeBanner({ results }) {
             size="small"
             color="info"
             variant="outlined"
-            label={`FTD ${ftdDate}${ftdAge != null ? ` (+${ftdAge}d)` : ''}`}
+            label={`フォロースルー ${ftdDate}${ftdAge != null ? `（+${ftdAge}日）` : ''}`}
           />
         </GlossaryLabel>
       )}
@@ -199,7 +199,7 @@ export default function MarketRegimeBanner({ results }) {
             size="small"
             variant="outlined"
             color={distDaysColor(distDays)}
-            label={`${distDays} distribution day${distDays === 1 ? '' : 's'}`}
+            label={`売り抜け ${distDays}日`}
           />
         </GlossaryLabel>
       )}
