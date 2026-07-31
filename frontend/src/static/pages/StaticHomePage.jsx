@@ -693,12 +693,14 @@ function StaticHomePage() {
                     {formatLocalCurrency(item.latest_close, item.currency)}
                   </Typography>
                   <Box display="flex" alignItems="center" sx={{ mt: 0.5 }}>
-                    {item.change_1d > 0 && <TrendingUpIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'success.main' }} />}
-                    {item.change_1d < 0 && <TrendingDownIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'error.main' }} />}
+                    {/* MUI の success/error.main はこの暗い面で 3.69:1 = AA 未達。
+                        方向色は測定済みの C.up / C.down に統一する。 */}
+                    {item.change_1d > 0 && <TrendingUpIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: C.up }} />}
+                    {item.change_1d < 0 && <TrendingDownIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: C.down }} />}
                     <Typography
                       variant="body2"
                       sx={{
-                        color: item.change_1d > 0 ? 'success.main' : item.change_1d < 0 ? 'error.main' : 'text.secondary',
+                        color: item.change_1d > 0 ? C.up : item.change_1d < 0 ? C.down : C.grey,
                         fontFamily: 'monospace',
                         fontWeight: W.semibold,
                         fontSize: px(T.micro),

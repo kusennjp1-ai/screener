@@ -18,7 +18,7 @@ import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../Charts/executio
 import GlossaryLabel from '../common/GlossaryLabel';
 import { INDICATOR_GLOSSARY } from '../../utils/indicatorGlossary';
 import { enterSlideFade } from '../../theme/motion';
-import { T, px } from '../../static/designTokens';
+import { C, T, W, px } from '../../static/designTokens';
 
 // Alias for this component's usage (uses hex colors)
 const getGrowthColor = getGrowthColorHex;
@@ -709,9 +709,13 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
                     size="small"
                     sx={{
                       backgroundColor: getStageColor(stockData.stage),
-                      color: 'white',
+                      // White on the stage fills measured 2.78:1 — below AA.
+                      // A solid chip takes near-black text (C.onSolid), the
+                      // same treatment the sell-timing pill uses.
+                      color: C.onSolid,
+                      fontWeight: W.bold,
                       fontSize: px(T.micro),
-                      height: 18,
+                      height: 20,
                       flexShrink: 0,
                       '& .MuiChip-label': { px: 0.75 },
                     }}

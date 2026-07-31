@@ -170,6 +170,10 @@ function StaticLayout({ children }) {
             })}
           </Box>
 
+          {/* 明暗の切り替えは静的サイトでは出さない。トークンが暗い面 1 つに
+              対して測定・固定されており、明モードでは見出しが白地に白で
+              消える（実測 1.02:1）。押せば壊れるボタンは置かない。 */}
+          {colorMode.canToggle !== false && (
           <IconButton
             onClick={colorMode.toggleColorMode}
             color="inherit"
@@ -183,6 +187,7 @@ function StaticLayout({ children }) {
           >
             {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
           </IconButton>
+          )}
         </Toolbar>
       </AppBar>
 

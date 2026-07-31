@@ -391,3 +391,23 @@ describe('App static mode', () => {
     expect(screen.getByRole('combobox', { name: '市場を選択' })).toHaveTextContent('香港');
   }, 10000);
 });
+
+describe('static mode is a dark-surface product', () => {
+  // src/static/designTokens.js is ONE measured palette: every WCAG ratio in it
+  // is quoted against the card panel #12151b over the page #0c0c11. Flipping
+  // MUI to light left those hex values untouched, so the phone painted
+  // near-white headings on white paper — "今日の買い候補" measured 1.02:1 and
+  // was invisible, and 27 of 114 text nodes fell below AA. Until a second
+  // measured palette exists, the toggle must not be reachable.
+  it('offers no theme toggle, because the tokens cannot follow it', async () => {
+    await renderStaticAppAtHash('#/');
+    expect(screen.queryByRole('button', { name: /ライトモード|ダークモード/ })).not.toBeInTheDocument();
+  }, 15000);
+
+  it('keeps the app on the dark surface the tokens are measured against', async () => {
+    await renderStaticAppAtHash('#/');
+    await waitFor(() => {
+      expect(document.body).toHaveStyle({ backgroundColor: 'rgb(12, 12, 17)' });
+    });
+  }, 15000);
+});

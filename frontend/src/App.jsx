@@ -58,21 +58,30 @@ const queryClient = new QueryClient({
 
 // Function to create theme based on mode
 const getDesignTokens = (mode) => ({
+  // On the dark surface MUI's stock palette does not clear WCAG AA: primary
+  // #1976d2 measures 3.99:1, error #d32f2f 3.67:1, success #2e7d32 worse still.
+  // Those colours reach the screen through every Button, Chip and link, so the
+  // fix belongs here rather than in each call site. The dark values are the
+  // same measured tokens src/static/designTokens.js uses (5.68 / 4.69 / 6.37).
+  // Light mode keeps MUI's defaults, which are built for a white background.
   palette: {
     mode,
     primary: {
-      main: '#1976d2',
+      main: mode === 'dark' ? '#4f8cff' : '#1976d2',
     },
     secondary: {
       main: '#dc004e',
     },
     success: {
-      main: '#2e7d32',
+      main: mode === 'dark' ? '#22ab94' : '#2e7d32',
       light: '#4caf50',
     },
     error: {
-      main: '#d32f2f',
+      main: mode === 'dark' ? '#f23645' : '#d32f2f',
       light: '#f44336',
+    },
+    warning: {
+      main: mode === 'dark' ? '#e0a52e' : '#ed6c02',
     },
     background: {
       default: mode === 'light' ? '#f5f5f5' : '#0c0c11',
@@ -195,6 +204,19 @@ const getDesignTokens = (mode) => ({
         labelSmall: {
           padding: '0 6px',
         },
+        // A SOLID chip in a semantic colour takes near-black text, not white.
+        // White on the (now correctly bright) fills measures 2.87-3.22:1; the
+        // page background #0c0c11 on them measures 5.01-8.91:1 and reads as a
+        // hole punched in the page. Same treatment as the sell-timing pill.
+        ...(mode === 'dark'
+          ? {
+            filledPrimary: { color: '#0c0c11' },
+            filledSuccess: { color: '#0c0c11' },
+            filledError: { color: '#0c0c11' },
+            filledWarning: { color: '#0c0c11' },
+            filledInfo: { color: '#0c0c11' },
+          }
+          : {}),
       },
     },
     MuiIconButton: {
@@ -235,17 +257,36 @@ const getDesignTokens = (mode) => ({
 function App() {
   const [mode, setMode] = useState('dark');
 
+  // The static PWA is a DARK-SURFACE product and cannot honour a light mode.
+  //
+  // Its whole visual system (src/static/designTokens.js) is a set of hex values
+  // whose WCAG ratios are measured, asserted and documented against ONE
+  // background — the card panel #12151b compositing over the page #0c0c11.
+  // Flipping MUI to light left those tokens unchanged, so the phone rendered
+  // near-white headings on white paper: "今日の買い候補" measured 1.02:1 and was
+  // literally invisible, 27 of 114 text nodes fell below AA, and the result
+  // cards stayed dark rectangles on a white page.
+  //
+  // A real light theme means a second measured palette, not a toggle — so the
+  // toggle is disabled here rather than left as a way to break the app. The
+  // full desktop app keeps its toggle: it is styled from the MUI palette, which
+  // does adapt.
   const colorMode = useMemo(
     () => ({
       toggleColorMode: () => {
+        if (STATIC_SITE_MODE) return;
         setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
       },
-      mode,
+      mode: STATIC_SITE_MODE ? 'dark' : mode,
+      canToggle: !STATIC_SITE_MODE,
     }),
     [mode]
   );
 
-  const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
+  const theme = useMemo(
+    () => createTheme(getDesignTokens(STATIC_SITE_MODE ? 'dark' : mode)),
+    [mode],
+  );
 
   const appShell = STATIC_SITE_MODE ? <StaticAppShell /> : (
     <RuntimeProvider>

@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import CandlestickChart from '../components/Charts/CandlestickChart';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
-import { T, W, px } from './designTokens';
+import { C, T, W, px } from './designTokens';
 
 const MAX_SYMBOLS = 50;
 const CHART_HEIGHT = 360;
@@ -30,7 +30,7 @@ function StatBadge({ value, label, bgcolor }) {
           bgcolor,
         }}
       >
-        <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}>
+        <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: C.onSolid, fontWeight: W.bold }}>
           {value}
         </Typography>
       </Box>

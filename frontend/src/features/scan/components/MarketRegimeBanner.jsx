@@ -1,5 +1,6 @@
 import { Box, Chip, Paper, Tooltip, Typography } from '@mui/material';
 import GlossaryLabel from '../../../components/common/GlossaryLabel';
+import { C } from '../../../static/designTokens';
 import { MOTION, enterSlideFade, pulseRing } from '../../../theme/motion';
 
 // Minervini's first rule: trade with the general market, scale exposure to its
@@ -198,7 +199,12 @@ export default function MarketRegimeBanner({ results }) {
           <Chip
             size="small"
             variant="outlined"
-            color={distDaysColor(distDays)}
+            // MUI の error/warning はこの面で 3.69:1（AA 未達）。測定済みの
+            // 方向色を直接指定する。
+            sx={{
+              color: distDays >= 6 ? C.down : distDays >= 4 ? C.amber : C.grey,
+              borderColor: distDays >= 6 ? C.down : distDays >= 4 ? C.amber : C.track,
+            }}
             label={`売り抜け ${distDays}日`}
           />
         </GlossaryLabel>

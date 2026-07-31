@@ -33,7 +33,7 @@ import GlossaryLabel from '../components/common/GlossaryLabel';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
-import { T, W, px } from './designTokens';
+import { C, T, W, px } from './designTokens';
 
 const CHART_INFO_STRIP_HEIGHT = 34;
 
@@ -489,7 +489,7 @@ function StaticChartViewerModal({
                     <Typography
                       variant="body2"
                       noWrap
-                      sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}
+                      sx={{ fontSize: px(T.body), color: C.onSolid, fontWeight: W.bold }}
                     >
                       {groupRank}
                     </Typography>
@@ -518,7 +518,7 @@ function StaticChartViewerModal({
                     <Typography
                       variant="body2"
                       noWrap
-                      sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}
+                      sx={{ fontSize: px(T.body), color: C.onSolid, fontWeight: W.bold }}
                     >
                       {Number(adrValue).toFixed(1)}%
                     </Typography>
@@ -548,7 +548,7 @@ function StaticChartViewerModal({
                     <Typography
                       variant="body2"
                       noWrap
-                      sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}
+                      sx={{ fontSize: px(T.body), color: C.onSolid, fontWeight: W.bold }}
                     >
                       {epsRating}
                     </Typography>
@@ -571,7 +571,7 @@ function StaticChartViewerModal({
                       bgcolor: stage === 2 ? 'success.main' : 'grey.600',
                     }}
                   >
-                    <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}>
+                    <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: C.onSolid, fontWeight: W.bold }}>
                       {stage}
                     </Typography>
                   </Box>
@@ -593,7 +593,7 @@ function StaticChartViewerModal({
                       bgcolor: 'success.main',
                     }}
                   >
-                    <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: 'white', fontWeight: 'bold' }}>
+                    <Typography variant="body2" noWrap sx={{ fontSize: px(T.body), color: C.onSolid, fontWeight: W.bold }}>
                       ✓
                     </Typography>
                   </Box>

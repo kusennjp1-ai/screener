@@ -79,10 +79,21 @@ describe('MarketRegimeBanner', () => {
   });
 
   it('escalates the distribution-day chip color with the count', () => {
-    renderWithProviders(<MarketRegimeBanner results={[{
-      market_regime: 'uptrend_under_pressure', market_distribution_days: 6,
-    }]} />);
-    const chip = screen.getByText('売り抜け 6日').closest('.MuiChip-root');
-    expect(chip.className).toContain('MuiChip-colorError');
+    // Asserts the painted colour, not a MUI class: the class told us nothing
+    // about legibility, and MUI's own error.main measures 3.69:1 on this dark
+    // surface — below AA. These are the measured tokens.
+    const colorOf = (count) => {
+      const { unmount } = renderWithProviders(<MarketRegimeBanner results={[{
+        market_regime: 'uptrend_under_pressure', market_distribution_days: count,
+      }]} />);
+      const chip = screen.getByText(`売り抜け ${count}日`).closest('.MuiChip-root');
+      const c = window.getComputedStyle(chip).color;
+      unmount();
+      return c;
+    };
+    expect(colorOf(6)).toBe('rgb(242, 54, 69)');   // C.down — 4.69:1
+    expect(colorOf(4)).toBe('rgb(224, 165, 46)');  // C.amber — 8.35:1
+    expect(colorOf(1)).toBe('rgb(154, 160, 172)'); // C.grey — 6.96:1
+    expect(colorOf(6)).not.toBe('rgb(211, 47, 47)'); // MUI error.main — 3.67:1
   });
 });

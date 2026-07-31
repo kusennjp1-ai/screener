@@ -1,34 +1,38 @@
 import { Box, Typography } from '@mui/material';
 import { formatLargeNumber } from '../../../utils/formatUtils';
 import GlossaryLabel from '../../../components/common/GlossaryLabel';
+import { C, T, W, px } from '../../../static/designTokens';
 
 // Color ramps tuned to the Markets 360 chips: 0–99 ratings go red→amber→green,
 // signed % chips go green/red by sign, band states map to their strip colors.
+// 塗りは測定済みの意味色に統一し、その上の文字は近黒（C.onSolid）にする。
+// 以前は暗い緑 #1a7f5a に白文字で 2.78:1（AA 4.5 未達）だった。
+// C.onSolid on up = 6.80:1 / on amber = 8.91:1 / on down = 5.01:1。
 function ratingColor(v) {
-  if (v == null) return '#3a3f4b';
-  if (v >= 80) return '#1a7f5a';
-  if (v >= 60) return '#5a7f1a';
-  if (v >= 40) return '#9a8520';
-  return '#a23b2e';
+  if (v == null) return C.grey;
+  if (v >= 80) return C.up;
+  if (v >= 60) return C.up;
+  if (v >= 40) return C.amber;
+  return C.down;
 }
 function signColor(v) {
-  if (v == null) return '#3a3f4b';
-  return v >= 0 ? '#1a7f5a' : '#a23b2e';
+  if (v == null) return C.grey;
+  return v >= 0 ? C.up : C.down;
 }
 const STATE_COLOR = {
-  buy: '#1a7f5a', sell: '#a23b2e', neutral: '#5c6270',
-  low: '#1a7f5a', medium: '#9a8520', high: '#a23b2e',
-  strong: '#1a7f5a', transition: '#9a8520', weak: '#a23b2e',
+  buy: C.up, sell: C.down, neutral: C.grey,
+  low: C.up, medium: C.amber, high: C.down,
+  strong: C.up, transition: C.amber, weak: C.down,
 };
-const TPR_LETTER_COLOR = { A: '#1a7f5a', B: '#3f7f2a', C: '#9a8520', D: '#a2542e', E: '#a23b2e' };
+const TPR_LETTER_COLOR = { A: C.up, B: C.up, C: C.amber, D: C.amber, E: C.down };
 
-function Field({ label, value, color = '#d1d4dc', strong, term }) {
+function Field({ label, value, color = C.ink, strong, term }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, px: 0.75 }}>
       <GlossaryLabel term={term}>
-        <Typography component="span" sx={{ fontSize: 11, color: '#787b86', fontWeight: 600 }}>{label}</Typography>
+        <Typography component="span" sx={{ fontSize: px(T.micro), color: C.dim, fontWeight: W.semibold }}>{label}</Typography>
       </GlossaryLabel>
-      <Typography sx={{ fontSize: strong ? 13 : 12, color, fontWeight: strong ? 700 : 600, fontVariantNumeric: 'tabular-nums' }}>
+      <Typography sx={{ fontSize: px(strong ? T.body : T.micro), color, fontWeight: strong ? W.bold : W.semibold, fontVariantNumeric: 'tabular-nums' }}>
         {value ?? '–'}
       </Typography>
     </Box>
@@ -39,11 +43,11 @@ function Chip({ label, value, bg, term }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75 }}>
       <GlossaryLabel term={term}>
-        <Typography component="span" sx={{ fontSize: 11, color: '#9aa0aa', fontWeight: 700 }}>{label}</Typography>
+        <Typography component="span" sx={{ fontSize: px(T.micro), color: C.grey, fontWeight: W.bold }}>{label}</Typography>
       </GlossaryLabel>
       <Box sx={{
-        bgcolor: bg, color: '#fff', borderRadius: 0.75, px: 0.75, minWidth: 22,
-        textAlign: 'center', fontSize: 11.5, fontWeight: 800, lineHeight: '18px',
+        bgcolor: bg, color: C.onSolid, borderRadius: 0.75, px: 0.75, minWidth: 22,
+        textAlign: 'center', fontSize: px(T.micro), fontWeight: W.bold, lineHeight: '18px',
       }}>
         {value ?? '–'}
       </Box>
@@ -51,7 +55,7 @@ function Chip({ label, value, bg, term }) {
   );
 }
 
-const Sep = () => <Box sx={{ width: '1px', alignSelf: 'stretch', bgcolor: '#23262f', my: 0.5 }} />;
+const Sep = () => <Box sx={{ width: '1px', alignSelf: 'stretch', bgcolor: C.track, my: 0.5 }} />;
 
 export default function StatusBar({ data }) {
   const q = data?.quote || {};
@@ -73,14 +77,14 @@ export default function StatusBar({ data }) {
         <Sep />
         <Chip label="ER" value={r.er} bg={ratingColor(r.er)} term="er" />
         <Chip label="SR" value={r.sr} bg={ratingColor(r.sr)} term="sr" />
-        <Field label="VCP" value={r.vcp_pct != null ? `${Number(r.vcp_pct).toFixed(1)}%` : '–'} color="#e0a52e" term="vcp" />
+        <Field label="VCP" value={r.vcp_pct != null ? `${Number(r.vcp_pct).toFixed(1)}%` : '–'} color={C.amber} term="vcp" />
         <Sep />
         <Chip label="Trend" value={s.trend_stage?.stage != null ? `S${s.trend_stage.stage}` : '–'}
-              bg={s.trend_stage?.stage === 2 ? '#1a7f5a' : s.trend_stage?.stage === 4 ? '#a23b2e' : '#5c6270'} term="stage" />
-        <Chip label="Pressure" value={(s.pressure?.state || '–').slice(0, 3).toUpperCase()} bg={STATE_COLOR[s.pressure?.state] || '#3a3f4b'} term="pressure" />
-        <Chip label="Buy Risk" value={(s.buy_risk?.state || '–').toUpperCase()} bg={STATE_COLOR[s.buy_risk?.state] || '#3a3f4b'} term="buy_risk" />
+              bg={s.trend_stage?.stage === 2 ? C.up : s.trend_stage?.stage === 4 ? C.down : C.grey} term="stage" />
+        <Chip label="Pressure" value={(s.pressure?.state || '–').slice(0, 3).toUpperCase()} bg={STATE_COLOR[s.pressure?.state] || C.grey} term="pressure" />
+        <Chip label="Buy Risk" value={(s.buy_risk?.state || '–').toUpperCase()} bg={STATE_COLOR[s.buy_risk?.state] || C.grey} term="buy_risk" />
         <Chip label="RPR" value={r.rpr} bg={ratingColor(r.rpr)} term="rpr" />
-        <Chip label="TPR" value={r.tpr} bg={TPR_LETTER_COLOR[r.tpr] || '#3a3f4b'} term="tpr" />
+        <Chip label="TPR" value={r.tpr} bg={TPR_LETTER_COLOR[r.tpr] || C.grey} term="tpr" />
       </Box>
       {/* Row 2: volume + rate chips */}
       <Box sx={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', py: 0.5, borderTop: '1px solid #16181f' }}>
@@ -89,7 +93,7 @@ export default function StatusBar({ data }) {
         <Field label="+/–20dma" value={spct(r.dist_20dma_pct)} color={signColor(r.dist_20dma_pct)} term="dist_20dma" />
         <Sep />
         <Chip label="ESR" value={r.esr} bg={ratingColor(r.esr)} term="esr" />
-        <Chip label="MonAlert" value={s.monalert_net} bg={s.monalert_net >= 5 ? '#1a7f5a' : s.monalert_net <= 0 ? '#a23b2e' : '#5c6270'} term="monalert" />
+        <Chip label="MonAlert" value={s.monalert_net} bg={s.monalert_net >= 5 ? C.up : s.monalert_net <= 0 ? C.down : C.grey} term="monalert" />
       </Box>
     </Box>
   );
