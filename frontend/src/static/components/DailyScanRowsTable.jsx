@@ -1,6 +1,8 @@
 import {
   Box,
   Paper,
+  useMediaQuery,
+  useTheme,
   Table,
   TableBody,
   TableCell,
@@ -10,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 
+import { useState } from 'react';
 import PriceSparkline from '../../components/Scan/PriceSparkline';
 import RSSparkline from '../../components/Scan/RSSparkline';
 import TickerCell from '../../components/common/TickerCell';
@@ -17,7 +20,11 @@ import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/commo
 import { getGroupRankColor } from '../../utils/colorUtils';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { resolveMarketCapDisplay } from '../../utils/marketCapUtils';
-import { T, W, px } from '../designTokens';
+import { C, T, W, px } from '../designTokens';
+import ScanResultCards from './ScanResultCards';
+
+// Characters of the section subtitle shown before the 説明を読む disclosure.
+const SUBTITLE_PREVIEW_CHARS = 42;
 
 const formatNumber = (value, digits = 0) => {
   if (value == null) return '-';
@@ -43,6 +50,16 @@ function DailyScanRowsTable({
   testId,
 }) {
   const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
+  const theme = useTheme();
+  // The 9-11 column table needs ~700px. On a phone it clipped its own last
+  // columns (株価トレンド ran off the right edge) while 時価総額 showed a dash
+  // in every row. Cards carry the same rows in the decision's own order.
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // A 6-line explanation above a 2-row table buries the content it explains.
+  // Keep the first line visible and put the rest one tap away.
+  const [subtitleOpen, setSubtitleOpen] = useState(false);
+  const subtitleText = typeof subtitle === 'string' ? subtitle : '';
+  const subtitleIsLong = subtitleText.length > SUBTITLE_PREVIEW_CHARS;
   const isChartEnabled = (symbol) => chartEnabledSymbols.has(symbol);
   const handleRowOpen = (symbol) => {
     if (isChartEnabled(symbol)) {
@@ -72,11 +89,36 @@ function DailyScanRowsTable({
             {title}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: px(T.micro) }}>
-            {subtitle}
+            {subtitleIsLong && !subtitleOpen
+              ? `${subtitleText.slice(0, SUBTITLE_PREVIEW_CHARS)}…`
+              : subtitle}
           </Typography>
+          {subtitleIsLong && (
+            <Box
+              component="button"
+              type="button"
+              data-testid={testId ? `${testId}-subtitle-toggle` : undefined}
+              onClick={() => setSubtitleOpen((v) => !v)}
+              aria-expanded={subtitleOpen}
+              sx={{
+                minHeight: 44, display: 'inline-flex', alignItems: 'center',
+                background: 'none', border: 0, p: 0, cursor: 'pointer',
+                color: C.blue, font: 'inherit', fontSize: px(T.micro),
+              }}
+            >
+              {subtitleOpen ? '説明を閉じる ▴' : '説明を読む ▾'}
+            </Box>
+          )}
         </Box>
         {action}
       </Box>
+      {isMobile ? (
+        <ScanResultCards
+          rows={rows}
+          onOpenChart={(symbol) => handleRowOpen(symbol)}
+          isChartEnabled={isChartEnabled}
+        />
+      ) : (
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -173,6 +215,7 @@ function DailyScanRowsTable({
           </TableBody>
         </Table>
       </TableContainer>
+      )}
       {metricInfoPopover}
     </Paper>
   );

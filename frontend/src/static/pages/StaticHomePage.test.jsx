@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -401,6 +401,10 @@ describe('StaticHomePage', () => {
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     const leadersSection = await screen.findByTestId('leaders-in-leading-groups-section');
+    // The subtitle is truncated on a phone behind a 説明を読む disclosure, so the
+    // sentence must still be reachable — collapsing it must not lose the
+    // liquidity floor, which is the whole point of this assertion.
+    fireEvent.click(within(leadersSection).getByTestId('leaders-in-leading-groups-section-subtitle-toggle'));
     expect(
       within(leadersSection).getByText('上位20銘柄: グループ順位40位以内、RS 80以上、売買代金 1,300,000 以上。')
     ).toBeInTheDocument();

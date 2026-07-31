@@ -270,6 +270,11 @@ function StaticHomePage() {
   const [marketCapMin, setMarketCapMin] = useState('');
   const { openInfo, popover: metricInfoPopover } = useMetricInfoPopover();
   const topGroups = homeQuery.data?.top_groups ?? EMPTY_RESULTS;
+  // A column where every cell is a dash teaches nothing and costs width the
+  // phone does not have. Render a rank-change column only if at least one row
+  // actually has that number.
+  const showRankChange1w = topGroups.some((g) => g?.rank_change_1w != null);
+  const showRankChange1m = topGroups.some((g) => g?.rank_change_1m != null);
   const scanDefaultFilters = useMemo(
     () => scanBundleQuery.data?.defaultFilters ?? {},
     [scanBundleQuery.data?.defaultFilters]
@@ -534,84 +539,6 @@ function StaticHomePage() {
       {/* C95: the strategy's long-run scorecard (CAGR > maxDD > risk-adjusted >
           expectancy > win rate, plus the 訂正). Now BELOW the buy list behind a
           one-line summary — it is a receipt, not a decision. */}
-      <ScorecardSummaryRow data={scorecardQuery.data} />
-
-      <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        {(home?.key_markets || [])
-          .map((item) => ({
-            ...item,
-            _closes: (item.history || []).map((h) => h.close).filter((c) => c != null),
-          }))
-          .filter((item) => item.latest_close != null && item._closes.length > 1)
-          .map((item, cardIndex) => {
-          const closes = item._closes;
-          const trend = closes[closes.length - 1] > closes[0]
-            ? 1
-            : closes[closes.length - 1] < closes[0]
-              ? -1
-              : 0;
-          return (
-            <Grid item xs={12} sm={6} md={4} lg={2.4} key={item.symbol}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 1.5,
-                  height: '100%',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  display: 'flex',
-                  alignItems: 'stretch',
-                  gap: 1.5,
-                  ...enterSlideFade(cardIndex),
-                  transition: `transform ${MOTION.duration.fast}ms ${MOTION.easing.standard}, border-color ${MOTION.duration.fast}ms ${MOTION.easing.standard}`,
-                  '@media (hover: hover)': {
-                    '&:hover': { transform: 'translateY(-2px)', borderColor: 'primary.main' },
-                  },
-                }}
-              >
-                <Box sx={{ flex: '0 0 auto', minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: W.semibold, fontSize: px(T.body) }}>
-                    {item.symbol}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: px(T.micro) }}>
-                    {item.display_name}
-                  </Typography>
-                  <Typography variant="body1" sx={{ mt: 0.5, fontFamily: 'monospace', fontWeight: W.semibold }}>
-                    {formatLocalCurrency(item.latest_close, item.currency)}
-                  </Typography>
-                  <Box display="flex" alignItems="center" sx={{ mt: 0.5 }}>
-                    {item.change_1d > 0 && <TrendingUpIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'success.main' }} />}
-                    {item.change_1d < 0 && <TrendingDownIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'error.main' }} />}
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: item.change_1d > 0 ? 'success.main' : item.change_1d < 0 ? 'error.main' : 'text.secondary',
-                        fontFamily: 'monospace',
-                        fontWeight: W.semibold,
-                        fontSize: px(T.micro),
-                      }}
-                    >
-                      {item.change_1d != null
-                        ? `${item.change_1d > 0 ? '+' : ''}${formatNumber(item.change_1d, 2)}%`
-                        : '-'}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch' }}>
-                  <PriceSparkline
-                    data={closes}
-                    trend={trend}
-                    change1d={null}
-                    width="100%"
-                    height="100%"
-                    showChange={false}
-                  />
-                </Box>
-              </Paper>
-            </Grid>
-          );
-        })}
-      </Grid>
 
       {topResults.length === 0 ? (
         <EmptySectionBar
@@ -712,6 +639,93 @@ function StaticHomePage() {
         />
       )}
 
+      {/* 参考情報はここから下。上は「今日なにを買えるか」だけに使う —
+          検証実績と指数カードを候補リストの前に置くと、買える銘柄に
+          たどり着くまでに 2 画面スクロールすることになる。 */}
+      <ScorecardSummaryRow data={scorecardQuery.data} />
+
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {(home?.key_markets || [])
+          .map((item) => ({
+            ...item,
+            _closes: (item.history || []).map((h) => h.close).filter((c) => c != null),
+          }))
+          .filter((item) => item.latest_close != null && item._closes.length > 1)
+          .map((item, cardIndex) => {
+          const closes = item._closes;
+          const trend = closes[closes.length - 1] > closes[0]
+            ? 1
+            : closes[closes.length - 1] < closes[0]
+              ? -1
+              : 0;
+          return (
+            // Two-up on a phone. Full width, these index cards took 330px — a
+            // fifth of the page, above the actual candidates, for context the
+            // 待機/健全度 verdict band already states more precisely. They are
+            // reference, not the decision, so they get reference-sized space.
+            <Grid item xs={6} sm={6} md={4} lg={2.4} key={item.symbol}>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 1,
+                  height: '100%',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  display: 'flex',
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  alignItems: 'stretch',
+                  gap: { xs: 0.5, sm: 1.5 },
+                  ...enterSlideFade(cardIndex),
+                  transition: `transform ${MOTION.duration.fast}ms ${MOTION.easing.standard}, border-color ${MOTION.duration.fast}ms ${MOTION.easing.standard}`,
+                  '@media (hover: hover)': {
+                    '&:hover': { transform: 'translateY(-2px)', borderColor: 'primary.main' },
+                  },
+                }}
+              >
+                <Box sx={{ flex: '0 0 auto', minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: W.semibold, fontSize: px(T.body) }}>
+                    {item.symbol}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: px(T.micro) }}>
+                    {item.display_name}
+                  </Typography>
+                  <Typography variant="body1" sx={{ mt: 0.5, fontFamily: 'monospace', fontWeight: W.semibold }}>
+                    {formatLocalCurrency(item.latest_close, item.currency)}
+                  </Typography>
+                  <Box display="flex" alignItems="center" sx={{ mt: 0.5 }}>
+                    {item.change_1d > 0 && <TrendingUpIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'success.main' }} />}
+                    {item.change_1d < 0 && <TrendingDownIcon sx={{ fontSize: px(T.strong), mr: 0.25, color: 'error.main' }} />}
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: item.change_1d > 0 ? 'success.main' : item.change_1d < 0 ? 'error.main' : 'text.secondary',
+                        fontFamily: 'monospace',
+                        fontWeight: W.semibold,
+                        fontSize: px(T.micro),
+                      }}
+                    >
+                      {item.change_1d != null
+                        ? `${item.change_1d > 0 ? '+' : ''}${formatNumber(item.change_1d, 2)}%`
+                        : '-'}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch', minHeight: 34 }}>
+                  <PriceSparkline
+                    data={closes}
+                    trend={trend}
+                    change1d={null}
+                    width="100%"
+                    height="100%"
+                    showChange={false}
+                  />
+                </Box>
+              </Paper>
+            </Grid>
+          );
+        })}
+      </Grid>
+
       {topGroups.length === 0 ? (
         <EmptySectionBar
           testId="top-groups-section"
@@ -733,8 +747,12 @@ function StaticHomePage() {
               <TableRow>
                 <GlossaryHeaderCell glossaryId="group_rank" openInfo={openInfo}>順位</GlossaryHeaderCell>
                 <GlossaryHeaderCell glossaryId="ibd_industry_group" openInfo={openInfo} align="left">業種グループ</GlossaryHeaderCell>
-                <GlossaryHeaderCell glossaryId="group_rank_change_1w" openInfo={openInfo} align="right">1週</GlossaryHeaderCell>
-                <GlossaryHeaderCell glossaryId="group_rank_change_1m" openInfo={openInfo} align="right">1ヶ月</GlossaryHeaderCell>
+                {showRankChange1w && (
+                  <GlossaryHeaderCell glossaryId="group_rank_change_1w" openInfo={openInfo} align="right">1週</GlossaryHeaderCell>
+                )}
+                {showRankChange1m && (
+                  <GlossaryHeaderCell glossaryId="group_rank_change_1m" openInfo={openInfo} align="right">1ヶ月</GlossaryHeaderCell>
+                )}
                 <GlossaryHeaderCell glossaryId="group_top_stock" openInfo={openInfo} align="left">代表銘柄</GlossaryHeaderCell>
               </TableRow>
             </TableHead>
@@ -743,8 +761,12 @@ function StaticHomePage() {
                 <TableRow key={group.industry_group}>
                   <TableCell align="center" sx={{ fontFamily: 'monospace', fontWeight: W.semibold }}>{group.rank}</TableCell>
                   <TableCell>{group.industry_group}</TableCell>
-                  <TableCell align="right"><RankChangeCell value={group.rank_change_1w} /></TableCell>
-                  <TableCell align="right"><RankChangeCell value={group.rank_change_1m} /></TableCell>
+                  {showRankChange1w && (
+                    <TableCell align="right"><RankChangeCell value={group.rank_change_1w} /></TableCell>
+                  )}
+                  {showRankChange1m && (
+                    <TableCell align="right"><RankChangeCell value={group.rank_change_1m} /></TableCell>
+                  )}
                   <TableCell>
                     <TickerCell symbol={group.top_symbol} companyName={group.top_symbol_name} />
                   </TableCell>
