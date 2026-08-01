@@ -37,10 +37,32 @@ MAX_POSITION_PCT = 25.0
 # Minervini/O'Neil setting (he flexes 0.5-1.25% with conviction & market health).
 ACCOUNT_RISK_PCT = 1.25
 # Progressive risk (Minervini): commit harder only when the general market has
-# CONFIRMED. Validated on two backtest windows before shipping (C61,
-# docs/BACKTEST_C54.md): 2x risk in confirmed uptrends lifted both the 6y and
-# 10y windows with drawdown unchanged; every attempt to loosen the
-# under-pressure cap instead was rejected (C62-C64).
+# CONFIRMED.
+#
+# NOT SHIPPED, and the claim that used to sit here — "lifted both windows with
+# drawdown unchanged" — does not survive re-measurement on the unbiased
+# (point-in-time) harness. Measured 5y, 2021-08..2026-07, --pit-universe
+# --quality-rank:
+#
+#   flat 1.25%    CAGR 10.7%  maxDD -15.8%  Sortino 1.03   (SPY 12.4% / -24.5%)
+#   2x confirmed  CAGR 13.6%  maxDD -21.9%  Sortino 1.20
+#
+# The CAGR looks better and is not real improvement:
+#   * 108 trades are common to both runs with max|dR| = 0.0000 and ZERO
+#     differing exit dates — it is the identical trade stream at 2x size, not a
+#     better strategy.
+#   * ONE position (SIMO, opened 87 days before the window closed) supplies
+#     65.5% of the gain; the top three supply 113%, i.e. the other ~135 trades
+#     net NEGATIVE. Excluding it: 7.5% -> 8.7%, both far below SPY.
+#   * The drawdown does not merely deepen, it MOVES — from the 2022 bear into a
+#     twelve-month -21.9% hole inside a RISING market (2024-07..2025-07).
+# Under docs/OBJECTIVE.md (CAGR > maxDD > ...), buying priority 1 with
+# priority 2 is not an improvement, and one trade is not evidence.
+#
+# Kept, not deleted: the function below is the correct implementation of a real
+# Minervini behaviour and is the natural place to re-enable it if a future
+# measurement earns it. Nothing calls it today — see the note in
+# markets360_scanner.py.
 ACCOUNT_RISK_PCT_CONFIRMED = 2.5
 # Reward:risk objectives to surface (he targets >= 2-3:1 and sells into strength).
 TARGET_R_MULTIPLES = (2.0, 3.0)

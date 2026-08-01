@@ -141,3 +141,44 @@ class TestProgressiveRisk:
         # same stop distance -> suggested size doubles, but never past the cap
         # (both values are independently rounded to 0.1, so allow that much slack)
         assert abs(double["position_size_pct"] - min(MAX_POSITION_PCT, base["position_size_pct"] * 2)) <= 0.2
+
+
+def test_one_account_risk_reaches_every_surface():
+    """The product must quote ONE position size for a given name.
+
+    It used to quote two. `markets360_scanner` scaled per-trade risk with the
+    market regime (1.25% -> 2.5% in a confirmed uptrend) while the static
+    export — the only surface that actually renders a size to a user — passed
+    no override and shipped a flat 1.25%. The scaled number was computed and
+    never displayed, so the disagreement was invisible: two code paths, two
+    answers, and the one the user saw was not the one the comment described.
+    """
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[3]  # backend/
+
+    def risk_pct_kwarg(rel: str) -> set[str]:
+        """Every `account_risk_pct=` argument passed to compute_risk_plan."""
+        tree = ast.parse((root / rel).read_text(encoding="utf-8"))
+        found = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+            if name != "compute_risk_plan":
+                continue
+            passed = [k for k in node.keywords if k.arg == "account_risk_pct"]
+            found.add("<default>" if not passed else ast.unparse(passed[0].value))
+        return found
+
+    scanner = risk_pct_kwarg("app/scanners/markets360_scanner.py")
+    export = risk_pct_kwarg("app/services/static_site_export_service.py")
+
+    assert scanner, "expected markets360_scanner to plan risk"
+    assert export, "expected the static export to plan risk"
+    # The export's default IS ACCOUNT_RISK_PCT (risk.py), so the scanner must
+    # name that same constant rather than a regime-dependent function.
+    assert scanner == {"ACCOUNT_RISK_PCT"}, scanner
+    assert export == {"<default>"}, export

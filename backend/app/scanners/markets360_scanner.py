@@ -22,7 +22,7 @@ import pandas as pd
 from app.services.minervini_bands import calculate_bands, to_weekly, DAILY, WEEKLY
 from app.services.markets360 import ratings
 from app.services.markets360.vcp_footprint import compute_vcp_footprint
-from app.services.markets360.risk import account_risk_pct_for_regime, compute_risk_plan
+from app.services.markets360.risk import ACCOUNT_RISK_PCT, compute_risk_plan
 from app.services.markets360.rs_line import compute_rs_line_signals
 from app.services.markets360.entry_signals import compute_entry_signals
 from app.services.market_regime import assess_market_regime
@@ -161,11 +161,19 @@ class Markets360Scanner(BaseStockScreener):
 
         # Minervini's other half: the stop defines the size. Plan entry/stop/
         # targets/position-size off the price structure and the VCP pivot.
-        # Progressive risk: the suggested size commits harder only when the
-        # general market is a confirmed uptrend (backtest-validated, C61).
+        #
+        # Flat account risk, deliberately. This used to scale with the regime
+        # (account_risk_pct_for_regime), which made the product quote TWO
+        # different position sizes for the same name: this path said 2.5% in a
+        # confirmed uptrend while the static export — the only surface that
+        # actually renders a size — said 1.25% (all 26 occurrences of
+        # account_risk_pct in the published bundle are 1.25; none are 2.5).
+        # So the scaled number was computed and never shown, and the two paths
+        # disagreed. See risk.py for the re-measurement that says the scaled
+        # version is not an improvement anyway.
         risk_plan = compute_risk_plan(
             price, pivot=vcp.get("pivot"),
-            account_risk_pct=account_risk_pct_for_regime(regime.get("regime")),
+            account_risk_pct=ACCOUNT_RISK_PCT,
         )
 
         # RS line at new high (often before price) — Minervini's leadership tell.
