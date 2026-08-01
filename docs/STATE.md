@@ -5,58 +5,78 @@
 
 ## 現在
 
-- **サイクル**: C97完了・**本番反映済**（**売り常時表示＋9年バックテスト＋スコアカード両窓化＋バックテスト準拠リスト。PR #61 squash merged=542034f・static-site full US rebuild成功=run 30096553153でスマホ反映済**）。売り必ず表示: `compute_sell_plan`常時`stop_level`+`targets`／export常時sell／共有`SellTiming`を全4面配線（凍結非接触・backend77+front547 green）。9年窓実測(run 30064735759)=CAGR+4.3% vs SPY+14.7%＝**ほぼ上げ相場ではB&Hに大敗**（現金規律の機会損失・C60再確認）→スコアカードに両窓＋caveat表示（flatteringな6年だけ見せない）。スクリーニング一致調査(wf_6a4bbf56)=バックテストは素の技術戦略(RS≥70・ファンダ/group gateなし)、製品はC93で品質ゲート追加＝**厳密一致はC93を外すことになりユーザー判断案件**。以下は旧C96要点↓。C96完了（**「約束」＝目的関数の確定＋実測完成・88a385a**）。ユーザーと**長期優先順位を合意**: (1)CAGR (2)最大DD (3)リスク調整後(**Sortino主・Sharpe従**＝Sharpeは大勝ちも罰する→右テール保存と矛盾) (4)期待値/トレード (5)勝率。`docs/OBJECTIVE.md`に約束として明文化（上位優先・上位犠牲の下位改善は不採用）。C95監査で利確固定・利益上限は不在＝思想は既存戦略と一致。**実測(6y run 30051701118・full_tactics・2021-08〜2026-07・1576銘柄)**: CAGR+15.2%(SPY+12.4%)・最大DD-13.9%(SPY-24.5%)・Sortino1.28(1.06)・期待値+0.53R/payoff3.4・勝率36.7%・**右テール=上位10%が総利益68.4%/最大+12.23R**＝**5指標すべてでSPY B&H超え**(2022ベア含む窓ゆえ防御が効く。強気5年窓ではB&H未勝は不変)。`backtest`に`payoff_distribution`+`sortino`追加(純レポート・凍結非接触)。スマホ: `StrategyScorecardCard`が5指標＋右テールバー表示・**375px実レンダ確認済**・`strategy-scorecard.json`(publicルート・tracked)。build/lint/5テストgreen。**次: 本番反映(main merge＋静的再ビルド=ユーザー判断待ち)／10y窓でも同計測／inspectorを新スキーマfixtureで全4面＋CIゲート化**。C86-C94は本番反映済(PR#60)。
-- **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
-- **ブランチ**: `claude/minerva-market-360-rebuild-toy2fa`（PR #59までMERGED・mainと同期。フロー: PR作成→CI green→squash merge→mainマージバック。**C86の2コミット(d87fe80/20b9b61)は未PR・push要**）
-- **実行中/待機中の外部ジョブ**: なし（PR#59マージ済＝C81本番反映済・今日の買い候補UI稼働）。C82グループローテーション=最終棄却、表示バッジ化はユーザー判断待ち。20yバックテスト=ヘッドライン無効（凍結810宇宙）・**2008/2022ベア防御確認・チョップ年出血発見**→C85 tiering3窓棄却。**執行チューニング族5連続棄却＝打ち切り確定**（C71/76/80/82/85）。残proven-lever=discovery/表示・規律UI・fundamentals計測(matrix#5)・mobile可用性(matrix#4=C86着手/残SW)・desktop/scanカード。
+- **サイクル**: C101-C102（スマホUIの品質確定 → 戦略の計測系を再監査 → VCP検出の再設計）。ブランチ `claude/minerva-market-360-rebuild-toy2fa` に push 済み。
+- **モデル**: Opus 5（fableが従量課金になったら停止＝恒久ルール）。
+- **いま何が問題か（一言）**: **CAGRで市場に負けている**。守り（最大DD）は市場の6〜7割で効いている。第1優先で負けているので「最高」ではない。
+
+## 実測値（★すべて `--pit-universe --quality-rank`・本セッションで再実行）
+
+| 窓 | 戦略 CAGR | SPY CAGR | 戦略 最大DD | SPY 最大DD | Sortino | トレード |
+|---|---|---|---|---|---|---|
+| 5年 2021-08〜2026-07 | **10.7%** | 12.4% | **−15.8%** | −24.5% | 1.03 / 1.11 | 158 |
+| 9年 2017-08〜2026-07 | **11.5%** | 14.8% | **−18.4%** | −33.7% | 1.07 / 1.17 | 292 |
+
+**リターンの分解（これ以外の道はない）**:
+`CAGR ≈ 年間トレード数 × 期待値R × 1トレードのリスク%` = 31.8 × 0.40R × 1.25% ≈ 15.9%/年（粗）。
+第3項の引き上げは**測定済み・両窓棄却**（下記）。∴ 攻めどころは**トレード数と期待値のみ**。
+
+**ギャップの内訳**（SPY単独から再計算し、記録済みベンチマークを厳密に再現して検証）:
+レジーム制御が 5年 **−5.7pp** / 9年 **−7.4pp**、銘柄選択が +3.7pp / +4.2pp。
+ただし**「制御を外す」は測定済みで否定**（ゲート無し = CAGR −0.8%、最大DD −32.7%）。
+引き上げた資金は逆選択される＝選択の貢献はエクスポージャーに対して一定でない。
 
 ## 凍結metricの現在値（低下＝即revert）
 
 | metric | 値 | 測定 |
 |---|---|---|
-| 908トレード: TT / S2 / SETUP / FIRE±5 / GATE | 69.7 / 90.0 / 78.6 / **91.7** / **66.5** %（MSCORE 95.5。**FIRE±5はC70で88.6→91.2、C75で91.2→91.7に改善**・判別+24.1→+24.0pp＝1sample/575ノイズ、他バイト一致） | `scripts/validate_trade_ideas.py`（~7分） |
+| 908トレード: TT / S2 / SETUP / **FIRE±5** / GATE | 69.7 / 90.0 / 78.6 / **96.9**（C102で91.7→96.9）/ **66.5** 床。MSCORE 95.5。判別 FIRE±5 **+24.9pp** | `scripts/validate_trade_ideas.py`（~7分） |
 | Band right-edge（12銘柄 vs MM360実写） | 91%（P82 / BR92 / TPR100）**床** | `scripts/markets360_band_rightedge_eval.py` |
 | Golden回帰 | **43 passed 床** | `make gate-5` |
-| 戦術バックテスト（参考・凍結外・**決定的**） | 5年: legacy+89.0%（SPY+83.6%超え）だが**9年窓では+78.2% vs SPY+251.8%＝一般化せず**（C60）。ベア防御のみ両窓で実証 | ローカル or CI `backtest-tactics.yml`（6y/10yバンドルはリリースに保存） |
-| 戦術バックテスト payoff（**C96実測・6y 2021-08〜2026-07・凍結外・参考**） | CAGR**+15.2%**(SPY+12.4%)・最大DD**-13.9%**(SPY-24.5%)・Sortino**1.28**(1.06)・期待値**+0.53R**/payoff3.4・勝率36.7%・右テール上位10%=総利益**68.4%**/最大+12.23R。**5指標すべてSPY超**（2022ベア含む窓）。強気5年窓ではB&H未勝は不変 | CI `backtest-tactics.yml`（run 30051701118） |
-| 戦術バックテスト（**C97実測・9y 2017-08〜2026-07・凍結外・正直な弱点**） | full_tactics CAGR**+4.3% vs SPY+14.7%**・最大DD-25.8%(SPY-33.7%)・Sortino0.46(1.01)・期待値+0.14R・勝率34.8%・右テールtop10%=72.3%。**ほぼ上げ相場9年ではB&Hに大敗**（平均投資64.9%＝現金規律が機会損失）。下げ耐性のみ優位＝C60既知事実を再確認 | CI（run 30064735759） |
 
-**注意**: C55までの凍結metricは不変（バックテスト修正はscripts/のみ、本体サービス無変更）。
-**C56の+53.9%は非決定性バグの偶然の1試行＝無効**（BACKTEST_C54.md参照）。
+**注意**: `make gate-1` はこのsandboxで4件落ちるが、**変更をstashしても同一**＝環境起因（numpy read-only）。
 
-## C58の要点（docs/BACKTEST_C54.md全面改訂済み）
+## 本セッションで確定した「計測系の誤り」（戦略より先に疑うこと）
 
-- バックテストは決定的になった（RS降順候補・sorted sells・シード2種で一致確認）。
-- armed買い逆指値=前日プランに対し交差判定（毎日上書きで死んでいた）。
-- `--funnel product`=スマホ画面のBuy Signalチェックリスト再現（minervini_bandsウォークフォワード履歴・TPR緑∧圧力緑・Buy Risk緑/黄・フレッシュ交差）。バンド計算は`compute_band_panels`（history_bars拡張で1コール/銘柄・全銘柄7分）。
-- 誠実な結論: 強気5年窓ではSPY B&Hに勝てず。型は実証（PF1.4-1.6・ゲート寄与+60.7pp・2022年legacy−2.9% vs SPY−18.2%）。
-- C59でVCP時系列反転を修正→VCP由来115件/PF2.13が主役に（v2までの数字は反転バグ込み）。
-- 成果物: scratchpadの`report_6y_legacy_v2.full.json`・`report_6y_product_v2.full.json`（全トレード）、6yバンドルはリリース`backtest-price-us-6y.json.gz`。
+1. **`--pit-universe` が `--funnel product` の下で無効化されていた**。バンド判定表を凍結リストからしか作らず、後期上場銘柄は `.get(s, False)` で全て脱落。実行は「点時点に見えて凍結として振る舞う」＝**正しいと自称する誤った数字**。修正済み。
+2. **フラグが出力に記録されていなかった**（progressive_risk / selective_pressure / breadth_confirm）。どの設定で測ったかを成果物から判定できなかった。記録するよう修正＋出荷版と一致しない実行には警告を自動付与。
+3. **製品が同じ銘柄に2種類の建玉サイズを出していた**。スキャナ経路は 1.25%→2.5%、スマホ書き出しは常に 1.25%。公開バンドル26箇所すべて 1.25 ＝ **スケールした値は誰にも表示されない死んだ分岐**。統一済み＋再分岐を検出するテスト追加。
+4. **`risk.py` の「両窓改善・ドローダウン不変」は誤り**。撤回済み（下記）。
+5. **VCP判定に使っていた pp-gap 指標は緩和を報酬する**（両率が上がれば gap は増える）。今後は lift で判定すること。
+
+## 測定して棄却したもの（再挑戦する前に読むこと）
+
+- **累進リスク（確認済み上昇で2倍）** — 両窓棄却。5年 CAGR 10.7→13.6 だが最大DD −15.8→**−21.9**、9年 11.5→13.1（**SPY 14.8に依然負け**）・最大DD −18.4→**−22.0**。
+  かつ **共通108トレードで max|ΔR| = 0.0000・決済日相違 0/108 ＝ 同一トレード列を2倍で張っただけ**。**SIMO 1銘柄が改善幅の65.5%**、上位3件で113%（＝残り約135トレードは合計マイナス）。除くと 7.5%→8.7% で共にSPYに大敗。ドローダウンは深くなるだけでなく**2022年のベア相場から2024/07〜2025/07の上昇相場の中の穴へ移動**した。
+
+## 採用したもの（C102）
+
+- **ベース固定型VCP検出（`base_anchored`）** — `vcp_footprint.py` の第4の並行経路として追加。
+  現行検出器は「150バー窓の最後の4つの山〜山スイング」を使い、実測でそれは中央値105バーにまたがりエントリーの15バー**前**に終わる＝**ベースではなく手前の上昇**を測っていた。結果、(a) ピボットを定義する最後の収縮が**構造的に見えない**、(b) 各谷を**新しい方**の山で割るため高値切り上げ型で収縮が**機械的に反転**する。
+  実測（588エントリー/576対照）: **36.1%/16.0%/lift 2.26 → 40.3%/12.8%/lift 3.14**。和では 55.6%→58.7%。**再現率と精度が同時に改善**（試した緩和系はすべて精度を支払っていた）。
+  **疑うべき数値**: フラクタル次数は不安定（order 4 で 30.3% に低下）。窓幅は安定（W42:40.0 / W90:30.1）。深さ許容0.15も恣意的（原理的代替は k*ATR20/価格）。
 
 ## 次アクション（優先順）
 
-**★ docs/MINERVINI_CAPABILITY_MATRIX.md（C78）が優先順の正。(1)ストップ・ヒット売り分岐=C79完了（324b5c2・実ブラウザ検証済）** (2)ブレッドスdivergenceガード=C80完了（高値圏∧<40%のみ降格・直近10年で発火0＝テール保険・908バイト一致・plumbingは#3の基盤） 残: (3)エクスポージャー梯子の実効化＋レジーム別rating cap＋市場売りアラート（要908＋両窓） (4)mobileオフラインSW＋localStorage watchlist＋保有連動exit可視化（client側・要browser375px） (5)fundamentals付き908リプレイでrating stack検証（data=point-in-time要GHA・計測先行）。
-
-
-0. **【C77一部完了】コヒーレンスギャップ**: 製品のフラット`vcp_detected`（VCP列表示）は依然 minervini_scanner の別VCPDetector由来だが、**quality_rank（並び順）は既に markets360 footprint の recall改善detection＋source tier を読むよう修正済（C77・backend限定・9db1fad）**。∴ recall改善（C70/C75）は品質ランクに反映される。**残**: VCP**列の表示bool**もfootprint由来に寄せる/`source`を列バッジ表示（要frontend＋ブラウザ検証）。どのdetectorを表示の正とするかは相関的変更＝慎重に。
-1. **C69: VCP recall向上（最大レバー・概ね飽和）** — オフライン計測基盤あり（scratchpad/vcp_recall_pareto.py・36.1%、見逃しの81%は深さ逐次収縮ゲート）。パラメータ微調整は+2.8ppしか出ない（C59実証済）→**ベース分割ロジックの再設計**（W型・ハンドル・複合ベース＝B2と一体）。凍結metric（SETUP/FIRE±5/golden）直結＝本体変更は908ハーネス必須。
-2. **未マージdocs/実験フラグのPR** — C66〜C68のコミットが未PR。GitHub MCP再認証後にPR→CI→マージ。
-3. **保留**: Notion/Substack/YouTube/fewmoredaysはプロキシ403（環境ネットワークポリシー・回避禁止）→ユーザーのエクスポート/複製待ち。C81後の初回実測: fast 3本クロン化＋US warm 16:05 ET（mainマージ後に発効・着弾=目標 夏5:30-6:15/冬6:30-6:50 JST）。UI: account_risk_pct表示・スマホ統一。
-4. **リスクトーン・オプション（ユーザー選択待ち）**: 半分クライマックス売り（--sell-into-strength --climax-partial）は両窓でmaxDD改善・Sharpe同値以上・検証済み。リスク低減優先なら即採用可。
-**注意（C45/C47の教訓）**: サイクル開始時はSPECを信じる前にコードをgrepする。
+1. **`--sell-into-strength` / `--climax-partial` の両窓再測定** — バイアス修正後に**一度も測っていない**最優先項目。当時9年窓で改善し最大DDは両窓で改善、棄却理由は現在と別の基準。ミネルヴィニ自身の手法。（実行中）
+2. **シミュレーション自体の上限を切り分ける** — 翌日始値約定・10枠均等・ピラミッディング無し・**ストップ後の再エントリー無し**。到達可能CAGRを模擬が決めている可能性。戦略の不足と模擬の不足を分けて報告する。（実行中）
+3. **`base_anchored` をバックテストに配線して効果を測る** — ハーネスは legacy 検出器を直接呼ぶので、footprint の改善が入っていない。候補供給が制約なら、**最大DDを支払わずCAGRを買える唯一の系統**。
+4. 再測定すべき棄却済み実験（バイアス下で判定されたもの、優先順）: `--no-correction-buys` → `--ma-tight` → `--breadth-confirm` / `--selective-pressure`（各1窓しか測っていない）→ `--group-rotation`。
+   **注意**: breadth と group RS は `--pit-universe` でも凍結リストのままなので、再測定しても部分的にしかバイアスが取れない。
 
 ## 絶対制約（ユーザー指示・恒久）
 
-- **fableが従量課金になったら停止**（その後はOpus 4.8で継続）。
-- **egressプロキシ回避は絶対禁止**（市場データベンダーはsandboxで403のまま扱う）。
-- golden/凍結metricの低下＝即revert。数値フィッティングは理論的根拠なしには行わない。metric追加・変更で見かけの改善を作らない。
+- **fableが従量課金になったら停止**（その後はOpusで継続）。
+- **egressプロキシ回避は絶対禁止**。
+- golden/凍結metricの低下＝即revert。数値フィッティング禁止。metric追加・変更で見かけの改善を作らない。
 - 1論点=1コミット、Conventional Commits、サイクル毎にPROGRESS追記＋本ファイル上書き。
+- **採用候補は必ず別エージェントに「計測アーティファクトである」立場から反証させる。反証されたら不採用。**
+- **1銘柄チェックを必ず通す**（上位1/3件の寄与を出し、除いても改善が残るか）。
 
 ## 環境（このsandboxの真実）
 
-- Postgres16/Redis稼働。`DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。フルスタックは `sandbox-e2e` skill。
-- Node 22 は `/opt/node22/bin`（NVM無し）。
-- Yahoo/EDGAR egressは**GitHub Actionsのみ**。新workflowはmainに載るまでdispatch不可。リリース資産DLは可（6yバンドル取得済み）。
-- バックテストのローカル実行: `cd backend && DATABASE_URL=... REDIS_ENABLED=false PYTHONPATH=. python3 scripts/backtest_minervini_tactics.py --bundle <6y.json.gz> --output out.json [--funnel product]`（~35分）。
-- **GitHub MCP切断中**（PR操作・CIログ読み不可。git push/pullは可）。
+- Postgres16/Redis稼働（`pg_ctlcluster 16 main start`）。`DATABASE_URL="postgresql://stockscanner:stockscanner@localhost/stockscanner"`。
+- Node 22 は NVM 経由（`export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"`）。
+- **価格バンドルは GitHub リリースから取得可能**（`daily-price-data` タグ: 6y 81MB / 10y 126MB / 20y 220MB）。取得済み: `/tmp/bt-6y.json.gz`、`/tmp/bt-10y.json.gz`。**ローカルでバックテストが回る**（1本 20〜40分、4コアなので同時2本まで）。
+- 静的サイトのビルドは `VITE_STATIC_SITE=true npx vite build`。`vite preview` はこの環境で xdg-open に失敗するので `python3 -m http.server` で配信する。
+- Yahoo/EDGAR egress は GitHub Actions のみ。github.io は 403（回避しない）。
 - スマホ用スクリーナー（静的PWA）: **https://kusennjp1-ai.github.io/screener/**
