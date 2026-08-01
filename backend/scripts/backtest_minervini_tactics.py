@@ -853,8 +853,20 @@ def main() -> int:
     det = VCPDetector()
     band_panels = None
     if args.funnel == "product":
-        print("computing walk-forward band panels (shipped minervini_bands)...", flush=True)
-        band_panels = compute_band_panels(fields, tradable, close["SPY"])
+        # The panel must cover EVERY symbol the candidate loop can propose.
+        # It used to be built from `tradable` (the frozen list) while the
+        # candidate loop, under --pit-universe, proposes late-listing symbols
+        # too — and the gate below reads `tpr_row.get(s, False)`, so every
+        # PIT-admitted symbol silently defaulted to False and was dropped.
+        # The run then LOOKED point-in-time and BEHAVED frozen, which is the
+        # worst possible failure: a wrong number that reports itself as right.
+        panel_symbols = tradable
+        if pit_eligible is not None:
+            ever_eligible = [s for s in pit_eligible.columns if bool(pit_eligible.loc[sim_dates, s].any())]
+            panel_symbols = sorted(set(tradable) | set(ever_eligible))
+        print(f"computing walk-forward band panels (shipped minervini_bands) "
+              f"for {len(panel_symbols)} symbols...", flush=True)
+        band_panels = compute_band_panels(fields, panel_symbols, close["SPY"])
         greens = (band_panels[0] & band_panels[1]).loc[sim_dates].sum(axis=1)
         print(f"band panels done: avg {greens.mean():.1f} TPR∧pressure-green names/day", flush=True)
     watch_by_week: dict = {}
