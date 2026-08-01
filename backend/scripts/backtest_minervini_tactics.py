@@ -1042,11 +1042,24 @@ def main() -> int:
         "breadth_regime": args.breadth_regime,
         "group_rotation": args.group_rotation,
         "tiered_uptrend": args.tiered_uptrend,
+        # These three were omitted, which is how the published scorecard became
+        # unable to answer "was progressive risk on?". `--progressive-risk` is
+        # not a tweak: it is the only setting that reproduces what the product
+        # SHIPS (risk.py::account_risk_pct_for_regime scales 1.25% -> 2.5% in a
+        # confirmed uptrend). A run without it measures a strategy nobody runs.
+        "progressive_risk": args.progressive_risk,
+        "selective_pressure": args.selective_pressure,
+        "breadth_confirm": args.breadth_confirm,
         "caveats": [
             "survivorship bias: today's listed universe only",
             "technicals only: point-in-time fundamentals unavailable (C43 bonus excluded)",
             "daily bars: entries at next open (later than intraday pivot buys), 10bps/side costs",
-        ] + ([] if args.pit_universe else [
+        ] + ([] if args.progressive_risk else [
+            "sizing mismatch: the shipped product scales per-trade risk with the "
+            "regime (risk.py::account_risk_pct_for_regime, 1.25% -> 2.5% in a "
+            "confirmed uptrend). This run used flat 1.25%, so it does NOT measure "
+            "the shipped strategy. Re-run with --progressive-risk to compare."
+        ]) + ([] if args.pit_universe else [
             "listing-age bias: the tradable list is frozen at the first simulated "
             "bar, so companies that listed later are excluded for the entire run. "
             "This penalises LONG windows specifically (a 9y run never sees a 2021 "
