@@ -174,7 +174,19 @@ _PYTHON_SORT_LIMIT = 1000
 # C70/C75 parallel recall paths (MA-tight, ATR volatility-contraction) catch real
 # but looser setups, so they rank below it. Used only to break ties among
 # VCP-detected rows (see get_quality_key in _sort_in_python).
-_QUALITY_SOURCE_TIER: dict[str, int] = {"vcp": 2, "ma_tight": 1, "vol_contract": 1}
+#
+# `base_anchored` (C102) sits at the SAME tier as "vcp", not below it: measured
+# on the 908-trade ground truth it is the more discriminating of the two —
+# entry 40.3% at control 12.8% (lift 3.14) against the legacy path's 36.1% /
+# 16.0% (lift 2.26). Ranking it with the looser recall paths would bury the
+# better signal.
+#
+# A source name absent from this map silently gets tier 0 and sorts BELOW
+# ma_tight, so anything added to vcp_footprint.py must be added here too —
+# see test_quality_source_tiers_cover_every_footprint_source.
+_QUALITY_SOURCE_TIER: dict[str, int] = {
+    "vcp": 2, "base_anchored": 2, "ma_tight": 1, "vol_contract": 1,
+}
 
 
 def _json_sort_expr(query: Query, field: str, column, json_path: tuple[str, ...], order: SortOrder):

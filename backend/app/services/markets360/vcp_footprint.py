@@ -195,6 +195,140 @@ _EMPTY: Dict[str, object] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Base-anchored contraction detector (C102).
+#
+# WHY a fourth path. The legacy detector does not enumerate the contractions of
+# a base at all. It takes the last four peak-to-peak swings of a 150-bar window
+# (legacy_vcp_detection.py:81-98) — measured, those swings span a median 105
+# bars and END a median 15 bars before the entry, i.e. they describe the prior
+# ADVANCE, not the base. Two consequences, both measured on the 908-trade
+# ground truth:
+#
+#   * The decisive final contraction — the tightening leg from the last peak to
+#     today, the one that defines the pivot — has no newer peak to pair with and
+#     is therefore STRUCTURALLY INVISIBLE.
+#   * Each trough is divided by the NEWER peak (`:94`), so in any base making
+#     higher highs the depth sequence is inflated toward the present, which
+#     mechanically INVERTS the contraction the detector then demands. A textbook
+#     W-base of 15.0% then 12.2% is reported as 13.25% then 14.21% — expanding.
+#
+# The depth-sequence gate that rejects on those numbers rejects 51% of
+# Minervini's real entries and 54% of random control days: lift 1.07, i.e. it
+# carries almost no information while destroying ~64% of recall.
+#
+# This path instead ANCHORS the base: the pivot is the highest high in
+# [-BASE_WINDOW, -BASE_MIN_RIGHT], contractions are enumerated forward from it,
+# and the open final leg is always appended.
+#
+# Measured on the same 588 entry / 576 control windows (T0 vs T0-63):
+#   legacy path              entry 36.1%   control 16.0%   lift 2.26
+#   this path                entry 40.3%   control 12.8%   lift 3.14
+#   shipped union            entry 55.6%   control 28.1%   lift 1.98
+#   union incl. this path    entry 58.7%                   lift 2.31
+# Recall AND precision improve together, which is why it is worth a new path
+# rather than a loosened threshold (every loosening tried bought recall with
+# precision — see the rejected list in the C102 notes).
+#
+# Parameter honesty: BASE_WINDOW is stable (W=42 gives 40.0/13.4, W=90 gives
+# 30.1/11.5), but the fractal order is NOT — order 4 drops recall to 30.3%. The
+# order-3 choice is doing real work and is the one number here to distrust.
+# BASE_DEPTH_TOL is likewise arbitrary; a principled replacement is k*ATR20/px.
+BASE_WINDOW = 65          # bars searched for the base's left high
+BASE_MIN_RIGHT = 10       # the pivot may not sit in the last N bars: no right side yet
+BASE_FRACTAL_ORDER = 3
+BASE_DEPTH_TOL = 0.15
+BASE_MIN_DEPTH_PCT = 1.0  # below this a "contraction" is noise, not a leg
+BASE_MAX_CONTRACTIONS = 6
+BASE_TIGHT_PCT = 5.0
+
+
+def _fractals(values, order: int, want_high: bool):
+    """Indices that are a strict local extreme over +/- `order` bars."""
+    out = []
+    n = len(values)
+    for i in range(order, n - order):
+        window = values[i - order: i + order + 1]
+        centre = values[i]
+        if want_high and centre == max(window) and centre > max(
+            list(window[:order]) + list(window[order + 1:])
+        ):
+            out.append(i)
+        elif not want_high and centre == min(window) and centre < min(
+            list(window[:order]) + list(window[order + 1:])
+        ):
+            out.append(i)
+    return out
+
+
+def _base_contractions(high, low, order: int = BASE_FRACTAL_ORDER):
+    """Depths (%) of each contraction inside the anchored base, oldest first."""
+    n = len(high)
+    if n < BASE_WINDOW + 5:
+        return []
+    seg = high[n - BASE_WINDOW: n - BASE_MIN_RIGHT]
+    if len(seg) < 10:
+        return []
+    pivot_idx = int(np.argmax(seg)) + (n - BASE_WINDOW)
+    if n - 1 - pivot_idx < BASE_MIN_RIGHT:
+        return []
+
+    h, l = high[pivot_idx:], low[pivot_idx:]
+    lows = _fractals(l, order, want_high=False)
+    highs = [0] + [i for i in _fractals(h, order, want_high=True) if i > 0]
+
+    depths, used = [], 0
+    for hi in highs:
+        if hi < used:
+            continue
+        later = [j for j in lows if j > hi]
+        if not later:
+            break
+        lo = later[0]
+        hp = float(h[hi])
+        if hp <= 0:
+            break
+        depths.append((hp - float(l[lo])) / hp * 100.0)
+        used = lo
+    # The open final contraction: from the last confirmed trough to today. This
+    # is the leg the legacy enumeration can never see.
+    if used < len(h) - 1:
+        tail_h = h[used:]
+        k = int(np.argmax(tail_h))
+        hp = float(tail_h[k])
+        tail_l = l[used + k:]
+        if hp > 0 and len(tail_l) >= 3:
+            depths.append((hp - float(np.min(tail_l))) / hp * 100.0)
+    return [d for d in depths if d >= BASE_MIN_DEPTH_PCT]
+
+
+def _base_anchored(price_data: pd.DataFrame) -> Optional[Dict[str, float]]:
+    """Base-anchored VCP detector (returns pivot/dist/depths or None). Never raises."""
+    try:
+        high = price_data["High"].to_numpy(dtype="float64")
+        low = price_data["Low"].to_numpy(dtype="float64")
+        close = price_data["Close"].to_numpy(dtype="float64")
+        if len(close) < BASE_WINDOW + 5:
+            return None
+        depths = _base_contractions(high, low)
+        if not (2 <= len(depths) <= BASE_MAX_CONTRACTIONS):
+            return None
+        # Minervini's informative half: the NEWEST contraction is the shallowest.
+        # (The "deepest first" half was measured to add precision but cost more
+        # recall than it returns — see the C102 notes.)
+        if not (depths[-1] <= min(depths) * (1 + BASE_DEPTH_TOL) and depths[-1] <= depths[0]):
+            return None
+        pivot = float(np.max(high[-BASE_WINDOW:]))
+        if pivot <= 0:
+            return None
+        dist = (pivot - float(close[-1])) / pivot * 100.0
+        if dist > BASE_TIGHT_PCT:
+            return None
+        return {"pivot": pivot, "dist": dist, "depths": depths}
+    except Exception:  # pragma: no cover - defensive; never break a scan
+        return None
+
+
 def compute_vcp_footprint(
     price_data: Optional[pd.DataFrame],
     min_bars: int = 120,
@@ -252,6 +386,21 @@ def compute_vcp_footprint(
             vcb_source = True
             pivot = vcb["pivot"]
             dist = vcb["dist"]
+    ba_source = False
+    ba_depths = None
+    if not detected:
+        # Parallel base-anchored path (C102): anchors the base at its left high
+        # and enumerates the contractions INSIDE it, including the open final
+        # leg the legacy peak-pair enumeration cannot see. Measured recall
+        # 40.3% at control 12.8% (lift 3.14) vs legacy 36.1% / 16.0% / 2.26 —
+        # the only change tried that raises recall and precision together.
+        ba = _base_anchored(price_data)
+        if ba is not None:
+            detected = True
+            ba_source = True
+            pivot = ba["pivot"]
+            dist = ba["dist"]
+            ba_depths = ba["depths"]
     # Actionable pivot states require the VCP STRUCTURE, not just proximity to a
     # recent high: without the `detected` gate, any uptrending stock sat "near
     # pivot" ~96% of the time (measured on the fixtures via the trade-idea
@@ -261,7 +410,7 @@ def compute_vcp_footprint(
     near_pivot = detected and (
         dist is not None and -MAX_PAST_PIVOT_PCT <= dist <= NEAR_PIVOT_PCT
     )
-    if ma_source or vcb_source:
+    if ma_source or vcb_source or ba_source:
         # Parallel-path bases have no legacy pivot_info; "ready" = coiled within
         # 3% under the pivot (same threshold the legacy detector uses).
         ready = dist is not None and 0.0 <= dist <= 3.0
@@ -276,9 +425,13 @@ def compute_vcp_footprint(
     return {
         "detected": detected,
         "score": round(score, 1) if score is not None else None,
-        "num_contractions": int(legacy.get("num_bases", 0) or 0),
+        "num_contractions": (
+            len(ba_depths) if ba_depths is not None else int(legacy.get("num_bases", 0) or 0)
+        ),
         "contraction_ratio": _f(legacy.get("contraction_ratio")),
-        "contractions_pct": depths,
+        "contractions_pct": (
+            [round(d, 2) for d in ba_depths] if ba_depths is not None else depths
+        ),
         "volume_dryup": bool(legacy.get("contracting_volume", False)),
         "tight_near_highs": bool(legacy.get("tight_near_highs", False)),
         "pivot": pivot,
@@ -288,6 +441,7 @@ def compute_vcp_footprint(
         "source": (
             "ma_tight" if ma_source
             else "vol_contract" if vcb_source
+            else "base_anchored" if ba_source
             else ("vcp" if detected else None)
         ),
     }
