@@ -1042,7 +1042,15 @@ def main() -> int:
     spy_ret = spy_c.pct_change().fillna(0)
     bh = (1 + spy_ret).cumprod() * 100_000
     exp_series = pd.Series({d: regimes[d]["exposure"] / 100.0 for d in sim_dates}).shift(1).fillna(0)
-    timed = (1 + spy_ret * exp_series.values).cumprod() * 100_000
+    # The exposure-matched control must be paid the SAME cash rate on the SAME
+    # idle fraction. Crediting the strategy's cash but not its own control would
+    # inflate the measured selection alpha by exactly the cash yield — the
+    # benchmark that exists to isolate selection would instead be measuring the
+    # accounting change.
+    _cash_daily = (CASH_YIELD_PCT / 100.0) / 252.0
+    timed = (
+        1 + spy_ret * exp_series.values + _cash_daily * (1 - exp_series.values)
+    ).cumprod() * 100_000
     for label, series in (("spy_buy_hold", bh), ("spy_regime_timed", timed)):
         curve = [{"date": str(d.date()), "equity": float(x), "invested_pct": 100.0}
                  for d, x in series.items()]
