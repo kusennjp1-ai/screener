@@ -61,6 +61,7 @@ BREAKOUT_VOL_RATIO = 1.5
 CHASE_CAP = 1.05               # never pay >5% above the pivot
 MAX_POSITIONS = 10
 PROGRESSIVE_RISK = False  # set by --progressive-risk: 2x risk in confirmed uptrend
+CASH_YIELD_PCT = 0.0  # set by --cash-yield-pct: annualised return on idle cash
 # Minervini under pressure: tighten SELECTION, don't stop buying — leaders
 # (RS>=90) may still be bought at full exposure while the trend is intact.
 SELECTIVE_PRESSURE = False
@@ -389,6 +390,13 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
         if BREADTH_CONFIRM and under_pressure and regimes[d].get("breadth", 0.0) >= BREADTH_MIN:
             exposure_pct = 100  # broad participation: index-volume noise, not deterioration
 
+        # Idle cash accrues at the stated rate BEFORE anything trades, so a
+        # day spent fully in cash earns exactly one day of it. Zero unless
+        # --cash-yield-pct is given, which keeps the default headline
+        # conservative (see the flag's help for why a rate is not assumed).
+        if CASH_YIELD_PCT:
+            cash *= 1.0 + (CASH_YIELD_PCT / 100.0) / 252.0
+
         # --- execute queued exits at the open --------------------------------
         # sorted so float summation order (cash +=) is bitwise-reproducible
         for sym in sorted(pending_sells):
@@ -664,6 +672,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--cash-yield-pct", type=float, default=0.0,
+                    help=(
+                        "Annualised %% earned on IDLE CASH (default 0). The "
+                        "simulation otherwise pays nothing on cash, which "
+                        "systematically penalises a strategy that holds cash "
+                        "against a 100%%-invested benchmark: this book averages "
+                        "~36-40%% cash, so at 3%% T-bills that is ~1.2pp/yr of "
+                        "CAGR the model simply discards. Off by default because "
+                        "no risk-free series ships in the price bundle -- the "
+                        "rate must be STATED by whoever runs it, not guessed "
+                        "here, and it is recorded in the output so a flattering "
+                        "assumption cannot hide."
+                    ))
     ap.add_argument("--pit-universe", action="store_true",
                     help="admit a symbol on the first day it clears the "
                          "liquidity/price bar instead of freezing the tradable "
@@ -725,8 +746,10 @@ def main() -> int:
                          "green/yellow required on the signal day")
     args = ap.parse_args()
     global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM, NO_CORRECTION_BUYS
+    global CASH_YIELD_PCT
     global SELL_INTO_STRENGTH
     PROGRESSIVE_RISK = args.progressive_risk
+    CASH_YIELD_PCT = args.cash_yield_pct
     SELECTIVE_PRESSURE = args.selective_pressure
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
@@ -1031,6 +1054,7 @@ def main() -> int:
         "window": {"start": str(sim_dates[0].date()), "end": str(sim_dates[-1].date())},
         "universe_size": len(tradable),
         "pit_universe": args.pit_universe,
+        "cash_yield_pct": args.cash_yield_pct,
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
         "no_correction_buys": args.no_correction_buys,
