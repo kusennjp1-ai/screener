@@ -324,7 +324,9 @@ def _base_anchored(price_data: pd.DataFrame) -> Optional[Dict[str, float]]:
         dist = (pivot - float(close[-1])) / pivot * 100.0
         if dist > BASE_TIGHT_PCT:
             return None
-        return {"pivot": pivot, "dist": dist, "depths": depths}
+        # The base's floor — the stop reference for anyone trading this pivot.
+        base_low = float(np.min(low[-BASE_WINDOW:]))
+        return {"pivot": pivot, "dist": dist, "depths": depths, "base_low": base_low}
     except Exception:  # pragma: no cover - defensive; never break a scan
         return None
 

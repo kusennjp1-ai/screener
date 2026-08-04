@@ -44,6 +44,7 @@ import numpy as np
 import pandas as pd
 
 from app.scanners.criteria.vcp_detection import VCPDetector
+from app.services.markets360.vcp_footprint import _base_anchored
 from app.services import minervini_bands as mb
 from app.services.market_regime import assess_market_regime
 from app.services.markets360.exit_signals import (
@@ -62,6 +63,7 @@ CHASE_CAP = 1.05               # never pay >5% above the pivot
 MAX_POSITIONS = 10
 PROGRESSIVE_RISK = False  # set by --progressive-risk: 2x risk in confirmed uptrend
 CASH_YIELD_PCT = 0.0  # set by --cash-yield-pct: annualised return on idle cash
+BASE_ANCHORED = False  # set by --base-anchored: extra VCP detection path
 # Minervini under pressure: tighten SELECTION, don't stop buying — leaders
 # (RS>=90) may still be bought at full exposure while the trend is intact.
 SELECTIVE_PRESSURE = False
@@ -672,6 +674,20 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--base-anchored", action="store_true",
+                    help=(
+                        "Add the base-anchored VCP path (C102) as a fallback "
+                        "when the legacy detector finds nothing. The legacy "
+                        "enumeration measures the last four swings of a 150-bar "
+                        "window -- median 105 bars wide, ending a median 15 bars "
+                        "BEFORE the entry -- i.e. the prior advance, not the "
+                        "base; the final tightening leg that defines the pivot "
+                        "is structurally invisible to it. Measured on the "
+                        "908-trade ground truth this path reaches 40.3%% recall "
+                        "at a 12.8%% control rate (lift 3.14) against the legacy "
+                        "36.1%% / 16.0%% (lift 2.26) -- higher recall AND higher "
+                        "precision. Off by default so recorded runs are unchanged."
+                    ))
     ap.add_argument("--cash-yield-pct", type=float, default=0.0,
                     help=(
                         "Annualised %% earned on IDLE CASH (default 0). The "
@@ -746,10 +762,11 @@ def main() -> int:
                          "green/yellow required on the signal day")
     args = ap.parse_args()
     global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM, NO_CORRECTION_BUYS
-    global CASH_YIELD_PCT
+    global CASH_YIELD_PCT, BASE_ANCHORED
     global SELL_INTO_STRENGTH
     PROGRESSIVE_RISK = args.progressive_risk
     CASH_YIELD_PCT = args.cash_yield_pct
+    BASE_ANCHORED = args.base_anchored
     SELECTIVE_PRESSURE = args.selective_pressure
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
@@ -964,6 +981,14 @@ def main() -> int:
             vpiv = (r.get("pivot_info") or {}).get("pivot")
             if r.get("vcp_detected") and vpiv and r.get("recent_base_low"):
                 piv, base_low, source = float(vpiv), float(r["recent_base_low"]), "vcp"
+            elif BASE_ANCHORED and (
+                (_ba := _base_anchored(pd.DataFrame({
+                    "High": high[s].iloc[max(0, idx - 251): idx + 1],
+                    "Low": low[s].iloc[max(0, idx - 251): idx + 1],
+                    "Close": prices,
+                }).dropna())) is not None
+            ):
+                piv, base_low, source = _ba["pivot"], _ba["base_low"], "base_anchored"
             elif MA_TIGHT and args.funnel != "product" and (
                 (mt := ma_tight_pivot(prices, high[s].iloc[:idx + 1], low[s].iloc[:idx + 1])) is not None
             ):
@@ -1063,6 +1088,7 @@ def main() -> int:
         "universe_size": len(tradable),
         "pit_universe": args.pit_universe,
         "cash_yield_pct": args.cash_yield_pct,
+        "base_anchored": args.base_anchored,
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
         "no_correction_buys": args.no_correction_buys,
