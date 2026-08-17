@@ -610,7 +610,7 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             watch = wk
         if exposure_pct > 0 or not market_gate:
             def _entry_allowed(sym, plan):
-                if SELECTION == "group_leaders" and market_gate and \
+                if SELECTION in ("group_leaders", "group_leaders_breakout") and market_gate and \
                         regimes[d]["regime"] != "confirmed_uptrend":
                     # "after a follow-through day" -- the confirmed-uptrend label
                     # IS the post-FTD state (market_regime.py). Buying leaders is
@@ -870,7 +870,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--output", required=True)
-    ap.add_argument("--selection", choices=["group_leaders"], default=None,
+    ap.add_argument("--selection", choices=["group_leaders", "group_leaders_breakout"], default=None,
                     help=(
                         "Replace the screener's SELECTION with an alternative "
                         "thesis, holding execution identical (same regime gate, "
@@ -1322,7 +1322,7 @@ def main() -> int:
                 null_diag["target"].append(n_target)
                 continue
 
-            if SELECTION == "group_leaders":
+            if SELECTION in ("group_leaders", "group_leaders_breakout"):
                 # SELECTION swap, execution untouched. Candidates are the
                 # highest-RS names whose industry group sits in the top 40
                 # (GROUP_LEAD_PCT = 0.80 of ~197 groups). No VCP, no base, no
@@ -1353,8 +1353,25 @@ def main() -> int:
                         if len(prices) < 200 or len(lows) < 20:
                             continue
                         c0 = float(prices.iloc[-1])
-                        wl[s] = {"pivot": c0, "base_low": float(lows.iloc[-20:].min()),
-                                 "mode": "early", "source": "group_leader", "rs": rs_v}
+                        if SELECTION == "group_leaders_breakout":
+                            # Same SELECTION, different ENTRY: wait for a cross
+                            # above the prior 20-day high instead of buying at
+                            # the close. The pivot is a plain 20-bar high — it
+                            # encodes no pattern knowledge — so this isolates
+                            # "is group leadership a good way to PICK?" from
+                            # "is buying an extended leader at any price bad?".
+                            highs = high[s].iloc[max(0, idx - 251): idx + 1].dropna()
+                            if len(highs) < 21:
+                                continue
+                            piv = float(highs.iloc[-21:-1].max())
+                            if piv <= 0 or c0 > piv * CHASE_CAP:
+                                continue
+                            wl[s] = {"pivot": piv, "base_low": float(lows.iloc[-20:].min()),
+                                     "mode": "armed" if c0 <= piv else "early",
+                                     "source": "group_leader", "rs": rs_v}
+                        else:
+                            wl[s] = {"pivot": c0, "base_low": float(lows.iloc[-20:].min()),
+                                     "mode": "early", "source": "group_leader", "rs": rs_v}
                 watch_by_week[d] = wl
                 continue
 
