@@ -72,6 +72,22 @@ BASE_ANCHORED = False  # set by --base-anchored: extra VCP detection path
 #                   CONFIRMED uptrend (i.e. after a follow-through day), with no
 #                   VCP/base pattern requirement at all.
 SELECTION = None
+# --- 8-week hold rule (O'Neil / IBD; set by --eight-week-hold) --------------
+# "If a stock breaks out of a proper base and gains >=20% within 3 weeks, it has
+# announced itself. Sit on it for 8 weeks unless a genuine sell signal appears
+# (e.g. it closes below the 50-DMA)."
+#
+# What it actually suspends matters. The 8% protective stop is a LOSS stop and
+# is irrelevant to a position already +20%. The thing that would cut such a
+# position is the TRAILING LADDER, which ratchets up to the 50-DMA / 20-bar low
+# and fires on an ordinary pullback. So the rule freezes the ladder for the
+# holding window and leaves the 50-DMA breakdown exit fully armed -- which is
+# what the rule says in words, and the opposite of "sell into strength"
+# (measured and rejected on both windows, C103).
+EIGHT_WEEK_HOLD = False
+EWH_TRIGGER_PCT = 20.0    # gain that earns the hold
+EWH_TRIGGER_DAYS = 15     # "within 3 weeks" in trading days
+EWH_HOLD_DAYS = 40        # "8 weeks" in trading days, measured from ENTRY
 # Minervini under pressure: tighten SELECTION, don't stop buying — leaders
 # (RS>=90) may still be bought at full exposure while the trend is intact.
 SELECTIVE_PRESSURE = False
@@ -438,6 +454,7 @@ class Position:
     mode: str = ""
     source: str = ""
     below50_prev: bool = False   # prior close was below the 50DMA (--confirm-exit)
+    ewh_until: int = -1          # bar index the 8-week hold protects through (-1 = none)
 
 
 @dataclass
@@ -576,8 +593,23 @@ def run_variant(name, market_gate, fields, ind, regimes, watch_by_week, sim_date
             if c != c:
                 continue
             ma50 = ind["ma50"].at[d, sym]
-            low20 = low[sym].iloc[max(0, close.index.get_loc(d) - 19): close.index.get_loc(d) + 1].min()
-            p.stop = ladder_stop(c, p.entry, p.stop0, ma50 if ma50 == ma50 else np.nan, low20)
+            _di = close.index.get_loc(d)
+            low20 = low[sym].iloc[max(0, _di - 19): _di + 1].min()
+            if EIGHT_WEEK_HOLD:
+                # Earn the hold: >=20% above entry within 3 weeks of entering.
+                # Checked once (ewh_until is set and never re-armed) so a name
+                # cannot keep renewing its own protection.
+                _held = _di - close.index.get_loc(p.entry_date)
+                if p.ewh_until < 0 and _held <= EWH_TRIGGER_DAYS \
+                        and c >= p.entry * (1 + EWH_TRIGGER_PCT / 100.0):
+                    p.ewh_until = close.index.get_loc(p.entry_date) + EWH_HOLD_DAYS
+            if EIGHT_WEEK_HOLD and 0 <= p.ewh_until and _di <= p.ewh_until:
+                # Ladder frozen. The stop stays where it was, so a normal
+                # pullback -- even to the 50-DMA -- cannot ratchet it into the
+                # price. The 50-DMA BREAKDOWN exit below is untouched.
+                pass
+            else:
+                p.stop = ladder_stop(c, p.entry, p.stop0, ma50 if ma50 == ma50 else np.nan, low20)
             vol_ratio = (volume.at[d, sym] / ind["vol50"].at[d, sym]) if ind["vol50"].at[d, sym] else 0
             below50 = ma50 == ma50 and c < ma50
             fire_50dma = below50 and vol_ratio >= 1.5 and (p.below50_prev or not CONFIRM_EXIT)
@@ -883,6 +915,16 @@ def main() -> int:
                         "group-leadership idea, and it is the cleanest test of "
                         "whether the pattern machinery earns its place."
                     ))
+    ap.add_argument("--eight-week-hold", action="store_true",
+                    help=(
+                        "O'Neil/IBD 8-week hold rule: a position that gains "
+                        ">=20%% within 3 weeks of entry has its TRAILING LADDER "
+                        "frozen until 8 weeks from entry. The 50-DMA breakdown "
+                        "exit and the initial protective stop stay armed -- the "
+                        "rule suspends profit-protection, not risk control. "
+                        "Direct counterpart to --sell-into-strength, which was "
+                        "rejected on both windows."
+                    ))
     ap.add_argument("--base-anchored", action="store_true",
                     help=(
                         "Add the base-anchored VCP path (C102) as a fallback "
@@ -1018,12 +1060,13 @@ def main() -> int:
                          "screener's inline per-symbol checks, then exit")
     args = ap.parse_args()
     global PROGRESSIVE_RISK, SELECTIVE_PRESSURE, BREADTH_CONFIRM, NO_CORRECTION_BUYS
-    global CASH_YIELD_PCT, BASE_ANCHORED, SELECTION
+    global CASH_YIELD_PCT, BASE_ANCHORED, SELECTION, EIGHT_WEEK_HOLD
     global SELL_INTO_STRENGTH
     PROGRESSIVE_RISK = args.progressive_risk
     CASH_YIELD_PCT = args.cash_yield_pct
     BASE_ANCHORED = args.base_anchored
     SELECTION = args.selection
+    EIGHT_WEEK_HOLD = args.eight_week_hold
     SELECTIVE_PRESSURE = args.selective_pressure
     BREADTH_CONFIRM = args.breadth_confirm
     NO_CORRECTION_BUYS = args.no_correction_buys
@@ -1129,7 +1172,7 @@ def main() -> int:
     # --- group-rotation: walk-forward per-group RS percentile panel ----------
     group_pct = group_mom = None
     sym_group = None
-    if GROUP_ROTATION or SELECTION == "group_leaders":
+    if GROUP_ROTATION or SELECTION in ("group_leaders", "group_leaders_breakout"):
         sym_group = {}
         with open(IBD_CSV, newline="", encoding="utf-8") as fh:
             for parts in csv.reader(fh):
@@ -1602,6 +1645,7 @@ def main() -> int:
         "cash_yield_pct": args.cash_yield_pct,
         "base_anchored": args.base_anchored,
         "selection": args.selection,
+        "eight_week_hold": args.eight_week_hold,
         "vcp_only": args.vcp_only,
         "funnel": args.funnel,
         "no_correction_buys": args.no_correction_buys,
