@@ -4,6 +4,7 @@ import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 
 export const fetchStaticJson = async (relativePath) => {
   const response = await fetch(getStaticDataUrl(relativePath), {
+    cache: 'no-cache',
     headers: {
       Accept: 'application/json',
     },
@@ -19,7 +20,8 @@ export const fetchStaticJson = async (relativePath) => {
 export const useStaticManifest = () => useQuery({
   queryKey: ['staticManifest'],
   queryFn: () => fetchStaticJson('manifest.json'),
-  staleTime: Infinity,
+  staleTime: 60000,
+  refetchInterval: 60000,
   gcTime: Infinity,
 });
 

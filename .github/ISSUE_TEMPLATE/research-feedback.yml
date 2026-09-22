@@ -1,0 +1,23 @@
+name: リサーチ画面の改善
+description: 不具合・選定根拠・チャート・使い勝手を報告
+title: "[Research] "
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 対象
+      options: [選定ロジック, データの鮮度, チャート, UI・操作, その他]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順と期待する結果
+      description: 銘柄、データ日付、端末、操作、実際の結果を書いてください。個人情報やAPIキーは含めないでください。
+    validations:
+      required: true
+  - type: dropdown
+    id: score
+    attributes:
+      label: 利用評価（5段階）
+      options: ['5', '4', '3', '2', '1']

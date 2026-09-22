@@ -16,6 +16,10 @@ frontend/node_modules
 # Build artifacts
 frontend/dist
 frontend/public/static-data/
+frontend/public/ibd-reference.json
+frontend/public/research-daily.json
+research-test-results.json
+full-test-results.json
 
 # Environment variables (keep .example files)
 .env

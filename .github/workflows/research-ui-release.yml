@@ -1,0 +1,54 @@
+name: Research UI Release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+concurrency:
+  group: research-ui-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Verify research rules and 100 synthetic task profiles
+        run: npm run test:run -- src/static/researchEngine.test.js src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx --maxWorkers=2
+        working-directory: frontend
+      - name: Restore the last successful daily data without rewriting its timestamp
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          run_id=$(gh run list --workflow static-site.yml --branch "$GITHUB_REF_NAME" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          test -n "$run_id"
+          gh run download "$run_id" --name github-pages --dir /tmp/last-pages
+          mkdir -p /tmp/extracted
+          tar -xf /tmp/last-pages/artifact.tar -C /tmp/extracted
+          test -f /tmp/extracted/static-data/manifest.json
+          cp -R /tmp/extracted/static-data frontend/public/static-data
+      - name: Build with daily selection export
+        working-directory: frontend
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: frontend/dist
+      - uses: actions/deploy-pages@v4
+        id: deploy

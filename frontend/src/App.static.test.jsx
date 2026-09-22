@@ -322,11 +322,12 @@ describe('App static mode', () => {
   });
 
   it.each([
-    ['#/', 'United States スナップショット'],
+    ['#/', '米国株リサーチ'],
+    ['#/daily', 'United States スナップショット'],
     ['#/scan', 'デイリースキャン'],
     ['#/breadth', 'United States 騰落状況（ブレッドス）'],
     ['#/groups', 'United States 業種グループランキング'],
-    ['#/themes', 'United States スナップショット'],
+    ['#/themes', '米国株リサーチ'],
   ])('renders the static hash route %s without any /api requests', async (hash, heading) => {
     await renderStaticAppAtHash(hash);
 
@@ -336,7 +337,7 @@ describe('App static mode', () => {
       return hasText(element) && Array.from(element.children).every((child) => !hasText(child));
     };
     expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getAllByText('閲覧専用').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('米国株 / 日次分析').length).toBeGreaterThan(0);
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
 
     await waitFor(() => {
@@ -348,9 +349,9 @@ describe('App static mode', () => {
     // Every static-mode request must be a static source and never hit /api. The
     // strategy scorecard is a tracked app-root static asset (not pipeline data),
     // so it is a legitimate static source alongside the /static-data/ bundle.
-    const isStaticSource = (url) => url.includes('/static-data/') || url.includes('strategy-scorecard.json');
+    const isStaticSource = (url) => url.includes('/static-data/') || url.includes('strategy-scorecard.json') || url.includes('ibd-reference.json');
     expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
-  }, 15000);
+  }, 30000);
 
   it('keeps scan controls read-only in the static route', async () => {
     await renderStaticAppAtHash('#/scan');

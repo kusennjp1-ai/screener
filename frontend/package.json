@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node tools/export-research.mjs && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
