@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { assess, compareReference, entryPlan, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from './researchEngine';
 
 describe('research rules and financial data integrity', () => {
+  it('requires three annual growth rates rather than substituting CAGR', () => {
+    expect(assess({ eps_cagr_3y: 100 }, 'oneil').rules[2].state).toBe('unknown');
+    expect(assess({ annual_eps_growth_3y: [50, -10, 100] }, 'oneil').rules[2].state).toBe('fail');
+    expect(assess({ annual_eps_growth_3y: [25, 30, 40] }, 'oneil').rules[2].state).toBe('pass');
+    expect(assess({ annual_eps_growth_3y: [25, 30] }, 'oneil').rules[2].state).toBe('unknown');
+  });
+  it('does not mistake high-volume selling for demand', () => {
+    for (const change of [-5, 0]) expect(assess({ price_change_1d: change, se_volume_vs_50d: 3 }, 'oneil').rules[4].state).toBe('fail');
+    expect(assess({ se_volume_vs_50d: 3 }, 'oneil').rules[4].state).toBe('unknown');
+    expect(assess({ price_change_1d: 2, se_volume_vs_50d: 1.4 }, 'oneil').rules[4].state).toBe('pass');
+  });
+  it('rejects coerced values and applies the top-20 industry threshold', () => {
+    expect(assess({ eps_growth_yy: '30' }, 'oneil').rules[0].state).toBe('unknown');
+    expect(assess({ ibd_group_rank: true }, 'ibd').rules[3].state).toBe('unknown');
+    expect(assess({ ibd_group_rank: 20 }, 'ibd').rules[3].state).toBe('pass');
+    expect(assess({ ibd_group_rank: 21 }, 'ibd').rules[3].state).toBe('fail');
+  });
   it('measures analysis age in New York calendar days, independent of publication time', () => {
     const now = Date.parse('2026-09-24T02:00:00Z'); // Still September 23 in New York.
     expect(snapshotFreshness('2026-09-23', now)).toEqual({ state: 'recent', days: 0 });
@@ -18,7 +35,7 @@ describe('research rules and financial data integrity', () => {
     expect(csv).toContain('"2026-09-21"');
     expect(csv).toContain('"\'=HYPERLINK(""bad"")"');
     expect(csv).toContain('"false","0","8","8"');
-    expect(csv).toContain('年間 EPS 3年成長率');
+    expect(csv).toContain('直近3年の各年 EPS 成長率');
     expect(csv).toContain('"99"');
   });
   it('normalizes both legacy signed and feature-store unsigned high distance', () => {

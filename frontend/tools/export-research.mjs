@@ -35,7 +35,7 @@ for (const file of (await readdir(referenceDir)).filter(f => /^\d{4}-\d{2}-\d{2}
 }
 await writeFile('public/ibd-reference.json', JSON.stringify(reference));
 await writeFile('public/research-daily.json', JSON.stringify({
-  schema_version: 1, rule_version: 'research-v1', as_of_date: scan.as_of_date,
+  schema_version: 1, rule_version: 'research-v2', as_of_date: scan.as_of_date,
   generated_at: manifest.generated_at, universe_size: rows.size, ratings: 'independent_estimates',
   liquidity: { min_price_usd: 10, min_average_dollar_volume: 20000000 },
   candidates, ibd_comparison: compareReference(candidates.ibd, reference, scan.as_of_date),

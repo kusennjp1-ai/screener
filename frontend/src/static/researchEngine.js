@@ -25,28 +25,31 @@ export function researchCsv(ranked, method, date) {
 // The feature store exports positive % BELOW the high; the legacy technical
 // calculator exports negative distance. Normalize magnitude at this boundary.
 export const highDistance = (row) => finite(row.week_52_high_distance) ? Math.abs(row.week_52_high_distance) : null;
-const rule = (label, value, test, unit = '') => ({ label, value, unit, state: value == null || (typeof value === 'number' && !finite(value)) ? 'unknown' : test(value) ? 'pass' : 'fail' });
+const rule = (label, value, test, unit = '', boolean = false) => ({ label, value, unit, state: (boolean ? typeof value !== 'boolean' : !finite(value)) ? 'unknown' : test(value) ? 'pass' : 'fail' });
 export function assess(row, method = 'minervini') {
+  // Three annual YoY rates, not an endpoint CAGR that can hide a down year.
+  const annual = row.annual_eps_growth_3y;
+  const annualMinimum = Array.isArray(annual) && annual.length === 3 && annual.every(finite) ? Math.min(...annual) : null;
   const common = [rule('RS 推計 ≥ 80', row.rs_rating, v => v >= 80)];
   const rules = method === 'minervini' ? [
-    rule('トレンドテンプレート通過', row.passes_template, v => v === true),
+    rule('トレンドテンプレート通過', row.passes_template, v => v === true, '', true),
     rule('RS 推計 ≥ 70', row.rs_rating, v => v >= 70),
     rule('52週安値から ≥ 30%', row.week_52_low_distance, v => v >= 30, '%'),
     rule('52週高値からの距離 ≤ 25%', highDistance(row), v => v <= 25, '%'),
   ] : method === 'oneil' ? [
     rule('C：四半期 EPS 前年同期比 ≥ 25%', row.eps_growth_yy, v => v >= 25, '%'),
     rule('売上高 前年同期比 ≥ 25%', row.sales_growth_yy, v => v >= 25, '%'),
-    rule('A：年間 EPS 3年成長率 ≥ 25%', row.eps_cagr_3y, v => v >= 25, '%'),
+    rule('A：直近3年の各年 EPS 成長率 ≥ 25%（最小値）', annualMinimum, v => v >= 25, '%'),
     rule('N：52週高値からの距離 ≤ 15%（代替指標）', highDistance(row), v => v <= 15, '%'),
-    rule('S：出来高 / 50日平均 ≥ 1.4', row.se_volume_vs_50d, v => v >= 1.4, '倍'),
+    rule('S：上昇日の出来高 / 50日平均 ≥ 1.4（代替指標）', finite(row.price_change_1d) ? row.se_volume_vs_50d : null, v => v >= 1.4 && row.price_change_1d > 0, '倍'),
     ...common,
-    rule('I：機関投資家の保有社数が増加', row.institutional_sponsors_increasing, v => v === true),
-    rule('M：市場が50日線・200日線より上', row.market_above_50dma == null || row.market_above_200dma == null ? null : row.market_above_50dma && row.market_above_200dma, v => v === true),
+    rule('I：機関投資家の保有社数が増加', row.institutional_sponsors_increasing, v => v === true, '', true),
+    rule('M：市場が50日線・200日線より上（代替指標）', typeof row.market_above_50dma !== 'boolean' || typeof row.market_above_200dma !== 'boolean' ? null : row.market_above_50dma && row.market_above_200dma, v => v === true, '', true),
   ] : [
     rule('Composite 推計 ≥ 90', row.composite_rating, v => v >= 90),
     rule('RS 推計 ≥ 85', row.rs_rating, v => v >= 85),
     rule('EPS 推計 ≥ 80', row.eps_rating, v => v >= 80),
-    rule('業種順位 推計 ≤ 40', row.ibd_group_rank, v => v >= 1 && v <= 40),
+    rule('業種順位 推計 ≤ 20', row.ibd_group_rank, v => Number.isInteger(v) && v >= 1 && v <= 20),
     rule('52週高値からの距離 ≤ 15%', highDistance(row), v => v <= 15, '%'),
   ];
   const passed = rules.filter(r => r.state === 'pass').length;

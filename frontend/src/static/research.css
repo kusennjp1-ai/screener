@@ -8,6 +8,13 @@
 .research-panel { border:1px solid var(--line); border-radius:8px!important; box-shadow:none!important; overflow:hidden; }
 .research-list { position:sticky; top:84px; }
 .research-detail { min-width:0; scroll-margin-top:90px; }
+@keyframes research-reveal { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.research-detail { animation: research-reveal 180ms ease-out; }
+.research-workbench .MuiTableRow-root { transition: background-color 140ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .research-detail { animation: none; }
+  .research-workbench .MuiTableRow-root { transition: none; }
+}
 .research-symbol-head { display:flex; align-items:start; justify-content:space-between; flex-wrap:wrap; gap:16px; padding:22px; }
 .research-symbol-price { text-align:right; }
 .research-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-block:1px solid var(--line); }

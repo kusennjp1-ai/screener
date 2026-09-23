@@ -137,7 +137,7 @@ export default function ResearchPage() {
         {!ranked.length && !bundle.isLoading && <Typography sx={{ p: 3 }}>該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</Typography>}
         {ranked.length > limit && <Button fullWidth onClick={() => setLimit(limit + 50)} sx={{ p: 1.5 }}>次の50件を表示</Button>}
       </Paper>
-      <div className="research-detail" ref={detailRef}>
+      <div className="research-detail" ref={detailRef} key={selected?.symbol}>
         {selected && <>
           <Paper className="research-panel">
             <div className="research-symbol-head">
@@ -159,7 +159,7 @@ export default function ResearchPage() {
               <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>エントリー位置</Typography>
               <Typography sx={{ fontSize: 24, fontWeight: 700, my: 2, color: plan.state === '買いゾーン超過' ? 'warning.main' : 'text.primary' }}>{plan.state}</Typography>
               <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>5%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 2 }}>{plan.pivotSource || '未判定'}のピボット。チャートのVCPトリガーとは計算方式が異なる場合があります。</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 2 }}>{plan.pivotSource || '未判定'}のピボット。ゾーンは価格位置だけの判定で、出来高・市場環境・ベースの妥当性を保証しません。チャートのVCPトリガーとは計算方式が異なる場合があります。</Typography>
               <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}><Typography component="h3" variant="subtitle2">チャートの確認ポイント</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>VCP：{selected.vcp_detected == null ? '未確認' : selected.vcp_detected ? '検出' : '未検出'} / 出来高50日平均比：{fmt(selected.se_volume_vs_50d, 2)}倍</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>ベース：{fmt(selected.se_base_length_weeks)}週 / 深さ：{fmt(selected.se_base_depth_pct)}%</Typography></Box>
             </Paper>
           </div>
@@ -170,7 +170,7 @@ export default function ResearchPage() {
       <Typography component="h2" variant="subtitle1" fontWeight={700}>選定方式とデータの読み方</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : '場中価格の配信先は未設定です。現在は日次価格で計算しています。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
-      <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://www.minervini.com/1MTPreview.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
+      <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
     </footer>
     <StaticChartViewerModal open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} chartIndex={index.data} navigationSymbols={ranked.map(r => r.row.symbol)} />
   </Box>;

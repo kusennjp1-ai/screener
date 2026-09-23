@@ -16,7 +16,7 @@ vi.mock('../components/ResearchChart', () => ({ default: ({ entry, onExpand }) =
 const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market: 'US', current_price: 102, se_pivot_price: 100, adv_usd: 50000000,
   passes_template: true, rs_rating: 95, eps_rating: 92, composite_rating: 96, ibd_group_rank: 10,
   week_52_low_distance: 50, week_52_high_distance: -2, eps_growth_yy: 30, sales_growth_yy: 30,
-  eps_cagr_3y: 30, se_volume_vs_50d: 1.6, institutional_sponsors_increasing: true,
+  annual_eps_growth_3y: [30, 30, 30], price_change_1d: 2, se_volume_vs_50d: 1.6, institutional_sponsors_increasing: true,
   market_above_50dma: true, market_above_200dma: true };
 let client;
 beforeEach(() => {
