@@ -4,7 +4,7 @@ import { Alert, Box, Button, Chip, CircularProgress, FormControlLabel, Paper, St
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import StaticChartViewerModal from '../StaticChartViewerModal';
-import { assess, compareReference, entryPlan, finite, highDistance, quoteStatus, rankCandidates } from '../researchEngine';
+import { assess, compareReference, entryPlan, finite, highDistance, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from '../researchEngine';
 import { tradingViewUrl } from '../tradingView';
 import ResearchChart from '../components/ResearchChart';
 import '../research.css';
@@ -34,6 +34,7 @@ export default function ResearchPage() {
     try { const value = JSON.parse(localStorage.getItem('research-watch') || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; }
   });
   const bundle = useQuery({
+    placeholderData: () => undefined,
     queryKey: ['researchRows', entry.pages?.scan?.path, version],
     enabled: Boolean(entry.pages?.scan?.path),
     queryFn: async () => {
@@ -76,13 +77,14 @@ export default function ResearchPage() {
   const overlap = compareReference(leaders, reference.data, bundle.data?.date);
   const age = clock.data - Date.parse(manifest.data?.generated_at);
   const stale = !Number.isFinite(age) || age > 36 * 3600000;
+  const freshness = snapshotFreshness(bundle.data?.date || entry.as_of_date, clock.data);
   function toggleWatch(ticker) {
     const next = watch.includes(ticker) ? watch.filter(s => s !== ticker) : [...watch, ticker];
     setWatch(next);
     try { localStorage.setItem('research-watch', JSON.stringify(next)); } catch { setStorageError(true); }
   }
   function download() {
-    const csv = ['symbol,method,passed,total,unknown,rs_estimate,price,pivot', ...ranked.map(({ row: r, assessment: a }) => [r.symbol, method, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, r.se_pivot_price].map(v => `"${String(v ?? '').replaceAll('"', '""')}"`).join(','))].join('\r\n');
+    const csv = researchCsv(ranked, method, bundle.data?.date);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
@@ -98,6 +100,9 @@ export default function ResearchPage() {
       <Typography variant="body2" color="text.secondary" sx={{ ml: { md: 'auto' }, fontSize: 12 }}>公開更新：{manifest.data?.generated_at ? new Date(manifest.data.generated_at).toLocaleString('ja-JP') : '未確認'}</Typography>
     </div>
     {stale && <Alert severity="warning" sx={{ mb: 2 }}>公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
+    {bundle.data && freshness.state !== 'recent' && <Alert severity="warning" sx={{ mb: 2 }}>
+      {freshness.state === 'old' ? `分析基準日は米国東部の日付から${freshness.days}暦日前です。公開更新が新しくても、分析データが新しいとは限りません。休場日も含む日数です。` : '分析基準日が未確認、または未来の日付です。最新の分析として扱わないでください。'}
+    </Alert>}
     <Paper className="research-controls" elevation={0}>
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2} justifyContent="space-between" alignItems={{ md: 'center' }}>
         <ToggleButtonGroup exclusive value={method} onChange={(_, value) => { if (value) { setMethod(value); setLimit(50); } }} aria-label="投資手法" sx={{ flexWrap: 'wrap' }}>

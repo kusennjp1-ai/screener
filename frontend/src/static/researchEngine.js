@@ -1,5 +1,27 @@
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+// Calendar age is deliberately not an exchange-session count (holidays vary).
+export function snapshotFreshness(date, now = Date.now()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { state: 'unknown', days: null };
+  const stamp = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== date) return { state: 'unknown', days: null };
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const days = Math.round((Date.parse(`${today}T00:00:00Z`) - stamp) / 86400000);
+  return { state: days < 0 ? 'future' : days >= 4 ? 'old' : 'recent', days };
+}
+
+export function researchCsv(ranked, method, date) {
+  const cell = value => {
+    let text = String(value ?? '');
+    // Text that starts with spreadsheet formula syntax must remain literal.
+    if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
+    return `"${text.replaceAll('"', '""')}"`;
+  };
+  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules'];
+  const lines = ranked.map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, r.se_pivot_price ?? r.vcp_pivot,
+    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / ')]);
+  return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
+}
 // The feature store exports positive % BELOW the high; the legacy technical
 // calculator exports negative distance. Normalize magnitude at this boundary.
 export const highDistance = (row) => finite(row.week_52_high_distance) ? Math.abs(row.week_52_high_distance) : null;

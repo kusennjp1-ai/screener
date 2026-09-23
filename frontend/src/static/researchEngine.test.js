@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { assess, compareReference, entryPlan, quoteStatus, rankCandidates } from './researchEngine';
+import { assess, compareReference, entryPlan, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from './researchEngine';
 
 describe('research rules and financial data integrity', () => {
+  it('measures analysis age in New York calendar days, independent of publication time', () => {
+    const now = Date.parse('2026-09-24T02:00:00Z'); // Still September 23 in New York.
+    expect(snapshotFreshness('2026-09-23', now)).toEqual({ state: 'recent', days: 0 });
+    expect(snapshotFreshness('2026-09-19', now)).toEqual({ state: 'old', days: 4 });
+    expect(snapshotFreshness('2026-09-24', now).state).toBe('future');
+    expect(snapshotFreshness('2026-02-30', now).state).toBe('unknown');
+    expect(snapshotFreshness(undefined, now).state).toBe('unknown');
+    expect(snapshotFreshness('2026-09-18', Date.parse('2026-09-21T12:00:00Z')).state).toBe('recent');
+  });
+  it('exports dated, auditable CSV with unknown rules and literal spreadsheet text', () => {
+    const ranked = rankCandidates([{ symbol: '=HYPERLINK("bad")', current_price: 100, vcp_pivot: 99 }], 'oneil');
+    const csv = researchCsv(ranked, 'oneil', '2026-09-21');
+    expect(csv).toContain('"as_of_date"');
+    expect(csv).toContain('"2026-09-21"');
+    expect(csv).toContain('"\'=HYPERLINK(""bad"")"');
+    expect(csv).toContain('"false","0","8","8"');
+    expect(csv).toContain('年間 EPS 3年成長率');
+    expect(csv).toContain('"99"');
+  });
   it('normalizes both legacy signed and feature-store unsigned high distance', () => {
     for (const distance of [-10, 10, 0]) expect(assess({ week_52_high_distance: distance }, 'ibd').rules[4].state).toBe('pass');
     for (const distance of [-26, 26]) expect(assess({ week_52_high_distance: distance }, 'minervini').rules[3].state).toBe('fail');

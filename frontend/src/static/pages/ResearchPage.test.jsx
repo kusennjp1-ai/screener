@@ -3,11 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
 
-const data = vi.hoisted(() => ({ rows: [], fail: false, charts: true, generated: new Date().toISOString() }));
+const data = vi.hoisted(() => ({ rows: [], fail: false, charts: true, date: '2026-09-21', generated: new Date().toISOString() }));
 vi.mock('../dataClient', () => ({
   useStaticManifest: () => ({ data: { generated_at: data.generated, as_of_date: '2026-09-21' } }),
   resolveStaticMarketEntry: () => ({ pages: { scan: { path: 'scan.json' } }, assets: { charts: { path: 'charts.json' } } }),
-  fetchStaticJson: async () => { if (data.fail) throw Error('offline'); return { initial_rows: data.rows, chunks: [], as_of_date: '2026-09-21' }; },
+  fetchStaticJson: async () => { if (data.fail) throw Error('offline'); return { initial_rows: data.rows, chunks: [], as_of_date: data.date }; },
 }));
 vi.mock('../chartClient', () => ({ useStaticChartIndex: () => ({ data: { symbols: data.charts ? [{ symbol: 'LEAD' }, { symbol: 'FAIL' }] : [] } }) }));
 vi.mock('../StaticChartViewerModal', () => ({ default: ({ open, initialSymbol, onClose }) => open ? <div role="dialog" aria-label="日次分析"><span>{initialSymbol}</span><button onClick={onClose}>閉じる</button></div> : null }));
@@ -20,7 +20,7 @@ const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market
   market_above_50dma: true, market_above_200dma: true };
 let client;
 beforeEach(() => {
-  localStorage.clear(); data.fail = false; data.charts = true;
+  localStorage.clear(); data.fail = false; data.charts = true; data.date = '2026-09-21';
   data.rows = [leader, { ...leader, symbol: 'FAIL', company_name: 'Weak Fixture', passes_template: false, rs_rating: 10, eps_growth_yy: -20, composite_rating: 10 }, { symbol: 'NONE', market: 'US', company_name: 'Unknown Fixture', current_price: 50, adv_usd: 30000000 }];
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -90,4 +90,10 @@ it('recovers from a bundle error using retry', async () => {
   await screen.findByText(/データを取得できません/);
   data.fail = false; fireEvent.click(screen.getByRole('button', { name: '再試行' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'LEAD の分析を表示' })).toBeInTheDocument());
+});
+it('warns about old analysis even when publication was just regenerated', async () => {
+  data.date = '2000-01-03';
+  mount();
+  await screen.findByRole('button', { name: 'LEAD の分析を表示' });
+  expect(screen.getByText(/公開更新が新しくても、分析データが新しいとは限りません/)).toBeInTheDocument();
 });
