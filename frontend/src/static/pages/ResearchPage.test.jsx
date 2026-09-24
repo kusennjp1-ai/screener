@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
@@ -75,7 +75,7 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByText(/場中価格の配信先は未設定/)).toBeInTheDocument();
         expect(screen.getByText('買いゾーン内')).toBeInTheDocument();
       } else if (t === 8) {
-        expect(screen.getByText('未検証')).toBeInTheDocument();
+        expect(screen.getByText('IBD公式リストとの一致：未検証')).toBeInTheDocument();
         expect(screen.getByText(/IBD公式の選定銘柄・非公開の計算式を再現したものではありません/)).toBeInTheDocument();
       } else {
         fireEvent.click(screen.getByRole('button', { name: methods[(s + 1) % 3], exact: true }));
@@ -96,4 +96,15 @@ it('warns about old analysis even when publication was just regenerated', async 
   mount();
   await screen.findByRole('button', { name: 'LEAD の分析を表示' });
   expect(screen.getByText(/公開更新が新しくても、分析データが新しいとは限りません/)).toBeInTheDocument();
+});
+it('keeps keyboard focus in search after explicitly opening a stock detail', async () => {
+  mount();
+  fireEvent.click(await screen.findByRole('button', { name: 'LEAD の分析を表示' }));
+  await waitFor(() => expect(screen.getByLabelText('銘柄詳細')).toHaveFocus());
+  const input = screen.getByLabelText('銘柄・企業名を検索');
+  act(() => input.focus());
+  fireEvent.change(input, { target: { value: 'FAIL' } });
+  expect(input).toHaveFocus();
+  fireEvent.change(input, { target: { value: 'NONE' } });
+  expect(input).toHaveFocus();
 });

@@ -9,11 +9,9 @@ import { getStaticSupportedMarkets, resolveStaticMarketEntry, useStaticManifest 
 import { marketFlag } from './marketFlags';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'リサーチ' },
-  { path: '/daily', label: 'デイリー' },
+  { path: '/', label: '本日の判断' },
   { path: '/scan', label: '詳細スキャン' },
   { path: '/breadth', label: '市場環境' },
-  { path: '/groups', label: '業種ランキング' },
 ];
 export default function StaticLayout({ children }) {
   const location = useLocation();
@@ -36,7 +34,7 @@ export default function StaticLayout({ children }) {
         </Box>
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
           <Chip label="米国株 / 日次分析" size="small" variant="outlined" sx={{ display: { xs: 'none', sm: 'flex' }, fontSize: 12, borderRadius: 1 }} />
-          {markets.length > 1 && <FormControl size="small"><Select value={market.market} onChange={e => setSelectedMarket(e.target.value)} inputProps={{ 'aria-label': 'Static market selector' }}>{markets.map(m => <MenuItem key={m} value={m}>{marketFlag(m)} {manifest.data?.markets?.[m]?.display_name || m}</MenuItem>)}</Select></FormControl>}
+          {location.pathname !== '/' && markets.length > 1 && <FormControl size="small"><Select value={market.market} onChange={e => setSelectedMarket(e.target.value)} inputProps={{ 'aria-label': 'Static market selector' }}>{markets.map(m => <MenuItem key={m} value={m}>{marketFlag(m)} {manifest.data?.markets?.[m]?.display_name || m}</MenuItem>)}</Select></FormControl>}
           <IconButton onClick={colorMode.toggleColorMode} aria-label={dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'} size="small">{dark ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}</IconButton>
         </Box>
       </Toolbar>

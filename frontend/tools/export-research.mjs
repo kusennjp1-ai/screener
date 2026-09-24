@@ -2,6 +2,7 @@
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { rankCandidates, compareReference } from '../src/static/researchEngine.js';
+import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 
 const root = resolve('public/static-data');
 async function read(relative) {
@@ -34,6 +35,7 @@ for (const file of (await readdir(referenceDir)).filter(f => /^\d{4}-\d{2}-\d{2}
   if (value.verified === true && value.as_of_date === scan.as_of_date && value.source && value.constituents?.length) { reference = value; break; }
 }
 await writeFile('public/ibd-reference.json', JSON.stringify(reference));
+await writeFile('public/portfolio-model.json', JSON.stringify({ model_version: 'cash-first-v1', source_generated_at: manifest.generated_at, ...buildPortfolioPlan([...rows.values()], scan.as_of_date) }, null, 2));
 await writeFile('public/research-daily.json', JSON.stringify({
   schema_version: 1, rule_version: 'research-v2', as_of_date: scan.as_of_date,
   generated_at: manifest.generated_at, universe_size: rows.size, ratings: 'independent_estimates',
