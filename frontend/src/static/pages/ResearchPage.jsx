@@ -88,7 +88,10 @@ export default function ResearchPage() {
     setMethod('minervini'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
-  function focusDetail() { requestAnimationFrame(() => detailRef.current?.focus?.()); }
+  function focusDetail() { requestAnimationFrame(() => {
+    detailRef.current?.focus?.({ preventScroll: true });
+    detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
+  }); }
   function download() {
     const csv = researchCsv(ranked, method, bundle.data?.date);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
@@ -146,7 +149,7 @@ export default function ResearchPage() {
       </Paper>
       <div className="research-detail" ref={detailRef} key={selected?.symbol} tabIndex={-1} aria-label="銘柄詳細">
         {selected && <>
-          <Button size="small" onClick={() => document.getElementById('today-decision')?.focus()}>← 本日の配分に戻る</Button>
+          <Button size="small" onClick={() => { const target = document.getElementById('today-decision'); target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'start', behavior: 'auto' }); }}>← 本日の配分に戻る</Button>
           <Paper className="research-panel">
             <div className="research-symbol-head">
               <Box><Stack direction="row" gap={1.5} alignItems="baseline"><Typography component="h2" sx={{ fontSize: 32, lineHeight: 1.2, fontWeight: 700, fontFamily: 'monospace' }}>{selected.symbol}</Typography><Chip size="small" label={selected.exchange || 'US'} variant="outlined" sx={{ height: 22, borderRadius: 1 }} /></Stack><Typography sx={{ mt: .75, fontSize: 14 }} color="text.secondary">{selected.company_name}</Typography><Typography sx={{ mt: .75, fontSize: 12 }} color="text.secondary">{selected.ibd_industry_group || '業種未確認'}</Typography></Box>
