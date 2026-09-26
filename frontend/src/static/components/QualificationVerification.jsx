@@ -5,7 +5,7 @@ import { auditDailyBars } from '../qualificationAudit';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
 import { buildBookTechnicalEvidence } from '../bookTechnicalEvidence';
 import { fetchStaticJson } from '../dataClient';
-import { assess, entryChecks } from '../researchEngine';
+import { assess } from '../researchEngine';
 import SepaReview from './SepaReview';
 import BookPatternReview from './BookPatternReview';
 import BookExitEvidence from './BookExitEvidence';
@@ -35,10 +35,6 @@ export default function QualificationVerification({ row, entry, date, generation
       {result.audit.errors.join(' / ')}
       {result.assessment.rules.filter(r => r.state !== 'pass').map(r => r.label).join(' / ')}
     </Alert>}
-    <details style={{ marginTop: 12 }}><summary>買い判断に追加で必要な確認（日次）</summary>
-      <ul>{entryChecks(row, method).map(r => <li key={r.label}>{r.label}：{r.state === 'pass' ? '適合' : r.state === 'fail' ? '不適合' : '未確認'}</li>)}</ul>
-      <Typography sx={{ fontSize: 12 }}>スクリーニング通過は買いシグナルではありません。VCPは任意の形状条件で、トレンドテンプレート通過だけでは成立しません。決算予定とベースの妥当性、当日の執行条件は別途確認が必要です。</Typography>
-    </details>
     {method.startsWith('minervini') && <SepaReview method={method} row={row} />}
     {method.startsWith('minervini') && <BookPatternReview key={`${row.symbol}-${date}`} row={row} entry={entry} date={date} />}
     {method.startsWith('minervini') && <BookExitEvidence key={`exit-${row.symbol}-${date}`} row={row} entry={entry} date={date} />}

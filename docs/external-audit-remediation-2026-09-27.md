@@ -19,3 +19,10 @@ The supplied audit describes a real coverage/performance problem, but some findi
 - Selected-symbol Finnhub quotes do not supply a consolidated market-wide live volume feed or automatically recalculate the entire daily portfolio. Keys remain memory-only. No credential is read or logged during this audit.
 - Legacy auxiliary screens have intentionally different filters. Their counts are not described as the book's independent qualification totals.
 - bd is unavailable in this workspace; this document tracks remaining work.
+
+## Validation
+- UI release 36252793524 succeeded. Public 2026-09-25 compact index: 5,887 rows, 9,096,814 bytes (gzip measurement 959,847 bytes). Legacy details are fetched separately. The pre-expansion dataset still has 830 independently verified symbols, 315 of 1,938 liquid names; the UI discloses these counts.
+- Local 2026-09-21 full-versus-compact comparison: all 23,544 assessments (5,886 rows × four methods) identical. Node benchmark: initial assessment 122 ms, average pre-evaluated filtering 2.9 ms across 100 searches; this is not a browser/phone timing claim.
+- CI 36252792929: all 968 frontend tests, frontend smoke, backend quality gates and assistant smoke passed. Local follow-up tests cover chart pivot precedence, cache generations, legacy route labels, portfolio and detail verification.
+- Browser validation: desktop and 390px mobile layout; SNDK chart/entry both use 1564.99 in the local snapshot; TXG's obsolete pivot is excluded; public delayed detail loading and the unexpired exchange-calendar freshness display verified. No live API key was accessed.
+- Removed the redundant detail checklist that unconditionally marked earnings/base review unknown. The seven-condition dated readiness panel remains the one displayed purchase-readiness checklist.

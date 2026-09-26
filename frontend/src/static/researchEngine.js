@@ -94,7 +94,6 @@ export function entryChecks(row, method = 'minervini') {
     rule('上昇日の出来高 ≥ 直前50日平均の1.4倍（アプリの代理閾値）', finite(v.change) ? v.volumeRatio : null, x => x >= 1.4 && v.change > 0, '倍'),
     rule('セットアップ準備完了（検出器）', row.se_setup_ready, x => x === true, '', true),
     rule('市場：上昇トレンド確認（アプリの保守的制約）', typeof row.market_regime === 'string' ? row.market_regime === 'confirmed_uptrend' : null, x => x === true, '', true),
-    rule('決算日・ベース形状の最終確認', null, () => false),
   ];
 }
 
