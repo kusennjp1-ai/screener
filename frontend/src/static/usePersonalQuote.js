@@ -12,8 +12,10 @@ export function usePersonalQuote(symbol, apiKey) {
     const update = (quote, status) => { if (!closed) setState(old => ({session,symbol,quote:newerQuote(old.symbol === symbol && old.session === session ? old.quote : null,quote),status})); };
     async function poll() {
       try {
-        const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}`, {
-          headers:{'X-Finnhub-Token':apiKey},cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',
+        // Finnhub's cross-origin preflight does not allow the token header.
+        // Use its documented query-token authentication only on this fixed host.
+        const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`, {
+          cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',
           signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)]),
         });
         if (!response.ok) { update(null,response.status === 401 || response.status === 403 ? 'キー・利用権限を確認' : response.status === 429 ? '配信の利用上限' : '価格取得エラー'); return; }

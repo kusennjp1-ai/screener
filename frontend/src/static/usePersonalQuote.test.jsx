@@ -8,8 +8,10 @@ it('isolates credentials, symbol changes, disconnection and late responses',asyn
   vi.stubGlobal('WebSocket',class {constructor(){sockets.push(this);}close=vi.fn();send=vi.fn();});
   const {result,rerender,unmount}=renderHook(({symbol,key})=>usePersonalQuote(symbol,key),{initialProps:{symbol:'NVDA',key:'private-test-key'}});
   await waitFor(()=>expect(requests).toHaveLength(1));
-  expect(requests[0].url).not.toContain('private-test-key');
-  expect(requests[0].options.headers['X-Finnhub-Token']).toBe('private-test-key');
+  expect(new URL(requests[0].url).origin).toBe('https://finnhub.io');
+  expect(new URL(requests[0].url).searchParams.get('token')).toBe('private-test-key');
+  expect(requests[0].options.cache).toBe('no-store');
+  expect(requests[0].options.referrerPolicy).toBe('no-referrer');
   await act(async()=>requests[0].resolve({ok:true,json:async()=>({c:100,t:Math.floor(Date.now()/1000)})}));
   expect(result.current.quote.price).toBe(100);
   rerender({symbol:'MSFT',key:'private-test-key'});
