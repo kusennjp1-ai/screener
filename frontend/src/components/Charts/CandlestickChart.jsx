@@ -976,7 +976,7 @@ function CandlestickChart({
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
         <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>
         <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。Dailyに切り替えてください。' : showBookAnnotations ? annotations.summary : '自動注記を非表示にしています。'}</Typography>
-        <details><summary style={{ cursor: 'pointer', fontSize: 12 }}>図解の見方・判定方法</summary><Typography sx={{ fontSize: 12 }}>紫の枠＝ベース候補。水色の斜線C1、C2…＝高値から後続安値への収縮と下落率。直近126日、15日以上の調整、深さ5〜50%・底から1/3以上の回復を探索します。前後2本で極値を確認し、2%以上の押しが2〜6回縮小、最終10%以内・安値から20日以内をVCP候補とします。数値はアプリの探索設定で書籍の固定条件ではありません。日足の後からの図解で、当時利用可能なシグナルではありません。ステージ・需給・財務・市場環境は別確認です。</Typography>
+        <details><summary style={{ cursor: 'pointer', fontSize: 12 }}>図解の見方・判定方法</summary><Typography sx={{ fontSize: 12 }}>紫の枠＝ベース候補。水色の破線C1、C2…＝高値→後続安値→回復高値を結ぶガイド曲線と下落率。曲線そのものは価格の軌跡ではありません。矢印＝収縮高値を日中に上抜けた日で、買い指示ではありません。直近126日、15日以上の調整、深さ5〜50%・底から1/3以上の回復を探索します。前後2本で極値を確認し、2%以上の押しが2〜6回縮小、最終10%以内・安値から20日以内をVCP候補とします。数値はアプリの探索設定で書籍の固定条件ではありません。日足の後からの図解で、当時利用可能なシグナルではありません。ステージ・需給・財務・市場環境は別確認です。</Typography>
           {annotations.boxes.map((box, i) => <Typography key={i} sx={{ fontSize: 12 }}>{box.label}：{box.start}〜{box.end} / 高値 {box.high.toFixed(2)}・安値 {box.low.toFixed(2)}</Typography>)}
         </details>
       </Box>}

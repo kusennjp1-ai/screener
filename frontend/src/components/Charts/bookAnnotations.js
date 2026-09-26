@@ -49,8 +49,28 @@ export function buildBookAnnotations(bars) {
     bars[end].close >= last.low && bars[end].close <= last.high * 1.05 &&
     bars.slice(last.index + 1).every(b => b.low >= last.low);
   const volumeContracts = candidate && legs.every((leg, i) => !i || (leg.volume > 0 && leg.volume < legs[i - 1].volume));
-  if (candidate) legs.forEach((leg, i) => boxes.push({ ...leg, color: '#4dd0e1',
-    label: `C${i + 1} −${leg.depthPct.toFixed(1)}%`, diagonal: true }));
-  return { boxes, legs: candidate ? legs : [], pivot: candidate ? last.high : null, candidate,
+  if (candidate) legs.forEach((leg, i) => {
+    const next = legs[i + 1];
+    const limit = next ? bars.findIndex(b => b.date === next.start) : end;
+    let recovery = leg.index + 1;
+    for (let j = recovery; j <= limit; j++) if (bars[j].high >= bars[recovery].high) recovery = j;
+    boxes.push({ ...leg, color: '#4dd0e1', label: `C${i + 1} −${leg.depthPct.toFixed(1)}%`,
+      recoveryDate: bars[recovery].date, recoveryHigh: bars[recovery].high, curve: true });
+  });
+  // An observed high crossing, not a buy signal. Wait until the local trough
+  // can have been confirmed; never mark its earlier recovery retrospectively.
+  let breakout = null;
+  if (candidate) {
+    const index = bars.findIndex((b, i) => i >= last.index + 3 && b.high > last.high && bars[i - 1].high <= last.high);
+    if (index >= 0) {
+      const bar = bars[index];
+      const weakClose = bar.close < (bar.high + bar.low) / 2;
+      breakout = { date: bar.date, high: bar.high, low: bar.low, close: bar.close, pivot: last.high, weakClose,
+        label: weakClose ? '高値上抜け・下半分で引け' : '収縮高値を上抜け' };
+      boxes.push({ start: bar.date, end: bar.date, high: bar.high, low: bar.high, arrow: true,
+        color: weakClose ? '#ffb74d' : '#80cbc4', label: breakout.label });
+    }
+  }
+  return { boxes, breakout, legs: candidate ? legs : [], pivot: candidate ? last.high : null, candidate,
     summary: candidate ? `VCP候補：${legs.map((leg, i) => `C${i + 1} ${leg.depthPct.toFixed(1)}%`).join(' → ')}。区間平均出来高：${volumeContracts ? '順に減少' : '順次減少を確認できず'}。成立・買い判断は別確認。` : 'ベース候補のみ。VCPの収縮条件は未確認。' };
 }

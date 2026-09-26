@@ -29,13 +29,29 @@ class VcpBoxRenderer {
         const h = Math.max(bottom - top, 1);
         // Clean, understated base outline: faint fill + thin dashed amber edge,
         // so it reads as the base footprint rather than a heavy orange box.
-        ctx.fillStyle = 'rgba(255, 152, 0, 0.05)';
-        ctx.fillRect(left, top, w, h);
+        if (!r.curve && !r.arrow) {
+          ctx.fillStyle = 'rgba(255, 152, 0, 0.025)';
+          ctx.fillRect(left, top, w, h);
+        }
         ctx.save();
         ctx.strokeStyle = r.color || 'rgba(255, 167, 38, 0.45)';
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
-        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
+        if (!r.curve && !r.arrow) ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
+        if (r.curve && r.x3 != null && r.y3 != null) {
+          ctx.lineWidth = 2 * hr; ctx.setLineDash([5 * hr, 3 * hr]);
+          ctx.beginPath(); ctx.moveTo(r.x1 * hr, r.y1 * vr);
+          const middle1 = (r.x1 + r.x2) / 2 * hr, middle2 = (r.x2 + r.x3) / 2 * hr;
+          ctx.bezierCurveTo(middle1, r.y1 * vr, middle1, r.y2 * vr, r.x2 * hr, r.y2 * vr);
+          ctx.bezierCurveTo(middle2, r.y2 * vr, middle2, r.y3 * vr, r.x3 * hr, r.y3 * vr);
+          ctx.stroke();
+        }
+        if (r.arrow) {
+          const x = r.x1 * hr, y = r.y1 * vr;
+          ctx.setLineDash([]); ctx.lineWidth = 2 * hr;
+          ctx.beginPath(); ctx.moveTo(x - 28 * hr, y - 32 * vr); ctx.lineTo(x, y - 3 * vr);
+          ctx.lineTo(x - 9 * hr, y - 6 * vr); ctx.moveTo(x, y - 3 * vr); ctx.lineTo(x - 2 * hr, y - 12 * vr); ctx.stroke();
+        }
         if (r.diagonal) {
           ctx.setLineDash([]); ctx.lineWidth = 2 * hr;
           ctx.beginPath(); ctx.moveTo(r.x1 * hr, r.y1 * vr); ctx.lineTo(r.x2 * hr, r.y2 * vr); ctx.stroke();
@@ -44,7 +60,7 @@ class VcpBoxRenderer {
           ctx.font = `${11 * vr}px sans-serif`;
           const labelWidth = Math.min(ctx.measureText(r.label).width + 10 * hr, scope.bitmapSize.width);
           const labelX = Math.max(0, Math.min(left, scope.bitmapSize.width - labelWidth));
-          let labelY = Math.max(58 * vr, Math.min(bottom + (r.diagonal ? 4 : 22) * vr, scope.bitmapSize.height - 18 * vr));
+          let labelY = Math.max(58 * vr, Math.min(r.arrow ? top - 52 * vr : bottom + ((r.diagonal || r.curve) ? 4 : 22) * vr, scope.bitmapSize.height - 18 * vr));
           for (let attempt = 0; attempt < 8; attempt++) {
             if (!occupiedLabels.some(b => labelX < b.right + 4 * hr && labelX + labelWidth > b.left - 4 * hr && labelY < b.bottom && labelY + 17 * vr > b.top)) break;
             labelY += 19 * vr;
@@ -83,8 +99,10 @@ class VcpBoxPaneView {
       if (x1 == null && x2 == null) continue;
       if (x1 == null) x1 = 0;
       if (x2 == null) x2 = width;
-      if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > width) continue;
-      this._rects.push({ x1, x2, y1, y2, label: box.label, color: box.color, diagonal: box.diagonal });
+      const x3 = box.curve ? timeScale.timeToCoordinate(box.recoveryDate) : null;
+      const y3 = box.curve ? series.priceToCoordinate(box.recoveryHigh) : null;
+      if (Math.max(x1, x2, x3 ?? x2) < 0 || Math.min(x1, x2) > width) continue;
+      this._rects.push({ x1, x2, y1, y2, x3, y3, label: box.label, color: box.color, diagonal: box.diagonal, curve: box.curve, arrow: box.arrow });
     }
   }
 

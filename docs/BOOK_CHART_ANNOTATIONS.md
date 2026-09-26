@@ -7,3 +7,9 @@ These are visual research aids; they do not modify rankings, book audit scores, 
 Rendering follows chart pan/zoom. Diagram labels avoid each other, and offscreen shapes are skipped. Chart recreation now reinstalls data and overlays on size/theme changes. Expanded chart trade cards that obscured candles were removed; portfolio planning remains on the research page.
 
 Validation: pure detector cases cover valid shrinking legs, widening legs, invalid data, breakdown and monotonic prices; canvas tests verify labels, coordinates and offscreen exclusion. Static chart integration and modal tests cover payload use and diagram activation. Browser verification includes ANET daily/weekly, expanded desktop chart and 390px mobile. Data/shape limitations remain in existing fidelity reports. No claim of full discretionary pattern recognition or author endorsement. Beads unavailable; this is the local completion/limitations record.
+
+## Supplied illustration references (2026-09-26)
+
+The five supplied book figures guide presentation, not signal labels copied without evidence. Contraction strokes now use dashed high → trough → measured recovery-high curves, without a rectangle around every leg. The curve is a schematic guide, not reconstructed intraday prices. The first observed crossing of the last contraction high, at least three bars after its trough, receives an arrow. A close in the lower half of that day's range is described literally; it is not automatically certified as a squat or failed 3C breakout. Stage transitions, normal pullbacks and tennis-ball recoveries are not inferred solely from visual resemblance. The supplied copyrighted images remain outside the published repository.
+
+Additional tests cover recovery endpoints, exact curve coordinates, crossing timing, and lower-half closes. Existing selection and order logic is unchanged.

@@ -14,6 +14,7 @@ describe('automatic book chart aids', () => {
     expect(result.boxes[0].start).toBe(bars[60].date);
     expect(result.legs.map(x => x.depthPct)).toEqual(expect.arrayContaining([expect.any(Number)]));
     expect(result.legs[0].depthPct).toBeCloseTo((100.2 - 79.8) / 100.2 * 100);
+    expect(result.boxes[1]).toMatchObject({curve:true,recoveryDate:bars[80].date,recoveryHigh:98.2});
     expect(result.pivot).toBeCloseTo(96.2); expect(result.summary).toContain('成立・買い判断は別確認');
   });
   it('does not label widening pullbacks as VCP', () => {
@@ -35,4 +36,15 @@ describe('automatic book chart aids', () => {
   it('does not draw an invented base on a monotonic rise', () => {
     expect(buildBookAnnotations(fixture([[0,50],[110,100]])).boxes).toEqual([]);
   });
+});
+
+it('marks only an observed crossing after the trough is confirmable', () => {
+  const bars = fixture([[0,50],[60,100],[70,80],[80,98],[88,88],[96,96],[104,91],[110,99]]);
+  const result = buildBookAnnotations(bars);
+  expect(result.breakout.date).toBe(bars[108].date);
+  expect(result.boxes.at(-1)).toMatchObject({ arrow:true, start:bars[108].date });
+  const earlier = buildBookAnnotations(bars.slice(0,108));
+  expect(earlier.breakout).toBeNull();
+  bars[108] = {...bars[108], high:99, low:95, close:96, open:96};
+  expect(buildBookAnnotations(bars).breakout.weakClose).toBe(true);
 });
