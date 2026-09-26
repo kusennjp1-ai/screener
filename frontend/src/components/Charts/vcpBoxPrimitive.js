@@ -19,6 +19,7 @@ class VcpBoxRenderer {
       const ctx = scope.context;
       const hr = scope.horizontalPixelRatio;
       const vr = scope.verticalPixelRatio;
+      const occupiedLabels = [];
       for (const r of this._rects) {
         const left = Math.round(Math.min(r.x1, r.x2) * hr);
         const right = Math.round(Math.max(r.x1, r.x2) * hr);
@@ -31,10 +32,28 @@ class VcpBoxRenderer {
         ctx.fillStyle = 'rgba(255, 152, 0, 0.05)';
         ctx.fillRect(left, top, w, h);
         ctx.save();
-        ctx.strokeStyle = 'rgba(255, 167, 38, 0.45)';
+        ctx.strokeStyle = r.color || 'rgba(255, 167, 38, 0.45)';
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
+        if (r.diagonal) {
+          ctx.setLineDash([]); ctx.lineWidth = 2 * hr;
+          ctx.beginPath(); ctx.moveTo(r.x1 * hr, r.y1 * vr); ctx.lineTo(r.x2 * hr, r.y2 * vr); ctx.stroke();
+        }
+        if (r.label && w > 24 * hr) {
+          ctx.font = `${11 * vr}px sans-serif`;
+          const labelWidth = Math.min(ctx.measureText(r.label).width + 10 * hr, scope.bitmapSize.width);
+          const labelX = Math.max(0, Math.min(left, scope.bitmapSize.width - labelWidth));
+          let labelY = Math.max(58 * vr, Math.min(bottom + (r.diagonal ? 4 : 22) * vr, scope.bitmapSize.height - 18 * vr));
+          for (let attempt = 0; attempt < 8; attempt++) {
+            if (!occupiedLabels.some(b => labelX < b.right + 4 * hr && labelX + labelWidth > b.left - 4 * hr && labelY < b.bottom && labelY + 17 * vr > b.top)) break;
+            labelY += 19 * vr;
+            if (labelY > scope.bitmapSize.height - 18 * vr) labelY = Math.max(58 * vr, top - (attempt + 2) * 19 * vr);
+          }
+          occupiedLabels.push({ left: labelX, right: labelX + labelWidth, top: labelY, bottom: labelY + 17 * vr });
+          ctx.fillStyle = 'rgba(20,27,42,.94)'; ctx.fillRect(labelX, labelY, labelWidth, 17 * vr);
+          ctx.fillStyle = r.color || '#ffb74d'; ctx.fillText(r.label, labelX + 5 * hr, labelY + 12 * vr, labelWidth - 10 * hr);
+        }
         ctx.restore();
       }
     });
@@ -64,9 +83,12 @@ class VcpBoxPaneView {
       if (x1 == null && x2 == null) continue;
       if (x1 == null) x1 = 0;
       if (x2 == null) x2 = width;
-      this._rects.push({ x1, x2, y1, y2 });
+      if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > width) continue;
+      this._rects.push({ x1, x2, y1, y2, label: box.label, color: box.color, diagonal: box.diagonal });
     }
   }
+
+  zOrder() { return 'top'; }
 
   renderer() {
     return new VcpBoxRenderer(this._rects);

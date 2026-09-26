@@ -21,7 +21,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
       : query.isLoading ? <Box role="status" sx={{ p: 6 }}><CircularProgress size={24} /> チャートを読み込み中…</Box>
       : query.isError ? <Alert severity="error" action={<Button onClick={() => query.refetch()}>再試行</Button>}>チャートを取得できません。</Alert>
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography>
-      : <CandlestickChart key={symbol} symbol={symbol} height={small ? 320 : 410}
+      : <CandlestickChart bookAnnotations key={symbol} symbol={symbol} height={small ? 320 : 410}
         priceData={data.bars} rsLineData={data.rs_line || null} rsRatingValue={rsRating ?? null}
         epsLine={data.eps_line || null} blueDots={data.blue_dots || null}
         dataUpdatedAtOverride={data.generated_at ? Date.parse(data.generated_at) : null}

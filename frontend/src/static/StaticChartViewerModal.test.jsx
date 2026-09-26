@@ -159,11 +159,10 @@ describe('StaticChartViewerModal', () => {
     const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
     expect(requestedUrls.every((url) => url.includes('/static-data/') && !url.includes('/api'))).toBe(true);
 
-    // Markets 360 signal cards from the static payload (desktop viewport):
-    // the same Buying Now / sell-plan components as the live page.
-    expect(screen.getByText('Buying Now!')).toBeInTheDocument();
-    expect(screen.getByText('96.10')).toBeInTheDocument(); // buy card's protective stop
-    expect(screen.getByText('Raise Stop')).toBeInTheDocument();
-    expect(screen.getByText('101.30')).toBeInTheDocument(); // ladder's raised stop
+    // The research chart shows measured diagram aids, without trade cards
+    // obscuring the candles or implying author endorsement.
+    expect(chartSpy).toHaveBeenCalledWith(expect.objectContaining({ bookAnnotations: true }));
+    expect(screen.queryByText('Buying Now!')).not.toBeInTheDocument();
+    expect(screen.queryByText('Raise Stop')).not.toBeInTheDocument();
   }, 10000);
 });

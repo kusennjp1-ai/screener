@@ -1,6 +1,7 @@
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
+import { buildBookAnnotations } from './bookAnnotations';
 import { VcpBoxPrimitive } from './vcpBoxPrimitive';
 import { BandStripPrimitive } from './bandStripPrimitive';
 import { BuyPointPrimitive } from './buyPointPrimitive';
@@ -57,6 +58,7 @@ function CandlestickChart({
   pivotPrice = null,
   pivotLabel = 'Pivot',
   vcpBoxes = null,
+  bookAnnotations = false,
   bands = null,
   buyPoints = null,
 }) {
@@ -85,6 +87,8 @@ function CandlestickChart({
   const prevCloseMapRef = useRef(new Map()); // Map of date -> previous close for % change calculation
   const latestCandleRef = useRef(null); // Store latest candle for default display
 
+  const [showBookAnnotations, setShowBookAnnotations] = useState(true);
+  const annotations = useMemo(() => buildBookAnnotations(bookAnnotations ? priceData : null), [bookAnnotations, priceData]);
   const [timeframe, setTimeframe] = useState('daily');
   const [showRSLine, setShowRSLine] = useState(true); // RS line overlay toggle
   const [legendData, setLegendData] = useState(null); // OHLC legend data on hover
@@ -325,7 +329,7 @@ function CandlestickChart({
       handleScroll: interactive,
       handleScale: interactive,
     });
-  }, [interactive]);
+  }, [interactive, height, isDarkMode, symbol, compact]);
 
   // Subscribe to visible time range changes
   useEffect(() => {
@@ -348,7 +352,7 @@ function CandlestickChart({
       debouncedRangeChange.cancel();
       if (unsubscribe) unsubscribe();
     };
-  }, [onVisibleRangeChange, symbol]);
+  }, [onVisibleRangeChange, symbol, height, isDarkMode, compact]);
 
   // Default the visible window to a readable recent span (~6 months daily)
   // instead of fitting all ~2 years of bars, so the recent base/VCP is legible
@@ -478,7 +482,7 @@ function CandlestickChart({
   // setDefaultVisibleWindow is stable (defined below from refs); excluded to
   // keep this effect keyed only on data/range changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, visibleRange, effectiveTimeframe]);
+  }, [chartData, visibleRange, effectiveTimeframe, height, isDarkMode, symbol, compact]);
 
   // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
   // candlestick series. This is the key actionable level for VCP / Minervini
@@ -492,14 +496,16 @@ function CandlestickChart({
       pivotLineRef.current = null;
     }
 
-    if (pivotPrice != null && Number.isFinite(pivotPrice) && pivotPrice > 0) {
+    const annotatedPivot = bookAnnotations && showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.pivot : null;
+    const displayedPivot = annotatedPivot ?? pivotPrice;
+    if (displayedPivot != null && Number.isFinite(displayedPivot) && displayedPivot > 0) {
       pivotLineRef.current = series.createPriceLine({
-        price: pivotPrice,
+        price: displayedPivot,
         color: '#ff9800',
         lineWidth: 2,
         lineStyle: 2, // dashed
         axisLabelVisible: true,
-        title: pivotLabel,
+        title: annotatedPivot ? '収縮高値（推定）' : pivotLabel,
       });
     }
 
@@ -510,7 +516,7 @@ function CandlestickChart({
         pivotLineRef.current = null;
       }
     };
-  }, [pivotPrice, pivotLabel, chartData]);
+  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact]);
 
   // Draw VCP consolidation boxes over the candles (full chart only). The
   // primitive follows pan/zoom on its own; we only (re)create it when the
@@ -519,7 +525,7 @@ function CandlestickChart({
   useEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!series || compact) return undefined;
-    const boxes = Array.isArray(vcpBoxes) ? vcpBoxes : [];
+    const boxes = bookAnnotations ? (showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.boxes : []) : (Array.isArray(vcpBoxes) ? vcpBoxes : []);
     try {
       if (!vcpBoxPrimitiveRef.current) {
         vcpBoxPrimitiveRef.current = new VcpBoxPrimitive(boxes);
@@ -536,7 +542,7 @@ function CandlestickChart({
       }
       vcpBoxPrimitiveRef.current = null;
     };
-  }, [vcpBoxes, chartData, compact]);
+  }, [vcpBoxes, chartData, compact, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol]);
 
   // MM360 color-band strips (Pressure / Buy Risk / TPR) across the top of the
   // price pane, time-aligned to the candles. Re-aligns on pan/zoom because the
@@ -566,7 +572,7 @@ function CandlestickChart({
       }
       bandStripPrimitiveRef.current = null;
     };
-  }, [bands, chartData, compact, bandTopOffset]);
+  }, [bands, chartData, compact, bandTopOffset, height, isDarkMode, symbol]);
 
   // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) drawn as
   // compact chips in a row under the top band strips, each connected by a thin
@@ -600,7 +606,7 @@ function CandlestickChart({
       }
       buyPointPrimitiveRef.current = null;
     };
-  }, [buyPoints, chartData, compact, bandTopOffset]);
+  }, [buyPoints, chartData, compact, bandTopOffset, height, isDarkMode, symbol]);
 
   // Earnings line (収益ライン): smooth green fair-value line on the price scale.
   // Date-anchored so it stays aligned under zoom/scale changes.
@@ -611,7 +617,7 @@ function CandlestickChart({
     try {
       series.setData(pts.map((p) => ({ time: p.time, value: p.value })));
     } catch { /* series recreated — ignore */ }
-  }, [epsLine, chartData, compact]);
+  }, [epsLine, chartData, compact, height, isDarkMode, symbol]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
@@ -645,7 +651,7 @@ function CandlestickChart({
       });
     }
     if (markers) markers.setMarkers(markerList);
-  }, [rsData, rsStripShown, rsRatingValue]);
+  }, [rsData, rsStripShown, rsRatingValue, height, isDarkMode, symbol, compact]);
 
   // RS strip layout: when the RS line is shown, compress price to a 0.66 floor
   // so the [0.66, 0.78] band below it is always empty (the RS scale floats in
@@ -713,7 +719,7 @@ function CandlestickChart({
         timeScale.unsubscribeVisibleTimeRangeChange(debouncedApply);
       }
     };
-  }, [chartData, rsData, rsStripShown]);
+  }, [chartData, rsData, rsStripShown, height, isDarkMode, symbol, compact]);
 
   // Determine overlay state
   // Only show full loading state if we have no data at all (not even placeholder)
@@ -730,6 +736,7 @@ function CandlestickChart({
   const rsLineVisible = !compact && rsStripShown;
 
   return (
+    <>
     <Box
       sx={{
         width: '100%',
@@ -966,6 +973,14 @@ function CandlestickChart({
         </Box>
       )}
     </Box>
+    {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
+        <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>
+        <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。Dailyに切り替えてください。' : showBookAnnotations ? annotations.summary : '自動注記を非表示にしています。'}</Typography>
+        <details><summary style={{ cursor: 'pointer', fontSize: 12 }}>図解の見方・判定方法</summary><Typography sx={{ fontSize: 12 }}>紫の枠＝ベース候補。水色の斜線C1、C2…＝高値から後続安値への収縮と下落率。直近126日、15日以上の調整、深さ5〜50%・底から1/3以上の回復を探索します。前後2本で極値を確認し、2%以上の押しが2〜6回縮小、最終10%以内・安値から20日以内をVCP候補とします。数値はアプリの探索設定で書籍の固定条件ではありません。日足の後からの図解で、当時利用可能なシグナルではありません。ステージ・需給・財務・市場環境は別確認です。</Typography>
+          {annotations.boxes.map((box, i) => <Typography key={i} sx={{ fontSize: 12 }}>{box.label}：{box.start}〜{box.end} / 高値 {box.high.toFixed(2)}・安値 {box.low.toFixed(2)}</Typography>)}
+        </details>
+      </Box>}
+    </>
   );
 }
 

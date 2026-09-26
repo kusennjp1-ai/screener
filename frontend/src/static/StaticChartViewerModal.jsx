@@ -20,8 +20,6 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import CandlestickChart from '../components/Charts/CandlestickChart';
-import BuyingNowCard from '../features/markets360/components/BuyingNowCard';
-import SellPlanCard from '../features/markets360/components/SellPlanCard';
 import SignalBadges from '../features/markets360/components/SignalBadges';
 import BuyChecklist from '../components/Scan/BuyChecklist';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
@@ -315,7 +313,7 @@ function StaticChartViewerModal({
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
   const chartHeight = isMobile
     ? Math.max(Math.round(viewportHeight * 0.55), 300)
-    : Math.max(viewportHeight - 60, 500);
+    : Math.max(viewportHeight - 140, 400);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
 
   return (
@@ -618,11 +616,11 @@ function StaticChartViewerModal({
                       sellPlan={chartPayload?.sell_plan}
                     />
                   )}
-                  <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
-                    <CandlestickChart
+                  <Box sx={{ flex: 1, minHeight: 0, position: 'relative', overflowY: 'auto' }}>
+                    <CandlestickChart bookAnnotations
                       symbol={currentSymbol}
                       period="6mo"
-                      height={Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT, 240)}
+                      height={Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT - 120, 240)}
                       visibleRange={visibleRange}
                       onVisibleRangeChange={setVisibleRange}
                       priceData={chartPayload?.bars || []}
@@ -639,18 +637,6 @@ function StaticChartViewerModal({
                       bands={chartPayload?.bands || null}
                       buyPoints={chartPayload?.buy_points || null}
                     />
-                    {/* Markets 360 signal cards from the static payload —
-                        same components as the live page, desktop only (at
-                        375px a 300px card would cover the candles; mobile
-                        gets the in-flow badge strip above the chart). */}
-                    {!isMobile && (
-                      <>
-                        <BuyingNowCard signal={chartPayload?.signal} />
-                        {chartPayload?.sell_plan
-                          ? <SellPlanCard sellPlan={chartPayload.sell_plan} />
-                          : null}
-                      </>
-                    )}
                   </Box>
                 </Box>
               ) : (
