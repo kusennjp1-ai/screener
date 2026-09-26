@@ -67,7 +67,7 @@ export function buildBookAnnotations(bars) {
       const weakClose = bar.close < (bar.high + bar.low) / 2;
       breakout = { date: bar.date, high: bar.high, low: bar.low, close: bar.close, pivot: last.high, weakClose,
         label: weakClose ? '高値上抜け・下半分で引け' : '収縮高値を上抜け' };
-      boxes.push({ start: bar.date, end: bar.date, high: bar.high, low: bar.high, arrow: true,
+      boxes.push({ start: bar.date, end: bar.date, high: bar.high, low: bar.low, arrow: true,
         color: weakClose ? '#ffb74d' : '#80cbc4', label: breakout.label });
     }
   }

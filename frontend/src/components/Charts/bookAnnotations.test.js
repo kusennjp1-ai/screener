@@ -42,7 +42,7 @@ it('marks only an observed crossing after the trough is confirmable', () => {
   const bars = fixture([[0,50],[60,100],[70,80],[80,98],[88,88],[96,96],[104,91],[110,99]]);
   const result = buildBookAnnotations(bars);
   expect(result.breakout.date).toBe(bars[108].date);
-  expect(result.boxes.at(-1)).toMatchObject({ arrow:true, start:bars[108].date });
+  expect(result.boxes.at(-1)).toMatchObject({ arrow:true, start:bars[108].date, low:bars[108].low });
   const earlier = buildBookAnnotations(bars.slice(0,108));
   expect(earlier.breakout).toBeNull();
   bars[108] = {...bars[108], high:99, low:95, close:96, open:96};
