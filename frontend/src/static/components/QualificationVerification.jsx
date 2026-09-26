@@ -9,6 +9,7 @@ import { assess, entryChecks } from '../researchEngine';
 import SepaReview from './SepaReview';
 import BookPatternReview from './BookPatternReview';
 import BookExitEvidence from './BookExitEvidence';
+import FinancialHistory from './FinancialHistory';
 
 export default function QualificationVerification({ row, entry, date, generation, method, onVerified }) {
   const query = useQuery({ queryKey: ['independentVerification', row.symbol, entry?.path, date, generation, method],
@@ -20,6 +21,7 @@ export default function QualificationVerification({ row, entry, date, generation
     } });
   const result = query.data;
   return <section aria-label="選出条件の再検証">
+    <FinancialHistory row={row} date={date} />
     <Typography component="h3" variant="subtitle1" sx={{ mt: 2 }}>選出条件の再検証</Typography>
     <Typography sx={{ fontSize: 12, my: 1 }}>公開時に日足から再計算。トレンド8条件とデータ整合性を別々に確認します。252営業日を52週の近似とし、SMA200の方向は21営業日前との比較です。RS・財務値の提供元そのものの正確性は保証しません。</Typography>
     <Button variant="outlined" size="small" disabled={!entry?.path || query.isFetching} onClick={async () => {

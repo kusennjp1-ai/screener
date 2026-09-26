@@ -32,8 +32,10 @@ def main():
     upcoming = schedule[schedule['market_close'] > now]
     calendar = {'source':'NYSE / pandas_market_calendars','evaluated_at':now.isoformat(),
         'latest_completed_session':str(completed.index[-1].date()),'valid_until':upcoming.iloc[0]['market_close'].isoformat()}
-    research = json.loads(Path('public/research-daily.json').read_text(encoding='utf-8'))
-    symbols = list(dict.fromkeys(r['symbol'] for method in ['minervini','ibd','minervini2'] for r in research.get('candidates',{}).get(method,[])))[:60]
+    audit = json.loads(Path('public/qualification-audit.json').read_text(encoding='utf-8'))
+    symbols = [r['symbol'] for r in audit['results'] if any(
+        (r.get('methods', {}).get(method) or {}).get('qualified')
+        for method in ['minervini', 'minervini2', 'ibd'])][:300]
     def fetch(symbol):
         try:
             raw = yf.Ticker(symbol).get_calendar()

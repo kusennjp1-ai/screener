@@ -1,4 +1,5 @@
 import { auditValues, RS_METHOD } from './qualificationAudit.js';
+import { financialHistory } from './financialHistory.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // Calendar age is deliberately not an exchange-session count (holidays vary).
@@ -48,7 +49,8 @@ export function assess(row, method = 'minervini') {
     { ...rule('RS 推計 ≥ 70（公開日足の共通母集団）', rs, x => x >= 70), evidence: `${row.rs_universe_size || 0}銘柄・${row.rs_as_of_date || '基準日未確認'} / 独自推計` },
   ];
   // Three annual YoY rates, not an endpoint CAGR that can hide a down year.
-  const annual = row.annual_eps_growth_3y;
+  const currentHistory = row.financial_history ? financialHistory(row.financial_history, row.symbol, row.technical_audit?.as_of_date) : null;
+  const annual = currentHistory ? currentHistory.annualGrowth : row.annual_eps_growth_3y;
   const annualMinimum = Array.isArray(annual) && annual.length === 3 && annual.every(finite) ? Math.min(...annual) : null;
   const common = [rule('RS 推計 ≥ 80', rs, v => v >= 80)];
   const rules = method.startsWith('minervini') ? [...trend, integrity] : method === 'oneil' ? [
@@ -68,11 +70,14 @@ export function assess(row, method = 'minervini') {
     rule('252日高値からの距離 ≤ 15%（日足再計算）', v.belowHigh, v => v >= 0 && v <= 15, '%'),
     rule('四半期 EPS 前年同期比 ≥ 25%（厳格成長条件）', row.eps_growth_yy, v => v >= 25, '%'),
     rule('売上高 前年同期比 ≥ 25%（厳格成長条件）', row.sales_growth_yy, v => v >= 25, '%'),
-    rule('直近3年の EPS 成長履歴が揃う', annualMinimum, () => true, '%'),
+    currentHistory ? rule('直近3年の EPS 成長履歴が揃う', currentHistory.annualComplete, v => v === true, '', true) : rule('直近3年の EPS 成長履歴が揃う', annualMinimum, () => true, '%'),
     comparison('株価 > SMA50・SMA200', [v.close, v.sma50, v.sma200], (a, b, c) => a > b && a > c, `${display(v.close)} > ${display(v.sma50)} / ${display(v.sma200)}`),
     integrity,
   ];
   const passed = rules.filter(r => r.state === 'pass').length;
+  if (row.financial_history) for (const item of rules.filter(r => r.label.includes('3年'))) {
+    item.evidence = `${row.financial_history.source} / 報告希薄化EPS / 取得 ${row.financial_history.retrieved_at}。取得時点データで、過去時点の公表確認ではありません。`;
+  }
   const failed = rules.filter(r => r.state === 'fail').length;
   const templatePass = trend.every(r => r.state === 'pass') && integrity.state === 'pass';
   return { rules, passed, failed, unknown: rules.length - passed - failed, total: rules.length,

@@ -1,0 +1,24 @@
+import {act,renderHook,waitFor} from '@testing-library/react';
+import {afterEach,expect,it,vi} from 'vitest';
+import {usePersonalQuote} from './usePersonalQuote';
+afterEach(()=>vi.unstubAllGlobals());
+it('isolates credentials, symbol changes, disconnection and late responses',async()=>{
+  const requests=[],sockets=[];
+  vi.stubGlobal('fetch',vi.fn((url,options)=>new Promise(resolve=>requests.push({url,options,resolve}))));
+  vi.stubGlobal('WebSocket',class {constructor(){sockets.push(this);}close=vi.fn();send=vi.fn();});
+  const {result,rerender,unmount}=renderHook(({symbol,key})=>usePersonalQuote(symbol,key),{initialProps:{symbol:'NVDA',key:'private-test-key'}});
+  await waitFor(()=>expect(requests).toHaveLength(1));
+  expect(requests[0].url).not.toContain('private-test-key');
+  expect(requests[0].options.headers['X-Finnhub-Token']).toBe('private-test-key');
+  await act(async()=>requests[0].resolve({ok:true,json:async()=>({c:100,t:Math.floor(Date.now()/1000)})}));
+  expect(result.current.quote.price).toBe(100);
+  rerender({symbol:'MSFT',key:'private-test-key'});
+  expect(result.current.quote).toBeNull();
+  expect(sockets[0].close).toHaveBeenCalled();
+  expect(requests[0].options.signal.aborted).toBe(true);
+  rerender({symbol:'MSFT',key:''});
+  await act(async()=>requests[1].resolve({ok:true,json:async()=>({c:200,t:Math.floor(Date.now()/1000)})}));
+  expect(result.current.quote).toBeNull();
+  expect(result.current.status).toBe('未接続');
+  unmount();expect(sockets[1].close).toHaveBeenCalled();
+});

@@ -34,7 +34,8 @@ const merged = mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_d
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
 const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
-let benchmark = null, financials = null, entryContext = null;
+let benchmark = null, financials = null, entryContext = null, currentFinancials = null;
+try { currentFinancials = await read('financial-history.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { entryContext = await read('entry-context.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { benchmark = await read('book-benchmark.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.payload?.benchmark_symbol || 'SPY', as_of_date: scan.as_of_date, bars: breadth?.payload?.benchmark_overlay || breadth?.payload?.spy_overlay || [] };
@@ -66,6 +67,7 @@ for (const row of merged) {
     shape:shape ? {candidate:shape.candidate,summary:shape.summary,method:'book-diagram-heuristic'} : null,
     volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
   rows.set(row.symbol, { ...row, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
+    financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
     book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null });
 }
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));

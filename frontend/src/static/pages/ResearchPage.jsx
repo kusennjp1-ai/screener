@@ -11,6 +11,8 @@ import { entryReadiness } from '../entryReadiness';
 import { modelMarket } from '../portfolioPlan';
 import PortfolioDecision from '../components/PortfolioDecision';
 import QualificationVerification from '../components/QualificationVerification';
+import QuoteConnection from '../components/QuoteConnection';
+import { usePersonalQuote } from '../usePersonalQuote';
 import { mergeScanRows } from '../qualificationAudit';
 import '../research.css';
 
@@ -25,6 +27,7 @@ export default function ResearchPage() {
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
   const version = manifest.data?.generated_at;
   const [method, setMethod] = useState('minervini');
+  const [personalKey, setPersonalKey] = useState('');
   const [search, setSearch] = useState('');
   const [strict, setStrict] = useState(false);
   const [mobileView, setMobileView] = useState('list');
@@ -62,7 +65,8 @@ export default function ResearchPage() {
   const index = useStaticChartIndex(entry.assets?.charts?.path);
   const chartEntry = index.data?.symbols?.find(r => r.symbol === selected?.symbol);
   const endpoint = import.meta.env.VITE_RESEARCH_QUOTE_URL;
-  const quote = useQuery({ queryKey: ['researchQuote', selected?.symbol], enabled: Boolean(endpoint && selected),
+  const personal = usePersonalQuote(selected?.symbol, personalKey);
+  const quote = useQuery({ queryKey: ['researchQuote', selected?.symbol], enabled: Boolean(endpoint && selected && !personalKey),
     placeholderData: () => undefined,
     queryFn: async () => {
       const url = new URL(endpoint); url.searchParams.set('symbol', selected.symbol);
@@ -74,8 +78,9 @@ export default function ResearchPage() {
     }, refetchInterval: 15000, retry: 1,
   });
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now });
-  const liveStatus = quote.isError ? '接続エラー' : quoteStatus(quote.data, clock.data);
-  const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? quote.data : null;
+  const activeQuote = personalKey ? personal.quote : quote.data;
+  const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, clock.data);
+  const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? activeQuote : null;
   const plan = selected ? entryPlan(selected, usableQuote, method) : null;
   const readiness = selected ? entryReadiness(selected, bundle.data?.date, modelMarket(rows), clock.data) : null;
   const leaders = useMemo(() => rankCandidates(rows, 'ibd', { liquidOnly: true }).filter(r => r.assessment.qualified).slice(0, 50).map(r => r.row), [rows]);
@@ -191,6 +196,7 @@ export default function ResearchPage() {
             <Paper sx={panel}>
               <Stack direction="row" justifyContent="space-between"><div className="research-kicker">買い位置の確認</div><Chip size="small" label={liveStatus} color={liveStatus === 'リアルタイム' ? 'success' : 'default'} sx={{ height: 22, fontSize: 12 }} /></Stack>
               <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>エントリー位置</Typography>
+              <QuoteConnection connected={Boolean(personalKey)} status={personal.status} quote={personal.quote} onConnect={setPersonalKey} onDisconnect={()=>setPersonalKey('')} />
               <Typography sx={{ fontSize: 24, fontWeight: 700, my: 2, color: plan.state === '買いゾーン超過' ? 'warning.main' : 'text.primary' }}>{plan.state}</Typography>
               <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>{plan.zone || 5}%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
               <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 2 }}>{plan.pivotSource || '未判定'}のピボット。ゾーンは価格位置だけの判定で、出来高・市場環境・ベースの妥当性を保証しません。チャートのVCPトリガーとは計算方式が異なる場合があります。</Typography>
@@ -213,7 +219,7 @@ export default function ResearchPage() {
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">IBD公式リストとの一致：{overlap ? `${Math.round(overlap.recall * 100)}%` : '未検証'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : '場中価格の配信先は未設定です。現在は日次価格で計算しています。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint || personalKey ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : 'エントリー位置の「場中価格を接続する」から自分用APIキーで接続できます。未接続時は日次価格で計算します。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
