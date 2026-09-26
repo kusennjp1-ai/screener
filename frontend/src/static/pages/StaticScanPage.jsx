@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 import FilterPanel from '../../components/Scan/FilterPanel';
 import ResultsTable from '../../components/Scan/ResultsTable';
-import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
+import { modelMarket } from '../portfolioPlan';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import {
@@ -94,7 +94,7 @@ function StaticScanPage() {
   );
   const manifestDefaultSortBy = scanManifestQuery.data?.sort?.field ?? 'composite_score';
   const manifestDefaultSortOrder = scanManifestQuery.data?.sort?.order ?? 'desc';
-  const presetScreens = scanManifestQuery.data?.preset_screens;
+  const presetScreens = useMemo(() => scanManifestQuery.data?.preset_screens?.map(s => ({...s, short_name:`補助 ${s.short_name}`})), [scanManifestQuery.data?.preset_screens]);
 
   useEffect(() => {
     if (scanManifestQuery.data?.default_page_size) {
@@ -323,12 +323,13 @@ function StaticScanPage() {
   return (
     <Box>
       <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
-        デイリースキャン
+        デイリースキャン（補助フィルター）
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
         基準日 {scanManifestQuery.data.as_of_date}（実行ID: {scanManifestQuery.data.run_id}）
       </Typography>
 
+      <Alert severity="info" sx={{mb:2}}>この画面は追加条件を自由に組み合わせる補助ビューです。プリセットの件数は独自の複合フィルターの結果で、ホームの書籍条件通過数とは異なります。</Alert>
       <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
         <Box display="flex" alignItems="baseline" gap={1.5}>
           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
@@ -375,7 +376,7 @@ function StaticScanPage() {
           shows; regime fields ride on every static scan row. Fed from the
           unfiltered set so the market context stays visible even when the
           active filters match nothing. */}
-      <MarketRegimeBanner results={hydratedRows} />
+      <Alert severity="info" sx={{mb:2}}>{modelMarket(hydratedRows).label} · 新規資金の試行配分上限 {Math.min(modelMarket(hydratedRows).cap, .25)*100}% · <a href="#/">本日の判断と共通の選定条件へ</a></Alert>
 
       {hydrationComplete && (
         <FilterPanel
@@ -428,6 +429,8 @@ function StaticScanPage() {
         open={chartModalOpen}
         onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
+        researchRows={hydratedRows}
+        generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at}
         chartIndex={chartIndexQuery.data}
         navigationSymbols={navigationSymbols}
       />

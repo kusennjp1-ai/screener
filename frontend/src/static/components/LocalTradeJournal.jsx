@@ -3,7 +3,7 @@ import { Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Ty
 import { appendJournalEvent, deriveJournal, emptyJournal, exportJournal, importJournal, JOURNAL_STORAGE_KEY, journalExposurePolicy, reviewJournalExit, reviewJournalOrder } from '../localTradeJournal';
 import PartialSalePlan from './PartialSalePlan';
 
-const number = (n, suffix = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2)}${suffix}` : '未確認';
+const number = (n, suffix = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}${suffix}` : '未確認';
 const emptyEvent = { date: '', type: 'buy', symbol: '', price: '', shares: '', fees: '0', stop: '', note: '', strategy: 'minervini', setupDate: '' };
 const emptyChecks = { setupConfirmed: false, marketConfirmed: false, earningsConfirmed: false, reentryConfirmed: false };
 const emptyExit = { symbol: '', close: '', ma50: '', backstop: '', previousMa50: '', previousMa50Date: '', asOfDate: '', previousTrailingLevel: '' };

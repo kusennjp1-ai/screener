@@ -1,3 +1,5 @@
+import { canonicalPivot } from './researchPresentation';
+import { assess, entryPlan } from './researchEngine';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Alert,
@@ -44,6 +46,8 @@ function StaticChartViewerModal({
   initialSymbol,
   chartIndex,
   navigationSymbols = null,
+  researchRows = null,
+  generation,
 }) {
   const queryClient = useQueryClient();
   const [visibleRange, setVisibleRange] = useState(null);
@@ -92,7 +96,7 @@ function StaticChartViewerModal({
     isLoading,
     isError,
   } = useQuery({
-    queryKey: staticChartKeys.payload(currentSymbol, currentEntry?.path),
+    queryKey: [...staticChartKeys.payload(currentSymbol, currentEntry?.path), ...(generation ? [generation] : [])],
     queryFn: () => fetchStaticChartPayload(currentEntry.path),
     enabled: open && Boolean(currentEntry?.path),
     staleTime: Infinity,
@@ -109,7 +113,7 @@ function StaticChartViewerModal({
         return;
       }
       queryClient.prefetchQuery({
-        queryKey: staticChartKeys.payload(entry.symbol, entry.path),
+        queryKey: [...staticChartKeys.payload(entry.symbol, entry.path), ...(generation ? [generation] : [])],
         queryFn: () => fetchStaticChartPayload(entry.path),
         staleTime: Infinity,
         gcTime: Infinity,
@@ -144,7 +148,7 @@ function StaticChartViewerModal({
     return () => {
       timeouts.forEach(clearTimeout);
     };
-  }, [currentIndex, entryBySymbol, open, queryClient, symbols]);
+  }, [currentIndex, entryBySymbol, generation, open, queryClient, symbols]);
 
   useEffect(() => {
     if (!open) {
@@ -172,14 +176,15 @@ function StaticChartViewerModal({
     };
   }, [goNext, goPrevious, onClose, open]);
 
-  const stockData = chartPayload?.stock_data || null;
+  const researchRow = researchRows?.find(r=>r.symbol === currentSymbol);
+  const stockData = researchRow || chartPayload?.stock_data || null;
   const fundamentals = chartPayload?.fundamentals || null;
   const adrValue = stockData?.adr_percent ?? fundamentals?.adr_percent ?? null;
   const epsRating = stockData?.eps_rating ?? fundamentals?.eps_rating ?? null;
   const groupRank = stockData?.ibd_group_rank ?? null;
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
-  const pivotPrice = stockData?.vcp_pivot ?? stockData?.se_pivot_price ?? null;
-  const pivotLabel = stockData?.vcp_pivot != null ? 'VCP Pivot' : 'Pivot';
+  const pivotPrice = canonicalPivot(stockData).price;
+  const pivotLabel = '共通ピボット';
   const stage = stockData?.stage ?? null;
   const vcpDetected = stockData?.vcp_detected === true;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
@@ -439,7 +444,12 @@ function StaticChartViewerModal({
                 height: { xs: 'auto', md: '100%' },
               }}
             >
-              <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
+              {researchRow ? <Box sx={{p:2}}><Typography variant="h6">{currentSymbol} · 日次判定</Typography>
+                <Typography>{entryPlan(researchRow).state}</Typography>
+                <Typography>RS 推計 {researchRow.rs_rating?.toFixed(0) ?? '未確認'} / Composite 推計 {researchRow.composite_rating?.toFixed(0) ?? '未確認'}</Typography>
+                <Typography sx={{my:1}}>共通ピボット {pivotPrice ? `$${pivotPrice.toFixed(2)}` : '有効水準なし'}</Typography>
+                {assess(researchRow,'minervini').rules.map(r=><Typography key={r.label} sx={{fontSize:12,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
+              </Box> : <><StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
                 symbol={currentSymbol}
@@ -447,7 +457,7 @@ function StaticChartViewerModal({
                 signal={chartPayload?.signal}
                 riskPlan={chartPayload?.risk_plan}
                 asOf={chartPayload?.as_of_date}
-              />
+              /></>}
             </Box>
 
             <Box

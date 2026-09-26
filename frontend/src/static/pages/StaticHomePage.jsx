@@ -1,3 +1,4 @@
+import { modelMarket } from '../portfolioPlan';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -285,7 +286,7 @@ function StaticHomePage() {
 
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
-      <MarketRegimeBanner results={scanRows} />
+      <MarketRegimeBanner results={scanRows} researchExposure={Math.min(modelMarket(scanRows).cap,.25)*100} />
 
       {/* C95: the strategy's long-run scorecard in the agreed priority order
           (CAGR > maxDD > risk-adjusted > expectancy > win rate) + the right-

@@ -955,6 +955,33 @@ class StaticSiteExportService:
                 log_label=f"Top-{STATIC_CHART_TOP_N_GROUPS} groups expansion",
             )
 
+        # Verification coverage must not depend on a top-N chart selection.
+        # Export lightweight OHLCV for every remaining cached scan symbol;
+        # optional drawing engines are deliberately omitted on this pass.
+        covered = {entry["symbol"] for entry in entries} | set(skipped_symbols)
+        remaining = [row for row in ordered_rows if getattr(row, "symbol", None) not in covered]
+        for offset in range(0, len(remaining), STATIC_CHART_LOOKUP_BATCH_SIZE):
+            batch = remaining[offset:offset + STATIC_CHART_LOOKUP_BATCH_SIZE]
+            symbols = [row.symbol for row in batch if getattr(row, "symbol", None)]
+            cached = self._price_cache.get_many_cached_only(symbols, period="2y")
+            for row in batch:
+                symbol = getattr(row, "symbol", None)
+                if not symbol:
+                    continue
+                bars = self._serialize_chart_bars(cached.get(symbol))
+                if not bars:
+                    skipped_symbols.append(symbol)
+                    continue
+                rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
+                stock_data = self._serialize_scan_row(row)
+                self._write_json(output_dir / rel_path, {
+                    "schema_version": CHART_BUNDLE_SCHEMA_VERSION,
+                    "generated_at": generated_at, "as_of_date": run.as_of_date.isoformat(),
+                    "symbol": symbol, "bars": bars, "stock_data": stock_data,
+                    "verification_only": True,
+                })
+                entries.append({"symbol": symbol, "rank": None, "path": rel_path.as_posix()})
+
         index_rel_path = normalized_prefix / "charts" / "index.json"
         index_payload = {
             "schema_version": CHART_BUNDLE_SCHEMA_VERSION,

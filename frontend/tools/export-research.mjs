@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { rankCandidates, compareReference } from '../src/static/researchEngine.js';
 import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.js';
@@ -78,11 +79,27 @@ if (breadth) {
     await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
   }
 }
+// Details are fetched only when a symbol is opened. Keep rule inputs in the index.
+await mkdir(resolve(root, 'research-details'), {recursive:true});
+const compactRows = new Map();
+for (const [symbol, row] of rows) {
+  const { book_diagnostics, book_technical_evidence, book_financials, ...compact } = row;
+  const detail = {symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials};
+  const content = JSON.stringify(detail);
+  const hash = createHash('sha256').update(content).digest('hex').slice(0,16);
+  const path = `research-details/${encodeURIComponent(symbol)}-${hash}.json`;
+  await writeFile(resolve(root, path), content);
+  compact.research_detail_path = path;
+  compactRows.set(symbol, compact);
+}
+manifest.research_generation = createHash('sha256').update(JSON.stringify([...compactRows.values()])).digest('hex');
+await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));
+
 // Stamp the generated bundle, so every UI and the portfolio share verified data.
-scan.initial_rows = (scan.initial_rows || []).map(r => rows.get(r?.symbol)).filter(Boolean);
+scan.initial_rows = (scan.initial_rows || []).map(r => compactRows.get(r?.symbol)).filter(Boolean);
 await writeFile(resolve(root, entry.pages.scan.path), JSON.stringify(scan));
 for (const { path, payload } of chunks) {
-  payload.rows = (payload.rows || []).map(r => rows.get(r?.symbol)).filter(Boolean);
+  payload.rows = (payload.rows || []).map(r => compactRows.get(r?.symbol)).filter(Boolean);
   await writeFile(resolve(root, path), JSON.stringify(payload));
 }
 const verification = [...rows.values()].map(row => ({ symbol: row.symbol, audit: row.technical_audit,

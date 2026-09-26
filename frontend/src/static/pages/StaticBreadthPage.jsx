@@ -1,3 +1,4 @@
+import { formatPublished } from '../researchPresentation';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -165,7 +166,7 @@ function StaticBreadthPage() {
       )}
 
       {selectedTab === 1 && <BreadthGroupAttribution attribution={groupAttribution} />}
-      <footer className="market-footnote">4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{breadthQuery.data.published_at || breadthQuery.data.generated_at || '未確認'}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></footer>
+      <footer className="market-footnote">4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{formatPublished(breadthQuery.data.published_at || breadthQuery.data.generated_at)}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></footer>
       {metricInfoPopover}
     </Box>
   );

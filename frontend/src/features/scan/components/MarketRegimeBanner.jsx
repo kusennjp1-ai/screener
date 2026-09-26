@@ -88,14 +88,14 @@ const HealthMeter = ({ health }) => {
  * Suggested-exposure ladder: four rising segments (Minervini scales in — pilot
  * → add → build → full). Lit segments arrive in a stagger, bottom-up.
  */
-const ExposureLadder = ({ exposure }) => {
+const ExposureLadder = ({ exposure, label = 'Suggested exposure' }) => {
   const value = Math.max(0, Math.min(100, exposure));
   const litSegments = Math.round((value / 100) * 4);
   return (
     <GlossaryLabel term="exposure">
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'flex-end', gap: 0.75 }}>
         <Typography component="span" variant="body2" color="text.secondary">
-          Suggested exposure <strong>{value}%</strong>
+          {label} <strong>{value}%</strong>
         </Typography>
         <Box
           data-testid="exposure-ladder"
@@ -139,7 +139,7 @@ const distDaysColor = (distDays) => {
   return 'default';
 };
 
-export default function MarketRegimeBanner({ results }) {
+export default function MarketRegimeBanner({ results, researchExposure }) {
   const row = Array.isArray(results) ? results.find((r) => r?.market_regime) : null;
   if (!row || !row.market_regime) return null;
 
@@ -150,7 +150,7 @@ export default function MarketRegimeBanner({ results }) {
     hint: '',
   };
   const health = row.market_health;
-  const exposure = row.market_exposure_pct;
+  const exposure = researchExposure ?? row.market_exposure_pct;
   const distDays = row.market_distribution_days;
   const ftdDate = row.market_ftd_date;
   const ftdAge = row.market_ftd_days_since;
@@ -192,7 +192,7 @@ export default function MarketRegimeBanner({ results }) {
         </GlossaryLabel>
       )}
       {health != null && <HealthMeter health={health} />}
-      {exposure != null && <ExposureLadder exposure={exposure} />}
+      {exposure != null && <ExposureLadder exposure={exposure} label={researchExposure == null ? undefined : "新規資金の試行配分上限"} />}
       {distDays != null && (
         <GlossaryLabel term="distribution_days">
           <Chip

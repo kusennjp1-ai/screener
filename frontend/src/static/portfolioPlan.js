@@ -1,3 +1,4 @@
+import { canonicalPivot } from './researchPresentation.js';
 import { assess, finite, snapshotFreshness } from './researchEngine.js';
 import { entryReadiness } from './entryReadiness.js';
 
@@ -34,7 +35,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   rows.forEach(r => counts.set(r.symbol, (counts.get(r.symbol) || 0) + 1));
   const candidates = rows.filter(r => {
     if (!r.symbol || counts.get(r.symbol) !== 1 || r.market !== 'US' || r.currency !== 'USD') return false;
-    const pivot = r.se_pivot_price;
+    const pivot = canonicalPivot(r).price;
     return assess(r, 'minervini').qualified && assess(r, 'ibd').qualified &&
       finite(r.adv_usd) && r.adv_usd >= 20000000 && finite(r.current_price) && r.current_price >= 10 &&
       finite(pivot) && pivot > 0 && r.current_price >= pivot * .97 && r.current_price <= pivot * 1.05 &&
@@ -54,8 +55,8 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   let used = 0, risk = 0;
   for (const row of candidates) {
     if (positions.length === 5) break;
-    const buy = centsUp(Math.max(row.current_price, row.se_pivot_price * 1.001));
-    if (buy > row.se_pivot_price * 1.05) continue;
+    const buy = centsUp(Math.max(row.current_price, canonicalPivot(row).price * 1.001));
+    if (buy > canonicalPivot(row).price * 1.05) continue;
     const stop = centsDown(buy * .93);
     const perShareRisk = buy - stop;
     const sector = row.gics_sector.trim();
@@ -65,7 +66,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
     const cost = Math.round(shares * buy * 100) / 100;
     const loss = Math.round(shares * perShareRisk * 100) / 100;
     used += cost; risk += loss; sectors.set(sector, (sectors.get(sector) || 0) + cost);
-    positions.push({ dailyReady:readySymbols.has(row.symbol), symbol: row.symbol, sector, buy, stop, target: centsDown(buy * 1.2), shares, cost, loss, weight: cost / capital, pivot: row.se_pivot_price });
+    positions.push({ dailyReady:readySymbols.has(row.symbol), symbol: row.symbol, sector, buy, stop, target: centsDown(buy * 1.2), shares, cost, loss, weight: cost / capital, pivot: canonicalPivot(row).price });
   }
   const dailyPositions = positions.filter(p=>readySymbols.has(p.symbol));
   return { date, capital, market, allocationCap, blockers, positions, readiness, dailyPositions, candidateCount: candidates.length,

@@ -13,7 +13,7 @@ import { getStaticSupportedMarkets, useStaticManifest } from './dataClient';
 function StaticAppContent() {
   const manifestQuery = useStaticManifest();
   const queryClient = useQueryClient();
-  const generation = manifestQuery.data?.generated_at;
+  const generation = manifestQuery.data?.research_generation || manifestQuery.data?.generated_at;
   useEffect(() => {
     if (!generation) return;
     // Asset paths are stable across publishes. Refresh dependent charts/pages

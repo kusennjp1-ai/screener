@@ -101,3 +101,13 @@
 @media(max-width:600px) { .decision-actions { flex-direction:column; } .decision-actions > button { width:100%; } .decision-account strong { font-size:24px; } }
 
 .leader-shell[data-theme="light"] .research-workbench .MuiTableCell-head { background:#f5f6fa; }
+
+.decision-mobile-summary { display:none; }
+@media(max-width:600px) {
+  .decision-mobile-summary { display:block; padding:10px 0; font-size:14px; }
+  .decision-panel > .decision-overview, .decision-panel > .decision-description { display:none; }
+  .decision-panel:not(.decision-expanded) > .research-disclosure, .decision-panel:not(.decision-expanded) > details:last-child { display:none; }
+  .decision-panel { padding:14px; }
+  .decision-actions { flex-direction:row; }
+  .decision-actions > button { width:auto; flex:1; font-size:12px; }
+}

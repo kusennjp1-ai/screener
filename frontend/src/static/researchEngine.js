@@ -1,3 +1,4 @@
+import { canonicalPivot } from './researchPresentation.js';
 import { auditValues, RS_METHOD } from './qualificationAudit.js';
 import { financialHistory } from './financialHistory.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
@@ -20,7 +21,7 @@ export function researchCsv(ranked, method, date) {
     return `"${text.replaceAll('"', '""')}"`;
   };
   const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules'];
-  const lines = ranked.map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, r.se_pivot_price ?? r.vcp_pivot,
+  const lines = ranked.map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
     a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / ')]);
   return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
 }
@@ -86,7 +87,7 @@ export function assess(row, method = 'minervini') {
 }
 
 export function entryChecks(row, method = 'minervini') {
-  const v = auditValues(row), pivot = row.se_pivot_price;
+  const v = auditValues(row), pivot = canonicalPivot(row).price;
   const zone = method === 'minervini2' ? 3 : 5;
   return [
     comparison(`ピボット以上・${zone}%以内`, [v.close, pivot], (p, b) => p >= b && p <= b * (1 + zone / 100)),
@@ -99,11 +100,12 @@ export function entryChecks(row, method = 'minervini') {
 
 export function entryPlan(row, quote, method = 'minervini') {
   const price = finite(quote?.price) && quote.price > 0 ? quote.price : row.current_price;
-  const pivot = row.se_pivot_price ?? row.vcp_pivot;
-  if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: '未判定', price, pivot: null, distance: null };
+  const pivotInfo = canonicalPivot(row);
+  const pivot = pivotInfo.price;
+  if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: pivotInfo.reason.includes('25%') ? '有効な買い水準なし' : '未判定', price, pivot: null, distance: null, pivotSource: pivotInfo.reason };
   const distance = (price / pivot - 1) * 100;
   const zone = method === 'minervini2' ? 3 : 5;
-  return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: row.se_pivot_price != null ? 'Setup Engine' : 'VCP',
+  return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: pivotInfo.reason,
     state: distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
     // A transparent example, not a claim that a pattern-specific stop was detected.
     stopExample: price * .93 };
@@ -117,7 +119,7 @@ export function rankCandidates(rows, method, { search = '', qualifiedOnly = fals
     .filter(r => !watchlist || watchlist.includes(r.symbol))
     .map(row => ({ row, assessment: assess(row, method) }))
     .filter(r => !qualifiedOnly || r.assessment.qualified)
-    .sort((a, b) => b.assessment.score - a.assessment.score || (b.row.rs_rating ?? -1) - (a.row.rs_rating ?? -1) || a.row.symbol.localeCompare(b.row.symbol));
+    .sort((a, b) => b.assessment.score - a.assessment.score || (a.assessment.qualified && b.assessment.qualified ? entryPriority(a.row) - entryPriority(b.row) : 0) || (b.row.rs_rating ?? -1) - (a.row.rs_rating ?? -1) || a.row.symbol.localeCompare(b.row.symbol));
 }
 
 export function quoteStatus(quote, now = Date.now()) {
@@ -134,4 +136,12 @@ export function compareReference(candidates, reference, date) {
   const selected = [...new Set(candidates.map(r => r.symbol))].slice(0, 50);
   const hits = selected.filter(s => symbols.has(s));
   return { hits, recall: hits.length / symbols.size, precision: selected.length ? hits.length / selected.length : 0, total: symbols.size };
+}
+
+function entryPriority(row) {
+  const pivot = canonicalPivot(row).price;
+  if (!pivot || !finite(row.current_price)) return 10000;
+  const distance = (row.current_price / pivot - 1) * 100;
+  // Near a trigger first; overextended names are never promoted by high RS.
+  return distance >= 0 && distance <= 5 ? distance : distance < 0 ? 10 + Math.abs(distance) : 100 + distance;
 }

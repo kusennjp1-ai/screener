@@ -2289,9 +2289,14 @@ def test_export_chart_bundle_uses_sorted_scan_order_for_primary_chart_selection(
 
     index_payload = json.loads((tmp_path / "charts" / "index.json").read_text(encoding="utf-8"))
 
-    assert manifest["symbols_total"] == 1
-    assert [entry["symbol"] for entry in index_payload["symbols"]] == ["HIGH"]
-    assert [entry["rank"] for entry in index_payload["symbols"]] == [1]
+    assert manifest["symbols_total"] == 2
+    assert [entry["symbol"] for entry in index_payload["symbols"]] == ["HIGH", "LOW"]
+    assert [entry["rank"] for entry in index_payload["symbols"]] == [1, None]
+    lightweight = json.loads((tmp_path / "charts" / "LOW.json").read_text(encoding="utf-8"))
+    assert lightweight["verification_only"] is True
+    assert lightweight["bars"]
+    assert lightweight["as_of_date"] == "2026-04-02"
+    assert "signal" not in lightweight
 
 
 def _make_chart_price_frame(close: float = 100.0) -> pd.DataFrame:
@@ -2605,9 +2610,10 @@ def test_export_chart_bundle_expands_coverage_for_top_groups_constituents(
     index_payload = json.loads((tmp_path / "charts" / "index.json").read_text(encoding="utf-8"))
     exported = {entry["symbol"] for entry in index_payload["symbols"]}
 
-    assert exported == {"NVDA", "GROUP_A1", "GROUP_B1"}
-    assert "OUTSIDE_TOP" not in exported
-    assert manifest["symbols_total"] == 3
+    assert exported == {"NVDA", "GROUP_A1", "GROUP_B1", "OUTSIDE_TOP"}
+    outside = json.loads((tmp_path / "charts" / "OUTSIDE_TOP.json").read_text(encoding="utf-8"))
+    assert outside["verification_only"] is True
+    assert manifest["symbols_total"] == 4
 
 
 def test_build_key_markets_skips_change_when_latest_close_is_null(service_and_session_factory):

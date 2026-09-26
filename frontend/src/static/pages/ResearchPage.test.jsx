@@ -78,7 +78,7 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
         expect(screen.getByText('買いゾーン内')).toBeInTheDocument();
       } else if (t === 8) {
-        expect(screen.getByText('IBD公式リストとの一致：未検証')).toBeInTheDocument();
+        expect(screen.getByText('公開ルールに基づく独自スクリーナー')).toBeInTheDocument();
         expect(screen.getByText(/IBD公式の選定銘柄・非公開の計算式を再現したものではありません/)).toBeInTheDocument();
       } else {
         fireEvent.click(screen.getByRole('button', { name: methods[(s + 1) % 3], exact: true }));

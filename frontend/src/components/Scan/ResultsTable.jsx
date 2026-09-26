@@ -107,7 +107,7 @@ const columns = [
   { id: 'ibd_industry_group', label: 'IBD Industry', sortable: true, width: 140 },
   { id: 'market_themes', label: 'Themes', sortable: false, width: 180 },
   { id: 'ibd_group_rank', label: 'Grp', sortable: true, width: 45 },
-  { id: 'composite_score', label: 'Comp', sortable: true, width: 50 },
+  { id: 'composite_score', label: '補助スコア', sortable: true, width: 50 },
   { id: 'minervini_score', label: 'Min', sortable: true, width: 45 },
   { id: 'canslim_score', label: 'CAN', sortable: true, width: 45 },
   { id: 'ipo_score', label: 'IPO', sortable: true, width: 45 },
@@ -610,13 +610,13 @@ function ResultsTable({
   // can lift this up later if users want it to survive navigation.
   const [mcapDisplay, setMcapDisplay] = useState(MCAP_DISPLAY.USD);
   const visibleColumns = useMemo(() => {
-    const base = showActions ? columns : columns.filter((column) => column.id !== 'chart');
+    const base = columns.filter(column => (showActions || column.id !== 'chart') && (column.id !== 'market_themes' || results.some(row => row.market_themes?.length)));
     return base.map((column) =>
       column.id === 'market_cap'
         ? { ...column, label: mcapDisplay === MCAP_DISPLAY.USD ? 'MCap ($)' : 'MCap (local)' }
         : column,
     );
-  }, [showActions, mcapDisplay]);
+  }, [showActions, mcapDisplay, results]);
 
   const toggleMcapDisplay = useCallback(() => {
     setMcapDisplay((mode) =>
