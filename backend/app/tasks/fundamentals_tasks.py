@@ -1567,7 +1567,7 @@ def calculate_smr_ratings(self):
 
 
 @celery_app.task(bind=True, name='app.tasks.fundamentals_tasks.refresh_code33_flags')
-def refresh_code33_flags(self, market: str = 'US', require_margin: bool = False):
+def refresh_code33_flags(self, market: str = 'US', require_margin: bool = True):
     """Stamp the Code 33 (Minervini earnings-acceleration) flag onto US rows.
 
     Computes Code 33 from SEC EDGAR XBRL company facts (US filers only) and
@@ -1579,6 +1579,8 @@ def refresh_code33_flags(self, market: str = 'US', require_margin: bool = False)
     """
     if not settings.fundamentals_code33_enabled:
         return {'status': 'disabled'}
+    if not require_margin:
+        return {'status': 'skipped', 'reason': 'relaxed EPS/sales diagnostics cannot populate full code33 flags'}
     if market.upper() != 'US':
         return {'status': 'skipped', 'reason': 'code33 is US-only (EDGAR)'}
 

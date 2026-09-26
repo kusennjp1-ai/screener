@@ -31,7 +31,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - name: Verify research rules and 100 synthetic task profiles
-        run: npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx --maxWorkers=2
+        run: npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx --maxWorkers=2
         working-directory: frontend
       - name: Restore the last successful daily data without rewriting its timestamp
         env:
@@ -45,6 +45,15 @@ jobs:
           tar -xf /tmp/last-pages/artifact.tar -C /tmp/extracted
           test -f /tmp/extracted/static-data/manifest.json
           cp -R /tmp/extracted/static-data frontend/public/static-data
+      - name: Prepare independently verifiable book evidence
+        working-directory: frontend
+        run: |
+          python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
+          python tools/test_sec_financials.py
+          python tools/test_export_book_benchmark.py
+          python tools/export-book-benchmark.py --allow-unavailable
+          node tools/export-research.mjs
+          python tools/sec-financials.py --limit 60
       - name: Build with daily selection export
         working-directory: frontend
         env:

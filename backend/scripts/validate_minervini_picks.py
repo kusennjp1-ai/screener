@@ -8,10 +8,9 @@ data, then prints a per-ticker scorecard and an overall verdict:
     trend template pass, Stage, RS rating, distance from the 52-week high, %
     above the 52-week low, the 50>150>200 MA stack, VCP, ADR%. This is exactly
     the engine the app screens with, so "passes" here means the same thing.
-  * **Fundamental** — Code 33 (relaxed) from SEC EDGAR XBRL: diluted EPS and
-    sales YoY growth for the three most recent quarters, so you can see whether
-    earnings/sales are *genuinely accelerating* (each quarter's YoY higher than
-    the last) rather than merely positive.
+  * **Fundamental** — Code 33 from SEC EDGAR XBRL: four consecutive diluted
+    EPS/sales YoY observations and net-margin levels, each with three increases.
+    Quarterly EPS is directly reported, never annual-minus-quarters estimated.
 
 Each ticker gets a verdict that flags concerns (extended above the 50-day,
 late-stage, thin acceleration) so you can judge "clean Stage-2 leader with
@@ -164,7 +163,7 @@ def _evaluate_technical(scanner: MinerviniScanner, ticker: str, card: Scorecard,
 
 def _evaluate_fundamental(client: SecEdgarClient, ticker: str, card: Scorecard) -> None:
     try:
-        res = client.code33(ticker, require_margin=False)
+        res = client.code33(ticker, require_margin=True)
     except Exception as exc:  # noqa: BLE001
         card.code33_note = f"EDGAR error: {str(exc)[:40]}"
         return

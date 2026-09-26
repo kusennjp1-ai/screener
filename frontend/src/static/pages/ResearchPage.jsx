@@ -93,7 +93,7 @@ export default function ResearchPage() {
     // Ignore an in-flight result from a replaced daily snapshot.
     if (date !== bundle.data?.date || generation !== version) return;
     client.setQueryData(['researchRows', entry.pages?.scan?.path, version], previous => previous ? {
-      ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics } : r),
+      ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r),
     } : previous);
     setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
   }

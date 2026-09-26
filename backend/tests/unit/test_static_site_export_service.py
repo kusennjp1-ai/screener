@@ -583,8 +583,8 @@ def test_stamp_code33_flags_disabled_defaults_false_without_network(
         "app.services.sec_edgar_financials.SecEdgarClient", _boom
     )
     rows = [
-        {"symbol": "NVDA", "passes_template": True},
-        {"symbol": "SNOW", "passes_template": False},
+        {"symbol": "NVDA", "passes_template": True, "code33": True},
+        {"symbol": "SNOW", "passes_template": False, "code33": True},
     ]
     service._stamp_code33_flags(rows, market="US")  # noqa: SLF001
     assert rows[0]["code33"] is False
@@ -602,9 +602,9 @@ def test_stamp_code33_flags_us_stamps_passes_template_candidates(
     looked_up: list[list[str]] = []
 
     class _StubClient:
-        def code33_map(self, tickers, *, require_margin=False):
+        def code33_map(self, tickers, *, require_margin=True):
             looked_up.append(list(tickers))
-            assert require_margin is False
+            assert require_margin is True
             return {"NVDA": True, "AAPL": False}
 
     monkeypatch.setattr(

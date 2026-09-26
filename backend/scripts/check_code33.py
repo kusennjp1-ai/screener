@@ -2,7 +2,7 @@
 
 Validates end-to-end that EDGAR company-facts fetching + the Code 33 engine work
 on real filings, before wiring Code 33 into the universe scan. Prints a markdown
-table (ticker, pass, the three YoY series, reason).
+table (ticker, pass, EPS/sales YoY series, margin levels, reason).
 
 Network: needs outbound data.sec.gov / www.sec.gov (available in CI, not in the
 app sandbox). SEC asks for a descriptive User-Agent and <=10 req/sec.
@@ -105,7 +105,7 @@ def _run_as_of_idea_dates(client, limit: int | None, require_margin: bool, markd
     p_ctrl = sum(s[2] for s in per_year.values())
     pct = lambda n, d: f"{n / d * 100:.1f}%" if d else "-"  # noqa: E731
 
-    mode = "strict" if require_margin else "relaxed (live)"
+    mode = "full Code 33" if require_margin else "relaxed EPS/sales only (not Code 33)"
     lines = ["# Code 33 catch rate AT idea dates (point-in-time EDGAR)\n"]
     lines.append(
         f"Mode: **{mode}**. {len(ideas)} ideas; {no_facts} without EDGAR facts, "
@@ -173,11 +173,11 @@ def main() -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Require net-margin acceleration too (literal Code 33). Default is the "
-        "relaxed EPS+sales screen used live in the static build.",
+        help="Compatibility flag: full Code 33 is now the default.",
     )
+    parser.add_argument("--relaxed", action="store_true", help="EPS/sales-only diagnostic; not full Code 33 and never written to scan flags.")
     args = parser.parse_args()
-    require_margin = args.strict
+    require_margin = not args.relaxed
 
     if args.as_of_idea_dates:
         client = SecEdgarClient(user_agent=args.user_agent)
@@ -209,7 +209,7 @@ def main() -> int:
                 print(f"  DUMP {ticker} {name}: {tail or '(empty)'}", file=sys.stderr)
         insufficient_data = (
             res.reason in ("no EDGAR facts", "missing EPS/revenue/net-income series",
-                           "fewer than 3 comparable quarters")
+                           "fewer than 4 comparable quarters", "nonconsecutive quarterly periods")
             or res.reason.startswith("missing YoY base")
         )
         if not insufficient_data:
@@ -221,23 +221,23 @@ def main() -> int:
             "✓" if res.passes else "✗",
             _fmt_series(res.eps_yoy),
             _fmt_series(res.sales_yoy),
-            _fmt_series(res.margin_yoy),
+            _fmt_series(res.margin_levels),
             res.reason,
         ))
 
     mode_label = (
-        "diluted EPS, sales, and net margin"
+        "diluted EPS/sales YoY and net margin levels"
         if require_margin
         else "diluted EPS and sales"
     )
     lines = ["# Code 33 (EDGAR) check\n"]
     lines.append(
-        f"Mode: **{'strict' if require_margin else 'relaxed (live)'}**. "
-        f"Evaluated {len(tickers)} tickers; **{passes}** pass Code 33 "
-        f"(3 consecutive quarters of rising YoY growth in {mode_label}). "
+        f"Mode: **{'full Code 33' if require_margin else 'relaxed EPS/sales only (not Code 33)'}**. "
+        f"Evaluated {len(tickers)} tickers; **{passes}** pass the selected diagnostic "
+        f"(4 consecutive quarterly values, 3 increases in {mode_label}). "
         f"{evaluated} had enough EDGAR history to judge.\n"
     )
-    lines.append("| Ticker | Code 33 | EPS YoY (recent→older) | Sales YoY | Margin YoY | Note |")
+    lines.append("| Ticker | Selected diagnostic | EPS YoY (recent→older) | Sales YoY | Net margin level | Note |")
     lines.append("|---|:--:|---|---|---|---|")
     for r in rows:
         lines.append(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} | {r[4]} | {r[5]} |")

@@ -1957,7 +1957,7 @@ class StaticSiteExportService:
         return os.environ.get(CODE33_ENV_FLAG, "").strip().lower() in {"1", "true", "yes", "on"}
 
     def _stamp_code33_flags(self, rows: list[dict[str, Any]], *, market: str | None) -> None:
-        """Stamp ``code33`` (relaxed Minervini earnings acceleration) onto rows.
+        """Stamp full four-quarter Code 33 (including net margin levels) onto rows.
 
         The field is always written (default ``False``) so the static client's
         boolean filter and the Minervini preset resolve even when the live EDGAR
@@ -1971,7 +1971,8 @@ class StaticSiteExportService:
         already drops. A per-symbol fetch failure simply leaves that row False.
         """
         for row in rows:
-            row.setdefault("code33", False)
+            # Never carry legacy/relaxed or stale flags into a fresh export.
+            row["code33"] = False
 
         if (market or "").upper() != CODE33_MARKET or not self._code33_enabled():
             return
@@ -1987,7 +1988,7 @@ class StaticSiteExportService:
         from app.services.sec_edgar_financials import SecEdgarClient
 
         try:
-            flags = SecEdgarClient().code33_map(candidates, require_margin=False)
+            flags = SecEdgarClient().code33_map(candidates, require_margin=True)
         except Exception:  # noqa: BLE001 - EDGAR outage must not abort the export
             logger.warning("Code 33 EDGAR lookup failed; leaving all rows code33=False", exc_info=True)
             return
@@ -2003,7 +2004,7 @@ class StaticSiteExportService:
         # app.services INFO records to stdout.
         print(
             f"[static-code33] stamped {passed}/{len(candidates)} passes_template US candidates "
-            f"as Code 33 (relaxed: EPS+sales YoY acceleration).",
+            f"as Code 33 (four quarters: EPS/sales YoY and net margin levels).",
             flush=True,
         )
 

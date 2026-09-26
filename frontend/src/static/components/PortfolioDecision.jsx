@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Button, Paper, Typography } from '@mui/material';
 import BookRiskWorkbench from './BookRiskWorkbench';
+import LocalTradeJournal from './LocalTradeJournal';
 import { buildPortfolioPlan } from '../portfolioPlan';
 
 const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n);
@@ -33,5 +34,6 @@ export default function PortfolioDecision({ rows, date, now, onInspect }) {
       <details><summary>配分ルールと限界</summary><p>1銘柄上限10%、1銘柄損失予算0.5%、総損失予算2%、同一セクター20%、最大5銘柄。市場上限は独自モデル：上昇50%、圧力あり25%、弱含み・不明0%。相関やベータを調整した最適化ではありません。既存保有がある場合はこの新規資金モデルを重ねず、全保有と合算して再計算してください。</p></details>
       <BookRiskWorkbench />
     </Box>}
+    <details style={{ marginTop: 20 }}><summary>自分の取引日誌・全保有のリスクを確認</summary><LocalTradeJournal /></details>
   </Paper>;
 }

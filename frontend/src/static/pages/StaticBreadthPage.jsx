@@ -22,6 +22,8 @@ import BreadthChart from '../../components/Charts/BreadthChart';
 import BreadthGroupAttribution from '../components/BreadthGroupAttribution';
 import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 import MarketPulse from '../components/MarketPulse';
+import BookMarketEvidence from '../components/BookMarketEvidence';
+import BookBreakoutJournal from '../components/BookBreakoutJournal';
 import { breadthSummary, recentBreadth } from '../breadthSummary';
 import '../market.css';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
@@ -115,6 +117,8 @@ function StaticBreadthPage() {
       {selectedTab === 0 && (
         <>
           <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange} />
+          {marketEntry.market === 'US' && payload.book_market_evidence && <BookMarketEvidence evidence={payload.book_market_evidence} expectedDate={marketEntry.as_of_date} />}
+          {marketEntry.market === 'US' && <BookBreakoutJournal />}
           {marketEntry.market === 'US' && !mismatch && payload.book_leadership?.date === current.date && <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
             <Typography component="h2" variant="h6">先導株の状態も確認する</Typography>
             <Typography sx={{ my: 1 }}>日足検証済み {payload.book_leadership.verified} / {payload.book_leadership.universe}銘柄。『基本と原則』の一次条件通過 {payload.book_leadership.templateLeaders}銘柄、検証母集団の高値5%以内 {payload.book_leadership.nearHigh}銘柄。</Typography>

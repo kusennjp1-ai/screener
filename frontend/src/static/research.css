@@ -81,3 +81,11 @@
 .sepa-review dd { margin: 4px 0 0; opacity: .85; }
 
 .risk-input-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:16px 0; }
+.financial-evidence-table { width:100%; border-collapse:collapse; font-size:12px; margin:12px 0; }
+.financial-evidence-table th,.financial-evidence-table td { padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+.financial-evidence-table th:first-child { text-align:left; }
+.leader-shell[data-theme="dark"] { color-scheme:dark; }
+.research-detail form label { font-size:13px; line-height:1.6; }
+.research-detail form input:not([type="checkbox"]),.research-detail form select { box-sizing:border-box; color:inherit; background:rgba(128,141,169,.08); border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; }
+.research-detail form input:focus-visible,.research-detail form select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.research-detail form fieldset:disabled { opacity:.65; }

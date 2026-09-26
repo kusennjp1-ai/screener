@@ -3,16 +3,20 @@ import { Alert, Button, Typography } from '@mui/material';
 import { fetchStaticChartPayload } from '../chartClient';
 import { auditDailyBars } from '../qualificationAudit';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
+import { buildBookTechnicalEvidence } from '../bookTechnicalEvidence';
+import { fetchStaticJson } from '../dataClient';
 import { assess, entryChecks } from '../researchEngine';
 import SepaReview from './SepaReview';
+import BookPatternReview from './BookPatternReview';
+import BookExitEvidence from './BookExitEvidence';
 
 export default function QualificationVerification({ row, entry, date, generation, method, onVerified }) {
   const query = useQuery({ queryKey: ['independentVerification', row.symbol, entry?.path, date, generation, method],
     enabled: false, retry: false, placeholderData: () => undefined,
     queryFn: async () => {
-      const payload = await fetchStaticChartPayload(entry.path);
+      const [payload, benchmark] = await Promise.all([fetchStaticChartPayload(entry.path), fetchStaticJson('book-benchmark.json').catch(() => null)]);
       const audit = auditDailyBars(row, payload, date);
-      return { audit, bookDiagnostics: diagnoseBookChart(row, payload, date), assessment: assess({ ...row, technical_audit: audit }, method) };
+      return { audit, bookDiagnostics: diagnoseBookChart(row, payload, date), bookTechnical: buildBookTechnicalEvidence(row, payload, date, { benchmark }), assessment: assess({ ...row, technical_audit: audit }, method) };
     } });
   const result = query.data;
   return <section aria-label="選出条件の再検証">
@@ -34,5 +38,7 @@ export default function QualificationVerification({ row, entry, date, generation
       <Typography sx={{ fontSize: 12 }}>スクリーニング通過は買いシグナルではありません。VCPは任意の形状条件で、トレンドテンプレート通過だけでは成立しません。決算予定とベースの妥当性、当日の執行条件は別途確認が必要です。</Typography>
     </details>
     {method.startsWith('minervini') && <SepaReview method={method} row={row} />}
+    {method.startsWith('minervini') && <BookPatternReview key={`${row.symbol}-${date}`} row={row} entry={entry} date={date} />}
+    {method.startsWith('minervini') && <BookExitEvidence key={`exit-${row.symbol}-${date}`} row={row} entry={entry} date={date} />}
   </section>;
 }

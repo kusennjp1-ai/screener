@@ -5,6 +5,8 @@ import { rankCandidates, compareReference } from '../src/static/researchEngine.j
 import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 import { diagnoseBookChart } from '../src/static/bookChartDiagnostics.js';
 import { marketLeadership } from '../src/static/marketLeadership.js';
+import { buildBookTechnicalEvidence } from '../src/static/bookTechnicalEvidence.js';
+import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } from '../src/static/qualificationAudit.js';
 
 const root = resolve('public/static-data');
@@ -30,6 +32,12 @@ if (entry.as_of_date !== scan.as_of_date) throw Error('Manifest / scan date mism
 const merged = mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_date);
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
+const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
+let benchmark = null, financials = null;
+try { benchmark = await read('book-benchmark.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.payload?.benchmark_symbol || 'SPY', as_of_date: scan.as_of_date, bars: breadth?.payload?.benchmark_overlay || breadth?.payload?.spy_overlay || [] };
+try { financials = await read('book-financials.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+const marketCharts = [];
 let rows = new Map();
 for (const row of merged) {
   let chart = null;
@@ -39,13 +47,22 @@ for (const row of merged) {
   const audit = auditDailyBars(row, chart, scan.as_of_date);
   if (row.technical_audit?.errors?.includes('同一銘柄のデータが矛盾')) { audit.errors.push('同一銘柄のデータが矛盾'); audit.valid = false; audit.values = {}; }
   const diagnostics = diagnoseBookChart(row, audit.valid ? chart : null, scan.as_of_date);
-  rows.set(row.symbol, { ...row, technical_audit: audit, book_diagnostics: diagnostics });
+  const technical = buildBookTechnicalEvidence(row, audit.valid ? chart : null, scan.as_of_date, { benchmark });
+  // Summaries in the candidate list; detailed series are recalculated on demand.
+  if (technical.valid) {
+    for (const value of Object.values(technical.sma200)) if (value && typeof value === 'object' && 'points' in value) delete value.points;
+    delete technical.rs.points;
+    for (const key of ['sixWeeks', 'thirteenWeeks']) delete technical.rs[key].points;
+  }
+  if (audit.valid) marketCharts.push({ symbol: row.symbol, as_of_date: scan.as_of_date, bars: chart.bars });
+  rows.set(row.symbol, { ...row, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
+    book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null });
 }
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));
-if (entry.pages?.breadth?.path) {
-  const breadth = await read(entry.pages.breadth.path);
+if (breadth) {
   if (breadth.payload?.current?.date === scan.as_of_date) {
     breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
+    breadth.payload.book_market_evidence = buildBookMarketEvidence({ charts: marketCharts, asOfDate: scan.as_of_date, benchmark, expectedUniverseSize: rows.size, lookbackSessions: 60 });
     await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
   }
 }
@@ -74,7 +91,7 @@ for (const file of (await readdir(referenceDir)).filter(f => /^\d{4}-\d{2}-\d{2}
 await writeFile('public/ibd-reference.json', JSON.stringify(reference));
 await writeFile('public/portfolio-model.json', JSON.stringify({ model_version: 'cash-first-v1', source_generated_at: manifest.generated_at, ...buildPortfolioPlan([...rows.values()], scan.as_of_date) }, null, 2));
 await writeFile('public/research-daily.json', JSON.stringify({
-  schema_version: 1, rule_version: 'research-v4-book-profiles', as_of_date: scan.as_of_date,
+  schema_version: 1, rule_version: 'research-v5-book-evidence', as_of_date: scan.as_of_date,
   generated_at: manifest.generated_at, universe_size: rows.size, ratings: 'independent_estimates',
   liquidity: { min_price_usd: 10, min_average_dollar_volume: 20000000 },
   candidates, ibd_comparison: compareReference(candidates.ibd, reference, scan.as_of_date),

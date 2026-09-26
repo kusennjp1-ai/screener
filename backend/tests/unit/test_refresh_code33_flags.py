@@ -48,3 +48,13 @@ def test_stamps_code33_from_edgar(monkeypatch):
     assert {"code33": True} in captured["updates"]
     assert {"code33": False} in captured["updates"]
     fake_db.commit.assert_called()
+    fake_client.code33_map.assert_called_once_with(["AAPL", "MSFT"], require_margin=True)
+
+
+def test_relaxed_diagnostic_cannot_write_full_code33_flags(monkeypatch):
+    monkeypatch.setattr(settings, "fundamentals_code33_enabled", True)
+    session_factory = MagicMock()
+    monkeypatch.setattr(ft, "SessionLocal", session_factory)
+    out = ft.refresh_code33_flags.run(market="US", require_margin=False)
+    assert out["status"] == "skipped"
+    session_factory.assert_not_called()

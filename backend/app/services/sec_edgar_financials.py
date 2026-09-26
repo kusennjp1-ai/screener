@@ -1,16 +1,15 @@
 """Code 33 — Minervini earnings-acceleration test from SEC EDGAR XBRL facts.
 
 Code 33 (Mark Minervini, *Trade Like a Stock Market Wizard*): diluted EPS,
-sales, AND net profit margin each show **rising year-over-year growth for three
-consecutive quarters** — i.e. each metric's YoY growth rate is higher than the
-prior quarter's YoY growth rate, three quarters running. Comparisons are YoY
-(same fiscal quarter, prior year), not QoQ. Quarterly net margin = quarterly net
-income / quarterly revenue.
+sales YoY growth, AND net profit margin LEVELS each rise over three consecutive
+quarter-to-quarter comparisons: FOUR quarterly observations (Fig. 8.10).
+EPS/sales comparisons are YoY, not QoQ; margin is quarterly net income/revenue,
+not YoY margin growth. Negative initial EPS/sales growth is allowed.
 
 Data source: SEC EDGAR XBRL "company facts"
 (``data.sec.gov/api/xbrl/companyfacts/CIK##########.json``) — free, no key,
 full multi-year quarterly history of actual 10-Q/10-K filings, which is what the
-3-consecutive-YoY-quarters test needs (~7 quarters). US filers only.
+four-point YoY test needs (~8 quarters). US filers only.
 
 This module is split so the *parsing/computation* is pure and unit-testable
 against a fixture (no network), while ``SecEdgarClient`` does the fetching (used
@@ -19,6 +18,8 @@ from CI, where outbound access to data.sec.gov is available).
 from __future__ import annotations
 
 import time
+import math
+from datetime import date, timedelta
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
@@ -35,8 +36,8 @@ REVENUE_TAGS = (
 )
 NET_INCOME_TAGS = ("NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic")
 
-_QUARTER_MIN_DAYS = 60
-_QUARTER_MAX_DAYS = 100
+_QUARTER_MIN_DAYS = 75
+_QUARTER_MAX_DAYS = 105
 _ANNUAL_MIN_DAYS = 330
 _ANNUAL_MAX_DAYS = 400
 _FP_TO_NUM = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
@@ -44,9 +45,7 @@ _FP_TO_NUM = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
 
 def _days(start: str, end: str) -> Optional[int]:
     try:
-        s = time.strptime(start, "%Y-%m-%d")
-        e = time.strptime(end, "%Y-%m-%d")
-        return int((time.mktime(e) - time.mktime(s)) / 86400)
+        return (date.fromisoformat(end) - date.fromisoformat(start)).days
     except (ValueError, TypeError):
         return None
 
@@ -89,8 +88,8 @@ def quarterly_series(facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
     Three-month entries are taken directly. The fourth quarter is almost always
     only filed as the full year (10-K), so Q4 is derived as annual minus the
     three reported quarters of the same fiscal year (revenue/net income are
-    additive; diluted EPS is treated as additive, which is the standard
-    approximation).
+    additive). EPS is NOT additive because annual and quarterly weighted share
+    denominators differ; only directly reported quarterly EPS is accepted.
     """
     fact = _first_tag(facts, tags)
     entries = _select_unit_entries(fact)
@@ -113,15 +112,15 @@ def quarterly_series(facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
             continue
         if _QUARTER_MIN_DAYS <= dur <= _QUARTER_MAX_DAYS:
             q = _FP_TO_NUM.get(fp)
-            # 10-K filings tag a 3-month period as fp=FY for Q4 in some cases;
-            # only accept explicit Q1-Q3 here, derive Q4 from the annual below.
-            if q in (1, 2, 3):
+            if q in (1, 2, 3, 4):
                 quarterly[(int(fy), q)] = float(val)
         elif _ANNUAL_MIN_DAYS <= dur <= _ANNUAL_MAX_DAYS:
             annual[int(fy)] = float(val)
 
     # Derive Q4 = FY - (Q1 + Q2 + Q3) where all three quarters are present.
-    for fy, fy_val in annual.items():
+    for fy, fy_val in ([] if is_eps else annual.items()):
+        if (fy, 4) in quarterly:
+            continue
         q123 = [quarterly.get((fy, q)) for q in (1, 2, 3)]
         if all(v is not None for v in q123):
             quarterly[(fy, 4)] = float(fy_val) - float(sum(q123))
@@ -130,7 +129,8 @@ def quarterly_series(facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool
 
 
 def quarterly_series_dated(
-    facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool, as_of: Optional[str] = None
+    facts: dict[str, Any], tags: Iterable[str], *, is_eps: bool, as_of: Optional[str] = None,
+    _period_starts: Optional[dict[str, str]] = None,
 ) -> list[tuple[str, float, str]]:
     """Quarterly series keyed by PERIOD END DATE: ``[(end, value, label), ...]``
     ascending by end.
@@ -144,8 +144,8 @@ def quarterly_series_dated(
     label comes from the EARLIEST filing of that period — the original filing
     labels its own quarter correctly.
 
-    Q4 is derived per annual entry as annual minus the three quarterly values
-    whose end dates fall inside that fiscal year's window.
+    Revenue/income Q4 may be derived only from three contiguous quarters exactly
+    covering the annual start. EPS is never derived by subtraction.
 
     ``as_of`` (YYYY-MM-DD) makes the series point-in-time: only entries FILED
     on or before that date are used (entries without a ``filed`` date are
@@ -160,23 +160,27 @@ def quarterly_series_dated(
     # end -> (filed, value) for 3-month periods; end -> (filed, label)
     q_val: dict[str, tuple[str, float]] = {}
     q_label: dict[str, tuple[str, str]] = {}
-    annual: dict[str, tuple[str, float, int]] = {}  # end -> (filed, value, fy)
+    starts: dict[str, str] = {}
+    annual: dict[str, tuple[str, float, str]] = {}  # end -> (filed, value, start)
 
     for e in entries:
         val = e.get("val")
         start, end = e.get("start"), e.get("end")
-        if val is None or not start or not end:
+        if not isinstance(val, (int, float)) or isinstance(val, bool) or not math.isfinite(val) or not start or not end:
             continue
         dur = _days(start, end)
         if dur is None:
             continue
         filed = e.get("filed", "")
-        if as_of is not None and (not filed or filed > as_of):
+        if filed and (_days(end, filed) is None or filed < end):
+            continue
+        if as_of is not None and (not filed or _days(filed, as_of) is None or filed > as_of or end > as_of):
             continue
         if _QUARTER_MIN_DAYS <= dur <= _QUARTER_MAX_DAYS:
             prev = q_val.get(end)
             if prev is None or filed >= prev[0]:
                 q_val[end] = (filed, float(val))
+                starts[end] = start
             fy, fp = e.get("fy"), e.get("fp")
             q = _FP_TO_NUM.get(fp)
             if fy is not None and q in (1, 2, 3, 4):
@@ -190,19 +194,21 @@ def quarterly_series_dated(
         elif _ANNUAL_MIN_DAYS <= dur <= _ANNUAL_MAX_DAYS:
             prev_a = annual.get(end)
             if prev_a is None or filed >= prev_a[0]:
-                fy = e.get("fy")
-                annual[end] = (filed, float(val), int(fy) if fy is not None else 0)
+                annual[end] = (filed, float(val), start)
 
     # Derive Q4 = annual - the three quarters ending inside the annual window.
-    for a_end, (_, a_val, _a_fy) in annual.items():
+    for a_end, (a_filed, a_val, a_start) in ([] if is_eps else annual.items()):
         if a_end in q_val:
             continue  # a real 3-month Q4 entry already covers this end
-        inside = [
+        inside = sorted([
             (end, v) for end, (_, v) in q_val.items()
-            if end < a_end and (_days(end, a_end) or 9999) < 300
-        ]
-        if len(inside) == 3:
-            q_val[a_end] = ("", a_val - sum(v for _, v in inside))
+            if a_start <= starts[end] and end < a_end
+        ])
+        if (len(inside) == 3 and starts[inside[0][0]] == a_start and
+                all(_days(inside[i - 1][0], starts[inside[i][0]]) == 1 for i in (1, 2)) and
+                _QUARTER_MIN_DAYS <= (_days(inside[-1][0], a_end) or 0) <= _QUARTER_MAX_DAYS):
+            q_val[a_end] = (a_filed, a_val - sum(v for _, v in inside))
+            starts[a_end] = (date.fromisoformat(inside[-1][0]) + timedelta(days=1)).isoformat()
             # Label by the period's END year, not the annual entry's fy — that
             # fy is the FILING's frame (GM's 2023-12-31 Q4 arrives inside the
             # FY2025 10-K and would be labeled FY2025Q4, or FY0Q4 when absent).
@@ -213,16 +219,25 @@ def quarterly_series_dated(
         for end, (_, v) in q_val.items()
     ]
     out.sort(key=lambda t: t[0])
+    if _period_starts is not None:
+        _period_starts.update(starts)
     return out
 
 
-def _yoy_base(dated: dict[str, float], end: str) -> Optional[float]:
+def _yoy_base(dated: dict[str, float], end: str, starts: Optional[dict[str, str]] = None) -> Optional[float]:
     """The value of the quarter ending ~1 year before ``end`` (350-380 days,
     widened to 340-390 as a fallback for irregular fiscal calendars)."""
     for lo, hi in ((350, 380), (340, 390)):
         for base_end, val in dated.items():
             d = _days(base_end, end)
             if d is not None and lo <= d <= hi:
+                if starts is not None:
+                    # Allow one fiscal week (53-week years), never a stub
+                    # versus a full quarter merely sharing a nearby end date.
+                    current_duration = _days(starts[end], end)
+                    prior_duration = _days(starts[base_end], base_end)
+                    if current_duration is None or prior_duration is None or abs(current_duration - prior_duration) > 7:
+                        continue
                 return val
     return None
 
@@ -267,8 +282,10 @@ class Code33Result:
     reason: str = ""
     eps_yoy: list[float] = field(default_factory=list)
     sales_yoy: list[float] = field(default_factory=list)
-    margin_yoy: list[float] = field(default_factory=list)
+    margin_yoy: list[Optional[float]] = field(default_factory=list)  # Legacy informational field, not gated.
     quarters: list[str] = field(default_factory=list)
+    margin_levels: list[Optional[float]] = field(default_factory=list)  # Fractions, latest first.
+    mode: str = "code33-four-quarter-margin-levels"
 
 
 def compute_code33_from_facts(
@@ -276,19 +293,17 @@ def compute_code33_from_facts(
 ) -> Code33Result:
     """Evaluate Code 33 from a parsed EDGAR companyfacts dict.
 
-    Literal Code 33 (``require_margin=True``) needs diluted EPS, sales, AND net
-    margin all accelerating in YoY growth for three consecutive quarters — in
-    practice almost no company satisfies the margin leg three quarters running.
-    ``require_margin=False`` is the relaxed screen used live: EPS and sales YoY
-    growth accelerating for three quarters (margin is still computed and
-    reported, just not gated on).
+    Four consecutive quarters provide three increases in EPS/sales YoY and net
+    margin levels. ``require_margin=False`` is a separately labelled relaxed
+    EPS/sales diagnostic, not full Code 33, and must not populate its flag.
 
     ``as_of`` evaluates point-in-time (filings filed on or before that date) —
     used to measure the historical catch rate at trade-idea dates.
     """
-    eps_d = quarterly_series_dated(facts, EPS_TAGS, is_eps=True, as_of=as_of)
-    rev_d = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False, as_of=as_of)
-    ni_d = quarterly_series_dated(facts, NET_INCOME_TAGS, is_eps=False, as_of=as_of)
+    eps_starts, rev_starts, ni_starts = {}, {}, {}
+    eps_d = quarterly_series_dated(facts, EPS_TAGS, is_eps=True, as_of=as_of, _period_starts=eps_starts)
+    rev_d = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False, as_of=as_of, _period_starts=rev_starts)
+    ni_d = quarterly_series_dated(facts, NET_INCOME_TAGS, is_eps=False, as_of=as_of, _period_starts=ni_starts)
     if not eps_d or not rev_d or (require_margin and not ni_d):
         return Code33Result(False, "missing EPS/revenue/net-income series")
 
@@ -304,60 +319,67 @@ def compute_code33_from_facts(
         if n is not None and r and r > 0:
             margin[end] = n / r
 
-    # The three most recent quarter-ends carrying the metrics we gate on.
-    comparable = set(eps) & set(rev)
-    if require_margin:
-        comparable &= set(margin)
-    recent = sorted(comparable, reverse=True)
-    if len(recent) < 3:
-        return Code33Result(False, "fewer than 3 comparable quarters")
+    # Use the latest observed dates, not an intersection that could hide a
+    # missing latest metric and silently certify an older four-quarter run.
+    recent = sorted(set(eps) | set(rev) | (set(ni) if require_margin else set()), reverse=True)[:4]
+    if len(recent) < 4:
+        return Code33Result(False, "fewer than 4 comparable quarters")
+    if any(not (_QUARTER_MIN_DAYS <= (_days(recent[i + 1], recent[i]) or 0) <= _QUARTER_MAX_DAYS) for i in range(3)):
+        return Code33Result(False, "nonconsecutive quarterly periods")
 
     eps_yoy: list[float] = []
     sales_yoy: list[float] = []
-    margin_yoy: list[float] = []
+    margin_yoy: list[Optional[float]] = []
+    margin_levels: list[Optional[float]] = []
     labels: list[str] = []
-    for end in recent[:3]:
+    for end in recent:
+        if end not in eps or end not in rev or (require_margin and end not in margin):
+            return Code33Result(False, f"missing current quarterly metric at {end}")
+        if eps_starts[end] != rev_starts[end] or (require_margin and ni_starts[end] != rev_starts[end]):
+            return Code33Result(False, f"quarter duration mismatch at {end}")
         # Year-ago base by END DATE, not fiscal label — EDGAR fy/fp describe
         # the filing's frame and lose year-ago quarters to relabeled
         # comparatives (see quarterly_series_dated).
-        eps_base, rev_base = _yoy_base(eps, end), _yoy_base(rev, end)
+        eps_base, rev_base = _yoy_base(eps, end, eps_starts), _yoy_base(rev, end, rev_starts)
         mar_base = _yoy_base(margin, end)
         g_eps = _yoy_growth(eps.get(end), eps_base)
         g_rev = _yoy_growth(rev.get(end), rev_base)
         g_mar = _yoy_growth(margin.get(end), mar_base)
-        # Margin YoY is informational unless gated on.
-        if g_eps is None or g_rev is None or (require_margin and g_mar is None):
+        # Margin YoY is informational only; net margin LEVEL is gated.
+        if g_eps is None or g_rev is None:
             label = label_by_end.get(end, end)
             # A quarter that EXISTS but has a non-positive base is a
             # legitimate Code 33 fail — % growth off a loss quarter is
             # undefined, and Minervini's test targets profitable growers.
             # Only a genuinely absent quarter means "cannot judge".
-            gated_bases = [eps_base, rev_base] + ([mar_base] if require_margin else [])
+            gated_bases = [eps_base, rev_base]
             if any(b is not None and b <= 0 for b in gated_bases):
                 return Code33Result(False, f"YoY base <= 0 at {label} — loss quarter, % growth undefined")
             return Code33Result(False, f"missing YoY base at {label}")
         eps_yoy.append(g_eps)
         sales_yoy.append(g_rev)
-        margin_yoy.append(g_mar if g_mar is not None else float("nan"))
+        margin_yoy.append(g_mar)
+        margin_levels.append(margin.get(end))
         labels.append(label_by_end.get(end, end))
 
-    # recent[:3] is most-recent-first, so accelerating == strictly decreasing as
-    # we go back in time: yoy[0] > yoy[1] > yoy[2].
+    # Latest first: four values are needed for THREE strict increases.
     def _accelerating(series: list[float]) -> bool:
-        return series[0] > series[1] > series[2]
+        return len(series) == 4 and all(series[i] > series[i + 1] for i in range(3))
 
     legs = [_accelerating(eps_yoy), _accelerating(sales_yoy)]
     if require_margin:
-        legs.append(_accelerating(margin_yoy))
+        legs.append(_accelerating(margin_levels))
     passes = all(legs)
-    metric_label = "EPS, sales, and net margin" if require_margin else "EPS and sales"
+    metric_label = "EPS/sales YoY and net margin levels" if require_margin else "relaxed EPS/sales YoY (not full Code 33)"
     return Code33Result(
         passes=passes,
-        reason="ok" if passes else f"not accelerating in {metric_label}",
+        reason=("ok" if require_margin else "relaxed EPS/sales only; not full Code 33") if passes else f"not accelerating in {metric_label}",
         eps_yoy=eps_yoy,
         sales_yoy=sales_yoy,
         margin_yoy=margin_yoy,
         quarters=labels,
+        margin_levels=margin_levels,
+        mode="code33-four-quarter-margin-levels" if require_margin else "relaxed-eps-sales-only",
     )
 
 
@@ -415,13 +437,16 @@ class SecEdgarClient:
             return Code33Result(False, "no EDGAR facts")
         return compute_code33_from_facts(facts, require_margin=require_margin, as_of=as_of)
 
-    def code33_map(self, tickers: list[str], *, require_margin: bool = False) -> dict[str, bool]:
+    def code33_map(self, tickers: list[str], *, require_margin: bool = True) -> dict[str, bool]:
         """{ticker: passes} for many tickers. Missing/withdrawn filers -> False.
 
         Pre-warms the CIK map once, then fetches each company's facts. Used to
         stamp ``code33`` onto US scan rows during the static build (EDGAR is
-        US-only). Never raises — a fetch failure just yields False for that name.
+        US-only). Fetch failures yield False; relaxed mode is rejected because
+        an EPS/sales-only result must never populate the Code 33 flag.
         """
+        if not require_margin:
+            raise ValueError("code33_map requires all three Code 33 legs")
         out: dict[str, bool] = {}
         for ticker in tickers:
             try:

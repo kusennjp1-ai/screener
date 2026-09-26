@@ -836,7 +836,11 @@ jobs:
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: |
           cd frontend
-          npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
+          npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
+          python tools/test_sec_financials.py
+          python tools/export-book-benchmark.py --allow-unavailable
+          node tools/export-research.mjs
+          python tools/sec-financials.py --limit 60
           npm run build
 
       - name: Upload Pages artifact
