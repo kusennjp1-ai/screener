@@ -74,7 +74,8 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByRole('button', { name: /CSV保存/ })).toBeDisabled();
       } else if (t === 7) {
         expect(screen.getByText('未接続')).toBeInTheDocument();
-        expect(screen.getByText(/場中価格の配信先は未設定/)).toBeInTheDocument();
+        expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
+        expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
         expect(screen.getByText('買いゾーン内')).toBeInTheDocument();
       } else if (t === 8) {
         expect(screen.getByText('IBD公式リストとの一致：未検証')).toBeInTheDocument();
