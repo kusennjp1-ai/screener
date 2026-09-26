@@ -7,18 +7,19 @@ import { buildPortfolioPlan } from '../portfolioPlan';
 const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n);
 const pct = n => `${(n * 100).toFixed(1)}%`;
 
-export default function PortfolioDecision({ rows, date, now, onInspect }) {
+export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse }) {
   const plan = useMemo(() => buildPortfolioPlan(rows, date, 100000, now), [rows, date, now]);
   const [expanded, setExpanded] = useState(false);
   return <Paper component="section" id="today-decision" tabIndex={-1} aria-label="本日の判断と10万ドルの配分" className="decision-panel" elevation={0}>
-    <div className="research-kicker">01 / TODAY → ALLOCATION → RESEARCH</div>
+    <div className="research-kicker">今日の判断</div>
     <div className="decision-overview"><div>
     <Typography component="h2" variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{plan.decision}</Typography>
-    <Typography sx={{ mt: 1 }}>本日そのまま発注できる銘柄は未確認です。新規資金10万ドルのモデルは株式0%、現金100%（$100,000）で待機します。</Typography>
-    </div><div className="decision-account"><small>MODEL ACCOUNT / 待機資金</small><strong>$100,000</strong><span>株式 0% · 現金 100%</span></div></div>
+    <Typography sx={{ mt: 1 }}>発注条件を確認できた銘柄はありません。まず候補のチャートと不足条件を確認してください。</Typography>
+    </div><div className="decision-account"><small>新規資金10万ドルのモデル</small><strong>$100,000</strong><span>株式0% · 現金100%</span></div></div>
     <Typography color="text.secondary" sx={{ mt: 1, fontSize: 13 }}>分析基準日：{date} ／ {plan.market.label}。既存保有なし・信用取引なしのモデルです。保有株の売却指示ではありません。</Typography>
-    <ul className="decision-blockers">{plan.blockers.map(reason => <li key={reason}>{reason}</li>)}</ul>
-    <Button variant="outlined" onClick={() => setExpanded(v => !v)} aria-expanded={expanded} aria-controls="conditional-plan">{expanded ? '条件付き計画を閉じる' : `条件付きの配分・注文計画を見る（${plan.positions.length}銘柄）`}</Button>
+    <details className="research-disclosure"><summary>購入を保留する理由</summary><ul className="decision-blockers">{plan.blockers.map(reason => <li key={reason}>{reason}</li>)}</ul></details>
+    <div className="decision-actions">{onBrowse && <Button variant="contained" onClick={onBrowse}>候補を確認する →</Button>}
+    <Button variant="outlined" onClick={() => setExpanded(v => !v)} aria-expanded={expanded} aria-controls="conditional-plan">{expanded ? '条件付き計画を閉じる' : `条件付きの配分・注文計画を見る（${plan.positions.length}銘柄）`}</Button></div>
     {expanded && <Box id="conditional-plan" sx={{ mt: 2 }}>
       <Typography component="h3" variant="h6">確認後のモデル計画 — 発注前</Typography>
       <Typography color="text.secondary" sx={{ fontSize: 13, my: 1 }}>ミネルヴィニ・IBD型の両方を通過し、流動性・ピボットから−3〜+5%・形状信頼度70以上・セクター情報で絞ります。CAN SLIM全条件の合格ではありません。</Typography>

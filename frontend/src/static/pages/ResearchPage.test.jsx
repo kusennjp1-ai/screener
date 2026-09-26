@@ -70,6 +70,7 @@ describe('100 virtual expert task profiles', () => {
       } else if (t === 6) {
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: 'NOT-A-STOCK' } });
         expect(screen.getByText(/該当銘柄がありません/)).toBeInTheDocument();
+        fireEvent.click(screen.getByText('表示・保存オプション'));
         expect(screen.getByRole('button', { name: /CSV保存/ })).toBeDisabled();
       } else if (t === 7) {
         expect(screen.getByText('未接続')).toBeInTheDocument();
@@ -108,4 +109,15 @@ it('keeps keyboard focus in search after explicitly opening a stock detail', asy
   expect(input).toHaveFocus();
   fireEvent.change(input, { target: { value: 'NONE' } });
   expect(input).toHaveFocus();
+});
+
+it('starts with compact research and opens detailed verification on demand', async () => {
+  mount();
+  await screen.findByRole('button', { name: 'LEAD の分析を表示' });
+  const details = screen.getByText('詳細検証 — 財務・チャート・書籍の条件').closest('details');
+  expect(details).not.toHaveAttribute('open');
+  fireEvent.click(screen.getByText('詳細検証 — 財務・チャート・書籍の条件'));
+  expect(details).toHaveAttribute('open');
+  fireEvent.click(screen.getByRole('button', { name: '候補を確認する →' }));
+  expect(screen.getByLabelText('銘柄・企業名を検索')).toHaveFocus();
 });

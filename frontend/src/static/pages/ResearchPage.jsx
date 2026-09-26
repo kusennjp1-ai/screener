@@ -108,11 +108,11 @@ export default function ResearchPage() {
   }
   return <Box component="main" className="research-workbench" data-mobile-view={mobileView} sx={{ '--accent': theme.palette.mode === 'dark' ? '#a399ff' : '#6555dc' }}>
     <header className="research-heading">
-      <Box><div className="research-kicker">US EQUITIES / LEADER RESEARCH</div><Typography component="h1" sx={{ fontSize: { xs: 25, md: 30 }, fontWeight: 700, letterSpacing: '-.03em', mt: .5 }}>米国株リサーチ</Typography></Box>
+      <Box><div className="research-kicker">米国株スクリーナー</div><Typography component="h1" sx={{ fontSize: { xs: 25, md: 30 }, fontWeight: 700, letterSpacing: '-.03em', mt: .5 }}>今日の投資判断</Typography></Box>
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => client.invalidateQueries()}>データを再確認 ↻</Button></Stack>
     </header>
-    {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={clock.data} onInspect={inspectOrder} />}
-    <Typography component="h2" variant="h6" sx={{ mt: 3, mb: 1 }}>02 / 候補の根拠を調べる</Typography>
+    {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={clock.data} onInspect={inspectOrder} onBrowse={() => { setMobileView('list'); document.getElementById('candidate-search')?.focus(); }} />}
+    <Typography component="h2" variant="h6" sx={{ mt: 3, mb: 1 }}>候補を探す</Typography>
     <div className="research-summary">
       <span>分析対象<strong>{rows.length.toLocaleString()} 銘柄</strong></span>
       <span>条件通過<strong>{ranked.filter(r => r.assessment.qualified).length} 銘柄</strong></span>
@@ -127,15 +127,17 @@ export default function ResearchPage() {
         <ToggleButtonGroup exclusive value={method} onChange={(_, value) => { if (value) { setMethod(value); setLimit(50); } }} aria-label="投資手法" sx={{ flexWrap: 'wrap' }}>
           {Object.entries(METHODS).map(([key, label]) => <ToggleButton key={key} value={key} sx={{ px: 2.5, py: 1, fontSize: 14 }}>{label}</ToggleButton>)}
         </ToggleButtonGroup>
-        <TextField label="銘柄・企業名を検索" value={search} onChange={e => { setSearch(e.target.value); setLimit(50); }} size="small" sx={{ width: { xs: '100%', md: 260 } }} />
+        <TextField id="candidate-search" label="銘柄・企業名を検索" value={search} onChange={e => { setSearch(e.target.value); setLimit(50); }} size="small" sx={{ width: { xs: '100%', md: 260 } }} />
       </Stack>
       <Stack direction="row" flexWrap="wrap" columnGap={2} sx={{ mt: 1 }} alignItems="center">
         <FormControlLabel control={<Switch size="small" checked={strict} onChange={e => setStrict(e.target.checked)} />} label="全条件通過のみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
         <FormControlLabel control={<Switch size="small" checked={onlyWatch} onChange={e => setOnlyWatch(e.target.checked)} />} label="ウォッチのみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
+      </Stack>
+      <details className="research-disclosure research-options"><summary>表示・保存オプション</summary><Stack direction="row" flexWrap="wrap" alignItems="center" gap={1}>
         <FormControlLabel control={<Switch size="small" checked={liquid} onChange={e => setLiquid(e.target.checked)} />} label="流動性フィルター：株価 $10以上・平均売買代金 $2,000万以上" sx={{ '& .MuiFormControlLabel-label': { fontSize: 12 } }} />
         <Button onClick={download} disabled={!ranked.length} size="small" sx={{ ml: 'auto' }}>CSV保存 ↓</Button>
         <Button component="a" href={`${import.meta.env.BASE_URL}qualification-audit.json`} download size="small">全銘柄の検証記録 ↓</Button>
-      </Stack>
+      </Stack></details>
     </Paper>
     {(manifest.isError || bundle.isError) && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={() => client.invalidateQueries()}>再試行</Button>}>データを取得できません。以前の表示値がある場合は最新とは限りません。</Alert>}
     {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} /> 銘柄と分析根拠を読み込んでいます…</Box>}
@@ -147,7 +149,7 @@ export default function ResearchPage() {
     <div className="research-grid">
       <Paper className="research-panel research-list">
         <Stack direction="row" sx={{ p: 2 }} justifyContent="space-between" alignItems="center"><Typography component="h2" sx={{ fontSize: 15, fontWeight: 700 }}>候補リスト</Typography><Typography variant="body2" color="text.secondary">{ranked.length.toLocaleString()} 件</Typography></Stack>
-        <Typography sx={{ px: 2, pb: 1.5, fontSize: 12, color: 'text.secondary' }}>条件充足率 → RS推計順 / 銘柄を選んで分析</Typography>
+        <Typography sx={{ px: 2, pb: 1.5, fontSize: 12, color: 'text.secondary' }}>銘柄を選ぶと、チャートと判定を確認できます。条件数は購入の合格認定ではありません。</Typography>
         <TableContainer sx={{ maxHeight: { xs: 560, md: 'calc(100vh - 350px)' }, minHeight: 200 }}><Table stickyHeader size="small" aria-label="投資手法別の銘柄候補">
           <TableHead><TableRow>{['銘柄 / 株価', '条件', 'RS推計', '高値比'].map(h => <TableCell key={h} sx={{ whiteSpace: 'nowrap' }}>{h}</TableCell>)}</TableRow></TableHead>
           <TableBody>{ranked.slice(0, limit).map(({ row: r, assessment: a }) => <TableRow key={r.symbol} selected={selected?.symbol === r.symbol} hover>
@@ -171,16 +173,20 @@ export default function ResearchPage() {
           </Paper>
           <div className="research-bottom">
             <Paper sx={panel}>
-              <div className="research-kicker">01 / METHODOLOGY</div><Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>{METHODS[method]}の判定根拠</Typography>
+              <div className="research-kicker">選定条件</div><Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>{METHODS[method]}の判定根拠</Typography>
+              <Typography sx={{ fontSize: 14, my: 1 }}>適合 {checks.passed} / {checks.total}・未確認 {checks.unknown}</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>一次選定の結果です。購入条件は下の詳細検証で確認できます。</Typography>
+              <details className="research-disclosure"><summary>条件ごとの結果を見る</summary>
               <ul className="research-rules">{checks.rules.map(r => <li key={r.label}><span>{r.label}{r.evidence && <small style={{ display: 'block' }}>{r.evidence}</small>}</span><Box component="span" sx={{ color: r.state === 'pass' ? 'success.main' : r.state === 'fail' ? 'error.main' : 'text.secondary' }}>{r.state === 'pass' ? '✓ 適合' : r.state === 'fail' ? '× 不適合' : '— 未確認'}{finite(r.value) ? ` · ${fmt(r.value)}${r.unit}` : ''}</Box></li>)}</ul>
               {checks.templateMismatch && <Alert severity="warning">元のテンプレート判定と日足再計算が不一致です。上の再計算結果を選定に使用しています。</Alert>}
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>未確認は合格に数えません。RS・EPS・Composite・業種順位は独自推計です。</Typography>
               {method === 'ibd' && <Typography sx={{ fontSize: 12, mt: 1 }}>公開ルールを参考にした独自の厳格成長スクリーニングです。財務履歴の欠損を推計スコアで補完しません。公式IBDの全条件や選出リストへの合格認定ではありません。</Typography>}
               {method.startsWith('minervini') && <Typography sx={{ fontSize: 12, mt: 1 }}>{method === 'minervini2' ? '書籍②『株式トレード 基本と原則』：安値から25%以上。買い位置は2〜3%以内という記述の上限3%を採用。' : '書籍①『成長株投資法』：安値から30%以上。表示する5%ゾーンはIBD型の補助指標で、書籍の固定条件ではありません。'} 200日線の4〜5か月上昇や高いRSは望ましい特徴で、最低条件とは区別します。</Typography>}
+              </details>
               <Button component="a" href={tradingViewUrl(selected.symbol, 'US')} target="_blank" rel="noopener noreferrer" size="small" sx={{ mt: 1.5 }}>TradingView</Button>
             </Paper>
             <Paper sx={panel}>
-              <Stack direction="row" justifyContent="space-between"><div className="research-kicker">02 / ENTRY CHECK</div><Chip size="small" label={liveStatus} color={liveStatus === 'リアルタイム' ? 'success' : 'default'} sx={{ height: 22, fontSize: 12 }} /></Stack>
+              <Stack direction="row" justifyContent="space-between"><div className="research-kicker">買い位置の確認</div><Chip size="small" label={liveStatus} color={liveStatus === 'リアルタイム' ? 'success' : 'default'} sx={{ height: 22, fontSize: 12 }} /></Stack>
               <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>エントリー位置</Typography>
               <Typography sx={{ fontSize: 24, fontWeight: 700, my: 2, color: plan.state === '買いゾーン超過' ? 'warning.main' : 'text.primary' }}>{plan.state}</Typography>
               <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>{plan.zone || 5}%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
@@ -189,7 +195,9 @@ export default function ResearchPage() {
             </Paper>
           </div>
             <Paper sx={{ ...panel, mt: 2 }}>
+              <details className="research-disclosure"><summary>詳細検証 — 財務・チャート・書籍の条件</summary>
               <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />
+              </details>
             </Paper>
         </>}
       </div>
@@ -197,10 +205,11 @@ export default function ResearchPage() {
     <footer className="research-method-note">
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">IBD公式リストとの一致：{overlap ? `${Math.round(overlap.recall * 100)}%` : '未検証'}</Typography>
-      <Typography component="h2" variant="subtitle1" fontWeight={700}>選定方式とデータの読み方</Typography>
+      <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : '場中価格の配信先は未設定です。現在は日次価格で計算しています。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
+      </details>
     </footer>
     <StaticChartViewerModal open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} chartIndex={index.data} navigationSymbols={ranked.map(r => r.row.symbol)} />
   </Box>;
