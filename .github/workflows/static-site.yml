@@ -836,7 +836,7 @@ jobs:
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: |
           cd frontend
-          npm run test:run -- src/static/qualificationAudit.test.js src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
+          npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
           npm run build
 
       - name: Upload Pages artifact

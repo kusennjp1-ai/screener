@@ -115,6 +115,13 @@ function StaticBreadthPage() {
       {selectedTab === 0 && (
         <>
           <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange} />
+          {marketEntry.market === 'US' && !mismatch && payload.book_leadership?.date === current.date && <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+            <Typography component="h2" variant="h6">先導株の状態も確認する</Typography>
+            <Typography sx={{ my: 1 }}>日足検証済み {payload.book_leadership.verified} / {payload.book_leadership.universe}銘柄。『基本と原則』の一次条件通過 {payload.book_leadership.templateLeaders}銘柄、検証母集団の高値5%以内 {payload.book_leadership.nearHigh}銘柄。</Typography>
+            <Typography sx={{ fontSize: 13 }}>一次通過株のRSライン30営業日前比プラス：{payload.book_leadership.rsUp} / {payload.book_leadership.rsAvailable}銘柄（RSラインを確認できた範囲）。指数の上昇だけで購入・増額を決めず、個別セットアップと保有後の反応を確認します。</Typography>
+            <Typography sx={{ fontSize: 12, mt: 1 }} color="text.secondary">公開日足が揃う一部銘柄の当日集計です。市場全体の新高値・新安値数、ブレイク成功率、過去からの改善を示す統計ではありません。</Typography>
+            <Button href="#/">銘柄ごとの根拠を確認 →</Button>
+          </Paper>}
           <details className="market-disclosure"><summary>指数と比較する / 詳細チャート</summary>
             <Typography sx={{ px: 3, fontSize: 12, color: 'text.secondary' }}>指数データは配信された期間のみ表示します：{filteredSpyData[0]?.date || '未確認'} → {filteredSpyData.at(-1)?.date || '未確認'}</Typography>
             <BreadthChart breadthData={filteredChartData} spyData={filteredSpyData} benchmarkLabel={benchmarkLabel} isLoading={false} error={null} timeRange={timeRange} onTimeRangeChange={setTimeRange} availableRanges={['1M', '3M']} />

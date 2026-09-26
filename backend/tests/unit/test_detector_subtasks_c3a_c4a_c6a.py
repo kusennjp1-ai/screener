@@ -122,7 +122,7 @@ def test_vcp_wrapper_propagates_legacy_no_detection_checks(monkeypatch):
         return {
             "vcp_detected": False,
             "vcp_score": 54.0,
-            "num_bases": 2,
+            "num_bases": 1,  # two contractions are valid; one is insufficient
             "contracting_depth": False,
             "tight_near_highs": False,
         }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Box, Button, Paper, Typography } from '@mui/material';
+import BookRiskWorkbench from './BookRiskWorkbench';
 import { buildPortfolioPlan } from '../portfolioPlan';
 
 const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n);
@@ -30,6 +31,7 @@ export default function PortfolioDecision({ rows, date, now, onInspect }) {
       <Typography sx={{ mt: 2, fontSize: 13 }}>注文条件：当日の市場・決算日・出来高とチャートを再確認し、ピボット以上の上昇を確認してから上記上限の買い指値。上限を超えたら追いかけません。未約定は当日失効とし、買えた株数だけに売り注文を設定します。</Typography>
       <Typography sx={{ mt: 1, fontSize: 13 }} color="text.secondary">逆指値は想定買値の−7%、利確は+20%の機械的な例で、構造的支持線や予測価格ではありません。実際の約定価格で再計算が必要です。ギャップ・滑りで損失額を超える場合があります。手数料・税・為替は含みません。</Typography>
       <details><summary>配分ルールと限界</summary><p>1銘柄上限10%、1銘柄損失予算0.5%、総損失予算2%、同一セクター20%、最大5銘柄。市場上限は独自モデル：上昇50%、圧力あり25%、弱含み・不明0%。相関やベータを調整した最適化ではありません。既存保有がある場合はこの新規資金モデルを重ねず、全保有と合算して再計算してください。</p></details>
+      <BookRiskWorkbench />
     </Box>}
   </Paper>;
 }

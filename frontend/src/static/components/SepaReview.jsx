@@ -1,10 +1,11 @@
 import { Alert, Typography } from '@mui/material';
 import { assess, finite } from '../researchEngine';
+import BookChartReview from './BookChartReview';
 
 // A trend template is the first selection stage, not certification of SEPA.
 // Missing quarterly histories and documentary evidence must remain explicit.
-export default function SepaReview({ row }) {
-  const trend = assess(row, 'minervini');
+export default function SepaReview({ row, method = 'minervini' }) {
+  const trend = assess(row, method);
   const percent = n => finite(n) ? `${n.toFixed(1)}%` : '未取得';
   return <section aria-label="SEPAの確認範囲">
     <Alert role="note" severity={trend.qualified ? 'info' : 'warning'} sx={{ mt: 2 }}>
@@ -21,5 +22,6 @@ export default function SepaReview({ row }) {
       </dl>
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>書籍の枠組みを参考にした確認欄です。裁量の評価や未取得の資料を、数値スコアで合格に置き換えません。</Typography>
     </details>
+    <BookChartReview diagnostics={row.book_diagnostics} />
   </section>;
 }

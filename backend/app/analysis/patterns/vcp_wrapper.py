@@ -101,6 +101,7 @@ class VCPWrapperDetector(PatternDetector):
                 "contraction_ratio": _as_float(legacy.get("contraction_ratio")),
                 "depth_score": _as_float(legacy.get("depth_score")),
                 "volume_score": _as_float(legacy.get("volume_score")),
+                "right_edge_volume_ratio": _as_float(legacy.get("right_edge_volume_ratio")),
                 "tightness_score": _as_float(legacy.get("tightness_score")),
                 "atr_score": _as_float(legacy.get("atr_score")),
                 "atr_contraction_ratio": _as_float(
@@ -124,6 +125,7 @@ class VCPWrapperDetector(PatternDetector):
                 "contracting_volume": bool(
                     legacy.get("contracting_volume", False)
                 ),
+                "right_edge_dry": bool(legacy.get("right_edge_dry", False)),
                 "tight_near_highs": bool(
                     legacy.get("tight_near_highs", False)
                 ),
@@ -145,11 +147,15 @@ def _legacy_failed_checks(legacy: dict[str, object]) -> tuple[str, ...]:
         failed.append("vcp_contracting_depth_failed")
     if not bool(legacy.get("tight_near_highs", False)):
         failed.append("vcp_tight_near_highs_failed")
+    if not bool(legacy.get("contracting_volume", False)):
+        failed.append("vcp_volume_contraction_unconfirmed")
+    if not bool(legacy.get("right_edge_dry", False)):
+        failed.append("vcp_right_edge_drying_unconfirmed")
     if _as_float(legacy.get("vcp_score")) is not None and (
-        (_as_float(legacy.get("vcp_score")) or 0.0) < 65.0
+        (_as_float(legacy.get("vcp_score")) or 0.0) < 55.0
     ):
         failed.append("vcp_score_below_legacy_threshold")
-    if int(legacy.get("num_bases", 0) or 0) < 3:
+    if int(legacy.get("num_bases", 0) or 0) < 2:
         failed.append("vcp_insufficient_bases")
     if not failed:
         failed.append("vcp_not_detected")

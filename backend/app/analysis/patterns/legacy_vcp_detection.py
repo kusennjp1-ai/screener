@@ -2,7 +2,7 @@
 Volatility Contraction Pattern (VCP) detection.
 
 Identifies VCP patterns as described by Mark Minervini:
-- Series of 3-4 pullbacks with progressively tighter ranges
+- Series of 2-6 pullbacks with progressively tighter ranges
 - Each pullback is shallower than the previous
 - Volume decreases on pullbacks (drying up)
 - Price consolidates near highs before breakout
@@ -20,7 +20,7 @@ class VCPDetector:
     Detect Volatility Contraction Patterns in stock price data.
 
     VCP Characteristics:
-    1. Base formation with 3-4 distinct pullbacks
+    1. Base formation with 2-6 distinct pullbacks
     2. Each pullback progressively tighter (contracting volatility)
     3. Volume dries up on each successive pullback
     4. Price remains relatively close to recent highs
@@ -30,7 +30,7 @@ class VCPDetector:
     def __init__(
         self,
         min_bases: int = 2,
-        max_bases: int = 4,
+        max_bases: int = 6,
         lookback_days: int = 150
     ):
         """
@@ -91,7 +91,9 @@ class VCPDetector:
             # Find lowest point in this segment (the pullback low)
             low_idx = segment.idxmin()
             low_price = segment.min()
-            high_price = recent_prices.iloc[peak_idx]
+            # A pullback starts at the OLDER peak. The newer recovery peak
+            # can be higher/lower and must not rewrite its historical depth.
+            high_price = recent_prices.iloc[next_peak_idx]
 
             # Calculate pullback depth
             if high_price > 0:
@@ -99,19 +101,16 @@ class VCPDetector:
             else:
                 continue
 
-            # First contraction can be deeper (5-45%), subsequent ones 5-35%
-            # This better matches classic VCP patterns where initial pullback is larger
-            is_first_base = len(bases) == 0
-            if is_first_base:
-                valid_depth = 5 <= depth_pct <= 45
-            else:
-                valid_depth = 5 <= depth_pct <= 35
+            # The book includes final contractions around 3%; a 5% floor
+            # discarded exactly the tight right edge we seek. The 45% cap is
+            # an application search bound, not a universal book requirement.
+            valid_depth = 0 < depth_pct <= 45
 
             if valid_depth:
                 bases.append({
                     "start_idx": peak_idx,
                     "end_idx": next_peak_idx,
-                    "duration": peak_idx - next_peak_idx,
+                    "duration": next_peak_idx - peak_idx,
                     "high_price": high_price,
                     "low_price": low_price,
                     "depth_pct": depth_pct,
@@ -170,8 +169,8 @@ class VCPDetector:
         # Reverse to get oldest-first for contraction check.
         depths = [base["depth_pct"] for base in reversed(bases)]
 
-        # Count how many successive pullbacks are shallower (oldest to newest)
-        # Require 75% to be contracting (allows one exception in 4-base pattern)
+        # Retain the fraction as evidence, but do not certify an expanding
+        # intervening leg merely because most other legs contract.
         decreasing_count = sum(
             1 for i in range(len(depths) - 1)
             if depths[i] > depths[i + 1]
@@ -179,11 +178,7 @@ class VCPDetector:
         total_pairs = len(depths) - 1
         contraction_ratio = decreasing_count / total_pairs if total_pairs > 0 else 0
 
-        # Consider contracting if a majority (>=60%) of successive pullbacks are
-        # shallower. (Was 0.75 — over 4 recent bases that demands 3/3 strictly
-        # tightening, which is rare with real, noisy pullbacks; 0.6 tolerates one
-        # non-contracting step while still requiring an overall tightening shape.)
-        contracting = contraction_ratio >= 0.6
+        contracting = contraction_ratio == 1.0
 
         # Calculate contraction score (0-100)
         if contracting:
@@ -243,8 +238,9 @@ class VCPDetector:
             hi = base["end_idx"] + 1    # older peak (higher index)
             segment_vol = volumes.iloc[lo:hi]
 
-            if len(segment_vol) > 0:
-                base_volumes.append(segment_vol.mean())
+            if len(segment_vol) != hi - lo or not np.isfinite(segment_vol).all() or (segment_vol <= 0).any():
+                return False, 0.0
+            base_volumes.append(segment_vol.mean())
 
         if len(base_volumes) < self.min_bases:
             return False, 0.0
@@ -254,15 +250,15 @@ class VCPDetector:
         # so reverse to oldest-first and count how many successive contractions see
         # LOWER average volume — mirroring the depth-contraction check. (The old
         # code tested most-recent-first with all()-monotonic, i.e. the WRONG
-        # direction AND no tolerance, so it flagged ~0% of real VCPs.) Volume is
-        # noisier than price, so the bar is a simple majority of steps.
+        # direction). This is a conservative segment-average proxy, not proof
+        # of the complete visual supply/demand pattern.
         vols = list(reversed(base_volumes))  # oldest -> newest
         decreasing_count = sum(
             1 for i in range(len(vols) - 1) if vols[i] > vols[i + 1]
         )
         total_pairs = len(vols) - 1
         volume_ratio = decreasing_count / total_pairs if total_pairs > 0 else 0.0
-        volume_decreasing = volume_ratio >= 0.6
+        volume_decreasing = volume_ratio == 1.0
 
         # Calculate volume contraction score
         if volume_decreasing:
@@ -309,7 +305,7 @@ class VCPDetector:
 
         distance_pct = ((recent_high - current_price) / recent_high) * 100
 
-        is_tight = distance_pct <= max_distance_pct
+        is_tight = 0 <= distance_pct <= max_distance_pct
 
         # Score based on how close to highs
         if distance_pct <= 2:
@@ -493,20 +489,21 @@ class VCPDetector:
             atr_score * 0.15
         )
 
-        # Gate calibrated against Mark Minervini's own ~900 referenced trades
-        # (scripts/calibrate_vcp.py): require the structural VCP shape — a
-        # tightening sequence of pullbacks (contracting_depth) finishing tight
-        # near the highs (tight_near_highs) — with a composite score above the
-        # median quality of his real setups (~49), so >= 55. Volume drying up is
-        # a defining VCP trait and feeds the score (25% weight), but is NOT a
-        # hard veto: keeping it mandatory rejected ~half of Minervini's actual
-        # VCP entries (volume is noisy and his mention date isn't always the
-        # exact pivot bar). Lowering 65 -> 55 and dropping the volume veto lifts
-        # recall on his real trades from 0% to ~35% while still requiring the
-        # core contraction-near-highs structure.
+        # Missing/expanding volume cannot be compensated by price scores.
+        # Right-edge drying is a disclosed 5-day/prior-50-day proxy; the book
+        # does not prescribe these exact averaging windows. Detection remains
+        # an inferred close-based candidate, never complete book certification.
+        right_edge_volume_ratio = None
+        if volumes is not None and len(volumes) >= 55:
+            sample = volumes.iloc[:55]
+            if np.isfinite(sample).all() and (sample > 0).all():
+                right_edge_volume_ratio = float(sample.iloc[:5].mean() / sample.iloc[5:55].mean())
+        right_edge_dry = right_edge_volume_ratio is not None and right_edge_volume_ratio < 1
         vcp_detected = (
             vcp_score >= 55 and
             contracting_depth and
+            contracting_volume and
+            right_edge_dry and
             tight_near_highs
         )
 
@@ -518,6 +515,9 @@ class VCPDetector:
             "contraction_ratio": round(contraction_ratio, 2),
             "depth_score": round(depth_score, 2),
             "contracting_volume": contracting_volume,
+            "right_edge_volume_ratio": right_edge_volume_ratio,
+            "right_edge_dry": right_edge_dry,
+            "evidence_scope": "close_based_inference_not_book_certification",
             "volume_score": round(volume_score, 2) if volumes is not None else None,
             "tight_near_highs": tight_near_highs,
             "tightness_score": round(tightness_score, 2),

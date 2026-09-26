@@ -30,7 +30,8 @@ const rule = (label, value, test, unit = '', boolean = false) => ({ label, value
 const rating = value => finite(value) && value >= 1 && value <= 99 ? value : null;
 const comparison = (label, values, test, evidence) => ({ ...rule(label, values.every(v => finite(v) && v > 0) ? test(...values) : null, v => v, '', true), evidence });
 export function assess(row, method = 'minervini') {
-  if (!['minervini', 'oneil', 'ibd'].includes(method)) throw Error('Unknown research method');
+  if (!['minervini', 'minervini2', 'oneil', 'ibd'].includes(method)) throw Error('Unknown research method');
+  const lowThreshold = method === 'minervini2' ? 25 : 30;
   const v = auditValues(row);
   const rs = row.rs_method === RS_METHOD && row.rs_universe_size >= 100 && row.rs_as_of_date === row.technical_audit?.as_of_date ? rating(row.rs_rating) : null;
   const display = n => finite(n) ? n.toFixed(2) : '未確認';
@@ -42,7 +43,7 @@ export function assess(row, method = 'minervini') {
     comparison('SMA200が21営業日前より上（1か月の上向き判定）', [v.sma200, v.sma200_21ago], (a, b) => a > b, `${display(v.sma200)} > ${display(v.sma200_21ago)}`),
     comparison('SMA50 > SMA150・SMA200', [v.sma50, v.sma150, v.sma200], (a, b, c) => a > b && a > c, `${display(v.sma50)} > ${display(v.sma150)} / ${display(v.sma200)}`),
     comparison('株価 > SMA50', [v.close, v.sma50], (a, b) => a > b, `${display(v.close)} > ${display(v.sma50)}`),
-    rule('252日安値から ≥ 30%（日中安値）', v.aboveLow, x => x >= 30, '%'),
+    rule(`252日安値から ≥ ${lowThreshold}%（日中安値）`, v.aboveLow, x => x >= lowThreshold, '%'),
     rule('252日高値からの距離 ≤ 25%（日中高値）', v.belowHigh, x => x >= 0 && x <= 25, '%'),
     { ...rule('RS 推計 ≥ 70（公開日足の共通母集団）', rs, x => x >= 70), evidence: `${row.rs_universe_size || 0}銘柄・${row.rs_as_of_date || '基準日未確認'} / 独自推計` },
   ];
@@ -50,7 +51,7 @@ export function assess(row, method = 'minervini') {
   const annual = row.annual_eps_growth_3y;
   const annualMinimum = Array.isArray(annual) && annual.length === 3 && annual.every(finite) ? Math.min(...annual) : null;
   const common = [rule('RS 推計 ≥ 80', rs, v => v >= 80)];
-  const rules = method === 'minervini' ? [...trend, integrity] : method === 'oneil' ? [
+  const rules = method.startsWith('minervini') ? [...trend, integrity] : method === 'oneil' ? [
     rule('C：四半期 EPS 前年同期比 ≥ 25%', row.eps_growth_yy, v => v >= 25, '%'),
     rule('売上高 前年同期比 ≥ 25%', row.sales_growth_yy, v => v >= 25, '%'),
     rule('A：直近3年の各年 EPS 成長率 ≥ 25%（最小値）', annualMinimum, v => v >= 25, '%'),
@@ -79,24 +80,26 @@ export function assess(row, method = 'minervini') {
     qualified: passed === rules.length, score: Math.round(passed / rules.length * 100) };
 }
 
-export function entryChecks(row) {
+export function entryChecks(row, method = 'minervini') {
   const v = auditValues(row), pivot = row.se_pivot_price;
+  const zone = method === 'minervini2' ? 3 : 5;
   return [
-    comparison('ピボット以上・5%以内', [v.close, pivot], (p, b) => p >= b && p <= b * 1.05),
-    rule('上昇日の出来高 ≥ 直前50日平均の1.4倍', finite(v.change) ? v.volumeRatio : null, x => x >= 1.4 && v.change > 0, '倍'),
+    comparison(`ピボット以上・${zone}%以内`, [v.close, pivot], (p, b) => p >= b && p <= b * (1 + zone / 100)),
+    rule('上昇日の出来高 ≥ 直前50日平均の1.4倍（アプリの代理閾値）', finite(v.change) ? v.volumeRatio : null, x => x >= 1.4 && v.change > 0, '倍'),
     rule('セットアップ準備完了（検出器）', row.se_setup_ready, x => x === true, '', true),
-    rule('市場：上昇トレンド確認（独自判定）', typeof row.market_regime === 'string' ? row.market_regime === 'confirmed_uptrend' : null, x => x === true, '', true),
+    rule('市場：上昇トレンド確認（アプリの保守的制約）', typeof row.market_regime === 'string' ? row.market_regime === 'confirmed_uptrend' : null, x => x === true, '', true),
     rule('決算日・ベース形状の最終確認', null, () => false),
   ];
 }
 
-export function entryPlan(row, quote) {
+export function entryPlan(row, quote, method = 'minervini') {
   const price = finite(quote?.price) && quote.price > 0 ? quote.price : row.current_price;
   const pivot = row.se_pivot_price ?? row.vcp_pivot;
   if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: '未判定', price, pivot: null, distance: null };
   const distance = (price / pivot - 1) * 100;
-  return { price, pivot, distance, upper: pivot * 1.05, pivotSource: row.se_pivot_price != null ? 'Setup Engine' : 'VCP',
-    state: distance < 0 ? 'ピボット待ち' : distance <= 5 + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
+  const zone = method === 'minervini2' ? 3 : 5;
+  return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: row.se_pivot_price != null ? 'Setup Engine' : 'VCP',
+    state: distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
     // A transparent example, not a claim that a pattern-specific stop was detected.
     stopExample: price * .93 };
 }

@@ -32,7 +32,7 @@ jobs:
 
       - name: Screening evidence regression tests
         working-directory: backend
-        run: python -m pytest tests/unit/scanners/test_minervini_template_canonical.py tests/unit/scanners/test_minervini_market_gate.py tests/unit/test_precomputed_scan_context.py tests/unit/test_minervini_scanner.py tests/unit/test_eps_rating_calendar_years.py -q
+        run: python -m pytest tests/unit/scanners/test_minervini_template_canonical.py tests/unit/scanners/test_minervini_market_gate.py tests/unit/test_precomputed_scan_context.py tests/unit/test_minervini_scanner.py tests/unit/test_eps_rating_calendar_years.py tests/unit/test_legacy_vcp_detection.py -q
 
       - name: "Gate 0: Theme identity invariants"
         run: make gate-identity

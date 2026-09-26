@@ -79,3 +79,5 @@
 .sepa-review { margin: 16px 0; font-size: 13px; line-height: 1.8; }
 .sepa-review dt { font-weight: 700; margin-top: 14px; }
 .sepa-review dd { margin: 4px 0 0; opacity: .85; }
+
+.risk-input-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:16px 0; }

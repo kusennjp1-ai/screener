@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Typography } from '@mui/material';
 import { fetchStaticChartPayload } from '../chartClient';
 import { auditDailyBars } from '../qualificationAudit';
+import { diagnoseBookChart } from '../bookChartDiagnostics';
 import { assess, entryChecks } from '../researchEngine';
 import SepaReview from './SepaReview';
 
@@ -11,7 +12,7 @@ export default function QualificationVerification({ row, entry, date, generation
     queryFn: async () => {
       const payload = await fetchStaticChartPayload(entry.path);
       const audit = auditDailyBars(row, payload, date);
-      return { audit, assessment: assess({ ...row, technical_audit: audit }, method) };
+      return { audit, bookDiagnostics: diagnoseBookChart(row, payload, date), assessment: assess({ ...row, technical_audit: audit }, method) };
     } });
   const result = query.data;
   return <section aria-label="選出条件の再検証">
@@ -29,9 +30,9 @@ export default function QualificationVerification({ row, entry, date, generation
       {result.assessment.rules.filter(r => r.state !== 'pass').map(r => r.label).join(' / ')}
     </Alert>}
     <details style={{ marginTop: 12 }}><summary>買い判断に追加で必要な確認（日次）</summary>
-      <ul>{entryChecks(row).map(r => <li key={r.label}>{r.label}：{r.state === 'pass' ? '適合' : r.state === 'fail' ? '不適合' : '未確認'}</li>)}</ul>
+      <ul>{entryChecks(row, method).map(r => <li key={r.label}>{r.label}：{r.state === 'pass' ? '適合' : r.state === 'fail' ? '不適合' : '未確認'}</li>)}</ul>
       <Typography sx={{ fontSize: 12 }}>スクリーニング通過は買いシグナルではありません。VCPは任意の形状条件で、トレンドテンプレート通過だけでは成立しません。決算予定とベースの妥当性、当日の執行条件は別途確認が必要です。</Typography>
     </details>
-    {method === 'minervini' && <SepaReview row={row} />}
+    {method.startsWith('minervini') && <SepaReview method={method} row={row} />}
   </section>;
 }

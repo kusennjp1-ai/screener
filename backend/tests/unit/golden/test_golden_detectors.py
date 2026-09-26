@@ -498,7 +498,7 @@ def test_golden_vcp_legacy_not_detected(monkeypatch, golden_update):
         return {
             "vcp_detected": False,
             "vcp_score": 40,
-            "num_bases": 2,
+            "num_bases": 1,  # two contractions are valid; one is insufficient
             "contracting_depth": False,
             "contraction_ratio": 0.95,
             "depth_score": 35.0,

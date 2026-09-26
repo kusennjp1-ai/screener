@@ -12,7 +12,7 @@ import QualificationVerification from '../components/QualificationVerification';
 import { mergeScanRows } from '../qualificationAudit';
 import '../research.css';
 
-const METHODS = { minervini: 'ミネルヴィニ', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
+const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 const fmt = (v, digits = 1) => finite(v) ? v.toLocaleString('ja-JP', { maximumFractionDigits: digits }) : '—';
 const panel = { p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', boxShadow: 'none' };
 
@@ -74,7 +74,7 @@ export default function ResearchPage() {
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now });
   const liveStatus = quote.isError ? '接続エラー' : quoteStatus(quote.data, clock.data);
   const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? quote.data : null;
-  const plan = selected ? entryPlan(selected, usableQuote) : null;
+  const plan = selected ? entryPlan(selected, usableQuote, method) : null;
   const leaders = useMemo(() => rankCandidates(rows, 'ibd', { liquidOnly: true }).filter(r => r.assessment.qualified).slice(0, 50).map(r => r.row), [rows]);
   const overlap = compareReference(leaders, reference.data, bundle.data?.date);
   const age = clock.data - Date.parse(manifest.data?.generated_at);
@@ -93,7 +93,7 @@ export default function ResearchPage() {
     // Ignore an in-flight result from a replaced daily snapshot.
     if (date !== bundle.data?.date || generation !== version) return;
     client.setQueryData(['researchRows', entry.pages?.scan?.path, version], previous => previous ? {
-      ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, technical_audit: result.audit } : r),
+      ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics } : r),
     } : previous);
     setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
   }
@@ -176,6 +176,7 @@ export default function ResearchPage() {
               {checks.templateMismatch && <Alert severity="warning">元のテンプレート判定と日足再計算が不一致です。上の再計算結果を選定に使用しています。</Alert>}
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>未確認は合格に数えません。RS・EPS・Composite・業種順位は独自推計です。</Typography>
               {method === 'ibd' && <Typography sx={{ fontSize: 12, mt: 1 }}>公開ルールを参考にした独自の厳格成長スクリーニングです。財務履歴の欠損を推計スコアで補完しません。公式IBDの全条件や選出リストへの合格認定ではありません。</Typography>}
+              {method.startsWith('minervini') && <Typography sx={{ fontSize: 12, mt: 1 }}>{method === 'minervini2' ? '書籍②『株式トレード 基本と原則』：安値から25%以上。買い位置は2〜3%以内という記述の上限3%を採用。' : '書籍①『成長株投資法』：安値から30%以上。表示する5%ゾーンはIBD型の補助指標で、書籍の固定条件ではありません。'} 200日線の4〜5か月上昇や高いRSは望ましい特徴で、最低条件とは区別します。</Typography>}
               <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />
               <Button component="a" href={tradingViewUrl(selected.symbol, 'US')} target="_blank" rel="noopener noreferrer" size="small" sx={{ mt: 1.5 }}>TradingView</Button>
             </Paper>
@@ -183,7 +184,7 @@ export default function ResearchPage() {
               <Stack direction="row" justifyContent="space-between"><div className="research-kicker">02 / ENTRY CHECK</div><Chip size="small" label={liveStatus} color={liveStatus === 'リアルタイム' ? 'success' : 'default'} sx={{ height: 22, fontSize: 12 }} /></Stack>
               <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>エントリー位置</Typography>
               <Typography sx={{ fontSize: 24, fontWeight: 700, my: 2, color: plan.state === '買いゾーン超過' ? 'warning.main' : 'text.primary' }}>{plan.state}</Typography>
-              <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>5%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
+              <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>{plan.zone || 5}%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
               <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 2 }}>{plan.pivotSource || '未判定'}のピボット。ゾーンは価格位置だけの判定で、出来高・市場環境・ベースの妥当性を保証しません。チャートのVCPトリガーとは計算方式が異なる場合があります。</Typography>
               <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}><Typography component="h3" variant="subtitle2">チャートの確認ポイント</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>VCP：{selected.vcp_detected == null ? '未確認' : selected.vcp_detected ? '検出' : '未検出'} / 出来高50日平均比：{fmt(selected.se_volume_vs_50d, 2)}倍</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>ベース：{fmt(selected.se_base_length_weeks)}週 / 深さ：{fmt(selected.se_base_depth_pct)}%</Typography></Box>
             </Paper>
