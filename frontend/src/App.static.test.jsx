@@ -322,12 +322,12 @@ describe('App static mode', () => {
   });
 
   it.each([
-    ['#/', '米国株リサーチ'],
+    ['#/', '今日の投資判断'],
     ['#/daily', 'United States スナップショット'],
     ['#/scan', 'デイリースキャン'],
     ['#/breadth', '市場環境'],
     ['#/groups', 'United States 業種グループランキング'],
-    ['#/themes', '米国株リサーチ'],
+    ['#/themes', '今日の投資判断'],
   ])('renders the static hash route %s without any /api requests', async (hash, heading) => {
     await renderStaticAppAtHash(hash);
 
