@@ -8,6 +8,8 @@ import { assess, compareReference, entryPlan, finite, highDistance, quoteStatus,
 import { tradingViewUrl } from '../tradingView';
 import ResearchChart from '../components/ResearchChart';
 import PortfolioDecision from '../components/PortfolioDecision';
+import QualificationVerification from '../components/QualificationVerification';
+import { mergeScanRows } from '../qualificationAudit';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
@@ -31,6 +33,7 @@ export default function ResearchPage() {
   const [chart, setChart] = useState(null);
   const [limit, setLimit] = useState(50);
   const [storageError, setStorageError] = useState(false);
+  const [verificationNotice, setVerificationNotice] = useState(null);
   const [watch, setWatch] = useState(() => {
     try { const value = JSON.parse(localStorage.getItem('research-watch') || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; }
   });
@@ -43,9 +46,7 @@ export default function ResearchPage() {
       if (entry.as_of_date && index.as_of_date && entry.as_of_date !== index.as_of_date) throw new Error('Snapshot date mismatch');
       const chunks = await Promise.all((index.chunks || []).map(c => fetchStaticJson(c.path)));
       if (chunks.some(c => c.as_of_date && c.as_of_date !== index.as_of_date)) throw new Error('Mixed snapshot dates');
-      const rows = new Map((index.initial_rows || []).map(r => [r.symbol, r]));
-      chunks.forEach(c => (c.rows || []).forEach(r => rows.set(r.symbol, r)));
-      return { rows: [...rows.values()], date: index.as_of_date };
+      return { rows: mergeScanRows([index, ...chunks], index.as_of_date), date: index.as_of_date };
     }, staleTime: 60000,
   });
   const reference = useQuery({ queryKey: ['researchReference', version], queryFn: async () => {
@@ -88,6 +89,14 @@ export default function ResearchPage() {
     setMethod('minervini'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
+  function applyVerification(ticker, result, date, generation) {
+    // Ignore an in-flight result from a replaced daily snapshot.
+    if (date !== bundle.data?.date || generation !== version) return;
+    client.setQueryData(['researchRows', entry.pages?.scan?.path, version], previous => previous ? {
+      ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, technical_audit: result.audit } : r),
+    } : previous);
+    setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
+  }
   function focusDetail() { requestAnimationFrame(() => {
     detailRef.current?.focus?.({ preventScroll: true });
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
@@ -97,7 +106,7 @@ export default function ResearchPage() {
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
-  return <Box component="main" className="research-workbench" data-mobile-view={mobileView} sx={{ '--accent': theme.palette.mode === 'dark' ? '#d4ac61' : '#72501c' }}>
+  return <Box component="main" className="research-workbench" data-mobile-view={mobileView} sx={{ '--accent': theme.palette.mode === 'dark' ? '#a399ff' : '#6555dc' }}>
     <header className="research-heading">
       <Box><div className="research-kicker">US EQUITIES / LEADER RESEARCH</div><Typography component="h1" sx={{ fontSize: { xs: 25, md: 30 }, fontWeight: 700, letterSpacing: '-.03em', mt: .5 }}>米国株リサーチ</Typography></Box>
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => client.invalidateQueries()}>データを再確認 ↻</Button></Stack>
@@ -125,11 +134,13 @@ export default function ResearchPage() {
         <FormControlLabel control={<Switch size="small" checked={onlyWatch} onChange={e => setOnlyWatch(e.target.checked)} />} label="ウォッチのみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
         <FormControlLabel control={<Switch size="small" checked={liquid} onChange={e => setLiquid(e.target.checked)} />} label="流動性フィルター：株価 $10以上・平均売買代金 $2,000万以上" sx={{ '& .MuiFormControlLabel-label': { fontSize: 12 } }} />
         <Button onClick={download} disabled={!ranked.length} size="small" sx={{ ml: 'auto' }}>CSV保存 ↓</Button>
+        <Button component="a" href={`${import.meta.env.BASE_URL}qualification-audit.json`} download size="small">全銘柄の検証記録 ↓</Button>
       </Stack>
     </Paper>
     {(manifest.isError || bundle.isError) && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={() => client.invalidateQueries()}>再試行</Button>}>データを取得できません。以前の表示値がある場合は最新とは限りません。</Alert>}
     {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} /> 銘柄と分析根拠を読み込んでいます…</Box>}
     {storageError && <Alert severity="warning">ウォッチはこの画面のみ保持されます。端末への保存が制限されています。</Alert>}
+    {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     <ToggleButtonGroup className="research-mobile-tabs" exclusive value={mobileView} onChange={(_, value) => { if (value) setMobileView(value); if (value === 'detail') focusDetail(); }} fullWidth aria-label="表示パネル">
       <ToggleButton value="list">候補一覧</ToggleButton><ToggleButton value="detail" disabled={!selected}>銘柄分析 {selected?.symbol}</ToggleButton>
     </ToggleButtonGroup>
@@ -156,13 +167,16 @@ export default function ResearchPage() {
               <div className="research-symbol-price"><Typography sx={{ fontSize: 30, fontWeight: 600, lineHeight: 1.2 }}>${fmt(plan.price, 2)}</Typography><Typography sx={{ fontSize: 13, mt: .75, color: selected.price_change_1d >= 0 ? 'success.main' : 'error.main' }}>{finite(selected.price_change_1d) ? `${selected.price_change_1d >= 0 ? '+' : ''}${fmt(selected.price_change_1d)}% 前日比（日次）` : '前日比未確認'}</Typography><Button size="small" sx={{ mt: .5 }} onClick={() => toggleWatch(selected.symbol)} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol) ? '★ 保存済み' : '☆ ウォッチ'}</Button></div>
             </div>
             <div className="research-metrics">{[['RS 推計', fmt(selected.rs_rating, 0)], ['Composite 推計', fmt(selected.composite_rating, 0)], ['EPS 前年同期比', `${fmt(selected.eps_growth_yy)}%`], ['業種順位 推計', fmt(selected.ibd_group_rank, 0)]].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
-            <ResearchChart entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={() => setChart(selected.symbol)} />
+            <ResearchChart rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={() => setChart(selected.symbol)} />
           </Paper>
           <div className="research-bottom">
             <Paper sx={panel}>
               <div className="research-kicker">01 / METHODOLOGY</div><Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>{METHODS[method]}の判定根拠</Typography>
-              <ul className="research-rules">{checks.rules.map(r => <li key={r.label}><span>{r.label}</span><Box component="span" sx={{ color: r.state === 'pass' ? 'success.main' : r.state === 'fail' ? 'error.main' : 'text.secondary' }}>{r.state === 'pass' ? '✓ 適合' : r.state === 'fail' ? '× 不適合' : '— 未確認'}{finite(r.value) ? ` · ${fmt(r.value)}${r.unit}` : ''}</Box></li>)}</ul>
+              <ul className="research-rules">{checks.rules.map(r => <li key={r.label}><span>{r.label}{r.evidence && <small style={{ display: 'block' }}>{r.evidence}</small>}</span><Box component="span" sx={{ color: r.state === 'pass' ? 'success.main' : r.state === 'fail' ? 'error.main' : 'text.secondary' }}>{r.state === 'pass' ? '✓ 適合' : r.state === 'fail' ? '× 不適合' : '— 未確認'}{finite(r.value) ? ` · ${fmt(r.value)}${r.unit}` : ''}</Box></li>)}</ul>
+              {checks.templateMismatch && <Alert severity="warning">元のテンプレート判定と日足再計算が不一致です。上の再計算結果を選定に使用しています。</Alert>}
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>未確認は合格に数えません。RS・EPS・Composite・業種順位は独自推計です。</Typography>
+              {method === 'ibd' && <Typography sx={{ fontSize: 12, mt: 1 }}>公開ルールを参考にした独自の厳格成長スクリーニングです。財務履歴の欠損を推計スコアで補完しません。公式IBDの全条件や選出リストへの合格認定ではありません。</Typography>}
+              <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />
               <Button component="a" href={tradingViewUrl(selected.symbol, 'US')} target="_blank" rel="noopener noreferrer" size="small" sx={{ mt: 1.5 }}>TradingView</Button>
             </Paper>
             <Paper sx={panel}>
@@ -182,7 +196,7 @@ export default function ResearchPage() {
       <Typography variant="body2">IBD公式リストとの一致：{overlap ? `${Math.round(overlap.recall * 100)}%` : '未検証'}</Typography>
       <Typography component="h2" variant="subtitle1" fontWeight={700}>選定方式とデータの読み方</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : '場中価格の配信先は未設定です。現在は日次価格で計算しています。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
     </footer>
     <StaticChartViewerModal open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} chartIndex={index.data} navigationSymbols={ranked.map(r => r.row.symbol)} />

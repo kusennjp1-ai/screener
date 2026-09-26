@@ -105,3 +105,4 @@ backend/tests/load/baselines/current_run.json
 # Redis persistence snapshots from local runs
 dump.rdb
 frontend/public/portfolio-model.json
+frontend/public/qualification-audit.json

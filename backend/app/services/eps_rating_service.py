@@ -115,6 +115,12 @@ class EPSRatingService:
         # Value from n years ago (start)
         start_idx = years_available - 1
         start_value = annual_eps[start_idx][1]
+        # Fiscal observations may have gaps. Four observations spanning six
+        # calendar years must not be annualized as if only three years passed.
+        fiscal_years = [year for year, _ in annual_eps[:years_available]]
+        if any(newer <= older for newer, older in zip(fiscal_years, fiscal_years[1:])):
+            return None, 0
+        elapsed_years = fiscal_years[0] - fiscal_years[-1]
 
         # Handle edge cases
         if start_value is None or end_value is None:
@@ -132,8 +138,7 @@ class EPSRatingService:
             if start_value > 0 and end_value > 0:
                 # Both positive: standard CAGR
                 ratio = end_value / start_value
-                n_years = years_available - 1
-                cagr = (pow(ratio, 1.0 / n_years) - 1) * 100
+                cagr = (pow(ratio, 1.0 / elapsed_years) - 1) * 100
             elif start_value < 0 and end_value > 0:
                 # Turnaround: went from loss to profit
                 # Calculate improvement rate

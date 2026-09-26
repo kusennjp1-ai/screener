@@ -834,7 +834,10 @@ jobs:
           VITE_STATIC_SITE: "true"
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
-        run: cd frontend && npm run build
+        run: |
+          cd frontend
+          npm run test:run -- src/static/qualificationAudit.test.js src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
+          npm run build
 
       - name: Upload Pages artifact
         id: upload-pages-artifact

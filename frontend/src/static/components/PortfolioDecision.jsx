@@ -10,15 +10,18 @@ export default function PortfolioDecision({ rows, date, now, onInspect }) {
   const [expanded, setExpanded] = useState(false);
   return <Paper component="section" id="today-decision" tabIndex={-1} aria-label="本日の判断と10万ドルの配分" className="decision-panel" elevation={0}>
     <div className="research-kicker">01 / TODAY → ALLOCATION → RESEARCH</div>
+    <div className="decision-overview"><div>
     <Typography component="h2" variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{plan.decision}</Typography>
     <Typography sx={{ mt: 1 }}>本日そのまま発注できる銘柄は未確認です。新規資金10万ドルのモデルは株式0%、現金100%（$100,000）で待機します。</Typography>
+    </div><div className="decision-account"><small>MODEL ACCOUNT / 待機資金</small><strong>$100,000</strong><span>株式 0% · 現金 100%</span></div></div>
     <Typography color="text.secondary" sx={{ mt: 1, fontSize: 13 }}>分析基準日：{date} ／ {plan.market.label}。既存保有なし・信用取引なしのモデルです。保有株の売却指示ではありません。</Typography>
     <ul className="decision-blockers">{plan.blockers.map(reason => <li key={reason}>{reason}</li>)}</ul>
     <Button variant="outlined" onClick={() => setExpanded(v => !v)} aria-expanded={expanded} aria-controls="conditional-plan">{expanded ? '条件付き計画を閉じる' : `条件付きの配分・注文計画を見る（${plan.positions.length}銘柄）`}</Button>
     {expanded && <Box id="conditional-plan" sx={{ mt: 2 }}>
       <Typography component="h3" variant="h6">確認後のモデル計画 — 発注前</Typography>
       <Typography color="text.secondary" sx={{ fontSize: 13, my: 1 }}>ミネルヴィニ・IBD型の両方を通過し、流動性・ピボットから−3〜+5%・形状信頼度70以上・セクター情報で絞ります。CAN SLIM全条件の合格ではありません。</Typography>
-      <div className="decision-totals"><span>市場別上限 <strong>{pct(plan.market.cap)}</strong></span><span>条件付き株式 <strong>{pct(plan.exposure)}</strong></span><span>残す現金 <strong>{money(plan.cash)}</strong></span><span>逆指値で約定した場合の損失 <strong>{money(plan.risk)}</strong></span></div>
+      <div className="decision-totals"><span>試行配分の上限 <strong>{pct(plan.allocationCap)}</strong></span><span>条件付き株式 <strong>{pct(plan.exposure)}</strong></span><span>残す現金 <strong>{money(plan.cash)}</strong></span><span>逆指値で約定した場合の損失 <strong>{money(plan.risk)}</strong></span></div>
+      <Typography sx={{ fontSize: 13, my: 1 }}>現金から始めるモデルのため、条件確認後も試行配分は最大25%に制限します。この数値は独自設定です。市場が強いだけでは増額せず、実際のトレード結果を確認します。損失が続くときは資金配分を縮小し、ストップ幅の拡大や含み損への買い増しで補いません。</Typography>
       {!plan.positions.length ? <Typography sx={{ my: 2 }}>配分できる候補はありません。条件を緩めて資金を埋めません。</Typography> : <div className="order-grid">{plan.positions.map(p => <article key={p.symbol} className="order-card">
         <Button onClick={() => onInspect(p.symbol)} aria-label={`${p.symbol} の注文根拠を確認`} sx={{ fontSize: 20, fontWeight: 700 }}>{p.symbol} → 根拠・チャート</Button>
         <Typography color="text.secondary" sx={{ fontSize: 12 }}>{p.sector} ／ {p.shares}株 ／ {money(p.cost)}（{pct(p.weight)}）</Typography>

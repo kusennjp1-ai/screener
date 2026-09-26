@@ -38,9 +38,9 @@ describe('research rules and financial data integrity', () => {
     expect(csv).toContain('直近3年の各年 EPS 成長率');
     expect(csv).toContain('"99"');
   });
-  it('normalizes both legacy signed and feature-store unsigned high distance', () => {
-    for (const distance of [-10, 10, 0]) expect(assess({ week_52_high_distance: distance }, 'ibd').rules[4].state).toBe('pass');
-    for (const distance of [-26, 26]) expect(assess({ week_52_high_distance: distance }, 'minervini').rules[3].state).toBe('fail');
+  it('does not accept legacy distances without independent daily verification', () => {
+    for (const distance of [-10, 10, 0]) expect(assess({ week_52_high_distance: distance }, 'ibd').rules[4].state).toBe('unknown');
+    for (const distance of [-26, 26]) expect(assess({ week_52_high_distance: distance }, 'minervini').rules[6].state).toBe('unknown');
   });
   it('excludes illiquid or missing-liquidity stocks when the liquidity gate is enabled', () => {
     const rows = [{ symbol: 'GOOD', current_price: 10, adv_usd: 20000000 }, { symbol: 'PENNY', current_price: 2, adv_usd: 50000000 }, { symbol: 'UNKNOWN', current_price: 50 }];
@@ -53,7 +53,7 @@ describe('research rules and financial data integrity', () => {
   });
   it('does not silently qualify missing fundamentals', () => {
     expect(assess({}, 'oneil').qualified).toBe(false);
-    expect(assess({}, 'ibd').unknown).toBe(5);
+    expect(assess({}, 'ibd').unknown).toBe(10);
   });
   it('keeps a known zero distinct from absent data', () => {
     expect(assess({ eps_growth_yy: 0 }, 'oneil').rules[0].state).toBe('fail');

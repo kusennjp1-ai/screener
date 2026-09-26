@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildPortfolioPlan } from './portfolioPlan';
+import { withAuditFixture } from './testAuditFixture';
 
-export const fixture = (symbol = 'LEAD', extra = {}) => ({ symbol, market: 'US', currency: 'USD', gics_sector: 'Technology',
+export const fixture = (symbol = 'LEAD', extra = {}) => withAuditFixture({ symbol, market: 'US', currency: 'USD', gics_sector: 'Technology',
   market_regime: 'confirmed_uptrend', market_above_50dma: true, market_above_200dma: true,
   passes_template: true, rs_rating: 95, week_52_low_distance: 50, week_52_high_distance: 3,
   composite_rating: 95, eps_rating: 90, ibd_group_rank: 10, adv_usd: 50000000,
@@ -26,6 +27,8 @@ describe('100 virtual portfolio monitoring scenarios', () => {
       expect(plan.executionCash).toBe(100000);
       expect(plan.invested + plan.cash).toBeCloseTo(100000, 2);
       expect(plan.exposure).toBeLessThanOrEqual(plan.market.cap + 1e-9);
+      expect(plan.exposure).toBeLessThanOrEqual(.25 + 1e-9);
+      expect(plan.allocationCap).toBe(Math.min(plan.market.cap, .25));
       expect(plan.risk).toBeLessThanOrEqual(2000.01);
       expect(plan.positions.length).toBeLessThanOrEqual(5);
       for (const p of plan.positions) {

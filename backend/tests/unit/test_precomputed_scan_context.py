@@ -76,8 +76,8 @@ def _manual_precomputed_context(data: StockData) -> SimpleNamespace:
         ema_10=float(close_chrono.ewm(span=10, adjust=False).mean().iloc[-1]),
         ema_20=float(close_chrono.ewm(span=20, adjust=False).mean().iloc[-1]),
         ema_50=float(close_chrono.ewm(span=50, adjust=False).mean().iloc[-1]),
-        high_52w=float(close_rev.max()),
-        low_52w=float(close_rev.min()),
+        high_52w=float(data.price_data["High"].tail(252).max()),
+        low_52w=float(data.price_data["Low"].tail(252).min()),
         rs_ratings=rs_ratings,
     )
 

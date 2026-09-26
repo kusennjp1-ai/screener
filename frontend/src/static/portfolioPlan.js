@@ -21,6 +21,9 @@ export function modelMarket(rows) {
 export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now()) {
   if (!finite(capital) || capital <= 0 || capital > 100000000) throw Error('Invalid model capital');
   const market = modelMarket(rows);
+  // This account starts in cash and has no demonstrated trading results.
+  // Use a disclosed pilot allocation; market strength alone cannot scale it up.
+  const allocationCap = Math.min(market.cap, .25);
   const freshness = snapshotFreshness(date, now);
   // Static scans cannot establish current execution conditions, even with a fresh date.
   const blockers = ['当日の価格・出来高・市場状態が未検証', '決算日とベース形状の最終確認が必要'];
@@ -46,7 +49,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
     const stop = centsDown(buy * .93);
     const perShareRisk = buy - stop;
     const sector = row.gics_sector.trim();
-    const budget = Math.min(capital * .1, capital * market.cap - used, capital * .2 - (sectors.get(sector) || 0));
+    const budget = Math.min(capital * .1, capital * allocationCap - used, capital * .2 - (sectors.get(sector) || 0));
     const shares = Math.max(0, Math.floor(Math.min(budget / buy, capital * .005 / perShareRisk, (capital * .02 - risk) / perShareRisk)));
     if (!shares) continue;
     const cost = Math.round(shares * buy * 100) / 100;
@@ -54,7 +57,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
     used += cost; risk += loss; sectors.set(sector, (sectors.get(sector) || 0) + cost);
     positions.push({ symbol: row.symbol, sector, buy, stop, target: centsDown(buy * 1.2), shares, cost, loss, weight: cost / capital, pivot: row.se_pivot_price });
   }
-  return { date, capital, market, blockers, positions, candidateCount: candidates.length,
+  return { date, capital, market, allocationCap, blockers, positions, candidateCount: candidates.length,
     invested: used, cash: capital - used, exposure: used / capital, risk,
     decision: '新規購入は保留', executionExposure: 0, executionCash: capital };
 }

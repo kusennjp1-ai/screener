@@ -320,18 +320,18 @@ class MinerviniScanner(BaseStockScreener):
             # 52-week range — restrict to the trailing ~252 trading days. The
             # raw series spans ~2 years (price_period="2y"), so using the whole
             # series would understate the 52-week low and let recently-broken
-            # stocks still clear "30% above the 52-week low". ``prices`` is
-            # most-recent-first, so ``iloc[:252]`` is the last 52 weeks.
-            prices_52w = prices.iloc[:TRADING_DAYS_52W]
+            # stocks still clear "30% above the 52-week low". Use intraday
+            # High/Low, not closes: a large upper wick must count as a high.
+            range_52w = price_data.tail(TRADING_DAYS_52W)
             high_52w = (
                 float(precomputed.high_52w)
                 if precomputed is not None and precomputed.high_52w is not None
-                else float(prices_52w.max())
+                else float(range_52w["High"].max())
             )
             low_52w = (
                 float(precomputed.low_52w)
                 if precomputed is not None and precomputed.low_52w is not None
-                else float(prices_52w.min())
+                else float(range_52w["Low"].min())
             )
 
             # 1. Calculate RS Ratings (weighted + individual periods)
@@ -500,7 +500,7 @@ class MinerviniScanner(BaseStockScreener):
             # SEPA rule 1: assess the general market from the benchmark so the
             # rating can be capped in a correction/downtrend. The template
             # verdict itself stays market-independent (setups are setups); an
-            # unknown regime (no/short benchmark) never blocks.
+            # unknown regime (no/short benchmark) caps the rating to Watch.
             regime = assess_market_regime(
                 spy_data,
                 breadth_pct_above_200dma=getattr(data, "market_breadth_pct_above_200dma", None),
@@ -548,9 +548,9 @@ class MinerviniScanner(BaseStockScreener):
             # SEPA rule 1 — trade WITH the general market. A perfect template
             # in a correction/downtrend is a watchlist name, not a buy (the
             # setup itself, passes_template, stays market-independent).
-            # market_uptrend is None when no benchmark was available; an
-            # unknown market never blocks (matches markets360's fallback).
-            if details.get("market_uptrend") is False:
+            # Missing market evidence cannot certify a Buy. Keep template
+            # qualification independent, but require an explicit healthy read.
+            if details.get("market_uptrend") is not True:
                 rating = "Watch"
             return rating
         elif score >= 60:

@@ -3,7 +3,7 @@ import { Alert, Box, Button, CircularProgress, Stack, Typography, useMediaQuery 
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 
-export default function ResearchChart({ entry, symbol, generation, onExpand }) {
+export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating }) {
   const small = useMediaQuery('(max-width: 700px)');
   const query = useQuery({
     queryKey: [...staticChartKeys.payload(symbol, entry?.path), generation],
@@ -22,7 +22,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand }) {
       : query.isError ? <Alert severity="error" action={<Button onClick={() => query.refetch()}>再試行</Button>}>チャートを取得できません。</Alert>
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography>
       : <CandlestickChart key={symbol} symbol={symbol} height={small ? 320 : 410}
-        priceData={data.bars} rsLineData={data.rs_line || null} rsRatingValue={data.stock_data?.rs_rating ?? null}
+        priceData={data.bars} rsLineData={data.rs_line || null} rsRatingValue={rsRating ?? null}
         epsLine={data.eps_line || null} blueDots={data.blue_dots || null}
         dataUpdatedAtOverride={data.generated_at ? Date.parse(data.generated_at) : null}
         hideOhlcLegend={small} hideTimeframeToggle={small}

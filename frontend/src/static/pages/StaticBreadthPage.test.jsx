@@ -151,7 +151,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage('/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
     expect(screen.getByTestId('breadth-chart')).toHaveTextContent('^HSI:1');
   });
 
@@ -256,7 +256,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
 
@@ -345,7 +345,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage('/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
     expect(
       await screen.findByText('Group attribution is not yet supported for market HK.')
@@ -430,7 +430,7 @@ describe('StaticBreadthPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '業種グループ別' }));
 
     // The empty-session message is shown but the date picker remains usable.

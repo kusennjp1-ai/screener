@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, cleanup, waitFor, within } from '@testi
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
+import { withAuditFixture } from '../testAuditFixture';
 
 const data = vi.hoisted(() => ({ rows: [], fail: false, charts: true, date: '2026-09-21', generated: new Date().toISOString() }));
 vi.mock('../dataClient', () => ({
@@ -21,7 +22,7 @@ const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market
 let client;
 beforeEach(() => {
   localStorage.clear(); data.fail = false; data.charts = true; data.date = '2026-09-21';
-  data.rows = [leader, { ...leader, symbol: 'FAIL', company_name: 'Weak Fixture', passes_template: false, rs_rating: 10, eps_growth_yy: -20, composite_rating: 10 }, { symbol: 'NONE', market: 'US', company_name: 'Unknown Fixture', current_price: 50, adv_usd: 30000000 }];
+  data.rows = [withAuditFixture(leader, data.date), { ...leader, symbol: 'FAIL', company_name: 'Weak Fixture', passes_template: false, rs_rating: 10, eps_growth_yy: -20, composite_rating: 10 }, { symbol: 'NONE', market: 'US', company_name: 'Unknown Fixture', current_price: 50, adv_usd: 30000000 }];
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 });
@@ -43,7 +44,7 @@ describe('100 virtual expert task profiles', () => {
       const table = screen.getByRole('table', { name: '投資手法別の銘柄候補' });
       if (t === 0) {
         expect(screen.getByText(`${methods[s % 3]}の判定根拠`)).toBeInTheDocument();
-        expect(within(table).getByText(s % 3 === 0 ? '4/4' : s % 3 === 1 ? '8/8' : '5/5')).toBeInTheDocument();
+        expect(within(table).getByText(s % 3 === 0 ? '9/9' : s % 3 === 1 ? '8/8' : '10/10')).toBeInTheDocument();
       } else if (t === 1) {
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
         expect(within(table).queryByText('FAIL')).not.toBeInTheDocument();

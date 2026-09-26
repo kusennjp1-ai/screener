@@ -100,7 +100,9 @@ def _build_precomputed_scan_context(stock_data: StockData) -> PrecomputedScanCon
     # series spans ~500 bars). Using the whole series understates the 52-week
     # low (and overstates the 52-week high), which let stocks that have actually
     # broken down recently still satisfy "30% above the 52-week low".
-    close_rev_52w = close_rev.iloc[:TRADING_DAYS_52W] if not close_rev.empty else close_rev
+    # Intraday High/Low extrema are required; close-only extrema can conceal
+    # a drawdown exceeding the template's 25% high-proximity limit.
+    range_52w = stock_data.price_data.tail(TRADING_DAYS_52W)
 
     ma_50_series = close_chrono.rolling(window=50, min_periods=50).mean()
     ma_150_series = close_chrono.rolling(window=150, min_periods=150).mean()
@@ -139,8 +141,8 @@ def _build_precomputed_scan_context(stock_data: StockData) -> PrecomputedScanCon
         ema_10=_series_last_float(ema_10_series),
         ema_20=_series_last_float(ema_20_series),
         ema_50=_series_last_float(ema_50_series),
-        high_52w=float(close_rev_52w.max()) if not close_rev_52w.empty else None,
-        low_52w=float(close_rev_52w.min()) if not close_rev_52w.empty else None,
+        high_52w=float(range_52w["High"].max()) if not range_52w.empty and "High" in range_52w else None,
+        low_52w=float(range_52w["Low"].min()) if not range_52w.empty and "Low" in range_52w else None,
         rs_ratings=rs_ratings,
     )
 

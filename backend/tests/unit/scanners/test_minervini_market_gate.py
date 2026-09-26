@@ -6,6 +6,7 @@ correction/downtrend, mirroring the markets360 scanner's buyable_now gate.
 """
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.scanners.base_screener import StockData
 from app.scanners.minervini_scanner import MinerviniScanner
@@ -51,13 +52,19 @@ def test_same_leader_in_a_downtrending_market_is_capped_to_watch():
     assert res.passes == res.details["passes_template"]
 
 
-def test_short_benchmark_leaves_the_rating_ungated():
-    """Unknown regime (benchmark too short to assess) must never block."""
+def test_short_benchmark_cannot_certify_a_buy():
+    """Unknown regime cannot certify the market prerequisite for a Buy."""
     bench = _frame(np.linspace(100, 104, 540))
     short_bench = bench.tail(150)  # < 200 sessions -> regime None
     stock = _leader()
     res = MinerviniScanner().scan_stock("LEAD", StockData(
         symbol="LEAD", price_data=stock, benchmark_data=short_bench, market="US"))
     assert res.details["market_uptrend"] is None
-    if res.details.get("passes_template"):
-        assert res.rating in ("Strong Buy", "Buy")
+    assert res.rating not in ("Strong Buy", "Buy")
+
+
+@pytest.mark.parametrize("market", [None, False, "true", 1])
+def test_template_pass_needs_explicit_market_confirmation(market):
+    scanner = MinerviniScanner()
+    assert scanner.calculate_rating(95, {"passes_template": True, "market_uptrend": market}) == "Watch"
+    assert scanner.calculate_rating(95, {"passes_template": True, "market_uptrend": True}) == "Strong Buy"

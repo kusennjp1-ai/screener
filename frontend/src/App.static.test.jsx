@@ -325,7 +325,7 @@ describe('App static mode', () => {
     ['#/', '米国株リサーチ'],
     ['#/daily', 'United States スナップショット'],
     ['#/scan', 'デイリースキャン'],
-    ['#/breadth', 'United States 騰落状況（ブレッドス）'],
+    ['#/breadth', '市場環境'],
     ['#/groups', 'United States 業種グループランキング'],
     ['#/themes', '米国株リサーチ'],
   ])('renders the static hash route %s without any /api requests', async (hash, heading) => {
@@ -366,7 +366,7 @@ describe('App static mode', () => {
   it('offers 1M and 3M ranges on the breadth page in the static route', async () => {
     await renderStaticAppAtHash('#/breadth');
 
-    expect(await screen.findByRole('heading', { name: 'United States 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
     expect(screen.getByTestId('breadth-chart-ranges')).toHaveTextContent('1M');
     expect(screen.getByTestId('breadth-chart-ranges')).toHaveTextContent('3M');
   }, 10000);
@@ -374,7 +374,7 @@ describe('App static mode', () => {
   it('honors the market query parameter and loads market-scoped breadth assets', async () => {
     await renderStaticAppAtHash('#/breadth?market=HK');
 
-    expect(await screen.findByRole('heading', { name: 'Hong Kong 騰落状況（ブレッドス）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
     expect(window.location.hash).toContain('#/breadth');
     expect(window.location.hash).toContain('market=HK');
     expect(window.localStorage.getItem('static-site:selected-market')).toBe('HK');

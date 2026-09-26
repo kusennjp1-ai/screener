@@ -8,9 +8,11 @@ overlay.
 """
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.scanners.base_screener import StockData
 from app.scanners.minervini_scanner import MinerviniScanner
+from app.scanners.scan_orchestrator import _build_precomputed_scan_context
 
 
 def _frame(close: np.ndarray) -> pd.DataFrame:
@@ -61,3 +63,34 @@ def test_broken_ma_stack_still_fails_the_template():
     bench = _frame(np.linspace(100, 104, 540))
     res = _scan(stock, bench)
     assert res.details["passes_template"] is False
+
+
+@pytest.mark.parametrize("precomputed", [False, True])
+def test_intraday_high_blocks_close_only_false_positive(precomputed):
+    stock = _frame(np.linspace(10, 100, 540))
+    bench = _frame(np.linspace(100, 100.5, 540))
+    # The closing high is 100, but the actual high is 140: 28.57% below high.
+    stock.iloc[-30, stock.columns.get_loc("High")] = 140.0
+    data = StockData(symbol="X", price_data=stock, benchmark_data=bench, market="US")
+    if precomputed:
+        data.precomputed_scan_context = _build_precomputed_scan_context(data)
+    result = MinerviniScanner().scan_stock("X", data)
+    assert result.details["high_52w"] == 140.0
+    assert result.details["from_52w_high_pct"] == pytest.approx(28.57)
+    assert result.passes is False
+
+
+@pytest.mark.parametrize("precomputed", [False, True])
+def test_range_uses_intraday_low_and_excludes_older_extremes(precomputed):
+    stock = _frame(np.linspace(10, 100, 540))
+    bench = _frame(np.linspace(100, 100.5, 540))
+    stock.iloc[-253, stock.columns.get_loc("High")] = 999.0
+    stock.iloc[-253, stock.columns.get_loc("Low")] = 0.01
+    stock.iloc[-100, stock.columns.get_loc("Low")] = 40.0
+    data = StockData(symbol="X", price_data=stock, benchmark_data=bench, market="US")
+    if precomputed:
+        data.precomputed_scan_context = _build_precomputed_scan_context(data)
+    result = MinerviniScanner().scan_stock("X", data)
+    assert result.details["high_52w"] == pytest.approx(100.5)
+    assert result.details["low_52w"] == 40.0
+    assert result.details["above_52w_low_pct"] == 150.0
