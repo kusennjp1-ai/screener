@@ -356,7 +356,7 @@ describe('App static mode', () => {
   it('keeps scan controls read-only in the static route', async () => {
     await renderStaticAppAtHash('#/scan');
 
-    expect(await screen.findByRole('heading', { name: 'デイリースキャン' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'デイリースキャン（補助フィルター）' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('static-filter-panel')).toHaveTextContent('presets-disabled');
       expect(screen.getByTestId('static-results-table')).toHaveTextContent('actions-visible:2');

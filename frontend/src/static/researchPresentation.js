@@ -10,7 +10,7 @@ export function canonicalPivot(row) {
 export function filterRanked(ranked, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false, coverage = 'all' } = {}) {
   const query = search.trim().toUpperCase();
   return ranked.filter(({row:r, assessment:a}) =>
-    (!liquidOnly || (r.current_price >= 10 && r.adv_usd >= 20000000)) &&
+    (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || a.qualified) && (!watchlist || watchlist.includes(r.symbol)) &&
     `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query) &&
     (coverage === 'all' || (coverage === 'verified') === (r.technical_audit?.valid === true)));

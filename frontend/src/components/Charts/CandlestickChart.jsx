@@ -496,7 +496,7 @@ function CandlestickChart({
       pivotLineRef.current = null;
     }
 
-    const annotatedPivot = bookAnnotations && showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.pivot : null;
+    const annotatedPivot = pivotLabel !== '共通ピボット' && bookAnnotations && showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.pivot : null;
     const displayedPivot = annotatedPivot ?? pivotPrice;
     if (displayedPivot != null && Number.isFinite(displayedPivot) && displayedPivot > 0) {
       pivotLineRef.current = series.createPriceLine({

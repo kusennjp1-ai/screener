@@ -83,8 +83,9 @@ if (breadth) {
 await mkdir(resolve(root, 'research-details'), {recursive:true});
 const compactRows = new Map();
 for (const [symbol, row] of rows) {
-  const { book_diagnostics, book_technical_evidence, book_financials, ...compact } = row;
-  const detail = {symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials};
+  const { book_diagnostics, book_technical_evidence, book_financials, research_detail_path: previousDetailPath, ...compact } = row;
+  void previousDetailPath;
+  const detail = {...compact, symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials};
   const content = JSON.stringify(detail);
   const hash = createHash('sha256').update(content).digest('hex').slice(0,16);
   const path = `research-details/${encodeURIComponent(symbol)}-${hash}.json`;
@@ -92,7 +93,13 @@ for (const [symbol, row] of rows) {
   compact.research_detail_path = path;
   compactRows.set(symbol, compact);
 }
-manifest.research_generation = createHash('sha256').update(JSON.stringify([...compactRows.values()])).digest('hex');
+const listFields = 'symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance'.split(' ');
+const researchIndex = {as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]])))};
+const researchContent = JSON.stringify(researchIndex);
+manifest.research_generation = createHash('sha256').update(researchContent).digest('hex');
+const researchPath = `research-index-${manifest.research_generation.slice(0,16)}.json`;
+await writeFile(resolve(root, researchPath), researchContent);
+entry.assets.research = {path:researchPath};
 await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));
 
 // Stamp the generated bundle, so every UI and the portfolio share verified data.

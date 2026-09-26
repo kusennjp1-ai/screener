@@ -26,6 +26,7 @@ export default function ResearchPage() {
   const client = useQueryClient();
   const manifest = useStaticManifest();
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
+  const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
   const version = manifest.data?.research_generation || manifest.data?.generated_at;
   const [method, setMethod] = useState('minervini');
   const [personalKey, setPersonalKey] = useState('');
@@ -42,15 +43,16 @@ export default function ResearchPage() {
   const [limit, setLimit] = useState(50);
   const [storageError, setStorageError] = useState(false);
   const [verificationNotice, setVerificationNotice] = useState(null);
+  const [verificationSymbol, setVerificationSymbol] = useState(null);
   const [watch, setWatch] = useState(() => {
     try { const value = JSON.parse(localStorage.getItem('research-watch') || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; }
   });
   const bundle = useQuery({
     placeholderData: () => undefined,
-    queryKey: ['researchRows', entry.pages?.scan?.path, version],
-    enabled: Boolean(entry.pages?.scan?.path),
+    queryKey: ['researchRows', researchPath, version],
+    enabled: Boolean(researchPath),
     queryFn: async () => {
-      const index = await fetchStaticJson(entry.pages.scan.path);
+      const index = await fetchStaticJson(researchPath);
       if (entry.as_of_date && index.as_of_date && entry.as_of_date !== index.as_of_date) throw new Error('Snapshot date mismatch');
       const chunks = await Promise.all((index.chunks || []).map(c => fetchStaticJson(c.path)));
       if (chunks.some(c => c.as_of_date && c.as_of_date !== index.as_of_date)) throw new Error('Mixed snapshot dates');
@@ -66,11 +68,16 @@ export default function ResearchPage() {
   const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage }), [evaluated, deferredSearch, strict, onlyWatch, watch, liquid, coverage]);
   const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
   const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
+  const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
   const detail = useQuery({queryKey:['researchDetail', selectedSummary?.research_detail_path, version],
-    enabled:Boolean(selectedSummary?.research_detail_path), staleTime:Infinity,
-    queryFn:() => fetchStaticJson(selectedSummary.research_detail_path)});
-  const selected = useMemo(() => selectedSummary && detail.data?.symbol === selectedSummary.symbol && detail.data?.as_of_date === bundle.data?.date ? {...selectedSummary, ...detail.data} : selectedSummary, [selectedSummary, detail.data, bundle.data?.date]);
+    enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity,
+    queryFn:async () => {
+      const value = await fetchStaticJson(selectedSummary.research_detail_path);
+      if (value.symbol !== selectedSummary.symbol || value.as_of_date !== bundle.data?.date) throw Error('Detail identity mismatch');
+      return value;
+    }});
+  const selected = useMemo(() => selectedSummary && detail.data?.symbol === selectedSummary.symbol && detail.data?.as_of_date === bundle.data?.date ? {...detail.data, ...selectedSummary} : selectedSummary, [selectedSummary, detail.data, bundle.data?.date]);
   const checks = selected ? assess(selected, method) : null;
   const index = useStaticChartIndex(entry.assets?.charts?.path);
   const chartEntry = index.data?.symbols?.find(r => r.symbol === selected?.symbol);
@@ -112,7 +119,7 @@ export default function ResearchPage() {
   function applyVerification(ticker, result, date, generation) {
     // Ignore an in-flight result from a replaced daily snapshot.
     if (date !== bundle.data?.date || generation !== version) return;
-    client.setQueryData(['researchRows', entry.pages?.scan?.path, version], previous => previous ? {
+    client.setQueryData(['researchRows', researchPath, version], previous => previous ? {
       ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r),
     } : previous);
     setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
@@ -226,8 +233,10 @@ export default function ResearchPage() {
             </Paper>
           </div>
             <Paper sx={{ ...panel, mt: 2 }}>
-              <details className="research-disclosure"><summary>詳細検証 — 財務・チャート・書籍の条件</summary>
-              <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />
+              <details className="research-disclosure" onToggle={e=>setVerificationSymbol(e.currentTarget.open ? selected.symbol : null)}><summary>詳細検証 — 財務・チャート・書籍の条件</summary>
+              {verificationSymbol === selected.symbol && detail.isLoading && <Typography role="status">詳細資料を読み込み中…</Typography>}
+              {verificationSymbol === selected.symbol && detail.isError && <Alert severity="error" action={<Button onClick={()=>detail.refetch()}>再試行</Button>}>詳細資料を取得できません。</Alert>}
+              {verificationSymbol === selected.symbol && (!selected.research_detail_path || detail.isSuccess) && <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />}
               </details>
             </Paper>
         </>}
@@ -242,6 +251,6 @@ export default function ResearchPage() {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>
-    <StaticChartViewerModal open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={ranked.map(r => r.row.symbol)} />
+    <StaticChartViewerModal open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />
   </Box>;
 }

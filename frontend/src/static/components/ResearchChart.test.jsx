@@ -14,10 +14,10 @@ function setup(props) {
 }
 describe('inline chart integration', () => {
   it('loads static bars, then switches symbol without reusing the previous chart', async () => {
-    fetchPayload.mockResolvedValue({ bars: [{ date: '2026-09-21', close: 100 }], signal: { trigger_price: 99 } });
-    const view = setup({ entry: { path: 'a.json' }, symbol: 'AAA', generation: '1' });
+    fetchPayload.mockResolvedValue({ bars: [{ date: '2026-09-21', close: 100 }], signal: { trigger_price: 120 }, stock_data: {vcp_pivot:110} });
+    const view = setup({ entry: { path: 'a.json' }, symbol: 'AAA', generation: '1', row:{current_price:100,se_pivot_price:99} });
     expect(await screen.findByTestId('chart')).toHaveTextContent('AAA:1:99');
-    view.update({ entry: { path: 'b.json' }, symbol: 'BBB', generation: '1' });
+    view.update({ entry: { path: 'b.json' }, symbol: 'BBB', generation: '1', row:{current_price:100,se_pivot_price:99} });
     await waitFor(() => expect(screen.getByTestId('chart')).toHaveTextContent('BBB:1:99'));
     expect(fetchPayload).toHaveBeenCalledWith('b.json');
   });

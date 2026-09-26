@@ -10,6 +10,7 @@ const pct = n => `${(n * 100).toFixed(1)}%`;
 export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse }) {
   const plan = useMemo(() => buildPortfolioPlan(rows, date, 100000, now), [rows, date, now]);
   const [expanded, setExpanded] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
   return <Paper component="section" id="today-decision" tabIndex={-1} aria-label="本日の判断と10万ドルの配分" className={`decision-panel${expanded ? " decision-expanded" : ""}`} elevation={0}>
     <div className="research-kicker">今日の判断</div>
     <details className="decision-mobile-summary"><summary>{plan.decision} · 上限 {pct(plan.allocationCap)}</summary><p>{plan.blockers.join(" / ") || "日次条件通過。注文時の価格を確認してください。"}</p></details>
@@ -44,6 +45,6 @@ export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse
       <details><summary>配分ルールと限界</summary><p>1銘柄上限10%、1銘柄損失予算0.5%、総損失予算2%、同一セクター20%、最大5銘柄。市場上限は独自モデル：上昇50%、圧力あり25%、弱含み・不明0%。相関やベータを調整した最適化ではありません。既存保有がある場合はこの新規資金モデルを重ねず、全保有と合算して再計算してください。</p></details>
       <BookRiskWorkbench />
     </Box>}
-    <details style={{ marginTop: 20 }}><summary>自分の取引日誌・全保有のリスクを確認</summary><LocalTradeJournal /></details>
+    <details style={{ marginTop: 20 }} onToggle={e=>setJournalOpen(e.currentTarget.open)}><summary>自分の取引日誌・全保有のリスクを確認</summary>{journalOpen && <LocalTradeJournal />}</details>
   </Paper>;
 }

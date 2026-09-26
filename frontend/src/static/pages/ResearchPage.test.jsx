@@ -1,9 +1,11 @@
-import { act, fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, cleanup, waitFor, within, configure } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
 import { withAuditFixture } from '../testAuditFixture';
 
+// Allow actual async query/render completion under concurrent CI load.
+configure({asyncUtilTimeout:5000});
 const data = vi.hoisted(() => ({ rows: [], fail: false, charts: true, date: '2026-09-21', generated: new Date().toISOString() }));
 vi.mock('../dataClient', () => ({
   useStaticManifest: () => ({ data: { generated_at: data.generated, as_of_date: '2026-09-21' } }),

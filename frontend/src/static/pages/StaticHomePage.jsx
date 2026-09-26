@@ -489,6 +489,8 @@ function StaticHomePage() {
         open={chartModalOpen}
         onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
+        researchRows={scanRows}
+        generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at}
         chartIndex={chartIndexQuery.data}
         navigationSymbols={modalNavigationSymbols}
       />

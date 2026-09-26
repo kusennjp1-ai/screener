@@ -413,9 +413,9 @@ describe('StaticScanPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Leaders (2)')).toBeInTheDocument();
+    expect(await screen.findByText('補助 Leaders (2)')).toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(screen.getByText('Leaders (2)'));
+    await user.click(screen.getByText('補助 Leaders (2)'));
 
     await waitFor(() => {
       expect(screen.getByTestId('results-table-rows')).toHaveTextContent('IPOLEAD,LEAD');
@@ -675,7 +675,7 @@ describe('StaticScanPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'デイリースキャン' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'デイリースキャン（補助フィルター）' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('results-table-actions')).toHaveTextContent('actions-visible');
     });
@@ -757,7 +757,7 @@ describe('StaticScanPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'デイリースキャン' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'デイリースキャン（補助フィルター）' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'resort' }));
     await user.click(screen.getByRole('button', { name: 'open-chart' }));
 
