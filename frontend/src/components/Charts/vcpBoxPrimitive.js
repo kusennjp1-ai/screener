@@ -40,7 +40,7 @@ class VcpBoxRenderer {
           ctx.setLineDash([]); ctx.lineWidth = 2 * hr;
           ctx.beginPath(); ctx.moveTo(r.x1 * hr, r.y1 * vr); ctx.lineTo(r.x2 * hr, r.y2 * vr); ctx.stroke();
         }
-        if (r.label && w > 24 * hr) {
+        if (r.label) {
           ctx.font = `${11 * vr}px sans-serif`;
           const labelWidth = Math.min(ctx.measureText(r.label).width + 10 * hr, scope.bitmapSize.width);
           const labelX = Math.max(0, Math.min(left, scope.bitmapSize.width - labelWidth));
