@@ -7,6 +7,9 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class HistoryTest(unittest.TestCase):
+    def test_does_not_require_the_missing_history_before_fetching_it(self):
+        self.assertTrue(module.needs_history({'methods':{'ibd':{'qualified':False,'rules':[{'label':'RS','state':'pass'},{'label':'直近3年の EPS 成長履歴が揃う','state':'unknown'}]}}}))
+        self.assertFalse(module.needs_history({'methods':{'ibd':{'rules':[]}}}))
     def test_no_fabrication_and_no_future_periods(self):
         frame = pd.DataFrame({pd.Timestamp('2025-12-31'): [float('nan'), 100], pd.Timestamp('2026-12-31'): [9, 500]}, index=['DilutedEPS','TotalRevenue'])
         rows = module.normalize_frame(frame, '2026-09-25')

@@ -32,6 +32,17 @@ def normalize_frame(frame, as_of):
     return result
 
 
+def needs_history(row):
+    methods = row.get('methods', {})
+    if any((methods.get(method) or {}).get('qualified') for method in ['minervini', 'minervini2', 'ibd']):
+        return True
+    # Do not require IBD qualification before acquiring the history required
+    # for that very qualification. Include rows missing only this evidence.
+    rules = (methods.get('ibd') or {}).get('rules', [])
+    other_rules = [r for r in rules if '3年' not in r.get('label', '')]
+    return bool(other_rules) and all(r.get('state') == 'pass' for r in other_rules)
+
+
 def main():
     import yfinance as yf
     parser = argparse.ArgumentParser()
@@ -40,9 +51,8 @@ def main():
     root = Path('public/static-data')
     audit = json.loads(Path('public/qualification-audit.json').read_text(encoding='utf-8'))
     as_of = audit['as_of_date']
-    symbols = [r['symbol'] for r in audit['results'] if any(
-        (r.get('methods', {}).get(method) or {}).get('qualified')
-        for method in ['minervini', 'minervini2', 'ibd'])][:max(0, min(args.limit, 300))]
+    eligible = [r['symbol'] for r in audit['results'] if needs_history(r)]
+    symbols = eligible[:max(0, min(args.limit, 300))]
     results = {}
 
     def fetch(symbol):
@@ -66,7 +76,7 @@ def main():
         for symbol, result in pool.map(fetch, symbols):
             results[symbol] = result
     payload = {'as_of_date': as_of, 'results': results, 'coverage': {
-        'requested': len(symbols), 'available': sum(v['status'] == 'available' for v in results.values()),
+        'eligible': len(eligible), 'requested': len(symbols), 'available': sum(v['status'] == 'available' for v in results.values()),
         'four_annual_eps': sum(len(v.get('annual', [])) >= 4 and all(p['eps'] is not None for p in v['annual'][-4:]) for v in results.values())}}
     (root/'financial-history.json').write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding='utf-8')
     print('Current financial history: ' + json.dumps(payload['coverage']), flush=True)
