@@ -127,7 +127,7 @@ export const transformToCandlestickData = (apiData, timeframe = 'daily') => {
     volume.push({
       time: d.date,
       value: d.volume,
-      color: d.close >= d.open ? 'rgba(33, 150, 243, 0.5)' : 'rgba(230, 25, 205, 0.5)',
+      color: d.close >= d.open ? 'rgba(16, 185, 129, 0.55)' : 'rgba(239, 68, 68, 0.55)',
     });
   });
 

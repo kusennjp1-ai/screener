@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,9 +52,11 @@ describe('StaticChartViewerModal', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('renders exported bars and sidebar metadata without live API calls', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
     globalThis.fetch = vi.fn(async (url) => {
       const path = String(url).split('/static-data/')[1];
 
@@ -164,5 +166,20 @@ describe('StaticChartViewerModal', () => {
     expect(chartSpy).toHaveBeenCalledWith(expect.objectContaining({ bookAnnotations: true }));
     expect(screen.queryByText('Buying Now!')).not.toBeInTheDocument();
     expect(screen.queryByText('Raise Stop')).not.toBeInTheDocument();
+    const surface = screen.getByTestId('chart-swipe-surface');
+    const swipe = (x, y) => {
+      fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 100 }] });
+      fireEvent.touchEnd(surface, { changedTouches: [{ clientX: x, clientY: y }] });
+    };
+    swipe(190, 300);
+    expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
+    swipe(80, 110);
+    expect(await screen.findByText('2 / 2 銘柄')).toBeInTheDocument();
+    swipe(330, 110);
+    expect(await screen.findByText('1 / 2 銘柄')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' }));
+    swipe(80, 110);
+    expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
+    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
   }, 10000);
 });

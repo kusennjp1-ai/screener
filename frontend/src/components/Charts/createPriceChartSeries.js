@@ -16,12 +16,12 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     width,
     height,
     layout: {
-      background: { type: 'solid', color: isDarkMode ? '#1e1e1e' : '#ffffff' },
+      background: { type: 'solid', color: isDarkMode ? '#101827' : '#ffffff' },
       textColor: isDarkMode ? '#d1d4dc' : '#333333',
     },
     grid: {
-      vertLines: { color: isDarkMode ? '#363a45' : '#e0e0e0' },
-      horzLines: { color: isDarkMode ? '#363a45' : '#e0e0e0' },
+      vertLines: { color: isDarkMode ? '#263244' : '#e0e0e0' },
+      horzLines: { color: isDarkMode ? '#263244' : '#e0e0e0' },
     },
     crosshair: { mode: CrosshairMode.Normal },
     rightPriceScale: {
@@ -56,11 +56,11 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
 
   // Candlesticks. Neutral scaleMargins; reapplied by the RS strip layout effect.
   const candlestickSeries = chart.addSeries(CandlestickSeries, {
-    upColor: '#2196f3',
-    downColor: '#E619CD',
+    upColor: '#10b981',
+    downColor: '#ef4444',
     borderVisible: false,
-    wickUpColor: '#2196f3',
-    wickDownColor: '#E619CD',
+    wickUpColor: '#10b981',
+    wickDownColor: '#ef4444',
     priceScaleId: 'right',
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
@@ -74,13 +74,13 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   const ema20Series = chart.addSeries(LineSeries, { color: '#4DD0E1', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
   const ema50Series = chart.addSeries(LineSeries, { color: '#FFEE58', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
-  // Minervini trend-template SMA stack (50 / 150 / 200-day). Purple → pink → red,
+  // Minervini trend-template SMA stack (50 / 150 / 200-day). Blue / slate / lavender,
   // a distinct family from the EMAs so the long-term trend stack reads clearly:
   // price should sit above 50 > 150 > 200 with a rising 200-day line. Avoids the
   // orange pivot line and amber RS line. Full chart only.
-  const sma50Series = chart.addSeries(LineSeries, { color: '#BA68C8', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const sma150Series = chart.addSeries(LineSeries, { color: '#F06292', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const sma200Series = chart.addSeries(LineSeries, { color: '#FF5252', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma50Series = chart.addSeries(LineSeries, { color: isDarkMode ? '#60a5fa' : '#2563eb', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma150Series = chart.addSeries(LineSeries, { color: isDarkMode ? '#94a3b8' : '#64748b', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma200Series = chart.addSeries(LineSeries, { color: isDarkMode ? '#c4b5fd' : '#7c3aed', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
   // RS line on its own hidden overlay scale (orange — distinct from the EMAs). It
   // sits in a band below the candles; blue-dot markers attach to it. The band is

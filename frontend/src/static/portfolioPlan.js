@@ -1,4 +1,5 @@
 import { assess, finite, snapshotFreshness } from './researchEngine.js';
+import { entryReadiness } from './entryReadiness.js';
 
 const centsUp = v => Math.ceil(v * 100 - 1e-8) / 100;
 const centsDown = v => Math.floor(v * 100 + 1e-8) / 100;
@@ -26,8 +27,8 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   const allocationCap = Math.min(market.cap, .25);
   const freshness = snapshotFreshness(date, now);
   // Static scans cannot establish current execution conditions, even with a fresh date.
-  const blockers = ['当日の価格・出来高・市場状態が未検証', '決算日とベース形状の最終確認が必要'];
-  if (freshness.state !== 'recent' || freshness.days > 1) blockers.unshift('分析基準日を最新の取引日と照合してください');
+  const blockers = [];
+  if ((freshness.state !== 'recent' || freshness.days > 1) && !rows.some(r => r.entry_evidence?.calendar?.latest_completed_session === date && now < Date.parse(r.entry_evidence.calendar.valid_until))) blockers.unshift('分析基準日を最新の取引日と照合してください');
   if (!market.cap) blockers.unshift(market.label);
   const counts = new Map();
   rows.forEach(r => counts.set(r.symbol, (counts.get(r.symbol) || 0) + 1));
@@ -40,6 +41,15 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
       finite(r.se_pattern_confidence) && r.se_pattern_confidence >= 70 &&
       typeof r.gics_sector === 'string' && r.gics_sector.trim().length > 0;
   }).sort((a, b) => b.rs_rating - a.rs_rating || a.symbol.localeCompare(b.symbol));
+  const readiness = candidates.map(row => entryReadiness(row,date,market,now));
+  const readySymbols = new Set(readiness.filter(r=>r.ready).map(r=>r.symbol));
+  if (!candidates.length) {
+    const primary = rows.filter(r => r.market === 'US' && r.currency === 'USD' && assess(r,'minervini').qualified);
+    const strict = primary.filter(r => assess(r,'ibd').qualified);
+    blockers.push(primary.length ? `ミネルヴィニ一次通過 ${primary.length}銘柄のうちIBD型も通過 ${strict.length}銘柄。財務・成長・流動性・買い位置などの条件で配分候補を絞っています。` : 'ミネルヴィニの一次条件を通過した銘柄がありません。');
+  }
+  for (const label of [...new Set(readiness.flatMap(r=>r.rules.filter(c=>c.state!=='pass').map(c=>c.label)))]) blockers.push(`${label}：${readiness.filter(r=>r.rules.some(c=>c.label===label&&c.state!=='pass')).length}銘柄が未達または未確認`);
+  candidates.sort((a,b) => Number(readySymbols.has(b.symbol)) - Number(readySymbols.has(a.symbol)));
   const positions = [], sectors = new Map();
   let used = 0, risk = 0;
   for (const row of candidates) {
@@ -55,9 +65,10 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
     const cost = Math.round(shares * buy * 100) / 100;
     const loss = Math.round(shares * perShareRisk * 100) / 100;
     used += cost; risk += loss; sectors.set(sector, (sectors.get(sector) || 0) + cost);
-    positions.push({ symbol: row.symbol, sector, buy, stop, target: centsDown(buy * 1.2), shares, cost, loss, weight: cost / capital, pivot: row.se_pivot_price });
+    positions.push({ dailyReady:readySymbols.has(row.symbol), symbol: row.symbol, sector, buy, stop, target: centsDown(buy * 1.2), shares, cost, loss, weight: cost / capital, pivot: row.se_pivot_price });
   }
-  return { date, capital, market, allocationCap, blockers, positions, candidateCount: candidates.length,
+  const dailyPositions = positions.filter(p=>readySymbols.has(p.symbol));
+  return { date, capital, market, allocationCap, blockers, positions, readiness, dailyPositions, candidateCount: candidates.length,
     invested: used, cash: capital - used, exposure: used / capital, risk,
-    decision: '新規購入は保留', executionExposure: 0, executionCash: capital };
+    decision: dailyPositions.length ? `${dailyPositions.length}銘柄が日次の買い条件を通過` : candidates.length ? '候補あり・未達条件を確認' : '購入条件を満たす銘柄なし', executionExposure: 0, executionCash: capital };
 }

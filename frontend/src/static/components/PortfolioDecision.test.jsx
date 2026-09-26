@@ -7,7 +7,7 @@ const row = { symbol: 'LEAD', market: 'US', currency: 'USD', gics_sector: 'Tech'
 it('shows cash first and reaches order prices and evidence in two actions', () => {
   const inspect = vi.fn();
   render(<PortfolioDecision rows={[withAuditFixture(row)]} date="2026-09-23" now={Date.parse('2026-09-24T14:00:00Z')} onInspect={inspect} />);
-  expect(screen.getByRole('heading', { name: '新規購入は保留' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '候補あり・未達条件を確認' })).toBeInTheDocument();
   expect(screen.getByText(/現金100%/)).toBeInTheDocument();
   expect(screen.queryByText('買い指値の上限')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /条件付きの配分・注文計画を見る/ }));

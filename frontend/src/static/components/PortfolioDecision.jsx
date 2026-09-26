@@ -14,10 +14,17 @@ export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse
     <div className="research-kicker">今日の判断</div>
     <div className="decision-overview"><div>
     <Typography component="h2" variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{plan.decision}</Typography>
-    <Typography sx={{ mt: 1 }}>発注条件を確認できた銘柄はありません。まず候補のチャートと不足条件を確認してください。</Typography>
-    </div><div className="decision-account"><small>新規資金10万ドルのモデル</small><strong>$100,000</strong><span>株式0% · 現金100%</span></div></div>
+    <Typography sx={{ mt: 1 }}>{plan.dailyPositions.length ? '日次データの買い条件を通過しています。注文計画を確認し、発注時の価格が買い上限を超えていないか照合してください。' : '選定・市場・買い位置・出来高・形状・決算の確認結果を表示しています。'}</Typography>
+    </div><div className="decision-account"><small>新規資金のモデル・未約定</small><strong>$100,000</strong><span>株式0% · 現金100%</span></div></div>
     <Typography color="text.secondary" sx={{ mt: 1, fontSize: 13 }}>分析基準日：{date} ／ {plan.market.label}。既存保有なし・信用取引なしのモデルです。保有株の売却指示ではありません。</Typography>
-    <details className="research-disclosure"><summary>購入を保留する理由</summary><ul className="decision-blockers">{plan.blockers.map(reason => <li key={reason}>{reason}</li>)}</ul></details>
+    <details className="research-disclosure"><summary>判定の内訳・未達条件</summary><ul className="decision-blockers">{plan.blockers.map(reason => <li key={reason}>{reason}</li>)}</ul></details>
+    {plan.readiness.length > 0 && <details className="research-disclosure"><summary>候補別の買い条件（{plan.readiness.length}銘柄）</summary>
+      {plan.readiness.slice(0,20).map(item => <Box key={item.symbol} sx={{py:1,borderBottom:'1px solid',borderColor:'divider'}}>
+        <Button onClick={()=>onInspect(item.symbol)}>{item.symbol}：{item.status}（{item.passed}/{item.total}）</Button>
+        {item.rules.map(rule=><Typography key={rule.id} sx={{fontSize:12,mt:.5}}>{rule.state==='pass'?'✓':rule.state==='fail'?'×':'?'} {rule.label}：{rule.detail}</Typography>)}
+      </Box>)}
+      <Typography sx={{fontSize:12}}>終値による研究モデルです。場中価格の接続と約定履歴は別管理のため、未約定のモデル資金を自動で投資済みにはしません。</Typography>
+    </details>}
     <div className="decision-actions">{onBrowse && <Button variant="contained" onClick={onBrowse}>候補を確認する →</Button>}
     <Button variant="outlined" onClick={() => setExpanded(v => !v)} aria-expanded={expanded} aria-controls="conditional-plan">{expanded ? '条件付き計画を閉じる' : `条件付きの配分・注文計画を見る（${plan.positions.length}銘柄）`}</Button></div>
     {expanded && <Box id="conditional-plan" sx={{ mt: 2 }}>
@@ -27,6 +34,7 @@ export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse
       <Typography sx={{ fontSize: 13, my: 1 }}>現金から始めるモデルのため、条件確認後も試行配分は最大25%に制限します。この数値は独自設定です。市場が強いだけでは増額せず、実際のトレード結果を確認します。損失が続くときは資金配分を縮小し、ストップ幅の拡大や含み損への買い増しで補いません。</Typography>
       {!plan.positions.length ? <Typography sx={{ my: 2 }}>配分できる候補はありません。条件を緩めて資金を埋めません。</Typography> : <div className="order-grid">{plan.positions.map(p => <article key={p.symbol} className="order-card">
         <Button onClick={() => onInspect(p.symbol)} aria-label={`${p.symbol} の注文根拠を確認`} sx={{ fontSize: 20, fontWeight: 700 }}>{p.symbol} → 根拠・チャート</Button>
+        <Typography sx={{fontSize:12,color:p.dailyReady ? 'success.main' : 'text.secondary'}}>{p.dailyReady ? '日次の買い条件通過' : '未達条件あり・条件付き計画'}</Typography>
         <Typography color="text.secondary" sx={{ fontSize: 12 }}>{p.sector} ／ {p.shares}株 ／ {money(p.cost)}（{pct(p.weight)}）</Typography>
         <dl><dt>上昇確認水準（ピボット）</dt><dd>{money(p.pivot)}</dd><dt>買い指値の上限</dt><dd>{money(p.buy)}</dd><dt>購入後の売り逆指値例</dt><dd>{money(p.stop)}</dd><dt>利確指値の計算例</dt><dd>{money(p.target)}</dd><dt>想定損失額</dt><dd>{money(p.loss)}</dd></dl>
       </article>)}</div>}

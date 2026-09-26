@@ -7,6 +7,8 @@ import StaticChartViewerModal from '../StaticChartViewerModal';
 import { assess, compareReference, entryPlan, finite, highDistance, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from '../researchEngine';
 import { tradingViewUrl } from '../tradingView';
 import ResearchChart from '../components/ResearchChart';
+import { entryReadiness } from '../entryReadiness';
+import { modelMarket } from '../portfolioPlan';
 import PortfolioDecision from '../components/PortfolioDecision';
 import QualificationVerification from '../components/QualificationVerification';
 import { mergeScanRows } from '../qualificationAudit';
@@ -75,6 +77,7 @@ export default function ResearchPage() {
   const liveStatus = quote.isError ? '接続エラー' : quoteStatus(quote.data, clock.data);
   const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? quote.data : null;
   const plan = selected ? entryPlan(selected, usableQuote, method) : null;
+  const readiness = selected ? entryReadiness(selected, bundle.data?.date, modelMarket(rows), clock.data) : null;
   const leaders = useMemo(() => rankCandidates(rows, 'ibd', { liquidOnly: true }).filter(r => r.assessment.qualified).slice(0, 50).map(r => r.row), [rows]);
   const overlap = compareReference(leaders, reference.data, bundle.data?.date);
   const age = clock.data - Date.parse(manifest.data?.generated_at);
@@ -191,6 +194,10 @@ export default function ResearchPage() {
               <Typography sx={{ fontSize: 24, fontWeight: 700, my: 2, color: plan.state === '買いゾーン超過' ? 'warning.main' : 'text.primary' }}>{plan.state}</Typography>
               <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>{plan.zone || 5}%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
               <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 2 }}>{plan.pivotSource || '未判定'}のピボット。ゾーンは価格位置だけの判定で、出来高・市場環境・ベースの妥当性を保証しません。チャートのVCPトリガーとは計算方式が異なる場合があります。</Typography>
+              <details className="research-disclosure"><summary>買い条件の自動確認：{readiness.passed}/{readiness.total}</summary>
+                {readiness.rules.map(rule=><Typography key={rule.id} sx={{fontSize:12,my:1}}>{rule.state==='pass'?'✓':rule.state==='fail'?'×':'?'} {rule.label}：{rule.detail}</Typography>)}
+                <Typography sx={{fontSize:12}}>ミネルヴィニ＋IBD型の新規資金モデル。最新の終値で判定し、場中価格の確認とは区別します。形状は自動推定です。</Typography>
+              </details>
               <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}><Typography component="h3" variant="subtitle2">チャートの確認ポイント</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>VCP：{selected.vcp_detected == null ? '未確認' : selected.vcp_detected ? '検出' : '未検出'} / 出来高50日平均比：{fmt(selected.se_volume_vs_50d, 2)}倍</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>ベース：{fmt(selected.se_base_length_weeks)}週 / 深さ：{fmt(selected.se_base_depth_pct)}%</Typography></Box>
             </Paper>
           </div>

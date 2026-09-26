@@ -2,6 +2,7 @@
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { rankCandidates, compareReference } from '../src/static/researchEngine.js';
+import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.js';
 import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 import { diagnoseBookChart } from '../src/static/bookChartDiagnostics.js';
 import { marketLeadership } from '../src/static/marketLeadership.js';
@@ -33,7 +34,8 @@ const merged = mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_d
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
 const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
-let benchmark = null, financials = null;
+let benchmark = null, financials = null, entryContext = null;
+try { entryContext = await read('entry-context.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { benchmark = await read('book-benchmark.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.payload?.benchmark_symbol || 'SPY', as_of_date: scan.as_of_date, bars: breadth?.payload?.benchmark_overlay || breadth?.payload?.spy_overlay || [] };
 try { financials = await read('book-financials.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -55,7 +57,15 @@ for (const row of merged) {
     for (const key of ['sixWeeks', 'thirteenWeeks']) delete technical.rs[key].points;
   }
   if (audit.valid) marketCharts.push({ symbol: row.symbol, as_of_date: scan.as_of_date, bars: chart.bars });
-  rows.set(row.symbol, { ...row, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
+  const shape = audit.valid ? buildBookAnnotations(chart.bars) : null;
+  const recent = audit.valid ? chart.bars.slice(-51,-1) : [];
+  const averageVolume = recent.length === 50 ? recent.reduce((sum,b)=>sum+b.volume,0)/50 : null;
+  const entryEvidence = { as_of_date:scan.as_of_date,
+    calendar:entryContext?.as_of_date === scan.as_of_date ? entryContext.calendar : null,
+    earnings:entryContext?.as_of_date === scan.as_of_date ? entryContext.earnings?.[row.symbol] || null : null,
+    shape:shape ? {candidate:shape.candidate,summary:shape.summary,method:'book-diagram-heuristic'} : null,
+    volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
+  rows.set(row.symbol, { ...row, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null });
 }
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));

@@ -403,15 +403,15 @@ function CandlestickChart({
 
     // Update EMAs
     if (ema10SeriesRef.current && chartData.ema10.length > 0) {
-      ema10SeriesRef.current.setData(chartData.ema10);
+      ema10SeriesRef.current.setData(bookAnnotations ? [] : chartData.ema10);
     }
 
     if (ema20SeriesRef.current && chartData.ema20.length > 0) {
-      ema20SeriesRef.current.setData(chartData.ema20);
+      ema20SeriesRef.current.setData(bookAnnotations ? [] : chartData.ema20);
     }
 
     if (ema50SeriesRef.current && chartData.ema50.length > 0) {
-      ema50SeriesRef.current.setData(chartData.ema50);
+      ema50SeriesRef.current.setData(bookAnnotations ? [] : chartData.ema50);
     }
 
     // Minervini SMA 50/150/200 stack — full chart only; compact grid tiles stay
@@ -482,7 +482,7 @@ function CandlestickChart({
   // setDefaultVisibleWindow is stable (defined below from refs); excluded to
   // keep this effect keyed only on data/range changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, visibleRange, effectiveTimeframe, height, isDarkMode, symbol, compact]);
+  }, [chartData, visibleRange, effectiveTimeframe, height, isDarkMode, symbol, compact, bookAnnotations]);
 
   // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
   // candlestick series. This is the key actionable level for VCP / Minervini
@@ -613,11 +613,11 @@ function CandlestickChart({
   useEffect(() => {
     const series = epsLineSeriesRef.current;
     if (!series) return;
-    const pts = Array.isArray(epsLine) ? epsLine : [];
+    const pts = !bookAnnotations && Array.isArray(epsLine) ? epsLine : [];
     try {
       series.setData(pts.map((p) => ({ time: p.time, value: p.value })));
     } catch { /* series recreated — ignore */ }
-  }, [epsLine, chartData, compact, height, isDarkMode, symbol]);
+  }, [epsLine, chartData, compact, height, isDarkMode, symbol, bookAnnotations]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
@@ -826,7 +826,7 @@ function CandlestickChart({
           {legendData.changePercent !== null && (
             <span
               style={{
-                color: legendData.changePercent >= 0 ? '#4CF64D' : '#E619CD',
+                color: legendData.changePercent >= 0 ? '#10b981' : '#ef4444',
                 fontWeight: 500,
               }}
             >

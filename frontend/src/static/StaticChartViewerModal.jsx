@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Alert,
   Box,
@@ -8,7 +8,6 @@ import {
   Fade,
   IconButton,
   Modal,
-  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -20,13 +19,11 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import CandlestickChart from '../components/Charts/CandlestickChart';
-import SignalBadges from '../features/markets360/components/SignalBadges';
-import BuyChecklist from '../components/Scan/BuyChecklist';
+import { swipeDirection } from './swipeNavigation';
 import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import TradingViewBridge from './components/TradingViewBridge';
 import TrendTemplateScorecard from './components/TrendTemplateScorecard';
 import { useStaticMarket } from './StaticMarketContext';
-import { EXECUTION_STATE_LABEL, EXECUTION_STATE_COLOR } from '../components/Charts/executionState';
 import GlossaryLabel from '../components/common/GlossaryLabel';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
@@ -34,136 +31,11 @@ import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
 
 const CHART_INFO_STRIP_HEIGHT = 34;
 
-// MA colours must match createPriceChartSeries.js.
-const MA_LEGEND = [
-  ['EMA10', '#E0E0E0'],
-  ['EMA20', '#4DD0E1'],
-  ['EMA50', '#FFEE58'],
-  ['SMA50', '#BA68C8'],
-  ['SMA150', '#F06292'],
-  ['SMA200', '#FF5252'],
-  ['収益', '#2EAD5B'],
-];
-
-// Single-line strip rendered ABOVE the chart: MA legend + Minervini trend-template
-// readout. Kept out of the plotting area so it never hides recent candles.
-
-// Tap-to-explain legend for the three MM360 bands.
-const BAND_EXPLANATIONS = [
-  ['Pressure', '買い圧力 vs 売り圧力。蓄積/分散（AD）ラインの傾きで判定。緑=買い優勢、黄=中立、赤=売り優勢。'],
-  ['Buy Risk', '今買うことのリスク。50日線からの乖離をATRで正規化し、VCP収縮で低下、50日線割れで高に。緑=低（押し目）、黄=中、赤=高（過伸び）。'],
-  ['TPR', 'トレンドテンプレートの充足度（最大8条件、ベンチマーク無しは7条件）。緑=強、黄=移行、赤=弱。'],
-];
-
-function BandLegend() {
-  return (
-    <Box
-      sx={{
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 1,
-        py: 0.5,
-        borderBottom: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.default',
-        overflowX: 'auto',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>バンド:</Typography>
-      {BAND_EXPLANATIONS.map(([label, desc]) => (
-        <Tooltip key={label} title={desc} arrow enterTouchDelay={0} leaveTouchDelay={6000}>
-          <Chip
-            label={label}
-            size="small"
-            variant="outlined"
-            sx={{ height: 20, fontSize: 11, cursor: 'pointer' }}
-          />
-        </Tooltip>
-      ))}
-    </Box>
-  );
-}
-
-function ChartInfoStrip({ minerviniInfo }) {
-  const i = minerviniInfo || {};
-  return (
-    <Box
-      sx={{
-        height: CHART_INFO_STRIP_HEIGHT,
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 1,
-        borderBottom: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.default',
-        overflowX: 'auto',
-        whiteSpace: 'nowrap',
-        fontFamily: 'monospace',
-        fontSize: '0.66rem',
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        {MA_LEGEND.map(([label, color]) => (
-          <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-            <Box sx={{ width: 12, height: 2, bgcolor: color, borderRadius: 1 }} />
-            <span style={{ color: '#cfcfcf' }}>{label}</span>
-          </Box>
-        ))}
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
-        {i.passesTemplate != null && (
-          <span style={{ color: i.passesTemplate ? '#4CF64D' : '#E619CD', fontWeight: 700 }}>
-            {i.passesTemplate ? '✓ テンプレート合格' : '✗ テンプレート不合格'}
-          </span>
-        )}
-        {i.rsRating != null && (
-          <span style={{ color: i.rsRating >= 70 ? '#4CF64D' : '#bbb' }}>
-            <GlossaryLabel term="rs_rating">RS</GlossaryLabel> {Math.round(i.rsRating)}
-          </span>
-        )}
-        {i.stage != null && (
-          <span style={{ color: i.stage === 2 ? '#4CF64D' : '#bbb' }}>
-            <GlossaryLabel term="stage">Stage</GlossaryLabel> {i.stage}
-          </span>
-        )}
-        {i.maStackOk != null && (
-          <span style={{ color: i.maStackOk ? '#4CF64D' : '#E619CD' }}>
-            <GlossaryLabel term="ma_stack">MA</GlossaryLabel>{i.maStackOk ? '✓' : '✗'}
-          </span>
-        )}
-        {i.aboveLowPct != null && (
-          <span style={{ color: i.aboveLowPct >= 30 ? '#4CF64D' : '#bbb' }}>
-            <GlossaryLabel term="week_52_low">52WL</GlossaryLabel> +{Math.round(i.aboveLowPct)}%
-          </span>
-        )}
-        {i.fromHighPct != null && (
-          <span style={{ color: i.fromHighPct >= -25 ? '#4CF64D' : '#bbb' }}>
-            <GlossaryLabel term="week_52_high">52WH</GlossaryLabel> {Math.round(i.fromHighPct)}%
-          </span>
-        )}
-        {i.pivot != null && (
-          <span style={{ color: '#FFA726' }}>
-            <GlossaryLabel term="pivot">Pivot</GlossaryLabel> {Number(i.pivot).toFixed(2)}
-          </span>
-        )}
-        {i.vcpDetected && (
-          <span style={{ color: '#4CF64D' }}><GlossaryLabel term="vcp">VCP</GlossaryLabel>✓</span>
-        )}
-        {i.executionState && i.executionState !== 'unknown' && (
-          <span style={{ color: EXECUTION_STATE_COLOR[i.executionState] || '#bbb', fontWeight: 700 }}>
-            <GlossaryLabel term={i.executionState} kind="execution">
-              {EXECUTION_STATE_LABEL[i.executionState] || i.executionState}
-            </GlossaryLabel>
-          </span>
-        )}
-      </Box>
-    </Box>
-  );
+function ChartInfoStrip() {
+  const dark = useTheme().palette.mode === 'dark';
+  return <Box sx={{ minHeight: CHART_INFO_STRIP_HEIGHT, display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 1.5, py: .75, bgcolor: 'background.paper', fontSize: 12 }}>
+    {[['▲ 上昇', '#10b981'], ['▼ 下落', '#ef4444'], ['━ SMA50', dark ? '#60a5fa' : '#2563eb'], ['━ SMA150', dark ? '#94a3b8' : '#64748b'], ['━ SMA200', dark ? '#c4b5fd' : '#7c3aed'], ['━ RS', '#ffa726']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
+  </Box>;
 }
 
 function StaticChartViewerModal({
@@ -175,6 +47,8 @@ function StaticChartViewerModal({
 }) {
   const queryClient = useQueryClient();
   const [visibleRange, setVisibleRange] = useState(null);
+  const [panMode, setPanMode] = useState(false);
+  const swipeStart = useRef(null);
   const theme = useTheme();
   // モバイルでは縦積みレイアウト（チャート上・指標下）＋画面上の前後ボタンに切り替える
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -197,6 +71,20 @@ function StaticChartViewerModal({
     initialSymbol,
     open
   );
+
+  function startSwipe(event) {
+    if (!isMobile || panMode || event.touches.length !== 1 || event.target.closest('button,a,input,select,textarea,summary')) { swipeStart.current = null; return; }
+    swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, at: Date.now() };
+  }
+  function endSwipe(event) {
+    const start = swipeStart.current; swipeStart.current = null;
+    if (!isMobile || panMode || event.changedTouches.length !== 1) return;
+    const touch = event.changedTouches[0];
+    const direction = swipeDirection(start, { x: touch.clientX, y: touch.clientY, at: Date.now() });
+    if (direction === 'next') goNext();
+    if (direction === 'previous') goPrevious();
+  }
+  useEffect(() => { swipeStart.current = null; }, [currentSymbol, open]);
 
   const currentEntry = currentSymbol ? entryBySymbol.get(currentSymbol) : null;
   const {
@@ -294,21 +182,6 @@ function StaticChartViewerModal({
   const pivotLabel = stockData?.vcp_pivot != null ? 'VCP Pivot' : 'Pivot';
   const stage = stockData?.stage ?? null;
   const vcpDetected = stockData?.vcp_detected === true;
-  // Minervini trend-template readout drawn on the chart itself.
-  const minerviniInfo = useMemo(() => {
-    if (!stockData) return null;
-    return {
-      passesTemplate: stockData.passes_template ?? null,
-      rsRating: stockData.rs_rating ?? null,
-      stage: stockData.stage ?? null,
-      maStackOk: stockData.ma_alignment ?? null,
-      aboveLowPct: stockData.week_52_low_distance ?? null,
-      fromHighPct: stockData.week_52_high_distance ?? null,
-      pivot: pivotPrice,
-      vcpDetected,
-      executionState: stockData.execution_state ?? null,
-    };
-  }, [stockData, pivotPrice, vcpDetected]);
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
   const chartHeight = isMobile
@@ -559,21 +432,13 @@ function StaticChartViewerModal({
             <Box
               sx={{
                 order: { xs: 2, md: 1 },
-                width: { xs: '100%', md: 'auto' },
+                width: { xs: '100%', md: 320 },
+                overflowY: 'auto',
+                '& > div': { width: '100%', height: 'auto', boxSizing: 'border-box' },
                 flexShrink: 0,
                 height: { xs: 'auto', md: '100%' },
               }}
             >
-              {/* 買い点灯条件 — same checklist as the live scan viewer, fed
-                  from the static payload's bands + signal blocks. */}
-              <BuyChecklist
-                buyContext={{
-                  available: Boolean(chartPayload?.bands || chartPayload?.signal),
-                  bands: chartPayload?.bands || {},
-                  signal: chartPayload?.signal || {},
-                }}
-                stockData={stockData}
-              />
               <StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
@@ -589,6 +454,7 @@ function StaticChartViewerModal({
               sx={{
                 order: { xs: 1, md: 2 },
                 flex: { xs: '0 0 auto', md: 1 },
+                minWidth: 0,
                 width: { xs: '100%', md: 'auto' },
                 overflow: 'hidden',
                 bgcolor: 'background.paper',
@@ -608,16 +474,15 @@ function StaticChartViewerModal({
                       Minervini readout never cover the candles (a leader near
                       new highs prints at the top-right). One line, scrolls
                       horizontally on narrow screens. */}
-                  <ChartInfoStrip minerviniInfo={minerviniInfo} />
-                  <BandLegend />
-                  {isMobile && (
-                    <SignalBadges
-                      signal={chartPayload?.signal}
-                      sellPlan={chartPayload?.sell_plan}
-                    />
-                  )}
-                  <Box sx={{ flex: 1, minHeight: 0, position: 'relative', overflowY: 'auto' }}>
-                    <CandlestickChart bookAnnotations
+                  <ChartInfoStrip />
+                  {isMobile && <Box sx={{ px: 1.5, fontSize: 12, color: 'text.secondary' }}>
+                    左スワイプ：次の銘柄 ／ 右：前の銘柄
+                    <Button size="small" aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'}</Button>
+                  </Box>}
+                  <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
+                    onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
+                    sx={{ flex: 1, minHeight: 0, position: 'relative', overflowY: 'auto', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
+                    <CandlestickChart bookAnnotations interactive={!isMobile || panMode}
                       symbol={currentSymbol}
                       period="6mo"
                       height={Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT - 120, 240)}
@@ -634,8 +499,6 @@ function StaticChartViewerModal({
                       pivotPrice={pivotPrice}
                       pivotLabel={pivotLabel}
                       vcpBoxes={chartPayload?.vcp_boxes || null}
-                      bands={chartPayload?.bands || null}
-                      buyPoints={chartPayload?.buy_points || null}
                     />
                   </Box>
                 </Box>
