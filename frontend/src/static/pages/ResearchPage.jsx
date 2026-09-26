@@ -177,7 +177,6 @@ export default function ResearchPage() {
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>未確認は合格に数えません。RS・EPS・Composite・業種順位は独自推計です。</Typography>
               {method === 'ibd' && <Typography sx={{ fontSize: 12, mt: 1 }}>公開ルールを参考にした独自の厳格成長スクリーニングです。財務履歴の欠損を推計スコアで補完しません。公式IBDの全条件や選出リストへの合格認定ではありません。</Typography>}
               {method.startsWith('minervini') && <Typography sx={{ fontSize: 12, mt: 1 }}>{method === 'minervini2' ? '書籍②『株式トレード 基本と原則』：安値から25%以上。買い位置は2〜3%以内という記述の上限3%を採用。' : '書籍①『成長株投資法』：安値から30%以上。表示する5%ゾーンはIBD型の補助指標で、書籍の固定条件ではありません。'} 200日線の4〜5か月上昇や高いRSは望ましい特徴で、最低条件とは区別します。</Typography>}
-              <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />
               <Button component="a" href={tradingViewUrl(selected.symbol, 'US')} target="_blank" rel="noopener noreferrer" size="small" sx={{ mt: 1.5 }}>TradingView</Button>
             </Paper>
             <Paper sx={panel}>
@@ -189,6 +188,9 @@ export default function ResearchPage() {
               <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}><Typography component="h3" variant="subtitle2">チャートの確認ポイント</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>VCP：{selected.vcp_detected == null ? '未確認' : selected.vcp_detected ? '検出' : '未検出'} / 出来高50日平均比：{fmt(selected.se_volume_vs_50d, 2)}倍</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>ベース：{fmt(selected.se_base_length_weeks)}週 / 深さ：{fmt(selected.se_base_depth_pct)}%</Typography></Box>
             </Paper>
           </div>
+            <Paper sx={{ ...panel, mt: 2 }}>
+              <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />
+            </Paper>
         </>}
       </div>
     </div>
