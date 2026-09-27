@@ -1,4 +1,4 @@
-import { dateKey, relativeStrengthScale, setResearchRange } from './researchChartModel';
+import { chartHistoryWarning, dateKey, relativeStrengthScale, setResearchRange } from './researchChartModel';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
@@ -91,7 +91,8 @@ function CandlestickChart({
   const latestCandleRef = useRef(null); // Store latest candle for default display
 
   const [showBookAnnotations, setShowBookAnnotations] = useState(true);
-  const annotations = useMemo(() => buildBookAnnotations(bookAnnotations ? priceData : null), [bookAnnotations, priceData]);
+  const historyWarning = useMemo(() => chartHistoryWarning(priceData), [priceData]);
+  const annotations = useMemo(() => buildBookAnnotations(bookAnnotations && !historyWarning ? priceData : null), [bookAnnotations, priceData, historyWarning]);
   const [windowRange, setWindowRange] = useState(null);
   const [timeframe, setTimeframe] = useState('daily');
   const [showRSLine, setShowRSLine] = useState(true); // RS line overlay toggle
@@ -495,7 +496,7 @@ function CandlestickChart({
 
     const annotatedPivot = pivotLabel !== '共通ピボット' && bookAnnotations && showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.pivot : null;
     const displayedPivot = annotatedPivot ?? pivotPrice;
-    if (displayedPivot != null && Number.isFinite(displayedPivot) && displayedPivot > 0) {
+    if (!historyWarning && displayedPivot != null && Number.isFinite(displayedPivot) && displayedPivot > 0) {
       pivotLineRef.current = series.createPriceLine({
         price: displayedPivot,
         color: '#ff9800',
@@ -513,7 +514,7 @@ function CandlestickChart({
         pivotLineRef.current = null;
       }
     };
-  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView]);
+  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView, historyWarning]);
 
   // Draw VCP consolidation boxes over the candles (full chart only). The
   // primitive follows pan/zoom on its own; we only (re)create it when the
@@ -739,6 +740,7 @@ function CandlestickChart({
 
   return (
     <>
+    {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
     {researchView && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
       <ToggleButtonGroup size="small" exclusive value={timeframe} onChange={(_,value)=>{if(value){isFirstDataLoadRef.current=true;setTimeframe(value);}}} aria-label="足の種類"><ToggleButton value="daily">日足</ToggleButton><ToggleButton value="weekly">週足</ToggleButton></ToggleButtonGroup>
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</Button>)}

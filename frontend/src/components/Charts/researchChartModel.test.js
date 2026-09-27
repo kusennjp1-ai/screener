@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { relativeStrengthScale, setResearchRange } from './researchChartModel';
+import { chartHistoryWarning, relativeStrengthScale, setResearchRange } from './researchChartModel';
 import { transformToCandlestickData } from './candlestickData';
 
 describe('research chart regressions', () => {
+  it('warns on unresolved split discontinuities and invalid OHLC instead of drawing a valid shape', () => {
+    const before={date:'2026-06-11',open:2400,high:2430,low:2300,close:2411,volume:1700000};
+    const after={date:'2026-06-12',open:237,high:255,low:236,close:254,volume:10000000};
+    expect(chartHistoryWarning([before,after])).toContain('分割');
+    expect(chartHistoryWarning([{...after,high:253}])).toContain('不整合');
+    expect(chartHistoryWarning([{...before,open:240,high:243,low:230,close:241.1,volume:17000000},after])).toBeNull();
+  });
   it('scales RS only to the visible period, including BusinessDay bounds', () => {
     const points=[{time:'2026-01-01',value:1000},{time:'2026-09-01',value:15},{time:'2026-09-02',value:53}];
     const scale=relativeStrengthScale(points,{from:{year:2026,month:9,day:1},to:{year:2026,month:9,day:2}}).priceRange;
