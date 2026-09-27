@@ -59,7 +59,10 @@ class VcpBoxRenderer {
         if (r.label) {
           ctx.font = `${11 * vr}px sans-serif`;
           const labelWidth = Math.min(ctx.measureText(r.label).width + 10 * hr, scope.bitmapSize.width);
-          const labelX = Math.max(0, Math.min(left, scope.bitmapSize.width - labelWidth));
+          // Anchor contraction captions to the trough, not an off-screen peak.
+          const anchorX = r.curve ? r.x2 * hr : left;
+          if (r.curve && (anchorX < 0 || anchorX > scope.bitmapSize.width)) { ctx.restore(); continue; }
+          const labelX = Math.max(0, Math.min(r.curve ? anchorX - labelWidth / 2 : left, scope.bitmapSize.width - labelWidth));
           let labelY = Math.max(58 * vr, Math.min(r.arrow ? top - 52 * vr : bottom + ((r.diagonal || r.curve) ? 4 : 22) * vr, scope.bitmapSize.height - 18 * vr));
           for (let attempt = 0; attempt < 8; attempt++) {
             if (!occupiedLabels.some(b => labelX < b.right + 4 * hr && labelX + labelWidth > b.left - 4 * hr && labelY < b.bottom && labelY + 17 * vr > b.top)) break;
@@ -67,6 +70,10 @@ class VcpBoxRenderer {
             if (labelY > scope.bitmapSize.height - 18 * vr) labelY = Math.max(58 * vr, top - (attempt + 2) * 19 * vr);
           }
           occupiedLabels.push({ left: labelX, right: labelX + labelWidth, top: labelY, bottom: labelY + 17 * vr });
+          if (r.curve) {
+            ctx.setLineDash([2 * hr, 2 * hr]); ctx.lineWidth = hr;
+            ctx.beginPath(); ctx.moveTo(anchorX, r.y2 * vr); ctx.lineTo(labelX + labelWidth / 2, labelY); ctx.stroke();
+          }
           ctx.fillStyle = r.labelBackground || 'rgba(20,27,42,.94)'; ctx.fillRect(labelX, labelY, labelWidth, 17 * vr);
           ctx.fillStyle = r.color || '#ffb74d'; ctx.fillText(r.label, labelX + 5 * hr, labelY + 12 * vr, labelWidth - 10 * hr);
         }

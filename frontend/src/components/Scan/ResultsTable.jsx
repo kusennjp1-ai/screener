@@ -100,13 +100,13 @@ const columns = [
   { id: 'chart', label: '', sortable: false, width: 60 },
   // Width fits "0700.HK" + MarketBadge + FieldAvailabilityChip on a single
   // line without overflow (nowrap guards the rest).
-  { id: 'symbol', label: 'Sym', sortable: true, width: SYMBOL_COLUMN_WIDTH },
-  { id: 'rs_trend', label: 'RS Trend', sortable: true, width: 110 },
-  { id: 'price_change_1d', label: 'Price', sortable: true, width: 110 },
-  { id: 'gics_sector', label: 'Sector', sortable: true, width: 80 },
+  { id: 'symbol', label: '銘柄', sortable: true, width: SYMBOL_COLUMN_WIDTH },
+  { id: 'rs_trend', label: 'RS推移', sortable: true, width: 110 },
+  { id: 'price_change_1d', label: '株価推移', sortable: true, width: 110 },
+  { id: 'gics_sector', label: 'セクター', sortable: true, width: 80 },
   { id: 'ibd_industry_group', label: 'IBD Industry', sortable: true, width: 140 },
   { id: 'market_themes', label: 'Themes', sortable: false, width: 180 },
-  { id: 'ibd_group_rank', label: 'Grp', sortable: true, width: 45 },
+  { id: 'ibd_group_rank', label: '業種順位', sortable: true, width: 65 },
   { id: 'composite_score', label: '補助スコア', sortable: true, width: 50 },
   { id: 'minervini_score', label: 'Min', sortable: true, width: 45 },
   { id: 'canslim_score', label: 'CAN', sortable: true, width: 45 },
@@ -128,8 +128,8 @@ const columns = [
   { id: 'beta', label: 'β', sortable: true, width: 45 },
   { id: 'beta_adj_rs', label: 'βRS', sortable: true, width: 45 },
   { id: 'eps_rating', label: 'EPS Rtg', sortable: true, width: 55 },
-  { id: 'stage', label: 'Stg', sortable: true, width: 40 },
-  { id: 'current_price', label: 'Price', sortable: true, width: 65 },
+  { id: 'stage', label: '段階', sortable: true, width: 40 },
+  { id: 'current_price', label: '株価', sortable: true, width: 65 },
   { id: 'volume', label: '$Vol', sortable: true, width: 60 },
   // MCap column header label is overridden per-render based on the USD/Local
   // toggle; keep the underlying sort key stable at 'market_cap' so the
@@ -188,6 +188,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
   onRowHover,
   onOpenChart,
   showActions,
+  showThemes,
   showWatchlistMenu,
   chartEnabled,
   mcapDisplay,
@@ -309,9 +310,9 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {row.ibd_industry_group || '-'}
       </TableCell>
 
-      <TableCell align="left" sx={{ color: 'text.secondary', width: 180, minWidth: 180, py: 0.5 }}>
+      {showThemes && <TableCell align="left" sx={{ color: 'text.secondary', width: 180, minWidth: 180, py: 0.5 }}>
         <MarketThemesList themes={row.market_themes} variant="compact" />
-      </TableCell>
+      </TableCell>}
 
       <TableCell align="center" sx={{
         fontFamily: 'monospace',
@@ -578,6 +579,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
          prevProps.row.tpr_state === nextProps.row.tpr_state &&
          prevProps.mcapDisplay === nextProps.mcapDisplay &&
          prevProps.showActions === nextProps.showActions &&
+         prevProps.showThemes === nextProps.showThemes &&
          prevProps.showWatchlistMenu === nextProps.showWatchlistMenu &&
          prevProps.chartEnabled === nextProps.chartEnabled;
 });
@@ -706,6 +708,7 @@ function ResultsTable({
               {visibleColumns.map((column) => (
                 <TableCell
                   key={column.id}
+                  data-column={column.id}
                   align={column.id === 'symbol' ? 'left' : 'center'}
                   sx={{
                     width: column.width,
@@ -758,6 +761,7 @@ function ResultsTable({
                   onRowClick={onOpenChart ? handleRowClick : null}
                   onRowHover={onRowHover}
                   onOpenChart={onOpenChart}
+                  showThemes={visibleColumns.some(c => c.id === "market_themes")}
                   showActions={showActions}
                   showWatchlistMenu={showWatchlistMenu}
                   chartEnabled={

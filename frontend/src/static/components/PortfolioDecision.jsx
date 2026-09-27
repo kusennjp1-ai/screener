@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react';
 import { Box, Button, Paper, Typography } from '@mui/material';
 import BookRiskWorkbench from './BookRiskWorkbench';
 import LocalTradeJournal from './LocalTradeJournal';
-import { buildPortfolioPlan } from '../portfolioPlan';
+import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 
 const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n);
 const pct = n => `${(n * 100).toFixed(1)}%`;
 
 export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse }) {
-  const plan = useMemo(() => buildPortfolioPlan(rows, date, 100000, now), [rows, date, now]);
+  const prepared = useMemo(() => preparePortfolioRows(rows), [rows]);
+  const plan = useMemo(() => buildPortfolioPlan(rows, date, 100000, now, prepared), [rows, date, now, prepared]);
   const [expanded, setExpanded] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
   return <Paper component="section" id="today-decision" tabIndex={-1} aria-label="本日の判断と10万ドルの配分" className={`decision-panel${expanded ? " decision-expanded" : ""}`} elevation={0}>

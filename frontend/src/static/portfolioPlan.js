@@ -1,5 +1,5 @@
 import { canonicalPivot } from './researchPresentation.js';
-import { assess, finite, snapshotFreshness } from './researchEngine.js';
+import { assessmentSummary as assess, finite, snapshotFreshness } from './researchEngine.js';
 import { entryReadiness } from './entryReadiness.js';
 
 const centsUp = v => Math.ceil(v * 100 - 1e-8) / 100;
@@ -20,9 +20,25 @@ export function modelMarket(rows) {
   return { label: '新規購入を抑制', cap: 0 };
 }
 
-export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now()) {
+export function preparePortfolioRows(rows) {
+  const counts = new Map();
+  rows.forEach(r => counts.set(r.symbol, (counts.get(r.symbol) || 0) + 1));
+  const candidates = rows.filter(r => {
+    if (r.corporate_action?.cash_acquisition || r.price_activity?.lowRange || !r.symbol || counts.get(r.symbol) !== 1 || r.market !== 'US' || r.currency !== 'USD') return false;
+    const pivot = canonicalPivot(r).price;
+    return assess(r, 'minervini').qualified && assess(r, 'ibd').qualified &&
+      finite(r.adv_usd) && r.adv_usd >= 20000000 && finite(r.current_price) && r.current_price >= 10 &&
+      finite(pivot) && pivot > 0 && r.current_price >= pivot * .97 && r.current_price <= pivot * 1.05 &&
+      finite(r.se_pattern_confidence) && r.se_pattern_confidence >= 70 &&
+      typeof r.gics_sector === 'string' && r.gics_sector.trim().length > 0;
+  }).sort((a, b) => b.rs_rating - a.rs_rating || a.symbol.localeCompare(b.symbol));
+  const primary = rows.filter(r => r.market === 'US' && r.currency === 'USD' && r.current_price >= 10 && r.adv_usd >= 20000000 && assess(r,'minervini').qualified);
+  return {market:modelMarket(rows), candidates, primary:primary.length, strict:primary.filter(r=>assess(r,'ibd').qualified).length};
+}
+
+export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(), prepared = preparePortfolioRows(rows)) {
   if (!finite(capital) || capital <= 0 || capital > 100000000) throw Error('Invalid model capital');
-  const market = modelMarket(rows);
+  const market = prepared.market;
   // This account starts in cash and has no demonstrated trading results.
   // Use a disclosed pilot allocation; market strength alone cannot scale it up.
   const allocationCap = Math.min(market.cap, .25);
@@ -31,23 +47,12 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   const blockers = [];
   if ((freshness.state !== 'recent' || freshness.days > 1) && !rows.some(r => r.entry_evidence?.calendar?.latest_completed_session === date && now < Date.parse(r.entry_evidence.calendar.valid_until))) blockers.unshift('分析基準日を最新の取引日と照合してください');
   if (!market.cap) blockers.unshift(market.label);
-  const counts = new Map();
-  rows.forEach(r => counts.set(r.symbol, (counts.get(r.symbol) || 0) + 1));
-  const candidates = rows.filter(r => {
-    if (!r.symbol || counts.get(r.symbol) !== 1 || r.market !== 'US' || r.currency !== 'USD') return false;
-    const pivot = canonicalPivot(r).price;
-    return assess(r, 'minervini').qualified && assess(r, 'ibd').qualified &&
-      finite(r.adv_usd) && r.adv_usd >= 20000000 && finite(r.current_price) && r.current_price >= 10 &&
-      finite(pivot) && pivot > 0 && r.current_price >= pivot * .97 && r.current_price <= pivot * 1.05 &&
-      finite(r.se_pattern_confidence) && r.se_pattern_confidence >= 70 &&
-      typeof r.gics_sector === 'string' && r.gics_sector.trim().length > 0;
-  }).sort((a, b) => b.rs_rating - a.rs_rating || a.symbol.localeCompare(b.symbol));
+  const candidates = [...prepared.candidates];
   const readiness = candidates.map(row => entryReadiness(row,date,market,now));
   const readySymbols = new Set(readiness.filter(r=>r.ready).map(r=>r.symbol));
   if (!candidates.length) {
-    const primary = rows.filter(r => r.market === 'US' && r.currency === 'USD' && assess(r,'minervini').qualified);
-    const strict = primary.filter(r => assess(r,'ibd').qualified);
-    blockers.push(primary.length ? `ミネルヴィニ一次通過 ${primary.length}銘柄のうちIBD型も通過 ${strict.length}銘柄。財務・成長・流動性・買い位置などの条件で配分候補を絞っています。` : 'ミネルヴィニの一次条件を通過した銘柄がありません。');
+    const {primary, strict} = prepared;
+    blockers.push(primary ? `流動性条件内のミネルヴィニ一次通過 ${primary}銘柄のうちIBD型も通過 ${strict}銘柄。財務・成長・流動性・買い位置などの条件で配分候補を絞っています。` : 'ミネルヴィニの一次条件を通過した銘柄がありません。');
   }
   for (const label of [...new Set(readiness.flatMap(r=>r.rules.filter(c=>c.state!=='pass').map(c=>c.label)))]) blockers.push(`${label}：${readiness.filter(r=>r.rules.some(c=>c.label===label&&c.state!=='pass')).length}銘柄が未達または未確認`);
   candidates.sort((a,b) => Number(readySymbols.has(b.symbol)) - Number(readySymbols.has(a.symbol)));

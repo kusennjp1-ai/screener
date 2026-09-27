@@ -52,6 +52,7 @@ jobs:
           python tools/test_sec_financials.py
           python tools/test_export_book_benchmark.py
           python tools/export-book-benchmark.py --allow-unavailable
+          node tools/repair-price-history.mjs
           node tools/export-research.mjs
           python tools/test_export_entry_context.py
           python tools/sec-financials.py --limit 60
@@ -65,7 +66,9 @@ jobs:
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
-        run: npm run build
+        run: |
+          npm run build
+          node tools/check-data-quality.mjs
       - uses: actions/upload-pages-artifact@v4
         with:
           path: frontend/dist

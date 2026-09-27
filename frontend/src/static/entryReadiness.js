@@ -15,7 +15,7 @@ export function entryReadiness(row, date, market, now = Date.now()) {
   const minervini = assess(row, 'minervini'), ibd = assess(row, 'ibd');
   const check = (id, label, value, detail) => ({id,label,state:value == null ? 'unknown' : value ? 'pass' : 'fail',detail});
   const rules = [
-    check('selection','選定条件', minervini.qualified && ibd.qualified, `ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未確認 ${minervini.unknown + ibd.unknown}）`),
+    check('selection','選定条件', minervini.qualified && ibd.qualified && !row.corporate_action?.cash_acquisition && !row.price_activity?.lowRange, `${row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外。' : row.price_activity?.lowRange ? '60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。' : ''}ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未確認 ${minervini.unknown + ibd.unknown}）`),
     check('market','市場環境', market.cap > 0, market.label),
     check('date','最新の取引日', calendar ? fresh : null, calendar ? `基準日 ${date}・最新完了取引日 ${calendar.latest_completed_session}` : `分析基準日 ${date}。取引カレンダー未取得`),
     check('price','買い位置', finite(row.current_price) && finite(pivot) && pivot > 0 ? row.current_price >= pivot && row.current_price <= pivot * 1.05 : null, `日次価格 ${finite(row.current_price) ? row.current_price.toFixed(2) : '未確認'} / ピボット ${finite(pivot) ? pivot.toFixed(2) : '未確認'}。0〜5%はこのモデルの設定`),

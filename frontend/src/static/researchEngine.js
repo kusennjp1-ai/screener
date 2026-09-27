@@ -21,7 +21,7 @@ export function researchCsv(ranked, method, date) {
     return `"${text.replaceAll('"', '""')}"`;
   };
   const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules'];
-  const lines = ranked.map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
+  const lines = ranked.map(({row})=>({row,assessment:assess(row,method)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
     a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / ')]);
   return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
 }
@@ -86,6 +86,14 @@ export function assess(row, method = 'minervini') {
     qualified: passed === rules.length, score: Math.round(passed / rules.length * 100) };
 }
 
+// Generated from the same rule function; unknowns stay unknown. Details and CSV
+// retain complete, independently recomputed rule evidence.
+export const RULE_SUMMARY_VERSION = 'research-summary-v1';
+export function assessmentSummary(row, method) {
+  const result = row.method_summary?.version === RULE_SUMMARY_VERSION && row.method_summary[method];
+  return result || assess(row, method);
+}
+
 export function entryChecks(row, method = 'minervini') {
   const v = auditValues(row), pivot = canonicalPivot(row).price;
   const zone = method === 'minervini2' ? 3 : 5;
@@ -105,7 +113,7 @@ export function entryPlan(row, quote, method = 'minervini') {
   const distance = (price / pivot - 1) * 100;
   const zone = method === 'minervini2' ? 3 : 5;
   return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: pivotInfo.reason,
-    state: distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
+    state: row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外' : row.price_activity?.lowRange ? '低変動・監視のみ' : distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
     // A transparent example, not a claim that a pattern-specific stop was detected.
     stopExample: price * .93 };
 }
@@ -116,9 +124,9 @@ export function rankCandidates(rows, method, { search = '', qualifiedOnly = fals
     .filter(r => !liquidOnly || (finite(r.current_price) && r.current_price >= 10 && finite(r.adv_usd) && r.adv_usd >= 20000000))
     .filter(r => `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query))
     .filter(r => !watchlist || watchlist.includes(r.symbol))
-    .map(row => ({ row, assessment: assess(row, method) }))
+    .map(row => ({ row, assessment: assessmentSummary(row, method) }))
     .filter(r => !qualifiedOnly || r.assessment.qualified)
-    .sort((a, b) => b.assessment.score - a.assessment.score || (a.assessment.qualified && b.assessment.qualified ? entryPriority(a.row) - entryPriority(b.row) : 0) || (b.row.rs_rating ?? -1) - (a.row.rs_rating ?? -1) || a.row.symbol.localeCompare(b.row.symbol));
+    .sort((a, b) => Number(Boolean(a.row.corporate_action?.cash_acquisition || a.row.price_activity?.lowRange)) - Number(Boolean(b.row.corporate_action?.cash_acquisition || b.row.price_activity?.lowRange)) || b.assessment.score - a.assessment.score || (a.assessment.qualified && b.assessment.qualified ? entryPriority(a.row) - entryPriority(b.row) : 0) || (b.row.rs_rating ?? -1) - (a.row.rs_rating ?? -1) || a.row.symbol.localeCompare(b.row.symbol));
 }
 
 export function quoteStatus(quote, now = Date.now()) {

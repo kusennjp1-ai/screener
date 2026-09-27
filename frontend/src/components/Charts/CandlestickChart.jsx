@@ -1,3 +1,4 @@
+import { dateKey, relativeStrengthScale, setResearchRange } from './researchChartModel';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
@@ -60,6 +61,7 @@ function CandlestickChart({
   vcpBoxes = null,
   bookAnnotations = false,
   researchView = false,
+  smallScreen = false,
   bands = null,
   buyPoints = null,
 }) {
@@ -90,6 +92,7 @@ function CandlestickChart({
 
   const [showBookAnnotations, setShowBookAnnotations] = useState(true);
   const annotations = useMemo(() => buildBookAnnotations(bookAnnotations ? priceData : null), [bookAnnotations, priceData]);
+  const [windowRange, setWindowRange] = useState(null);
   const [timeframe, setTimeframe] = useState('daily');
   const [showRSLine, setShowRSLine] = useState(true); // RS line overlay toggle
   const [legendData, setLegendData] = useState(null); // OHLC legend data on hover
@@ -178,7 +181,7 @@ function CandlestickChart({
 
   // When the timeframe toggle is hidden, force daily so the chart can't
   // remain on a stale weekly aggregation chosen before the toggle disappeared.
-  const effectiveTimeframe = hideTimeframeToggle ? 'daily' : timeframe;
+  const effectiveTimeframe = hideTimeframeToggle && !researchView ? 'daily' : timeframe;
 
   // Single source of truth for "is the RS line actually drawn right now". The
   // RS series is daily-only and toggleable, so it's hidden on weekly or when
@@ -186,7 +189,7 @@ function CandlestickChart({
   // reclaim the strip's space when RS is hidden) and the "RS" label.
   const rsStripShown =
     showRSLine &&
-    effectiveTimeframe === 'daily' &&
+    (effectiveTimeframe === 'daily' || researchView) &&
     Array.isArray(rsData?.rs_line) &&
     rsData.rs_line.length > 0;
 
@@ -232,6 +235,7 @@ function CandlestickChart({
       researchView,
     });
     chartRef.current = chart;
+    isFirstDataLoadRef.current = true;
     volumeSeriesRef.current = volumeSeries;
     avgVolumeSeriesRef.current = avgVolumeSeries;
     candlestickSeriesRef.current = candlestickSeries;
@@ -335,26 +339,24 @@ function CandlestickChart({
 
   // Subscribe to visible time range changes
   useEffect(() => {
-    if (!chartRef.current || !onVisibleRangeChange) return;
+    if (!chartRef.current || (!onVisibleRangeChange && !researchView)) return;
 
     const debouncedRangeChange = debounce((range) => {
       if (range) {
-        onVisibleRangeChange(range);
+        onVisibleRangeChange?.(range);
+        if (researchView) setWindowRange(range);
       }
     }, 100);
 
     const timeScale = chartRef.current.timeScale();
-    const unsubscribe = timeScale.subscribeVisibleTimeRangeChange((range) => {
-      if (range) {
-        debouncedRangeChange(range);
-      }
-    });
+    const onRange = range => { if(range)debouncedRangeChange(range); };
+    timeScale.subscribeVisibleTimeRangeChange(onRange);
 
     return () => {
       debouncedRangeChange.cancel();
-      if (unsubscribe) unsubscribe();
+      if(chartRef.current) timeScale.unsubscribeVisibleTimeRangeChange(onRange);
     };
-  }, [onVisibleRangeChange, symbol, height, isDarkMode, compact]);
+  }, [onVisibleRangeChange, symbol, height, isDarkMode, compact, researchView]);
 
   // Default the visible window to a readable recent span (~6 months daily)
   // instead of fitting all ~2 years of bars, so the recent base/VCP is legible
@@ -363,14 +365,14 @@ function CandlestickChart({
   const setDefaultVisibleWindow = useCallback((barCount) => {
     const timeScale = chartRef.current?.timeScale();
     if (!timeScale || !barCount) return;
-    if (researchView && chartData?.candlesticks?.length) { const bars=chartData.candlesticks; timeScale.setVisibleRange({from:bars[Math.max(0,bars.length-126)].time,to:bars.at(-1).time}); return; }
+    if (researchView && chartData?.candlesticks?.length) { setResearchRange(chartRef.current, chartData.candlesticks, effectiveTimeframe === "weekly" ? 52 : smallScreen ? 63 : 126); return; }
     const visibleBars = effectiveTimeframe === 'weekly' ? 80 : 130;
     if (barCount > visibleBars) {
       timeScale.setVisibleLogicalRange({ from: barCount - visibleBars, to: barCount + 2 });
     } else {
       timeScale.fitContent();
     }
-  }, [effectiveTimeframe, researchView, chartData]);
+  }, [effectiveTimeframe, researchView, chartData, smallScreen]);
 
   // Update chart data when data changes
   useEffect(() => {
@@ -386,7 +388,7 @@ function CandlestickChart({
     // ~50-day average-volume line (Minervini-style). Trailing simple average of
     // the volume series, aligned to the same time axis / volume scale.
     if (avgVolumeSeriesRef.current && chartData.volume.length > 0) {
-      const AVG_WINDOW = 50;
+      const AVG_WINDOW = effectiveTimeframe === 'weekly' ? 10 : 50;
       const vol = chartData.volume;
       const avg = [];
       let running = 0;
@@ -458,34 +460,26 @@ function CandlestickChart({
       setLegendData(latestLegend);
     }
 
-    // Check if we should restore the range (symbol changed and new data loaded)
-    if (shouldRestoreRangeRef.current) {
-      shouldRestoreRangeRef.current = false; // Clear the flag
-
-      if (visibleRange && visibleRange.from && visibleRange.to) {
-        // Use setTimeout to ensure data is fully rendered before setting range
-        setTimeout(() => {
-          if (chartRef.current) {
-            chartRef.current.timeScale().setVisibleRange(visibleRange);
-          }
-        }, 0);
-      } else {
-        // No saved range - default to a readable recent window
-        setDefaultVisibleWindow(chartData.candlesticks.length);
-      }
-    } else if (isFirstDataLoadRef.current) {
-      // First load - default to a readable recent window. Static bundles ship
-      // ~2 years of bars; fitContent() would squeeze the recent base/VCP into a
-      // sliver and force a manual zoom, so focus on the most recent months and
-      // let the user scroll back for context.
-      isFirstDataLoadRef.current = false;
-      setDefaultVisibleWindow(chartData.candlesticks.length);
+    // Wait until all panes (especially daily -> weekly RS) have replaced their
+    // time points before converting dates to logical indices.
+    const restore = shouldRestoreRangeRef.current;
+    const initialize = isFirstDataLoadRef.current;
+    shouldRestoreRangeRef.current = false;
+    isFirstDataLoadRef.current = false;
+    if (restore || initialize) {
+      const chart = chartRef.current;
+      const frame = requestAnimationFrame(() => {
+        if (chartRef.current !== chart) return;
+        if (restore && visibleRange?.from && visibleRange?.to) chart.timeScale().setVisibleRange(visibleRange);
+        else setDefaultVisibleWindow(chartData.candlesticks.length);
+      });
+      return () => cancelAnimationFrame(frame);
     }
     // Otherwise, don't touch the zoom - let user adjust freely
   // setDefaultVisibleWindow is stable (defined below from refs); excluded to
   // keep this effect keyed only on data/range changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, visibleRange, effectiveTimeframe, height, isDarkMode, symbol, compact, bookAnnotations]);
+  }, [chartData, effectiveTimeframe, height, isDarkMode, symbol, compact, bookAnnotations]);
 
   // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
   // candlestick series. This is the key actionable level for VCP / Minervini
@@ -507,8 +501,8 @@ function CandlestickChart({
         color: '#ff9800',
         lineWidth: 2,
         lineStyle: 2, // dashed
-        axisLabelVisible: true,
-        title: annotatedPivot ? '収縮高値（推定）' : pivotLabel,
+        axisLabelVisible: !researchView,
+        title: researchView ? '' : annotatedPivot ? '収縮高値（推定）' : pivotLabel,
       });
     }
 
@@ -519,7 +513,7 @@ function CandlestickChart({
         pivotLineRef.current = null;
       }
     };
-  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact]);
+  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView]);
 
   // Draw VCP consolidation boxes over the candles (full chart only). The
   // primitive follows pan/zoom on its own; we only (re)create it when the
@@ -636,7 +630,8 @@ function CandlestickChart({
       return;
     }
 
-    const points = rsData.rs_line;
+    const candleDates = new Set(chartData?.candlesticks.map(p=>p.time));
+    const points = effectiveTimeframe === 'weekly' ? rsData.rs_line.filter(p=>candleDates.has(p.time)) : rsData.rs_line;
     series.setData(points.map((p) => ({ time: p.time, value: p.value })));
 
     const timesInSeries = new Set(points.map((p) => p.time));
@@ -653,8 +648,12 @@ function CandlestickChart({
         text: `RS ${Math.round(rsRatingValue)}`,
       });
     }
-    if (markers) markers.setMarkers(markerList);
-  }, [rsData, rsStripShown, rsRatingValue, height, isDarkMode, symbol, compact, researchView]);
+    if (markers) markers.setMarkers(researchView ? [] : markerList);
+    if (researchView) {
+      series.priceScale().applyOptions({autoScale:true,mode:0,scaleMargins:{top:.18,bottom:.12}});
+      series.applyOptions({autoscaleInfoProvider:()=>relativeStrengthScale(points,chartRef.current?.timeScale().getVisibleRange())});
+    }
+  }, [chartData, effectiveTimeframe, rsData, rsStripShown, rsRatingValue, height, isDarkMode, symbol, compact, researchView]);
 
   // RS strip layout: when the RS line is shown, compress price to a 0.66 floor
   // so the [0.66, 0.78] band below it is always empty (the RS scale floats in
@@ -740,13 +739,18 @@ function CandlestickChart({
 
   return (
     <>
-    {researchView && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'wrap',gap:.5,p:1,borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
-      {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { const bars=chartData.candlesticks; chartRef.current?.timeScale().setVisibleRange({from:bars[Math.max(0,bars.length-count)].time,to:bars.at(-1).time}); }}>{label}</Button>)}
+    {researchView && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
+      <ToggleButtonGroup size="small" exclusive value={timeframe} onChange={(_,value)=>{if(value){isFirstDataLoadRef.current=true;setTimeframe(value);}}} aria-label="足の種類"><ToggleButton value="daily">日足</ToggleButton><ToggleButton value="weekly">週足</ToggleButton></ToggleButtonGroup>
+      {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</Button>)}
       <Button aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</Button>
       <Button aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</Button>
-      <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>表示をリセット</Button>
+      <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</Button>
       <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'ON':'OFF'}</Button>
     </Box>}
+    {researchView && hasData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary'}}>
+      <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span> · 共通ピボット {Number.isFinite(pivotPrice) ? pivotPrice.toFixed(2) : '未確認'} · {effectiveTimeframe === 'weekly' ? '週平均' : '日平均'}：
+      {[[50,chartData.sma50],[150,chartData.sma150],[200,chartData.sma200]].map(([period,points])=>{const value=points.at(-1)?.value;return <span key={period}> SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} (${((value/chartData.candlesticks.at(-1).close-1)*100).toFixed(1)}%)`:'—'} · </span>;})}
+    </Typography>}
     {researchView && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
       始 {legendData.open.toFixed(2)} · 高 {legendData.high.toFixed(2)} · 安 {legendData.low.toFixed(2)} · 終 {legendData.close.toFixed(2)}
     </Typography>}
@@ -884,7 +888,7 @@ function CandlestickChart({
 
       {researchView && hasData && <>
         <Typography sx={{position:'absolute',top:'70%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>RS · {rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}</Typography>
-        <Typography sx={{position:'absolute',top:'82%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>出来高 · 灰線は50日平均</Typography>
+        <Typography sx={{position:'absolute',top:'82%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>出来高 · 灰線は{effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均</Typography>
       </>}
       {/* Loading skeleton overlay */}
       {showLoading && (

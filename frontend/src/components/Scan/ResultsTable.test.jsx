@@ -52,6 +52,16 @@ const defaultProps = {
 };
 
 describe('ResultsTable', () => {
+  it.each([[false,false],[false,true],[true,false],[true,true]])('aligns every value with its header: themes %s, actions %s', (themes,showActions) => {
+    const {container}=renderWithProviders(<ResultsTable {...defaultProps} showActions={showActions} results={[{...fullSeRow,market_themes:themes?['AI']:[]}]} />);
+    const headers=container.querySelectorAll('thead th');
+    const cells=container.querySelectorAll('tbody tr[data-index="0"] td');
+    const rowCells=cells.length ? cells : [...container.querySelectorAll('tbody tr')].find(r=>r.textContent.includes(fullSeRow.symbol)).querySelectorAll('td');
+    expect(rowCells.length).toBe(headers.length);
+    const priceIndex=[...headers].findIndex(h=>h.dataset.column==='current_price');
+    expect(priceIndex).toBeGreaterThan(-1);
+    expect(rowCells[priceIndex].textContent).toContain('$');
+  });
   // ── SE column rendering — full data ──────────────────────────────────
   describe('SE column rendering — full data', () => {
     beforeEach(() => {

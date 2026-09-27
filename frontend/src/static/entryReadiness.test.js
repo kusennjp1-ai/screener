@@ -17,6 +17,13 @@ it('fails closed for missing/expired calendars, earnings, shape or volume',()=>{
  const r=row();modify(r);expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).ready).toBe(false);
  }
 });
+it('keeps cash acquisitions and near-static prices out of purchase plans without changing book qualifications',()=>{
+ for(const extra of [{corporate_action:{cash_acquisition:true}},{price_activity:{lowRange:true,range60pct:3}}]){
+  const r={...row(),...extra};
+  expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules[0].state).toBe('fail');
+  expect(buildPortfolioPlan([r],date,100000,now).positions).toEqual([]);
+ }
+});
 it('does not let unready high-RS rows crowd out qualified daily positions',()=>{
  const rows=Array.from({length:8},(_,i)=>withAuditFixture({...row(),symbol:`S${i}`,gics_sector:`Sector${i}`,rs_rating:99-i,entry_evidence:{...row().entry_evidence,volumeRatio:i===7?2:.5}},date));
  const plan=buildPortfolioPlan(rows,date,100000,now);expect(plan.dailyPositions[0].symbol).toBe('S7');

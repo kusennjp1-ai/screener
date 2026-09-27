@@ -137,9 +137,9 @@ export const transformToCandlestickData = (apiData, timeframe = 'daily') => {
   const ema50 = calculateEMA(processedData, 50);
 
   // Calculate the Minervini trend-template SMA stack (50 / 150 / 200-day).
-  const sma50 = calculateSMA(processedData, 50);
-  const sma150 = calculateSMA(processedData, 150);
-  const sma200 = calculateSMA(processedData, 200);
+  const sma50 = calculateSMA(processedData, timeframe === "weekly" ? 10 : 50);
+  const sma150 = calculateSMA(processedData, timeframe === "weekly" ? 30 : 150);
+  const sma200 = calculateSMA(processedData, timeframe === "weekly" ? 40 : 200);
 
   return { candlesticks, volume, ema10, ema20, ema50, sma50, sma150, sma200 };
 };

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { rankCandidates, compareReference } from '../src/static/researchEngine.js';
+import { rankCandidates, compareReference, assess, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
 import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.js';
 import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 import { diagnoseBookChart } from '../src/static/bookChartDiagnostics.js';
@@ -49,6 +49,15 @@ for (const row of merged) {
     try { chart = await read(paths.get(row.symbol)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
   const audit = auditDailyBars(row, chart, scan.as_of_date);
+  if (audit.valid && row.price_quality?.status === 'replaced') {
+    const comparison = new Map((benchmark?.bars || []).map(b=>[b.date,b.close]));
+    chart.rs_line = chart.bars.filter(b=>comparison.get(b.date)>0).map(b=>({time:b.date,value:b.close/comparison.get(b.date)}));
+    await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
+  }
+  const recent60 = audit.valid ? chart.bars.slice(-60) : [];
+  const range60 = recent60.length === 60 ? (Math.max(...recent60.map(b=>b.high))/Math.min(...recent60.map(b=>b.low))-1)*100 : null;
+  row.price_activity = {range60pct:range60,lowRange:range60 != null && range60 < 5};
+  if(row.symbol==='SLAB' && scan.as_of_date >= '2026-02-04') row.corporate_action={cash_acquisition:true,label:'現金買収合意（成長株の購入候補から除外）',announced:'2026-02-04',source:'https://investor.silabs.com/news-releases/news-release-details/texas-instruments-acquire-silicon-labs'};
   if (row.technical_audit?.errors?.includes('同一銘柄のデータが矛盾')) { audit.errors.push('同一銘柄のデータが矛盾'); audit.valid = false; audit.values = {}; }
   const diagnostics = diagnoseBookChart(row, audit.valid ? chart : null, scan.as_of_date);
   const technical = buildBookTechnicalEvidence(row, audit.valid ? chart : null, scan.as_of_date, { benchmark });
@@ -67,7 +76,7 @@ for (const row of merged) {
     earnings:entryContext?.as_of_date === scan.as_of_date ? entryContext.earnings?.[row.symbol] || null : null,
     shape:shape ? {candidate:shape.candidate,summary:shape.summary,method:'book-diagram-heuristic'} : null,
     volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
-  rows.set(row.symbol, { ...row, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
+  rows.set(row.symbol, { ...row, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
     book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null });
 }
@@ -82,6 +91,12 @@ if (breadth) {
 // Details are fetched only when a symbol is opened. Keep rule inputs in the index.
 await mkdir(resolve(root, 'research-details'), {recursive:true});
 const compactRows = new Map();
+for (const row of rows.values()) {
+  row.method_summary = {version:RULE_SUMMARY_VERSION};
+  for (const method of ['minervini','minervini2','oneil','ibd']) {
+    const {rules,...summary} = assess(row,method); row.method_summary[method] = summary;
+  }
+}
 for (const [symbol, row] of rows) {
   const { book_diagnostics, book_technical_evidence, book_financials, research_detail_path: previousDetailPath, ...compact } = row;
   void previousDetailPath;
@@ -93,7 +108,7 @@ for (const [symbol, row] of rows) {
   compact.research_detail_path = path;
   compactRows.set(symbol, compact);
 }
-const listFields = 'symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance'.split(' ');
+const listFields = 'price_quality corporate_action price_activity chart_path method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance'.split(' ');
 const researchIndex = {as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]])))};
 const researchContent = JSON.stringify(researchIndex);
 manifest.research_generation = createHash('sha256').update(researchContent).digest('hex');
@@ -110,7 +125,7 @@ for (const { path, payload } of chunks) {
   await writeFile(resolve(root, path), JSON.stringify(payload));
 }
 const verification = [...rows.values()].map(row => ({ symbol: row.symbol, audit: row.technical_audit,
-  methods: Object.fromEntries(['minervini', 'minervini2', 'ibd'].map(method => { const a = rankCandidates([row], method)[0]?.assessment; return [method, a || null]; })) }));
+  methods: Object.fromEntries(['minervini', 'minervini2', 'ibd'].map(method => { const a = assess(row, method); return [method, a || null]; })) }));
 await writeFile('public/qualification-audit.json', JSON.stringify({ version: AUDIT_VERSION, as_of_date: scan.as_of_date,
   generated_at: manifest.generated_at, independently_recalculated: verification.filter(r => r.audit.valid).length,
   total: rows.size, results: verification }));
@@ -133,3 +148,7 @@ await writeFile('public/research-daily.json', JSON.stringify({
   candidates, ibd_comparison: compareReference(candidates.ibd, reference, scan.as_of_date),
 }, null, 2));
 console.log(`Daily research exported for ${scan.as_of_date}: ${rows.size} rows.`);
+
+const liquid=[...rows.values()].filter(r=>r.current_price>=10&&r.adv_usd>=20000000);
+const failures={};for(const row of liquid)for(const reason of row.technical_audit.errors)failures[reason]=(failures[reason]||0)+1;
+await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:liquid.length,verified:liquid.filter(r=>r.technical_audit.valid).length,reasons:failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));

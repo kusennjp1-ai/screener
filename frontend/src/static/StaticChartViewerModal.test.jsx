@@ -31,6 +31,7 @@ const renderModal = (props) => {
     defaultOptions: {
       queries: {
         retry: false,
+        placeholderData: previous => previous,
       },
     },
   });

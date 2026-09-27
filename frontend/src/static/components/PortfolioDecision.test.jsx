@@ -22,3 +22,12 @@ it('does not fill cash with unqualified stocks when there are no candidates', ()
   fireEvent.click(screen.getByRole('button', { name: /条件付きの配分・注文計画を見る/ }));
   expect(screen.getByText(/配分できる候補はありません/)).toBeInTheDocument();
 });
+it('does not rescan the universe on a 15-second clock tick', () => {
+  const price=vi.fn(()=>50);
+  const rows=Array.from({length:1000},(_,i)=>({symbol:`S${i}`,market:'US',currency:'USD',get current_price(){return price();}}));
+  const start=Date.parse('2026-09-24T14:00:00Z');
+  const {rerender}=render(<PortfolioDecision rows={rows} date="2026-09-23" now={start} />);
+  price.mockClear();
+  rerender(<PortfolioDecision rows={rows} date="2026-09-23" now={start+15000} />);
+  expect(price).not.toHaveBeenCalled();
+});
