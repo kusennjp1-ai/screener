@@ -59,6 +59,7 @@ function CandlestickChart({
   pivotLabel = 'Pivot',
   vcpBoxes = null,
   bookAnnotations = false,
+  researchView = false,
   bands = null,
   buyPoints = null,
 }) {
@@ -228,6 +229,7 @@ function CandlestickChart({
       height: chartHeight,
       isDarkMode,
       interactive,
+      researchView,
     });
     chartRef.current = chart;
     volumeSeriesRef.current = volumeSeries;
@@ -310,7 +312,7 @@ function CandlestickChart({
     // applyOptions effect below picks up subsequent changes without remounting
     // the chart (which would reset visible range / EMAs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, isDarkMode, symbol, compact]); // Re-initialize only when required visual inputs change
+  }, [height, isDarkMode, symbol, compact, researchView]); // Re-initialize only when required visual inputs change
 
   // Track symbol changes - set flag to restore range when symbol changes
   useEffect(() => {
@@ -361,13 +363,14 @@ function CandlestickChart({
   const setDefaultVisibleWindow = useCallback((barCount) => {
     const timeScale = chartRef.current?.timeScale();
     if (!timeScale || !barCount) return;
+    if (researchView && chartData?.candlesticks?.length) { const bars=chartData.candlesticks; timeScale.setVisibleRange({from:bars[Math.max(0,bars.length-126)].time,to:bars.at(-1).time}); return; }
     const visibleBars = effectiveTimeframe === 'weekly' ? 80 : 130;
     if (barCount > visibleBars) {
       timeScale.setVisibleLogicalRange({ from: barCount - visibleBars, to: barCount + 2 });
     } else {
       timeScale.fitContent();
     }
-  }, [effectiveTimeframe]);
+  }, [effectiveTimeframe, researchView, chartData]);
 
   // Update chart data when data changes
   useEffect(() => {
@@ -528,7 +531,7 @@ function CandlestickChart({
     const boxes = bookAnnotations ? (showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.boxes : []) : (Array.isArray(vcpBoxes) ? vcpBoxes : []);
     try {
       if (!vcpBoxPrimitiveRef.current) {
-        vcpBoxPrimitiveRef.current = new VcpBoxPrimitive(boxes);
+        vcpBoxPrimitiveRef.current = new VcpBoxPrimitive(researchView ? boxes.map(b=>({...b,label:b.curve?b.label.split(' ')[0]:b.arrow?'過去の上抜け':'',labelBackground:isDarkMode?'#101827':'#ffffff',color:b.curve?(isDarkMode?'#67e8f9':'#0e7490'):(isDarkMode?'#c4b5fd':'#7c3aed')})) : boxes);
         series.attachPrimitive(vcpBoxPrimitiveRef.current);
       } else {
         vcpBoxPrimitiveRef.current.setBoxes(boxes);
@@ -542,7 +545,7 @@ function CandlestickChart({
       }
       vcpBoxPrimitiveRef.current = null;
     };
-  }, [vcpBoxes, chartData, compact, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol]);
+  }, [vcpBoxes, chartData, compact, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, researchView]);
 
   // MM360 color-band strips (Pressure / Buy Risk / TPR) across the top of the
   // price pane, time-aligned to the candles. Re-aligns on pan/zoom because the
@@ -641,7 +644,7 @@ function CandlestickChart({
       .filter((t) => timesInSeries.has(t))
       .map((t) => ({ time: t, position: 'inBar', color: '#2196f3', shape: 'circle' }));
     // Latest RS rating labelled at the head (right edge) of the RS line.
-    if (rsRatingValue != null && points.length > 0) {
+    if (!researchView && rsRatingValue != null && points.length > 0) {
       markerList.push({
         time: points[points.length - 1].time,
         position: 'aboveBar',
@@ -651,7 +654,7 @@ function CandlestickChart({
       });
     }
     if (markers) markers.setMarkers(markerList);
-  }, [rsData, rsStripShown, rsRatingValue, height, isDarkMode, symbol, compact]);
+  }, [rsData, rsStripShown, rsRatingValue, height, isDarkMode, symbol, compact, researchView]);
 
   // RS strip layout: when the RS line is shown, compress price to a 0.66 floor
   // so the [0.66, 0.78] band below it is always empty (the RS scale floats in
@@ -663,7 +666,7 @@ function CandlestickChart({
   useLayoutEffect(() => {
     const candle = candlestickSeriesRef.current;
     const volume = volumeSeriesRef.current;
-    if (!candle || !volume || !chartRef.current) return;
+    if (!candle || !volume || !chartRef.current || researchView) return;
 
     // RS shown -> compress price to a 0.66 floor (bottom 0.34) so [0.66, 0.78] is
     // an always-empty strip the RS band lives in; hidden -> full height (0.78).
@@ -681,7 +684,7 @@ function CandlestickChart({
       : Math.min(0.45, Math.max(0.14, bandReservePx / Math.max(height, 1)));
     candle.priceScale().applyOptions({ scaleMargins: { top: candleTop, bottom: candleBottom } });
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-  }, [rsStripShown, symbol, height, isDarkMode, compact, bandReservePx]);
+  }, [rsStripShown, symbol, height, isDarkMode, compact, bandReservePx, researchView]);
 
   // Dynamic RS band: size the RS overlay scale so the line fills the empty space
   // below the candles without overlapping them. Recomputes on data change and on
@@ -689,7 +692,7 @@ function CandlestickChart({
   // Debounced; the 12%-38% clamp lives in computeRsBand. Skipped when RS is hidden.
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || !rsLineSeriesRef.current || !rsStripShown) return;
+    if (!chart || !rsLineSeriesRef.current || !rsStripShown || researchView) return;
 
     // candles/rsLine are captured per effect run. They stay fresh because the
     // effect re-subscribes (and the cleanup cancels the pending debounce) whenever
@@ -719,7 +722,7 @@ function CandlestickChart({
         timeScale.unsubscribeVisibleTimeRangeChange(debouncedApply);
       }
     };
-  }, [chartData, rsData, rsStripShown, height, isDarkMode, symbol, compact]);
+  }, [chartData, rsData, rsStripShown, height, isDarkMode, symbol, compact, researchView]);
 
   // Determine overlay state
   // Only show full loading state if we have no data at all (not even placeholder)
@@ -733,10 +736,20 @@ function CandlestickChart({
   // The "RS" label rides the strip, so it shows whenever the strip is drawn —
   // except in compact mode, where (like the OHLC legend/toggles) overlays are
   // suppressed for dense grid tiles.
-  const rsLineVisible = !compact && rsStripShown;
+  const rsLineVisible = !researchView && !compact && rsStripShown;
 
   return (
     <>
+    {researchView && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'wrap',gap:.5,p:1,borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
+      {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { const bars=chartData.candlesticks; chartRef.current?.timeScale().setVisibleRange({from:bars[Math.max(0,bars.length-count)].time,to:bars.at(-1).time}); }}>{label}</Button>)}
+      <Button aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</Button>
+      <Button aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</Button>
+      <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>表示をリセット</Button>
+      <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'ON':'OFF'}</Button>
+    </Box>}
+    {researchView && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
+      始 {legendData.open.toFixed(2)} · 高 {legendData.high.toFixed(2)} · 安 {legendData.low.toFixed(2)} · 終 {legendData.close.toFixed(2)}
+    </Typography>}
     <Box
       sx={{
         width: '100%',
@@ -747,7 +760,7 @@ function CandlestickChart({
       }}
     >
       {/* Timeframe Toggle - only show when chart has data */}
-      {!compact && !hideTimeframeToggle && !showLoading && !showError && !showNoData && (
+      {!researchView && !compact && !hideTimeframeToggle && !showLoading && !showError && !showNoData && (
         <Box
           sx={{
             position: 'absolute',
@@ -770,8 +783,8 @@ function CandlestickChart({
               }}
               size="small"
             >
-              <ToggleButton value="daily">Daily</ToggleButton>
-              <ToggleButton value="weekly">Weekly</ToggleButton>
+              <ToggleButton value="daily">日足</ToggleButton>
+              <ToggleButton value="weekly">週足</ToggleButton>
             </ToggleButtonGroup>
             {/* RS line overlay toggle — shown only where RS data can load
                 (live charts, or static charts whose bundle carries rs_line). */}
@@ -794,7 +807,7 @@ function CandlestickChart({
 
       {/* OHLC Legend - show when hovering over chart. Hidden on mobile
           (hideOhlcLegend) where it would otherwise sit over the top band row. */}
-      {!compact && !hideOhlcLegend && !showLoading && !showError && !showNoData && legendData && (
+      {!researchView && !compact && !hideOhlcLegend && !showLoading && !showError && !showNoData && legendData && (
         <Box
           sx={{
             position: 'absolute',
@@ -869,6 +882,10 @@ function CandlestickChart({
         </Typography>
       )}
 
+      {researchView && hasData && <>
+        <Typography sx={{position:'absolute',top:'70%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>RS · {rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}</Typography>
+        <Typography sx={{position:'absolute',top:'82%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>出来高 · 灰線は50日平均</Typography>
+      </>}
       {/* Loading skeleton overlay */}
       {showLoading && (
         <Box
@@ -909,7 +926,7 @@ function CandlestickChart({
       )}
 
       {/* Last updated indicator */}
-      {!compact && !showLoading && !showError && !showNoData && lastUpdatedText && !showRefreshIndicator && (
+      {!researchView && !compact && !showLoading && !showError && !showNoData && lastUpdatedText && !showRefreshIndicator && (
         <Box
           sx={{
             position: 'absolute',
@@ -945,10 +962,10 @@ function CandlestickChart({
           }}
         >
           <Alert severity="error" sx={{ maxWidth: '100%' }}>
-            <AlertTitle>Failed to load chart data</AlertTitle>
+            <AlertTitle>チャートを読み込めません</AlertTitle>
             {effectiveError.message || 'An error occurred while fetching the chart data'}
             <Button onClick={() => effectiveRefetch()} variant="outlined" size="small" sx={{ mt: 1 }}>
-              Retry
+              再試行
             </Button>
           </Alert>
         </Box>
@@ -969,13 +986,13 @@ function CandlestickChart({
             bgcolor: 'background.paper',
           }}
         >
-          <Alert severity="info">No historical data available for {symbol}</Alert>
+          <Alert severity="info">{symbol} の日足データが不足しています</Alert>
         </Box>
       )}
     </Box>
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
-        <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>
-        <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。Dailyに切り替えてください。' : showBookAnnotations ? annotations.summary : '自動注記を非表示にしています。'}</Typography>
+        {!researchView && <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>}
+        <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : '自動注記を非表示にしています。'}</Typography>
         <details><summary style={{ cursor: 'pointer', fontSize: 12 }}>図解の見方・判定方法</summary><Typography sx={{ fontSize: 12 }}>紫の枠＝ベース候補。水色の破線C1、C2…＝高値→後続安値→回復高値を結ぶガイド曲線と下落率。曲線そのものは価格の軌跡ではありません。矢印＝収縮高値を日中に上抜けた日で、買い指示ではありません。直近126日、15日以上の調整、深さ5〜50%・底から1/3以上の回復を探索します。前後2本で極値を確認し、2%以上の押しが2〜6回縮小、最終10%以内・安値から20日以内をVCP候補とします。数値はアプリの探索設定で書籍の固定条件ではありません。日足の後からの図解で、当時利用可能なシグナルではありません。ステージ・需給・財務・市場環境は別確認です。</Typography>
           {annotations.boxes.map((box, i) => <Typography key={i} sx={{ fontSize: 12 }}>{box.label}：{box.start}〜{box.end} / 高値 {box.high.toFixed(2)}・安値 {box.low.toFixed(2)}</Typography>)}
         </details>

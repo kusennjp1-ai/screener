@@ -1,5 +1,6 @@
 import { canonicalPivot } from './researchPresentation';
-import { assess, entryPlan } from './researchEngine';
+import ChartDecisionSummary from './components/ChartDecisionSummary';
+import { assess } from './researchEngine';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Alert,
@@ -26,8 +27,6 @@ import StockMetricsSidebar from '../components/Scan/StockMetricsSidebar';
 import TradingViewBridge from './components/TradingViewBridge';
 import TrendTemplateScorecard from './components/TrendTemplateScorecard';
 import { useStaticMarket } from './StaticMarketContext';
-import GlossaryLabel from '../components/common/GlossaryLabel';
-import { getGroupRankColor } from '../utils/colorUtils';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
 
@@ -36,7 +35,7 @@ const CHART_INFO_STRIP_HEIGHT = 34;
 function ChartInfoStrip() {
   const dark = useTheme().palette.mode === 'dark';
   return <Box sx={{ minHeight: CHART_INFO_STRIP_HEIGHT, display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 1.5, py: .75, bgcolor: 'background.paper', fontSize: 12 }}>
-    {[['▲ 上昇', '#10b981'], ['▼ 下落', '#ef4444'], ['━ SMA50', dark ? '#60a5fa' : '#2563eb'], ['━ SMA150', dark ? '#94a3b8' : '#64748b'], ['━ SMA200', dark ? '#c4b5fd' : '#7c3aed'], ['━ RS', '#ffa726']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
+    {[['▲ 上昇', '#10b981'], ['▼ 下落', '#ef4444'], ['━ SMA50', dark ? '#60a5fa' : '#2563eb'], ['┄ SMA150', dark ? '#94a3b8' : '#64748b'], ['┈ SMA200', dark ? '#c4b5fd' : '#7c3aed'], ['━ RS', dark ? '#a5b4fc' : '#4f46e5']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
   </Box>;
 }
 
@@ -48,6 +47,7 @@ function StaticChartViewerModal({
   navigationSymbols = null,
   researchRows = null,
   generation,
+  method, date, market, now, quote,
 }) {
   const queryClient = useQueryClient();
   const [visibleRange, setVisibleRange] = useState(null);
@@ -160,7 +160,7 @@ function StaticChartViewerModal({
         onClose();
         return;
       }
-      if (event.key === ' ') {
+      if (event.key === ' ' && !event.target.closest('button,input,textarea,select,summary,a')) {
         event.preventDefault();
         if (event.shiftKey) {
           goPrevious();
@@ -179,14 +179,9 @@ function StaticChartViewerModal({
   const researchRow = researchRows?.find(r=>r.symbol === currentSymbol);
   const stockData = researchRow || chartPayload?.stock_data || null;
   const fundamentals = chartPayload?.fundamentals || null;
-  const adrValue = stockData?.adr_percent ?? fundamentals?.adr_percent ?? null;
-  const epsRating = stockData?.eps_rating ?? fundamentals?.eps_rating ?? null;
-  const groupRank = stockData?.ibd_group_rank ?? null;
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
   const pivotPrice = canonicalPivot(stockData).price;
   const pivotLabel = '共通ピボット';
-  const stage = stockData?.stage ?? null;
-  const vcpDetected = stockData?.vcp_detected === true;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
   const chartHeight = isMobile
@@ -212,243 +207,33 @@ function StaticChartViewerModal({
             outline: 'none',
           }}
         >
-          <Box
-            sx={{
-              minHeight: 60,
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              // セーフエリア（ノッチ／ステータスバー）を避ける
-              pt: 'env(safe-area-inset-top, 0px)',
-              pl: 'calc(env(safe-area-inset-left, 0px) + 12px)',
-              pr: 'calc(env(safe-area-inset-right, 0px) + 12px)',
-              borderBottom: 1,
-              borderColor: 'divider',
-              bgcolor: 'background.default',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: { xs: 1, md: 2 },
-                minWidth: 0,
-                // モバイルではバッジをクリップせず横スクロールで全部見られるようにする
-                flexWrap: 'nowrap',
-                overflowX: 'auto',
-                overflowY: 'hidden',
-                py: 0.5,
-                '&::-webkit-scrollbar': { display: 'none' },
-                scrollbarWidth: 'none',
-              }}
-            >
-              <Typography variant="h5" fontWeight="bold" sx={{ flexShrink: 0, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
-                {currentSymbol || 'Loading...'}
-              </Typography>
-              {isLoading ? <CircularProgress size={18} /> : null}
-
-              {stockData?.ibd_industry_group ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      px: 1.5,
-                      py: 0.5,
-                      textAlign: 'center',
-                      minWidth: 36,
-                      bgcolor: getGroupRankColor(groupRank),
-                    }}
-                  >
-                    <Typography
-                      variant="body2"
-                      noWrap
-                      sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
-                    >
-                      {groupRank ?? '-'}
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="grp_rank">Grp Rnk</GlossaryLabel>
-                  </Typography>
-                </Box>
-              ) : null}
-
-              {adrValue != null ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      px: 1.5,
-                      py: 0.5,
-                      textAlign: 'center',
-                      bgcolor: Number(adrValue) >= 4
-                        ? 'success.main'
-                        : Number(adrValue) >= 2
-                          ? 'warning.main'
-                          : 'error.main',
-                    }}
-                  >
-                    <Typography
-                      variant="body2"
-                      noWrap
-                      sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
-                    >
-                      {Number(adrValue).toFixed(1)}%
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="adr">ADR</GlossaryLabel>
-                  </Typography>
-                </Box>
-              ) : null}
-
-              {epsRating != null ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      px: 1.5,
-                      py: 0.5,
-                      textAlign: 'center',
-                      minWidth: 36,
-                      bgcolor: epsRating >= 80
-                        ? 'success.main'
-                        : epsRating >= 50
-                          ? 'warning.main'
-                          : 'error.main',
-                    }}
-                  >
-                    <Typography
-                      variant="body2"
-                      noWrap
-                      sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}
-                    >
-                      {epsRating}
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="eps_rating">EPS Rtg</GlossaryLabel>
-                  </Typography>
-                </Box>
-              ) : null}
-
-              {stage != null ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      px: 1.5,
-                      py: 0.5,
-                      textAlign: 'center',
-                      minWidth: 36,
-                      bgcolor: stage === 2 ? 'success.main' : 'grey.600',
-                    }}
-                  >
-                    <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
-                      {stage}
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="stage">Stage</GlossaryLabel>
-                  </Typography>
-                </Box>
-              ) : null}
-
-              {vcpDetected ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      px: 1.5,
-                      py: 0.5,
-                      textAlign: 'center',
-                      minWidth: 36,
-                      bgcolor: 'success.main',
-                    }}
-                  >
-                    <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem', color: 'white', fontWeight: 'bold' }}>
-                      ✓
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                    <GlossaryLabel term="vcp">VCP</GlossaryLabel>
-                  </Typography>
-                </Box>
-              ) : null}
-
-              {stockData ? (
-                <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 1.5, ml: 1 }}>
-                  {[
-                    ['IBD', stockData.ibd_industry_group],
-                    ['Sector', stockData.gics_sector],
-                    ['Industry', stockData.gics_industry],
-                  ].map(([label, value]) => (
-                    <Box key={label} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <Box
-                        sx={{
-                          border: 1,
-                          borderColor: 'divider',
-                          borderRadius: 1,
-                          px: 1.5,
-                          py: 0.5,
-                          minWidth: 80,
-                          maxWidth: 180,
-                          textAlign: 'center',
-                          bgcolor: 'background.paper',
-                        }}
-                      >
-                        <Typography variant="body2" noWrap sx={{ fontSize: '0.8rem' }}>
-                          {value || '-'}
-                        </Typography>
-                      </Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', mt: 0.25 }}>
-                        {label}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              ) : null}
-            </Box>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 } }}>
-              {totalCount > 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                  {`${currentIndex + 1} / ${totalCount} 銘柄`}
-                </Typography>
-              ) : null}
-              <Chip label="静的データ" size="small" color="info" sx={{ display: { xs: 'none', md: 'inline-flex' } }} />
-              <IconButton onClick={onClose} size="large" aria-label="チャートを閉じる">
-                <CloseIcon />
-              </IconButton>
-            </Box>
+          <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between',px:2,py:1,borderBottom:1,borderColor:'divider'}}>
+            <Box><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
+              <Typography sx={{fontSize:12,color:'text.secondary'}}>{stockData?.company_name || '日次チャート分析'} · {Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）</Typography></Box>
+            <IconButton onClick={onClose} aria-label="チャートを閉じる"><CloseIcon /></IconButton>
           </Box>
-
           <Box
             sx={{
               display: 'flex',
-              flexDirection: { xs: 'column', md: 'row' },
+              flexDirection: 'column',
               flex: 1,
-              overflow: { xs: 'auto', md: 'hidden' },
+              overflow: 'auto',
               // モバイルは下部の固定ナビゲーションバーに隠れないよう余白を確保
-              pb: { xs: 8, md: 0 },
+              pb: 10,
             }}
           >
             <Box
               sx={{
-                order: { xs: 2, md: 1 },
-                width: { xs: '100%', md: 320 },
+                order: 2,
+                width: '100%',
                 overflowY: 'auto',
                 '& > div': { width: '100%', height: 'auto', boxSizing: 'border-box' },
                 flexShrink: 0,
-                height: { xs: 'auto', md: '100%' },
+                height: 'auto',
               }}
             >
-              {researchRow ? <Box sx={{p:2}}><Typography variant="h6">{currentSymbol} · 日次判定</Typography>
-                <Typography>{entryPlan(researchRow).state}</Typography>
-                <Typography>RS 推計 {researchRow.rs_rating?.toFixed(0) ?? '未確認'} / Composite 推計 {researchRow.composite_rating?.toFixed(0) ?? '未確認'}</Typography>
-                <Typography sx={{my:1}}>共通ピボット {pivotPrice ? `$${pivotPrice.toFixed(2)}` : '有効水準なし'}</Typography>
-                {assess(researchRow,'minervini').rules.map(r=><Typography key={r.label} sx={{fontSize:12,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
+              {researchRow ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>選定条件の詳細（{assess(researchRow,'minervini').passed}/{assess(researchRow,'minervini').total}）</summary>
+                {assess(researchRow,'minervini').rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
               </Box> : <><StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
@@ -462,10 +247,10 @@ function StaticChartViewerModal({
 
             <Box
               sx={{
-                order: { xs: 1, md: 2 },
-                flex: { xs: '0 0 auto', md: 1 },
+                order: 1,
+                flex: '0 0 auto',
                 minWidth: 0,
-                width: { xs: '100%', md: 'auto' },
+                width: '100%',
                 overflow: 'hidden',
                 bgcolor: 'background.paper',
               }}
@@ -479,11 +264,12 @@ function StaticChartViewerModal({
                   <CircularProgress size={56} />
                 </Box>
               ) : currentSymbol ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', height: chartHeight }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                   {/* Info strip ABOVE the chart so the moving-average legend and
                       Minervini readout never cover the candles (a leader near
                       new highs prints at the top-right). One line, scrolls
                       horizontally on narrow screens. */}
+                  {!isMobile && <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
                   <ChartInfoStrip />
                   {isMobile && <Box sx={{ px: 1.5, fontSize: 12, color: 'text.secondary' }}>
                     左スワイプ：次の銘柄 ／ 右：前の銘柄
@@ -492,10 +278,10 @@ function StaticChartViewerModal({
                   <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
                     sx={{ flex: 1, minHeight: 0, position: 'relative', overflowY: 'auto', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
-                    <CandlestickChart bookAnnotations interactive={!isMobile || panMode}
+                    <CandlestickChart researchView bookAnnotations interactive={!isMobile || panMode}
                       symbol={currentSymbol}
                       period="6mo"
-                      height={Math.max(chartHeight - CHART_INFO_STRIP_HEIGHT - 120, 240)}
+                      height={isMobile ? 420 : Math.max(chartHeight - 220, 460)}
                       visibleRange={visibleRange}
                       onVisibleRangeChange={setVisibleRange}
                       priceData={chartPayload?.bars || []}
@@ -511,6 +297,7 @@ function StaticChartViewerModal({
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                     />
                   </Box>
+                  {isMobile && <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
                 </Box>
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight }}>

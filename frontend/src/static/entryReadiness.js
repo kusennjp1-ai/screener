@@ -4,9 +4,9 @@ const day = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Numbe
 export function entryReadiness(row, date, market, now = Date.now()) {
   const pivot = canonicalPivot(row).price;
   const evidence = row.entry_evidence;
-  const dated = evidence?.as_of_date === date;
+  const dated = Boolean(evidence && day(date) && evidence.as_of_date === date);
   const calendar = dated ? evidence.calendar : null;
-  const fresh = calendar?.latest_completed_session === date && Number.isFinite(Date.parse(calendar.valid_until)) && now < Date.parse(calendar.valid_until) && now >= Date.parse(calendar.evaluated_at);
+  const fresh = calendar && calendar.latest_completed_session === date && Number.isFinite(Date.parse(calendar.valid_until)) && now < Date.parse(calendar.valid_until) && now >= Date.parse(calendar.evaluated_at);
   const earnings = dated ? evidence.earnings : null;
   const today = new Intl.DateTimeFormat('en-CA', {timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   const earningsDays = day(earnings?.date) ? (Date.parse(earnings.date) - Date.parse(today)) / 86400000 : null;

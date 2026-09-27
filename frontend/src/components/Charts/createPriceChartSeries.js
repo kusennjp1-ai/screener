@@ -11,7 +11,7 @@ import {
 // handle the component needs to drive. Vertical bands (scaleMargins) are neutral
 // defaults here; the component's "RS strip layout" and "dynamic RS band" effects
 // reapply them reactively based on whether the RS line is shown.
-export function createPriceChartSeries(container, { width, height, isDarkMode, interactive }) {
+export function createPriceChartSeries(container, { width, height, isDarkMode, interactive, researchView = false }) {
   const chart = createChart(container, {
     width,
     height,
@@ -20,8 +20,8 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
       textColor: isDarkMode ? '#d1d4dc' : '#333333',
     },
     grid: {
-      vertLines: { color: isDarkMode ? '#263244' : '#e0e0e0' },
-      horzLines: { color: isDarkMode ? '#263244' : '#e0e0e0' },
+      vertLines: { color: isDarkMode ? '#1e293b' : '#edf0f4' },
+      horzLines: { color: isDarkMode ? '#1e293b' : '#edf0f4' },
     },
     crosshair: { mode: CrosshairMode.Normal },
     rightPriceScale: {
@@ -30,7 +30,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     },
     timeScale: {
       borderColor: isDarkMode ? '#485263' : '#cccccc',
-      timeVisible: true,
+      timeVisible: false,
       secondsVisible: false,
     },
     handleScroll: interactive,
@@ -47,7 +47,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // Average-volume line (Minervini-style ~50-day avg) on the same volume scale,
   // so above/below-average volume reads at a glance. Data set by the component.
   const avgVolumeSeries = chart.addSeries(LineSeries, {
-    color: '#FFD54F',
+    color: isDarkMode ? '#94a3b8' : '#64748b',
     lineWidth: 1,
     priceScaleId: 'volume',
     lastValueVisible: false,
@@ -86,7 +86,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // sits in a band below the candles; blue-dot markers attach to it. The band is
   // sized dynamically by the "dynamic RS band" effect.
   const rsLineSeries = chart.addSeries(LineSeries, {
-    color: '#FFA726',
+    color: isDarkMode ? '#a5b4fc' : '#4f46e5',
     lineWidth: 2,
     priceScaleId: 'rs',
     lastValueVisible: false,
@@ -114,6 +114,23 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     autoscaleInfoProvider: () => null,
   });
 
+  if (researchView) {
+    // Each measurement gets its own pane and axis. Only candles set price range.
+    rsLineSeries.moveToPane(1);
+    volumeSeries.moveToPane(2);
+    avgVolumeSeries.moveToPane(2);
+    for (const series of [ema10Series, ema20Series, ema50Series, sma50Series, sma150Series, sma200Series]) {
+      series.applyOptions({ autoscaleInfoProvider: () => null });
+    }
+    sma150Series.applyOptions({ lineStyle: 2 });
+    sma200Series.applyOptions({ lineStyle: 1 });
+    chart.panes()[0].setStretchFactor(.70);
+    chart.panes()[1].setStretchFactor(.12);
+    chart.panes()[2].setStretchFactor(.18);
+    candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: .12, bottom: .12 } });
+    rsLineSeries.priceScale().applyOptions({ scaleMargins: { top: .2, bottom: .2 } });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: .2, bottom: 0 } });
+  }
   return {
     chart,
     volumeSeries,

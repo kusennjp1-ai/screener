@@ -67,7 +67,7 @@ class VcpBoxRenderer {
             if (labelY > scope.bitmapSize.height - 18 * vr) labelY = Math.max(58 * vr, top - (attempt + 2) * 19 * vr);
           }
           occupiedLabels.push({ left: labelX, right: labelX + labelWidth, top: labelY, bottom: labelY + 17 * vr });
-          ctx.fillStyle = 'rgba(20,27,42,.94)'; ctx.fillRect(labelX, labelY, labelWidth, 17 * vr);
+          ctx.fillStyle = r.labelBackground || 'rgba(20,27,42,.94)'; ctx.fillRect(labelX, labelY, labelWidth, 17 * vr);
           ctx.fillStyle = r.color || '#ffb74d'; ctx.fillText(r.label, labelX + 5 * hr, labelY + 12 * vr, labelWidth - 10 * hr);
         }
         ctx.restore();
@@ -102,7 +102,7 @@ class VcpBoxPaneView {
       const x3 = box.curve ? timeScale.timeToCoordinate(box.recoveryDate) : null;
       const y3 = box.curve ? series.priceToCoordinate(box.recoveryHigh) : null;
       if (Math.max(x1, x2, x3 ?? x2) < 0 || Math.min(x1, x2) > width) continue;
-      this._rects.push({ x1, x2, y1, y2, x3, y3, label: box.label, color: box.color, diagonal: box.diagonal, curve: box.curve, arrow: box.arrow });
+      this._rects.push({ x1, x2, y1, y2, x3, y3, label: box.label, labelBackground: box.labelBackground, color: box.color, diagonal: box.diagonal, curve: box.curve, arrow: box.arrow });
     }
   }
 
