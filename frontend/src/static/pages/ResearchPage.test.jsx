@@ -20,6 +20,10 @@ const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market
   passes_template: true, rs_rating: 95, eps_rating: 92, composite_rating: 96, ibd_group_rank: 10,
   week_52_low_distance: 50, week_52_high_distance: -2, eps_growth_yy: 30, sales_growth_yy: 30,
   annual_eps_growth_3y: [30, 30, 30], price_change_1d: 2, se_volume_vs_50d: 1.6, institutional_sponsors_increasing: true,
+  institutional_evidence:{symbol:'LEAD',status:'available',unit:'13f_reporting_manager_cik',publication_cutoff:'2026-08-31',observations:[
+    {period:'2026-03-31',manager_count:100,filing_date_first:'2026-04-10',filing_date_last:'2026-05-15'},
+    {period:'2026-06-30',manager_count:110,filing_date_first:'2026-07-10',filing_date_last:'2026-08-15'},
+  ]},
   market_above_50dma: true, market_above_200dma: true };
 let client;
 beforeEach(() => {

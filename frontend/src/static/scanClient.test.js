@@ -10,6 +10,17 @@ import {
   sortStaticScanRows,
 } from './scanClient';
 
+it('does not treat missing boolean evidence as a failed condition',()=>{
+  const data=[{symbol:'UNKNOWN',se_setup_ready:null},{symbol:'FAIL',se_setup_ready:false},{symbol:'PASS',se_setup_ready:true}];
+  expect(filterStaticScanRows(data,{seSetupReady:false}).map(r=>r.symbol)).toEqual(['FAIL']);
+  expect(filterStaticScanRows(data,{seSetupReady:true}).map(r=>r.symbol)).toEqual(['PASS']);
+});
+it('keeps missing numeric values last in either direction',()=>{
+  const data=[{symbol:'U',rs_rating:null},{symbol:'A',rs_rating:80},{symbol:'B',rs_rating:90}];
+  expect(sortStaticScanRows(data,'rs_rating','desc').map(r=>r.symbol)).toEqual(['B','A','U']);
+  expect(sortStaticScanRows(data,'rs_rating','asc').map(r=>r.symbol)).toEqual(['A','B','U']);
+});
+
 const rows = [
   {
     symbol: 'NVDA',

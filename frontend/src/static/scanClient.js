@@ -57,6 +57,9 @@ const BOOLEAN_FILTER_TO_FIELD = {
   code33: 'code33',
 };
 
+export const SCAN_FILTER_FIELDS = [...Object.values(RANGE_FILTER_TO_FIELD),...Object.values(BOOLEAN_FILTER_TO_FIELD),
+  'symbol','company_name','stage','rating','ibd_industry_group','gics_sector','se_pattern_primary','volume','market_cap','market_cap_usd','currency','market','ipo_date','scan_mode'];
+
 const RATING_SORT_ORDER = {
   'Strong Buy': 5,
   Buy: 4,
@@ -196,7 +199,7 @@ export const filterStaticScanRows = (rows, filters) => {
     }
 
     for (const [filterKey, fieldName] of Object.entries(BOOLEAN_FILTER_TO_FIELD)) {
-      if (filters[filterKey] != null && Boolean(row[fieldName]) !== filters[filterKey]) {
+      if (filters[filterKey] != null && (row[fieldName] == null || Boolean(row[fieldName]) !== filters[filterKey])) {
         return false;
       }
     }
@@ -227,6 +230,9 @@ export const sortStaticScanRows = (
     }
     const leftValue = getSortValue(left, sortBy);
     const rightValue = getSortValue(right, sortBy);
+    // Unknown values are unknown, and remain last in either sort direction.
+    if (leftValue == null && rightValue != null) return 1;
+    if (leftValue != null && rightValue == null) return -1;
     if (sortBy === 'composite_score' && sortOrder === 'desc') {
       if (leftValue == null && rightValue != null) {
         return 1;

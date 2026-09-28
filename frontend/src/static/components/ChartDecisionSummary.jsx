@@ -17,6 +17,7 @@ export default function ChartDecisionSummary({row, date, market, method = 'miner
       <span>買い上限 <strong>{money(plan.upper)}</strong> {plan.zone ? `（${plan.zone}%）` : ''}</span>
     </Box>
     <Typography sx={{fontSize:12,color:'text.secondary',mt:.5}}>価格時点：{quote?.as_of ? new Date(quote.as_of).toLocaleString('ja-JP') : `${date || '未確認'} 日次終値`} · 購入条件は日次検証</Typography>
+    {row.setup_recalculation && <Typography sx={{fontSize:12,color:'text.secondary',mt:.5}}>{row.setup_recalculation.status==='calculated' ? '検証済み日足でセットアップを再計算済み' : 'セットアップ再計算不可・旧水準は無効'}{row.setup_recalculation.status==='calculated' && !plan.pivot ? ' · 現在有効なピボットなし' : ''}</Typography>}
     {missing.length ? <Box sx={{mt:1,fontSize:13}}><span>未達・未確認：{missing.map(rule=>rule.label).join(' ／ ')}</span><Box component="details" sx={{mt:.5}}><summary style={{cursor:'pointer'}}>理由を確認</summary><ul style={{paddingLeft:20}}>{missing.map(rule=><li key={rule.id}><strong>{rule.label}</strong>：{rule.detail}</li>)}</ul></Box></Box> : <Typography sx={{fontSize:13,mt:1}}>日次の購入条件を確認済み。発注時は現在価格と約定条件を確認。</Typography>}
   </Box>;
 }

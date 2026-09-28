@@ -91,6 +91,30 @@ describe('StaticScanPage', () => {
     vi.restoreAllMocks();
   });
 
+  it('uses compact chunks without requesting legacy rows or the global chart index',async()=>{
+    const payloads={
+      'manifest.json':{pages:{scan:{path:'legacy.json',list_path:'scan-list.json'}}},
+      'scan-list.json':{as_of_date:'2026-09-25',rows_total:2,initial_rows:[],chunks:[{path:'list-chunk.json'}],embedded_chart_paths:true,charts:{path:'huge-chart-index.json'},default_filters:{minVolume:0}},
+      'list-chunk.json':{as_of_date:'2026-09-25',rows:[{symbol:'NVDA',volume:150000000,chart_path:'nvda.json',research_detail_path:'nvda-detail.json'},{symbol:'MSFT',volume:120000000,chart_path:'msft.json'}]},
+    };
+    globalThis.fetch=vi.fn(async url=>{const value=payloads[String(url).split('/static-data/')[1]];return {ok:Boolean(value),status:value?200:404,json:async()=>value};});
+    renderPage();
+    await waitFor(()=>expect(screen.getByTestId('results-table-total')).toHaveTextContent('2'));
+    expect(globalThis.fetch.mock.calls.some(([url])=>/legacy|huge-chart-index|nvda-detail/.test(String(url)))).toBe(false);
+  });
+
+  it('keeps global results incomplete when a compact chunk belongs to another date',async()=>{
+    const payloads={
+      'manifest.json':{pages:{scan:{path:'legacy.json',list_path:'scan-list.json'}}},
+      'scan-list.json':{as_of_date:'2026-09-25',rows_total:2,initial_rows:[],chunks:[{path:'list-chunk.json'}],embedded_chart_paths:true},
+      'list-chunk.json':{as_of_date:'2026-09-24',rows:[{symbol:'NVDA'},{symbol:'MSFT'}]},
+    };
+    globalThis.fetch=vi.fn(async url=>{const value=payloads[String(url).split('/static-data/')[1]];return {ok:Boolean(value),status:value?200:404,json:async()=>value};});
+    renderPage();
+    expect(await screen.findByText(/バックグラウンドのデータ読み込みに失敗しました/)).toBeInTheDocument();
+    expect(screen.getByTestId('results-table-actions')).toHaveTextContent('actions-hidden');
+  });
+
   it('renders the exported first page before background hydration completes', async () => {
     const chunkRequest = deferred();
 

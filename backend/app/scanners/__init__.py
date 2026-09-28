@@ -8,8 +8,16 @@ from .base_screener import (
     StockData
 )
 from .screener_registry import ScreenerRegistry, screener_registry, register_screener
-from .data_preparation import DataPreparationLayer
-from .scan_orchestrator import ScanOrchestrator
+# Pure analysis / static exports do not need database or network services.
+# Preserve public imports while loading infrastructure only when requested.
+def __getattr__(name):
+    if name == 'DataPreparationLayer':
+        from .data_preparation import DataPreparationLayer
+        return DataPreparationLayer
+    if name == 'ScanOrchestrator':
+        from .scan_orchestrator import ScanOrchestrator
+        return ScanOrchestrator
+    raise AttributeError(name)
 
 # Import screeners (this triggers registration via @register_screener decorator)
 from .minervini_scanner import MinerviniScanner

@@ -35,6 +35,7 @@ from .cache.price_cache_failure_telemetry import PriceCacheFailureTelemetry
 from .cache.price_cache_freshness import PriceCacheFreshnessPolicy
 from .cache.market_cache_policy import MarketAwareCachePolicy, market_cache_policy
 from .cache.price_cache_warmup import PriceCacheWarmupStore
+from .cache.price_history_integrity import coherent_history, requires_full_history
 from .errors import CacheRefreshError
 from .redis_pool import get_redis_client, get_bulk_redis_client, is_redis_enabled
 
@@ -141,6 +142,8 @@ class PriceCacheService:
         cached_data, last_date = self._get_from_database(symbol, period)
 
         if cached_data is not None and not cached_data.empty:
+            if not coherent_history(cached_data):
+                return self._fetch_full_and_cache(symbol, period, market=market)
             # Check if data is fresh
             intraday_stale = self._is_intraday_data_stale(symbol, market=market)
             if self._is_data_fresh(last_date) and not intraday_stale:
@@ -336,7 +339,7 @@ class PriceCacheService:
             last_date = prices[-1].date
 
             logger.debug(f"Retrieved {symbol} from database ({len(df)} rows, last: {last_date})")
-            return df, last_date
+            return (df, last_date) if coherent_history(df) else (None, None)
 
         except Exception as e:
             logger.error(f"Error reading {symbol} from database: {e}", exc_info=True)
@@ -437,7 +440,7 @@ class PriceCacheService:
                     df.set_index('Date', inplace=True)
 
                     last_date = prices[-1].date
-                    results[symbol] = (df, last_date)
+                    results[symbol] = (df, last_date) if coherent_history(df) else (None, None)
 
                 logger.debug(
                     "Bulk DB query chunk %d/%d: %d symbols, %d rows",
@@ -475,6 +478,9 @@ class PriceCacheService:
                 logger.warning(f"Failed to fetch data for {symbol}")
                 return None
 
+            if not coherent_history(data):
+                logger.warning('Provider history failed OHLCV validation for %s', symbol)
+                return None
             logger.info(f"Fetched {symbol}: {len(data)} rows")
 
             # Cache in Redis (recent data only)
@@ -598,17 +604,13 @@ class PriceCacheService:
 
             if new_data is None or new_data.empty:
                 logger.warning(f"Failed to fetch incremental data for {symbol}")
-                return cached_data  # Return stale cache as fallback
+                return None  # A failed refresh must not revalidate yesterday's setup.
 
-            # Filter new_data to only dates after last_cached_date
-            # Ensure timezone compatibility for comparison
-            last_cached_ts = pd.Timestamp(last_cached_date)
-            if new_data.index.tz is not None and last_cached_ts.tz is None:
-                last_cached_ts = last_cached_ts.tz_localize(new_data.index.tz)
-            if force_same_day_refresh:
-                new_data_filtered = new_data[new_data.index >= last_cached_ts]
-            else:
-                new_data_filtered = new_data[new_data.index > last_cached_ts]
+            if requires_full_history(cached_data, new_data):
+                return self._fetch_full_and_cache(symbol, period, market=market)
+
+            # Include the provider's entire overlap to replace corrected bars.
+            new_data_filtered = new_data.copy()
 
             if new_data_filtered.empty:
                 logger.info(f"No new data available for {symbol}")
@@ -668,7 +670,7 @@ class PriceCacheService:
                 },
                 exc_info=exc,
             )
-            return cached_data  # Return stale cache as fallback
+            return None
 
     def _store_recent_in_redis(
         self,
@@ -684,7 +686,7 @@ class PriceCacheService:
 
         Also stores fetch metadata for intraday staleness detection.
         """
-        if not self._redis_client:
+        if not self._redis_client or not coherent_history(data):
             return
 
         try:
@@ -1352,9 +1354,12 @@ class PriceCacheService:
         """
         Store price data in database (StockPrice table).
 
-        Uses insert for historical rows and upsert/replace for the latest row so
-        intraday partial bars can be corrected after the close.
+        Upsert every supplied session so vendor corrections and split-adjusted
+        historical rows replace the previous cache, not only the latest day.
         """
+        if not coherent_history(data):
+            logger.warning('Refusing incoherent price history for %s', symbol)
+            return
         db = self._session_factory()
 
         try:
@@ -1374,7 +1379,6 @@ class PriceCacheService:
                     row_date = row_date.date()
                 normalized_dates.append(row_date)
 
-            latest_row_date = max(normalized_dates)
             existing_rows = {
                 record.date: record.id
                 for record in db.query(StockPrice.id, StockPrice.date).filter(
@@ -1410,7 +1414,7 @@ class PriceCacheService:
                     existing_id = existing_rows.get(row_date)
                     if existing_id is None:
                         rows_to_insert.append(price_dict)
-                    elif row_date == latest_row_date:
+                    else:
                         price_dict["id"] = existing_id
                         rows_to_update.append(price_dict)
 
@@ -1418,7 +1422,7 @@ class PriceCacheService:
                     logger.warning(f"Error preparing row for {symbol} on {row.get('Date')}: {e}")
                     continue
 
-            # Bulk insert historical rows, overwrite the latest day if it already exists.
+            # Upsert all supplied historical sessions and the latest day.
             if rows_to_insert:
                 db.bulk_insert_mappings(StockPrice, rows_to_insert)
             if rows_to_update:
@@ -1427,7 +1431,7 @@ class PriceCacheService:
             db.commit()
             if rows_to_insert or rows_to_update:
                 logger.info(
-                    "Persisted %s price rows for %s (%d inserts, %d latest-day updates)",
+                    "Persisted %s price rows for %s (%d inserts, %d historical/latest updates)",
                     len(rows_to_insert) + len(rows_to_update),
                     symbol,
                     len(rows_to_insert),
@@ -1506,6 +1510,7 @@ class PriceCacheService:
         Returns:
             Number of symbols successfully cached
         """
+        batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
         if not batch_data:
             return 0
 
@@ -1588,12 +1593,13 @@ class PriceCacheService:
         """
         Store multiple symbols' price data in database in a single transaction.
 
-        Queries existing dates for ALL symbols at once, bulk inserts historical
-        rows, and replaces the latest row when it already exists.
+        Queries existing dates for ALL symbols at once and upserts every supplied
+        historical row, including provider corrections.
 
         Args:
             batch_data: Dict mapping symbol to price DataFrame
         """
+        batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
         if not batch_data:
             return
 
@@ -1603,23 +1609,19 @@ class PriceCacheService:
             symbols = list(batch_data.keys())
 
             symbol_dates: Dict[str, set] = {}
-            latest_dates: Dict[str, date] = {}
             for symbol, data in batch_data.items():
                 if data is None or data.empty:
                     continue
                 normalized = set()
-                latest = None
-                for raw_date in data.reset_index()["Date"]:
+                for raw_date in data.index:
                     row_date = raw_date
                     if isinstance(row_date, pd.Timestamp):
                         row_date = row_date.date()
                     elif isinstance(row_date, datetime):
                         row_date = row_date.date()
                     normalized.add(row_date)
-                    latest = row_date if latest is None or row_date > latest else latest
                 if normalized:
                     symbol_dates[symbol] = normalized
-                    latest_dates[symbol] = latest
 
             existing_pairs: Dict[tuple[str, date], int] = {}
             for chunk_start in range(0, len(symbols), 100):
@@ -1662,7 +1664,7 @@ class PriceCacheService:
                         existing_id = existing_pairs.get((symbol, row_date))
                         if existing_id is None:
                             rows_to_insert.append(price_dict)
-                        elif row_date == latest_dates.get(symbol):
+                        else:
                             price_dict["id"] = existing_id
                             rows_to_update.append(price_dict)
                     except Exception as e:
@@ -1683,7 +1685,7 @@ class PriceCacheService:
             if rows_to_insert or rows_to_update:
                 db.commit()
                 logger.info(
-                    "Batch persisted %d price rows for %d symbols (%d inserts, %d latest-day updates)",
+                    "Batch persisted %d price rows for %d symbols (%d inserts, %d historical/latest updates)",
                     len(rows_to_insert) + len(rows_to_update),
                     len(batch_data),
                     len(rows_to_insert),
@@ -1844,7 +1846,7 @@ class PriceCacheService:
 
                             # Check if Redis data is sufficient for requested period
                             # Redis stores last 5 years (1825 days), but verify we have at least 200 days minimum
-                            if len(df) >= 200:
+                            if len(df) >= 200 and coherent_history(df):
                                 # Check freshness using pre-computed expected_date (B2 optimization)
                                 last_date = df.index[-1]
                                 if hasattr(last_date, 'date'):
@@ -2039,7 +2041,7 @@ class PriceCacheService:
                 bulk_results.update(provider_results)
             batch_to_store_by_market: dict[str | None, Dict[str, pd.DataFrame]] = {}
             for symbol, data in bulk_results.items():
-                if not data.get('has_error') and data.get('price_data') is not None:
+                if not data.get('has_error') and coherent_history(data.get('price_data')):
                     price_df = data['price_data']
                     cached_data[symbol] = price_df
                     yfinance_success += 1

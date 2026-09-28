@@ -4,7 +4,7 @@ import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 
 export const fetchStaticJson = async (relativePath) => {
   const response = await fetch(getStaticDataUrl(relativePath), {
-    cache: 'no-cache',
+    cache: /(?:index|chunk|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
     headers: {
       Accept: 'application/json',
     },

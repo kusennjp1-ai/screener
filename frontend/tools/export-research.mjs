@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import { scanListRow } from './scan-list-payload.mjs';
+import { setupEvidence } from './setup-evidence.mjs';
+import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
-import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { rankCandidates, compareReference, assess, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
 import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.js';
@@ -35,20 +38,35 @@ const merged = mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_d
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
 const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
-let benchmark = null, financials = null, entryContext = null, currentFinancials = null;
+let benchmark = null, financials = null, entryContext = null, currentFinancials = null, institutional = null;
+try { institutional = await read('institutional-holdings.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { currentFinancials = await read('financial-history.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { entryContext = await read('entry-context.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { benchmark = await read('book-benchmark.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.payload?.benchmark_symbol || 'SPY', as_of_date: scan.as_of_date, bars: breadth?.payload?.benchmark_overlay || breadth?.payload?.spy_overlay || [] };
 try { financials = await read('book-financials.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const marketCharts = [];
+const availableCharts = new Set();
 let rows = new Map();
 for (const row of merged) {
+  row.se_explain=row.setup_engine?.explain || null;
+  row.se_candidates=row.setup_engine?.candidates || null;
+  // Scores from other scanners cannot be carried across a price replacement.
+  // They remain unknown until those scanners receive the repaired history too.
+  if (row.price_quality?.status==='replaced' || row.setup_recalculation?.status!=='calculated') {
+    for (const key of ['composite_score','composite_reason','minervini_score','canslim_score','ipo_score','custom_score','volume_breakthrough_score','rating_basis_score','rating_basis_screener','buy_risk_atr','buy_risk_state','pressure_state','pressure_value','tpr_max','tpr_score','tpr_state','pct_day','pct_week','pct_month']) row[key]=null;
+  }
+  const evidence = institutional?.as_of_date === scan.as_of_date ? institutional.results?.[row.symbol] : null;
+  row.institutional_evidence = evidence ? {...evidence,observations:evidence.observations.map(({filings,...observation})=>{void filings;return observation;})} : null;
+  row.institutional_sponsors_increasing = institutionalGrowth(row.institutional_evidence,row.symbol,scan.as_of_date).increasing;
   let chart = null;
   if (paths.has(row.symbol)) {
     try { chart = await read(paths.get(row.symbol)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
+  if (chart) availableCharts.add(row.symbol);
   const audit = auditDailyBars(row, chart, scan.as_of_date);
+  row.week_52_high_distance=audit.valid ? -audit.values.belowHigh : null;
+  row.week_52_low_distance=audit.valid ? audit.values.aboveLow : null;
   if (audit.valid && row.price_quality?.status === 'replaced') {
     const comparison = new Map((benchmark?.bars || []).map(b=>[b.date,b.close]));
     chart.rs_line = chart.bars.filter(b=>comparison.get(b.date)>0).map(b=>({time:b.date,value:b.close/comparison.get(b.date)}));
@@ -74,7 +92,7 @@ for (const row of merged) {
   const entryEvidence = { as_of_date:scan.as_of_date,
     calendar:entryContext?.as_of_date === scan.as_of_date ? entryContext.calendar : null,
     earnings:entryContext?.as_of_date === scan.as_of_date ? entryContext.earnings?.[row.symbol] || null : null,
-    shape:shape ? {candidate:shape.candidate,summary:shape.summary,method:'book-diagram-heuristic'} : null,
+    shape:setupEvidence(row,shape,scan.as_of_date),
     volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
   rows.set(row.symbol, { ...row, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
@@ -90,14 +108,27 @@ if (breadth) {
 }
 // Details are fetched only when a symbol is opened. Keep rule inputs in the index.
 await mkdir(resolve(root, 'research-details'), {recursive:true});
+await mkdir(resolve(root, 'verified-charts'), {recursive:true});
 const compactRows = new Map();
+const currentDetails=new Set();
+const currentCharts=new Set();
 for (const row of rows.values()) {
+  row.passes_template=row.technical_audit.valid ? assess(row,'minervini').qualified : null;
   row.method_summary = {version:RULE_SUMMARY_VERSION};
   for (const method of ['minervini','minervini2','oneil','ibd']) {
     const {rules,...summary} = assess(row,method); row.method_summary[method] = summary;
   }
 }
 for (const [symbol, row] of rows) {
+  let canonicalChart=null;
+  if (availableCharts.has(symbol)) {
+    canonicalChart=await read(paths.get(symbol));
+    Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
+    const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
+    const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
+    row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;
+    paths.set(symbol,row.chart_path);currentCharts.add(row.chart_path);
+  }
   const { book_diagnostics, book_technical_evidence, book_financials, research_detail_path: previousDetailPath, ...compact } = row;
   void previousDetailPath;
   const detail = {...compact, symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials};
@@ -105,17 +136,52 @@ for (const [symbol, row] of rows) {
   const hash = createHash('sha256').update(content).digest('hex').slice(0,16);
   const path = `research-details/${encodeURIComponent(symbol)}-${hash}.json`;
   await writeFile(resolve(root, path), content);
+  currentDetails.add(path);
   compact.research_detail_path = path;
   compactRows.set(symbol, compact);
+  if (canonicalChart) {
+    canonicalChart.stock_data=scanListRow(compact);
+    // Canonical detail is shared even when a chart is opened outside research.
+    await writeFile(resolve(root,paths.get(symbol)),JSON.stringify(canonicalChart));
+  }
 }
-const listFields = 'price_quality corporate_action price_activity chart_path method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance'.split(' ');
+chartIndex.symbols=chartIndex.symbols.map(item=>availableCharts.has(item.symbol)?{...item,path:paths.get(item.symbol)}:item);
+const chartIndexContent=JSON.stringify(chartIndex),chartIndexHash=createHash('sha256').update(chartIndexContent).digest('hex').slice(0,16);
+const chartIndexPath=`charts-index-${chartIndexHash}.json`;
+await writeFile(resolve(root,chartIndexPath),chartIndexContent);
+entry.assets.charts={...entry.assets.charts,path:chartIndexPath};
+scan.charts={...scan.charts,path:chartIndexPath};
+const listFields = 'institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance'.split(' ');
 const researchIndex = {as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]])))};
 const researchContent = JSON.stringify(researchIndex);
+// The scan list has all global filter/sort values, but no full detector reports.
+await mkdir(resolve(root,'scan-list'),{recursive:true});
+const scanRows=[...compactRows.values()].map(scanListRow), scanChunks=[];
+for(let offset=0;offset<scanRows.length;offset+=1000) {
+  const content=JSON.stringify({as_of_date:scan.as_of_date,rows:scanRows.slice(offset,offset+1000)});
+  const hash=createHash('sha256').update(content).digest('hex').slice(0,16);
+  const path=`scan-list/chunk-${hash}.json`;await writeFile(resolve(root,path),content);
+  scanChunks.push({path,count:Math.min(1000,scanRows.length-offset)});
+}
+const lightScan={...scan,sort:{field:'se_setup_score',order:'desc'},initial_rows:[],chunks:scanChunks,embedded_chart_paths:true};
+const lightContent=JSON.stringify(lightScan),lightHash=createHash('sha256').update(lightContent).digest('hex').slice(0,16);
+entry.pages.scan.list_path=`scan-list/index-${lightHash}.json`;
+await writeFile(resolve(root,entry.pages.scan.list_path),lightContent);
 manifest.research_generation = createHash('sha256').update(researchContent).digest('hex');
 const researchPath = `research-index-${manifest.research_generation.slice(0,16)}.json`;
 await writeFile(resolve(root, researchPath), researchContent);
 entry.assets.research = {path:researchPath};
 await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));
+// Remove only obsolete, generated hash-addressed files in these known folders.
+// No source data or historical candidate snapshots are included in this cleanup.
+for(const [directory,keep] of [['research-details',currentDetails],['verified-charts',currentCharts],['scan-list',new Set([entry.pages.scan.list_path,...scanChunks.map(c=>c.path)])]]) {
+  for(const name of await readdir(resolve(root,directory))) {
+    const relative=`${directory}/${name}`;
+    if(/-[a-f0-9]{16}\.json$/.test(name) && !keep.has(relative)) await unlink(resolve(root,relative));
+  }
+}
+for(const name of await readdir(root)) if(/^research-index-[a-f0-9]{16}\.json$/.test(name) && name!==researchPath) await unlink(resolve(root,name));
+for(const name of await readdir(root)) if(/^charts-index-[a-f0-9]{16}\.json$/.test(name) && name!==chartIndexPath) await unlink(resolve(root,name));
 
 // Stamp the generated bundle, so every UI and the portfolio share verified data.
 scan.initial_rows = (scan.initial_rows || []).map(r => compactRows.get(r?.symbol)).filter(Boolean);

@@ -164,7 +164,9 @@ class YFinanceService:
             self._wait_for_yfinance_rate_limit()
 
             ticker = yf.Ticker(symbol)
-            data = ticker.history(period=period, interval=interval)
+            # Match bulk ingestion and the publication repair: vendor prices
+            # adjusted for splits, with dividend-adjusted Close kept separately.
+            data = ticker.history(period=period, interval=interval, auto_adjust=False, actions=True)
 
             if data.empty:
                 logger.warning(f"No historical data for {symbol}")

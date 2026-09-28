@@ -50,6 +50,7 @@ full-test-results.json
 !backend/desktop/universe_seed.csv
 !backend/desktop/ibd_industry_seed.csv
 data/.cache/*
+.cache/
 data/db_repair_backup_*/
 data/*.recovered_*
 data/xui-reader/

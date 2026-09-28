@@ -29,6 +29,7 @@ import TrendTemplateScorecard from './components/TrendTemplateScorecard';
 import { useStaticMarket } from './StaticMarketContext';
 import { useChartNavigation } from '../hooks/useChartNavigation';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
+import { fetchStaticJson } from './dataClient';
 
 const CHART_INFO_STRIP_HEIGHT = 34;
 
@@ -104,6 +105,7 @@ function StaticChartViewerModal({
     gcTime: Infinity,
     select: payload => {
       if (payload.symbol !== currentSymbol) throw Error('Chart symbol mismatch');
+      if (date && payload.as_of_date !== date) throw Error('Chart snapshot date mismatch');
       return payload;
     },
   });
@@ -181,8 +183,18 @@ function StaticChartViewerModal({
     };
   }, [goNext, goPrevious, onClose, open]);
 
-  const researchRow = researchRows?.find(r=>r.symbol === currentSymbol);
-  const stockData = researchRow || chartPayload?.stock_data || null;
+  const researchRow = researchRows?.find(r=>r.symbol === currentSymbol) || chartPayload?.stock_data;
+  const rowDetail = useQuery({
+    queryKey:['researchDetail',researchRow?.research_detail_path,generation],
+    enabled:Boolean(open && researchRow?.research_detail_path),
+    staleTime:Infinity, placeholderData:()=>undefined,
+    queryFn:async()=>{
+      const detail=await fetchStaticJson(researchRow.research_detail_path);
+      if(detail.symbol!==currentSymbol || (date && detail.as_of_date!==date)) throw Error('Detail identity mismatch');
+      return detail;
+    },
+  });
+  const stockData = rowDetail.data?.symbol===currentSymbol ? {...researchRow,...rowDetail.data} : researchRow || chartPayload?.stock_data || null;
   const fundamentals = chartPayload?.fundamentals || null;
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
   const pivotPrice = canonicalPivot(stockData).price;
@@ -212,6 +224,7 @@ function StaticChartViewerModal({
             outline: 'none',
           }}
         >
+          {rowDetail.isError && <Alert severity="warning">詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>}
           <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between',px:2,py:1,borderBottom:1,borderColor:'divider'}}>
             <Box><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
               <Typography sx={{fontSize:12,color:'text.secondary'}}>{stockData?.company_name || '日次チャート分析'} · {Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）</Typography></Box>
@@ -237,8 +250,8 @@ function StaticChartViewerModal({
                 height: 'auto',
               }}
             >
-              {researchRow ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>選定条件の詳細（{assess(researchRow,'minervini').passed}/{assess(researchRow,'minervini').total}）</summary>
-                {assess(researchRow,'minervini').rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
+              {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,'minervini').passed}/${assess(stockData,'minervini').total}）`}</summary>
+                {assess(stockData,'minervini').rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
               </Box> : <><StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge

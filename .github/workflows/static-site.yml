@@ -829,8 +829,15 @@ jobs:
             --combine-artifacts-dir /tmp/static-market-artifacts-current \
             --fallback-artifacts-dir /tmp/static-market-artifacts-fallback
 
+      - name: Cache public SEC archives and security mappings
+        uses: actions/cache@v4
+        with:
+          path: .cache/sec13f
+          key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: sec13f-v2-
       - name: Build static frontend
         env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           VITE_STATIC_SITE: "true"
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
@@ -840,6 +847,10 @@ jobs:
           python tools/test_sec_financials.py
           python tools/export-book-benchmark.py --allow-unavailable
           node tools/repair-price-history.mjs
+          python tools/test_institutional_holdings.py
+          python tools/test_recalculate_setups.py
+          python tools/export-institutional.py --refresh --mapping-limit 200
+          python tools/recalculate-setups.py
           node tools/export-research.mjs
           python tools/sec-financials.py --limit 60
           npm run build

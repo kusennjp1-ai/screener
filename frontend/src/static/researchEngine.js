@@ -1,6 +1,7 @@
 import { canonicalPivot } from './researchPresentation.js';
 import { auditValues, RS_METHOD } from './qualificationAudit.js';
 import { financialHistory } from './financialHistory.js';
+import { institutionalGrowth } from './institutionalEvidence.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // Calendar age is deliberately not an exchange-session count (holidays vary).
@@ -61,7 +62,7 @@ export function assess(row, method = 'minervini') {
     rule('N：52週高値からの距離 ≤ 15%（代替指標）', highDistance(row), v => v <= 15, '%'),
     rule('S：上昇日の出来高 / 50日平均 ≥ 1.4（代替指標）', finite(row.price_change_1d) ? row.se_volume_vs_50d : null, v => v >= 1.4 && row.price_change_1d > 0, '倍'),
     ...common,
-    rule('I：機関投資家の保有社数が増加', row.institutional_sponsors_increasing, v => v === true, '', true),
+    {...rule('I：13F報告運用会社の保有社数が増加', institutionalGrowth(row.institutional_evidence,row.symbol,row.technical_audit?.as_of_date).increasing, v => v === true, '', true), evidence:institutionalGrowth(row.institutional_evidence,row.symbol,row.technical_audit?.as_of_date).reason},
     rule('M：市場が50日線・200日線より上（代替指標）', typeof row.market_above_50dma !== 'boolean' || typeof row.market_above_200dma !== 'boolean' ? null : row.market_above_50dma && row.market_above_200dma, v => v === true, '', true),
   ] : [
     rule('Composite 推計 ≥ 90', rating(row.composite_rating), v => v >= 90),
@@ -88,7 +89,7 @@ export function assess(row, method = 'minervini') {
 
 // Generated from the same rule function; unknowns stay unknown. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v1';
+export const RULE_SUMMARY_VERSION = 'research-summary-v2';
 export function assessmentSummary(row, method) {
   const result = row.method_summary?.version === RULE_SUMMARY_VERSION && row.method_summary[method];
   return result || assess(row, method);

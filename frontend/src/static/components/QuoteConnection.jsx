@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Button, TextField, Typography } from '@mui/material';
-export default function QuoteConnection({connected,status,onConnect,onDisconnect,quote}) {
+import { probeInstitutionalAccess } from '../finnhubEntitlement';
+export default function QuoteConnection({connected,status,onConnect,onDisconnect,quote,apiKey,symbol,cusip}) {
   const [draft,setDraft]=useState('');
+  const [entitlement,setEntitlement]=useState(null);
   return <details className="research-disclosure"><summary>場中価格を接続する{connected ? ` — ${status}` : ''}</summary>
     <Typography sx={{fontSize:13,my:1}}>Finnhubの自分用APIキーで接続します。キーと配信価格はこのタブ内だけで扱い、サイトの公開データや保存ファイルには含めません。再読込で接続を解除します。</Typography>
     {connected ? <Button onClick={onDisconnect}>接続を解除</Button> : <form onSubmit={event=>{event.preventDefault();if(draft.trim()){onConnect(draft.trim());setDraft('');}}}>
@@ -10,6 +12,7 @@ export default function QuoteConnection({connected,status,onConnect,onDisconnect
       <Button component="a" href="https://finnhub.io/register" target="_blank" rel="noopener noreferrer">APIキーを取得</Button>
     </form>}
     {connected && <Typography role="status" sx={{fontSize:13}}>{status}{quote ? `・最終受信価格 $${quote.price} / 約定時刻 ${quote.as_of}` : ''}</Typography>}
+    {connected && <><Button disabled={!cusip || entitlement?.state==='loading'} onClick={async()=>{setEntitlement({state:'loading',label:'契約権限を確認中…',symbol});setEntitlement({...await probeInstitutionalAccess(apiKey,symbol,cusip),symbol});}}>機関投資家APIの権限を確認</Button>{entitlement?.symbol===symbol && <Typography role="status" sx={{fontSize:12}}>{entitlement.label}</Typography>}</>}
     <Typography sx={{fontSize:12,my:1}}>配信範囲は契約によります。全米統合気配や出来高の確認ではありません。90秒を超えた価格は発注判断の計算に使いません。休場中は最新約定が古くなります。TradingView契約は外部価格APIの利用権限ではありません。</Typography>
   </details>;
 }

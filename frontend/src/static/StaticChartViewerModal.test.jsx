@@ -46,6 +46,9 @@ const renderModal = (props) => {
 };
 
 describe('StaticChartViewerModal', () => {
+  it('does not assess a missing selection while the global scan list loads', () => {
+    expect(() => renderModal({open:false,onClose:vi.fn(),initialSymbol:null,chartIndex:{symbols:[]},researchRows:[{symbol:'AMD'}]})).not.toThrow();
+  });
   beforeEach(() => {
     chartSpy.mockClear();
     sidebarSpy.mockClear();

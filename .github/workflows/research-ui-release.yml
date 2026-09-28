@@ -45,14 +45,26 @@ jobs:
           tar -xf /tmp/last-pages/artifact.tar -C /tmp/extracted
           test -f /tmp/extracted/static-data/manifest.json
           cp -R /tmp/extracted/static-data frontend/public/static-data
+      - name: Cache public SEC archives and security mappings
+        uses: actions/cache@v4
+        with:
+          path: .cache/sec13f
+          key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
         working-directory: frontend
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/test_sec_financials.py
           python tools/test_export_book_benchmark.py
           python tools/export-book-benchmark.py --allow-unavailable
           node tools/repair-price-history.mjs
+          python tools/test_institutional_holdings.py
+          python tools/test_recalculate_setups.py
+          python tools/export-institutional.py --refresh --mapping-limit 200
+          python tools/recalculate-setups.py
           node tools/export-research.mjs
           python tools/test_export_entry_context.py
           python tools/sec-financials.py --limit 60

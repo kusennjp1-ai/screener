@@ -41,12 +41,12 @@ function StaticScanPage() {
     [manifestQuery.data, selectedMarket],
   );
   const scanManifestQuery = useQuery({
-    queryKey: ['staticScanManifest', marketEntry.pages?.scan?.path],
-    queryFn: () => fetchStaticJson(marketEntry.pages.scan.path),
+    queryKey: ['staticScanManifest', marketEntry.pages?.scan?.list_path || marketEntry.pages?.scan?.path],
+    queryFn: () => fetchStaticJson(marketEntry.pages.scan.list_path || marketEntry.pages.scan.path),
     enabled: Boolean(marketEntry.pages?.scan?.path),
     staleTime: Infinity,
   });
-  const chartIndexQuery = useStaticChartIndex(scanManifestQuery.data?.charts?.path);
+  const chartIndexQuery = useStaticChartIndex(scanManifestQuery.data?.charts?.path, !scanManifestQuery.data?.embedded_chart_paths);
 
   const theme = useTheme();
   // モバイルでは初期状態でフィルタを折りたたみ、結果テーブルをすぐ見られるようにする
@@ -153,6 +153,9 @@ function StaticScanPage() {
           }
 
           payloads.forEach((payload) => {
+            if (manifest.embedded_chart_paths && (payload.as_of_date !== manifest.as_of_date || !Array.isArray(payload.rows))) {
+              throw new Error('一覧データの日付または形式が一致しません。再読み込みしてください。');
+            }
             (payload.rows || []).forEach((row) => {
               rowsBySymbol.set(row.symbol, row);
             });
@@ -167,6 +170,7 @@ function StaticScanPage() {
         }
 
         if (!cancelled) {
+          if (rowsBySymbol.size !== totalRows) throw new Error(`一覧データが不足しています（${rowsBySymbol.size} / ${totalRows}）。全体の件数・CSVは未確定です。`);
           setHydrationState({
             status: 'complete',
             rows: Array.from(rowsBySymbol.values()),
@@ -249,9 +253,10 @@ function StaticScanPage() {
     setPage(1);
   }, [filterKey]);
   const chartEntries = useMemo(
-    () => chartIndexQuery.data?.symbols || [],
-    [chartIndexQuery.data]
+    () => scanManifestQuery.data?.embedded_chart_paths ? hydratedRows.filter(r=>r.chart_path).map(r=>({symbol:r.symbol,path:r.chart_path})) : chartIndexQuery.data?.symbols || [],
+    [chartIndexQuery.data, hydratedRows, scanManifestQuery.data?.embedded_chart_paths]
   );
+  const effectiveChartIndex = useMemo(()=>({symbols:chartEntries}),[chartEntries]);
   const chartEnabledSymbols = useMemo(
     () => new Set(chartEntries.map((entry) => entry.symbol)),
     [chartEntries]
@@ -431,7 +436,8 @@ function StaticScanPage() {
         initialSymbol={selectedChartSymbol}
         researchRows={hydratedRows}
         generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at}
-        chartIndex={chartIndexQuery.data}
+        chartIndex={effectiveChartIndex}
+        date={scanManifestQuery.data.as_of_date}
         navigationSymbols={navigationSymbols}
       />
     </Box>
