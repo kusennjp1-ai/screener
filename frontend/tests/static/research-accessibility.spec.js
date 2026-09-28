@@ -28,7 +28,9 @@ for (const width of [1440,390]) test(`research navigation and contrast at ${widt
     await expect(page.locator('canvas').first()).toBeVisible();
     const results=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
     expect(results.violations).toEqual([]);
-    await testInfo.attach(`${width}-${mode}`,{body:await page.screenshot(),contentType:'image/png'});
+    const screenshotPath=testInfo.outputPath(`${width}-${mode}.png`);
+    await page.screenshot({path:screenshotPath});
+    await testInfo.attach(`${width}-${mode}`,{path:screenshotPath,contentType:'image/png'});
   }
   expect(pageErrors).toEqual([]);
   if(width===390) {
