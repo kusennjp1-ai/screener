@@ -151,7 +151,6 @@ export default function ResearchPage() {
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>データを再確認 ↻</Button></Stack>
     </header>
     {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} onInspect={inspectOrder} onBrowse={browse} />}
-    <Typography component="h2" variant="h6" sx={{ mt: 1.5, mb: .5, fontSize:16 }}>候補を探す</Typography>
     <div className="research-summary">
       <span>分析対象<strong>{rows.length.toLocaleString()} 銘柄</strong></span>
       <span>条件通過<strong>{ranked.filter(r => r.assessment.qualified).length} 銘柄</strong></span>

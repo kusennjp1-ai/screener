@@ -4,8 +4,8 @@ const value=(n,digits=2)=>Number.isFinite(n)?n.toLocaleString('en-US',{minimumFr
 export default function MobileScanResults({rows,total,page,perPage,sortBy,sortOrder,onSort,onPage,onOpenChart,isChartEnabled}) {
   return <section aria-label="詳細スキャンの銘柄一覧">
     <Stack direction="row" alignItems="center" spacing={1} sx={{my:1}}>
-      <Select size="small" inputProps={{'aria-label':'詳細スキャンの並び順'}} value={['se_setup_score','rs_rating','current_price','adv_usd'].includes(sortBy)?sortBy:'se_setup_score'} onChange={e=>onSort(e.target.value,sortOrder)} sx={{minHeight:44,flex:1}}>
-        <MenuItem value="se_setup_score">セットアップ点</MenuItem><MenuItem value="rs_rating">RS推計</MenuItem><MenuItem value="current_price">株価</MenuItem><MenuItem value="adv_usd">平均売買代金</MenuItem>
+      <Select size="small" inputProps={{'aria-label':'詳細スキャンの並び順'}} value={sortBy} onChange={e=>onSort(e.target.value,sortOrder)} sx={{minHeight:44,flex:1}}>
+        {!['composite_score','se_setup_score','rs_rating','current_price','adv_usd'].includes(sortBy) && <MenuItem value={sortBy}>表で選んだ項目</MenuItem>}<MenuItem value="composite_score">補助スコア</MenuItem><MenuItem value="se_setup_score">セットアップ点</MenuItem><MenuItem value="rs_rating">RS推計</MenuItem><MenuItem value="current_price">株価</MenuItem><MenuItem value="adv_usd">平均売買代金</MenuItem>
       </Select><Button onClick={()=>onSort(sortBy,sortOrder==='desc'?'asc':'desc')}>{sortOrder==='desc'?'高い順 ↓':'低い順 ↑'}</Button>
     </Stack>
     {rows.map(row=><Paper key={row.symbol} variant="outlined" sx={{p:1.5,mb:1}}>

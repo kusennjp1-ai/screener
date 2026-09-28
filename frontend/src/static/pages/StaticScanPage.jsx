@@ -355,7 +355,7 @@ function StaticScanPage() {
       </Paper>
 
       {hydrationComplete && presetScreens?.length > 0 && (
-        <Box component={isMobile?'details':'div'} sx={{mb:1}}>{isMobile && <Box component="summary" sx={{minHeight:44,display:'flex',alignItems:'center',cursor:'pointer'}}>補助フィルターを選択</Box>}<ScreenSelector
+        <Box component={isMobile?'details':'div'} sx={{mb:1}}>{isMobile && <Box component="summary" sx={{minHeight:44,lineHeight:'44px',cursor:'pointer'}}>補助フィルターを選択</Box>}<ScreenSelector
           screens={presetScreens}
           activeScreenId={activeScreenId}
           onSelectScreen={handleSelectScreen}

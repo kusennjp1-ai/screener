@@ -52,3 +52,7 @@
   .market-trend { padding:20px 12px; }
   .market-section-head { flex-wrap:wrap; gap:14px; }
 }
+
+.market-workbench[data-theme="light"] .market-footnote a { color:#6555dc; }
+
+.market-workbench[data-theme="light"] .market-footnote { opacity:1; color:#526075; }

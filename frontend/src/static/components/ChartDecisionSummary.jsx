@@ -20,7 +20,7 @@ export default function ChartDecisionSummary({row, date, market, method = 'miner
     {!plan.pivot && <Typography sx={{fontSize:12,mt:.5}}>{plan.pivotSource}</Typography>}
     <Typography sx={{fontSize:13,mt:1}}>{missing.length ? `未達・未確認：${missing.map(rule=>rule.label).join(' ／ ')}` : '日次の購入条件を確認済み。発注時は現在価格と約定条件を確認。'}</Typography>
     <Box component="details" sx={{fontSize:13}}>
-      <summary style={{cursor:'pointer',minHeight:44,display:'flex',alignItems:'center'}}>理由・水準の根拠を確認</summary>
+      <summary style={{cursor:'pointer',minHeight:44,lineHeight:'44px'}}>理由・水準の根拠を確認</summary>
       {Number.isFinite(plan.stopExample) && <Typography sx={{fontSize:12,color:'text.secondary',mt:.5}}>参考：表示価格の−7% {money(plan.stopExample)}（損切りの計算例）</Typography>}
       {row.setup_recalculation && <Typography sx={{fontSize:12,color:'text.secondary',mt:.5}}>{row.setup_recalculation.status==='calculated' ? '検証済み日足でセットアップを再計算済み' : 'セットアップ再計算不可・旧水準は無効'}{row.setup_recalculation.status==='calculated' && !plan.pivot ? ' · 現在有効なピボットなし' : ''}</Typography>}
       {missing.length>0 && <ul style={{paddingLeft:20}}>{missing.map(rule=><li key={rule.id}><strong>{rule.label}</strong>：{rule.detail}</li>)}</ul>}
