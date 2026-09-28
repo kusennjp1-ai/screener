@@ -24,7 +24,7 @@ for (const width of [1440,390]) test(`research navigation and contrast at ${widt
   await expect(page.getByLabel('銘柄・企業名を検索')).not.toBeFocused();
   if(width===390) await page.getByRole('button',{name:'LEAD の分析を表示'}).click();
   for(const mode of ['dark','light']) {
-    if(mode==='light') { await page.getByRole('button',{name:'ライトモードに切り替え'}).click(); if(width===390) await page.getByRole('button',{name:'LEAD の分析を表示'}).click(); }
+    if(mode==='light') { await page.getByRole('button',{name:'ライトモードに切り替え'}).click(); if(width===390) await page.getByRole('button',{name:'銘柄分析 LEAD',exact:true}).click(); }
     await expect(page.locator('canvas').first()).toBeVisible();
     const results=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
     expect(results.violations).toEqual([]);
