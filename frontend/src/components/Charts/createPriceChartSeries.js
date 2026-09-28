@@ -32,6 +32,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
       borderColor: isDarkMode ? '#485263' : '#cccccc',
       timeVisible: false,
       secondsVisible: false,
+      lockVisibleTimeRangeOnResize: researchView,
     },
     handleScroll: interactive,
     handleScale: interactive,

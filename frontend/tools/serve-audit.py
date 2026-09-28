@@ -13,11 +13,11 @@ args=parser.parse_args();root=Path(args.root).resolve();probe=Path(__file__).wit
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path=self.path.split('?')[0].removeprefix('/screener/').lstrip('/') or 'index.html'
-        target=(root/path).resolve()
-        if not target.is_relative_to(root) or not target.is_file():
+        target=(Path(__file__).parent.parent/'node_modules/axe-core/axe.min.js').resolve() if path=='audit-axe.js' else (root/path).resolve()
+        if (not target.is_relative_to(root) and path!='audit-axe.js') or not target.is_file():
             self.send_error(404);return
         body=target.read_bytes()
-        if path=='index.html':body=body.replace(b'<head>',b'<head><script>'+probe+b'</script>')
+        if path=='index.html':body=body.replace(b'<head>',b'<head><script src="/screener/audit-axe.js"></script><script>'+probe+b'</script>')
         compressed=gzip.compress(body)
         if args.measure and path.startswith('static-data/'):
             print(json.dumps({'port':self.server.server_port,'path':path,'encoded':len(compressed),'decoded':len(body)}),flush=True)

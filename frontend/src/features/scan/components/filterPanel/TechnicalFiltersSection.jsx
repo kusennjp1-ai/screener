@@ -16,7 +16,7 @@ function TechnicalFiltersSection({
 }) {
   return (
     <FilterSection
-      title="Technical"
+      title="テクニカル"
       category="technical"
       activeCount={activeCount}
       defaultExpanded={defaultExpanded}

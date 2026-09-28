@@ -53,7 +53,7 @@ describe('100 virtual expert task profiles', () => {
         expect(within(table).getByText(s % 3 === 0 ? '9/9' : s % 3 === 1 ? '8/8' : '10/10')).toBeInTheDocument();
       } else if (t === 1) {
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
-        expect(within(table).queryByText('FAIL')).not.toBeInTheDocument();
+        await waitFor(()=>expect(within(table).queryByText('FAIL')).not.toBeInTheDocument());
         expect(within(table).getByText('LEAD')).toBeInTheDocument();
       } else if (t === 2) {
         fireEvent.click(screen.getByLabelText('全条件通過のみ'));
@@ -75,14 +75,14 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByRole('button', { name: '日次チャートを分析' })).toBeDisabled();
       } else if (t === 6) {
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: 'NOT-A-STOCK' } });
-        expect(screen.getByText(/該当銘柄がありません/)).toBeInTheDocument();
+        await screen.findByText(/該当銘柄がありません/);
         fireEvent.click(screen.getByText('表示・保存オプション'));
         expect(screen.getByRole('button', { name: /CSV保存/ })).toBeDisabled();
       } else if (t === 7) {
         expect(screen.getByText('未接続')).toBeInTheDocument();
         expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
-        expect(screen.getByText('買いゾーン内')).toBeInTheDocument();
+        expect(within(screen.getByRole('button',{name:'LEAD の分析を表示'}).closest('tr')).getByText('買いゾーン内')).toBeInTheDocument();
       } else if (t === 8) {
         expect(screen.getByText('公開ルールに基づく独自スクリーナー')).toBeInTheDocument();
         expect(screen.getByText(/IBD公式の選定銘柄・非公開の計算式を再現したものではありません/)).toBeInTheDocument();
@@ -126,5 +126,6 @@ it('starts with compact research and opens detailed verification on demand', asy
   fireEvent.click(screen.getByText('詳細検証 — 財務・チャート・書籍の条件'));
   expect(details).toHaveAttribute('open');
   fireEvent.click(screen.getByRole('button', { name: '候補を確認する →' }));
-  expect(screen.getByLabelText('銘柄・企業名を検索')).toHaveFocus();
+  await waitFor(()=>expect(screen.getByRole('region',{name:'候補リスト'})).toHaveFocus());
+  expect(screen.getByLabelText('銘柄・企業名を検索')).not.toHaveFocus();
 });

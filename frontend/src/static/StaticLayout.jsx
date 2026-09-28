@@ -38,7 +38,7 @@ export default function StaticLayout({ children }) {
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
           <Chip label="米国株 / 日次分析" size="small" variant="outlined" sx={{ display: { xs: 'none', sm: 'flex' }, fontSize: 12, borderRadius: 1 }} />
           {location.pathname !== '/' && markets.length > 1 && <FormControl size="small"><Select value={market.market} onChange={e => setSelectedMarket(e.target.value)} inputProps={{ 'aria-label': 'Static market selector' }}>{markets.map(m => <MenuItem key={m} value={m}>{marketFlag(m)} {manifest.data?.markets?.[m]?.display_name || m}</MenuItem>)}</Select></FormControl>}
-          <IconButton onClick={colorMode.toggleColorMode} aria-label={dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'} size="small">{dark ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}</IconButton>
+          <IconButton onClick={colorMode.toggleColorMode} aria-label={dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'} sx={{minWidth:44,minHeight:44}}>{dark ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}</IconButton>
         </Box>
       </Toolbar>
     </AppBar>

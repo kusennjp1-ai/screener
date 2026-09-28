@@ -282,9 +282,9 @@ describe('FilterPanel', () => {
   describe('structural', () => {
     it('renders all 3 section headers', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('Fundamental')).toBeInTheDocument();
-      expect(screen.getByText('Technical')).toBeInTheDocument();
-      expect(screen.getByText('Rating / Score')).toBeInTheDocument();
+      expect(screen.getByText('財務')).toBeInTheDocument();
+      expect(screen.getByText('テクニカル')).toBeInTheDocument();
+      expect(screen.getByText('評価・スコア')).toBeInTheDocument();
     });
 
     it('calls onReset when Reset button is clicked', async () => {
@@ -294,7 +294,7 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      await user.click(screen.getByText('Reset'));
+      await user.click(screen.getByText('リセット'));
       expect(onReset).toHaveBeenCalledTimes(1);
     });
 

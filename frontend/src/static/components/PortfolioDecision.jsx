@@ -13,12 +13,8 @@ export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse
   const [expanded, setExpanded] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
   return <Paper component="section" id="today-decision" tabIndex={-1} aria-label="本日の判断と10万ドルの配分" className={`decision-panel${expanded ? " decision-expanded" : ""}`} elevation={0}>
-    <div className="research-kicker">今日の判断</div>
-    <details className="decision-mobile-summary"><summary>{plan.decision} · 上限 {pct(plan.allocationCap)}</summary><p>{plan.blockers.join(" / ") || "日次条件通過。注文時の価格を確認してください。"}</p></details>
-    <div className="decision-overview"><div>
-    <Typography component="h2" variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{plan.decision}</Typography>
-    <Typography className="decision-description" sx={{ mt: 1 }}>{plan.dailyPositions.length ? '日次データの買い条件を通過しています。注文計画を確認し、発注時の価格が買い上限を超えていないか照合してください。' : '選定・市場・買い位置・出来高・形状・決算の確認結果を表示しています。'}</Typography>
-    </div><div className="decision-account"><small>新規資金のモデル・未約定</small><strong>$100,000</strong><span>株式0% · 現金100%</span></div></div>
+    <div className="decision-status-bar"><div><span className="research-kicker">今日の判断</span><Typography component="h2" sx={{fontSize:17,fontWeight:700}}>{plan.decision}</Typography><Typography sx={{fontSize:12,color:'text.secondary'}}>新規資金モデル · 株式0% / 現金100% · {plan.market.label}</Typography></div>{onBrowse && <Button variant="contained" onClick={onBrowse}>候補を確認する →</Button>}</div>
+    <details className="decision-full"><summary>判定の内訳・配分計画・取引日誌</summary>
     <Typography className="decision-description" color="text.secondary" sx={{ mt: 1, fontSize: 13 }}>分析基準日：{date} ／ {plan.market.label}。既存保有なし・信用取引なしのモデルです。保有株の売却指示ではありません。</Typography>
     <details className="research-disclosure"><summary>判定の内訳・未達条件</summary><ul className="decision-blockers">{plan.blockers.map(reason => <li key={reason}>{reason}</li>)}</ul></details>
     {plan.readiness.length > 0 && <details className="research-disclosure"><summary>候補別の買い条件（{plan.readiness.length}銘柄）</summary>
@@ -28,7 +24,7 @@ export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse
       </Box>)}
       <Typography sx={{fontSize:12}}>終値による研究モデルです。場中価格の接続と約定履歴は別管理のため、未約定のモデル資金を自動で投資済みにはしません。</Typography>
     </details>}
-    <div className="decision-actions">{onBrowse && <Button variant="contained" onClick={onBrowse}>候補を確認する →</Button>}
+    <div className="decision-actions">
     <Button variant="outlined" onClick={() => setExpanded(v => !v)} aria-expanded={expanded} aria-controls="conditional-plan">{expanded ? '条件付き計画を閉じる' : `条件付きの配分・注文計画を見る（${plan.positions.length}銘柄）`}</Button></div>
     {expanded && <Box id="conditional-plan" sx={{ mt: 2 }}>
       <Typography component="h3" variant="h6">確認後のモデル計画 — 発注前</Typography>
@@ -47,5 +43,6 @@ export default function PortfolioDecision({ rows, date, now, onInspect, onBrowse
       <BookRiskWorkbench />
     </Box>}
     <details style={{ marginTop: 20 }} onToggle={e=>setJournalOpen(e.currentTarget.open)}><summary>自分の取引日誌・全保有のリスクを確認</summary>{journalOpen && <LocalTradeJournal />}</details>
+    </details>
   </Paper>;
 }

@@ -184,7 +184,7 @@ describe('ScanPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Results:\s*1 stocks/i)).toBeInTheDocument();
     });
-    expect(screen.getByText('Filters')).toBeInTheDocument();
+    expect(screen.getByText('絞り込み')).toBeInTheDocument();
   });
 
   it('auto-loads the latest completed scan after scan history refreshes from running-only state', async () => {

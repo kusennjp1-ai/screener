@@ -1,7 +1,8 @@
 import { Box, Chip, Divider, Tooltip } from '@mui/material';
 
 const chipSx = (isActive) => ({
-  fontSize: '11px',
+  fontSize: {xs:'13px',md:'12px'},
+  minHeight:44,
   fontWeight: isActive ? 600 : 400,
   cursor: 'pointer',
   '& .MuiChip-label': { px: 1 },

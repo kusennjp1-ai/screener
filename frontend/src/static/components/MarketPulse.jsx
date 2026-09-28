@@ -21,7 +21,7 @@ export default function MarketPulse({ current, history, range, onRangeChange }) 
     </div>
     <Paper className="market-trend" elevation={0}>
       <div className="market-section-head"><div><Typography component="h2" variant="h6" fontWeight={700}>広がりの変化</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>10日レシオの推移。1.00を境に上昇・下落の優勢を比較。</Typography></div><div className="market-range" role="group" aria-label="市場環境の表示期間">{['1M', '3M'].map(r => <Button key={r} aria-pressed={range === r} onClick={() => onRangeChange(r)}>{r === '1M' ? '1か月' : '3か月'}</Button>)}</div></div>
-      {!history.some(r => finite(r.ratio_10day)) ? <Typography sx={{ py: 5 }}>推移データが不足しています。</Typography> : <Box sx={{ width: '100%', height: { xs: 230, md: 280 }, minWidth: 0 }} aria-label="10日上昇下落レシオの推移">
+      {!history.some(r => finite(r.ratio_10day)) ? <Typography sx={{ py: 5 }}>推移データが不足しています。</Typography> : <Box role="region" sx={{ width: '100%', height: { xs: 230, md: 280 }, minWidth: 0 }} aria-label="10日上昇下落レシオの推移">
         <ResponsiveContainer width="100%" height="100%"><AreaChart data={history.map(r => ({ ...r, ratio_10day: finite(r.ratio_10day) && r.ratio_10day >= 0 ? r.ratio_10day : null }))} margin={{ top: 20, right: 12, left: -20, bottom: 0 }} accessibilityLayer>
           <CartesianGrid vertical={false} stroke="currentColor" strokeOpacity={.08} />
           <XAxis dataKey="date" tickFormatter={d => d.slice(5)} minTickGap={32} tick={{ fill: 'currentColor', fontSize: 12 }} axisLine={false} tickLine={false} />

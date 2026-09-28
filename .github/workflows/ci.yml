@@ -83,6 +83,15 @@ jobs:
       - name: Smoke test
         run: cd frontend && npm run test:smoke
 
+      - name: Static research accessibility and mobile chart regression
+        run: cd frontend && npx playwright test --config playwright.static.config.js
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-browser-evidence
+          path: frontend/test-results/
+
   assistant-compose-smoke:
     name: Assistant Compose Smoke
     runs-on: ubuntu-latest

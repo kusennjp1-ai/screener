@@ -1,7 +1,7 @@
 // Shared presentation contracts: a price level is not evidence of a valid base.
 export function canonicalPivot(row) {
   const raw = row?.se_pivot_price ?? row?.vcp_pivot;
-  if (!Number.isFinite(raw) || raw <= 0) return { price: null, reason: 'ピボット未取得' };
+  if (!Number.isFinite(raw) || raw <= 0) return { price: null, reason: row?.setup_recalculation?.status === 'calculated' ? '再計算済み・現在有効なピボットなし' : row?.setup_recalculation?.status === 'unavailable' ? '日足の不足・不整合で再計算不可。旧水準は無効' : row?.price_quality?.status === 'replaced' ? '日足修復済み・セットアップの再計算待ち' : 'ピボット未取得' };
   const distance = row.current_price / raw - 1;
   if (Number.isFinite(distance) && Math.abs(distance) > .25) return { price: null, reason: '現在値から25%超離れた旧水準・ベースの再形成待ち' };
   return { price: raw, reason: row.se_pivot_price != null ? 'Setup Engine（日次）' : 'VCP（日次）' };

@@ -1,25 +1,22 @@
 import { filterRanked, formatPublished, sessionCurrent } from '../researchPresentation';
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, CircularProgress, FormControlLabel, Paper, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography, useTheme } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, FormControlLabel, Paper, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography, useTheme } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import StaticChartViewerModal from '../StaticChartViewerModal';
-import { assess, compareReference, entryPlan, finite, highDistance, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from '../researchEngine';
-import { tradingViewUrl } from '../tradingView';
-import ResearchChart from '../components/ResearchChart';
+import { compareReference, finite, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from '../researchEngine';
+import ResearchDetail from '../components/ResearchDetail';
+import CandidateBoard from '../components/CandidateBoard';
+import ResearchSearch from '../components/ResearchSearch';
 import { entryReadiness } from '../entryReadiness';
-import { modelMarket } from '../portfolioPlan';
+import { modelMarket, preparePortfolioRows } from '../portfolioPlan';
 import PortfolioDecision from '../components/PortfolioDecision';
-import QualificationVerification from '../components/QualificationVerification';
-import QuoteConnection from '../components/QuoteConnection';
 import { usePersonalQuote } from '../usePersonalQuote';
 import { mergeScanRows } from '../qualificationAudit';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
-const fmt = (v, digits = 1) => finite(v) ? v.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—';
-const panel = { p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', boxShadow: 'none' };
 
 export default function ResearchPage() {
   const theme = useTheme();
@@ -40,7 +37,6 @@ export default function ResearchPage() {
   const [onlyWatch, setOnlyWatch] = useState(false);
   const [symbol, setSymbol] = useState(null);
   const [chart, setChart] = useState(null);
-  const [limit, setLimit] = useState(50);
   const [storageError, setStorageError] = useState(false);
   const [verificationNotice, setVerificationNotice] = useState(null);
   const [verificationSymbol, setVerificationSymbol] = useState(null);
@@ -64,7 +60,8 @@ export default function ResearchPage() {
     return response.ok ? response.json() : null;
   }, retry: false });
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
-  const evaluated = useMemo(() => rankCandidates(rows, method), [rows, method]);
+  const rankings = useMemo(() => ({rows,methods:new Map()}), [rows]);
+  const evaluated = useMemo(() => { if (!rankings.methods.has(method)) rankings.methods.set(method,rankCandidates(rankings.rows,method)); return rankings.methods.get(method); }, [method, rankings]);
   const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage }), [evaluated, deferredSearch, strict, onlyWatch, watch, liquid, coverage]);
   const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
   const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
@@ -78,7 +75,6 @@ export default function ResearchPage() {
       return value;
     }});
   const selected = useMemo(() => selectedSummary && detail.data?.symbol === selectedSummary.symbol && detail.data?.as_of_date === bundle.data?.date ? {...detail.data, ...selectedSummary} : selectedSummary, [selectedSummary, detail.data, bundle.data?.date]);
-  const checks = selected ? assess(selected, method) : null;
   const embeddedCharts = useMemo(() => rows.some(r=>Object.hasOwn(r,'chart_path')) ? {symbols:rows.filter(r=>r.chart_path).map(r=>({symbol:r.symbol,path:r.chart_path}))} : null, [rows]);
   const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts);
   const index = {data:embeddedCharts || fetchedIndex.data};
@@ -96,40 +92,54 @@ export default function ResearchPage() {
       return result;
     }, refetchInterval: 15000, retry: 1,
   });
-  const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now });
-  const activeQuote = personalKey ? personal.quote : quote.data;
-  const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, clock.data);
-  const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? activeQuote : null;
-  const plan = selected ? entryPlan(selected, usableQuote, method) : null;
   const market = useMemo(() => modelMarket(rows), [rows]);
-  const readiness = selected ? entryReadiness(selected, bundle.data?.date, market, clock.data) : null;
+  const portfolioPrepared = useMemo(() => preparePortfolioRows(rows), [rows]);
+  const clockRows = useMemo(() => [...new Set([...portfolioPrepared.candidates,selected].filter(Boolean))], [portfolioPrepared,selected]);
+  const clockSelector = useCallback(time => JSON.stringify([
+    quoteStatus(personalKey ? personal.quote : quote.data,time),
+    snapshotFreshness(bundle.data?.date || entry.as_of_date,time),
+    sessionCurrent(rows,bundle.data?.date,time),
+    time-Date.parse(manifest.data?.generated_at)>96*3600000,
+    clockRows.map(row=>entryReadiness(row,bundle.data?.date,market,time).rules.map(r=>r.state)),
+  ]),[personalKey,personal.quote,quote.data,bundle.data?.date,entry.as_of_date,rows,clockRows,market,manifest.data?.generated_at]);
+  const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
+  // Preserve clock checks but notify the page only when a decision actually changes.
+  const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
+  const activeQuote = personalKey ? personal.quote : quote.data;
+  const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, now);
+  const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? activeQuote : null;
   const leaders = useMemo(() => rankCandidates(rows, 'ibd', { liquidOnly: true }).filter(r => r.assessment.qualified).slice(0, 50).map(r => r.row), [rows]);
   const overlap = compareReference(leaders, reference.data, bundle.data?.date);
-  const age = clock.data - Date.parse(manifest.data?.generated_at);
-  const currentSession = sessionCurrent(rows, bundle.data?.date, clock.data);
+  const age = now - Date.parse(manifest.data?.generated_at);
+  const currentSession = sessionCurrent(rows, bundle.data?.date, now);
   const stale = !currentSession && (!Number.isFinite(age) || age > 96 * 3600000);
-  const freshness = snapshotFreshness(bundle.data?.date || entry.as_of_date, clock.data);
-  function toggleWatch(ticker) {
+  const freshness = snapshotFreshness(bundle.data?.date || entry.as_of_date, now);
+  const toggleWatch = useCallback((ticker) => {
     const next = watch.includes(ticker) ? watch.filter(s => s !== ticker) : [...watch, ticker];
     setWatch(next);
     try { localStorage.setItem('research-watch', JSON.stringify(next)); } catch { setStorageError(true); }
-  }
+  }, [watch]);
   function inspectOrder(ticker) {
     setMethod('minervini'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
-  function applyVerification(ticker, result, date, generation) {
+  const applyVerification = useCallback((ticker, result, date, generation) => {
     // Ignore an in-flight result from a replaced daily snapshot.
     if (date !== bundle.data?.date || generation !== version) return;
     client.setQueryData(['researchRows', researchPath, version], previous => previous ? {
       ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, method_summary:undefined, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r),
     } : previous);
     setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
-  }
+  }, [bundle.data?.date, version, client, researchPath]);
   function focusDetail() { requestAnimationFrame(() => {
     detailRef.current?.focus?.({ preventScroll: true });
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
   }); }
+  const selectSymbol = useCallback(ticker => {setSymbol(ticker);setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});},[]);
+  const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
+  const disconnect = useCallback(()=>setPersonalKey(''),[]);
+  const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
+  const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
   function download() {
     const csv = researchCsv(ranked, method, bundle.data?.date);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
@@ -140,11 +150,12 @@ export default function ResearchPage() {
       <Box><div className="research-kicker">米国株スクリーナー</div><Typography component="h1" sx={{ fontSize: { xs: 25, md: 30 }, fontWeight: 700, letterSpacing: '-.03em', mt: .5 }}>今日の投資判断</Typography></Box>
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>データを再確認 ↻</Button></Stack>
     </header>
-    {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={clock.data} onInspect={inspectOrder} onBrowse={() => { setMobileView('list'); document.getElementById('candidate-search')?.focus(); }} />}
-    <Typography component="h2" variant="h6" sx={{ mt: 3, mb: 1 }}>候補を探す</Typography>
+    {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} onInspect={inspectOrder} onBrowse={browse} />}
+    <Typography component="h2" variant="h6" sx={{ mt: 1.5, mb: .5, fontSize:16 }}>候補を探す</Typography>
     <div className="research-summary">
       <span>分析対象<strong>{rows.length.toLocaleString()} 銘柄</strong></span>
       <span>条件通過<strong>{ranked.filter(r => r.assessment.qualified).length} 銘柄</strong></span>
+      <span className="coverage-summary">日足検証 {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}</span>
       <Typography variant="body2" color="text.secondary" sx={{ ml: { md: 'auto' }, fontSize: 12 }}>公開更新：{manifest.data?.generated_at ? formatPublished(manifest.data.generated_at) : '未確認'}</Typography>
     </div>
     {stale && <Alert severity="warning" sx={{ mb: 2 }}>公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
@@ -152,21 +163,21 @@ export default function ResearchPage() {
       {freshness.state === 'old' ? `分析基準日は米国東部の日付から${freshness.days}暦日前です。公開更新が新しくても、分析データが新しいとは限りません。休場日も含む日数です。` : '分析基準日が未確認、または未来の日付です。最新の分析として扱わないでください。'}
     </Alert>}
     <Paper className="research-controls" elevation={0}>
-      <Typography sx={{fontSize:12,mb:1}}>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。RSは検証できた共通母集団内の順位です。</Typography>
-      <ToggleButtonGroup size="small" exclusive value={coverage} onChange={(_,value)=>{if(value){setCoverage(value);setLimit(50);}}} aria-label="検証状況" sx={{mb:2}}>
-        <ToggleButton value="all">全銘柄</ToggleButton><ToggleButton value="verified">日足検証済み {verifiedCount}</ToggleButton><ToggleButton value="unverified">判定資料不足 {coverageRows.length-verifiedCount}</ToggleButton>
-      </ToggleButtonGroup>
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2} justifyContent="space-between" alignItems={{ md: 'center' }}>
-        <ToggleButtonGroup exclusive value={method} onChange={(_, value) => { if (value) { setMethod(value); setLimit(50); } }} aria-label="投資手法" sx={{ flexWrap: 'wrap' }}>
+        <ToggleButtonGroup exclusive value={method} onChange={(_, value) => { if (value) { setMethod(value);  } }} aria-label="投資手法" sx={{ flexWrap: 'wrap' }}>
           {Object.entries(METHODS).map(([key, label]) => <ToggleButton key={key} value={key} sx={{ px: 2.5, py: 1, fontSize: 14 }}>{label}</ToggleButton>)}
         </ToggleButtonGroup>
-        <TextField id="candidate-search" label="銘柄・企業名を検索" value={search} onChange={e => { setSearch(e.target.value); setLimit(50); }} size="small" sx={{ width: { xs: '100%', md: 260 } }} />
+        <ResearchSearch value={search} onChange={setSearch} />
       </Stack>
       <Stack direction="row" flexWrap="wrap" columnGap={2} sx={{ mt: 1 }} alignItems="center">
         <FormControlLabel control={<Switch size="small" checked={strict} onChange={e => setStrict(e.target.checked)} />} label="全条件通過のみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
         <FormControlLabel control={<Switch size="small" checked={onlyWatch} onChange={e => setOnlyWatch(e.target.checked)} />} label="ウォッチのみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
       </Stack>
-      <details className="research-disclosure research-options"><summary>表示・保存オプション</summary><Stack direction="row" flexWrap="wrap" alignItems="center" gap={1}>
+      <details className="research-disclosure research-options"><summary>表示・保存オプション</summary>      <Typography sx={{fontSize:12,mb:1}}>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。RSは検証できた共通母集団内の順位です。</Typography>
+      <ToggleButtonGroup size="small" exclusive value={coverage} onChange={(_,value)=>{if(value){setCoverage(value);}}} aria-label="検証状況" sx={{mb:2}}>
+        <ToggleButton value="all">全銘柄</ToggleButton><ToggleButton value="verified">日足検証済み {verifiedCount}</ToggleButton><ToggleButton value="unverified">判定資料不足 {coverageRows.length-verifiedCount}</ToggleButton>
+      </ToggleButtonGroup>
+<Stack direction="row" flexWrap="wrap" alignItems="center" gap={1}>
         <FormControlLabel control={<Switch size="small" checked={liquid} onChange={e => setLiquid(e.target.checked)} />} label="流動性フィルター：株価 $10以上・平均売買代金 $2,000万以上" sx={{ '& .MuiFormControlLabel-label': { fontSize: 12 } }} />
         <Button onClick={download} disabled={!ranked.length} size="small" sx={{ ml: 'auto' }}>CSV保存 ↓</Button>
         <Button component="a" href={`${import.meta.env.BASE_URL}qualification-audit.json`} download size="small">全銘柄の検証記録 ↓</Button>
@@ -176,73 +187,12 @@ export default function ResearchPage() {
     {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} /> 銘柄と分析根拠を読み込んでいます…</Box>}
     {storageError && <Alert severity="warning">ウォッチはこの画面のみ保持されます。端末への保存が制限されています。</Alert>}
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
-    <ToggleButtonGroup className="research-mobile-tabs" exclusive value={mobileView} onChange={(_, value) => { if (value) setMobileView(value); if (value === 'detail') focusDetail(); }} fullWidth aria-label="表示パネル">
+    <ToggleButtonGroup className="research-mobile-tabs" exclusive value={mobileView} onChange={(_, value) => { if (value === 'list') browse(); if (value === 'detail') {setMobileView(value);focusDetail();} }} fullWidth aria-label="表示パネル">
       <ToggleButton value="list">候補一覧</ToggleButton><ToggleButton value="detail" disabled={!selected}>銘柄分析 {selected?.symbol}</ToggleButton>
     </ToggleButtonGroup>
     <div className="research-grid">
-      <Paper className="research-panel research-list">
-        <Stack direction="row" sx={{ p: 2 }} justifyContent="space-between" alignItems="center"><Typography component="h2" sx={{ fontSize: 15, fontWeight: 700 }}>候補リスト</Typography><Typography variant="body2" color="text.secondary">{ranked.length.toLocaleString()} 件</Typography></Stack>
-        <Typography sx={{ px: 2, pb: 1.5, fontSize: 12, color: 'text.secondary' }}>銘柄を選ぶと、チャートと判定を確認できます。条件数は購入の合格認定ではありません。</Typography>
-        <TableContainer sx={{ maxHeight: { xs: 560, md: 'calc(100vh - 200px)' }, minHeight: 200 }}><Table stickyHeader size="small" aria-label="投資手法別の銘柄候補">
-          <TableHead><TableRow>{['銘柄 / 株価', '条件', 'RS推計', '高値比'].map(h => <TableCell key={h} sx={{ whiteSpace: 'nowrap' }}>{h}</TableCell>)}</TableRow></TableHead>
-          <TableBody>{ranked.slice(0, limit).map(({ row: r, assessment: a }) => <TableRow key={r.symbol} selected={selected?.symbol === r.symbol} hover>
-            <TableCell><Button onClick={() => { setSymbol(r.symbol); setMobileView('detail'); focusDetail(); }} aria-label={`${r.symbol} の分析を表示`} sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 17, color: 'text.primary', justifyContent: 'flex-start', p: 0, minHeight: 38 }}>{r.symbol}</Button><Typography sx={{ fontSize: 12, color: 'text.secondary' }}>${fmt(r.current_price, 2)}</Typography></TableCell>
-            <TableCell><Chip size="small" color={a.qualified ? 'success' : 'default'} variant="outlined" label={`${a.passed}/${a.total}`} sx={{ borderRadius: 1, height: 24 }} />{a.unknown > 0 && <Typography sx={{ fontSize: 11 }}>未確認 {a.unknown}</Typography>}</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>{fmt(r.rs_rating, 0)}</TableCell><TableCell>{highDistance(r) == null ? '—' : `${highDistance(r) ? '−' : ''}${fmt(highDistance(r))}%`}</TableCell>
-          </TableRow>)}</TableBody></Table></TableContainer>
-        {!ranked.length && !bundle.isLoading && <Typography sx={{ p: 3 }}>該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</Typography>}
-        {ranked.length > limit && <Button fullWidth onClick={() => setLimit(limit + 50)} sx={{ p: 1.5 }}>次の50件を表示</Button>}
-      </Paper>
-      <div className="research-detail" ref={detailRef} key={selected?.symbol} tabIndex={-1} aria-label="銘柄詳細">
-        {selected && <>
-          <Button size="small" onClick={() => { const target = document.getElementById('today-decision'); target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'start', behavior: 'auto' }); }}>← 本日の配分に戻る</Button>
-          <Paper className="research-panel">
-            <div className="research-symbol-head">
-              <Box><Stack direction="row" gap={1.5} alignItems="baseline"><Typography component="h2" sx={{ fontSize: 32, lineHeight: 1.2, fontWeight: 700, fontFamily: 'monospace' }}>{selected.symbol}</Typography><Chip size="small" label={selected.exchange || 'US'} variant="outlined" sx={{ height: 22, borderRadius: 1 }} /></Stack><Typography sx={{ mt: .75, fontSize: 14 }} color="text.secondary">{selected.company_name}</Typography><Typography sx={{ mt: .75, fontSize: 12 }} color="text.secondary">{selected.ibd_industry_group || '業種未確認'}</Typography></Box>
-              <div className="research-symbol-price"><Typography sx={{ fontSize: 30, fontWeight: 600, lineHeight: 1.2 }}>${fmt(plan.price, 2)}</Typography><Typography sx={{ fontSize: 13, mt: .75, color: selected.price_change_1d >= 0 ? 'success.main' : 'error.main' }}>{finite(selected.price_change_1d) ? `${selected.price_change_1d >= 0 ? '+' : ''}${fmt(selected.price_change_1d)}% 前日比（日次）` : '前日比未確認'}</Typography><Button size="small" sx={{ mt: .5 }} onClick={() => toggleWatch(selected.symbol)} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol) ? '★ 保存済み' : '☆ ウォッチ'}</Button></div>
-            </div>
-            <ResearchChart method={method} quote={usableQuote} date={bundle.data?.date} market={market} now={clock.data} row={selected} rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={() => setChart(selected.symbol)} />
-            <div className="research-metrics">{[['RS 推計', fmt(selected.rs_rating, 0)], ['Composite 推計', fmt(selected.composite_rating, 0)], ['EPS 前年同期比', finite(selected.eps_growth_yy) ? `${fmt(selected.eps_growth_yy)}%` : '—'], ['業種順位 推計', fmt(selected.ibd_group_rank, 0)]].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
-          </Paper>
-          <div className="research-bottom">
-            <Paper sx={panel}>
-              <div className="research-kicker">選定条件</div><Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>{METHODS[method]}の判定根拠</Typography>
-              <Typography sx={{ fontSize: 14, my: 1 }}>適合 {checks.passed} / {checks.total}・未確認 {checks.unknown}</Typography>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>一次選定の結果です。購入条件は下の詳細検証で確認できます。</Typography>
-              <details className="research-disclosure"><summary>条件ごとの結果を見る</summary>
-              <ul className="research-rules">{checks.rules.map(r => <li key={r.label}><span>{r.label}{r.evidence && <small style={{ display: 'block' }}>{r.evidence}</small>}</span><Box component="span" sx={{ color: r.state === 'pass' ? 'success.main' : r.state === 'fail' ? 'error.main' : 'text.secondary' }}>{r.state === 'pass' ? '✓ 適合' : r.state === 'fail' ? '× 不適合' : '— 未確認'}{finite(r.value) ? ` · ${fmt(r.value)}${r.unit}` : ''}</Box></li>)}</ul>
-              {checks.templateMismatch && <Alert severity="warning">元のテンプレート判定と日足再計算が不一致です。上の再計算結果を選定に使用しています。</Alert>}
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>未確認は合格に数えません。RS・EPS・Composite・業種順位は独自推計です。</Typography>
-              {method === 'ibd' && <Typography sx={{ fontSize: 12, mt: 1 }}>公開ルールを参考にした独自の厳格成長スクリーニングです。財務履歴の欠損を推計スコアで補完しません。公式IBDの全条件や選出リストへの合格認定ではありません。</Typography>}
-              {method.startsWith('minervini') && <Typography sx={{ fontSize: 12, mt: 1 }}>{method === 'minervini2' ? '書籍②『株式トレード 基本と原則』：安値から25%以上。買い位置は2〜3%以内という記述の上限3%を採用。' : '書籍①『成長株投資法』：安値から30%以上。表示する5%ゾーンはIBD型の補助指標で、書籍の固定条件ではありません。'} 200日線の4〜5か月上昇や高いRSは望ましい特徴で、最低条件とは区別します。</Typography>}
-              </details>
-              <Button component="a" href={tradingViewUrl(selected.symbol, 'US')} target="_blank" rel="noopener noreferrer" size="small" sx={{ mt: 1.5 }}>TradingView</Button>
-            </Paper>
-            <Paper sx={panel}>
-              <Stack direction="row" justifyContent="space-between"><div className="research-kicker">買い位置の確認</div><Chip size="small" label={liveStatus} color={liveStatus === 'リアルタイム' ? 'success' : 'default'} sx={{ height: 22, fontSize: 12 }} /></Stack>
-              <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>エントリー位置</Typography>
-              <QuoteConnection key={`${selected.symbol}-${Boolean(personalKey)}`} connected={Boolean(personalKey)} apiKey={personalKey} symbol={selected.symbol} cusip={selected.institutional_evidence?.cusip} status={personal.status} quote={personal.quote} onConnect={setPersonalKey} onDisconnect={()=>setPersonalKey('')} />
-              <Typography sx={{ fontSize: 24, fontWeight: 700, my: 2, color: plan.state === '買いゾーン超過' ? 'warning.main' : 'text.primary' }}>{plan.state}</Typography>
-              <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 14, '& dd': { m: 0, textAlign: 'right' } }}><dt>{usableQuote ? '配信価格' : '日次価格'}</dt><dd>${fmt(plan.price, 2)}</dd><dt>推定ピボット</dt><dd>${fmt(plan.pivot, 2)}</dd><dt>ピボット比</dt><dd>{fmt(plan.distance)}%</dd><dt>{plan.zone || 5}%ゾーン上限</dt><dd>${fmt(plan.upper, 2)}</dd><dt>7%損切りの計算例</dt><dd>${fmt(plan.stopExample, 2)}</dd></Box>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 2 }}>{plan.pivotSource || '未判定'}のピボット。ゾーンは価格位置だけの判定で、出来高・市場環境・ベースの妥当性を保証しません。一覧・日次チャート・拡大チャート・注文計画は同じピボットを使用します。現在値から25%超離れた旧水準は買い位置に使いません。</Typography>
-              <Typography sx={{fontSize:13,mt:2,fontWeight:600}}>次に確認すること</Typography>
-              <ul>{readiness.rules.filter(r=>r.state!=='pass').slice(0,3).map(r=><li key={r.id}>{r.label}：{r.detail}</li>)}</ul>
-              <details className="research-disclosure"><summary>買い条件の自動確認：{readiness.passed}/{readiness.total}</summary>
-                {readiness.rules.map(rule=><Typography key={rule.id} sx={{fontSize:12,my:1}}>{rule.state==='pass'?'✓':rule.state==='fail'?'×':'?'} {rule.label}：{rule.detail}</Typography>)}
-                <Typography sx={{fontSize:12}}>ミネルヴィニ＋IBD型の新規資金モデル。最新の終値で判定し、場中価格の確認とは区別します。形状は自動推定です。</Typography>
-              </details>
-              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}><Typography component="h3" variant="subtitle2">チャートの確認ポイント</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>VCP：{selected.vcp_detected == null ? '未確認' : selected.vcp_detected ? '検出' : '未検出'} / 出来高50日平均比：{fmt(selected.se_volume_vs_50d, 2)}倍</Typography><Typography sx={{ fontSize: 13, mt: 1 }}>ベース：{fmt(selected.se_base_length_weeks)}週 / 深さ：{fmt(selected.se_base_depth_pct)}%</Typography></Box>
-            </Paper>
-          </div>
-            <Paper sx={{ ...panel, mt: 2 }}>
-              <details className="research-disclosure" onToggle={e=>setVerificationSymbol(e.currentTarget.open ? selected.symbol : null)}><summary>詳細検証 — 財務・チャート・書籍の条件</summary>
-              {verificationSymbol === selected.symbol && detail.isLoading && <Typography role="status">詳細資料を読み込み中…</Typography>}
-              {verificationSymbol === selected.symbol && detail.isError && <Alert severity="error" action={<Button onClick={()=>detail.refetch()}>再試行</Button>}>詳細資料を取得できません。</Alert>}
-              {verificationSymbol === selected.symbol && (!selected.research_detail_path || detail.isSuccess) && <QualificationVerification row={selected} entry={chartEntry} date={bundle.data?.date} generation={version} method={method} onVerified={applyVerification} />}
-              </details>
-            </Paper>
-        </>}
-      </div>
+      <CandidateBoard ranked={ranked} method={method} selectedSymbol={selected?.symbol} loading={bundle.isLoading} onSelect={selectSymbol} />
+      <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} />
     </div>
     <footer className="research-method-note">
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
@@ -253,6 +203,6 @@ export default function ResearchPage() {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>
-    <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={clock.data} quote={usableQuote} open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />
+    <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />
   </Box>;
 }

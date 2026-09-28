@@ -8,8 +8,9 @@ it('shows cash first and reaches order prices and evidence in two actions', () =
   const inspect = vi.fn();
   render(<PortfolioDecision rows={[withAuditFixture(row)]} date="2026-09-23" now={Date.parse('2026-09-24T14:00:00Z')} onInspect={inspect} />);
   expect(screen.getByRole('heading', { name: '候補あり・未達条件を確認' })).toBeInTheDocument();
-  expect(screen.getByText(/現金100%/)).toBeInTheDocument();
+  expect(screen.getAllByText(/現金100%/).length).toBeGreaterThan(0);
   expect(screen.queryByText('買い指値の上限')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText('判定の内訳・配分計画・取引日誌'));
   fireEvent.click(screen.getByRole('button', { name: /条件付きの配分・注文計画を見る/ }));
   expect(screen.getByText('買い指値の上限')).toBeInTheDocument();
   expect(screen.getByText('購入後の売り逆指値例')).toBeInTheDocument();
@@ -19,6 +20,7 @@ it('shows cash first and reaches order prices and evidence in two actions', () =
 });
 it('does not fill cash with unqualified stocks when there are no candidates', () => {
   render(<PortfolioDecision rows={[{ ...row, passes_template: false }]} date="2026-09-23" onInspect={() => {}} />);
+  fireEvent.click(screen.getByText('判定の内訳・配分計画・取引日誌'));
   fireEvent.click(screen.getByRole('button', { name: /条件付きの配分・注文計画を見る/ }));
   expect(screen.getByText(/配分できる候補はありません/)).toBeInTheDocument();
 });

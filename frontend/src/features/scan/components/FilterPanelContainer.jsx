@@ -91,7 +91,7 @@ function FilterPanel({
       >
         <FilterListIcon sx={{ mr: 1, fontSize: 18, color: 'text.secondary' }} />
         <Typography variant="subtitle2" sx={{ mr: 2 }}>
-          Filters
+          絞り込み
           {activeFilters.length > 0 && (
             <Chip
               label={activeFilters.length}
@@ -162,9 +162,9 @@ function FilterPanel({
           size="small"
           sx={{ fontSize: '0.7rem', py: 0.25, px: 0.75, minWidth: 0 }}
         >
-          Reset
+          リセット
         </Button>
-        <IconButton size="small" sx={{ ml: 0.5 }}>
+        <IconButton aria-label={expanded?'絞り込みを閉じる':'絞り込みを開く'} aria-expanded={expanded} size="small" sx={{ ml: 0.5, minWidth:44, minHeight:44 }}>
           {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </IconButton>
       </Box>

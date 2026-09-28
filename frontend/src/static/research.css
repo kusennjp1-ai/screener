@@ -100,14 +100,57 @@
 .decision-panel .research-disclosure > summary { margin-top:4px; }
 @media(max-width:600px) { .decision-actions { flex-direction:column; } .decision-actions > button { width:100%; } .decision-account strong { font-size:24px; } }
 
-.leader-shell[data-theme="light"] .research-workbench .MuiTableCell-head { background:#f5f6fa; }
+.leader-shell[data-theme="light"] .research-workbench .MuiTableCell-head { background:#f5f6fa; color:#253149; }
 
-.decision-mobile-summary { display:none; }
-@media(max-width:600px) {
-  .decision-mobile-summary { display:block; padding:10px 0; font-size:14px; }
-  .decision-panel > .decision-overview, .decision-panel > .decision-description { display:none; }
-  .decision-panel:not(.decision-expanded) > .research-disclosure, .decision-panel:not(.decision-expanded) > details:last-child { display:none; }
-  .decision-panel { padding:14px; }
-  .decision-actions { flex-direction:row; }
-  .decision-actions > button { width:auto; flex:1; font-size:12px; }
+/* The daily decision leaves space for the actual candidates and chart. */
+.decision-panel { padding:16px 20px; }
+.decision-status-bar { display:flex; justify-content:space-between; gap:16px; align-items:center; }
+.decision-full > summary { font-size:13px; margin-top:6px; min-height:32px; cursor:pointer; }
+.decision-full > .decision-overview,.decision-full > .decision-mobile-summary { display:none; }
+.research-heading { margin:16px 0; }
+.research-summary { margin-bottom:10px; padding:8px 0; }
+.research-controls { padding:12px 16px; margin-bottom:12px; }
+.research-grid { grid-template-columns:minmax(410px,.85fr) minmax(0,1.7fr); }
+.research-list { top:80px; display:flex; flex-direction:column; max-height:calc(100dvh - 96px); scroll-margin-top:136px; }
+.candidate-board-heading { padding:14px 14px 0; }
+.candidate-board-heading h2 { font-size:16px; margin:0 0 8px; }
+.candidate-board-heading small { font-size:12px; font-weight:400; margin-left:8px; }
+.candidate-board-heading label { display:flex; align-items:center; justify-content:space-between; font-size:12px; gap:8px; }
+.candidate-board-heading select { font:inherit; color:inherit; border:1px solid var(--line); border-radius:6px; background:transparent; padding:8px; min-height:44px; }
+.candidate-help { font-size:12px; padding:0 14px; margin:8px 0 12px; }
+.candidate-scroll { overflow:auto; min-height:160px; }
+.candidate-table { width:100%; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums; }
+.candidate-table th { position:sticky; top:0; z-index:1; background:#1d2434; color:#e6ebf5; font-size:11px; font-weight:600; padding:12px 8px; white-space:nowrap; text-align:left; }
+.leader-shell[data-theme="light"] .candidate-table th { background:#edf0f6; color:#253149; }
+.candidate-table td { border-bottom:1px solid var(--line); font-size:12px; padding:8px; vertical-align:middle; }
+.candidate-table td:first-child { width:23%; }
+.candidate-table small { display:block; font-size:11px; margin-top:4px; line-height:1.5; }
+.candidate-table button { font:700 16px monospace; color:var(--accent); border:0; background:none; cursor:pointer; min-height:44px; min-width:44px; text-align:left; padding:0; }
+.candidate-table tr[aria-selected="true"] { background:rgba(138,123,233,.12); }
+.candidate-pagination { display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px; }
+.research-table { width:100%; border-collapse:collapse; font-size:13px; }
+.research-table td,.research-table th { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; }
+@media(max-width:1100px) { .research-grid { grid-template-columns:minmax(380px,.9fr) minmax(0,1.4fr); } }
+@media(max-width:800px) {
+  .research-grid { display:block; }
+  .research-workbench { padding-bottom:76px; }
+  .research-mobile-tabs { position:fixed; bottom:0; left:0; width:100%; z-index:1100; background:#171c27; padding:6px 12px max(6px,env(safe-area-inset-bottom)); box-sizing:border-box; margin:0!important; border-top:1px solid var(--line); box-shadow:0 -2px 12px #0002; }
+  .leader-shell[data-theme="light"] .research-mobile-tabs { background:#fff; }
+  .research-mobile-tabs button { min-height:44px; }
+  .research-list { max-height:none; }
+  .candidate-scroll { max-height:65dvh; }
+  .candidate-table td,.candidate-table th { padding:8px 5px; }
+  .candidate-table td { font-size:12px; }
+  .candidate-table th { font-size:11px; }
+  .decision-panel { padding:12px; }
+  .decision-status-bar { flex-wrap:wrap; gap:8px; }
+  .decision-status-bar button { min-height:44px; }
+  .research-detail,.research-list { scroll-margin-top:132px; }
 }
+
+.research-symbol-head { padding:12px 16px; }
+.decision-full > summary { min-height:44px; display:flex; align-items:center; }
+.research-options { border:0; margin:0; }
+.research-options > summary { padding:6px 0; }
+.research-controls .MuiToggleButton-root { min-height:44px; }
+@media(min-width:801px) { .decision-full { margin-top:0; } .decision-panel { padding:12px 20px 4px; } }

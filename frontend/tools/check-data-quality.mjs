@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { assess, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
+import { assess, assessmentSummary, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
 import {canonicalPivot} from '../src/static/researchPresentation.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
@@ -8,7 +8,7 @@ const index=await read((manifest.markets?.US||manifest).assets.research.path);
 const quality=await read('data-quality.json');
 for(const row of index.rows) for(const method of ['minervini','minervini2','oneil','ibd']) {
   const {rules,...expected}=assess(row,method); void rules;
-  if(row.method_summary?.version!==RULE_SUMMARY_VERSION || JSON.stringify(expected)!==JSON.stringify(row.method_summary[method])) throw Error(`Rule summary mismatch: ${row.symbol}/${method}`);
+  if(row.method_summary?.version!==RULE_SUMMARY_VERSION || JSON.stringify(expected)!==JSON.stringify(assessmentSummary(row,method))) throw Error(`Rule summary mismatch: ${row.symbol}/${method}`);
 }
 if(!quality.total || quality.as_of_date!==index.as_of_date || quality.verified/quality.total<.9) {
   throw Error(`Daily verification below 90%: ${quality.verified}/${quality.total}. Keep last good publication and repair the source; never relax selection criteria.`);
@@ -33,7 +33,7 @@ for(const row of index.rows) {
 }
 // Open real normal, repaired, split and incomplete symbols. All surfaces use
 // these same canonical details; chart stubs may not retain old levels.
-const sample=new Set(['AMD','TSM','JPM','KLAC','SLAB','ADI','SNDK',index.rows.find(r=>!r.financial_history)?.symbol,index.rows.find(r=>!r.institutional_evidence)?.symbol,index.rows.find(r=>r.setup_recalculation?.status!=='calculated')?.symbol]);
+const sample=new Set(['AMD','TSM','JPM','KLAC','SLAB','ADI','SNDK','NDSN','IRDM','EBAY',index.rows.find(r=>!r.financial_history)?.symbol,index.rows.find(r=>!r.institutional_evidence)?.symbol,index.rows.find(r=>r.setup_recalculation?.status!=='calculated')?.symbol]);
 for(const symbol of sample) {
   const row=index.rows.find(r=>r.symbol===symbol);if(!row)continue;
   const detail=await read(row.research_detail_path);
@@ -41,6 +41,7 @@ for(const symbol of sample) {
   for(const key of scalarFields)if(detail[key]!==row[key])throw Error(`Detail mismatch: ${symbol}/${key}`);
   if(row.chart_path) {
     const chart=await read(row.chart_path);
+    if(row.technical_audit?.valid && (!chart.rs_line || chart.rs_line.length<63)) throw Error(`Verified chart lacks RS context: ${symbol}`);
     for(const key of scalarFields)if(chart.stock_data[key]!==row[key])throw Error(`Chart mismatch: ${symbol}/${key}`);
   }
 }

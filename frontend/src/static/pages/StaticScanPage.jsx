@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
+  Button,
   Box,
   CircularProgress,
   Paper,
@@ -10,6 +11,8 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import MobileScanResults from '../components/MobileScanResults';
+import ResearchSearch from '../components/ResearchSearch';
 import FilterPanel from '../../components/Scan/FilterPanel';
 import ResultsTable from '../../components/Scan/ResultsTable';
 import { modelMarket } from '../portfolioPlan';
@@ -54,6 +57,8 @@ function StaticScanPage() {
   const [filters, setFilters] = useState(buildDefaultScanFilters);
   const [showFilters, setShowFilters] = useState(!isMobile);
   const [page, setPage] = useState(1);
+  const [fullTable,setFullTable]=useState(false);
+  const searchRows=useCallback(text=>{setFilters(old=>({...old,symbolSearch:text}));setPage(1);},[]);
   const [perPage, setPerPage] = useState(50);
   const [sortBy, setSortBy] = useState('composite_score');
   const [sortOrder, setSortOrder] = useState('desc');
@@ -350,12 +355,12 @@ function StaticScanPage() {
       </Paper>
 
       {hydrationComplete && presetScreens?.length > 0 && (
-        <ScreenSelector
+        <Box component={isMobile?'details':'div'} sx={{mb:1}}>{isMobile && <Box component="summary" sx={{minHeight:44,display:'flex',alignItems:'center',cursor:'pointer'}}>補助フィルターを選択</Box>}<ScreenSelector
           screens={presetScreens}
           activeScreenId={activeScreenId}
           onSelectScreen={handleSelectScreen}
           matchCounts={matchCounts}
-        />
+        /></Box>
       )}
 
       {!hydrationComplete && (
@@ -405,7 +410,8 @@ function StaticScanPage() {
         />
       )}
 
-      <ResultsTable
+      <Box sx={{display:'flex',gap:1,alignItems:'center',my:1.5}}><ResearchSearch value={filters.symbolSearch || ''} onChange={searchRows} />{isMobile && <Button onClick={()=>setFullTable(v=>!v)}>{fullTable?'カード表示':'全項目の表'}</Button>}</Box>
+      {isMobile && !fullTable ? <MobileScanResults rows={pagedRows} total={hydrationComplete?cappedRows.length:pagedRows.length} page={page} perPage={perPage} sortBy={sortBy} sortOrder={sortOrder} onSort={(field,order)=>{if(hydrationComplete){setSortBy(field);setSortOrder(order);setPage(1);}}} onPage={setPage} onOpenChart={handleOpenChart} isChartEnabled={isChartEnabled} /> : <ResultsTable
         results={pagedRows}
         total={hydrationComplete ? cappedRows.length : pagedRows.length}
         page={hydrationComplete ? page : 1}
@@ -428,7 +434,7 @@ function StaticScanPage() {
         showWatchlistMenu={false}
         isChartEnabled={isChartEnabled}
         sortingEnabled={hydrationComplete}
-      />
+      />}
 
       <StaticChartViewerModal
         open={chartModalOpen}

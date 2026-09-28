@@ -2,6 +2,7 @@ import { canonicalPivot } from './researchPresentation.js';
 import { auditValues, RS_METHOD } from './qualificationAudit.js';
 import { financialHistory } from './financialHistory.js';
 import { institutionalGrowth } from './institutionalEvidence.js';
+import { decodeAssessment } from './assessmentEncoding.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // Calendar age is deliberately not an exchange-session count (holidays vary).
@@ -91,7 +92,7 @@ export function assess(row, method = 'minervini') {
 // retain complete, independently recomputed rule evidence.
 export const RULE_SUMMARY_VERSION = 'research-summary-v2';
 export function assessmentSummary(row, method) {
-  const result = row.method_summary?.version === RULE_SUMMARY_VERSION && row.method_summary[method];
+  const result = row.method_summary?.version === RULE_SUMMARY_VERSION && decodeAssessment(row.method_summary[method]);
   return result || assess(row, method);
 }
 

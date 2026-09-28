@@ -44,5 +44,5 @@ export function usePersonalQuote(symbol, apiKey) {
     try { connect(); } catch { /* Browsers without WebSocket still use REST. */ }
     return () => { closed=true; controller.abort(); clearTimeout(timer); clearTimeout(reconnect); if (socket) { socket.onclose=null; socket.onmessage=null; socket.close(); } };
   }, [symbol,apiKey,session]);
-  return apiKey && state.symbol === symbol && state.session === session ? state : {symbol,quote:null,status:apiKey ? '接続中' : '未接続'};
+  return useMemo(() => apiKey && state.symbol === symbol && state.session === session ? state : {symbol,quote:null,status:apiKey ? '接続中' : '未接続'}, [apiKey,state,symbol,session]);
 }

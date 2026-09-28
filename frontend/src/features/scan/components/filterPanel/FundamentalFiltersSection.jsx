@@ -18,7 +18,7 @@ function FundamentalFiltersSection({
 }) {
   return (
     <FilterSection
-      title="Fundamental"
+      title="財務"
       category="fundamental"
       activeCount={activeCount}
       defaultExpanded={defaultExpanded}

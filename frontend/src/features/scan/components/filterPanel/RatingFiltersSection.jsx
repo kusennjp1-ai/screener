@@ -16,7 +16,7 @@ function RatingFiltersSection({
 }) {
   return (
     <FilterSection
-      title="Rating / Score"
+      title="評価・スコア"
       category="rating"
       activeCount={activeCount}
       defaultExpanded={defaultExpanded}
