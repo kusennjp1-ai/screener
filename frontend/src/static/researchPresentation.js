@@ -1,3 +1,4 @@
+import { sectorKey } from './sectorDefinitions.js';
 // Shared presentation contracts: a price level is not evidence of a valid base.
 export function canonicalPivot(row) {
   const raw = row?.se_pivot_price ?? row?.vcp_pivot;
@@ -7,9 +8,10 @@ export function canonicalPivot(row) {
   return { price: raw, reason: row.se_pivot_price != null ? 'Setup Engine（日次）' : 'VCP（日次）' };
 }
 
-export function filterRanked(ranked, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false, coverage = 'all' } = {}) {
+export function filterRanked(ranked, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false, coverage = 'all', sector = '' } = {}) {
   const query = search.trim().toUpperCase();
   return ranked.filter(({row:r, assessment:a}) =>
+    (!sector || sectorKey(r.gics_sector)===sector) &&
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || a.qualified) && (!watchlist || watchlist.includes(r.symbol)) &&
     `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query) &&

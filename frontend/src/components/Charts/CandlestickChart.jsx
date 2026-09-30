@@ -61,6 +61,7 @@ function CandlestickChart({
   vcpBoxes = null,
   bookAnnotations = false,
   researchView = false,
+  comparisonSessions = null,
   smallScreen = false,
   bands = null,
   buyPoints = null,
@@ -366,14 +367,14 @@ function CandlestickChart({
   const setDefaultVisibleWindow = useCallback((barCount) => {
     const timeScale = chartRef.current?.timeScale();
     if (!timeScale || !barCount) return;
-    if (researchView && chartData?.candlesticks?.length) { setResearchRange(chartRef.current, chartData.candlesticks, effectiveTimeframe === "weekly" ? 52 : smallScreen ? 63 : 126); return; }
+    if (researchView && chartData?.candlesticks?.length) { setResearchRange(chartRef.current, chartData.candlesticks, comparisonSessions || (effectiveTimeframe === "weekly" ? 52 : smallScreen ? 63 : 126)); return; }
     const visibleBars = effectiveTimeframe === 'weekly' ? 80 : 130;
     if (barCount > visibleBars) {
       timeScale.setVisibleLogicalRange({ from: barCount - visibleBars, to: barCount + 2 });
     } else {
       timeScale.fitContent();
     }
-  }, [effectiveTimeframe, researchView, chartData, smallScreen]);
+  }, [effectiveTimeframe, researchView, chartData, smallScreen, comparisonSessions]);
 
   // Update chart data when data changes
   useEffect(() => {
@@ -409,22 +410,22 @@ function CandlestickChart({
 
     // Update EMAs
     if (ema10SeriesRef.current && chartData.ema10.length > 0) {
-      ema10SeriesRef.current.setData(bookAnnotations ? [] : chartData.ema10);
+      ema10SeriesRef.current.setData(bookAnnotations || researchView ? [] : chartData.ema10);
     }
 
     if (ema20SeriesRef.current && chartData.ema20.length > 0) {
-      ema20SeriesRef.current.setData(bookAnnotations ? [] : chartData.ema20);
+      ema20SeriesRef.current.setData(bookAnnotations || researchView ? [] : chartData.ema20);
     }
 
     if (ema50SeriesRef.current && chartData.ema50.length > 0) {
-      ema50SeriesRef.current.setData(bookAnnotations ? [] : chartData.ema50);
+      ema50SeriesRef.current.setData(bookAnnotations || researchView ? [] : chartData.ema50);
     }
 
     // Minervini SMA 50/150/200 stack — full chart only; compact grid tiles stay
     // clean with just the short EMAs. Always call setData (even with []) so the
     // stack clears when switching to a symbol with too little history.
     if (sma50SeriesRef.current) {
-      sma50SeriesRef.current.setData(compact ? [] : (chartData.sma50 || []));
+      sma50SeriesRef.current.setData(compact && !researchView ? [] : (chartData.sma50 || []));
     }
     if (sma150SeriesRef.current) {
       sma150SeriesRef.current.setData(compact ? [] : (chartData.sma150 || []));
@@ -738,10 +739,17 @@ function CandlestickChart({
   // suppressed for dense grid tiles.
   const rsLineVisible = !researchView && !compact && rsStripShown;
 
+  useEffect(() => {
+    if (!comparisonSessions || !chartData?.candlesticks?.length) return;
+    const frame=requestAnimationFrame(()=>{if(chartRef.current)setResearchRange(chartRef.current,chartData.candlesticks,comparisonSessions);});
+    return ()=>cancelAnimationFrame(frame);
+  },[comparisonSessions,chartData,height,isDarkMode,symbol]);
+
   return (
     <>
+    {comparisonSessions && <Typography data-testid="comparison-visible-range" sx={{px:2,py:.5,fontSize:12}}>SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
     {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
-    {researchView && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
+    {researchView && !compact && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
       <ToggleButtonGroup size="small" exclusive value={timeframe} onChange={(_,value)=>{if(value){isFirstDataLoadRef.current=true;setTimeframe(value);}}} aria-label="足の種類"><ToggleButton value="daily">日足</ToggleButton><ToggleButton value="weekly">週足</ToggleButton></ToggleButtonGroup>
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</Button>)}
       <Button aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</Button>
@@ -749,14 +757,14 @@ function CandlestickChart({
       <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</Button>
       <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'ON':'OFF'}</Button>
     </Box>}
-    {researchView && hasData && <Box sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary'}}>
+    {researchView && !compact && hasData && <Box sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary'}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
       <Box component={smallScreen ? 'details' : 'div'} sx={{mt:.5,'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>
         {smallScreen && <summary>移動平均線・株価の乖離率</summary>}
         {[[50,chartData.sma50],[150,chartData.sma150],[200,chartData.sma200]].map(([period,points])=>{const value=points.at(-1)?.value, delta=(chartData.candlesticks.at(-1).close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
       </Box>
     </Box>}
-    {researchView && !smallScreen && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
+    {researchView && !compact && !smallScreen && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
       始 {legendData.open.toFixed(2)} · 高 {legendData.high.toFixed(2)} · 安 {legendData.low.toFixed(2)} · 終 {legendData.close.toFixed(2)}
     </Typography>}
     <Box

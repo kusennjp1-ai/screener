@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getStaticDataUrl } from '../config/runtimeMode';
 import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 
-export const fetchStaticJson = async (relativePath) => {
+export const fetchStaticJson = async (relativePath, { sha256 } = {}) => {
   const response = await fetch(getStaticDataUrl(relativePath), {
-    cache: /(?:index|chunk|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
+    cache: /(?:index|chunk|workbench|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
     headers: {
       Accept: 'application/json',
     },
@@ -14,6 +14,13 @@ export const fetchStaticJson = async (relativePath) => {
     throw new Error(`Failed to load static data: ${relativePath} (${response.status})`);
   }
 
+  if (sha256) {
+    const raw=await response.text();
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+    const actual=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    if(actual!==sha256) throw new Error('Static asset integrity mismatch');
+    return JSON.parse(raw);
+  }
   return response.json();
 };
 

@@ -68,6 +68,8 @@ jobs:
           python tools/test_sec_financials.py
           python tools/test_export_book_benchmark.py
           python tools/export-book-benchmark.py --allow-unavailable
+          python tools/restore-candidate-history.py
+          python tools/export-sector-prices.py
           node tools/repair-price-history.mjs
           python tools/test_institutional_holdings.py
           python tools/test_recalculate_setups.py

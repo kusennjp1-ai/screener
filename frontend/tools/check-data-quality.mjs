@@ -1,4 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
+import { sectorStrength } from '../src/static/sectorStrength.js';
 import { assess, assessmentSummary, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
 import {canonicalPivot} from '../src/static/researchPresentation.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
@@ -55,3 +58,20 @@ for(const filters of [{},{minVolume:20000000,price:{min:10}},{seSetupReady:true}
   }
 }
 console.log(`Cross-view gate passed: ${list.length} scan rows; ${sample.size} real chart/detail cases; global filters/sort identical.`);
+
+const workbenchRef=market.assets.workbench;
+const workbenchRaw=await readFile(`public/static-data/${workbenchRef.path}`,'utf8');
+if(createHash('sha256').update(workbenchRaw).digest('hex')!==workbenchRef.sha256) throw Error('Workbench hash mismatch');
+const workbench=JSON.parse(workbenchRaw);
+if(workbench.as_of!==index.as_of_date || workbench.source_research_sha256!==manifest.research_generation || workbench.snapshot_id!==workbenchRef.snapshot_id) throw Error('Mixed workbench snapshot');
+const sectorPrices=await read('sector-prices.json');
+if(JSON.stringify(sectorStrength(index.rows,sectorPrices,index.as_of_date))!==JSON.stringify(workbench.sectors)) throw Error('Sector evidence does not reproduce');
+const saved=await readFile(`public/static-data/${workbench.current_snapshot.path}`);
+if(createHash('sha256').update(saved).digest('hex')!==workbench.current_snapshot.sha256)throw Error('Saved observation hash mismatch');
+const recorded=JSON.parse(gunzipSync(saved).toString('utf8'));
+if(recorded.records.length!==index.rows.length || recorded.as_of!==index.as_of_date)throw Error('Selection snapshot coverage/date mismatch');
+for(const method of ['minervini','minervini2','oneil','ibd']) {
+  const changes=workbench.changes[method];
+  if(Object.values(changes.counts).reduce((a,b)=>a+b,0)!==changes.items.length)throw Error('Candidate change count mismatch');
+}
+console.log(`Workbench gate passed: ${recorded.records.length} saved observations; sector calculations reproduce; snapshot identity and counts agree.`);

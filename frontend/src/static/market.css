@@ -56,3 +56,27 @@
 .market-workbench[data-theme="light"] .market-footnote a { color:#6555dc; }
 
 .market-workbench[data-theme="light"] .market-footnote { opacity:1; color:#526075; }
+.sector-strength { min-width:0; }
+.sector-strength h2 {font-size:22px; margin:16px 0 8px;}
+.sector-strength p {font-size:13px; line-height:1.7;}
+.sector-map { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.sector-cell { padding:16px; border-radius:12px!important; border-left-width:4px!important; }
+.sector-cell[data-direction="strong"] {border-left-color:#34a592;}
+.sector-cell[data-direction="weak"] {border-left-color:#ca8760;}
+.sector-cell h3 {font-size:16px; margin:0 0 16px;}
+.sector-cell h3 small {font-size:12px; font-weight:500; margin-left:6px;}
+.sector-values {display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px;}
+.sector-values strong {display:block; font-size:27px; font-variant-numeric:tabular-nums; margin:5px 0;}
+.sector-values small {font-size:12px;}
+.sector-cell .MuiButton-root {min-height:44px; font-size:13px;}
+.sector-strength .comparison-controls {display:flex; flex-wrap:wrap; gap:16px; margin:16px 0; font-size:13px;}
+.sector-strength select {min-height:44px; border:1px solid #748094; border-radius:8px; color:inherit; background:transparent; padding:8px; font:inherit;}
+.sector-strength option {background:#fff;color:#152033;}
+@media(max-width:1000px){.sector-map{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:600px){.sector-map{grid-template-columns:1fr;}}
+.sector-view {display:flex;gap:8px;margin-bottom:14px;}
+.sector-view [aria-pressed="true"] {background:rgba(128,115,216,.15);font-weight:750;}
+.sector-table-scroll {overflow-x:auto;}
+.sector-table-scroll table {border-collapse:collapse;width:100%;font-size:13px;}
+.sector-table-scroll th,.sector-table-scroll td {padding:12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
+.sector-table-scroll a {color:inherit;display:inline-block;min-height:32px;line-height:32px;}

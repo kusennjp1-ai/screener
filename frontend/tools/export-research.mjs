@@ -1,3 +1,4 @@
+import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
 import { encodeAssessment } from '../src/static/assessmentEncoding.js';
 import { scanListRow } from './scan-list-payload.mjs';
@@ -181,7 +182,7 @@ manifest.research_generation = createHash('sha256').update(researchContent).dige
 const researchPath = `research-index-${manifest.research_generation.slice(0,16)}.json`;
 await writeFile(resolve(root, researchPath), researchContent);
 entry.assets.research = {path:researchPath};
-await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));
+
 // Remove only obsolete, generated hash-addressed files in these known folders.
 // No source data or historical candidate snapshots are included in this cleanup.
 for(const [directory,keep] of [['research-details',currentDetails],['verified-charts',currentCharts],['scan-list',new Set([entry.pages.scan.list_path,...scanChunks.map(c=>c.path)])]]) {
@@ -228,3 +229,7 @@ console.log(`Daily research exported for ${scan.as_of_date}: ${rows.size} rows.`
 const liquid=[...rows.values()].filter(r=>r.current_price>=10&&r.adv_usd>=20000000);
 const failures={};for(const row of liquid)for(const reason of row.technical_audit.errors)failures[reason]=(failures[reason]||0)+1;
 await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:liquid.length,verified:liquid.filter(r=>r.technical_audit.valid).length,reasons:failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));
+
+await exportWorkbench({root,rows:[...rows.values()],manifest,entry,researchContent});
+// Publish the manifest pointer only after every referenced asset is complete.
+await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));

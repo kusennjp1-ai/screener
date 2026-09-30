@@ -1,0 +1,61 @@
+import { test,expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import AxeBuilder from '@axe-core/playwright';
+import { withAuditFixture } from '../../src/static/testAuditFixture.js';
+import { selectionSnapshot,compareSnapshots } from '../../src/static/candidateHistory.js';
+import { sectorStrength } from '../../src/static/sectorStrength.js';
+const date='2026-09-29';
+const rows=['AMD','TSM','JPM','KLAC','SLAB','MRNA','NDSN'].map((symbol,i)=>withAuditFixture({symbol,company_name:`Synthetic ${symbol}`,market:'US',current_price:102+i,se_pivot_price:100+i,adv_usd:5e7,rs_rating:95-i,eps_rating:92,composite_rating:96,ibd_group_rank:10,gics_sector:i<4?'Technology':'Financial',chart_path:`${symbol}.json`,market_above_50dma:true,market_above_200dma:true},date));
+const bars=Array.from({length:320},(_,i)=>({date:new Date(Date.parse(date)-(319-i)*86400000).toISOString().slice(0,10),open:85+i*.05,high:86+i*.05,low:84+i*.05,close:85.5+i*.05,volume:1e6+i*1000}));
+const current=selectionSnapshot(rows,{as_of:date,rule_version:'test'}),previous=selectionSnapshot(rows.map(r=>({...r,rs_rating:10})),{as_of:'2026-09-28',rule_version:'test'});
+const workbench={as_of:date,snapshot_id:'test',history:{previous_as_of:'2026-09-28'},changes:compareSnapshots(current,previous),sectors:sectorStrength(rows,{as_of_date:date,adjustment:'split-adjusted-close-no-dividend',series:Object.fromEntries(['SPY','XLK','XLF'].map(s=>[s,bars]))},date)};
+const raw=JSON.stringify(workbench),sha256=createHash('sha256').update(raw).digest('hex');
+for(const width of [1440,390])test(`comparison, daily changes, sector navigation at ${width}px`,async({page},info)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.setViewportSize({width,height:900});
+  await page.route('**/static-data/**',async route=>{
+    const file=new URL(route.request().url()).pathname.split('/').pop();
+    if(file==='workbench.json')return route.fulfill({body:raw,contentType:'application/json'});
+    const row=rows.find(r=>`${r.symbol}.json`===file);
+    const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'test',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'},workbench:{path:'workbench.json',sha256,snapshot_id:'test'}},pages:{breadth:{path:'breadth.json'}}}}}
+      :file==='research.json'?{as_of_date:date,rows}:file==='breadth.json'?{payload:{current:{date},chart_data:[]}}:row?{symbol:row.symbol,as_of_date:date,bars:row.symbol==='MRNA'?[]:bars,rs_line:bars.map((b,i)=>({time:b.date,value:1+i*.002})),stock_data:row}:{};
+    await route.fulfill({json:payload});
+  });
+  await page.goto('/');
+  await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('今回通過 7');
+  await page.getByText('変化の内訳を開く',{exact:true}).click();
+  await page.getByText('AMD · 今回通過 · 1条件が変化',{exact:true}).click();
+  await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('前回：未通過');
+  await page.getByText('変化の内訳を開く',{exact:true}).click();
+  await page.getByRole('button',{name:'候補を確認する →'}).click();
+  await page.getByRole('button',{name:'チャート比較',exact:true}).click();
+  await expect(page.getByRole('article',{name:'AMD 比較チャート'}).locator('canvas').first()).toBeVisible();
+  expect(await page.locator('.tv-lightweight-charts').count()).toBeLessThanOrEqual(6);
+  const range=page.getByRole('article',{name:'AMD 比較チャート'}).getByTestId('comparison-visible-range');
+  await expect(range).toContainText('2026-');const before=await range.textContent();
+  await page.getByRole('combobox',{name:'全チャートの期間',exact:true}).selectOption('126');
+  await expect(range).not.toHaveText(before);
+  await page.getByRole('button',{name:'AMD を分析',exact:true}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(await page.locator('.comparison-canvas[data-active-chart="true"]').count()).toBe(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('combobox',{name:'全チャートの期間',exact:true})).toHaveValue('126');
+  await page.getByRole('link',{name:'市場環境',exact:true}).click();
+  await page.getByRole('tab',{name:'業種の強さ',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'金融 XLF'})).toBeVisible();
+  await page.getByRole('button',{name:'表',exact:true}).click();
+  await expect(page.getByRole('table',{name:'業種の相対強度一覧'})).toContainText('3 / 3');
+  await page.getByRole('link',{name:'情報技術 / XLK',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'業種',exact:true})).toHaveValue('Technology');
+  await expect(page.getByRole('heading',{name:'候補リスト 4件'})).toBeVisible();
+  await page.getByRole('button',{name:'候補を確認する →'}).click();
+  for(const mode of ['dark','light']){
+    if(mode==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
+    const axe=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+    expect(axe.violations).toEqual([]);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    await page.screenshot({path:info.outputPath(`workbench-${width}-${mode}.png`)});
+  }
+  expect(errors).toEqual([]);
+});

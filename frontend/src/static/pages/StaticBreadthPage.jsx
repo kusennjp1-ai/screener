@@ -1,3 +1,5 @@
+import ConnectionStatus from '../components/ConnectionStatus';
+import SectorStrength from '../components/SectorStrength';
 import { formatPublished } from '../researchPresentation';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -48,11 +50,11 @@ function StaticBreadthPage() {
   const [timeRange, setTimeRange] = useState('1M');
   // タブはURL（?tab=groups）と同期し、戻る/進むで切り替えを巻き戻せるようにする
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedTab = searchParams.get('tab') === 'groups' ? 1 : 0;
+  const selectedTab = searchParams.get('tab') === 'sectors' ? 2 : searchParams.get('tab') === 'groups' ? 1 : 0;
   const handleTabChange = useCallback((_event, value) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (value === 1) {
+      if(value===2) {next.set('tab','sectors');} else if (value === 1) {
         next.set('tab', 'groups');
       } else {
         next.delete('tab');
@@ -100,6 +102,7 @@ function StaticBreadthPage() {
 
   return (
     <Box component="main" className="market-workbench" data-theme={theme.palette.mode}>
+      <ConnectionStatus date={marketEntry.as_of_date} />
       <header className="market-page-head"><div><div className="research-kicker">MARKET OVERVIEW</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 28, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>データを再確認 ↻</Button></div></header>
       {(summary.fresh.state !== 'recent' || mismatch) && <Alert severity="warning" sx={{ mb: 2 }}>分析日が古い、未確認、または公開データと一致しません。最新の市場状態として扱わないでください。</Alert>}
       <Tabs
@@ -113,6 +116,7 @@ function StaticBreadthPage() {
           sx={{ minHeight: 36, fontSize: '12px' }}
           disabled={!attributionAvailable && groupAttribution == null}
         />
+        {marketEntry.market==='US' && <Tab label="業種の強さ" sx={{minHeight:44}} />}
       </Tabs>
 
       {selectedTab === 0 && (
@@ -165,6 +169,7 @@ function StaticBreadthPage() {
         </>
       )}
 
+      {selectedTab === 2 && <SectorStrength entry={marketEntry} />}
       {selectedTab === 1 && <BreadthGroupAttribution attribution={groupAttribution} />}
       <footer className="market-footnote">4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{formatPublished(breadthQuery.data.published_at || breadthQuery.data.generated_at)}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></footer>
       {metricInfoPopover}

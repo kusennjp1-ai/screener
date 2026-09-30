@@ -846,6 +846,8 @@ jobs:
           npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
           python tools/test_sec_financials.py
           python tools/export-book-benchmark.py --allow-unavailable
+          python tools/restore-candidate-history.py
+          python tools/export-sector-prices.py
           node tools/repair-price-history.mjs
           python tools/test_institutional_holdings.py
           python tools/test_recalculate_setups.py

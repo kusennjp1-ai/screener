@@ -1,3 +1,7 @@
+import ConnectionStatus from '../components/ConnectionStatus';
+import { SECTORS } from '../sectorStrength';
+import { useWorkbench } from '../useWorkbench';
+import DailyChanges from '../components/DailyChanges';
 import { filterRanked, formatPublished, sessionCurrent } from '../researchPresentation';
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,7 +29,11 @@ export default function ResearchPage() {
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
   const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
   const version = manifest.data?.research_generation || manifest.data?.generated_at;
-  const [method, setMethod] = useState('minervini');
+  const params=new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const [method, setMethod] = useState(()=>Object.hasOwn(METHODS,params.get('method'))?params.get('method'):'minervini');
+  const [view,setView]=useState(()=>params.get('view')==='charts'?'charts':'list');
+  const [sector,setSector]=useState(()=>params.get('sector') || '');
+  const workbench=useWorkbench(entry);
   const [personalKey, setPersonalKey] = useState('');
   const [search, setSearch] = useState('');
   const [strict, setStrict] = useState(false);
@@ -62,7 +70,7 @@ export default function ResearchPage() {
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
   const rankings = useMemo(() => ({rows,methods:new Map()}), [rows]);
   const evaluated = useMemo(() => { if (!rankings.methods.has(method)) rankings.methods.set(method,rankCandidates(rankings.rows,method)); return rankings.methods.get(method); }, [method, rankings]);
-  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage }), [evaluated, deferredSearch, strict, onlyWatch, watch, liquid, coverage]);
+  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, onlyWatch, watch, liquid, coverage, sector]);
   const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
   const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
   const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
@@ -120,7 +128,7 @@ export default function ResearchPage() {
     try { localStorage.setItem('research-watch', JSON.stringify(next)); } catch { setStorageError(true); }
   }, [watch]);
   function inspectOrder(ticker) {
-    setMethod('minervini'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
+    setMethod('minervini'); setSector(''); setView('list'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
   const applyVerification = useCallback((ticker, result, date, generation) => {
@@ -146,11 +154,13 @@ export default function ResearchPage() {
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
   return <Box component="main" className="research-workbench" data-mobile-view={mobileView} sx={{ '--accent': theme.palette.mode === 'dark' ? '#a399ff' : '#6555dc' }}>
+    <ConnectionStatus date={bundle.data?.date || entry.as_of_date} />
     <header className="research-heading">
       <Box><div className="research-kicker">米国株スクリーナー</div><Typography component="h1" sx={{ fontSize: { xs: 25, md: 30 }, fontWeight: 700, letterSpacing: '-.03em', mt: .5 }}>今日の投資判断</Typography></Box>
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>データを再確認 ↻</Button></Stack>
     </header>
     {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} onInspect={inspectOrder} onBrowse={browse} />}
+    <DailyChanges query={workbench} method={method} onSelect={inspectOrder} />
     <div className="research-summary">
       <span>分析対象<strong>{rows.length.toLocaleString()} 銘柄</strong></span>
       <span>条件通過<strong>{ranked.filter(r => r.assessment.qualified).length} 銘柄</strong></span>
@@ -172,6 +182,7 @@ export default function ResearchPage() {
         <FormControlLabel control={<Switch size="small" checked={strict} onChange={e => setStrict(e.target.checked)} />} label="全条件通過のみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
         <FormControlLabel control={<Switch size="small" checked={onlyWatch} onChange={e => setOnlyWatch(e.target.checked)} />} label="ウォッチのみ" sx={{ '& .MuiFormControlLabel-label': { fontSize: 13 } }} />
       </Stack>
+      <label className="sector-filter">業種 <select value={sector} onChange={e=>setSector(e.target.value)}><option value="">すべての業種</option>{SECTORS.map(([key,label])=><option key={key} value={key}>{label}</option>)}<option value="Unknown">分類不明</option></select></label>
       <details className="research-disclosure research-options"><summary>表示・保存オプション</summary>      <Typography sx={{fontSize:12,mb:1}}>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。RSは検証できた共通母集団内の順位です。</Typography>
       <ToggleButtonGroup size="small" exclusive value={coverage} onChange={(_,value)=>{if(value){setCoverage(value);}}} aria-label="検証状況" sx={{mb:2}}>
         <ToggleButton value="all">全銘柄</ToggleButton><ToggleButton value="verified">日足検証済み {verifiedCount}</ToggleButton><ToggleButton value="unverified">判定資料不足 {coverageRows.length-verifiedCount}</ToggleButton>
@@ -186,12 +197,12 @@ export default function ResearchPage() {
     {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} /> 銘柄と分析根拠を読み込んでいます…</Box>}
     {storageError && <Alert severity="warning">ウォッチはこの画面のみ保持されます。端末への保存が制限されています。</Alert>}
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
-    <ToggleButtonGroup className="research-mobile-tabs" exclusive value={mobileView} onChange={(_, value) => { if (value === 'list') browse(); if (value === 'detail') {setMobileView(value);focusDetail();} }} fullWidth aria-label="表示パネル">
+    <ToggleButtonGroup className="research-mobile-tabs" exclusive value={mobileView} onChange={(_, value) => { if (value === 'list') browse(); if (value === 'detail') {setView('list');setMobileView(value);focusDetail();} }} fullWidth aria-label="表示パネル">
       <ToggleButton value="list">候補一覧</ToggleButton><ToggleButton value="detail" disabled={!selected}>銘柄分析 {selected?.symbol}</ToggleButton>
     </ToggleButtonGroup>
-    <div className="research-grid">
-      <CandidateBoard ranked={ranked} method={method} selectedSymbol={selected?.symbol} loading={bundle.isLoading} onSelect={selectSymbol} />
-      <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} />
+    <div className="research-grid" data-view={view}>
+      <CandidateBoard ranked={ranked} method={method} selectedSymbol={selected?.symbol} loading={bundle.isLoading} onSelect={selectSymbol} view={view} onView={setView} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
+      {view!=='charts' && <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} />}
     </div>
     <footer className="research-method-note">
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
