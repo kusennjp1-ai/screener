@@ -7,7 +7,7 @@ import { sectorStrength } from '../src/static/sectorStrength.js';
 const hash = value => createHash('sha256').update(value).digest('hex');
 export async function exportWorkbench({root, rows, manifest, entry, researchContent}) {
   const engineFiles=['researchEngine.js','qualificationAudit.js','financialHistory.js','institutionalEvidence.js','candidateHistory.js'];
-  const ruleVersion=hash((await Promise.all(engineFiles.map(f=>readFile(new URL(`../src/static/${f}`,import.meta.url),'utf8')))).join('\n'));
+  const ruleVersion=hash((await Promise.all(engineFiles.map(f=>readFile(new URL(`../src/static/${f}`,import.meta.url),'utf8')))).map(s=>s.replace(/\r\n/g,'\n')).join('\n'));
   const meta={as_of:entry.as_of_date,generated_at:manifest.generated_at,published_at:null,rule_version:ruleVersion,source_research_sha256:hash(researchContent),universe_members_sha256:hash(rows.map(r=>r.symbol).sort().join('\n'))};
   const snapshot=selectionSnapshot(rows,meta);
   const content=JSON.stringify(snapshot), snapshotId=hash(content);

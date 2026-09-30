@@ -215,6 +215,9 @@ function StaticChartViewerModal({
     >
       <Fade in={open}>
         <Box
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="static-chart-viewer-modal"
           sx={{
             position: 'fixed',
             inset: 0,

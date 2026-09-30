@@ -11,7 +11,7 @@ export default function DailyChanges({query,method,onSelect}) {
   const current=Math.min(page,Math.max(0,Math.ceil(items.length/20)-1));
   return <Paper component="section" className="daily-changes" variant="outlined" aria-label="候補の日次変化">
     <div className="daily-changes-heading"><strong>候補の変化</strong><span>{data.history.previous_as_of?`${data.history.previous_as_of} → ${data.as_of}`:`記録開始 ${data.as_of}`}</span></div>
-    {!data.history.previous_as_of ? <p>前回比較は、次の営業日の公開後から表示します。</p> : <p>日次の選定条件の変化です。購入シグナルではありません。流動性フィルター内を比較します。</p>}
+    {!data.history.previous_as_of ? <p>前回比較は、次の営業日の公開後から表示します。</p> : <p>日次の選定条件の変化です。購入シグナルではありません。全業種・流動性フィルター内を比較します。</p>}
     {data.history.previous_as_of&&<p>{Object.entries(CHANGE_LABELS).filter(([key])=>key!=='unchanged').map(([key,label])=>`${label} ${summary.counts[key]}`).join(' · ')}</p>}
     <details><summary>変化の内訳を開く</summary>
       {!data.history.previous_as_of&&<p>{data.history.reason}</p>}
