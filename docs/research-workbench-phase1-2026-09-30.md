@@ -47,3 +47,27 @@ These are separately scoped ideas, not completed features or promised trading re
 - The existing SEC 13F access/coverage and historical point-in-time financial-data limitations remain. This phase does not turn missing data into passes, or claim investment performance.
 
 Technical reference for synchronized ranges: [Lightweight Charts time-scale API](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/ITimeScaleApi). The installed library implementation and existing chart wrapper were reused; third-party screen assets and sample prices were not copied into production.
+
+## Measured performance
+
+Same workstation, Chromium in-app browser, actual 1265px viewport, three interleaved warm reloads of production builds against the identical 2026-09-29 dataset. No CPU throttling. A local server recorded DOM readiness through PerformanceObserver / MutationObserver; these are not internet cold-load or completed GPU-paint measurements.
+
+| Metric | Before | Phase 1 |
+|---|---:|---:|
+| First candidate DOM, median | 454.4 ms | 469.3 ms |
+| First chart canvas DOM, median | 519.1 ms | 534.7 ms |
+| Longest initial task across three runs | 86 ms | 87 ms |
+| Research index, gzip equivalent | 1,751,381 bytes | unchanged |
+| Additional workbench, gzip equivalent | none | 28,066 bytes |
+| Full observations downloaded at startup | none | none |
+
+Candidate samples: before 454.4 / 457.8 / 436.9 ms; after 516.5 / 469.3 / 439.7 ms. Chart samples: before 519.1 / 528.0 / 510.7 ms; after 596.8 / 534.7 / 518.0 ms. Compression figures are computed from files, not browser-observed compressed wire transfer; the measurement server served uncompressed content. Workbench raw size was 1,160,554 bytes, compressed history archive 706,980 bytes. Browser heap readings varied with GC and other open tabs and do not support a memory-improvement claim. Comparison mounts only visible cards (two in the inspected desktop viewport, at most six); opening the detail modal leaves zero comparison charts mounted.
+
+The installed desktop browser's viewport override did not change its actual dimensions. Responsive 390px appearance was additionally inspected in a local fixed-width iframe; authoritative 1440px / 390px interaction and accessibility checks run in CI Chromium using real viewport dimensions.
+
+## Final checks
+
+- Frontend suite on 5b2fa3d: 130 files, 1,024 tests passed; six frontend smoke tests passed. Subsequent focused tests for the dialog/history/sector changes: 19 passed. Lint: zero errors, eight existing warnings.
+- Browser regression on bb73ba8: all four tests passed, including 1440px and 390px comparison/navigation and dark/light axe checks. CI screenshots were downloaded and visually inspected. Fixtures are explicitly labeled Synthetic and never exported into production.
+- Regression testing exposed a missing dialog role on the existing chart modal. The actual modal now has `role="dialog"`, `aria-modal` and a heading reference; the test was retained rather than weakened.
+- [CI and browser screenshots](https://github.com/kusennjp1-ai/screener/actions/runs/36737611608) (`static-browser-evidence` artifact).
