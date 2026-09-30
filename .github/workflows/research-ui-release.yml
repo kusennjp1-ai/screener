@@ -1,6 +1,11 @@
 name: Research UI Release
 on:
   workflow_dispatch:
+    inputs:
+      ui_only:
+        description: 'Reuse verified published fundamentals and setups for display-only changes'
+        type: boolean
+        default: false
   # A long-running daily export may have started before the latest UI commit.
   # Rebuild its completed data with current rules so it cannot leave an old UI live.
   workflow_run:
@@ -31,7 +36,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - name: Verify research rules and 100 synthetic task profiles
-        run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx --maxWorkers=2
+        run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/components/DailyChanges.test.jsx src/static/components/CandidateCharts.test.jsx --maxWorkers=2
         working-directory: frontend
       - name: Restore the last successful published data without rewriting its timestamp
         env:
@@ -60,6 +65,7 @@ jobs:
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
+        if: ${{ !inputs.ui_only }}
         working-directory: frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
@@ -82,6 +88,14 @@ jobs:
           python tools/export-financial-history.py --limit 200
           node tools/export-research.mjs
           python tools/export-entry-context.py
+      - name: Prepare workbench using verified published evidence
+        if: ${{ inputs.ui_only }}
+        working-directory: frontend
+        run: |
+          python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
+          python tools/export-book-benchmark.py --allow-unavailable
+          python tools/restore-candidate-history.py
+          python tools/export-sector-prices.py
       - name: Build with daily selection export
         working-directory: frontend
         env:
