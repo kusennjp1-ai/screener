@@ -5,7 +5,7 @@ import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { selectionSnapshot,compareSnapshots } from '../../src/static/candidateHistory.js';
 import { sectorStrength } from '../../src/static/sectorStrength.js';
 const date='2026-09-29';
-const rows=['AMD','TSM','JPM','KLAC','SLAB','MRNA','NDSN'].map((symbol,i)=>withAuditFixture({symbol,company_name:`Synthetic ${symbol}`,market:'US',current_price:102+i,se_pivot_price:100+i,adv_usd:5e7,rs_rating:95-i,eps_rating:92,composite_rating:96,ibd_group_rank:10,gics_sector:i<4?'Technology':'Financial',chart_path:`${symbol}.json`,market_above_50dma:true,market_above_200dma:true},date));
+const rows=['AMD','TSM','JPM','KLAC','SLAB','MRNA','NDSN'].map((symbol,i)=>withAuditFixture({symbol,company_name:`Synthetic ${symbol}`,market:'US',current_price:102,se_pivot_price:100,adv_usd:5e7,rs_rating:95-i,eps_rating:92,composite_rating:96,ibd_group_rank:10,gics_sector:i<4?'Technology':'Financial',chart_path:`${symbol}.json`,market_above_50dma:true,market_above_200dma:true},date));
 const bars=Array.from({length:320},(_,i)=>({date:new Date(Date.parse(date)-(319-i)*86400000).toISOString().slice(0,10),open:85+i*.05,high:86+i*.05,low:84+i*.05,close:85.5+i*.05,volume:1e6+i*1000}));
 const current=selectionSnapshot(rows,{as_of:date,rule_version:'test'}),previous=selectionSnapshot(rows.map(r=>({...r,rs_rating:10})),{as_of:'2026-09-28',rule_version:'test'});
 const workbench={as_of:date,snapshot_id:'test',history:{previous_as_of:'2026-09-28'},changes:compareSnapshots(current,previous),sectors:sectorStrength(rows,{as_of_date:date,adjustment:'split-adjusted-close-no-dividend',series:Object.fromEntries(['SPY','XLK','XLF'].map(s=>[s,bars]))},date)};

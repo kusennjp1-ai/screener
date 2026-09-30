@@ -16,12 +16,12 @@ export default memo(function CandidateBoard({ranked,method,selectedSymbol,loadin
   },[ranked,method,sort]);
   const maxPage=Math.max(0,Math.ceil(ordered.length/50)-1), current=Math.min(page,maxPage);
   return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="候補リスト" className="research-panel research-list">
-    <div className="candidate-board-heading"><h2>候補リスト <small>{ranked.length.toLocaleString()}件</small></h2>
+    <div className="candidate-board-heading"><h2>候補リスト <small>{loading?'—':ranked.length.toLocaleString()}件</small></h2>
       <label>並び順 <select aria-label="候補の並び順" value={sort} onChange={e=>{setSort(e.target.value);setPage(0);}}><option value="rank">選定・買い位置</option><option value="state">状態</option><option value="distance">ピボットに近い順</option><option value="rs">RSが高い順</option><option value="volume">出来高比が高い順</option></select></label>
     </div>
     <div className="candidate-view-switch" role="group" aria-label="候補の表示形式"><Button aria-pressed={view==='list'} onClick={()=>onView?.('list')}>一覧</Button><Button aria-pressed={view==='charts'} onClick={()=>onView?.('charts')}>チャート比較</Button></div>
     <p className="candidate-help">状態は価格位置です。購入条件の合格とは別に表示します。</p>
-    {view==='charts' && <CandidateCharts ordered={ordered} {...{method,date,generation,market,now,paused}} onSelect={onCompare || onSelect} />}
+    {view==='charts' && !loading && <CandidateCharts ordered={ordered} {...{method,date,generation,market,now,paused}} onSelect={onCompare || onSelect} />}
     <div className="candidate-scroll" hidden={view!=='list'}><table aria-label="投資手法別の銘柄候補" className="candidate-table">
       <thead><tr><th>銘柄 / 株価</th><th>状態</th><th>ピボット比</th><th>RS / 出来高</th></tr></thead>
       <tbody>{ordered.slice(current*50,current*50+50).map(({row:r,assessment:a,plan:p})=><tr key={r.symbol} aria-selected={r.symbol===selectedSymbol}>

@@ -162,8 +162,8 @@ export default function ResearchPage() {
     {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} onInspect={inspectOrder} onBrowse={browse} />}
     <DailyChanges query={workbench} method={method} onSelect={inspectOrder} />
     <div className="research-summary">
-      <span>分析対象<strong>{rows.length.toLocaleString()} 銘柄</strong></span>
-      <span>条件通過<strong>{ranked.filter(r => r.assessment.qualified).length} 銘柄</strong></span>
+      <span>分析対象<strong>{bundle.data?rows.length.toLocaleString():'—'} 銘柄</strong></span>
+      <span>条件通過<strong>{bundle.data?ranked.filter(r => r.assessment.qualified).length:'—'} 銘柄</strong></span>
       <span className="coverage-summary">日足検証 {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}</span>
       <Typography variant="body2" color="text.secondary" sx={{ ml: { md: 'auto' }, fontSize: 12 }}>公開更新：{manifest.data?.generated_at ? formatPublished(manifest.data.generated_at) : '未確認'}</Typography>
     </div>

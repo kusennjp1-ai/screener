@@ -11,9 +11,10 @@ export default function DailyChanges({query,method,onSelect}) {
   const current=Math.min(page,Math.max(0,Math.ceil(items.length/20)-1));
   return <Paper component="section" className="daily-changes" variant="outlined" aria-label="候補の日次変化">
     <div className="daily-changes-heading"><strong>候補の変化</strong><span>{data.history.previous_as_of?`${data.history.previous_as_of} → ${data.as_of}`:`記録開始 ${data.as_of}`}</span></div>
-    {!data.history.previous_as_of ? <p>{data.history.reason} 次の営業日の公開データから比較できます。</p> : <p>日次の選定条件の変化です。購入シグナルではありません。流動性フィルター内を比較します。</p>}
+    {!data.history.previous_as_of ? <p>前回比較は、次の営業日の公開後から表示します。</p> : <p>日次の選定条件の変化です。購入シグナルではありません。流動性フィルター内を比較します。</p>}
     {data.history.previous_as_of&&<p>{Object.entries(CHANGE_LABELS).filter(([key])=>key!=='unchanged').map(([key,label])=>`${label} ${summary.counts[key]}`).join(' · ')}</p>}
     <details><summary>変化の内訳を開く</summary>
+      {!data.history.previous_as_of&&<p>{data.history.reason}</p>}
       <div className="change-tabs" role="group" aria-label="変化の種類">{Object.entries(CHANGE_LABELS).map(([key,label])=><Button key={key} aria-pressed={kind===key} onClick={()=>{setKind(key);setPage(0);}}>{label} {summary.counts[key]}</Button>)}</div>
       {items.slice(current*20,current*20+20).map(item=><details className="change-row" key={item.symbol}><summary>{item.symbol} · {CHANGE_LABELS[item.state]}{item.changes.length?` · ${item.changes.length}条件が変化`:''}</summary>
         {item.reason&&<p>{item.reason}</p>}{item.changes.map(c=><div key={c.id}><strong>{c.label}</strong><p>前回：{display(c.before)}{c.unit}<br/>今回：{display(c.after)}{c.unit}</p></div>)}
