@@ -74,6 +74,7 @@ export default function ResearchPage() {
   const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
   const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
   const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
+  const availableSymbols = useMemo(() => new Set(rows.map(r => r.symbol)), [rows]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
   const detail = useQuery({queryKey:['researchDetail', selectedSummary?.research_detail_path, version],
     enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity,
@@ -132,7 +133,7 @@ export default function ResearchPage() {
     focusDetail();
   }
   function inspectChanged(ticker) {
-    setSector(''); setView('list'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
+    setSector(''); setView('list'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setLiquid(false); setCoverage('all'); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
   const applyVerification = useCallback((ticker, result, date, generation) => {
@@ -164,7 +165,7 @@ export default function ResearchPage() {
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>データを再確認 ↻</Button></Stack>
     </header>
     {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} onInspect={inspectOrder} onBrowse={browse} />}
-    <DailyChanges query={workbench} method={method} onSelect={inspectChanged} />
+    <DailyChanges query={workbench} method={method} onSelect={inspectChanged} availableSymbols={availableSymbols} />
     <div className="research-summary">
       <span>分析対象<strong>{bundle.data?rows.length.toLocaleString():'—'} 銘柄</strong></span>
       <span>条件通過<strong>{bundle.data?ranked.filter(r => r.assessment.qualified).length:'—'} 銘柄</strong></span>
