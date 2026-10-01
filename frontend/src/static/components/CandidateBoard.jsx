@@ -11,7 +11,7 @@ const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(
 const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onSelect,onCompare,onMove}) {
  const {row:r,assessment:a,plan:p}=item,key=stateKey(p.state),[label,,tone]=STATES[key];
  const missing=useMemo(()=>nearOnly?singleMissingCondition(assess(r,method)):null,[nearOnly,r,method]);
- return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${r.rs_rating??'未確認'}。選定 ${a.passed}/${a.total}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
+ return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(r.se_volume_vs_50d)}。選定 ${a.passed}/${a.total}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
   if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
  }}>
