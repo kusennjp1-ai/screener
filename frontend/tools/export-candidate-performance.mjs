@@ -4,6 +4,14 @@ import { createHash } from 'node:crypto';
 import { candidatePerformance } from '../src/static/candidatePerformance.js';
 import { auditDailyBars } from '../src/static/qualificationAudit.js';
 
+export function performanceBenchmarkInputs(prices, asOf) {
+  const current = prices?.as_of_date === asOf && prices?.calendar === 'NYSE' && prices?.adjustment === 'split-adjusted-close-no-dividend';
+  // A price series is not an exchange calendar: deriving sessions from SPY
+  // silently compresses any missing benchmark bar into a longer horizon.
+  return { benchmark: current ? { verified: true, bars: prices.series?.SPY || [] } : null,
+    sessions: current && Array.isArray(prices.sessions) ? prices.sessions : [] };
+}
+
 export async function exportCandidatePerformance({ root, snapshots, rows, prices, entry, manifest }) {
   const eligible = new Set(snapshots.flatMap(snapshot => snapshot.records.filter(record => record.liquid === true && Object.values(record.methods || {}).some(method => method.state === 'pass')).map(record => record.symbol)));
   const stocks = new Map();
@@ -16,9 +24,7 @@ export async function exportCandidatePerformance({ root, snapshots, rows, prices
       if (audit.valid) stocks.set(row.symbol, { verified: true, bars: payload.bars.map(({ date, close }) => ({ date, close })) });
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  const currentBenchmark = prices?.as_of_date === entry.as_of_date && prices?.calendar === 'NYSE' && prices?.adjustment === 'split-adjusted-close-no-dividend';
-  const benchmark = currentBenchmark ? { verified: true, bars: prices.series?.SPY || [] } : null;
-  const sessions = currentBenchmark ? prices.sessions || benchmark.bars.map(bar => bar.date) : [];
+  const { benchmark, sessions } = performanceBenchmarkInputs(prices, entry.as_of_date);
   const data = { ...candidatePerformance({ snapshots, asOf: entry.as_of_date, sessions, stocks, benchmark }), generated_at: manifest.generated_at,
     source: { candidate_history: 'previously-published-catalog', prices: 'current independently verified daily chart payloads', benchmark: prices?.source || null },
     history_first_as_of: snapshots[0]?.as_of || null };
