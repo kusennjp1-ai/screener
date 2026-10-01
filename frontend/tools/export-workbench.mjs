@@ -33,7 +33,7 @@ export async function exportWorkbench({root, rows, manifest, entry, researchCont
     // full preceding snapshot only; a 126-session archive must not retain 126
     // copies of all detailed rule evidence in build memory.
     const retained=value.as_of===previousDate ? value : {...value,records:value.records.map(record=>({...record,methods:Object.fromEntries(Object.entries(record.methods).map(([method,result])=>[method,{state:result.state}]))}))};
-    published.push(retained);
+    published.push({...retained,published_ref:ref});
     if(value.as_of<entry.as_of_date)history.push(retained);
   }
   history.sort((a,b)=>a.as_of.localeCompare(b.as_of));

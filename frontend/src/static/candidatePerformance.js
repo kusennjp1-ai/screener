@@ -50,14 +50,17 @@ function summarize(results, cohortCount) {
 
 // Cohorts come only from the restored publication catalog. Current passes must
 // never be used to reconstruct who would have qualified on an earlier date.
-export function candidatePerformance({ snapshots, asOf, sessions, stocks, benchmark }) {
+export function candidatePerformance({ snapshots, asOf, sessions, stocks, benchmark, observationFor }) {
   const accumulators = Object.fromEntries(methods.map(method => [method, Object.fromEntries(PERFORMANCE_HORIZONS.map(horizon => [horizon, []]))]));
   const cohorts = snapshots.filter(snapshot => snapshot.as_of <= asOf).map(snapshot => ({
     as_of: snapshot.as_of, rule_version: snapshot.rule_version, universe_version: snapshot.universe_version,
     methods: Object.fromEntries(methods.map(method => {
       const records = snapshot.records.filter(record => record.market === 'US' && record.liquid === true && record.methods?.[method]?.state === 'pass');
       return [method, Object.fromEntries(PERFORMANCE_HORIZONS.map(horizon => {
-        const results = records.map(record => measureCandidateReturn({ startDate: snapshot.as_of, asOf, sessions, stock: stocks.get(record.symbol), benchmark, horizon }));
+        const results = records.map(record => {
+          const measure = () => measureCandidateReturn({ startDate: snapshot.as_of, asOf, sessions, stock: stocks.get(record.symbol), benchmark, horizon });
+          return observationFor ? observationFor({ snapshot, record, horizon, measure }) : measure();
+        });
         accumulators[method][horizon].push(...results);
         return [horizon, summarize(results, records.length)];
       }))];
