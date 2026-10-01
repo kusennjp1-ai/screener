@@ -29,6 +29,6 @@ export function researchTheme(mode) {
       success:{main:p.zone},error:{main:p.neg},warning:{main:p.ext},info:{main:p.wait},divider:p.line},
     typography:{fontFamily:fonts.body,fontSize:14,h1:{fontSize:42,fontWeight:700},h2:{fontSize:34,fontWeight:700},h3:{fontSize:26},h4:{fontSize:20},h5:{fontSize:16},h6:{fontSize:14},body1:{fontSize:14},body2:{fontSize:13},caption:{fontSize:12},overline:{fontSize:11},button:{fontSize:13,textTransform:'none'}},
     shape:{borderRadius:8},
-    components:{MuiPaper:{styleOverrides:{root:{backgroundImage:'none',boxShadow:'none'}}},MuiButton:{styleOverrides:{root:{minHeight:24,minWidth:24}}},MuiIconButton:{styleOverrides:{root:{minHeight:24,minWidth:24}}},MuiTooltip:{styleOverrides:{tooltip:{fontSize:12}}}},
+    components:{MuiPaper:{styleOverrides:{root:{backgroundImage:'none',boxShadow:'none'}}},MuiButton:{styleOverrides:{root:{minHeight:24,minWidth:24}}},MuiIconButton:{styleOverrides:{root:{minHeight:24,minWidth:24}}},MuiChip:{styleOverrides:{root:{fontSize:11},label:{fontSize:11}}},MuiInputBase:{styleOverrides:{input:{minHeight:24}}},MuiTooltip:{styleOverrides:{tooltip:{fontSize:12}}}},
   };
 }
