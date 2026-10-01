@@ -1,0 +1,171 @@
+{
+  "task": "D9",
+  "cpu_rate": 4,
+  "point_count_required": 207,
+  "maximum_first_frame_ms": 50,
+  "measurement": "Production React mount, synchronous real draw and layout, then next animation frame. Three runs including the first cold mount; no warm-up. Instrumented cold mounts are separate diagnostic contexts and excluded from acceptance measurements.",
+  "before": {
+    "commit": "41325a74af152d86ea5ef533a6ac852d24f98395",
+    "run": "https://github.com/kusennjp1-ai/screener/actions/runs/36874254419",
+    "results": [
+      {
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "cpu_rate": 4,
+        "runs": [
+          {
+            "render_layout_ms": 64.70000000001164,
+            "first_frame_ms": 68.90000000000873,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 14.60000000000582,
+            "first_frame_ms": 17.5,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 20.30000000000291,
+            "first_frame_ms": 22.39999999999418,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          }
+        ],
+        "instrumented": {
+          "render_layout_ms": 77.29999999998836,
+          "first_frame_ms": 82.5,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        "pass": false
+      },
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "cpu_rate": 4,
+        "runs": [
+          {
+            "render_layout_ms": 57.5,
+            "first_frame_ms": 62.29999999998836,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 14.60000000000582,
+            "first_frame_ms": 17.40000000000873,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 18.30000000000291,
+            "first_frame_ms": 21.30000000000291,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          }
+        ],
+        "instrumented": {
+          "render_layout_ms": 71,
+          "first_frame_ms": 77.5,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        "pass": false
+      }
+    ]
+  },
+  "after": {
+    "commit": "350892872ddb5805d939c26c05addf3c74e8b22a",
+    "run": "https://github.com/kusennjp1-ai/screener/actions/runs/36878108950",
+    "results": [
+      {
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "cpu_rate": 4,
+        "runs": [
+          {
+            "render_layout_ms": 35.09999999999127,
+            "first_frame_ms": 40.69999999999709,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 4.7999999999883585,
+            "first_frame_ms": 16.59999999999127,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 5.5,
+            "first_frame_ms": 16.5,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          }
+        ],
+        "instrumented": {
+          "render_layout_ms": 37.69999999999709,
+          "first_frame_ms": 44.90000000000873,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        "pass": true
+      },
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "cpu_rate": 4,
+        "runs": [
+          {
+            "render_layout_ms": 31.30000000000291,
+            "first_frame_ms": 36.30000000000291,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 4.100000000005821,
+            "first_frame_ms": 16.60000000000582,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          },
+          {
+            "render_layout_ms": 4.7999999999883585,
+            "first_frame_ms": 17.09999999999127,
+            "point_count": 207,
+            "as_of_date": "2026-09-29",
+            "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+          }
+        ],
+        "instrumented": {
+          "render_layout_ms": 37.40000000000873,
+          "first_frame_ms": 43.80000000000291,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        "pass": true
+      }
+    ]
+  }
+}
