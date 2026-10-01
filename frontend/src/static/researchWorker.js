@@ -1,4 +1,5 @@
 import { prepareResearchBundle } from './researchPreprocess.js';
+import { researchPackets } from './researchWorkerPackets.js';
 
 async function read(url, sha256) {
   const response = await fetch(url, { cache: /-[a-f0-9]{16}\.json$/.test(url) ? 'default' : 'no-cache', headers: { Accept: 'application/json' } });
@@ -14,14 +15,15 @@ async function read(url, sha256) {
 self.onmessage = async ({ data }) => {
   try {
     if (data.operation === 'prepare') {
-      self.postMessage({ result: prepareResearchBundle(data.payloads, data.date) });
+      for(const packet of researchPackets(prepareResearchBundle(data.payloads,data.date))) self.postMessage({packet});
       return;
     }
     const index = await read(data.url, data.sha256);
     const result = data.operation === 'research'
       ? prepareResearchBundle([index, ...await Promise.all((index.chunks || []).map(chunk => read(new URL(chunk.path, data.baseUrl).href)))], data.date)
       : index;
-    self.postMessage({ result });
+    if(data.operation==='research') for(const packet of researchPackets(result)) self.postMessage({packet});
+    else self.postMessage({ result });
   } catch (error) {
     self.postMessage({ error: error.message });
   }

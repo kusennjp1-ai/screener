@@ -1,12 +1,17 @@
 import { getStaticDataUrl } from '../config/runtimeMode';
 import { prepareResearchBundle } from './researchPreprocess';
+import { createResearchReceiver } from './researchWorkerPackets';
 
 export function runDataWorker(request, signal) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./researchWorker.js', import.meta.url), { type: 'module', name: 'research-data' });
     const dispose = () => { worker.terminate(); signal?.removeEventListener('abort', abort); };
     const abort = () => { dispose(); reject(new DOMException('Aborted', 'AbortError')); };
-    worker.onmessage = ({ data }) => { dispose(); if (data.error) reject(Error(data.error)); else resolve(data.result); };
+    const receive=createResearchReceiver();
+    worker.onmessage = ({ data }) => {
+      if(data.packet) { const result=receive(data.packet);if(result){dispose();resolve(result);}return; }
+      dispose(); if (data.error) reject(Error(data.error)); else resolve(data.result);
+    };
     worker.onerror = () => { dispose(); reject(Error('分析データの前処理に失敗しました')); };
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) { abort(); return; }
