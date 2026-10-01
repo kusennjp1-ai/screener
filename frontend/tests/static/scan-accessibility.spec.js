@@ -36,6 +36,12 @@ for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({path:info.outputPath(`scan-${viewport.width}-${theme}.png`),fullPage:true});
     // Expanded controls must also retain names and sufficient contrast.
+    if (viewport.width === 390) {
+      const tools = page.getByRole('button', {name: /条件・使い方/});
+      await expect(tools).toHaveAttribute('aria-expanded', 'false');
+      await tools.click();
+      await expect(tools).toHaveAttribute('aria-expanded', 'true');
+    }
     await page.getByRole('button',{name:'絞り込みを開く'}).click();
     await page.getByRole('button',{name:'財務を開く'}).click();
     const expanded = await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
