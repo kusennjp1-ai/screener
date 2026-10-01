@@ -9,7 +9,7 @@ export function runDataWorker(request, signal) {
     const abort = () => { dispose(); reject(new DOMException('Aborted', 'AbortError')); };
     const receive=createResearchReceiver();
     worker.onmessage = ({ data }) => {
-      if(data.packet) { const result=receive(data.packet);if(result){dispose();resolve(result);}return; }
+      if(data.packet) { try { const result=receive(data.packet);if(result){dispose();resolve(result);} } catch(error) {dispose();reject(error);} return; }
       dispose(); if (data.error) reject(Error(data.error)); else resolve(data.result);
     };
     worker.onerror = () => { dispose(); reject(Error('分析データの前処理に失敗しました')); };

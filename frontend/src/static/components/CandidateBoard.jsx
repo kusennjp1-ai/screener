@@ -1,6 +1,6 @@
 import CandidateCharts from './CandidateCharts';
 import PositionMeter from './PositionMeter';
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Button, Paper } from '@mui/material';
 import { assess, entryPlan } from '../researchEngine';
 import { singleMissingCondition } from '../missingCondition';
@@ -27,14 +27,15 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
 export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false}) {
  const [sort,setSort]=useState('rank'),[page,setPage]=useState(0);
  const ordered=useMemo(()=>{
+  if(sort==='rank')return ranked;
   const values=ranked.map(item=>({...item,plan:entryPlan(item.row,null,method)}));
-  if(sort==='rank')return values;
   const value=item=>sort==='distance'?(item.plan.distance==null?null:Math.abs(item.plan.distance)):sort==='rs'?item.row.rs_rating:sort==='volume'?item.row.se_volume_vs_50d:stateOrder(item.plan.state);
   return values.sort((a,b)=>{const av=value(a),bv=value(b);return av==null?(bv==null?0:1):bv==null?-1:(av-bv)*(sort==='rs'||sort==='volume'?-1:1)||a.row.symbol.localeCompare(b.row.symbol);});
  },[ranked,method,sort]);
  const maxPage=Math.max(0,Math.ceil(ordered.length/50)-1),current=Math.min(page,maxPage);
- const sortBy=key=>{setSort(key);setPage(0);};
- const move=(symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){onSelect(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{element.closest('.candidate-scroll')?.querySelectorAll('.candidate-row')[(index+direction)%50]?.focus({preventScroll:false});});}};
+ const visible=useMemo(()=>ordered.slice(current*50,current*50+50).map(item=>item.plan?item:{...item,plan:entryPlan(item.row,null,method)}),[ordered,current,method]);
+ const sortBy=useCallback(key=>{setSort(key);setPage(0);},[]);
+ const move=useCallback((symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){onSelect(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{element.closest('.candidate-scroll')?.querySelectorAll('.candidate-row')[(index+direction)%50]?.focus({preventScroll:false});});}},[ordered,onSelect]);
  return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="候補リスト" className={`research-panel research-list${compareOnly?' compare-only':''}`}>
   {!compareOnly&&<>{toolbar}<div className="candidate-board-heading"><h2>候補リスト <small>{loading?'—':ranked.length.toLocaleString()}件</small></h2><label><span className="sr-only">並び順</span><select aria-label="候補の並び順" value={sort} onChange={e=>sortBy(e.target.value)}>{Object.entries(SORTS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{onNearToggle&&<button className="near-pass-toggle" aria-pressed={nearOnly} onClick={onNearToggle}>あと1条件</button>}{onFilters&&<button onClick={onFilters} aria-label="候補を絞り込む">絞込</button>}</div>
   <div className="candidate-legend"><span>● ゾーン内 ◔ 待ち ▲ 超過</span><span>帯＝買いゾーン / 線＝ピボット</span></div></>}
@@ -42,7 +43,7 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
   {view==='charts'&&!loading&&<CandidateCharts ordered={ordered} {...{method,nearOnly,date,generation,market,now,paused}} onSelect={onCompare||onSelect}/>}
   <div className="candidate-scroll" hidden={view!=='list'}>
    <div className="candidate-columns" role="group" aria-label="列の並べ替え">{[['rank','銘柄'],['state','位置'],['distance','ピボット比'],['rs','RS'],['volume','出来高']].map(([key,label])=><button key={key} aria-label={`${label}で並べ替え`} aria-pressed={sort===key} onClick={()=>sortBy(key)}>{label}{sort===key?' ↓':''}</button>)}</div>
-   <div role="list" aria-label="投資手法別の銘柄候補">{ordered.slice(current*50,current*50+50).map(item=><div role="listitem" key={item.row.symbol}><CandidateRow item={item} method={method} nearOnly={nearOnly} selected={item.row.symbol===selectedSymbol} onSelect={onSelect} onCompare={onCompare} onMove={move}/></div>)}</div>
+   <div role="list" aria-label="投資手法別の銘柄候補">{visible.map(item=><div role="listitem" key={item.row.symbol}><CandidateRow item={item} method={method} nearOnly={nearOnly} selected={item.row.symbol===selectedSymbol} onSelect={onSelect} onCompare={onCompare} onMove={move}/></div>)}</div>
   </div>
   {!ranked.length&&!loading&&<p className="candidate-help">該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</p>}
   {view==='list'&&maxPage>0&&<div className="candidate-pagination"><Button disabled={!current} onClick={()=>setPage(current-1)}>前の50件</Button><span>{current+1} / {maxPage+1}</span><Button disabled={current===maxPage} onClick={()=>setPage(current+1)}>次の50件</Button></div>}

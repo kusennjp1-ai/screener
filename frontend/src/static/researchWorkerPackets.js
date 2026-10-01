@@ -9,12 +9,31 @@ export function* researchPackets(bundle, size = 300) {
   yield {kind:'complete',date:bundle.date,prepared:{...bundle.prepared,candidates:bundle.prepared.candidates.map(row=>ids.get(row))}};
 }
 
+// Workbench history has thousands of change records, independent of the row
+// bundle. Keep that second Worker delivery bounded as well.
+export function* workbenchPackets(value, size = 300) {
+  const changes=Object.fromEntries(Object.entries(value.changes || {}).map(([method,entry])=>[method,{...entry,items:[]} ]));
+  yield {kind:'workbench-start',value:{...value,changes}};
+  for(const [method,entry] of Object.entries(value.changes || {})) {
+    if(!Array.isArray(entry.items)) throw Error('Invalid workbench change records');
+    for(let offset=0;offset<entry.items.length;offset+=size) yield {kind:'workbench-items',method,items:entry.items.slice(offset,offset+size)};
+  }
+  yield {kind:'workbench-complete'};
+}
+
 export function createResearchReceiver() {
   const rows=[],rankings={};
+  let workbench;
   return packet => {
     if(packet.kind==='rows') rows.push(...packet.rows);
     else if(packet.kind==='ranking') (rankings[packet.method] ||= []).push(...packet.items.map(({id,assessment})=>({row:rows[id],assessment})));
     else if(packet.kind==='complete') return {rows,rankings,date:packet.date,prepared:{...packet.prepared,candidates:packet.prepared.candidates.map(id=>rows[id])}};
+    else if(packet.kind==='workbench-start') workbench=packet.value;
+    else if(packet.kind==='workbench-items') {
+      if(!workbench || !Object.hasOwn(workbench.changes,packet.method)) throw Error('Invalid workbench packet');
+      workbench.changes[packet.method].items.push(...packet.items);
+    }
+    else if(packet.kind==='workbench-complete') {if(!workbench)throw Error('Missing workbench header');return workbench;}
     return null;
   };
 }

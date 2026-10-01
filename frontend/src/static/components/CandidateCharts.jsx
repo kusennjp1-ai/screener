@@ -1,16 +1,17 @@
-import { memo, useEffect, useId, useRef, useState } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Paper, useMediaQuery } from '@mui/material';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 import { entryReadiness } from '../entryReadiness';
-import { assess } from '../researchEngine';
+import { assess, entryPlan } from '../researchEngine';
 import { singleMissingCondition } from '../missingCondition';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 import './comparison.css';
 
 const Card = memo(function ComparisonCard({ item, date, generation, method, nearOnly, market, now, sessions, onSelect, paused }) {
-  const { row, plan } = item, ref = useRef(null), [visible, setVisible] = useState(false);
+  const { row } = item, ref = useRef(null), [visible, setVisible] = useState(false);
+  const plan=useMemo(()=>item.plan || entryPlan(row,null,method),[item,row,method]);
   const descriptionId = useId(), smallScreen = useMediaQuery('(max-width:767px)');
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { rootMargin: '0px' });
