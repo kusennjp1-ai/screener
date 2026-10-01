@@ -70,3 +70,21 @@ it('never requests notification permission implicitly and uses the event ID for 
   expect(showNotification).toHaveBeenCalledWith('CASE の状態変化', expect.objectContaining({ tag: event.id, renotify: false, data: { url: 'https://example.com/screener/#/?symbol=CASE' } }));
   expect(notification.requestPermission).not.toHaveBeenCalled();
 });
+it('opens the symbol when a supported desktop notification is clicked without a service worker', async () => {
+  let delivered;
+  class DesktopNotification {
+    static permission = 'granted';
+    constructor(title, options) { this.title = title; this.options = options; this.close = vi.fn(); delivered = this; }
+  }
+  const assign = vi.fn(), focus = vi.fn();
+  vi.stubGlobal('location', { assign }); vi.stubGlobal('focus', focus);
+  try {
+    const event = daily(daily(emptyWatchState(), 98).state, 102, d2).added[0];
+    expect(await deliverLocalWatchNotification(event, { enabled: true, notification: DesktopNotification, serviceWorker: null, baseUrl: 'https://example.com/screener/#/compare' })).toBe(true);
+    expect(assign).not.toHaveBeenCalled();
+    delivered.onclick({ preventDefault: vi.fn() });
+    expect(delivered.close).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledWith('https://example.com/screener/#/?symbol=CASE');
+  } finally { vi.unstubAllGlobals(); }
+});

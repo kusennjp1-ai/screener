@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { advanceDailyWatch, advanceLiveWatch, deliverLocalWatchNotification, readWatchState, watchStorage, WATCH_NOTIFICATION_KEY, WATCH_NOTIFICATION_PREFERENCE } from '../watchNotifications';
 const EMPTY = [];
+const METHOD_NAMES = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール', ibd: 'IBD型' };
 
 function readPreference() { try { return localStorage.getItem(WATCH_NOTIFICATION_PREFERENCE) === 'true'; } catch { return false; } }
 
@@ -62,7 +63,7 @@ export default function WatchNotifications({ rows = EMPTY, watch = EMPTY, asOf, 
     <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0 }}>
       {events.slice(0, 50).map(event => <Box component="li" key={event.id} sx={{ py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Button disabled={!onSelect || !rowMap.has(event.symbol)} onClick={() => onSelect?.(event.symbol)} sx={{ minHeight: 44, fontSize: 14 }}>{event.symbol} · {event.from} → {event.to}</Button>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{event.source === 'daily' ? `日次 ${event.previous_as_of} → ${event.as_of}` : `接続価格 ${new Date(event.observed_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} JST · このタブ内のみ`}</Typography>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{METHOD_NAMES[event.method] || '方式未確認'} · {event.source === 'daily' ? `日次 ${event.previous_as_of} → ${event.as_of}` : `接続価格 ${new Date(event.observed_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} JST · このタブ内のみ`}</Typography>
       </Box>)}
     </Box>
     {events.length > 50 && <Typography sx={{ fontSize: 12 }}>最新50件を表示しています。</Typography>}

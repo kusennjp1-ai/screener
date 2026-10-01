@@ -55,6 +55,15 @@ export async function deliverLocalWatchNotification(event, { enabled, notificati
     data: { url: new URL(`#/?symbol=${encodeURIComponent(event.symbol)}`, baseUrl).href } };
   const registration = await serviceWorker?.getRegistration?.();
   if (registration?.showNotification) { await registration.showNotification(`${event.symbol} の状態変化`, options); return true; }
-  if (notification) { new notification(`${event.symbol} の状態変化`, options); return true; }
+  if (notification) {
+    const notice = new notification(`${event.symbol} の状態変化`, options);
+    notice.onclick = click => {
+      click?.preventDefault?.();
+      notice.close?.();
+      globalThis.focus?.();
+      globalThis.location?.assign(options.data.url);
+    };
+    return true;
+  }
   return false;
 }
