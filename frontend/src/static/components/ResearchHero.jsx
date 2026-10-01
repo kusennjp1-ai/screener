@@ -13,7 +13,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const changes=workbench.data?.changes?.[method];
  const first=!workbench.data?.history?.previous_as_of;
  return <section data-testid="home-hero" className={`research-hero${collapsed?' hero-collapsed':''}`} aria-label="今日の概況">
-  <div className="hero-copy"><p className="hero-date">{date||'取得中'} 終値 · 米国株 日次判断</p>
+  <div className="hero-copy"><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
    <h1>{loading?'データを読み込み中。':plan.dailyPositions.length?`${plan.dailyPositions.length}銘柄が条件通過。`:counts.qualified?'候補あり。':'条件を確認中。'}</h1>
    <p className="hero-subtitle">発注前に、未達の条件を確かめる。</p>
    <div className="hero-kpis">
