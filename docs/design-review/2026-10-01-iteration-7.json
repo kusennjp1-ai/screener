@@ -1,0 +1,3024 @@
+{
+  "observed_commit": "c9cec0b31ef7f3654ffe279f9e22733327671c89",
+  "reviewer": "Codex root and handoff_f1_plan: changed original PNGs visually reviewed; byte-identical prior images verified with SHA-256. Internal evaluation, not a user survey.",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/36878832685",
+  "screens_location": "CI artifact design-acceptance-c9cec0b31ef7f3654ffe279f9e22733327671c89",
+  "status": "not accepted: P1 desktop method switch maximum 448ms exceeds unchanged 400ms limit",
+  "objective_failures": [
+    "1440: P1 exact limits not met (3500ms / 400ms / 200ms)"
+  ],
+  "screens": [
+    {
+      "key": "home/1440/dark",
+      "screenshot": "home-1440x900-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "大きな結論、4つの指標、レーダー、候補と価格チャートの順に主従がある。控えめなグリッドと状態色で価格の動きが見える。 ダークでは面の明度差と明るい本文の階層が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "候補7行と銘柄の価格チャートが同時に見え、状態・ピボット比・RS・出来高比から次の銘柄を選べる。期間操作の見た目はやや密だが配置は一貫する。"
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "買いゾーンの意味をレーダー、候補行の小型ゲージ、価格チャートに連続させた計器としての構成が明確。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "220通過、43ゾーン内、検証97.4%と市場上限0%が区別され、ZETAの価格位置と購入条件4/7を別表示している。候補ありを購入可とは断定していない。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "7a51b7745d864bde0049931e32afd2381a1ab9f3cd0e7afc65ab288a7a9df496",
+        "compared_source": ".git/design-fifth/home-1440x900-dark.png",
+        "compared_sha256": "ffa595d25eb1d273bc94eae526932c19efecbcdb5cf2bba2c870f06276d18d95",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#home/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 7,
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "home/1440/light",
+      "screenshot": "home-1440x900-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "大きな結論、4つの指標、レーダー、候補と価格チャートの順に主従がある。控えめなグリッドと状態色で価格の動きが見える。 ライトでは白い面と暗い本文の境界が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "候補7行と銘柄の価格チャートが同時に見え、状態・ピボット比・RS・出来高比から次の銘柄を選べる。期間操作の見た目はやや密だが配置は一貫する。"
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "買いゾーンの意味をレーダー、候補行の小型ゲージ、価格チャートに連続させた計器としての構成が明確。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "220通過、43ゾーン内、検証97.4%と市場上限0%が区別され、ZETAの価格位置と購入条件4/7を別表示している。候補ありを購入可とは断定していない。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "bea6bd0eaf30ed3dfdd8492af4c5b4f30820a62ba6b688f5e6d9a08668dfba34",
+        "compared_source": ".git/design-fifth/home-1440x900-light.png",
+        "compared_sha256": "c52e32ac91e97b01f1ed54ae258bd05edd52e7ab94b4c60e2e4e871b352333f8",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#home/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 7,
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "home/390/dark",
+      "screenshot": "home-390x844-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "結論と4指標を保ちながら、レーダーから3行の候補へ自然につながる。下部ナビは内容と十分区切られる。 ダークでは面の明度差と明るい本文の階層が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "初期画面で3候補を確認できる。選定・買い位置、あと1条件、絞込の操作行は密で、目的を読み分ける余地が残る。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "PCと同じゾーン帯・状態色・小型ゲージを小画面にも保ち、単なる表の縮小になっていない。"
+        },
+        "content": {
+          "value": 8.1,
+          "reason": "検証率と市場上限0%を候補数と同時に示す。候補行は価格位置・RS・出来高比を絞って示すが、レーダー軸の説明はPCより省略されている。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "a6e186b826513c17a761929ed5e27ef27868f7d32db10e6822c27435a02c216e",
+        "compared_source": ".git/design-fifth/home-390x844-dark.png",
+        "compared_sha256": "9910a778a24aa163f790f354e684198167742bdc4dcc796ac1332a4e8af770d8",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#home/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 3,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "home/390/light",
+      "screenshot": "home-390x844-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "結論と4指標を保ちながら、レーダーから3行の候補へ自然につながる。下部ナビは内容と十分区切られる。 ライトでは白い面と暗い本文の境界が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "初期画面で3候補を確認できる。選定・買い位置、あと1条件、絞込の操作行は密で、目的を読み分ける余地が残る。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "PCと同じゾーン帯・状態色・小型ゲージを小画面にも保ち、単なる表の縮小になっていない。"
+        },
+        "content": {
+          "value": 8.1,
+          "reason": "検証率と市場上限0%を候補数と同時に示す。候補行は価格位置・RS・出来高比を絞って示すが、レーダー軸の説明はPCより省略されている。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "1e638537b039757955953bd3f372a6572d61e0a7ef38ad58b7cc824abab719c6",
+        "compared_source": ".git/design-fifth/home-390x844-light.png",
+        "compared_sha256": "6333cb76a1bf90253dac1551f34a305e270377b42fbbd2384f7c33a59d1053be",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#home/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 3,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "near-pass/1440/dark",
+      "screenshot": "near-pass-1440x900-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "通常の候補ボードを保ち、未達条件だけを行の2段目で強調する。長い条件名があっても数値列との衝突は見られない。 ダークでは面の明度差と明るい本文の階層が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "あと1条件の有効状態が分かり、SNDKの高値距離、MXLの未判定、SLSのSMA50条件を一覧で確認できる。行は通常より密である。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "価格位置ゲージと不足条件を同じ行で対照でき、単純な合格ランキングから確認行動へつなぐ構成に独自性がある。"
+        },
+        "content": {
+          "value": 8.1,
+          "reason": "未達条件を合格にせず表示し、SNDKの買いゾーン超過と購入条件1/7も別枠で示している。ただしあと1条件は選定方式の条件であり購入条件全体とは異なる説明がさらに近いとよい。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "7a04196b557aa885cd9fea9dab4a813ebca8bf0d31347a7b5ab5e12f25270452",
+        "compared_source": ".git/design-fifth/near-pass-1440x900-dark.png",
+        "compared_sha256": "a644b7af70111ae1c1f7f5c0d1acbbba1d68cf2326df4346b0b1f60a31ba2902",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#near-pass/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 7,
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 816
+        },
+        "chart_card": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "near-pass/1440/light",
+      "screenshot": "near-pass-1440x900-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "通常の候補ボードを保ち、未達条件だけを行の2段目で強調する。長い条件名があっても数値列との衝突は見られない。 ライトでは白い面と暗い本文の境界が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "あと1条件の有効状態が分かり、SNDKの高値距離、MXLの未判定、SLSのSMA50条件を一覧で確認できる。行は通常より密である。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "価格位置ゲージと不足条件を同じ行で対照でき、単純な合格ランキングから確認行動へつなぐ構成に独自性がある。"
+        },
+        "content": {
+          "value": 8.1,
+          "reason": "未達条件を合格にせず表示し、SNDKの買いゾーン超過と購入条件1/7も別枠で示している。ただしあと1条件は選定方式の条件であり購入条件全体とは異なる説明がさらに近いとよい。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "2d9a716ecfaadea0f12ce716919dffdda92fd3b1e9655d12d5ae0227ddc0a56b",
+        "compared_source": ".git/design-fifth/near-pass-1440x900-light.png",
+        "compared_sha256": "4eeeff17518c3f3e44cb8b05a6ae382b7fb718e317acd139812d8520c133d765",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#near-pass/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 7,
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 816
+        },
+        "chart_card": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "near-pass/390/dark",
+      "screenshot": "near-pass-390x844-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "不足条件のチップを行ごとに整理し、横にはみ出さず3銘柄分の文脈を保つ。 ダークでは面の明度差と明るい本文の階層が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "3行の未達理由を初期画面で読める。ピボット不明のダッシュは詳細を開いて補う必要があり、通常一覧より判断材料を絞った表示である。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "不足条件を主役にする専用の行表示は、一般的な価格一覧より確認作業に合う。"
+        },
+        "content": {
+          "value": 8,
+          "reason": "SNDK・MXLは52週高値条件、SLSは株価とSMA50の条件が未達と具体的に見える。未取得価格位置をゼロにしていない。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "86fb5ff79d923a0fc1dcd978db29cdf7305f37377c675f83d9bbd9b786c424bb",
+        "compared_source": ".git/design-fifth/near-pass-390x844-dark.png",
+        "compared_sha256": "7a82bb7ffbea90b970c95b8b4937bee61978ec01d2f29dbc2108efac2aa1918a",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#near-pass/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 3,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "near-pass/390/light",
+      "screenshot": "near-pass-390x844-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "不足条件のチップを行ごとに整理し、横にはみ出さず3銘柄分の文脈を保つ。 ライトでは白い面と暗い本文の境界が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "3行の未達理由を初期画面で読める。ピボット不明のダッシュは詳細を開いて補う必要があり、通常一覧より判断材料を絞った表示である。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "不足条件を主役にする専用の行表示は、一般的な価格一覧より確認作業に合う。"
+        },
+        "content": {
+          "value": 8,
+          "reason": "SNDK・MXLは52週高値条件、SLSは株価とSMA50の条件が未達と具体的に見える。未取得価格位置をゼロにしていない。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "04ee4f114f60359429abdfa2205ac4978ec5cced1cc7aa0a28edab13bcf4fc5b",
+        "compared_source": ".git/design-fifth/near-pass-390x844-light.png",
+        "compared_sha256": "6bf8194823714b83ba640cc84a5fd2fbfe01b33043f10c3d5e63514afd77f932",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#near-pass/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 3,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "compact/1440/dark",
+      "screenshot": "compact-1440x900-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "状況バーを64pxに収め、候補ボードとチャートが早い位置から始まる。価格、RS、出来高の3ペインが同時に見える。 ダークでは面の明度差と明るい本文の階層が判読できる。"
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "少なくとも12行の候補と価格チャート全体を一画面で比較できる。日々の反復確認に適した密度で、検索・期間・拡大も近い。"
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "レーダー表示と密な計器表示を同じ意味づけのまま切り替える構成が、分析作業に適合している。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "市場の新規上限0%、条件通過数、日足検証率、購入条件4/7と価格水準を同時に確認できる。MA数値と株価からの乖離も明記する。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "b86529841734d556fcbbf5f862c7e478ba7169e1962ad950a96d8658f60db5f6",
+        "compared_source": ".git/design-fifth/compact-1440x900-dark.png",
+        "compared_sha256": "130dbdbdad96fac3898c028f13eb57c7f079625456fb891f097f5be99e2d2715",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#compact/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 12,
+        "chart": {
+          "top": 290,
+          "bottom": 577,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 208,
+          "bottom": 791,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "compact/1440/light",
+      "screenshot": "compact-1440x900-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "状況バーを64pxに収め、候補ボードとチャートが早い位置から始まる。価格、RS、出来高の3ペインが同時に見える。 ライトでは白い面と暗い本文の境界が判読できる。"
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "少なくとも12行の候補と価格チャート全体を一画面で比較できる。日々の反復確認に適した密度で、検索・期間・拡大も近い。"
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "レーダー表示と密な計器表示を同じ意味づけのまま切り替える構成が、分析作業に適合している。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "市場の新規上限0%、条件通過数、日足検証率、購入条件4/7と価格水準を同時に確認できる。MA数値と株価からの乖離も明記する。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "07288dae25053e2a14a27e6b14003cb13d5bb464542c426bae7d72707db6ad60",
+        "compared_source": ".git/design-fifth/compact-1440x900-light.png",
+        "compared_sha256": "6bfd295528d9c2ae958dd19a2d33f5aaca9fd1899b893c87b0f8e2a757768db5",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#compact/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 12,
+        "chart": {
+          "top": 290,
+          "bottom": 577,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 208,
+          "bottom": 791,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "detail/1440/dark",
+      "screenshot": "detail-1440x900-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "PCはホームと同じ二列配置で選択銘柄を明確化し、銘柄・状態・価格から広いチャートへ進む。両領域の境界が整理されている。 ダークでは面の明度差と明るい本文の階層が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "一覧を残しながらZETAを分析できる。7行以上の候補と期間操作が常時見え、別画面へ戻る負担がない。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "候補の価格位置とチャートのゾーンが連動する作業台としての設計がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "価格位置の買いゾーン内と購入条件4/7、分析日、ピボット・上限・損切り例を区別している。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "29257c502ca05127149b8e89e963f200f29939c94ef9a4c220a3ffada8aa3bb4",
+        "compared_source": ".git/design-fifth/detail-1440x900-dark.png",
+        "compared_sha256": "985027a3ec872a7c70ba2b1e10f42340d7bcafecc99d9459122d2b388ddb4a05",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#detail/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 7,
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "detail/1440/light",
+      "screenshot": "detail-1440x900-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "PCはホームと同じ二列配置で選択銘柄を明確化し、銘柄・状態・価格から広いチャートへ進む。両領域の境界が整理されている。 ライトでは白い面と暗い本文の境界が判読できる。 今回のCanvas点群も軸・帯と整列し、選択されている場合のZETAのリングと説明枠に位置ずれは見られない。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "一覧を残しながらZETAを分析できる。7行以上の候補と期間操作が常時見え、別画面へ戻る負担がない。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "候補の価格位置とチャートのゾーンが連動する作業台としての設計がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "価格位置の買いゾーン内と購入条件4/7、分析日、ピボット・上限・損切り例を区別している。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "ff473b6c9b34d1fa85689972a3e868f868ffe1ad1d38c6921b669ee88c41d382",
+        "compared_source": ".git/design-fifth/detail-1440x900-light.png",
+        "compared_sha256": "0df2dfa068a4d114814571e5fb60175739276185ae8b0a1a48b8394185d954e1",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#detail/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 7,
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        }
+      }
+    },
+    {
+      "key": "detail/390/dark",
+      "screenshot": "detail-390x844-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "銘柄・価格・チャートを先に置き、候補一覧へ戻る導線と下部ナビを保つ。価格ペインはRS・出来高より大きい。 ダークでは面の明度差と明るい本文の階層が判読できる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "価格横に購入条件4/7のボタンが追加され、チャートへ進む前に条件が未完了と分かる。候補一覧への戻りと根拠への入口を保ち、追加情報を大きく積み重ねずチャートを先に見せる。 今回の再利用後もZETAの銘柄名・31.57の価格・7〜9月のローソク足・31.50のピボットが同じ文脈で見える。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "ゾーン内という価格位置、別の購入条件数、共通水準の軸ラベルをコンパクトに接続している。PCの分析作業台を小画面用に段階化する設計がある。"
+        },
+        "content": {
+          "value": 8.1,
+          "reason": "価格位置の買いゾーン内と購入条件4/7を同時表示し、価格・基準日2026-09-30も見える。未達理由の本文は下のエントリーカードだが、条件が全通過ではないことは初期画面で明示され、従来の主要な誤読余地が解消した。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "f1760b4cf47b16b6092ef4827df7913ace8ad872778bda3260c089b4c1aa9705",
+        "compared_source": ".git/design-fifth/detail-390x844-dark.png",
+        "compared_sha256": "6a4bccaeecf6c50549276433e7f590c2bd810d90b98c77fa03597ef1978b6b0d",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#detail/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
+    },
+    {
+      "key": "detail/390/light",
+      "screenshot": "detail-390x844-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "銘柄・価格・チャートを先に置き、候補一覧へ戻る導線と下部ナビを保つ。価格ペインはRS・出来高より大きい。 ライトでは白い面と暗い本文の境界が判読できる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "価格横に購入条件4/7のボタンが追加され、チャートへ進む前に条件が未完了と分かる。候補一覧への戻りと根拠への入口を保ち、追加情報を大きく積み重ねずチャートを先に見せる。 今回の再利用後もZETAの銘柄名・31.57の価格・7〜9月のローソク足・31.50のピボットが同じ文脈で見える。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "ゾーン内という価格位置、別の購入条件数、共通水準の軸ラベルをコンパクトに接続している。PCの分析作業台を小画面用に段階化する設計がある。"
+        },
+        "content": {
+          "value": 8.1,
+          "reason": "価格位置の買いゾーン内と購入条件4/7を同時表示し、価格・基準日2026-09-30も見える。未達理由の本文は下のエントリーカードだが、条件が全通過ではないことは初期画面で明示され、従来の主要な誤読余地が解消した。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "6e23017ff937873474084f7d8ed7f5e1ee11c34f684e67acad23182d4d4c41e1",
+        "compared_source": ".git/design-fifth/detail-390x844-light.png",
+        "compared_sha256": "2572c970d38cca22c82385ad4d7edcd82bda5f3b31469364605b10def5a4188e",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#detail/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
+    },
+    {
+      "key": "chart/1440/dark",
+      "screenshot": "chart-1440x900-dark.png",
+      "reviewer": "Codex handoff_f1_plan: fifth-run visual assessment inherited solely because original PNG bytes are identical",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "横幅を使ったローソク足と、別ペインのRS・出来高が明確。水準ラベルは右軸にまとまり、足に大きな注記が被らない。 ダークでは面の明度差と明るい本文の階層が判読できる。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・日週切替・ズーム・リセットがまとまり、前後銘柄とキーボード操作が画面下に見える。根拠要約もチャート前にある。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "共通ピボット・上限帯・損切り例を価格図と条件要約にそろえ、標準チャートに判断の接続を加えている。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ZETA31.57、ピボット31.50、上限33.08、損切り例29.36が識別できる。価格時点2026-09-30と、未達の選定条件・市場環境・ベース形状を記載しており、買いゾーン内を購入可と断定していない。"
+        }
+      },
+      "evidence": {
+        "method": "sha256-identical-inheritance",
+        "sha256": "281b6e2d24dde885bb9d68e4a4ea4233788284a465fab9784448158bb38febb6",
+        "compared_source": ".git/design-fifth/chart-1440x900-dark.png",
+        "compared_sha256": "281b6e2d24dde885bb9d68e4a4ea4233788284a465fab9784448158bb38febb6",
+        "identical": true,
+        "inherited_review": ".git/review-home-fifth.json#chart/1440/dark"
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#chart/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "chart/1440/light",
+      "screenshot": "chart-1440x900-light.png",
+      "reviewer": "Codex handoff_f1_plan: fifth-run visual assessment inherited solely because original PNG bytes are identical",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "横幅を使ったローソク足と、別ペインのRS・出来高が明確。水準ラベルは右軸にまとまり、足に大きな注記が被らない。 ライトでは白い面と暗い本文の境界が判読できる。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・日週切替・ズーム・リセットがまとまり、前後銘柄とキーボード操作が画面下に見える。根拠要約もチャート前にある。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "共通ピボット・上限帯・損切り例を価格図と条件要約にそろえ、標準チャートに判断の接続を加えている。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ZETA31.57、ピボット31.50、上限33.08、損切り例29.36が識別できる。価格時点2026-09-30と、未達の選定条件・市場環境・ベース形状を記載しており、買いゾーン内を購入可と断定していない。"
+        }
+      },
+      "evidence": {
+        "method": "sha256-identical-inheritance",
+        "sha256": "39d5d67db3e75024167f3d3f29d3e3e5dac78e0d80382e9b3841edf626437e11",
+        "compared_source": ".git/design-fifth/chart-1440x900-light.png",
+        "compared_sha256": "39d5d67db3e75024167f3d3f29d3e3e5dac78e0d80382e9b3841edf626437e11",
+        "identical": true,
+        "inherited_review": ".git/review-home-fifth.json#chart/1440/light"
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#chart/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "chart/390/dark",
+      "screenshot": "chart-390x844-dark.png",
+      "reviewer": "Codex handoff_f1_plan: fifth-run visual assessment inherited solely because original PNG bytes are identical",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "価格ペインを優先し、RS・出来高の区切りと右軸の水準ラベルを小画面でも保つ。上部操作は比較的多い。 ダークでは面の明度差と明るい本文の階層が判読できる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "初期ヘッダーで価格時点と購入条件4/7、未達3件を読めるようになった。左右スワイプとチャート操作の切替、前後ボタンを保ち、追加要約によってローソク足・RS・出来高が隠れていない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通水準を図に直接置き、初期ヘッダーの条件要約へ接続する。銘柄スワイプとチャート移動を明示的に切り替える構成も分析目的に合う。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ZETA31.57の価格時点2026-09-30日次終値、購入条件4/7、未達の選定条件・市場環境・ベース形状が初期画面にそろう。上限33.08、ピボット31.50、損切り例29.36と購入条件成立を混同させない。"
+        }
+      },
+      "evidence": {
+        "method": "sha256-identical-inheritance",
+        "sha256": "2429561a4e665d469a470e203e8f1c3ce2cbfab85ebe98b5618e5bd9eded7783",
+        "compared_source": ".git/design-fifth/chart-390x844-dark.png",
+        "compared_sha256": "2429561a4e665d469a470e203e8f1c3ce2cbfab85ebe98b5618e5bd9eded7783",
+        "identical": true,
+        "inherited_review": ".git/review-home-fifth.json#chart/390/dark"
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#chart/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "chart/390/light",
+      "screenshot": "chart-390x844-light.png",
+      "reviewer": "Codex handoff_f1_plan: fifth-run visual assessment inherited solely because original PNG bytes are identical",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "価格ペインを優先し、RS・出来高の区切りと右軸の水準ラベルを小画面でも保つ。上部操作は比較的多い。 ライトでは白い面と暗い本文の境界が判読できる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "初期ヘッダーで価格時点と購入条件4/7、未達3件を読めるようになった。左右スワイプとチャート操作の切替、前後ボタンを保ち、追加要約によってローソク足・RS・出来高が隠れていない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通水準を図に直接置き、初期ヘッダーの条件要約へ接続する。銘柄スワイプとチャート移動を明示的に切り替える構成も分析目的に合う。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ZETA31.57の価格時点2026-09-30日次終値、購入条件4/7、未達の選定条件・市場環境・ベース形状が初期画面にそろう。上限33.08、ピボット31.50、損切り例29.36と購入条件成立を混同させない。"
+        }
+      },
+      "evidence": {
+        "method": "sha256-identical-inheritance",
+        "sha256": "7f881120658b218f7e936197a245648a028536fb2c1a522776dea9c1dc73e2fe",
+        "compared_source": ".git/design-fifth/chart-390x844-light.png",
+        "compared_sha256": "7f881120658b218f7e936197a245648a028536fb2c1a522776dea9c1dc73e2fe",
+        "identical": true,
+        "inherited_review": ".git/review-home-fifth.json#chart/390/light"
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#chart/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "portfolio/1440/dark",
+      "screenshot": "portfolio-1440x900-dark.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "右側の引き出しに判断を集め、背景を抑えてタイトル、分類、金額表の階層を明確にする。空データにも無理なカードを作らない。 ダークでは面の明度差と明るい本文の階層が判読できる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "日次通過と条件付きを分離し、閉じる操作が見つけやすい。0件の説明が繰り返され、市場上限0%の原因は下部にあるため空状態はさらに短くできる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "確定注文と誤解させず、条件成立時の配分・想定損失・未約定の現金を分けた情報設計に意味がある。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "両分類0件、合計0ドル、現金10万ドル、市場条件未確認で新規0%を明示し、実際の発注や成果を装わない。この画像では非空の条件付き行の表示検証はできない。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "b6b6149e2f0cecd33ad62dc2f82ce5f05d56832af1d8825540afa416355226e1",
+        "compared_source": ".git/design-fifth/portfolio-1440x900-dark.png",
+        "compared_sha256": "d9167095f0fc5360abe258dbdc0dc02371eb70d04936ea836a8730a95621779d",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#portfolio/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "portfolio/1440/light",
+      "screenshot": "portfolio-1440x900-light.png",
+      "reviewer": "Codex handoff_f1_plan: seventh-run original PNG visually inspected anew",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "右側の引き出しに判断を集め、背景を抑えてタイトル、分類、金額表の階層を明確にする。空データにも無理なカードを作らない。 ライトでは白い面と暗い本文の境界が判読できる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "日次通過と条件付きを分離し、閉じる操作が見つけやすい。0件の説明が繰り返され、市場上限0%の原因は下部にあるため空状態はさらに短くできる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "確定注文と誤解させず、条件成立時の配分・想定損失・未約定の現金を分けた情報設計に意味がある。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "両分類0件、合計0ドル、現金10万ドル、市場条件未確認で新規0%を明示し、実際の発注や成果を装わない。この画像では非空の条件付き行の表示検証はできない。"
+        }
+      },
+      "evidence": {
+        "method": "new-original-image-inspection",
+        "sha256": "1402ab50822fa16f143ce20cb0e7c11307859942309978a889b6ddee3ccd57db",
+        "compared_source": ".git/design-fifth/portfolio-1440x900-light.png",
+        "compared_sha256": "5199198bdf3489278767c73ffd0e188735b26b4861ee2889526de60a7b21eaba",
+        "identical": false
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#portfolio/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "portfolio/390/dark",
+      "screenshot": "portfolio-390x844-dark.png",
+      "reviewer": "Codex handoff_f1_plan: fifth-run visual assessment inherited solely because original PNG bytes are identical",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "全幅の引き出しで説明と3列表を折り返しながら整列させ、横にはみ出す金額や閉じるボタンの衝突はない。 ダークでは面の明度差と明るい本文の階層が判読できる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "分類別の0件と現金額を縦に読める。説明の反復で空状態としては長いが、重要な金額と市場制約は初期画面に収まる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "資金を無理に埋めず、条件付きの試算と現金保持を同じ面で示す設計が一貫する。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "未確認を合格に数えないこと、株式0%、現金10万ドル、新規上限0%と未約定を示している。非空の条件付きカードの内容はこのスクリーンショットでは未検証。"
+        }
+      },
+      "evidence": {
+        "method": "sha256-identical-inheritance",
+        "sha256": "514947816042259a068061c8f0e2e5c12dc6464fcc29a6101a6a0493dbd5fb3b",
+        "compared_source": ".git/design-fifth/portfolio-390x844-dark.png",
+        "compared_sha256": "514947816042259a068061c8f0e2e5c12dc6464fcc29a6101a6a0493dbd5fb3b",
+        "identical": true,
+        "inherited_review": ".git/review-home-fifth.json#portfolio/390/dark"
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#portfolio/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "portfolio/390/light",
+      "screenshot": "portfolio-390x844-light.png",
+      "reviewer": "Codex handoff_f1_plan: fifth-run visual assessment inherited solely because original PNG bytes are identical",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "全幅の引き出しで説明と3列表を折り返しながら整列させ、横にはみ出す金額や閉じるボタンの衝突はない。 ライトでは白い面と暗い本文の境界が判読できる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "分類別の0件と現金額を縦に読める。説明の反復で空状態としては長いが、重要な金額と市場制約は初期画面に収まる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "資金を無理に埋めず、条件付きの試算と現金保持を同じ面で示す設計が一貫する。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "未確認を合格に数えないこと、株式0%、現金10万ドル、新規上限0%と未約定を示している。非空の条件付きカードの内容はこのスクリーンショットでは未検証。"
+        }
+      },
+      "evidence": {
+        "method": "sha256-identical-inheritance",
+        "sha256": "93207b6aa08e4f42f69fc78e3b0be75f673d084c7de7cb90504d7ccd8207e7b6",
+        "compared_source": ".git/design-fifth/portfolio-390x844-light.png",
+        "compared_sha256": "93207b6aa08e4f42f69fc78e3b0be75f673d084c7de7cb90504d7ccd8207e7b6",
+        "identical": true,
+        "inherited_review": ".git/review-home-fifth.json#portfolio/390/light"
+      },
+      "objective": {
+        "source": ".git/design-seventh/report.json#portfolio/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
+    },
+    {
+      "key": "case-MSM-inline/1440/dark",
+      "screenshot": "case-MSM-inline-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "db8327cc65e3a0b9d6d0cdd70d7effa8a37140e419872885d9607dfd2d7c74b7",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline-annotations/1440/dark",
+      "screenshot": "case-MSM-inline-annotations-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "a2aeb7b7819373c7f137323db1266e9ae0c95ae08647ac95c1230be3a359da26",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded/1440/dark",
+      "screenshot": "case-MSM-expanded-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "c937cd1c0a4ce15d51e60e7552f05cb9a7f838645c1001eee7c4b3606df9bfb9",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded-annotations/1440/dark",
+      "screenshot": "case-MSM-expanded-annotations-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "c937cd1c0a4ce15d51e60e7552f05cb9a7f838645c1001eee7c4b3606df9bfb9",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline/1440/dark",
+      "screenshot": "case-ADI-inline-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "95ab95be7eef8d4fdab6a962b0e524a0f6e8581645a565f1bd40c707aabae958",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline-annotations/1440/dark",
+      "screenshot": "case-ADI-inline-annotations-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "9c33f7918c2d8692950f595ae780cf8214dbcd451c25dc1282baa8cdcd376bca",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded/1440/dark",
+      "screenshot": "case-ADI-expanded-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "3826cb8a8f5dac1d2ad5d0cacb6b343907b9fa84b9af4a814c69472ee454c7d4",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded-annotations/1440/dark",
+      "screenshot": "case-ADI-expanded-annotations-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "3826cb8a8f5dac1d2ad5d0cacb6b343907b9fa84b9af4a814c69472ee454c7d4",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline/1440/dark",
+      "screenshot": "case-TGTX-inline-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "71442cdeaea32788f4f1f62e4569e700c082ad2b379328374e540c4d50e9cd2f",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline-annotations/1440/dark",
+      "screenshot": "case-TGTX-inline-annotations-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "236da10b78ac3283370b644d55f6e1760ab90a02b1cb594845e5db2f930677bc",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded/1440/dark",
+      "screenshot": "case-TGTX-expanded-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "73708198d88ad8856118782c8b61d5565fb5a13079fddfd77b588bb57da96199",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/1440/dark",
+      "screenshot": "case-TGTX-expanded-annotations-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "73708198d88ad8856118782c8b61d5565fb5a13079fddfd77b588bb57da96199",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline/1440/light",
+      "screenshot": "case-MSM-inline-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "ab9f4adb311287f395dea75f0ca821088cccab9e84c05583cedce56f4b37658e",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline-annotations/1440/light",
+      "screenshot": "case-MSM-inline-annotations-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "c056a74d5ca0fac00cb034d0a241d646af0870574ef1ec61b221953c609332ba",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded/1440/light",
+      "screenshot": "case-MSM-expanded-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "e4173ea29a75f4dc4da81c0713a563d0436a7b3b54cfe86ecca785314fe35302",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded-annotations/1440/light",
+      "screenshot": "case-MSM-expanded-annotations-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "e4173ea29a75f4dc4da81c0713a563d0436a7b3b54cfe86ecca785314fe35302",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline/1440/light",
+      "screenshot": "case-ADI-inline-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "1a927671c6adbb2db4ee7faca1ac51099e9efa68ae80c58f0d13de0166512d32",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline-annotations/1440/light",
+      "screenshot": "case-ADI-inline-annotations-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "f72445685deeba7799d63da0b69c6cd98cd6add10266a3d135221f80ccc3766c",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded/1440/light",
+      "screenshot": "case-ADI-expanded-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "bf6fb8878ce8eefcd2011a23271055b9a2b084fdb2dd8660af095015b1c964cf",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded-annotations/1440/light",
+      "screenshot": "case-ADI-expanded-annotations-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "bf6fb8878ce8eefcd2011a23271055b9a2b084fdb2dd8660af095015b1c964cf",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline/1440/light",
+      "screenshot": "case-TGTX-inline-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "63a47bde98319588d6ca57c5d2e54b566f78dfd949beda8f60622ee35b1f4695",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline-annotations/1440/light",
+      "screenshot": "case-TGTX-inline-annotations-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "銘柄・状態・終値からすぐ価格チャートへ進める。エントリーカードは直下にあり、深い折りたたみを経ずに水準を確認できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "95bc68fd07709451df7032d596389d5764af4d4acce888ad6dee77898d2abaff",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded/1440/light",
+      "screenshot": "case-TGTX-expanded-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "97ff4ad46028ecea3d5a5f12661b22073d38bf20d3dc583396dcb8874003153d",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/1440/light",
+      "screenshot": "case-TGTX-expanded-annotations-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "広い価格ペイン、抑えたグリッド、線種が異なる移動平均と右軸タグにより主従が明確。色テーマ変更後も同じ階層を保つ。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "期間・週足・拡大縮小とリセットが一列にあり、上部で価格位置と未達条件を確認して価格推移へ進める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "97ff4ad46028ecea3d5a5f12661b22073d38bf20d3dc583396dcb8874003153d",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline/390/dark",
+      "screenshot": "case-MSM-inline-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "bea2cb9811a40892eb4c3e833392be9ddb519f19c72f355d3a380890df139a16",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline-annotations/390/dark",
+      "screenshot": "case-MSM-inline-annotations-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "a42cb365e9d6c6f4219b71c8d0a2879aacc4a8fa3d75d89d06ef3d9e2c95d86c",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded/390/dark",
+      "screenshot": "case-MSM-expanded-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "6474c204484ec1f0bdf4195b7273f7fdb9f35ca4e25e80ed6572ce5ed50d95b3",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded-annotations/390/dark",
+      "screenshot": "case-MSM-expanded-annotations-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "e72c5a6a198c1c3a0cad1b4f9b5968ae53ab8acf4c8a6d2fb5d22f4611471ecf",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline/390/dark",
+      "screenshot": "case-ADI-inline-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "2f61bf6ee59307bdf8fdd63e6fe8e28b5a6a1b707cd4f76de1524fd24e4ebb8e",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline-annotations/390/dark",
+      "screenshot": "case-ADI-inline-annotations-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "11c217f2ca98e758a44212e1cb39b04683e303b3bf613d412700b92f364cce90",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded/390/dark",
+      "screenshot": "case-ADI-expanded-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "93373ea6a0d370658a28acdca60b9420f222a1686d63c04bfbcbb634b4600e9f",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded-annotations/390/dark",
+      "screenshot": "case-ADI-expanded-annotations-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "2647a2fe457827228467f4c1083748a56ad684571bb5d20d36792d1a35233a56",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline/390/dark",
+      "screenshot": "case-TGTX-inline-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "e2e8c023054ada2ae41169491755c60bf2db2bf3951c7140f1eb8007dcbf4bab",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline-annotations/390/dark",
+      "screenshot": "case-TGTX-inline-annotations-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "f8a3c4bc3e91ae2ebb5feadd636ada105262924db2b7a08efe9b1b07e0f9ae6c",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded/390/dark",
+      "screenshot": "case-TGTX-expanded-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "fe7f88a9ea521a2d15c3c1091c706c0394155778bcc74c95ab89a65cd0412f54",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/390/dark",
+      "screenshot": "case-TGTX-expanded-annotations-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "2294c402e03e482105f56a8449956f0f5be2742339649d430443070a1ca0ca58",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline/390/light",
+      "screenshot": "case-MSM-inline-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "927d11d350318c2e77e9638974fd49b3779d520ad995382e902f19dd62a6c9c3",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-inline-annotations/390/light",
+      "screenshot": "case-MSM-inline-annotations-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "34889aa5881b57ba74f5bf109305753a6ddcbd1927d34f68902ab78bea7c56b1",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded/390/light",
+      "screenshot": "case-MSM-expanded-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "2bdcb9ee465cadf55a55659ec587188b86a06e711f618c1ee83fb6cea065f602",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-MSM-expanded-annotations/390/light",
+      "screenshot": "case-MSM-expanded-annotations-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "MSM: 終値123.72、ピボット124.51、買い上限130.74、購入条件1/7。十分な収縮根拠のないVCP曲線を足していない。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "a13b002dc1c8afc6b81906f482f8e09d679fce044a6ee07327959db51157b75b",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline/390/light",
+      "screenshot": "case-ADI-inline-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "6c0ddb07ea86d11a4bf5184f3129df852c233aa80f3d51453c4589c9ef13dd2d",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-inline-annotations/390/light",
+      "screenshot": "case-ADI-inline-annotations-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "2ae810245caabe5c1a4c7b06540179337f3b06a69bf1299b4846dfb6761b4228",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded/390/light",
+      "screenshot": "case-ADI-expanded-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "217bbf23766515caa1038d980d294a356b9fe49180b2baa9ef9d826269a06294",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-ADI-expanded-annotations/390/light",
+      "screenshot": "case-ADI-expanded-annotations-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ADI: 終値396.71、ピボット377.49、上限396.36、購入条件3/7でゾーン超過。詳細図解は5収縮の曲線を保持し、狭幅では衝突するラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "42e73e5701c906871aea10fccbf43f69d279450e0b41fce5b9aa241693c6fa89",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline/390/light",
+      "screenshot": "case-TGTX-inline-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "c5c4cb8a2f6577fa0a34994db707017404d574950a00432eacba74a59cdb0bb4",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-inline-annotations/390/light",
+      "screenshot": "case-TGTX-inline-annotations-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "銘柄・価格・日付と購入条件数が最初の画面にそろう。詳細条件は直下のエントリーカードへ進める。横に送る期間ツールバーはやや発見しにくいが、図解と拡大へ到達できる。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "e6938f3620e953fe8e089c0721bfe7427d80aea24eaace7a727f979912c82867",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded/390/light",
+      "screenshot": "case-TGTX-expanded-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "89f12baf2a6970f097cd129bdf59a75ee54793bbfb71b8ac7f05d1cdfd4f1491",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/390/light",
+      "screenshot": "case-TGTX-expanded-annotations-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against visually reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "価格・RS・出来高の3段を維持し、明暗両テーマで共通水準と足を識別できる。価格軸はラベル用の幅を取り、価格ペインはなおコンパクト。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "冒頭に日次終値・日付・購入条件数と未達上位3件を表示。拡大移動と銘柄移動の操作領域を分けている。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "共通の買いゾーン帯と損切り例を、価格チャート・候補の位置メーター・エントリー位置ゲージにつなげた構成。装飾より判断の一貫性に独自性がある。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "TGTX: 終値55.78、ピボット57.14、上限60.00、購入条件3/7。C1/C2の狭い収縮区間は拡大幅で表示し、小画面では重なるラベルを省く。 自動形状と購入成立を混同させず、実データの値を共通利用する。"
+        }
+      },
+      "sha256": "799f57ae57074c56db11d10a0efc2837aa1e36f63c95be0a52e52708919fce16",
+      "prior_review": ".git/review-chart-sixth.json"
+    },
+    {
+      "key": "comparison/1440/dark",
+      "screenshot": "comparison-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "3列×2段を揃え、価格・RS・出来高とフッター数値の主従が一貫する。選択枠以外に装飾色を増やさず6銘柄が一画面に収まる。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "6枚全体を見ながら表示期間とページを変更できる。状態、ピボット比、買い上限、損切り例、購入条件数がカードごとの同じ位置にある。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "同じ買いゾーンを6つの価格図へ直接置き、RS・出来高・購入条件と対応させた比較計器になっている。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "価格位置と購入条件は別判定と明記し、ZETA4/7・HELP2/7など未完了の条件を隠していない。縦軸は銘柄ごととの注記があり、株価水準の直接比較を誘導しない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 900,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGridHeight": 671,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "f6a37c177049f97dc378777d597d400841fe476462bebceb032dbc082699b005",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison/1440/light",
+      "screenshot": "comparison-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "3列×2段を揃え、価格・RS・出来高とフッター数値の主従が一貫する。選択枠以外に装飾色を増やさず6銘柄が一画面に収まる。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "6枚全体を見ながら表示期間とページを変更できる。状態、ピボット比、買い上限、損切り例、購入条件数がカードごとの同じ位置にある。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "同じ買いゾーンを6つの価格図へ直接置き、RS・出来高・購入条件と対応させた比較計器になっている。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "価格位置と購入条件は別判定と明記し、ZETA4/7・HELP2/7など未完了の条件を隠していない。縦軸は銘柄ごととの注記があり、株価水準の直接比較を誘導しない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 900,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGridHeight": 671,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "b7145e8539a4f2903c5aea9ee56706a006245cd742d920908ec1c8c683b10437",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison/390/dark",
+      "screenshot": "comparison-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "1列に切り替えて銘柄名と状態、右の価格水準、下の条件数を保つ。チャートの足が認識できる大きさで表示される。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "最初のカード全体と次のカードの一部を読める。ページ送りと期間操作が近く、横に47列を送るような操作が不要。見出し周辺の余白には縮小余地がある。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "PCと同じ条件を小型チャートと四つの数値枠へ保ち、価格位置と購入可否を分けて比較できる。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ZETAの31.57、ピボット31.50、上限33.08、損切り例29.36、購入条件4/7が一枚で確認できる。値動き・相対強度・出来高も別枠に保たれる。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 2458,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGridHeight": 2157,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "52ee1b7c3618b7a4e39dbf6b8486320f994c631a72e46fb611bafa49706203e6",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison/390/light",
+      "screenshot": "comparison-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "1列に切り替えて銘柄名と状態、右の価格水準、下の条件数を保つ。チャートの足が認識できる大きさで表示される。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "最初のカード全体と次のカードの一部を読める。ページ送りと期間操作が近く、横に47列を送るような操作が不要。見出し周辺の余白には縮小余地がある。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "PCと同じ条件を小型チャートと四つの数値枠へ保ち、価格位置と購入可否を分けて比較できる。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "ZETAの31.57、ピボット31.50、上限33.08、損切り例29.36、購入条件4/7が一枚で確認できる。値動き・相対強度・出来高も別枠に保たれる。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 2458,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGridHeight": 2157,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "9d1775281e663e40cc072f1167148cd556827a71af8a8c79354f74933a781676",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison-near-pass/1440/dark",
+      "screenshot": "comparison-near-pass-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "不足条件を会社名の位置へ移し、カード高を増やさず6枚の比較を維持する。未判定の中立色、待ちの青、超過の黄が整理される。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "SNDKの高値距離、SLSの株価対SMA50、VICRの移動平均順序をチャートと同時に確認できる。無効ピボットには帯や売買水準を描いていない。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "あと1条件を単なるリストでなく価格図の比較へ展開し、条件の不足と現在の価格位置を独立に見せている。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "見出しが選定あと1条件、説明が未合格・購入条件は別判定なので、購入条件1/7と矛盾しない。MXL/SLS/VICRの不明な水準をゼロ価格へ置換していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 900,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGridHeight": 671,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "7056aeeebcde69b3d6b95bfdca95d49eb8202d2d84739d00bd943464aa25227f",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison-near-pass/1440/light",
+      "screenshot": "comparison-near-pass-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run original PNG visually inspected",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "不足条件を会社名の位置へ移し、カード高を増やさず6枚の比較を維持する。未判定の中立色、待ちの青、超過の黄が整理される。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "SNDKの高値距離、SLSの株価対SMA50、VICRの移動平均順序をチャートと同時に確認できる。無効ピボットには帯や売買水準を描いていない。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "あと1条件を単なるリストでなく価格図の比較へ展開し、条件の不足と現在の価格位置を独立に見せている。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "見出しが選定あと1条件、説明が未合格・購入条件は別判定なので、購入条件1/7と矛盾しない。MXL/SLS/VICRの不明な水準をゼロ価格へ置換していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 900,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGridHeight": 671,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "ee477dae8674779cbb0a9bc82abe6ebe6e73f0efdf3218f2116ded7e99dba75c",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison-near-pass/390/dark",
+      "screenshot": "comparison-near-pass-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "不足条件の1行を維持したまま状態と価格図を縦にまとめる。SNDKの超過とMXLの未判定が色と文字で判別できる。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "1枚目を全体確認して次へ進める。ページ件数254と表示1–6が上にあり、通常比較との切替先も見える。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "未合格理由と価格位置を別軸で読む構成をスマホでも維持し、買いシグナルのような一色表示にしていない。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "SNDKのピボット比+11.2%、購入条件1/7、52週高値距離未達がそろう。MXLの上限が不明なことも未判定のラベルで分かる。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 2458,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGridHeight": 2157,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "02e5de1cd698da2c3e64e309ea0aa268532e3978828089044bf5c41f071ebfc5",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "comparison-near-pass/390/light",
+      "screenshot": "comparison-near-pass-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "不足条件の1行を維持したまま状態と価格図を縦にまとめる。SNDKの超過とMXLの未判定が色と文字で判別できる。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "1枚目を全体確認して次へ進める。ページ件数254と表示1–6が上にあり、通常比較との切替先も見える。"
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "未合格理由と価格位置を別軸で読む構成をスマホでも維持し、買いシグナルのような一色表示にしていない。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "SNDKのピボット比+11.2%、購入条件1/7、52週高値距離未達がそろう。MXLの上限が不明なことも未判定のラベルで分かる。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 2458,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGridHeight": 2157,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "5487299d21c399e10ebe735c81aae542d43b39307a219bb4ceea89603e174c61",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "market/1440/dark",
+      "screenshot": "market-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "相対指数100を中心に左右の棒、21日変化、条件通過率を整列し、右にローテーションと読み方を置く。11業種の順序が追いやすい。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "最上位と改善中の結論から、実数と母数へそのまま視線を移せる。表への切替と期間・選定方式の変更も先頭にまとまる。"
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "期間相対指数と足元の変化を、横棒とローテーションという二つの読み方へ接続している。円のサイズに条件通過率を使う役割も説明される。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "指数値、21日の上下、通過数/母数/未確認を分離している。簡易RRGがJdK方式とは異なることと、分類不明を未確認のまま残す説明がある。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 988,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "0aad0ab7e788acfb4cf142bf951bf59bbbadf83dc7bd629687bb76cc6b92fff6",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "market/1440/light",
+      "screenshot": "market-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "相対指数100を中心に左右の棒、21日変化、条件通過率を整列し、右にローテーションと読み方を置く。11業種の順序が追いやすい。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "最上位と改善中の結論から、実数と母数へそのまま視線を移せる。表への切替と期間・選定方式の変更も先頭にまとまる。"
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "期間相対指数と足元の変化を、横棒とローテーションという二つの読み方へ接続している。円のサイズに条件通過率を使う役割も説明される。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "指数値、21日の上下、通過数/母数/未確認を分離している。簡易RRGがJdK方式とは異なることと、分類不明を未確認のまま残す説明がある。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 988,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "c928363555252775625c179686d432abcb93ea1e024116d3bc308bde82f55625",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "market/390/dark",
+      "screenshot": "market-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "業種名と変化率を一列へまとめ、指数と通過率の列を残している。相対指数の見出しは折り返され、情報密度はやや高い。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "上位8業種の状態を初期画面で追える。指標の文字は読み取れるが、棒と数字の間隔はPCより狭く、右の図は下へスクロールする必要がある。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "順位・指数・通過率を切り離さず、同じ業種計器を縦画面へ移している。スマホでも単なる上昇率ランキングになっていない。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "上位のエネルギー113.9、ヘルスケア103.2、情報技術103.1と21日の増減・未確認件数を別表示する。現時点の強さと改善方向を混同していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 1597,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "1b543feee63e438859d3b8b7f81114db73557c3119a15dda68ca662c2e1486df",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "market/390/light",
+      "screenshot": "market-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8,
+          "reason": "業種名と変化率を一列へまとめ、指数と通過率の列を残している。相対指数の見出しは折り返され、情報密度はやや高い。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "上位8業種の状態を初期画面で追える。指標の文字は読み取れるが、棒と数字の間隔はPCより狭く、右の図は下へスクロールする必要がある。"
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "順位・指数・通過率を切り離さず、同じ業種計器を縦画面へ移している。スマホでも単なる上昇率ランキングになっていない。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "上位のエネルギー113.9、ヘルスケア103.2、情報技術103.1と21日の増減・未確認件数を別表示する。現時点の強さと改善方向を混同していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 1597,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "f1c96675d0ab8b376973fee5fa948ebb7c3b5acb965177e09bdf3793240e57b6",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "breadth/1440/dark",
+      "screenshot": "breadth-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "大きな文章カードと反復する3枚の統計を1つの計器に集約。10日レシオ0.82、日次198/235/−37、推移の順が明快。ダークでも強調値と補助情報の濃淡を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "数値と推移が900px内に収まり、期間ボタンもチャート見出し横にある。PCではまだ上部の余白を詰める余地があるが、主要判断を妨げない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "10営業日の比率と1日の銘柄構成を別の時間軸として組み合わせ、同じ色と桁位置の簡潔な計器にした。派手な演出ではなく、数字の意味を比較できる構成で独自性を出している。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "0.82は10日レシオ、198/235/−37は直近1日と見出しで区別。4%以上の騰落という対象、均衡1.00の破線、分析日・表示対象期間・22営業日を保ち、日次件数の割算と誤読させない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 1439,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "sha256": "9440e6dfae440d1a75c0b224ba8d95b02d93d1881557d7496582c0ce8eeb7921",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "breadth/1440/light",
+      "screenshot": "breadth-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "大きな文章カードと反復する3枚の統計を1つの計器に集約。10日レシオ0.82、日次198/235/−37、推移の順が明快。ライトでも強調値と補助情報の濃淡を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "数値と推移が900px内に収まり、期間ボタンもチャート見出し横にある。PCではまだ上部の余白を詰める余地があるが、主要判断を妨げない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "10営業日の比率と1日の銘柄構成を別の時間軸として組み合わせ、同じ色と桁位置の簡潔な計器にした。派手な演出ではなく、数字の意味を比較できる構成で独自性を出している。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "0.82は10日レシオ、198/235/−37は直近1日と見出しで区別。4%以上の騰落という対象、均衡1.00の破線、分析日・表示対象期間・22営業日を保ち、日次件数の割算と誤読させない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 1439,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "sha256": "c87af4482f18115a3889abb2582ba4374e70e91a4e8f290212f1c318b333d7a4",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "breadth/390/dark",
+      "screenshot": "breadth-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "大きな文章カードと反復する3枚の統計を1つの計器に集約。10日レシオ0.82、日次198/235/−37、推移の順が明快。ダークでも強調値と補助情報の濃淡を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "最初の画面で結論、比率、日次件数と推移全体を読み、1/3か月を切り替えられる。説明は下の開閉欄へ移り、以前のように数値とチャートを探してスクロールする必要がない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "10営業日の比率と1日の銘柄構成を別の時間軸として組み合わせ、同じ色と桁位置の簡潔な計器にした。派手な演出ではなく、数字の意味を比較できる構成で独自性を出している。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "0.82は10日レシオ、198/235/−37は直近1日と見出しで区別。4%以上の騰落という対象、均衡1.00の破線、分析日・表示対象期間・22営業日を保ち、日次件数の割算と誤読させない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 1458,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "sha256": "437b68b1ac6ee2da1b8211b4e2b7959acac3c691be151a3cd7833b2acafb8ab4",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "breadth/390/light",
+      "screenshot": "breadth-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "大きな文章カードと反復する3枚の統計を1つの計器に集約。10日レシオ0.82、日次198/235/−37、推移の順が明快。ライトでも強調値と補助情報の濃淡を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "最初の画面で結論、比率、日次件数と推移全体を読み、1/3か月を切り替えられる。説明は下の開閉欄へ移り、以前のように数値とチャートを探してスクロールする必要がない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "10営業日の比率と1日の銘柄構成を別の時間軸として組み合わせ、同じ色と桁位置の簡潔な計器にした。派手な演出ではなく、数字の意味を比較できる構成で独自性を出している。"
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "0.82は10日レシオ、198/235/−37は直近1日と見出しで区別。4%以上の騰落という対象、均衡1.00の破線、分析日・表示対象期間・22営業日を保ち、日次件数の割算と誤読させない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 1458,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "sha256": "be812d5d7ffabc95ccbf33ac9889c18f63b74fbbb98c8fbc0aa517fc3104351f",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "scan/1440/dark",
+      "screenshot": "scan-1440x900-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "以前空だったRS推移・株価推移が各行で描かれ、列見出しの階層と行間が整う。ライトでも見出し行は暗い帯と明るい文字で読める。 ダーク配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "検索、補助条件、現在の市場上限が結果表の前にまとまり、7行ほどを初期表示で確認できる。多数の列と補助チップは専門的で、通常候補画面より操作密度が高い。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "RSの棒と価格の線を行に埋め込み、独自点数と個別の推移を比較できる。表形式は標準的だが、欠損情報の印と共通選定への導線が分析用途に合う。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "補助条件と本日の共通選定を区別し、市場上限0%を明記する。917/全5901件、チャート8734銘柄は件数の見方へ導線があり、異なる母集団を同一件数として示していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 1197,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "5b81ec1f1529fdf6ac7978a2ffa376bef2738ac6b400bbfd8eb739f474c9fdc9",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "scan/1440/light",
+      "screenshot": "scan-1440x900-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "以前空だったRS推移・株価推移が各行で描かれ、列見出しの階層と行間が整う。ライトでも見出し行は暗い帯と明るい文字で読める。 ライト配色でも本文と補助線の役割を読み分けられる。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "検索、補助条件、現在の市場上限が結果表の前にまとまり、7行ほどを初期表示で確認できる。多数の列と補助チップは専門的で、通常候補画面より操作密度が高い。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "RSの棒と価格の線を行に埋め込み、独自点数と個別の推移を比較できる。表形式は標準的だが、欠損情報の印と共通選定への導線が分析用途に合う。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "補助条件と本日の共通選定を区別し、市場上限0%を明記する。917/全5901件、チャート8734銘柄は件数の見方へ導線があり、異なる母集団を同一件数として示していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 56,
+        "pageHeight": 1197,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": null,
+        "visibleScanCards": 0
+      },
+      "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
+      "sha256": "924449061566870e6736b7130eb6010943418c74d89657047e43b80364b50c35",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "scan/390/dark",
+      "screenshot": "scan-390x844-dark.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "件数と「条件・使い方」を1段にまとめ、検索・並べ替えから同じ構造の銘柄カードへ視線が流れる。3枚が完全に見え、余白の大きい設定群に占有されなくなった。ダークでも強調値と補助情報の濃淡を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "先頭カードは実測431.17pxでEXEL・ITGR・METの3件を完全表示。必要な条件操作は残し、詳細項目表への入口と次のTECHも見える。市場条件の説明は依然大きいが購入を誤認しないための情報として読める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "47列をそのまま縮小せず、価格・RS・共通ピボット・出来高比・準備条件を各銘柄の2行に編集。PCの全項目表へ行く手段も並置している。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "917/5901という母数、分析日、試行配分上限0%、RS84・共通ピボット59.41・出来高1.35倍・準備条件未達を同時に読める。補助スキャンの点数を購入成立と同一視していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 2467,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": {
+          "top": 431.171875,
+          "bottom": 523.171875,
+          "height": 92,
+          "width": 358
+        },
+        "visibleScanCards": 3
+      },
+      "sha256": "2a69fe9c3b273c7a9a5d224c075aebc9471edc788ce916d98b348934f77ba778",
+      "prior_review": ".git/review-scan-sixth.json"
+    },
+    {
+      "key": "scan/390/light",
+      "screenshot": "scan-390x844-light.png",
+      "reviewer": "Codex root: seventh-run byte-identical SHA-256 verification against reviewed sixth-run capture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "件数と「条件・使い方」を1段にまとめ、検索・並べ替えから同じ構造の銘柄カードへ視線が流れる。3枚が完全に見え、余白の大きい設定群に占有されなくなった。ライトでも強調値と補助情報の濃淡を読み分けられる。"
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "先頭カードは実測431.17pxでEXEL・ITGR・METの3件を完全表示。必要な条件操作は残し、詳細項目表への入口と次のTECHも見える。市場条件の説明は依然大きいが購入を誤認しないための情報として読める。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "47列をそのまま縮小せず、価格・RS・共通ピボット・出来高比・準備条件を各銘柄の2行に編集。PCの全項目表へ行く手段も並置している。"
+        },
+        "content": {
+          "value": 8.2,
+          "reason": "917/5901という母数、分析日、試行配分上限0%、RS84・共通ピボット59.41・出来高1.35倍・準備条件未達を同時に読める。補助スキャンの点数を購入成立と同一視していない。"
+        }
+      },
+      "observed_metrics": {
+        "axe_violations": 0,
+        "smallTargets": 0,
+        "fontIssues": 0,
+        "radiusIssues": 0,
+        "horizontalOverflow": false,
+        "chromeHeight": 104,
+        "pageHeight": 2467,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGridHeight": null,
+        "firstScanCard": {
+          "top": 431.171875,
+          "bottom": 523.171875,
+          "height": 92,
+          "width": 358
+        },
+        "visibleScanCards": 3
+      },
+      "sha256": "0509df074b413df39bd69427956c07550591976db2ee75cf14f7dc67e8fd74eb",
+      "prior_review": ".git/review-scan-sixth.json"
+    }
+  ]
+}
