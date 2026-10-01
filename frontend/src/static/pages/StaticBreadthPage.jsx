@@ -40,17 +40,17 @@ function StaticBreadthPage() {
     () => resolveStaticMarketEntry(manifestQuery.data, selectedMarket),
     [manifestQuery.data, selectedMarket],
   );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedTab = searchParams.get('tab') === 'sectors' ? 2 : searchParams.get('tab') === 'groups' ? 1 : 0;
   const breadthQuery = useQuery({
     queryKey: ['staticBreadth', marketEntry.pages?.breadth?.path, manifestQuery.data?.generated_at],
     queryFn: () => fetchStaticJson(marketEntry.pages.breadth.path),
-    enabled: Boolean(marketEntry.pages?.breadth?.path),
+    enabled: selectedTab !== 2 && Boolean(marketEntry.pages?.breadth?.path),
     staleTime: 60000,
     placeholderData: () => undefined,
   });
   const [timeRange, setTimeRange] = useState('1M');
   // タブはURL（?tab=groups）と同期し、戻る/進むで切り替えを巻き戻せるようにする
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedTab = searchParams.get('tab') === 'sectors' ? 2 : searchParams.get('tab') === 'groups' ? 1 : 0;
   const handleTabChange = useCallback((_event, value) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
@@ -79,7 +79,7 @@ function StaticBreadthPage() {
   }, [payload.benchmark_overlay, payload.spy_overlay, analysisDate, timeRange]);
   const benchmarkLabel = payload.benchmark_symbol || (marketEntry.market === 'US' ? 'SPY' : 'Benchmark');
 
-  if (manifestQuery.isLoading || breadthQuery.isLoading) {
+  if (manifestQuery.isLoading || (selectedTab !== 2 && breadthQuery.isLoading)) {
     return (
       <Box display="flex" justifyContent="center" py={8}>
         <CircularProgress />
@@ -87,11 +87,11 @@ function StaticBreadthPage() {
     );
   }
 
-  if (manifestQuery.isError || breadthQuery.isError) {
+  if (manifestQuery.isError || (selectedTab !== 2 && breadthQuery.isError)) {
     return <Alert severity="error" action={<Button onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>再試行</Button>}>騰落データの読み込みに失敗しました。</Alert>;
   }
 
-  if (breadthQuery.data?.available === false) {
+  if (selectedTab !== 2 && breadthQuery.data?.available === false) {
     return <Alert severity="info">{breadthQuery.data?.message || '騰落スナップショットがありません。'}</Alert>;
   }
 
@@ -101,10 +101,10 @@ function StaticBreadthPage() {
   const mismatch = Boolean(marketEntry.as_of_date && current.date !== marketEntry.as_of_date);
 
   return (
-    <Box component="main" className="market-workbench" data-theme={theme.palette.mode}>
+    <Box component="main" className={`market-workbench${selectedTab===2?' sector-workbench':''}`} data-theme={theme.palette.mode}>
       <ConnectionStatus date={marketEntry.as_of_date} />
-      <header className="market-page-head"><div><div className="research-kicker">MARKET OVERVIEW</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 28, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>データを再確認 ↻</Button></div></header>
-      {(summary.fresh.state !== 'recent' || mismatch) && <Alert severity="warning" sx={{ mb: 2 }}>分析日が古い、未確認、または公開データと一致しません。最新の市場状態として扱わないでください。</Alert>}
+      {selectedTab === 2 ? <div className="sector-page-meta"><span>分析 {marketEntry.as_of_date || '未確認'}</span><a href="#/scan">詳細スキャン →</a></div> : <header className="market-page-head"><div><div className="research-kicker">市場の概況</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 28, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>データを再確認 ↻</Button></div></header>}
+      {selectedTab !== 2 && (summary.fresh.state !== 'recent' || mismatch) && <Alert severity="warning" sx={{ mb: 2 }}>分析日が古い、未確認、または公開データと一致しません。最新の市場状態として扱わないでください。</Alert>}
       <Tabs
         value={selectedTab}
         onChange={handleTabChange}
@@ -171,7 +171,7 @@ function StaticBreadthPage() {
 
       {selectedTab === 2 && <SectorStrength entry={marketEntry} />}
       {selectedTab === 1 && <BreadthGroupAttribution attribution={groupAttribution} />}
-      <footer className="market-footnote">4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{formatPublished(breadthQuery.data.published_at || breadthQuery.data.generated_at)}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></footer>
+      <footer className="market-footnote">{selectedTab===2 ? <>公開更新：{formatPublished(manifestQuery.data?.generated_at)} · 日次スナップショット</> : <>4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{formatPublished(breadthQuery.data.published_at || breadthQuery.data.generated_at)}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></>}</footer>
       {metricInfoPopover}
     </Box>
   );

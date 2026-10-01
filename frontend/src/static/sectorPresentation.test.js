@@ -1,0 +1,9 @@
+import { describe,it,expect } from 'vitest';
+import { rankedSectors,sectorReadings,sectorBar,sectorChange } from './sectorPresentation';
+const group=(key,value,momentum,percent,total=20)=>({key,label:key,relative:{63:{value},126:{value:value==null?null:value+2}},momentum21:{value:momentum},small:total<10,rates:{minervini:{pass:percent==null?0:percent*total/100,total,unknown:2,percent}}});
+describe('sector presentation uses the exported values without reclassification',()=>{
+ it('sorts known values first without changing the input or inventing missing values',()=>{const groups=[group('missing',null,null,null),group('low',98,95,20),group('high',113,104,30)];expect(rankedSectors(groups,63).map(g=>g.key)).toEqual(['high','low','missing']);expect(groups[0].key).toBe('missing');});
+ it('derives headings from the selected period and describes improvement separately',()=>{const groups=[group('A',105,99,20),group('B',102,102,40),group('C',99,106,30)];const result=sectorReadings(groups,63,'minervini');expect(result.heading).toBe('追い風はAとB。');expect(result.subheading).toBe('改善中はC。');expect(result.highPass[0].key).toBe('B');expect(sectorReadings(groups,126,'minervini').improving).toEqual([]);});
+ it('keeps unknown and all-underperforming days distinct',()=>{expect(sectorReadings([group('A',null,null,null)],63,'minervini').heading).toBe('業種の相対指数は未確認。');expect(sectorReadings([group('A',99,95,20)],63,'minervini').heading).toBe('SPYを上回る業種なし。');});
+ it('clamps only bars while preserving visible values and true missing state',()=>{expect(sectorBar(130)).toMatchObject({end:100,width:50,clipped:true});expect(sectorBar(90)).toMatchObject({left:25,width:25,positive:false});expect(sectorBar(null)).toBeNull();expect(sectorChange(-1.2)).toBe('−1.2%');expect(sectorChange(0)).toBe('±0.0%');});
+});

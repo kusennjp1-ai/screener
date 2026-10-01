@@ -15,6 +15,8 @@ vi.mock('../../components/Charts/BreadthChart', () => ({
   ),
 }));
 
+vi.mock('../useWorkbench',()=>({useWorkbench:()=>({data:{sectors:{groups:[]}}})}));
+
 const renderPage = (initialEntry = '/breadth') => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -38,6 +40,14 @@ const renderPage = (initialEntry = '/breadth') => {
 };
 
 describe('StaticBreadthPage', () => {
+  it('opens the sector deep link independently of the unrelated breadth bundle',async()=>{
+    globalThis.fetch=vi.fn(async url=>({ok:true,status:200,json:async()=>String(url).endsWith('manifest.json')?{as_of_date:'2026-09-29',pages:{breadth:{path:'breadth.json'}}}:{}}));
+    renderPage('/breadth?tab=sectors');
+    expect(await screen.findByRole('heading',{name:'業種の相対指数は未確認。'})).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'詳細スキャン →'})).toHaveAttribute('href','#/scan');
+    expect(globalThis.fetch.mock.calls.some(([url])=>String(url).endsWith('/breadth.json'))).toBe(false);
+  });
+
   beforeEach(() => {
     vi.stubEnv('VITE_STATIC_SITE', 'true');
   });
