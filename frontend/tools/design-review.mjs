@@ -115,7 +115,7 @@ async function capture(page, viewport, theme, screen) {
   check(metrics.radiusIssues.length === 0, `${key}: ${metrics.radiusIssues.length} radius-step violations`);
   check(!metrics.horizontalOverflow, `${key}: horizontal page overflow`);
   if (viewport.width === 390) check(metrics.chromeHeight <= 110, `${key}: fixed chrome ${metrics.chromeHeight}px > 110px`);
-  if (screen === 'home' && viewport.width === 1440) {
+  if (['home', 'near-pass'].includes(screen) && viewport.width === 1440) {
     check(metrics.hero && metrics.hero.height <= 320, `${key}: hero height ${metrics.hero?.height} > 320px or missing`);
     check(metrics.chart && metrics.chart.top <= 540, `${key}: chart top ${metrics.chart?.top} > 540px or missing`);
   }
@@ -124,20 +124,24 @@ async function capture(page, viewport, theme, screen) {
     check(metrics.chart && metrics.chart.top <= 420, `${key}: chart top ${metrics.chart?.top} > 420px or missing`);
     check(metrics.visibleCandidates >= 12, `${key}: ${metrics.visibleCandidates} visible rows < 12`);
   }
-  if (screen === 'home' && viewport.width === 390) check(metrics.visibleCandidates >= 3, `${key}: ${metrics.visibleCandidates} visible rows < 3`);
+  if (['home', 'near-pass'].includes(screen) && viewport.width === 390) check(metrics.visibleCandidates >= 3, `${key}: ${metrics.visibleCandidates} visible rows < 3`);
   if (screen === 'detail' && viewport.width === 390) check(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, `${key}: detail-to-chart ${metrics.chartCard && metrics.detail ? metrics.chartCard.top - metrics.detail.top : 'missing'}px > 160px`);
-  if (screen === 'comparison' && viewport.width === 1440) {
+  if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 1440) {
     check(metrics.pageHeight <= 900, `${key}: page height ${metrics.pageHeight}px > 900px`);
     check(metrics.visibleCompareCards >= 6, `${key}: ${metrics.visibleCompareCards} visible comparison cards < 6`);
   }
   if (screen === 'market') check(metrics.pageHeight <= (viewport.width === 390 ? 1600 : 1000), `${key}: market page height ${metrics.pageHeight}px exceeds budget`);
   if (screen === 'scan') {
     if (viewport.width === 390) check(metrics.pageHeight <= 3000, `${key}: scan page height ${metrics.pageHeight}px > 3000px`);
-    const sparklines = await page.locator('th[data-column="rs_trend"], th[data-column="price_change_1d"]').count();
-    if (sparklines) {
-      const paths = await page.locator('td[data-column="rs_trend"] svg path, td[data-column="price_change_1d"] svg path').evaluateAll(nodes => nodes.map(node => node.getTotalLength()));
-      check(paths.length > 0 && paths.every(length => length > 0), `${key}: displayed sparkline columns have no lines`);
-    }
+    // Body cells do not duplicate header data-column attributes. Resolve their
+    // actual column indices; RS uses bars whereas price uses an area path.
+    const sparklineColumns = await page.locator('th[data-column="rs_trend"], th[data-column="price_change_1d"]').evaluateAll(headers => headers.map(header => ({
+      id: header.dataset.column,
+      geometry: [...header.closest('table').querySelectorAll('tbody tr')].flatMap(row => [...(row.cells[header.cellIndex]?.querySelectorAll('svg path,svg rect,svg polyline') || [])]).filter(node => {
+        const box = node.getBBox(); return box.width > 0 && box.height > 0;
+      }).length,
+    })));
+    for (const column of sparklineColumns) check(column.geometry > 0, `${key}: displayed ${column.id} sparkline column has no geometry`);
   }
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.waitForTimeout(50);
@@ -156,6 +160,13 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, viewport, theme, 'home');
+    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+    await page.getByLabel('あと1条件', { exact: true }).check();
+    await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
+    await capture(page, viewport, theme, 'near-pass');
+    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+    await page.getByLabel('あと1条件', { exact: true }).uncheck();
+    await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
     if (viewport.width === 1440) {
       await page.getByRole('button', { name: '概況をたたむ', exact: true }).click();
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -165,29 +176,57 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     await page.locator('.candidate-row').first().click();
     await capture(page, viewport, theme, 'detail');
     const expand = page.getByRole('button', { name: '日次チャートを分析', exact: true });
+    check(await expand.isVisible(), `${key}: chart expansion control is missing`);
     if (await expand.isVisible()) {
       await expand.click(); await visible(page.getByRole('dialog'));
       await capture(page, viewport, theme, 'chart');
       await page.keyboard.press('Escape');
     }
-    const back = page.getByRole('button', { name: '← 候補一覧に戻る', exact: true });
-    if (await back.isVisible()) await back.click();
-    await page.goto(`${current.url}#/`); await visible(page.locator(readySelector));
+    if (viewport.width === 390) {
+      await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
+      await visible(page.locator(readySelector));
+      check(await page.locator('.research-workbench').getAttribute('data-mobile-view') === 'list', `${key}: back control did not restore candidate list`);
+    }
+  } catch (error) {
+    report.failures.push(`${key}: home/detail verification interrupted: ${error.message}`);
+    await page.screenshot({ path: resolve(output, `interrupted-home-${viewport.width}-${theme}.png`) }).catch(() => {});
+  }
+  // Each remaining route is independently loadable. A broken return control
+  // above remains a failure, but cannot hide problems on unrelated screens.
+  try {
+    await page.goto(current.url); await page.reload(); await visible(page.locator(readySelector));
     const planButton = page.getByRole('button', { name: /条件付きの配分|配分の試算/ }).first();
     await planButton.click(); await visible(page.getByRole('dialog'));
     await capture(page, viewport, theme, 'portfolio');
     await page.keyboard.press('Escape');
-    for (const [screen, route, selector] of [['comparison', '#/compare', '.comparison-grid'], ['market', '#/breadth?tab=sectors', '.sector-strength'], ['scan', '#/scan', 'h1']]) {
+  } catch (error) {
+    report.failures.push(`${key}: portfolio verification interrupted: ${error.message}`);
+  }
+  for (const [screen, route, selector] of [['comparison', '#/compare', '.comparison-grid'], ['market', '#/breadth?tab=sectors', '.sector-strength'], ['breadth', '#/breadth', '.market-trend'], ['scan', '#/scan', 'h1']]) {
+    try {
       await page.goto(`${current.url}${route}`); await visible(page.locator(selector));
       if (screen === 'comparison') await visible(page.locator('.comparison-grid canvas, .comparison-grid svg'));
       if (screen === 'scan') await visible(page.locator('[data-testid="mobile-scan-row"], tbody tr'));
       await capture(page, viewport, theme, screen);
+      if (screen === 'comparison') {
+        await page.getByRole('button', { name: '手法・絞り込み', exact: true }).click();
+        await page.getByLabel('あと1条件', { exact: true }).check();
+        await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
+        await capture(page, viewport, theme, 'comparison-near-pass');
+      }
+    } catch (error) {
+      report.failures.push(`${key}: ${screen} verification interrupted: ${error.message}`);
+      await page.screenshot({ path: resolve(output, `interrupted-${screen}-${viewport.width}-${theme}.png`) }).catch(() => {});
     }
-  } catch (error) {
-    report.failures.push(`${key}: route verification interrupted: ${error.message}`);
-    await page.screenshot({ path: resolve(output, `interrupted-${viewport.width}-${theme}.png`) }).catch(() => {});
   }
   await context.close();
+}
+for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
+  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : [])];
+  for (const screen of screens) {
+    const key = `${screen}/${viewport.width}/${theme}`;
+    check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
+  }
 }
 
 const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -219,7 +258,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const candidateMs = Date.now() - start;
         const initialTasks = await page.evaluate(() => ({ longest: Math.max(0, ...window.__reviewTasks.map(item => item.duration)), tasks: window.__reviewTasks }));
-        const method = page.getByRole('button', { name: /オニール.*CAN SLIM/, exact: false });
+        const method = page.getByRole('button', { name: /^オニール/, exact: false });
         const switchStart = Date.now(); await method.click();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const switchMs = Date.now() - switchStart;
