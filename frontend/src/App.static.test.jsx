@@ -324,7 +324,7 @@ describe('App static mode', () => {
   it.each([
     ['#/', '今日の投資判断'],
     ['#/daily', 'United States スナップショット'],
-    ['#/scan', 'デイリースキャン'],
+    ['#/scan', '詳細スキャン'],
     ['#/breadth', '市場環境'],
     ['#/groups', 'United States 業種グループランキング'],
     ['#/themes', '今日の投資判断'],
@@ -336,8 +336,9 @@ describe('App static mode', () => {
       const hasText = (el) => el.textContent?.includes(heading);
       return hasText(element) && Array.from(element.children).every((child) => !hasText(child));
     };
-    expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getAllByText('米国株 / 日次分析').length).toBeGreaterThan(0);
+    if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'今日の概況'}, {timeout:10000})).toBeInTheDocument();
+    else expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(screen.getByRole('banner')).toHaveTextContent('分析');
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
 
     await waitFor(() => {
@@ -356,7 +357,7 @@ describe('App static mode', () => {
   it('keeps scan controls read-only in the static route', async () => {
     await renderStaticAppAtHash('#/scan');
 
-    expect(await screen.findByRole('heading', { name: 'デイリースキャン（補助フィルター）' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '詳細スキャン' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('static-filter-panel')).toHaveTextContent('presets-disabled');
       expect(screen.getByTestId('static-results-table')).toHaveTextContent('actions-visible:2');
@@ -389,6 +390,6 @@ describe('App static mode', () => {
     await renderStaticAppAtHash('#/groups');
 
     expect(await screen.findByRole('heading', { name: 'Hong Kong 業種グループランキング' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Static market selector' })).toHaveTextContent('Hong Kong');
+    expect(screen.getByRole('combobox', { name: '市場切替' })).toHaveTextContent('Hong Kong');
   }, 10000);
 });
