@@ -37,12 +37,31 @@ for(const width of [1440,390])test(`offscreen candidates keep height, focus and 
     await expect(next).toBeFocused();await expect(next).toBeInViewport();
     await next.press('ArrowUp');
     await expect(last).toBeFocused();await expect(last).toBeInViewport();
-  }else{
-    await page.getByRole('button',{name:'次の50件',exact:true}).click();
-    await expect(items.first()).toContainText('PERF050');
-    await page.getByRole('button',{name:'次の50件',exact:true}).click();
-    await expect(items).toHaveCount(1);
-    await expect(items.first()).toContainText('PERF100');
   }
+  const expectPageStart=async symbol=>{
+    const first=items.first().getByRole('button');
+    await expect(first).toContainText(symbol);
+    await expect(first).toBeFocused();
+    await expect(first).toBeInViewport({ratio:1});
+    const bounds=await first.evaluate(node=>{
+      const row=node.getBoundingClientRect(),header=document.querySelector('.leader-header').getBoundingClientRect();
+      const columns=document.querySelector('.candidate-columns').getBoundingClientRect(),nav=document.querySelector('.leader-mobile-nav')?.getBoundingClientRect();
+      const heading=document.querySelector('.candidate-board-heading').getBoundingClientRect();
+      return {top:row.top,bottom:row.bottom,headingTop:heading.top,headerBottom:header.bottom,columnsBottom:columns.height?columns.bottom:header.bottom,visibleBottom:nav?.height?nav.top:innerHeight};
+    });
+    expect(bounds.top).toBeGreaterThanOrEqual(Math.max(bounds.headerBottom,bounds.columnsBottom));
+    expect(bounds.bottom).toBeLessThanOrEqual(bounds.visibleBottom);
+    if(width===390)expect(bounds.headingTop).toBeGreaterThanOrEqual(bounds.headerBottom);
+  };
+  await page.getByRole('button',{name:'次の50件',exact:true}).click();
+  await expectPageStart('PERF050');
+  await page.getByRole('button',{name:'次の50件',exact:true}).click();
+  await expect(items).toHaveCount(1);
+  await expectPageStart('PERF100');
+  await page.getByRole('button',{name:'前の50件',exact:true}).click();
+  await expect(items).toHaveCount(50);
+  await expectPageStart('PERF050');
+  await page.getByRole('button',{name:'前の50件',exact:true}).click();
+  await expectPageStart('PERF000');
   await expect(page.getByRole('heading',{name:'候補リスト 101件'})).toHaveText('候補リスト 101件');
 });

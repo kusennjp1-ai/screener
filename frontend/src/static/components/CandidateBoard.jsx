@@ -1,6 +1,6 @@
 import CandidateCharts from './CandidateCharts';
 import PositionMeter from './PositionMeter';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Paper } from '@mui/material';
 import { assess, entryPlan } from '../researchEngine';
 import { singleMissingCondition } from '../missingCondition';
@@ -26,6 +26,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
 });
 export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false}) {
  const [sort,setSort]=useState('rank'),[page,setPage]=useState(0);
+ const scrollRef=useRef(null),pageStartRef=useRef(null);
  const ordered=useMemo(()=>{
   if(sort==='rank')return ranked;
   const values=ranked.map(item=>({...item,plan:entryPlan(item.row,null,method)}));
@@ -34,6 +35,22 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
  },[ranked,method,sort]);
  const maxPage=Math.max(0,Math.ceil(ordered.length/50)-1),current=Math.min(page,maxPage);
  const visible=useMemo(()=>ordered.slice(current*50,current*50+50).map(item=>item.plan?item:{...item,plan:entryPlan(item.row,null,method)}),[ordered,current,method]);
+ useLayoutEffect(()=>{
+  if(pageStartRef.current!==current)return;
+  pageStartRef.current=null;
+  const scroll=scrollRef.current,first=scroll?.querySelector('.candidate-row');
+  if(!first)return;
+  // Only explicit pagination returns to the first row. Arrow-key navigation
+  // keeps its existing target, including the previous page's final row.
+  scroll.scrollTop=0;
+  first.focus({preventScroll:true});
+  if(window.innerWidth<=700){
+   const heading=scroll.closest('.research-list')?.querySelector('.candidate-board-heading');
+   const top=(heading||first).getBoundingClientRect().top,headerBottom=document.querySelector('.leader-header')?.getBoundingClientRect().bottom||0;
+   window.scrollTo({top:Math.max(0,window.scrollY+top-headerBottom),behavior:'instant'});
+  }
+ },[current]);
+ const showPage=useCallback(next=>{pageStartRef.current=next;setPage(next);},[]);
  const sortBy=useCallback(key=>{setSort(key);setPage(0);},[]);
  const move=useCallback((symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){const scroll=element.closest('.candidate-scroll');onSelect(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{scroll?.querySelectorAll('.candidate-row')[(index+direction)%50]?.focus({preventScroll:false});});}},[ordered,onSelect]);
  return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="候補リスト" className={`research-panel research-list${compareOnly?' compare-only':''}`}>
@@ -41,11 +58,11 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
   <div className="candidate-legend"><span>● ゾーン内 ◔ 待ち ▲ 超過</span><span>帯＝買いゾーン / 線＝ピボット</span></div></>}
   {!onFilters&&!compareOnly&&<div className="candidate-view-switch" role="group" aria-label="候補の表示形式"><Button aria-pressed={view==='list'} onClick={()=>onView?.('list')}>一覧</Button><Button aria-pressed={view==='charts'} onClick={()=>onView?.('charts')}>チャート比較</Button></div>}
   {view==='charts'&&!loading&&<CandidateCharts ordered={ordered} {...{method,nearOnly,date,generation,market,now,paused}} onSelect={onCompare||onSelect}/>}
-  <div className="candidate-scroll" hidden={view!=='list'}>
+  <div className="candidate-scroll" ref={scrollRef} hidden={view!=='list'}>
    <div className="candidate-columns" role="group" aria-label="列の並べ替え">{[['rank','銘柄'],['state','位置'],['distance','ピボット比'],['rs','RS'],['volume','出来高']].map(([key,label])=><button key={key} aria-label={`${label}で並べ替え`} aria-pressed={sort===key} onClick={()=>sortBy(key)}>{label}{sort===key?' ↓':''}</button>)}</div>
    <div role="list" aria-label="投資手法別の銘柄候補">{visible.map(item=><div role="listitem" key={item.row.symbol}><CandidateRow item={item} method={method} nearOnly={nearOnly} selected={item.row.symbol===selectedSymbol} onSelect={onSelect} onCompare={onCompare} onMove={move}/></div>)}</div>
   </div>
   {!ranked.length&&!loading&&<p className="candidate-help">該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</p>}
-  {view==='list'&&maxPage>0&&<div className="candidate-pagination"><Button disabled={!current} onClick={()=>setPage(current-1)}>前の50件</Button><span>{current+1} / {maxPage+1}</span><Button disabled={current===maxPage} onClick={()=>setPage(current+1)}>次の50件</Button></div>}
+  {view==='list'&&maxPage>0&&<div className="candidate-pagination"><Button disabled={!current} onClick={()=>showPage(current-1)}>前の50件</Button><span>{current+1} / {maxPage+1}</span><Button disabled={current===maxPage} onClick={()=>showPage(current+1)}>次の50件</Button></div>}
  </Paper>;
 });
