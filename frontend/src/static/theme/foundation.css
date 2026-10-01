@@ -14,7 +14,6 @@
 .leader-shell .MuiCheckbox-root,.leader-shell .MuiSwitch-root { min-width:24px;min-height:24px; }
 .leader-shell .MuiChip-root[role=button] { min-height:24px; }
 .leader-shell a:not(p a),:root[data-theme] .MuiModal-root a { min-height:24px; }
-.leader-shell a:not(p a):not(.MuiButton-root),:root[data-theme] .MuiModal-root a { display:inline-flex;align-items:center; }
 :root[data-theme] .tv-lightweight-charts a { min-width:24px;min-height:24px;display:inline-flex;align-items:center; }
 @media(max-width:700px),(pointer:coarse){
  .leader-shell .MuiFormControlLabel-root { min-height:44px; }

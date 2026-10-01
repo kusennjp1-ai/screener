@@ -388,7 +388,7 @@ function StaticScanPage() {
           shows; regime fields ride on every static scan row. Fed from the
           unfiltered set so the market context stays visible even when the
           active filters match nothing. */}
-      <Alert severity="info" sx={{mb:2}}>{modelMarket(hydratedRows).label} · 新規資金の試行配分上限 {Math.min(modelMarket(hydratedRows).cap, .25)*100}% · <a href="#/">本日の判断と共通の選定条件へ</a></Alert>
+      <Alert severity="info" sx={{mb:2}}>{modelMarket(hydratedRows).label} · 新規資金の試行配分上限 {Math.min(modelMarket(hydratedRows).cap, .25)*100}% · <a href="#/" style={{display:'inline-flex',alignItems:'center'}}>本日の判断と共通の選定条件へ</a></Alert>
 
       {hydrationComplete && (
         <FilterPanel
