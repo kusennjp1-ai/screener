@@ -41,8 +41,10 @@ for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
       await expect(tools).toHaveAttribute('aria-expanded', 'false');
       await tools.click();
       await expect(tools).toHaveAttribute('aria-expanded', 'true');
+      await expect(page.getByRole('button',{name:'絞り込みを閉じる'})).toBeVisible();
+    } else {
+      await page.getByRole('button',{name:'絞り込みを開く'}).click();
     }
-    await page.getByRole('button',{name:'絞り込みを開く'}).click();
     await page.getByRole('button',{name:'財務を開く'}).click();
     const expanded = await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
     expect(expanded.violations).toEqual([]);
