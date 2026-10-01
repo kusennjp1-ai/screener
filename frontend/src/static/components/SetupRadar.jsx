@@ -1,21 +1,23 @@
 import { memo, useMemo, useState } from 'react';
 import { entryPlan } from '../researchEngine';
-import { radarGeometry, signed, stateKey, STATES } from '../positionGeometry';
+import { radarGeometry, signed, stateKey } from '../positionGeometry';
+import { radarMarks } from '../radarMarks';
 export default memo(function SetupRadar({ranked,selectedSymbol,onSelect,small=false}) {
  const [hover,setHover]=useState(null);
  const points=useMemo(()=>ranked.filter(x=>x.assessment.qualified).map(({row})=>{const p=entryPlan(row,null,'minervini');return {symbol:row.symbol,distance:p.pivot?p.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(p.state),pickable:Boolean(row.chart_path)};}),[ranked]);
  const g=useMemo(()=>radarGeometry(points,small?340:620,small?124:224),[points,small]);
- const marks=useMemo(()=>g.points.map(p=><circle key={p.symbol} cx={p.x} cy={p.y} r={p.radius} fill={`var(--${STATES[p.state][2]})`} opacity={p.state==='zone'?.95:.6} onMouseEnter={()=>setHover(p.symbol)} onMouseLeave={()=>setHover(null)} onClick={()=>p.pickable&&onSelect(p.symbol)} style={{cursor:p.pickable?'pointer':'default'}}><title>{p.symbol} · {signed(p.distance)} · RS {Math.round(p.rs)}{p.pickable?'':' · 詳細なし'}</title></circle>),[g,onSelect]);
+ const marks=useMemo(()=>({__html:radarMarks(g.points)}),[g]);
+ const eventPoint=event=>{const node=event.target.closest?.('[data-radar-point]');return node?g.points[Number(node.dataset.radarPoint)]:null;};
  const active=g.points.find(p=>p.symbol===(hover||selectedSymbol));
  const percent=(v,size)=>`${v/size*100}%`;
  return <section className="setup-radar" aria-label="セットアップ・レーダー">
   <header><strong>セットアップ・レーダー</strong><span>横：ピボット比 · 縦：RS推計</span></header>
   <div className="radar-plot" style={{aspectRatio:`${g.width}/${g.height}`}}>
-   <svg viewBox={`0 0 ${g.width} ${g.height}`} role="img" aria-label={`ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。`}>
+   <svg viewBox={`0 0 ${g.width} ${g.height}`} role="img" aria-label={`ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。`} onMouseOver={event=>setHover(eventPoint(event)?.symbol||null)} onMouseOut={event=>{if(!event.relatedTarget?.nodeType || !event.currentTarget.contains(event.relatedTarget))setHover(null);}} onMouseLeave={()=>setHover(null)} onClick={event=>{const point=eventPoint(event);if(point?.pickable)onSelect(point.symbol);}}>
     <rect x={g.x(0)} y={g.top} width={g.x(5)-g.x(0)} height={g.ph} fill="var(--zone-fill)"/>
     {[-15,-10,-5,0,5,10,25].map(n=><path key={n} d={`M${g.x(n)} ${g.top}V${g.top+g.ph}`} stroke={n===0||n===5?'var(--zone-edge)':'var(--grid)'} strokeDasharray={n===0||n===5?'3 3':undefined}/>)}
     {[70,80,90,100].map(n=><path key={n} d={`M${g.left} ${g.y(n)}H${g.left+g.pw}`} stroke="var(--grid)"/>)}
-    {marks}
+    <g data-radar-marks dangerouslySetInnerHTML={marks}/>
     {active&&<><path d={`M${active.x} ${g.top}V${g.top+g.ph}M${g.left} ${active.y}H${g.left+g.pw}`} stroke="var(--accent)" strokeDasharray="3 4" opacity=".5"/><circle cx={active.x} cy={active.y} r={active.radius+5} fill="none" stroke="var(--accent)"/></>}
     <path d={`M${g.x(10)-3} ${g.top+g.ph+4}l3 -8m1 8l3 -8`} stroke="var(--text-3)"/>
    </svg>
