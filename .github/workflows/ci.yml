@@ -83,6 +83,13 @@ jobs:
       - name: Smoke test
         run: cd frontend && npm run test:smoke
 
+      - name: Preserve smoke failure evidence
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-browser-evidence
+          path: frontend/test-results/
+
   static-browser:
     name: Static Browser Regression
     runs-on: ubuntu-latest
