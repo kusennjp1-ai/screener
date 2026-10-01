@@ -121,6 +121,8 @@ function objectiveMetrics() {
     headerHeight: header?.height || 0, bottomNavHeight: nav?.height || 0, chromeHeight: (header?.height || 0) + (nav?.height || 0),
     hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas') || rect('.research-detail .research-chart [data-chart-plot]'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
     visibleCandidates: [...document.querySelectorAll('.candidate-row')].filter(shown).filter(completelyVisible).length,
+    firstScanCard: rect('[data-testid="mobile-scan-row"]'),
+    visibleScanCards: [...document.querySelectorAll('[data-testid="mobile-scan-row"]')].filter(shown).filter(completelyVisible).length,
     visibleCompareCards: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).filter(completelyVisible).length,
     visibleCompareCardFraction: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).reduce((sum, card) => sum + visibleFraction(card), 0),
     comparisonGrid: rect('.comparison-grid'),
