@@ -88,6 +88,7 @@ describe('StaticScanPage', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -101,6 +102,32 @@ describe('StaticScanPage', () => {
     renderPage();
     await waitFor(()=>expect(screen.getByTestId('results-table-total')).toHaveTextContent('2'));
     expect(globalThis.fetch.mock.calls.some(([url])=>/legacy|huge-chart-index|nvda-detail/.test(String(url)))).toBe(false);
+  });
+
+  it('keeps mobile results visible while optional tools are opened and closed', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(query => ({
+      matches: query.includes('max-width'), media: query, onchange: null,
+      addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+    })));
+    const payloads = {
+      'manifest.json': { pages: { scan: { path: 'scan-list.json' } } },
+      'scan-list.json': { as_of_date: '2026-09-25', rows_total: 1, embedded_chart_paths: true,
+        default_filters: { minVolume: 0 }, initial_rows: [{ symbol: 'NVDA', current_price: 100, volume: 150000000, chart_path: 'nvda.json' }] },
+    };
+    globalThis.fetch = vi.fn(async url => {
+      const value = payloads[String(url).split('/static-data/')[1]];
+      return { ok: Boolean(value), status: value ? 200 : 404, json: async () => value };
+    });
+    renderPage();
+    expect(await screen.findByTestId('mobile-scan-row')).toHaveTextContent('NVDA');
+    expect(screen.queryByTestId('filter-panel')).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /条件・使い方/ }));
+    expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /条件・使い方/ })).toHaveAttribute('aria-expanded', 'true');
+    await user.click(screen.getByRole('button', { name: /条件・使い方/ }));
+    expect(screen.queryByTestId('filter-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mobile-scan-row')).toHaveTextContent('NVDA');
   });
 
   it('keeps global results incomplete when a compact chunk belongs to another date',async()=>{

@@ -56,6 +56,7 @@ function StaticScanPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [filters, setFilters] = useState(buildDefaultScanFilters);
   const [showFilters, setShowFilters] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [fullTable,setFullTable]=useState(false);
   useEffect(() => { setPage(1); }, [isMobile]);
@@ -341,28 +342,29 @@ function StaticScanPage() {
         基準日 {scanManifestQuery.data.as_of_date} · 補助条件で絞り込み
       </Typography>
 
-      <Box component="details" sx={{ mb: 1, '&[open] .scan-help-indicator': { transform: 'rotate(180deg)' } }}>
+      {(!isMobile || mobileToolsOpen) && <Box component="details" sx={{ mb: 1, '&[open] .scan-help-indicator': { transform: 'rotate(180deg)' } }}>
         <Box component="summary" sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: { xs: 44, md: 24 }, cursor: 'pointer', color: 'text.secondary', fontSize: 12 }}>
           件数・補助フィルターの見方<Box component="span" className="scan-help-indicator" aria-hidden="true">⌄</Box>
         </Box>
         <Alert severity="info" sx={{ mt: 1 }}>この画面は追加条件を自由に組み合わせる補助ビューです。プリセットの件数は独自の複合フィルターの結果で、ホームの書籍条件通過数とは異なります。</Alert>
-      </Box>
-      <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
-        <Box display="flex" alignItems="baseline" gap={1.5}>
+      </Box>}
+      <Paper elevation={0} sx={{ p: { xs: 0.5, md: 1.5 }, pl: 1.5, mb: 1, border: '1px solid', borderColor: 'divider' }}>
+        <Box display="flex" alignItems="center" gap={1}>
           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
             {(hydrationComplete ? cappedRows.length : hydrationState.loadedRows).toLocaleString()}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: '12px' }}>
             件 / 全 {scanManifestQuery.data.rows_total.toLocaleString()} 件
-            {scanManifestQuery.data.charts?.available
+            {!isMobile && scanManifestQuery.data.charts?.available
               ? ` · チャート ${(scanManifestQuery.data.charts.symbols_total ?? scanManifestQuery.data.charts.limit).toLocaleString()} 銘柄`
               : ''}
           </Typography>
+          {isMobile && <Button aria-expanded={mobileToolsOpen} onClick={() => setMobileToolsOpen(open => !open)} sx={{ ml: 'auto', flexShrink: 0, minHeight: 44, fontSize: 12 }}>条件・使い方 {mobileToolsOpen ? '⌃' : '⌄'}</Button>}
         </Box>
       </Paper>
 
-      {hydrationComplete && presetScreens?.length > 0 && (
-        <Box component={isMobile?'details':'div'} sx={{mb:1,'&[open] .preset-disclosure-indicator':{transform:'rotate(180deg)'}}}>{isMobile && <Box component="summary" sx={{minHeight:44,lineHeight:'44px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',px:1,color:'primary.main'}}>補助フィルターを選択<Box component="span" className="preset-disclosure-indicator" aria-hidden="true">⌄</Box></Box>}<ScreenSelector
+      {hydrationComplete && presetScreens?.length > 0 && (!isMobile || mobileToolsOpen) && (
+        <Box sx={{mb:1}}><ScreenSelector
           screens={presetScreens}
           activeScreenId={activeScreenId}
           onSelectScreen={handleSelectScreen}
@@ -395,7 +397,7 @@ function StaticScanPage() {
           active filters match nothing. */}
       <Alert severity="info" sx={{mb:2}}>{modelMarket(hydratedRows).label} · 新規資金の試行配分上限 {Math.min(modelMarket(hydratedRows).cap, .25)*100}% · <a href="#/" style={{display:'inline-flex',alignItems:'center'}}>本日の判断と共通の選定条件へ</a></Alert>
 
-      {hydrationComplete && (
+      {hydrationComplete && (!isMobile || mobileToolsOpen) && (
         <FilterPanel
           filters={filters}
           onFilterChange={setFilters}
@@ -410,8 +412,8 @@ function StaticScanPage() {
             }
           }}
           filterOptions={normalizeScanFilterOptions(scanManifestQuery.data.filter_options)}
-          expanded={showFilters}
-          onToggle={() => setShowFilters((previous) => !previous)}
+          expanded={isMobile || showFilters}
+          onToggle={() => isMobile ? setMobileToolsOpen(false) : setShowFilters((previous) => !previous)}
           presetsEnabled={false}
           sectionDefaultExpanded={sectionDefaultExpanded}
         />
