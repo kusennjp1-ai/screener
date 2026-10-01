@@ -59,16 +59,16 @@
 .market-workbench[data-theme="light"] .market-footnote { opacity:1; color:var(--text-2); }
 
 /* D8: ranked relative strength board; fixed data semantics, compact layout. */
-.sector-workbench { padding:16px 24px; }
+.sector-workbench { padding:12px 24px; }
 .sector-workbench .MuiTabs-root { margin-bottom:12px; }
 .sector-page-meta { display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:var(--text-2); }
 .sector-page-meta a { color:var(--accent);min-height:24px;display:inline-flex;align-items:center; }
 .sector-strength { min-width:0; }
-.sector-heading { margin-bottom:12px; }
+.sector-heading { margin-bottom:8px; }
 .sector-heading h1 { font-size:34px;letter-spacing:-.03em;line-height:1.3;margin:8px 0 4px; }
 .sector-heading p { font-size:13px;color:var(--text-2);line-height:1.5;margin:4px 0; }
 .sector-heading .sector-subheading { font-size:20px;font-weight:700;color:var(--wait); }
-.sector-controls { display:flex;align-items:end;gap:12px;margin-bottom:12px; }
+.sector-controls { display:flex;align-items:end;gap:12px;margin-bottom:8px; }
 .sector-controls label { font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:8px; }
 .sector-strength select,.sector-view button { min-height:36px;min-width:36px;border:1px solid var(--line-2);border-radius:8px;color:var(--text);background:var(--surface);padding:4px 8px;font:inherit; }
 .sector-strength option { background:var(--surface);color:var(--text); }
@@ -130,7 +130,7 @@
  .sector-rate-top>i { width:36px; }
 }
 @media(max-width:700px) {
- .sector-workbench { padding:8px 16px; }
+ .sector-workbench { padding:4px 16px; }
  .sector-page-meta { font-size:11px; }
  .sector-dashboard { grid-template-columns:1fr;gap:12px; }
  .sector-heading h1 { font-size:34px; }
@@ -148,6 +148,9 @@
  .sector-name strong { display:block;line-height:14px;white-space:nowrap; }
  .sector-name small { display:none; }
  .sector-rate-top { gap:4px; }
+ .sector-rate-top { line-height:14px; }
+ .sector-rate small { line-height:14px; }
+ .sector-rate-missing { display:block; }
  .sector-rate-top>i { width:30px; }
  .sector-readings { padding:12px; }
  .sector-readings dl { display:grid;grid-template-columns:1fr 1fr;gap:12px; }

@@ -17,7 +17,7 @@ function Rate({rate,small}) {
   if(!rate)return <span>未確認</span>;
   return <span className="sector-rate" role="img" aria-label={`条件通過率 ${sectorNumber(rate.percent)}${rate.percent==null?'':'%'}。通過${rate.pass}、全対象${rate.total}、未確認${rate.unknown}銘柄${small?'。10銘柄未満の少数標本':''}`}>
     <span className="sector-rate-top"><i aria-hidden="true"><b style={{width:`${Number.isFinite(rate.percent)?Math.max(0,Math.min(100,rate.percent)):0}%`}}/></i><strong>{sectorNumber(rate.percent)}{rate.percent==null?'':'%'}</strong></span>
-    <small>{rate.pass} / {rate.total} · 未確認{rate.unknown}{small?' *':''}</small>
+    <small><span>{rate.pass} / {rate.total}</span><span className="sector-rate-missing"> · 未確認{rate.unknown}{small?' *':''}</span></small>
   </span>;
 }
 function Reading({groups,render}) {return groups.length?groups.slice(0,3).map(render).join('、'):'該当なし';}
