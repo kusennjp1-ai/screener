@@ -41,6 +41,7 @@ const debounce = (fn, ms) => {
  * @param {boolean} props.compact - When true, hides overlays (Daily/Weekly toggle, OHLC legend, updated-at indicator) for dense grid layouts
  * @param {boolean} props.hideTimeframeToggle - When true, hides only the Daily/Weekly toggle (other overlays stay) and forces the daily timeframe
  * @param {boolean} props.interactive - When false, disables time-axis pan/zoom (mouse wheel, drag, pinch) until re-enabled
+ * @param {string|null} props.chartIdentity - Validated static payload identity; enables canvas reuse with synchronous data replacement
  */
 function CandlestickChart({
   symbol,
@@ -68,6 +69,7 @@ function CandlestickChart({
   researchActions = null,
   comparisonSessions = null,
   smallScreen = false,
+  chartIdentity = null,
   bands = null,
   buyPoints = null,
 }) {
@@ -95,6 +97,10 @@ function CandlestickChart({
   const isFirstDataLoadRef = useRef(true); // Track first data load
   const prevCloseMapRef = useRef(new Map()); // Map of date -> previous close for % change calculation
   const latestCandleRef = useRef(null); // Store latest candle for default display
+  const previousIdentityRef = useRef(chartIdentity);
+  // Validated static surfaces can reuse their canvas; live/legacy charts retain
+  // symbol-scoped instances. The identity covers symbol, date, path and generation.
+  const instanceSymbol = chartIdentity == null ? symbol : null;
 
   const [annotationDetail, setAnnotationDetail] = useState(null);
   const showBookAnnotations = annotationDetail ?? !smallScreen;
@@ -328,10 +334,37 @@ function CandlestickChart({
     // applyOptions effect below picks up subsequent changes without remounting
     // the chart (which would reset visible range / EMAs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, isDarkMode, symbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
+  }, [height, isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
+
+  useLayoutEffect(() => {
+    if (previousIdentityRef.current === chartIdentity) return;
+    previousIdentityRef.current = chartIdentity;
+    // setData invalidates a canvas for a later animation frame. Erase the old
+    // bitmap synchronously so a cached next symbol cannot flash old candles or
+    // levels under its new heading before that frame runs.
+    for (const canvas of chartContainerRef.current?.querySelectorAll('canvas') || []) {
+      const context = canvas.getContext('2d');
+      if (!context) continue;
+      context.save();
+      context.resetTransform();
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.restore();
+    }
+    chartRef.current?.clearCrosshairPosition();
+    candleMarkersRef.current?.setMarkers([]);
+    prevCloseMapRef.current = new Map();
+    latestCandleRef.current = null;
+    isFirstDataLoadRef.current = true;
+    shouldRestoreRangeRef.current = false;
+    setLegendData(null);
+    setWindowRange(null);
+    setTimeframe('daily');
+    setAnnotationDetail(null);
+    setShowRSLine(true);
+  }, [chartIdentity]);
 
   // Track symbol changes - set flag to restore range when symbol changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevSymbolRef.current !== null && prevSymbolRef.current !== symbol) {
       // Symbol changed - flag that we should restore range on next data update
       shouldRestoreRangeRef.current = true;
@@ -386,20 +419,21 @@ function CandlestickChart({
     }
   }, [effectiveTimeframe, researchView, chartData, smallScreen, comparisonSessions]);
 
-  // Update chart data when data changes
-  useEffect(() => {
+  // Replace every price/volume series before paint, including empty data while
+  // a reused static surface is waiting for its newly validated identity.
+  useLayoutEffect(() => {
     if (!chartData || !chartRef.current) {
       return;
     }
 
     // Update volume data
-    if (volumeSeriesRef.current && chartData.volume.length > 0) {
+    if (volumeSeriesRef.current) {
       volumeSeriesRef.current.setData(researchView ? researchVolumeBars(chartData.volume, effectiveTimeframe === 'weekly' ? 10 : 50, chartPalette) : chartData.volume);
     }
 
     // ~50-day average-volume line (Minervini-style). Trailing simple average of
     // the volume series, aligned to the same time axis / volume scale.
-    if (avgVolumeSeriesRef.current && chartData.volume.length > 0) {
+    if (avgVolumeSeriesRef.current) {
       const AVG_WINDOW = effectiveTimeframe === 'weekly' ? 10 : 50;
       const vol = chartData.volume;
       const avg = [];
@@ -415,20 +449,20 @@ function CandlestickChart({
     }
 
     // Update candlestick data
-    if (candlestickSeriesRef.current && chartData.candlesticks.length > 0) {
+    if (candlestickSeriesRef.current) {
       candlestickSeriesRef.current.setData(chartData.candlesticks);
     }
 
     // Update EMAs
-    if (ema10SeriesRef.current && chartData.ema10.length > 0) {
+    if (ema10SeriesRef.current) {
       ema10SeriesRef.current.setData(bookAnnotations || researchView ? [] : chartData.ema10);
     }
 
-    if (ema20SeriesRef.current && chartData.ema20.length > 0) {
+    if (ema20SeriesRef.current) {
       ema20SeriesRef.current.setData(bookAnnotations || researchView ? [] : chartData.ema20);
     }
 
-    if (ema50SeriesRef.current && chartData.ema50.length > 0) {
+    if (ema50SeriesRef.current) {
       ema50SeriesRef.current.setData(bookAnnotations || researchView ? [] : chartData.ema50);
     }
 
@@ -471,6 +505,11 @@ function CandlestickChart({
       };
       latestCandleRef.current = latestLegend;
       setLegendData(latestLegend);
+    } else {
+      latestCandleRef.current = null;
+      setLegendData(null);
+      isFirstDataLoadRef.current = true;
+      return;
     }
 
     // Wait until all panes (especially daily -> weekly RS) have replaced their
@@ -481,12 +520,19 @@ function CandlestickChart({
     isFirstDataLoadRef.current = false;
     if (restore || initialize) {
       const chart = chartRef.current;
+      let applied = false;
       const frame = requestAnimationFrame(() => {
         if (chartRef.current !== chart) return;
+        applied = true;
         if (restore && visibleRange?.from && visibleRange?.to) chart.timeScale().setVisibleRange(visibleRange);
         else setDefaultVisibleWindow(chartData.candlesticks.length);
       });
-      return () => cancelAnimationFrame(frame);
+      return () => {
+        cancelAnimationFrame(frame);
+        // A synchronous timeframe reset may cancel this frame before the new
+        // daily bars commit. The replacement still needs its initial window.
+        if (!applied && chartRef.current === chart) isFirstDataLoadRef.current = true;
+      };
     }
     // Otherwise, don't touch the zoom - let user adjust freely
   // setDefaultVisibleWindow is stable (defined below from refs); excluded to
@@ -497,7 +543,7 @@ function CandlestickChart({
   // Draw the VCP / setup pivot (buy-trigger) as a horizontal price line on the
   // candlestick series. This is the key actionable level for VCP / Minervini
   // breakouts. Recreated whenever the pivot or the underlying series changes.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!series) return undefined;
 
@@ -528,7 +574,7 @@ function CandlestickChart({
     };
   }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView, historyWarning, chartPalette]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!researchView || historyWarning || !series) return undefined;
     const levels = new TradeLevelsPrimitive({ pivot: pivotPrice, upper: buyCeiling, stop: stopPrice }, chartPalette);
@@ -540,7 +586,7 @@ function CandlestickChart({
   // primitive follows pan/zoom on its own; we only (re)create it when the
   // series is rebuilt or the boxes change. Wrapped so a charting aid can never
   // break the chart.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!series || compact) return undefined;
     const sourceBoxes = bookAnnotations ? (effectiveTimeframe === 'daily' ? annotations.boxes : []) : (Array.isArray(vcpBoxes) ? vcpBoxes : []);
@@ -569,7 +615,7 @@ function CandlestickChart({
   // MM360 color-band strips (Pressure / Buy Risk / TPR) across the top of the
   // price pane, time-aligned to the candles. Re-aligns on pan/zoom because the
   // primitive recomputes coordinates on every chart redraw.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!series || compact) return undefined;
     const hasBands = bands && (bands.pressure_history || bands.buy_risk_history || bands.tpr_history);
@@ -601,7 +647,7 @@ function CandlestickChart({
   // vertical line down to its pivot price — so labels never overlap the candles.
   // Re-aligns on pan/zoom because the primitive recomputes coordinates on every
   // redraw. Wrapped so a charting aid can never break the chart.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!series || compact) return undefined;
     const list = Array.isArray(buyPoints) ? buyPoints : [];
@@ -632,7 +678,7 @@ function CandlestickChart({
 
   // Earnings line (収益ライン): smooth green fair-value line on the price scale.
   // Date-anchored so it stays aligned under zoom/scale changes.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = epsLineSeriesRef.current;
     if (!series) return;
     const pts = !bookAnnotations && Array.isArray(epsLine) ? epsLine : [];
@@ -644,13 +690,14 @@ function CandlestickChart({
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
   // otherwise so stale points never linger under weekly candles.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const series = rsLineSeriesRef.current;
     const markers = rsMarkersRef.current;
     if (!series || !chartRef.current) return;
 
     if (!rsStripShown) {
       series.setData([]);
+      if (researchView) series.applyOptions({autoscaleInfoProvider:()=>null});
       if (markers) markers.setMarkers([]);
       return;
     }

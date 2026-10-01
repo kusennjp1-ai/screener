@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchChart from './ResearchChart';
 const fetchPayload = vi.hoisted(() => vi.fn());
 vi.mock('../chartClient', () => ({ fetchStaticChartPayload: fetchPayload, staticChartKeys: { payload: (symbol, path) => ['chart', symbol, path] } }));
-vi.mock('../../components/Charts/CandlestickChart', () => ({ default: ({ symbol, priceData, pivotPrice }) => <div data-testid="chart">{symbol}:{priceData.length}:{pivotPrice}</div> }));
+vi.mock('../../components/Charts/CandlestickChart', () => ({ default: ({ symbol, priceData, pivotPrice, buyCeiling, stopPrice, rsLineData, epsLine, vcpBoxes }) => <div data-testid="chart" data-levels={JSON.stringify([pivotPrice,buyCeiling,stopPrice])} data-guides={JSON.stringify([rsLineData,epsLine,vcpBoxes])}>{symbol}:{priceData.length}:{pivotPrice}</div> }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function setup(props) {
   props={date:'2026-09-21',...props};
@@ -14,7 +14,7 @@ function setup(props) {
   return { ...view, update: p => view.rerender(wrap(p)) };
 }
 describe('inline chart integration', () => {
-  it('loads static bars, then switches symbol without reusing the previous chart', async () => {
+  it('loads static bars, then replaces the symbol without reusing previous data', async () => {
     fetchPayload.mockImplementation(async path=>({ symbol:path==='a.json'?'AAA':'BBB',as_of_date:'2026-09-21',bars: [{ date: '2026-09-21', close: 100 }], signal: { trigger_price: 120 }, stock_data: {vcp_pivot:110} }));
     const view = setup({ entry: { path: 'a.json' }, symbol: 'AAA', generation: '1', row:{current_price:100,se_pivot_price:99} });
     expect(await screen.findByTestId('chart')).toHaveTextContent('AAA:1:99');
@@ -35,13 +35,30 @@ describe('inline chart integration', () => {
     const view = setup({ entry: { path: 'a.json' }, symbol: 'AAA' });
     await screen.findByTestId('chart');
     view.update({ entry: { path: 'b.json' }, symbol: 'BBB' });
-    expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chart')).not.toBeVisible();
+    expect(screen.getByTestId('chart')).toHaveTextContent('BBB:0:');
+    expect(screen.getByTestId('chart')).toHaveAttribute('data-levels', '[null,null,null]');
+    expect(screen.getByTestId('chart')).toHaveAttribute('data-guides', '[null,null,null]');
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
   it('does not request a live backend when a static chart is absent', () => {
     setup({ symbol: 'NONE' });
     expect(screen.getByText('この銘柄のチャートは未配信です。')).toBeInTheDocument();
     expect(fetchPayload).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'error', 'wrong identity'])('clears a previously valid chart when its replacement is %s', async reason => {
+    fetchPayload.mockResolvedValueOnce({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});
+    const view=setup({entry:{path:'a.json'},symbol:'AAA',row:{current_price:100,se_pivot_price:99}});
+    expect(await screen.findByTestId('chart')).toBeVisible();
+    if(reason==='error') fetchPayload.mockRejectedValueOnce(Error('offline'));
+    else if(reason==='wrong identity') fetchPayload.mockResolvedValueOnce({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});
+    view.update({entry:reason==='missing'?undefined:{path:'b.json'},symbol:'BBB',row:{current_price:200,se_pivot_price:199}});
+    await screen.findByText(reason==='missing'?'この銘柄のチャートは未配信です。':'チャートを取得できません。');
+    const chart=screen.getByTestId('chart');
+    expect(chart).not.toBeVisible();
+    expect(chart).toHaveTextContent('BBB:0:');
+    expect(chart).toHaveAttribute('data-levels','[null,null,null]');
+    expect(chart).toHaveAttribute('data-guides','[null,null,null]');
   });
   it('recovers after a failed chart download', async () => {
     fetchPayload.mockRejectedValueOnce(Error('offline')).mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});
@@ -66,7 +83,9 @@ it('revalidates cached bars when the expected date changes without a path change
  const view=setup(props);await screen.findByTestId('chart');
  view.update({...props,date:'2026-09-22'});
  await screen.findByText('チャートを取得できません。');
- expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
+ expect(screen.getByTestId('chart')).not.toBeVisible();
+ expect(screen.getByTestId('chart')).toHaveTextContent('AAA:0:');
+ expect(screen.getByTestId('chart')).toHaveAttribute('data-levels','[null,null,null]');
  expect(fetchPayload).toHaveBeenCalledTimes(1);
 });
 it('does not treat a missing expected analysis date as verified',async()=>{
