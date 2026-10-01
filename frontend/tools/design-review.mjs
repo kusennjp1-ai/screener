@@ -171,6 +171,8 @@ async function capture(page, viewport, theme, screen) {
   await page.waitForTimeout(50);
   check((await page.evaluate(objectiveMetrics)).runningAnimations === 0, `${key}: animations remain with reduced motion`);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  console.log(`Captured ${key}; ${report.failures.length} objective failures recorded so far.`);
+  await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
 }
 
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
@@ -290,6 +292,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
         const switchMs = Date.now() - switchStart;
         runs.push({ candidate_ms: candidateMs, method_switch_ms: switchMs, longest_initial_task_ms: initialTasks.longest, initial_tasks: initialTasks.tasks,
           memory: await page.evaluate(() => performance.memory ? { usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize } : null) });
+        console.log(`CPU4 ${label}/${viewport.width} run ${repetition + 1}: ready ${candidateMs}ms, switch ${switchMs}ms, long task ${initialTasks.longest}ms.`);
       }
       if (label === 'current' && runs.some(run => run.candidate_ms > 3500 || run.method_switch_ms > 400 || run.longest_initial_task_ms > 200)) {
         // Diagnostic recording is a separate fourth run and cannot influence
@@ -319,6 +322,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
       metrics.p1_pass = runs.length === 3 && metrics.candidate_median_ms <= 3500 && metrics.maximum_switch_ms <= 400 && metrics.longest_initial_task_ms <= 200;
       check(metrics.p1_pass, `${viewport.width}: P1 exact limits not met (3500ms / 400ms / 200ms)`);
     }
+    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
     await context.close();
   }
 }
