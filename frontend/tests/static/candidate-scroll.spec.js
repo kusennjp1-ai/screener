@@ -26,6 +26,8 @@ for(const width of [1440,390])test(`offscreen candidates keep height, focus and 
   await page.keyboard.press('Tab');
   const last=page.getByRole('button',{name:/^PERF049 の分析/});
   await expect(last).toBeFocused();
+  await expect(last).toHaveCSS('outline-offset','-3px');
+  await expect(last).toHaveCSS('outline-style','solid');
   await expect(last).toBeInViewport();
   expect(await scroll.evaluate(node=>node.scrollHeight)).toBe(height);
   expect(await items.last().evaluate(node=>node.getBoundingClientRect().height)).toBe(width===390?70:51);
