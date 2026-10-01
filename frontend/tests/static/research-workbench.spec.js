@@ -22,7 +22,7 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
     await route.fulfill({json:payload});
   });
   await page.goto('/');
-  await page.getByRole('button',{name:/^変化：新たに通過/}).click();
+  await page.getByRole('button',{name:'候補の日次変化',exact:true}).click();
   await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('今回通過 7');
   await page.getByText('変化の内訳を開く',{exact:true}).click();
   await page.getByText('AMD · 今回通過 · 1条件が変化',{exact:true}).click();

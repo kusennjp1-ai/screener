@@ -27,7 +27,9 @@ for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
     } else {
       await expect(page.locator('th[data-column="rs_trend"]')).toHaveCount(0);
       await expect(page.locator('th[data-column="price_change_1d"]')).toHaveCount(0);
-      await expect(page.getByText('補助スコア',{exact:true}).first()).toBeVisible();
+      const scoreHeader=page.locator('th[data-column="composite_score"]');
+      await expect(scoreHeader.getByText('補助スコア',{exact:true})).toBeVisible();
+      expect(await scoreHeader.evaluate(cell=>cell.scrollWidth<=cell.clientWidth)).toBe(true);
     }
     const axe = await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
     expect(axe.violations).toEqual([]);

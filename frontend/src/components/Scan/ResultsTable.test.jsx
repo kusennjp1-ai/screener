@@ -94,7 +94,7 @@ describe('ResultsTable', () => {
     });
 
     it('renders se_distance_to_pivot_pct as -3.2%', () => {
-      expect(screen.getByText('-3.2%')).toBeInTheDocument();
+      expect(screen.getByText('−3.2%')).toBeInTheDocument();
     });
 
     it('renders se_bb_width_pctile_252 as 15', () => {
@@ -102,7 +102,7 @@ describe('ResultsTable', () => {
     });
 
     it('renders se_volume_vs_50d as 1.8倍', () => {
-      expect(screen.getByText('1.8倍')).toBeInTheDocument();
+      expect(screen.getByText('1.80×')).toBeInTheDocument();
     });
 
     it('renders CheckIcon for se_rs_line_new_high=true', () => {
@@ -125,8 +125,8 @@ describe('ResultsTable', () => {
       // by checking that none of the SE-specific formatted values appear.
       expect(screen.queryByText('78.3')).not.toBeInTheDocument();
       expect(screen.queryByText('カップ・ウィズ・ハンドル')).not.toBeInTheDocument();
-      expect(screen.queryByText('-3.2%')).not.toBeInTheDocument();
-      expect(screen.queryByText('1.8倍')).not.toBeInTheDocument();
+      expect(screen.queryByText('−3.2%')).not.toBeInTheDocument();
+      expect(screen.queryByText('1.80×')).not.toBeInTheDocument();
       expect(screen.queryByText('$198.50')).not.toBeInTheDocument();
       // No CheckIcon should appear for se_rs_line_new_high=null
       // (other booleans like ma_alignment still render icons)
@@ -147,8 +147,8 @@ describe('ResultsTable', () => {
 
     it('renders populated SE values alongside dashes for null ones', () => {
       expect(screen.getByText('62.1')).toBeInTheDocument();
-      expect(screen.getByText('4.7%')).toBeInTheDocument();
-      expect(screen.getByText('2.3倍')).toBeInTheDocument();
+      expect(screen.getByText('+4.7%')).toBeInTheDocument();
+      expect(screen.getByText('2.30×')).toBeInTheDocument();
     });
   });
 

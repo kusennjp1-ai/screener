@@ -94,12 +94,12 @@ describe('formatPercent', () => {
     expect(formatPercent(12.34)).toBe('+12.3%');
   });
 
-  it('formats negative without extra sign', () => {
-    expect(formatPercent(-5.67)).toBe('-5.7%');
+  it('formats negative with a true minus sign', () => {
+    expect(formatPercent(-5.67)).toBe('−5.7%');
   });
 
-  it('formats zero with + sign', () => {
-    expect(formatPercent(0)).toBe('+0.0%');
+  it('formats zero with a neutral plus-minus sign', () => {
+    expect(formatPercent(0)).toBe('±0.0%');
   });
 
   it('returns "-" for null', () => {
