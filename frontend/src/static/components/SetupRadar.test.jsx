@@ -61,7 +61,9 @@ it('updates only the selection overlay and clears stale selections and marks on 
  expect(screen.getByRole('img')).toHaveAttribute('data-radar-point-count','0');expect(container.querySelector('.radar-point-label')).toBeNull();expect(container.querySelector('[data-radar-selection]')).toBeEmptyDOMElement();
 });
 it('redraws on theme, CSS size and pixel-density changes while hit testing stays in logical coordinates',async()=>{
+ const widthWrites=vi.spyOn(HTMLCanvasElement.prototype,'width','set'),heightWrites=vi.spyOn(HTMLCanvasElement.prototype,'height','set');
  const onSelect=vi.fn();render(<SetupRadar ranked={ranked} onSelect={onSelect}/>);const canvas=screen.getByRole('img');
+ expect(widthWrites).not.toHaveBeenCalled();expect(heightWrites).not.toHaveBeenCalled();
  expect(context.points[0].color).toBe(palettes.dark.zone);
  document.documentElement.dataset.theme='light';await waitFor(()=>expect(context.points.at(-1).color).toBe(palettes.light.zone));
  const count=context.points.length;resizeCallbacks[0]();expect(context.points).toHaveLength(count);

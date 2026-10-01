@@ -1,24 +1,27 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import { entryPlan } from '../researchEngine';
 import { radarGeometry, signed, stateKey } from '../positionGeometry';
 import { radarFrame, radarSelection, drawRadar, radarHit } from '../radarMarks';
 import { palettes } from '../theme/tokens';
 
+function paintSelection(node, last, geometry, point) {
+ const painted=last.current;
+ if ((!painted&&!point)||(painted?.geometry===geometry&&painted.point===point)) return;
+ const {overlay,label}=radarSelection(geometry,point);
+ node.querySelector('[data-radar-selection]').innerHTML=overlay;
+ node.querySelector('[data-radar-label]').innerHTML=label;
+ last.current={geometry,point};
+}
+
 export default memo(function SetupRadar({ranked,selectedSymbol,onSelect,small=false}) {
  const container=useRef(null), paintedSelection=useRef(null);
- const points=useMemo(()=>ranked.filter(x=>x.assessment.qualified).map(({row})=>{const p=entryPlan(row,null,'minervini');return {symbol:row.symbol,distance:p.pivot?p.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(p.state),pickable:Boolean(row.chart_path)};}),[ranked]);
- const g=useMemo(()=>radarGeometry(points,small?340:620,small?124:224),[points,small]);
- const frame=useMemo(()=>({__html:radarFrame(g,small)}),[g,small]);
- const selected=useMemo(()=>g.points.find(point=>point.symbol===selectedSymbol),[g,selectedSymbol]);
- const drawSelection=useCallback(point=>{
-  const painted=paintedSelection.current;
-  if ((!painted&&!point)||(painted?.geometry===g&&painted.point===point)) return;
-  const {overlay,label}=radarSelection(g,point);
-  const graphic=container.current.querySelector('[data-radar-selection]');
-  const caption=container.current.querySelector('[data-radar-label]');
-  graphic.innerHTML=overlay;caption.innerHTML=label;
-  paintedSelection.current={geometry:g,point};
- },[g]);
+ const {g,frame}=useMemo(()=>{
+  const points=ranked.filter(x=>x.assessment.qualified).map(({row})=>{const p=entryPlan(row,null,'minervini');return {symbol:row.symbol,distance:p.pivot?p.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(p.state),pickable:Boolean(row.chart_path)};});
+  const geometry=radarGeometry(points,small?340:620,small?124:224);
+  return {g:geometry,frame:{__html:radarFrame(geometry,small)}};
+ },[ranked,small]);
+ const selected=g.points.find(point=>point.symbol===selectedSymbol);
+ const drawSelection=point=>paintSelection(container.current,paintedSelection,g,point);
  useLayoutEffect(()=>{
   const node=container.current,canvas=node.querySelector('[data-radar-canvas]'),context=canvas.getContext('2d');
   if(!context){canvas.setAttribute('aria-label','レーダーを描画できません。銘柄一覧から確認できます。');return undefined;}
@@ -28,7 +31,10 @@ export default memo(function SetupRadar({ranked,selectedSymbol,onSelect,small=fa
    const width=Math.max(1,Math.round((rect.width||g.width)*ratio)),height=Math.max(1,Math.round((rect.height||g.height)*ratio));
    const mode=themeOwner?.dataset.theme||document.documentElement.dataset.theme||'dark';
    const signature=`${width}/${height}/${mode}`;if(previous===signature)return;
-   canvas.width=width;canvas.height=height;context.setTransform(width/g.width,0,0,height/g.height,0,0);
+   // Assigning even an unchanged canvas dimension discards and reallocates its
+   // backing store. Keep it when the initial logical/DPR size already matches.
+   if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;
+   context.setTransform(width/g.width,0,0,height/g.height,0,0);
    canvas.dataset.radarPointCount=String(drawRadar(context,g,palettes[mode]||palettes.dark));previous=signature;
   };
   paint();
@@ -38,7 +44,7 @@ export default memo(function SetupRadar({ranked,selectedSymbol,onSelect,small=fa
   window.addEventListener('resize',paint);
   return ()=>{resize?.disconnect();themes.disconnect();window.removeEventListener('resize',paint);};
  },[g,frame]);
- useLayoutEffect(()=>{drawSelection(selected);},[frame,selected,drawSelection]);
+ useLayoutEffect(()=>{paintSelection(container.current,paintedSelection,g,selected);},[frame,g,selected]);
  const eventPoint=event=>{
   const canvas=container.current.querySelector('[data-radar-canvas]');if(event.target!==canvas||!(Number(canvas.dataset.radarPointCount)>0))return null;
   const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return null;
