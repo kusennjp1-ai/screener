@@ -324,6 +324,7 @@ describe('App static mode', () => {
   it.each([
     ['#/', '今日の投資判断'],
     ['#/daily', 'United States スナップショット'],
+    ['#/compare', '買い位置を比較する'],
     ['#/scan', '詳細スキャン'],
     ['#/breadth', '市場環境'],
     ['#/groups', 'United States 業種グループランキング'],
