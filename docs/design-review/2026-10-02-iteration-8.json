@@ -40,7 +40,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#home/1440/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#home/1440/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -93,7 +93,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#home/1440/light",
+        "source": "2026-10-02-iteration-8-metrics.json#home/1440/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -146,7 +146,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#home/390/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#home/390/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -189,7 +189,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#home/390/light",
+        "source": "2026-10-02-iteration-8-metrics.json#home/390/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -232,7 +232,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#near-pass/1440/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#near-pass/1440/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -285,7 +285,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#near-pass/1440/light",
+        "source": "2026-10-02-iteration-8-metrics.json#near-pass/1440/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -338,7 +338,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#near-pass/390/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#near-pass/390/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -381,7 +381,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#near-pass/390/light",
+        "source": "2026-10-02-iteration-8-metrics.json#near-pass/390/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -424,7 +424,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#compact/1440/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#compact/1440/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -477,7 +477,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#compact/1440/light",
+        "source": "2026-10-02-iteration-8-metrics.json#compact/1440/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -530,7 +530,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#detail/1440/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#detail/1440/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -583,7 +583,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#detail/1440/light",
+        "source": "2026-10-02-iteration-8-metrics.json#detail/1440/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -636,7 +636,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#detail/390/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#detail/390/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -689,7 +689,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#detail/390/light",
+        "source": "2026-10-02-iteration-8-metrics.json#detail/390/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -743,7 +743,7 @@
         "inherited_review": ".git/review-home-fifth.json#chart/1440/dark"
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#chart/1440/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#chart/1440/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -787,7 +787,7 @@
         "inherited_review": ".git/review-home-fifth.json#chart/1440/light"
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#chart/1440/light",
+        "source": "2026-10-02-iteration-8-metrics.json#chart/1440/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -831,7 +831,7 @@
         "inherited_review": ".git/review-home-fifth.json#chart/390/dark"
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#chart/390/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#chart/390/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -875,7 +875,7 @@
         "inherited_review": ".git/review-home-fifth.json#chart/390/light"
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#chart/390/light",
+        "source": "2026-10-02-iteration-8-metrics.json#chart/390/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -918,7 +918,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#portfolio/1440/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#portfolio/1440/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -961,7 +961,7 @@
         "identical": false
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#portfolio/1440/light",
+        "source": "2026-10-02-iteration-8-metrics.json#portfolio/1440/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -1005,7 +1005,7 @@
         "inherited_review": ".git/review-home-fifth.json#portfolio/390/dark"
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#portfolio/390/dark",
+        "source": "2026-10-02-iteration-8-metrics.json#portfolio/390/dark",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -1049,7 +1049,7 @@
         "inherited_review": ".git/review-home-fifth.json#portfolio/390/light"
       },
       "objective": {
-        "source": ".git/design-seventh/report.json#portfolio/390/light",
+        "source": "2026-10-02-iteration-8-metrics.json#portfolio/390/light",
         "axe_violations": 0,
         "small_targets": 0,
         "font_issues": 0,
@@ -1085,7 +1085,28 @@
         }
       },
       "sha256": "c80cf1b2a00b7a5ba1c86476b10c77d27adac41b4b0263f699fccf48d8dc533f",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-MSM-inline-annotations/1440/dark",
@@ -1110,7 +1131,28 @@
         }
       },
       "sha256": "a2aeb7b7819373c7f137323db1266e9ae0c95ae08647ac95c1230be3a359da26",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline-annotations/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-MSM-expanded/1440/dark",
@@ -1135,7 +1177,18 @@
         }
       },
       "sha256": "c937cd1c0a4ce15d51e60e7552f05cb9a7f838645c1001eee7c4b3606df9bfb9",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-expanded-annotations/1440/dark",
@@ -1160,7 +1213,18 @@
         }
       },
       "sha256": "c937cd1c0a4ce15d51e60e7552f05cb9a7f838645c1001eee7c4b3606df9bfb9",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded-annotations/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-inline/1440/dark",
@@ -1185,7 +1249,28 @@
         }
       },
       "sha256": "0977019d53c2c89d2393029c3cd15b6ec73ceced7edd2982a9b047c8780d03e6",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 13,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-ADI-inline-annotations/1440/dark",
@@ -1210,7 +1295,28 @@
         }
       },
       "sha256": "9c33f7918c2d8692950f595ae780cf8214dbcd451c25dc1282baa8cdcd376bca",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline-annotations/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 13,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-ADI-expanded/1440/dark",
@@ -1235,7 +1341,18 @@
         }
       },
       "sha256": "3826cb8a8f5dac1d2ad5d0cacb6b343907b9fa84b9af4a814c69472ee454c7d4",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-expanded-annotations/1440/dark",
@@ -1260,7 +1377,18 @@
         }
       },
       "sha256": "3826cb8a8f5dac1d2ad5d0cacb6b343907b9fa84b9af4a814c69472ee454c7d4",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded-annotations/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-inline/1440/dark",
@@ -1285,7 +1413,28 @@
         }
       },
       "sha256": "b88f2233a3c31aa8f15e3a4d2a222c4ebca66d1a25d194f0ca0d21e53a13ab42",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-TGTX-inline-annotations/1440/dark",
@@ -1310,7 +1459,28 @@
         }
       },
       "sha256": "236da10b78ac3283370b644d55f6e1760ab90a02b1cb594845e5db2f930677bc",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline-annotations/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-TGTX-expanded/1440/dark",
@@ -1335,7 +1505,18 @@
         }
       },
       "sha256": "73708198d88ad8856118782c8b61d5565fb5a13079fddfd77b588bb57da96199",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-expanded-annotations/1440/dark",
@@ -1360,7 +1541,18 @@
         }
       },
       "sha256": "73708198d88ad8856118782c8b61d5565fb5a13079fddfd77b588bb57da96199",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded-annotations/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-inline/1440/light",
@@ -1385,7 +1577,28 @@
         }
       },
       "sha256": "f212bd1a0a89bfd914f95f993e7cf6554071981935ff0b6c39463f3b8f487112",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-MSM-inline-annotations/1440/light",
@@ -1410,7 +1623,28 @@
         }
       },
       "sha256": "c056a74d5ca0fac00cb034d0a241d646af0870574ef1ec61b221953c609332ba",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline-annotations/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-MSM-expanded/1440/light",
@@ -1435,7 +1669,18 @@
         }
       },
       "sha256": "e4173ea29a75f4dc4da81c0713a563d0436a7b3b54cfe86ecca785314fe35302",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-expanded-annotations/1440/light",
@@ -1460,7 +1705,18 @@
         }
       },
       "sha256": "e4173ea29a75f4dc4da81c0713a563d0436a7b3b54cfe86ecca785314fe35302",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded-annotations/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-inline/1440/light",
@@ -1485,7 +1741,28 @@
         }
       },
       "sha256": "2e15f04d20f49992579f1d8ab3bf37bda178cf8aeb7a9956cc0a629844e1540f",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 13,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-ADI-inline-annotations/1440/light",
@@ -1510,7 +1787,28 @@
         }
       },
       "sha256": "f72445685deeba7799d63da0b69c6cd98cd6add10266a3d135221f80ccc3766c",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline-annotations/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 13,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-ADI-expanded/1440/light",
@@ -1535,7 +1833,18 @@
         }
       },
       "sha256": "bf6fb8878ce8eefcd2011a23271055b9a2b084fdb2dd8660af095015b1c964cf",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-expanded-annotations/1440/light",
@@ -1560,7 +1869,18 @@
         }
       },
       "sha256": "bf6fb8878ce8eefcd2011a23271055b9a2b084fdb2dd8660af095015b1c964cf",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded-annotations/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-inline/1440/light",
@@ -1585,7 +1905,28 @@
         }
       },
       "sha256": "63a47bde98319588d6ca57c5d2e54b566f78dfd949beda8f60622ee35b1f4695",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-TGTX-inline-annotations/1440/light",
@@ -1610,7 +1951,28 @@
         }
       },
       "sha256": "95bc68fd07709451df7032d596389d5764af4d4acce888ad6dee77898d2abaff",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline-annotations/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 1,
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chart_card": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        }
+      }
     },
     {
       "key": "case-TGTX-expanded/1440/light",
@@ -1635,7 +1997,18 @@
         }
       },
       "sha256": "97ff4ad46028ecea3d5a5f12661b22073d38bf20d3dc583396dcb8874003153d",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-expanded-annotations/1440/light",
@@ -1660,7 +2033,18 @@
         }
       },
       "sha256": "97ff4ad46028ecea3d5a5f12661b22073d38bf20d3dc583396dcb8874003153d",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded-annotations/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-inline/390/dark",
@@ -1685,7 +2069,28 @@
         }
       },
       "sha256": "bea2cb9811a40892eb4c3e833392be9ddb519f19c72f355d3a380890df139a16",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-MSM-inline-annotations/390/dark",
@@ -1710,7 +2115,28 @@
         }
       },
       "sha256": "a42cb365e9d6c6f4219b71c8d0a2879aacc4a8fa3d75d89d06ef3d9e2c95d86c",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline-annotations/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-MSM-expanded/390/dark",
@@ -1735,7 +2161,18 @@
         }
       },
       "sha256": "6474c204484ec1f0bdf4195b7273f7fdb9f35ca4e25e80ed6572ce5ed50d95b3",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-expanded-annotations/390/dark",
@@ -1760,7 +2197,18 @@
         }
       },
       "sha256": "e72c5a6a198c1c3a0cad1b4f9b5968ae53ab8acf4c8a6d2fb5d22f4611471ecf",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded-annotations/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-inline/390/dark",
@@ -1785,7 +2233,28 @@
         }
       },
       "sha256": "db6ba3c280639983e38780e6dccd7f6a6b11732b2f4da67268e6caecda72a1be",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-ADI-inline-annotations/390/dark",
@@ -1810,7 +2279,28 @@
         }
       },
       "sha256": "11c217f2ca98e758a44212e1cb39b04683e303b3bf613d412700b92f364cce90",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline-annotations/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-ADI-expanded/390/dark",
@@ -1835,7 +2325,18 @@
         }
       },
       "sha256": "93373ea6a0d370658a28acdca60b9420f222a1686d63c04bfbcbb634b4600e9f",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-expanded-annotations/390/dark",
@@ -1860,7 +2361,18 @@
         }
       },
       "sha256": "2647a2fe457827228467f4c1083748a56ad684571bb5d20d36792d1a35233a56",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded-annotations/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-inline/390/dark",
@@ -1885,7 +2397,28 @@
         }
       },
       "sha256": "e2e8c023054ada2ae41169491755c60bf2db2bf3951c7140f1eb8007dcbf4bab",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-TGTX-inline-annotations/390/dark",
@@ -1910,7 +2443,28 @@
         }
       },
       "sha256": "f8a3c4bc3e91ae2ebb5feadd636ada105262924db2b7a08efe9b1b07e0f9ae6c",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline-annotations/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-TGTX-expanded/390/dark",
@@ -1935,7 +2489,18 @@
         }
       },
       "sha256": "9c7cab4546f24f37fa874d5120794e1aec6abc505fe51fb4a2ea31c8a5055c8d",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-expanded-annotations/390/dark",
@@ -1960,7 +2525,18 @@
         }
       },
       "sha256": "7d47ad2cd926b4dc01513261825fc68028cddf545c731f7feb1047c47b3b61ed",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded-annotations/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-inline/390/light",
@@ -1985,7 +2561,28 @@
         }
       },
       "sha256": "927d11d350318c2e77e9638974fd49b3779d520ad995382e902f19dd62a6c9c3",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-MSM-inline-annotations/390/light",
@@ -2010,7 +2607,28 @@
         }
       },
       "sha256": "34889aa5881b57ba74f5bf109305753a6ddcbd1927d34f68902ab78bea7c56b1",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-inline-annotations/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-MSM-expanded/390/light",
@@ -2035,7 +2653,18 @@
         }
       },
       "sha256": "2bdcb9ee465cadf55a55659ec587188b86a06e711f618c1ee83fb6cea065f602",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-MSM-expanded-annotations/390/light",
@@ -2060,7 +2689,18 @@
         }
       },
       "sha256": "a13b002dc1c8afc6b81906f482f8e09d679fce044a6ee07327959db51157b75b",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-MSM-expanded-annotations/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-inline/390/light",
@@ -2085,7 +2725,28 @@
         }
       },
       "sha256": "6c0ddb07ea86d11a4bf5184f3129df852c233aa80f3d51453c4589c9ef13dd2d",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-ADI-inline-annotations/390/light",
@@ -2110,7 +2771,28 @@
         }
       },
       "sha256": "2ae810245caabe5c1a4c7b06540179337f3b06a69bf1299b4846dfb6761b4228",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-inline-annotations/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-ADI-expanded/390/light",
@@ -2135,7 +2817,18 @@
         }
       },
       "sha256": "217bbf23766515caa1038d980d294a356b9fe49180b2baa9ef9d826269a06294",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-ADI-expanded-annotations/390/light",
@@ -2160,7 +2853,18 @@
         }
       },
       "sha256": "42e73e5701c906871aea10fccbf43f69d279450e0b41fce5b9aa241693c6fa89",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-ADI-expanded-annotations/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-inline/390/light",
@@ -2185,7 +2889,28 @@
         }
       },
       "sha256": "c5c4cb8a2f6577fa0a34994db707017404d574950a00432eacba74a59cdb0bb4",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-TGTX-inline-annotations/390/light",
@@ -2210,7 +2935,28 @@
         }
       },
       "sha256": "e6938f3620e953fe8e089c0721bfe7427d80aea24eaace7a727f979912c82867",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-inline-annotations/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chart_card": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        }
+      }
     },
     {
       "key": "case-TGTX-expanded/390/light",
@@ -2235,7 +2981,18 @@
         }
       },
       "sha256": "89f12baf2a6970f097cd129bdf59a75ee54793bbfb71b8ac7f05d1cdfd4f1491",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "case-TGTX-expanded-annotations/390/light",
@@ -2260,7 +3017,18 @@
         }
       },
       "sha256": "799f57ae57074c56db11d10a0efc2837aa1e36f63c95be0a52e52708919fce16",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#case-TGTX-expanded-annotations/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison/1440/dark",
@@ -2300,7 +3068,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "f6a37c177049f97dc378777d597d400841fe476462bebceb032dbc082699b005",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison/1440/light",
@@ -2340,7 +3119,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "b7145e8539a4f2903c5aea9ee56706a006245cd742d920908ec1c8c683b10437",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison/390/dark",
@@ -2380,7 +3170,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "52ee1b7c3618b7a4e39dbf6b8486320f994c631a72e46fb611bafa49706203e6",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison/390/light",
@@ -2420,7 +3221,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "9d1775281e663e40cc072f1167148cd556827a71af8a8c79354f74933a781676",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison-near-pass/1440/dark",
@@ -2460,7 +3272,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "6b4c8a99584ee3cc2c442ad1bbd07fd37132689e44441d1b652f2f6d50c74b21",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison-near-pass/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison-near-pass/1440/light",
@@ -2500,7 +3323,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "a3dda31b4e1ff563eafc6919416f4b8fdaffef52cf45ece05cee847f5599ffaf",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison-near-pass/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison-near-pass/390/dark",
@@ -2540,7 +3374,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "02e5de1cd698da2c3e64e309ea0aa268532e3978828089044bf5c41f071ebfc5",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison-near-pass/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "comparison-near-pass/390/light",
@@ -2580,7 +3425,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "5487299d21c399e10ebe735c81aae542d43b39307a219bb4ceea89603e174c61",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#comparison-near-pass/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "market/1440/dark",
@@ -2620,7 +3476,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "0aad0ab7e788acfb4cf142bf951bf59bbbadf83dc7bd629687bb76cc6b92fff6",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#market/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "market/1440/light",
@@ -2660,7 +3527,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "c928363555252775625c179686d432abcb93ea1e024116d3bc308bde82f55625",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#market/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "market/390/dark",
@@ -2700,7 +3578,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "1b543feee63e438859d3b8b7f81114db73557c3119a15dda68ca662c2e1486df",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#market/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "market/390/light",
@@ -2740,7 +3629,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "f1c96675d0ab8b376973fee5fa948ebb7c3b5acb965177e09bdf3793240e57b6",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#market/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "breadth/1440/dark",
@@ -2779,7 +3679,18 @@
         "visibleScanCards": 0
       },
       "sha256": "9440e6dfae440d1a75c0b224ba8d95b02d93d1881557d7496582c0ce8eeb7921",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#breadth/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "breadth/1440/light",
@@ -2818,7 +3729,18 @@
         "visibleScanCards": 0
       },
       "sha256": "c87af4482f18115a3889abb2582ba4374e70e91a4e8f290212f1c318b333d7a4",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#breadth/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "breadth/390/dark",
@@ -2857,7 +3779,18 @@
         "visibleScanCards": 0
       },
       "sha256": "437b68b1ac6ee2da1b8211b4e2b7959acac3c691be151a3cd7833b2acafb8ab4",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#breadth/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "breadth/390/light",
@@ -2896,7 +3829,18 @@
         "visibleScanCards": 0
       },
       "sha256": "be812d5d7ffabc95ccbf33ac9889c18f63b74fbbb98c8fbc0aa517fc3104351f",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#breadth/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "scan/1440/dark",
@@ -2936,7 +3880,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "5b81ec1f1529fdf6ac7978a2ffa376bef2738ac6b400bbfd8eb739f474c9fdc9",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#scan/1440/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "scan/1440/light",
@@ -2976,7 +3931,18 @@
       },
       "review_note": "第6回の元画像を再目視し、第5回と同等の配置・情報優先度を確認して評価を維持。第5回の点数を未確認のまま流用したものではない。",
       "sha256": "924449061566870e6736b7130eb6010943418c74d89657047e43b80364b50c35",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#scan/1440/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "scan/390/dark",
@@ -3020,7 +3986,18 @@
         "visibleScanCards": 3
       },
       "sha256": "2a69fe9c3b273c7a9a5d224c075aebc9471edc788ce916d98b348934f77ba778",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#scan/390/dark",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     },
     {
       "key": "scan/390/light",
@@ -3064,7 +4041,18 @@
         "visibleScanCards": 3
       },
       "sha256": "0509df074b413df39bd69427956c07550591976db2ee75cf14f7dc67e8fd74eb",
-      "prior_review": "docs/design-review/2026-10-01-iteration-7.json"
+      "prior_review": "docs/design-review/2026-10-01-iteration-7.json",
+      "objective": {
+        "source": "2026-10-02-iteration-8-metrics.json#scan/390/light",
+        "axe_violations": 0,
+        "small_targets": 0,
+        "font_issues": 0,
+        "radius_issues": 0,
+        "horizontal_overflow": false,
+        "visible_candidates": 0,
+        "chart": null,
+        "chart_card": null
+      }
     }
   ]
 }
