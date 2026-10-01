@@ -98,7 +98,8 @@ it('rejects invalid geometry and escapes every data-bearing HTML label',()=>{
 });
 it('does not report or select undrawn points when a canvas context is unavailable',()=>{
  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);const onSelect=vi.fn();
- render(<SetupRadar ranked={ranked} onSelect={onSelect}/>);const canvas=screen.getByRole('img');
+ const {container}=render(<SetupRadar ranked={ranked} selectedSymbol="SAFE" onSelect={onSelect}/>);const canvas=screen.getByRole('img');
  expect(canvas.getAttribute('aria-label')).toContain('描画できません');expect(canvas).not.toHaveAttribute('data-radar-point-count');
+ expect(container.querySelector('.radar-point-label')).toBeNull();
  fireEvent.click(canvas,coordinates(geometryFor(ranked).points[0]));expect(onSelect).not.toHaveBeenCalled();
 });

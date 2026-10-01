@@ -1,38 +1,40 @@
-import { memo, useLayoutEffect, useMemo, useRef } from 'react';
+import { PureComponent } from 'react';
 import { entryPlan } from '../researchEngine';
 import { radarGeometry, signed, stateKey } from '../positionGeometry';
 import { radarFrame, radarSelection, drawRadar, radarHit } from '../radarMarks';
 import { palettes } from '../theme/tokens';
 
-function paintSelection(node, last, geometry, point) {
- const painted=last.current;
- if ((!painted&&!point)||(painted?.geometry===geometry&&painted.point===point)) return;
- const {overlay,label}=radarSelection(geometry,point);
- node.querySelector('[data-radar-selection]').innerHTML=overlay;
- node.querySelector('[data-radar-label]').innerHTML=label;
- last.current={geometry,point};
-}
-
-export default memo(function SetupRadar({ranked,selectedSymbol,onSelect,small=false}) {
- const container=useRef(null), paintedSelection=useRef(null);
- const {g,frame}=useMemo(()=>{
-  const points=ranked.filter(x=>x.assessment.qualified).map(({row})=>{const p=entryPlan(row,null,'minervini');return {symbol:row.symbol,distance:p.pivot?p.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(p.state),pickable:Boolean(row.chart_path)};});
-  const geometry=radarGeometry(points,small?340:620,small?124:224);
-  return {g:geometry,frame:{__html:radarFrame(geometry,small)}};
- },[ranked,small]);
- const selected=g.points.find(point=>point.symbol===selectedSymbol);
- const drawSelection=point=>paintSelection(container.current,paintedSelection,g,point);
- useLayoutEffect(()=>{
-  const node=container.current,canvas=node.querySelector('[data-radar-canvas]'),context=canvas.getContext('2d');
-  if(!context){canvas.setAttribute('aria-label','レーダーを描画できません。銘柄一覧から確認できます。');return undefined;}
+// The canvas has an imperative lifecycle. Keep its one immutable publication
+// frame and observers on the instance; selection updates never redraw points.
+export default class SetupRadar extends PureComponent {
+ paintedSelection=null;
+ setContainer=node=>{this.container=node;};
+ componentDidMount(){this.mountCanvas();this.drawSelected();}
+ componentDidUpdate(){
+  if(this.mountedGeometry!==this.geometry){this.stopPainting?.();this.mountCanvas();}
+  this.drawSelected();
+ }
+ componentWillUnmount(){this.stopPainting?.();}
+ drawSelected=()=>this.drawSelection(this.canvasAvailable&&this.props.selectedSymbol?this.mountedGeometry.points.find(point=>point.symbol===this.props.selectedSymbol):null);
+ drawSelection(point){
+  const g=this.mountedGeometry,painted=this.paintedSelection;
+  if((!painted&&!point)||(painted?.geometry===g&&painted.point===point))return;
+  const {overlay,label}=radarSelection(g,point);
+  this.container.querySelector('[data-radar-selection]').innerHTML=overlay;
+  this.container.querySelector('[data-radar-label]').innerHTML=label;
+  this.paintedSelection={geometry:g,point};
+ }
+ mountCanvas(){
+  const g=this.geometry,node=this.container,canvas=node.querySelector('[data-radar-canvas]'),context=canvas.getContext('2d');
+  this.mountedGeometry=g;this.canvasAvailable=Boolean(context);
+  if(!context){canvas.setAttribute('aria-label','レーダーを描画できません。銘柄一覧から確認できます。');return;}
   const themeOwner=node.closest('[data-theme]');let previous='';
   const paint=()=>{
    const rect=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
    const width=Math.max(1,Math.round((rect.width||g.width)*ratio)),height=Math.max(1,Math.round((rect.height||g.height)*ratio));
    const mode=themeOwner?.dataset.theme||document.documentElement.dataset.theme||'dark';
    const signature=`${width}/${height}/${mode}`;if(previous===signature)return;
-   // Assigning even an unchanged canvas dimension discards and reallocates its
-   // backing store. Keep it when the initial logical/DPR size already matches.
+   // Unchanged dimensions must not discard/reallocate the backing store.
    if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;
    context.setTransform(width/g.width,0,0,height/g.height,0,0);
    canvas.dataset.radarPointCount=String(drawRadar(context,g,palettes[mode]||palettes.dark));previous=signature;
@@ -42,22 +44,27 @@ export default memo(function SetupRadar({ranked,selectedSymbol,onSelect,small=fa
   const themes=new MutationObserver(paint);themes.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   if(themeOwner&&themeOwner!==document.documentElement)themes.observe(themeOwner,{attributes:true,attributeFilter:['data-theme']});
   window.addEventListener('resize',paint);
-  return ()=>{resize?.disconnect();themes.disconnect();window.removeEventListener('resize',paint);};
- },[g,frame]);
- useLayoutEffect(()=>{paintSelection(container.current,paintedSelection,g,selected);},[frame,g,selected]);
- const eventPoint=event=>{
-  const canvas=container.current.querySelector('[data-radar-canvas]');if(event.target!==canvas||!(Number(canvas.dataset.radarPointCount)>0))return null;
+  this.stopPainting=()=>{resize?.disconnect();themes.disconnect();window.removeEventListener('resize',paint);};
+ }
+ eventPoint(event){
+  const canvas=this.container.querySelector('[data-radar-canvas]'),g=this.mountedGeometry;if(event.target!==canvas||!(Number(canvas.dataset.radarPointCount)>0))return null;
   const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return null;
   return radarHit(g.points,(event.clientX-rect.left)/rect.width*g.width,(event.clientY-rect.top)/rect.height*g.height);
- };
- const hover=event=>{
-  const point=eventPoint(event),canvas=container.current.querySelector('[data-radar-canvas]');
+ }
+ hover=event=>{
+  const point=this.eventPoint(event),canvas=this.container.querySelector('[data-radar-canvas]');
   canvas.style.cursor=point?.pickable?'pointer':'default';canvas.title=point?`${point.symbol} · ${signed(point.distance)} · RS ${Math.round(point.rs)}${point.pickable?'':' · 詳細なし'}`:'';
-  drawSelection(point||selected);
+  if(point)this.drawSelection(point);else this.drawSelected();
  };
- return <section ref={container} className="setup-radar" aria-label="セットアップ・レーダー" dangerouslySetInnerHTML={frame}
-  onMouseMove={hover} onMouseOver={hover}
-  onMouseOut={event=>{if(!event.relatedTarget?.nodeType || !event.currentTarget.contains(event.relatedTarget))drawSelection(selected);}}
-  onMouseLeave={()=>drawSelection(selected)}
-  onClick={event=>{const point=eventPoint(event);if(point?.pickable)onSelect(point.symbol);}}/>;
-});
+ leave=event=>{if(!event.relatedTarget?.nodeType||!event.currentTarget.contains(event.relatedTarget))this.drawSelected();};
+ select=event=>{const point=this.eventPoint(event);if(point?.pickable)this.props.onSelect(point.symbol);};
+ render(){
+  const {ranked,small=false}=this.props;
+  if(!this.geometry||ranked!==this.ranked||small!==this.small){
+   const points=ranked.filter(item=>item.assessment.qualified).map(({row})=>{const plan=entryPlan(row,null,'minervini');return {symbol:row.symbol,distance:plan.pivot?plan.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(plan.state),pickable:Boolean(row.chart_path)};});
+   this.geometry=radarGeometry(points,small?340:620,small?124:224);this.frame={__html:radarFrame(this.geometry,small)};this.ranked=ranked;this.small=small;
+  }
+  return <section ref={this.setContainer} className="setup-radar" aria-label="セットアップ・レーダー" dangerouslySetInnerHTML={this.frame}
+   onMouseMove={this.hover} onMouseOver={this.hover} onMouseOut={this.leave} onMouseLeave={this.drawSelected} onClick={this.select}/>;
+ }
+}
