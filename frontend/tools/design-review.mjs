@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { resolve, extname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -242,10 +243,12 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
       await page.screenshot({ path: resolve(output, `interrupted-${screen}-${viewport.width}-${theme}.png`) }).catch(() => {});
     }
   }
+  await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await context.close();
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : [])];
+  const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
+  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens];
   for (const screen of screens) {
     const key = `${screen}/${viewport.width}/${theme}`;
     check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
