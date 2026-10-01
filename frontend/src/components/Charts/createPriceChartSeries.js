@@ -12,7 +12,7 @@ import {
 // handle the component needs to drive. Vertical bands (scaleMargins) are neutral
 // defaults here; the component's "RS strip layout" and "dynamic RS band" effects
 // reapply them reactively based on whether the RS line is shown.
-export function createPriceChartSeries(container, { width, height, isDarkMode, interactive, researchView = false, compact = false }) {
+export function createPriceChartSeries(container, { width, height, isDarkMode, interactive, researchView = false, compact = false, bookAnnotations = false }) {
   const palette = palettes[isDarkMode ? 'dark' : 'light'];
   const chart = createChart(container, {
     width,
@@ -71,14 +71,16 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
   // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) attach here.
-  const candleMarkers = createSeriesMarkers(candlestickSeries, []);
+  const candleMarkers = researchView ? null : createSeriesMarkers(candlestickSeries, []);
 
   // EMA 10 / 20 / 50 — short-term entry guides. Share the price ('right') scale.
   // Thin (1px). Distinct hues (gray / cyan / yellow) so the MAs don't cluster in
   // one color family and stay clear of the green earnings line and amber RS line.
-  const ema10Series = chart.addSeries(LineSeries, { color: palette['text-2'], lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const ema20Series = chart.addSeries(LineSeries, { color: palette.wait, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const ema50Series = chart.addSeries(LineSeries, { color: palette.ext, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  // Research mode always clears these series. Avoid constructing empty chart
+  // models, scale views and renderers for them on every symbol change.
+  const ema10Series = researchView ? null : chart.addSeries(LineSeries, { color: palette['text-2'], lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema20Series = researchView ? null : chart.addSeries(LineSeries, { color: palette.wait, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema50Series = researchView ? null : chart.addSeries(LineSeries, { color: palette.ext, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
   // Minervini trend-template SMA stack (50 / 150 / 200-day). Blue / slate / lavender,
   // a distinct family from the EMAs so the long-term trend stack reads clearly:
@@ -99,7 +101,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     priceLineVisible: false,
   });
   rsLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.66, bottom: 0.22 }, visible: false });
-  const rsMarkers = createSeriesMarkers(rsLineSeries, []);
+  const rsMarkers = researchView ? null : createSeriesMarkers(rsLineSeries, []);
 
   // Earnings line (収益ライン / Redford-MarketSurge style): a smooth fair-value
   // line in PRICE units, on the same 'right' price scale as the candles so the
@@ -110,7 +112,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // axis autoscale, so an early low-EPS tail can't blow the axis out and squash
   // the candles into a sliver — the candles/MAs set the scale; the line draws
   // within it (clipping only in extreme over/under-valuation).
-  const epsLineSeries = chart.addSeries(LineSeries, {
+  const epsLineSeries = researchView && bookAnnotations ? null : chart.addSeries(LineSeries, {
     color: palette.zone,
     lineWidth: 2,
     priceScaleId: 'right',
@@ -125,7 +127,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     rsLineSeries.moveToPane(1);
     volumeSeries.moveToPane(2);
     avgVolumeSeries.moveToPane(2);
-    for (const series of [ema10Series, ema20Series, ema50Series, sma50Series, sma150Series, sma200Series]) {
+    for (const series of [ema10Series, ema20Series, ema50Series, sma50Series, sma150Series, sma200Series].filter(Boolean)) {
       series.applyOptions({ autoscaleInfoProvider: () => null });
     }
     sma150Series.applyOptions({ lineStyle: 2 });

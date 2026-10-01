@@ -244,6 +244,7 @@ function CandlestickChart({
       interactive,
       researchView,
       compact,
+      bookAnnotations,
     });
     chartRef.current = chart;
     isFirstDataLoadRef.current = true;
@@ -327,7 +328,7 @@ function CandlestickChart({
     // applyOptions effect below picks up subsequent changes without remounting
     // the chart (which would reset visible range / EMAs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, isDarkMode, symbol, compact, researchView]); // Re-initialize only when required visual inputs change
+  }, [height, isDarkMode, symbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
 
   // Track symbol changes - set flag to restore range when symbol changes
   useEffect(() => {

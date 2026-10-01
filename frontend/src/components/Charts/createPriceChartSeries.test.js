@@ -16,4 +16,13 @@ describe('research chart pane layout',()=>{
     expect(options.autoscaleInfoProvider()).toBeNull();
     expect(result.candlestickSeries.applyOptions).not.toHaveBeenCalled();
   });
+  it('omits only permanently empty research guides and keeps legacy EMA/EPS handles',()=>{
+    const options={width:1200,height:600,isDarkMode:false,interactive:true};
+    const research=createPriceChartSeries({}, {...options,researchView:true,bookAnnotations:true});
+    expect([research.ema10Series,research.ema20Series,research.ema50Series,research.epsLineSeries,research.candleMarkers,research.rsMarkers]).toEqual([null,null,null,null,null,null]);
+    for(const key of ['candlestickSeries','volumeSeries','avgVolumeSeries','sma50Series','sma150Series','sma200Series','rsLineSeries']) expect(research[key]).not.toBeNull();
+    const legacy=createPriceChartSeries({},options);
+    for(const key of ['ema10Series','ema20Series','ema50Series','epsLineSeries','candleMarkers','rsMarkers']) expect(legacy[key]).not.toBeNull();
+    expect(createPriceChartSeries({}, {...options,researchView:true,bookAnnotations:false}).epsLineSeries).not.toBeNull();
+  });
 });

@@ -1,6 +1,6 @@
 // Bound each structured-clone delivery; a whole decoded universe otherwise
 // monopolizes the main thread even when all computation ran in a Worker.
-export function* researchPackets(bundle, size = 300) {
+export function* researchPackets(bundle, size = 150) {
   const ids = new Map(bundle.rows.map((row, index) => [row, index]));
   for (let offset=0;offset<bundle.rows.length;offset+=size) yield {kind:'rows',rows:bundle.rows.slice(offset,offset+size)};
   for (const [method, ranked] of Object.entries(bundle.rankings)) for (let offset=0;offset<ranked.length;offset+=size) {
@@ -11,7 +11,7 @@ export function* researchPackets(bundle, size = 300) {
 
 // Workbench history has thousands of change records, independent of the row
 // bundle. Keep that second Worker delivery bounded as well.
-export function* workbenchPackets(value, size = 300) {
+export function* workbenchPackets(value, size = 150) {
   const changes=Object.fromEntries(Object.entries(value.changes || {}).map(([method,entry])=>[method,{...entry,items:[]} ]));
   yield {kind:'workbench-start',value:{...value,changes}};
   for(const [method,entry] of Object.entries(value.changes || {})) {

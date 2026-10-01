@@ -7,7 +7,7 @@ import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography, useMediaQuery } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import StaticChartViewerModal from '../StaticChartViewerModal';
@@ -26,6 +26,7 @@ import '../research.css';
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
 export default function ResearchPage({compareOnly=false}) {
+  const smallScreen = useMediaQuery('(max-width:700px)');
   const client = useQueryClient();
   const manifest = useStaticManifest();
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
@@ -222,7 +223,7 @@ export default function ResearchPage({compareOnly=false}) {
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
       <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
-      {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
+      {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">
       <CandidatePerformance entry={entry}/>
@@ -235,6 +236,6 @@ export default function ResearchPage({compareOnly=false}) {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>}
-    <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />
+    {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
   </Box>;
 }

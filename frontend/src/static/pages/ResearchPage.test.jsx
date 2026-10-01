@@ -6,14 +6,14 @@ import { withAuditFixture } from '../testAuditFixture';
 
 // Allow actual async query/render completion under concurrent CI load.
 configure({asyncUtilTimeout:5000});
-const data = vi.hoisted(() => ({ rows: [], fail: false, charts: true, date: '2026-09-21', generated: new Date().toISOString() }));
+const data = vi.hoisted(() => ({ rows: [], fail: false, charts: true, date: '2026-09-21', generated: new Date().toISOString(), modalRenders:0 }));
 vi.mock('../dataClient', () => ({
   useStaticManifest: () => ({ data: { generated_at: data.generated, as_of_date: '2026-09-21' } }),
   resolveStaticMarketEntry: () => ({ pages: { scan: { path: 'scan.json' } }, assets: { charts: { path: 'charts.json' } } }),
   fetchStaticJson: async () => { if (data.fail) throw Error('offline'); return { initial_rows: data.rows, chunks: [], as_of_date: data.date }; },
 }));
 vi.mock('../chartClient', () => ({ useStaticChartIndex: () => ({ data: { symbols: data.charts ? [{ symbol: 'LEAD' }, { symbol: 'FAIL' }] : [] } }) }));
-vi.mock('../StaticChartViewerModal', () => ({ default: ({ open, initialSymbol, onClose }) => open ? <div role="dialog" aria-label="日次分析"><span>{initialSymbol}</span><button onClick={onClose}>閉じる</button></div> : null }));
+vi.mock('../StaticChartViewerModal', () => ({ default: ({ open, initialSymbol, onClose }) => {data.modalRenders++;return open ? <div role="dialog" aria-label="日次分析"><span>{initialSymbol}</span><button onClick={onClose}>閉じる</button></div> : null;} }));
 vi.mock('../components/ResearchChart', () => ({ default: ({ entry, onExpand }) => <button disabled={!entry} onClick={onExpand}>日次チャートを分析</button> }));
 
 const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market: 'US', current_price: 102, se_pivot_price: 100, adv_usd: 50000000,
@@ -27,7 +27,7 @@ const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market
   market_above_50dma: true, market_above_200dma: true };
 let client;
 beforeEach(() => {
-  localStorage.clear(); data.fail = false; data.charts = true; data.date = '2026-09-21';
+  localStorage.clear(); data.fail = false; data.charts = true; data.date = '2026-09-21'; data.modalRenders=0;
   data.rows = [withAuditFixture(leader, data.date), { ...leader, symbol: 'FAIL', company_name: 'Weak Fixture', passes_template: false, rs_rating: 10, eps_growth_yy: -20, composite_rating: 10 }, { symbol: 'NONE', market: 'US', company_name: 'Unknown Fixture', current_price: 50, adv_usd: 30000000 }];
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -63,6 +63,35 @@ it('opens an initial symbol link at the selected detail once its data arrives', 
     window.history.replaceState(null, '', previousHash || '#/');
     Element.prototype.scrollIntoView = previousScroll;
   }
+});
+it('renders the mobile chart only in detail, preserving row selection and focus on entry',async()=>{
+  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+  mount();
+  const leaderRow=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+  expect(screen.queryByRole('button',{name:'日次チャートを分析'})).not.toBeInTheDocument();
+  fireEvent.click(leaderRow);
+  expect(await screen.findByRole('button',{name:'日次チャートを分析'})).toBeInTheDocument();
+  await waitFor(()=>expect(screen.getByRole('region',{name:'銘柄詳細'})).toHaveFocus());
+  expect(screen.getByRole('heading',{name:'LEAD'})).toBeInTheDocument();
+  act(()=>window.dispatchEvent(new Event('research:back')));
+  expect(screen.queryByRole('button',{name:'日次チャートを分析'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:/^FAIL の分析を表示/}));
+  expect(await screen.findByRole('heading',{name:'FAIL'})).toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'LEAD'})).not.toBeInTheDocument();
+});
+it('does not construct a closed expanded chart during method changes and opens the chosen symbol',async()=>{
+  mount();await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+  fireEvent.click(screen.getByRole('button',{name:'オニール',exact:true}));
+  expect(data.modalRenders).toBe(0);
+  fireEvent.click(screen.getByRole('button',{name:'日次チャートを分析'}));
+  expect(screen.getByRole('dialog',{name:'日次分析'})).toHaveTextContent('LEAD');
+  fireEvent.click(screen.getByRole('button',{name:'閉じる'}));
+  const previous=data.modalRenders;
+  fireEvent.click(screen.getByRole('button',{name:'ミネルヴィニ',exact:true}));
+  expect(data.modalRenders).toBe(previous);
+  fireEvent.click(screen.getByRole('button',{name:/^FAIL の分析を表示/}));
+  fireEvent.click(screen.getByRole('button',{name:'日次チャートを分析'}));
+  expect(screen.getByRole('dialog',{name:'日次分析'})).toHaveTextContent('FAIL');
 });
 describe('100 virtual expert task profiles', () => {
   specialties.forEach((specialty, s) => tasks.forEach((task, t) => {
