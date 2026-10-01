@@ -1,3 +1,4 @@
+import { requireChartIdentity } from '../chartPayloadIdentity';
 import { entryPlan } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
 import { useQuery } from '@tanstack/react-query';
@@ -5,13 +6,14 @@ import { Alert, Box, Button, CircularProgress, Typography, useMediaQuery } from 
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 
-export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating, row, method, quote }) {
+export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating, row, method, quote, date }) {
   const small = useMediaQuery('(max-width: 700px)');
   const query = useQuery({
     queryKey: [...staticChartKeys.payload(symbol, entry?.path), generation],
     queryFn: () => fetchStaticChartPayload(entry.path),
     enabled: Boolean(entry?.path), staleTime: 60000,
     placeholderData: () => undefined,
+    select: payload => requireChartIdentity(payload, symbol, date),
   });
   const data = query.data;
   const plan = entryPlan(row || data?.stock_data || {},quote,method);

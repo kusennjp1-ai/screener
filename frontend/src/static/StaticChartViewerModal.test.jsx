@@ -70,6 +70,7 @@ describe('StaticChartViewerModal', () => {
           status: 200,
           json: async () => ({
             generated_at: '2026-04-03T20:10:00Z',
+            as_of_date: '2026-04-02',
             symbol: 'NVDA',
             bars: [
               { date: '2026-04-01', open: 100, high: 105, low: 99, close: 104, volume: 1000000 },
@@ -114,6 +115,7 @@ describe('StaticChartViewerModal', () => {
           status: 200,
           json: async () => ({
             generated_at: '2026-04-03T20:10:00Z',
+            as_of_date: '2026-04-02',
             symbol: 'MSFT',
             bars: [],
             stock_data: { symbol: 'MSFT', company_name: 'Microsoft Corporation' },
@@ -133,6 +135,7 @@ describe('StaticChartViewerModal', () => {
       open: true,
       onClose: vi.fn(),
       initialSymbol: 'NVDA',
+      date: '2026-04-02',
       chartIndex: {
         symbols: [
           { symbol: 'NVDA', rank: 1, path: 'charts/NVDA.json' },
@@ -186,4 +189,38 @@ describe('StaticChartViewerModal', () => {
     expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
   }, 10000);
+});
+
+it.each([
+ ['other symbol',{symbol:'MSFT'}],['other snapshot',{as_of_date:'2026-04-01'}],['missing date',{as_of_date:undefined}],['stale last bar',{bars:[{date:'2026-04-01',close:100}]}],
+])('expanded chart refuses %s',async(_label,override)=>{
+ chartSpy.mockClear();
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,status:200,json:async()=>({symbol:'NVDA',as_of_date:'2026-04-02',bars:[{date:'2026-04-02',close:100}],...override})})));
+ renderModal({open:true,onClose:vi.fn(),initialSymbol:'NVDA',date:'2026-04-02',chartIndex:{symbols:[{symbol:'NVDA',path:'charts/NVDA.json'}]}});
+ await screen.findByText('チャートデータの読み込みに失敗しました。');
+ expect(screen.queryByTestId('static-candlestick-chart')).not.toBeInTheDocument();
+ expect(chartSpy).not.toHaveBeenCalled();
+ vi.unstubAllGlobals();
+});
+it('requires a date from the independent selection or chart index',async()=>{
+ chartSpy.mockClear();
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,status:200,json:async()=>({symbol:'NVDA',as_of_date:'2026-04-02',bars:[{date:'2026-04-02',close:100}]})})));
+ renderModal({open:true,onClose:vi.fn(),initialSymbol:'NVDA',chartIndex:{symbols:[{symbol:'NVDA',path:'charts/NVDA.json'}]}});
+ await screen.findByText('チャートデータの読み込みに失敗しました。');
+ expect(chartSpy).not.toHaveBeenCalled();
+ vi.unstubAllGlobals();
+});
+
+it('keeps canonical summary price and pivot when the expanded detail arrives',async()=>{
+ chartSpy.mockClear();
+ const summary={symbol:'NVDA',current_price:100,se_pivot_price:99,research_detail_path:'details/NVDA.json',price_quality:{status:'verified'},setup_recalculation:{status:'calculated'}};
+ const detail={...summary,as_of_date:'2026-04-02',current_price:80,se_pivot_price:77,price_quality:{status:'replaced'},setup_recalculation:{status:'unavailable'}};
+ vi.stubGlobal('fetch',vi.fn(async(url)=>({ok:true,status:200,json:async()=>String(url).includes('details/')?detail:{symbol:'NVDA',as_of_date:'2026-04-02',bars:[{date:'2026-04-02',close:100}],stock_data:summary}})));
+ renderModal({open:true,onClose:vi.fn(),initialSymbol:'NVDA',date:'2026-04-02',chartIndex:{symbols:[{symbol:'NVDA',path:'charts/NVDA.json'}]},researchRows:[summary]});
+ await screen.findByTestId('static-candlestick-chart');
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringContaining('details/NVDA.json'),expect.any(Object)));
+ await waitFor(()=>expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({pivotPrice:99,buyCeiling:103.95,stopPrice:93})));
+ expect(screen.getAllByText(/\$100.00/).length).toBeGreaterThan(0);
+ expect(screen.queryByText(/\$80.00/)).not.toBeInTheDocument();
+ vi.unstubAllGlobals();
 });

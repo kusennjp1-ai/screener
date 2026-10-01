@@ -1,3 +1,4 @@
+import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
 import { assess, entryPlan } from './researchEngine';
@@ -35,7 +36,7 @@ const CHART_INFO_STRIP_HEIGHT = 34;
 
 function ChartInfoStrip() {
   return <Box sx={{ minHeight: CHART_INFO_STRIP_HEIGHT, display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 1.5, py: .75, bgcolor: 'background.paper', fontSize: 12 }}>
-    {[['▲ 上昇','var(--up)'],['▼ 下落','var(--down)'],['━ SMA50日 / 10週','var(--accent)'],['┄ SMA150日 / 30週','var(--wait)'],['┈ SMA200日 / 40週','var(--text-3)'],['━ RS','var(--accent)']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
+    {[['▲ 上昇','var(--zone)'],['▼ 下落','var(--neg)'],['━ SMA50日 / 10週','var(--accent)'],['┄ SMA150日 / 30週','var(--wait)'],['┈ SMA200日 / 40週','var(--text-3)'],['━ RS','var(--accent)']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
   </Box>;
 }
 
@@ -91,6 +92,7 @@ function StaticChartViewerModal({
   useEffect(() => { swipeStart.current = null; }, [currentSymbol, open]);
 
   const currentEntry = currentSymbol ? entryBySymbol.get(currentSymbol) : null;
+  const expectedDate = date || chartIndex?.as_of_date;
   const {
     data: chartPayload,
     isLoading,
@@ -102,11 +104,7 @@ function StaticChartViewerModal({
     enabled: open && Boolean(currentEntry?.path),
     staleTime: Infinity,
     gcTime: Infinity,
-    select: payload => {
-      if (payload.symbol !== currentSymbol) throw Error('Chart symbol mismatch');
-      if (date && payload.as_of_date !== date) throw Error('Chart snapshot date mismatch');
-      return payload;
-    },
+    select: payload => requireChartIdentity(payload,currentSymbol,expectedDate),
   });
 
   useEffect(() => {
@@ -189,11 +187,11 @@ function StaticChartViewerModal({
     staleTime:Infinity, placeholderData:()=>undefined,
     queryFn:async()=>{
       const detail=await fetchStaticJson(researchRow.research_detail_path);
-      if(detail.symbol!==currentSymbol || (date && detail.as_of_date!==date)) throw Error('Detail identity mismatch');
+      if(detail.symbol!==currentSymbol || (!expectedDate || detail.as_of_date!==expectedDate)) throw Error('Detail identity mismatch');
       return detail;
     },
   });
-  const stockData = rowDetail.data?.symbol===currentSymbol ? {...researchRow,...rowDetail.data} : researchRow || chartPayload?.stock_data || null;
+  const stockData = rowDetail.data?.symbol===currentSymbol && rowDetail.data?.as_of_date===expectedDate ? {...rowDetail.data,...researchRow,price_quality:{...rowDetail.data.price_quality,...researchRow.price_quality},setup_recalculation:{...rowDetail.data.setup_recalculation,...researchRow.setup_recalculation}} : researchRow || chartPayload?.stock_data || null;
   const fundamentals = chartPayload?.fundamentals || null;
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
   const pivotPrice = canonicalPivot(stockData).price;
