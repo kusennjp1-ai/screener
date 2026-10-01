@@ -63,7 +63,9 @@ function objectiveMetrics() {
   const chartInternal = element => element.closest('.tv-lightweight-charts, [data-chart-internal], canvas');
   const elements = [...document.querySelectorAll('body *')].filter(shown);
   const smallTargets = [...document.querySelectorAll('button,a,[role="button"],summary,select,input')].filter(element => shown(element) && !element.closest('p') && !element.disabled).flatMap(element => {
-    const target = element.matches('input') ? element.labels?.[0] || element.closest('label') || element : element;
+    // Checkbox/radio labels enlarge their target. A floating text-field label
+    // is only a caption: measure the editable field itself, not that caption.
+    const target = element.matches('input[type=checkbox],input[type=radio]') ? element.labels?.[0] || element.closest('label') || element : element;
     const box = target.getBoundingClientRect(), minimum = innerWidth < 768 ? 44 : 24;
     return box.width + .1 < minimum || box.height + .1 < minimum ? [{ ...describe(element), width: box.width, height: box.height }] : [];
   });
@@ -221,6 +223,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   // above remains a failure, but cannot hide problems on unrelated screens.
   try {
     await page.goto(current.url); await page.reload(); await visible(page.locator(readySelector));
+    if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
     const planButton = page.getByRole('button', { name: /条件付きの配分|配分の試算/ }).first();
     await planButton.click(); await visible(page.getByRole('dialog'));
     await capture(page, viewport, theme, 'portfolio');
@@ -228,7 +231,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   } catch (error) {
     report.failures.push(`${key}: portfolio verification interrupted: ${error.message}`);
   }
-  for (const [screen, route, selector] of [['comparison', '#/compare', '.comparison-grid'], ['market', '#/breadth?tab=sectors', '.sector-strength'], ['breadth', '#/breadth', '.market-trend'], ['scan', '#/scan', 'h1']]) {
+  for (const [screen, route, selector] of [['comparison', '#/compare', '.comparison-grid'], ['market', '#/breadth?tab=sectors', '.sector-strength'], ['breadth', '#/breadth', '.market-trend, [data-testid="breadth-unavailable"]'], ['scan', '#/scan', 'h1']]) {
     try {
       await page.goto(`${current.url}${route}`); await visible(page.locator(selector));
       if (screen === 'comparison') await visible(page.locator('.comparison-grid canvas, .comparison-grid svg'));

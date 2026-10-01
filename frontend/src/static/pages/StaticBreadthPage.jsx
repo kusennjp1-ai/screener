@@ -87,13 +87,11 @@ function StaticBreadthPage() {
     );
   }
 
-  if (manifestQuery.isError || (selectedTab !== 2 && breadthQuery.isError)) {
+  if (manifestQuery.isError) {
     return <Alert severity="error" action={<Button onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>再試行</Button>}>騰落データの読み込みに失敗しました。</Alert>;
   }
 
-  if (selectedTab !== 2 && breadthQuery.data?.available === false) {
-    return <Alert severity="info">{breadthQuery.data?.message || '騰落スナップショットがありません。'}</Alert>;
-  }
+  const unavailable = breadthQuery.isError || breadthQuery.data?.available === false;
 
   const current = payload.current || {};
   const history = recentBreadth(payload.history_90d || [], '3M', current.date).reverse();
@@ -119,7 +117,8 @@ function StaticBreadthPage() {
         {marketEntry.market==='US' && <Tab label="業種の強さ" sx={{minHeight:44}} />}
       </Tabs>
 
-      {selectedTab === 0 && (
+      {selectedTab !== 2 && unavailable && <Alert data-testid="breadth-unavailable" severity={breadthQuery.isError?'error':'info'} action={<Button onClick={()=>breadthQuery.refetch()}>再試行</Button>}>{breadthQuery.data?.message || '騰落データを取得できません。業種の強さは別タブで確認できます。'}</Alert>}
+      {selectedTab === 0 && !unavailable && (
         <>
           <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange} />
           {marketEntry.market === 'US' && payload.book_market_evidence && <details className="market-disclosure"><summary>市場判断の根拠 — 新高値・先導株・出来高</summary><BookMarketEvidence evidence={payload.book_market_evidence} expectedDate={marketEntry.as_of_date} /></details>}
@@ -170,8 +169,8 @@ function StaticBreadthPage() {
       )}
 
       {selectedTab === 2 && <SectorStrength entry={marketEntry} />}
-      {selectedTab === 1 && <BreadthGroupAttribution attribution={groupAttribution} />}
-      <footer className="market-footnote">{selectedTab===2 ? <>公開更新：{formatPublished(manifestQuery.data?.generated_at)} · 分析 {marketEntry.as_of_date || '未確認'} · 日次スナップショット <a href="#/scan">詳細スキャン →</a></> : <>4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{formatPublished(breadthQuery.data.published_at || breadthQuery.data.generated_at)}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></>}</footer>
+      {selectedTab === 1 && !unavailable && <BreadthGroupAttribution attribution={groupAttribution} />}
+      <footer className="market-footnote">{selectedTab===2 ? <>公開更新：{formatPublished(manifestQuery.data?.generated_at)} · 分析 {marketEntry.as_of_date || '未確認'} · 日次スナップショット <a href="#/scan">詳細スキャン →</a></> : <>4%以上の騰落銘柄数は、市場全体の上昇・下落銘柄数とは異なります。10日レシオ＝期間内の4%以上上昇銘柄数の合計 ÷ 同下落銘柄数の合計。<br />公開更新：{formatPublished(breadthQuery.data?.published_at || breadthQuery.data?.generated_at)}<br /><a href="#/">銘柄の選定・10万ドル配分へ →</a></>}</footer>
       {metricInfoPopover}
     </Box>
   );
