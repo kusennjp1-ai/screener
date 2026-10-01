@@ -1,5 +1,6 @@
 import { prepareResearchBundle } from './researchPreprocess.js';
 import { researchPackets, workbenchPackets } from './researchWorkerPackets.js';
+import { summarizeWorkbench } from './workbenchSummary.js';
 
 async function read(url, sha256) {
   const response = await fetch(url, { cache: /-[a-f0-9]{16}\.json$/.test(url) ? 'default' : 'no-cache', headers: { Accept: 'application/json' } });
@@ -24,6 +25,7 @@ self.onmessage = async ({ data }) => {
       : index;
     if(data.operation==='research') for(const packet of researchPackets(result)) self.postMessage({packet});
     else if(data.operation==='workbench') for(const packet of workbenchPackets(result)) self.postMessage({packet});
+    else if(data.operation==='workbench-summary') self.postMessage({result:summarizeWorkbench(result)});
     else self.postMessage({ result });
   } catch (error) {
     self.postMessage({ error: error.message });

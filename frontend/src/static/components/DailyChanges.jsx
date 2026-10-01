@@ -6,7 +6,7 @@ export default function DailyChanges({query,method,onSelect,availableSymbols}) {
   const [kind,setKind]=useState('new'),[page,setPage]=useState(0);
   if(query.isError) return <Alert severity="warning">候補の変化を取得できません。脱落とは扱いません。</Alert>;
   const data=query.data, summary=data?.changes?.[method];
-  if(!summary) return null;
+  if(!summary || !Array.isArray(summary.items)) return <p role="status">候補の変化の内訳を読み込み中… 未取得を0件とは扱いません。</p>;
   const items=summary.items.filter(i=>i.state===kind);
   const current=Math.min(page,Math.max(0,Math.ceil(items.length/20)-1));
   return <Paper component="section" className="daily-changes" variant="outlined" aria-label="候補の日次変化">

@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { getStaticDataUrl } from '../config/runtimeMode';
 import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 import { runDataWorker } from './researchWorkerClient';
+import { summarizeWorkbench } from './workbenchSummary';
 
 export const fetchStaticJson = async (relativePath, { sha256, worker = false } = {}) => {
-  if (worker && typeof Worker !== 'undefined') return runDataWorker({ operation: worker === 'workbench' ? 'workbench' : 'json', url: new URL(getStaticDataUrl(relativePath), location.href).href, sha256 });
+  if (worker && typeof Worker !== 'undefined') return runDataWorker({ operation: ['workbench', 'workbench-summary'].includes(worker) ? worker : 'json', url: new URL(getStaticDataUrl(relativePath), location.href).href, sha256 });
   const response = await fetch(getStaticDataUrl(relativePath), {
-    cache: /(?:index|chunk|workbench|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
+    cache: /(?:index|chunk|workbench(?:-summary)?|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
     headers: {
       Accept: 'application/json',
     },
@@ -21,9 +22,11 @@ export const fetchStaticJson = async (relativePath, { sha256, worker = false } =
     const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
     const actual=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
     if(actual!==sha256) throw new Error('Static asset integrity mismatch');
-    return JSON.parse(raw);
+    const value = JSON.parse(raw);
+    return worker === 'workbench-summary' ? summarizeWorkbench(value) : value;
   }
-  return response.json();
+  const value = await response.json();
+  return worker === 'workbench-summary' ? summarizeWorkbench(value) : value;
 };
 
 export const useStaticManifest = () => useQuery({

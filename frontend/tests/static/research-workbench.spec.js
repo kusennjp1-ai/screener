@@ -4,29 +4,41 @@ import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { selectionSnapshot,compareSnapshots } from '../../src/static/candidateHistory.js';
 import { sectorStrength } from '../../src/static/sectorStrength.js';
+import { summarizeWorkbench } from '../../src/static/workbenchSummary.js';
 const date='2026-09-29';
 const rows=['AMD','TSM','JPM','KLAC','SLAB','MRNA','NDSN'].map((symbol,i)=>withAuditFixture({symbol,company_name:`Synthetic ${symbol}`,market:'US',current_price:102,se_pivot_price:100,adv_usd:5e7,rs_rating:95-i,eps_rating:92,composite_rating:96,ibd_group_rank:10,gics_sector:i<4?'Technology':'Financial',chart_path:`${symbol}.json`,market_above_50dma:true,market_above_200dma:true},date));
 const bars=Array.from({length:320},(_,i)=>({date:new Date(Date.parse(date)-(319-i)*86400000).toISOString().slice(0,10),open:85+i*.05,high:86+i*.05,low:84+i*.05,close:85.5+i*.05,volume:1e6+i*1000}));
 const current=selectionSnapshot(rows,{as_of:date,rule_version:'test'}),previous=selectionSnapshot(rows.map(r=>({...r,rs_rating:10})),{as_of:'2026-09-28',rule_version:'test'});
 const workbench={as_of:date,snapshot_id:'test',history:{previous_as_of:'2026-09-28'},changes:compareSnapshots(current,previous),sectors:sectorStrength(rows,{as_of_date:date,adjustment:'split-adjusted-close-no-dividend',series:Object.fromEntries(['SPY','XLK','XLF'].map(s=>[s,bars]))},date)};
 const raw=JSON.stringify(workbench),sha256=createHash('sha256').update(raw).digest('hex');
+const fullRef={path:'workbench.json',sha256,snapshot_id:'test'};
+const summaryRaw=JSON.stringify(summarizeWorkbench(workbench,fullRef)),summaryHash=createHash('sha256').update(summaryRaw).digest('hex');
 for(const width of [1440,390])test(`comparison, daily changes, sector navigation at ${width}px`,async({page},info)=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let fullRequests=0;
   await page.setViewportSize({width,height:width===390?844:900});
   await page.route('**/static-data/**',async route=>{
     const file=new URL(route.request().url()).pathname.split('/').pop();
-    if(file==='workbench.json')return route.fulfill({body:raw,contentType:'application/json'});
+    if(file==='workbench-summary.json')return route.fulfill({body:summaryRaw,contentType:'application/json'});
+    if(file==='workbench.json'){fullRequests++;return route.fulfill({body:raw,contentType:'application/json'});}
     const row=rows.find(r=>`${r.symbol}.json`===file);
-    const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'test',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'},workbench:{path:'workbench.json',sha256,snapshot_id:'test'}},pages:{breadth:{path:'breadth.json'}}}}}
+    const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'test',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'},workbench:fullRef,workbench_summary:{path:'workbench-summary.json',sha256:summaryHash,snapshot_id:'test'}},pages:{breadth:{path:'breadth.json'}}}}}
       :file==='research.json'?{as_of_date:date,rows}:file==='breadth.json'?{payload:{current:{date},chart_data:[]}}:row?{symbol:row.symbol,as_of_date:date,bars:row.symbol==='MRNA'?[]:bars,rs_line:bars.map((b,i)=>({time:b.date,value:1+i*.002})),stock_data:row}:{};
     await route.fulfill({json:payload});
   });
   await page.goto('/');
+  await expect(page.locator('.changes-desktop')).toContainText('新たに通過 7');
+  expect(fullRequests).toBe(0);
   await page.getByRole('button',{name:'候補の日次変化',exact:true}).click();
   await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('今回通過 7');
+  expect(fullRequests).toBe(1);
   await page.getByText('変化の内訳を開く',{exact:true}).click();
   await page.getByText('AMD · 今回通過 · 1条件が変化',{exact:true}).click();
   await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('前回：未通過');
+  await page.getByRole('button',{name:'候補の変化を閉じる'}).click();
+  await page.getByRole('button',{name:'候補の日次変化',exact:true}).click();
+  await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('今回通過 7');
+  expect(fullRequests).toBe(1);
   await page.getByRole('button',{name:'候補の変化を閉じる'}).click();
   const navigation=page.getByRole('navigation',{name:width===390?'モバイルナビゲーション':'メインナビゲーション'});
   await navigation.getByRole('link',{name:'比較',exact:true}).click();

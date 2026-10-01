@@ -6,6 +6,7 @@ import { selectionSnapshot, compareSnapshots } from '../src/static/candidateHist
 import { sectorStrength } from '../src/static/sectorStrength.js';
 import { HISTORY_RETENTION_SESSIONS } from '../src/static/candidatePerformance.js';
 import { exportCandidatePerformance } from './export-candidate-performance.mjs';
+import { summarizeWorkbench } from '../src/static/workbenchSummary.js';
 const hash = value => createHash('sha256').update(value).digest('hex');
 export async function exportWorkbench({root, rows, manifest, entry, researchContent}) {
   const engineFiles=['researchEngine.js','qualificationAudit.js','financialHistory.js','institutionalEvidence.js','candidateHistory.js'];
@@ -48,5 +49,11 @@ export async function exportWorkbench({root, rows, manifest, entry, researchCont
   const serialized=JSON.stringify(result), digest=hash(serialized),path=`workbench-${digest.slice(0,16)}.json`;
   await writeFile(resolve(root,path),serialized);
   entry.assets.workbench={path,sha256:digest,as_of_date:entry.as_of_date,snapshot_id:snapshotId};
+  // Keep the full workbench and its F3 observation references unchanged. The
+  // overview only needs counts and sector evidence; details are read on demand.
+  const summary=JSON.stringify(summarizeWorkbench(result,entry.assets.workbench));
+  const summaryDigest=hash(summary),summaryPath=`workbench-summary-${summaryDigest.slice(0,16)}.json`;
+  await writeFile(resolve(root,summaryPath),summary);
+  entry.assets.workbench_summary={path:summaryPath,sha256:summaryDigest,as_of_date:entry.as_of_date,snapshot_id:snapshotId,source_research_sha256:meta.source_research_sha256};
   return result;
 }
