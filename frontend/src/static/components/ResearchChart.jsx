@@ -1,11 +1,11 @@
-import ChartDecisionSummary from './ChartDecisionSummary';
+import { entryPlan } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Button, CircularProgress, Stack, Typography, useMediaQuery, useTheme } from '@mui/material';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 
-export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating, row, method, quote, date, market, now }) {
+export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating, row, method, quote }) {
   const dark = useTheme().palette.mode === 'dark';
   const small = useMediaQuery('(max-width: 700px)');
   const query = useQuery({
@@ -15,7 +15,8 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
     placeholderData: () => undefined,
   });
   const data = query.data;
-  return <Box className="research-chart" aria-label={`${symbol} の日次チャート`}>
+  const plan = entryPlan(row || data?.stock_data || {},quote,method);
+  return <Box component="section" className="research-chart" aria-label={`${symbol} の日次チャート`}>
     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography variant="body2" fontWeight={700}>価格・出来高・相対強度</Typography>
       <Button size="small" disabled={!entry} onClick={onExpand}>日次チャートを分析</Button>
@@ -24,14 +25,14 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
       : query.isLoading ? <Box role="status" sx={{ p: 6 }}><CircularProgress size={24} /> チャートを読み込み中…</Box>
       : query.isError ? <Alert severity="error" action={<Button onClick={() => query.refetch()}>再試行</Button>}>チャートを取得できません。</Alert>
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography>
-      : <CandlestickChart smallScreen={small} researchView bookAnnotations key={symbol} symbol={symbol} height={small ? 410 : 520}
+      : <CandlestickChart smallScreen={small} researchView bookAnnotations key={symbol} symbol={symbol} height={small ? 360 : 440}
         priceData={data.bars} rsLineData={data.rs_line || null} rsRatingValue={rsRating ?? null}
         epsLine={data.eps_line || null} blueDots={data.blue_dots || null}
         dataUpdatedAtOverride={data.generated_at ? Date.parse(data.generated_at) : null}
-        hideOhlcLegend={small} hideTimeframeToggle={small}
+        hideOhlcLegend={small} hideTimeframeToggle={false}
         pivotPrice={canonicalPivot(row || data.stock_data).price}
-        pivotLabel="共通ピボット" vcpBoxes={data.vcp_boxes || null} />}
-    {<ChartDecisionSummary row={row} date={date || data?.as_of_date} method={method} quote={quote} market={market} now={now} />}
+        buyCeiling={plan.upper} stopPrice={plan.stopExample} pivotLabel="共通ピボット" vcpBoxes={data.vcp_boxes || null} />}
+
     <Stack direction="row" flexWrap="wrap" gap={2} sx={{ px: 2, py: 1, fontSize: 12, color: 'text.secondary', borderTop: '1px solid', borderColor: 'divider' }}>
       <span style={{ color: dark ? 'var(--wait)' : 'var(--wait)' }}>━ SMA50日 / 10週</span><span style={{ color: dark ? 'var(--text-2)' : 'var(--text-2)' }}>┄ SMA150日 / 30週</span><span style={{ color: dark ? 'var(--accent)' : 'var(--accent)' }}>┈ SMA200日 / 40週</span><span>RS：対市場の強さ</span><span>日次データ / {data?.as_of_date || '未確認'}</span>
     </Stack>
