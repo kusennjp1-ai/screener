@@ -43,3 +43,5 @@
 .header-market{background:var(--surface);color:var(--text);border:1px solid var(--line-2);border-radius:8px;min-height:32px;font-size:12px;padding:4px;max-width:140px}@media(max-width:700px){.header-market{min-height:44px;max-width:100px}.leader-header:has(.header-market) .header-dates{display:none}}
 
 @media(max-width:700px){.research-hero .changes-trigger{display:block;position:absolute;top:4px;right:64px;min-height:44px;min-width:44px;font-size:12px;color:var(--text-2)}.changes-desktop{display:none}.changes-mobile{display:inline}}
+
+.radar-zone-label{background:var(--ground);padding:0 4px}
