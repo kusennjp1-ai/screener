@@ -47,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           restored=false
-          for run_id in $(gh api --paginate "repos/$GH_REPO/actions/artifacts?name=github-pages&per_page=100" --jq '.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main") | .workflow_run.id' | head -8); do
+          for run_id in $(gh api --paginate --slurp "repos/$GH_REPO/actions/artifacts?name=github-pages&per_page=100" --jq '[.[].artifacts[] | select(.expired == false and .workflow_run.head_branch == "main")] | sort_by(.created_at) | reverse | .[0:8][] | .workflow_run.id'); do
             if [ "$(gh run view "$run_id" --json conclusion --jq .conclusion)" = success ]; then
               gh run download "$run_id" --name github-pages --dir "$RUNNER_TEMP/design-pages"
               echo "SOURCE_RUN=$run_id" >> "$GITHUB_ENV"
