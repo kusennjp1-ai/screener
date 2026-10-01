@@ -76,6 +76,15 @@ it('uses the topmost actually painted circle for overlap hit testing and does no
  const {container}=render(<SetupRadar ranked={[{...ranked[0],assessment:{qualified:false}},{...ranked[1],row:{...ranked[1].row,se_pivot_price:null}}]} onSelect={()=>{}}/>);
  expect(container.querySelector('canvas')).toHaveAttribute('data-radar-point-count','0');
 });
+it('keeps the canvas, HTML label and SVG selection aligned when maximum height makes the viewport non-proportional',()=>{
+ rect={left:10,top:20,width:820,height:228};const onSelect=vi.fn(),point=geometryFor(ranked).points[0];
+ const {container}=render(<SetupRadar ranked={ranked} selectedSymbol="SAFE" onSelect={onSelect}/>);
+ expect(context.setTransform).toHaveBeenLastCalledWith(820/620,0,0,228/224,0,0);
+ const overlay=container.querySelector('svg');expect(overlay).toHaveAttribute('preserveAspectRatio','none');
+ expect(overlay.querySelector('circle')).toHaveAttribute('cx',String(point.x));expect(overlay.querySelector('circle')).toHaveAttribute('cy',String(point.y));
+ const label=container.querySelector('.radar-point-label');expect(parseFloat(label.style.left)).toBeCloseTo(point.x/620*100);expect(parseFloat(label.style.top)).toBeCloseTo(point.y/224*100);
+ fireEvent.click(screen.getByRole('img'),coordinates(point));expect(onSelect).toHaveBeenCalledWith('SAFE');
+});
 it('rejects invalid geometry and escapes every data-bearing HTML label',()=>{
  const geometry=geometryFor(ranked);
  const html=document.createElement('div');html.innerHTML=radarFrame(geometry,false);html.querySelector('[data-radar-label]').innerHTML=radarSelection(geometry,geometry.points[1]).label;

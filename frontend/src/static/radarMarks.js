@@ -13,7 +13,7 @@ export function radarFrame(g, small) {
   return `<header><strong>セットアップ・レーダー</strong><span>横：ピボット比 · 縦：RS推計</span></header>`+
     `<div class="radar-plot" style="aspect-ratio:${g.width}/${g.height}">`+
     `<canvas data-radar-canvas width="${g.width}" height="${g.height}" style="display:block;width:100%;height:100%" role="img" aria-label="ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。"></canvas>`+
-    `<svg viewBox="0 0 ${g.width} ${g.height}" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"><g data-radar-selection></g><path d="M${g.x(10)-3} ${g.top+g.ph+4}l3 -8m1 8l3 -8" stroke="var(--text-3)"></path></svg>`+
+    `<svg viewBox="0 0 ${g.width} ${g.height}" preserveAspectRatio="none" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"><g data-radar-selection></g><path d="M${g.x(10)-3} ${g.top+g.ph+4}l3 -8m1 8l3 -8" stroke="var(--text-3)"></path></svg>`+
     xs+ys+`<span class="radar-zone-label" style="left:${percent((g.x(0)+g.x(5))/2,g.width)}">買いゾーン</span><span data-radar-label style="display:contents"></span></div>`+
     '<footer><span>◔ ピボット待ち</span><span>● ゾーン内</span><span>▲ 超過</span><span>+10%以降は圧縮</span></footer>';
 }
