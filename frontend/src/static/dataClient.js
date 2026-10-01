@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { getStaticDataUrl } from '../config/runtimeMode';
 import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
+import { runDataWorker } from './researchWorkerClient';
 
-export const fetchStaticJson = async (relativePath, { sha256 } = {}) => {
+export const fetchStaticJson = async (relativePath, { sha256, worker = false } = {}) => {
+  if (worker && typeof Worker !== 'undefined') return runDataWorker({ operation: 'json', url: new URL(getStaticDataUrl(relativePath), location.href).href, sha256 });
   const response = await fetch(getStaticDataUrl(relativePath), {
     cache: /(?:index|chunk|workbench|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
     headers: {

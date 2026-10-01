@@ -5,25 +5,26 @@ import DailyChanges from '../components/DailyChanges';
 import { filterRanked, formatPublished, sessionCurrent } from '../researchPresentation';
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, CircularProgress, FormControlLabel, Paper, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography, useTheme } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, FormControlLabel, Paper, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import StaticChartViewerModal from '../StaticChartViewerModal';
-import { compareReference, finite, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from '../researchEngine';
+import { compareReference, finite, quoteStatus, researchCsv, snapshotFreshness } from '../researchEngine';
 import ResearchDetail from '../components/ResearchDetail';
 import CandidateBoard from '../components/CandidateBoard';
 import ResearchSearch from '../components/ResearchSearch';
 import { entryReadiness } from '../entryReadiness';
-import { modelMarket, preparePortfolioRows } from '../portfolioPlan';
+import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 import PortfolioDecision from '../components/PortfolioDecision';
 import { usePersonalQuote } from '../usePersonalQuote';
-import { mergeScanRows } from '../qualificationAudit';
+import { useResearchBundle } from '../useResearchBundle';
+import { refreshResearchBundle } from '../researchWorkerClient';
+import { prepareResearchBundle } from '../researchPreprocess';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
 export default function ResearchPage() {
-  const theme = useTheme();
   const client = useQueryClient();
   const manifest = useStaticManifest();
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
@@ -51,25 +52,13 @@ export default function ResearchPage() {
   const [watch, setWatch] = useState(() => {
     try { const value = JSON.parse(localStorage.getItem('research-watch') || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; }
   });
-  const bundle = useQuery({
-    placeholderData: () => undefined,
-    queryKey: ['researchRows', researchPath, version],
-    enabled: Boolean(researchPath),
-    queryFn: async () => {
-      const index = await fetchStaticJson(researchPath);
-      if (entry.as_of_date && index.as_of_date && entry.as_of_date !== index.as_of_date) throw new Error('Snapshot date mismatch');
-      const chunks = await Promise.all((index.chunks || []).map(c => fetchStaticJson(c.path)));
-      if (chunks.some(c => c.as_of_date && c.as_of_date !== index.as_of_date)) throw new Error('Mixed snapshot dates');
-      return { rows: mergeScanRows([index, ...chunks], index.as_of_date), date: index.as_of_date };
-    }, staleTime: Infinity,
-  });
+  const bundle = useResearchBundle(researchPath, entry.as_of_date, version);
   const reference = useQuery({ queryKey: ['researchReference', version], queryFn: async () => {
     const response = await fetch(`${import.meta.env.BASE_URL}ibd-reference.json`, { cache: 'no-cache' });
     return response.ok ? response.json() : null;
   }, retry: false });
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
-  const rankings = useMemo(() => ({rows,methods:new Map()}), [rows]);
-  const evaluated = useMemo(() => { if (!rankings.methods.has(method)) rankings.methods.set(method,rankCandidates(rankings.rows,method)); return rankings.methods.get(method); }, [method, rankings]);
+  const evaluated = useMemo(() => bundle.data?.rankings?.[method] || [], [method, bundle.data]);
   const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, onlyWatch, watch, liquid, coverage, sector]);
   const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
   const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
@@ -101,8 +90,8 @@ export default function ResearchPage() {
       return result;
     }, refetchInterval: 15000, retry: 1,
   });
-  const market = useMemo(() => modelMarket(rows), [rows]);
-  const portfolioPrepared = useMemo(() => preparePortfolioRows(rows), [rows]);
+  const portfolioPrepared = useMemo(() => bundle.data?.prepared || preparePortfolioRows([]), [bundle.data]);
+  const market = portfolioPrepared.market;
   const clockRows = useMemo(() => [...new Set([...portfolioPrepared.candidates,selected].filter(Boolean))], [portfolioPrepared,selected]);
   const clockSelector = useCallback(time => JSON.stringify([
     quoteStatus(personalKey ? personal.quote : quote.data,time),
@@ -114,10 +103,11 @@ export default function ResearchPage() {
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
+  const portfolioPlan = useMemo(() => buildPortfolioPlan(rows, bundle.data?.date, 100000, now, portfolioPrepared), [rows, bundle.data?.date, now, portfolioPrepared]);
   const activeQuote = personalKey ? personal.quote : quote.data;
   const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, now);
   const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? activeQuote : null;
-  const leaders = useMemo(() => rankCandidates(rows, 'ibd', { liquidOnly: true }).filter(r => r.assessment.qualified).slice(0, 50).map(r => r.row), [rows]);
+  const leaders = useMemo(() => filterRanked(bundle.data?.rankings?.ibd || [], { liquidOnly: true, qualifiedOnly: true }).slice(0, 50).map(r => r.row), [bundle.data]);
   const overlap = compareReference(leaders, reference.data, bundle.data?.date);
   const age = now - Date.parse(manifest.data?.generated_at);
   const currentSession = sessionCurrent(rows, bundle.data?.date, now);
@@ -136,13 +126,24 @@ export default function ResearchPage() {
     setSector(''); setView('list'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setLiquid(false); setCoverage('all'); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
+  const verificationQueue = useRef(Promise.resolve());
   const applyVerification = useCallback((ticker, result, date, generation) => {
     // Ignore an in-flight result from a replaced daily snapshot.
     if (date !== bundle.data?.date || generation !== version) return;
-    client.setQueryData(['researchRows', researchPath, version], previous => previous ? {
-      ...previous, rows: previous.rows.map(r => r.symbol === ticker ? { ...r, method_summary:undefined, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r),
-    } : previous);
-    setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
+    verificationQueue.current = verificationQueue.current.then(async () => {
+      const key = ['researchRows', researchPath, version];
+      const previous = client.getQueryData(key);
+      if (previous?.date !== date) return;
+      const updated = previous.rows.map(r => r.symbol === ticker ? { ...r, method_summary:undefined, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r);
+      let next;
+      try { next = await refreshResearchBundle(updated, date); }
+      catch { next = prepareResearchBundle([{ rows: updated, as_of_date: date }], date); }
+      // A refetch or a new publication may have replaced this snapshot while
+      // the worker was running. Never resurrect the prior publication.
+      if (client.getQueryData(key) !== previous) return;
+      client.setQueryData(key, next);
+      setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
+    }).catch(() => setVerificationNotice(`${ticker}：再検証の反映に失敗しました。データを再取得してください。`));
   }, [bundle.data?.date, version, client, researchPath]);
   function focusDetail() { requestAnimationFrame(() => {
     detailRef.current?.focus?.({ preventScroll: true });
@@ -158,13 +159,13 @@ export default function ResearchPage() {
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
-  return <Box component="main" className="research-workbench" data-mobile-view={mobileView} sx={{ '--accent': theme.palette.mode === 'dark' ? '#a399ff' : '#6555dc' }}>
+  return <Box component="main" className="research-workbench" data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date} />
     <header className="research-heading">
       <Box><div className="research-kicker">米国株スクリーナー</div><Typography component="h1" sx={{ fontSize: { xs: 25, md: 30 }, fontWeight: 700, letterSpacing: '-.03em', mt: .5 }}>今日の投資判断</Typography></Box>
       <Stack alignItems="flex-end" gap={.5}><Typography variant="body2" color="text.secondary">日次分析：{bundle.data?.date || entry.as_of_date || '取得中'}</Typography><Button size="small" onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>データを再確認 ↻</Button></Stack>
     </header>
-    {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} onInspect={inspectOrder} onBrowse={browse} />}
+    {bundle.data && !bundle.isError && <PortfolioDecision rows={rows} date={bundle.data.date} now={now} plan={portfolioPlan} onInspect={inspectOrder} onBrowse={browse} />}
     <DailyChanges query={workbench} method={method} onSelect={inspectChanged} availableSymbols={availableSymbols} />
     <div className="research-summary">
       <span>分析対象<strong>{bundle.data?rows.length.toLocaleString():'—'} 銘柄</strong></span>

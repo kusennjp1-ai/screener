@@ -1,6 +1,7 @@
 import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
 import { encodeAssessment } from '../src/static/assessmentEncoding.js';
+import { encodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
 import { scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
@@ -164,7 +165,11 @@ const researchIndex = {as_of_date:scan.as_of_date, rows:[...compactRows.values()
   summary.method_summary={version:RULE_SUMMARY_VERSION,...Object.fromEntries(['minervini','minervini2','oneil','ibd'].map(method=>[method,encodeAssessment(row.method_summary[method])]))};
   return summary;
 })};
-const researchContent = JSON.stringify(researchIndex);
+const researchRowIds = new Map(researchIndex.rows.map((row, index) => [row.symbol, index]));
+const researchOrders = Object.fromEntries(RESEARCH_METHODS.map(method => [method,
+  rankCandidates(researchIndex.rows, method).map(({ row }) => researchRowIds.get(row.symbol)),
+]));
+const researchContent = JSON.stringify(encodeResearchIndex(researchIndex, researchOrders));
 // The scan list has all global filter/sort values, but no full detector reports.
 await mkdir(resolve(root,'scan-list'),{recursive:true});
 const scanRows=[...compactRows.values()].map(scanListRow), scanChunks=[];

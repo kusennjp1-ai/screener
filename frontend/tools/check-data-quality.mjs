@@ -1,13 +1,24 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
+import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { prepareResearchBundle } from '../src/static/researchPreprocess.js';
 import { sectorStrength } from '../src/static/sectorStrength.js';
-import { assess, assessmentSummary, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
+import { assess, assessmentSummary, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
 import {canonicalPivot} from '../src/static/researchPresentation.js';
+import {buildPortfolioPlan} from '../src/static/portfolioPlan.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
 const manifest=await read('manifest.json');
-const index=await read((manifest.markets?.US||manifest).assets.research.path);
+const indexPath=(manifest.markets?.US||manifest).assets.research.path;
+const wireRaw=await readFile(`public/static-data/${indexPath}`);
+const wire=JSON.parse(wireRaw.toString('utf8'));
+const index=decodeResearchIndex(wire);
+const prepared=prepareResearchBundle([wire],index.as_of_date);
+if(wire.schema && (wireRaw.length>8000000 || gzipSync(wireRaw).length>1000000)) throw Error(`Research payload budget exceeded: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes`);
+for(const method of ['minervini','minervini2','oneil','ibd']) {
+  if(prepared.rankings[method].map(item=>item.row.symbol).join(',')!==rankCandidates(index.rows,method).map(item=>item.row.symbol).join(',')) throw Error(`Exported ranking differs: ${method}`);
+}
 const quality=await read('data-quality.json');
 for(const row of index.rows) for(const method of ['minervini','minervini2','oneil','ibd']) {
   const {rules,...expected}=assess(row,method); void rules;
@@ -29,11 +40,28 @@ for(const chunk of scan.chunks) {
 const bySymbol=new Map(list.map(r=>[r.symbol,r]));
 if(list.length!==index.rows.length || bySymbol.size!==list.length) throw Error('Scan-list universe differs');
 const scalarFields=['current_price','se_pivot_price','vcp_pivot','se_setup_ready','rs_rating','passes_template','institutional_sponsors_increasing'];
+const canonicalRows=[];
 for(const row of index.rows) {
   const entry=bySymbol.get(row.symbol);
   for(const key of scalarFields) if(entry[key]!==row[key]) throw Error(`Cross-view value mismatch: ${row.symbol}/${key}`);
   if(row.setup_recalculation?.status!=='calculated' && (canonicalPivot(row).price || row.se_setup_ready)) throw Error(`Stale failed setup: ${row.symbol}`);
+  // Every compact row must reproduce the full canonical inputs, not merely
+  // agree with its own exported summary (which could hide transport drift).
+  const detail=await read(row.research_detail_path);
+  canonicalRows.push(detail);
+  for(const method of ['minervini','minervini2','oneil','ibd']) {
+    if(JSON.stringify(assess(row,method))!==JSON.stringify(assess(detail,method))) throw Error(`Canonical detail rule mismatch: ${row.symbol}/${method}`);
+    if(researchCsv([{row}],method,index.as_of_date)!==researchCsv([{row:detail}],method,index.as_of_date)) throw Error(`Canonical CSV mismatch: ${row.symbol}/${method}`);
+  }
 }
+const planTime=Date.now();
+const planContract=rows=>{
+  const plan=buildPortfolioPlan(rows,index.as_of_date,100000,planTime);
+  return {positions:plan.positions,dailyPositions:plan.dailyPositions,candidateCount:plan.candidateCount,invested:plan.invested,cash:plan.cash,exposure:plan.exposure,risk:plan.risk,
+    readiness:plan.readiness.map(item=>({symbol:item.symbol,passed:item.passed,ready:item.ready,states:item.rules.map(rule=>[rule.id,rule.state])}))};
+};
+if(JSON.stringify(planContract(index.rows))!==JSON.stringify(planContract(canonicalRows))) throw Error('Compact research changes order plan or entry readiness');
+console.log(`Research transport gate passed: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes; full canonical rules, CSV, rankings and order plan agree.`);
 // Open real normal, repaired, split and incomplete symbols. All surfaces use
 // these same canonical details; chart stubs may not retain old levels.
 const sample=new Set(['AMD','TSM','JPM','KLAC','SLAB','ADI','SNDK','NDSN','IRDM','EBAY',index.rows.find(r=>!r.financial_history)?.symbol,index.rows.find(r=>!r.institutional_evidence)?.symbol,index.rows.find(r=>r.setup_recalculation?.status!=='calculated')?.symbol]);
