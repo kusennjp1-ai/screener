@@ -891,6 +891,12 @@ function CandlestickChart({
       {/* Chart Container - always rendered so useLayoutEffect can initialize */}
       <div
         ref={chartContainerRef}
+        data-chart-symbol={researchView ? symbol : undefined}
+        data-chart-asof={researchView ? priceData?.at(-1)?.date : undefined}
+        data-chart-pivot={researchView && !historyWarning ? pivotPrice ?? '' : ''}
+        data-chart-upper={researchView && !historyWarning ? buyCeiling ?? '' : ''}
+        data-chart-stop={researchView && !historyWarning ? stopPrice ?? '' : ''}
+        data-chart-annotation-mode={researchView ? showBookAnnotations ? 'detail' : 'simple' : undefined}
         style={{
           width: '100%',
           height: '100%',

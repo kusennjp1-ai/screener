@@ -34,3 +34,13 @@ it('uses one CSS pixel and 0.55 opacity for detailed contraction curves at doubl
   primitive.paneViews()[0].renderer().draw({useBitmapCoordinateSpace:fn=>fn({context:ctx,horizontalPixelRatio:2,verticalPixelRatio:2,bitmapSize:{width:600,height:600}})});
   expect(strokes).toEqual([{width:2,alpha:0.55}]);
 });
+it('keeps captions clear of wide candle bodies after zooming in', () => {
+  const ctx = Object.fromEntries(['save','restore','setLineDash','strokeRect','fillRect','fillText'].map(key => [key,vi.fn()]));
+  ctx.measureText = () => ({width:20});
+  const primitive = new VcpBoxPrimitive([{start:'a',end:'b',high:80,low:60,label:'C1'}], [{time:'c',high:180,low:10}]);
+  primitive.attached({chart:{timeScale:()=>({width:()=>300,options:()=>({barSpacing:40}),timeToCoordinate:t=>({a:90,b:110,c:130})[t]})},series:{priceToCoordinate:p=>200-p},requestUpdate:vi.fn()});
+  primitive.paneViews()[0].renderer().draw({useBitmapCoordinateSpace:fn=>fn({context:ctx,horizontalPixelRatio:1,verticalPixelRatio:1,bitmapSize:{width:300,height:300}})});
+  for (const [x,y,width,height] of ctx.fillRect.mock.calls) expect(x < 150 && x + width > 110 && y < 190 && y + height > 20).toBe(false);
+  // The label is retained in another safe horizontal slot, not over the body.
+  expect(ctx.fillText).toHaveBeenCalledTimes(1);
+});

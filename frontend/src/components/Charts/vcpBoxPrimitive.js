@@ -10,6 +10,7 @@
 // primitive must never throw into the chart, so callers wrap usage in try/catch.
 
 import { placeAnnotationLabels } from './annotationLabelLayout';
+import { palettes } from '../../static/theme/tokens';
 
 class VcpBoxRenderer {
   constructor(rects, candles) {
@@ -30,7 +31,7 @@ class VcpBoxRenderer {
         const w = Math.max(right - left, 1);
         const h = Math.max(bottom - top, 1);
         ctx.save();
-        ctx.strokeStyle = r.color || 'rgba(255, 167, 38, 0.45)';
+        ctx.strokeStyle = r.color || palettes.dark.wait;
         ctx.lineWidth = hr;
         ctx.globalAlpha = r.curve ? 0.55 : 0.7;
         ctx.setLineDash([3 * hr, 3 * hr]);
@@ -60,9 +61,9 @@ class VcpBoxRenderer {
       const labels = placeAnnotationLabels(this._rects, this._candles, scope.bitmapSize.width / hr, scope.bitmapSize.height / vr, text => ctx.measureText(text).width / hr);
       for (const label of labels) {
         const { shape: r, x, y, width, height } = label;
-        ctx.fillStyle = r.labelBackground || 'rgba(20,27,42,.94)';
+        ctx.fillStyle = r.labelBackground || palettes.dark.surface;
         ctx.fillRect(x * hr, y * vr, width * hr, height * vr);
-        ctx.fillStyle = r.color || '#ffb74d';
+        ctx.fillStyle = r.color || palettes.dark.wait;
         ctx.fillText(r.label, (x + 5) * hr, (y + 12) * vr, (width - 10) * hr);
       }
       ctx.restore();
@@ -84,9 +85,13 @@ class VcpBoxPaneView {
     if (!chart || !series || !Array.isArray(boxes) || boxes.length === 0) return;
     const timeScale = chart.timeScale();
     const width = timeScale.width();
+    // Reserve the whole bar slot, including zoomed-in candle bodies. A fixed
+    // 8px obstacle misses the edges once the user increases bar spacing.
+    const spacing = timeScale.options?.().barSpacing;
+    const candleWidth = Number.isFinite(spacing) && spacing > 0 ? Math.max(1, spacing) : 8;
     this._candles = candles.map(candle => {
       const x = timeScale.timeToCoordinate(candle.time ?? candle.date), high = series.priceToCoordinate(candle.high), low = series.priceToCoordinate(candle.low);
-      return x == null || high == null || low == null || x < -4 || x > width + 4 ? null : { x: x - 4, y: Math.min(high, low), width: 8, height: Math.max(1, Math.abs(low - high)) };
+      return x == null || high == null || low == null || x < -candleWidth / 2 || x > width + candleWidth / 2 ? null : { x: x - candleWidth / 2, y: Math.min(high, low), width: candleWidth, height: Math.max(1, Math.abs(low - high)) };
     }).filter(Boolean);
     for (const box of boxes) {
       const y1 = series.priceToCoordinate(box.high);
