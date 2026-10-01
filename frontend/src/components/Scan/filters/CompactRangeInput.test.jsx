@@ -26,8 +26,8 @@ describe('CompactRangeInput', () => {
     );
     const inputs = screen.getAllByRole('spinbutton');
     expect(inputs).toHaveLength(2);
-    expect(inputs[0]).toHaveAttribute('placeholder', 'Min');
-    expect(inputs[1]).toHaveAttribute('placeholder', 'Max');
+    expect(inputs[0]).toHaveAttribute('placeholder', '下限');
+    expect(inputs[1]).toHaveAttribute('placeholder', '上限');
   });
 
   it('fires onChange with parsed value after 300ms debounce', async () => {
