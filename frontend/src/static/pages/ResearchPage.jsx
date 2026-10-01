@@ -3,6 +3,7 @@ import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
 import CandidatePerformance from '../components/CandidatePerformance';
+import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, sessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,15 +37,15 @@ export default function ResearchPage({compareOnly=false}) {
   const [sector,setSector]=useState(()=>params.get('sector') || '');
   const workbench=useWorkbench(entry);
   const [personalKey, setPersonalKey] = useState('');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => params.get('symbol') || '');
   const [strict, setStrict] = useState(false);
   const [nearOnly, setNearOnly] = useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
   const [coverage, setCoverage] = useState('all');
   const deferredSearch = useDeferredValue(search);
   useEffect(()=>{const searchEvent=e=>setSearch(e.detail||'');const backEvent=()=>setMobileView('list');window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};},[]);
-  const [mobileView, setMobileView] = useState('list');
-  const [liquid, setLiquid] = useState(true);
+  const [mobileView, setMobileView] = useState(() => params.get('symbol') ? 'detail' : 'list');
+  const [liquid, setLiquid] = useState(() => !params.get('symbol'));
   const detailRef = useRef(null);
   const [onlyWatch, setOnlyWatch] = useState(false);
   const [symbol, setSymbol] = useState(() => params.get('symbol') || null);
@@ -197,8 +198,9 @@ export default function ResearchPage({compareOnly=false}) {
       <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={()=>{setNearOnly(value=>!value);setStrict(false);}} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={()=>setFiltersOpen(true)} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
-    <footer className="research-method-note">
-      {!compareOnly&&<CandidatePerformance entry={entry}/>}
+    {!compareOnly&&<footer className="research-method-note">
+      <CandidatePerformance entry={entry}/>
+      {bundle.data&&<WatchNotifications rows={rows} watch={watch} asOf={bundle.data.date} method={method} personalConnected={Boolean(personalKey)&&personal.status==='接続済み'} personalQuote={usableQuote} onSelect={inspectChanged}/>}
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">{overlap ? `IBD公式リストとの一致：${Math.round(overlap.recall * 100)}%` : '公開ルールに基づく独自スクリーナー'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
@@ -206,7 +208,7 @@ export default function ResearchPage({compareOnly=false}) {
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
-    </footer>
+    </footer>}
     <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open={Boolean(chart)} onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />
   </Box>;
 }
