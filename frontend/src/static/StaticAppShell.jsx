@@ -31,6 +31,7 @@ function StaticAppContent() {
       <StaticLayout>
         <Routes>
           <Route path="/" element={<ResearchPage />} />
+          <Route path="/compare" element={<ResearchPage compareOnly />} />
           <Route path="/daily" element={<StaticHomePage />} />
           <Route path="/scan" element={<StaticScanPage />} />
           <Route path="/breadth" element={<StaticBreadthPage />} />
