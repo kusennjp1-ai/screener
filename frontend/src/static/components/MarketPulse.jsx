@@ -11,7 +11,7 @@ export default function MarketPulse({ current, history, range, onRangeChange }) 
     <Paper elevation={0} className={`breadth-pulse-summary market-tone-${summary.tone}`}>
       <div className="breadth-pulse-conclusion">
         <div><p className="breadth-pulse-eyebrow">直近10営業日の広がり</p><h2>{summary.title}</h2><p className="breadth-pulse-reference">{summary.ratio === null ? '10日レシオは未確認' : summary.ratio > 1 ? '基準1.00より上 · 上昇優勢' : summary.ratio < 1 ? '基準1.00より下 · 下落優勢' : '基準1.00 · 均衡'}</p></div>
-        <div className="breadth-pulse-ratio" aria-label="10日上昇下落レシオ"><span>10日レシオ</span><strong>{summary.ratio === null ? '—' : summary.ratio.toFixed(2)}<small>倍</small></strong></div>
+        <div className="breadth-pulse-ratio" role="group" aria-label="10日上昇下落レシオ"><span>10日レシオ</span><strong>{summary.ratio === null ? '—' : summary.ratio.toFixed(2)}<small>倍</small></strong></div>
       </div>
       <div className="breadth-pulse-daily" role="group" aria-label="直近取引日の4%以上騰落銘柄数">
         <p className="breadth-pulse-eyebrow">直近1日 · {current.date || '日付未確認'} <span>4%以上の騰落</span></p>

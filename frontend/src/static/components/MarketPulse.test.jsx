@@ -6,7 +6,7 @@ describe('MarketPulse', () => {
   it('separates the exported ten-day ratio from the latest daily counts', () => {
     const { container } = render(<MarketPulse current={{ date: '2026-09-30', ratio_10day: .82, stocks_up_4pct: 198, stocks_down_4pct: 235 }} history={[]} range="1M" onRangeChange={() => {}} />);
     expect(screen.getByRole('heading', { name: '下落の広がりに注意' })).toBeInTheDocument();
-    expect(screen.getByLabelText('10日上昇下落レシオ')).toHaveTextContent('0.82倍');
+    expect(screen.getByRole('group', { name: '10日上昇下落レシオ' })).toHaveTextContent('0.82倍');
     const daily = screen.getByRole('group', { name: '直近取引日の4%以上騰落銘柄数' });
     expect(daily).toHaveTextContent('直近1日 · 2026-09-30');
     expect(daily).toHaveTextContent('上昇198銘柄下落235銘柄差し引き−37銘柄');
@@ -24,7 +24,7 @@ describe('MarketPulse', () => {
   it('preserves missing values rather than implying a flat or balanced market', () => {
     const { container } = render(<MarketPulse current={{ date: '2026-09-30' }} history={[]} range="1M" onRangeChange={() => {}} />);
     expect(screen.getByRole('heading', { name: '市場の広がりは未確認' })).toBeInTheDocument();
-    expect(screen.getByLabelText('10日上昇下落レシオ')).toHaveTextContent('—倍');
+    expect(screen.getByRole('group', { name: '10日上昇下落レシオ' })).toHaveTextContent('—倍');
     const daily = screen.getByRole('group', { name: '直近取引日の4%以上騰落銘柄数' });
     expect(daily).toHaveTextContent('上昇—銘柄下落—銘柄差し引き—銘柄');
     expect(container.querySelector('.breadth-pulse-balance')).toBeNull();
