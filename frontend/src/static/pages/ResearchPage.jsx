@@ -37,6 +37,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [personalKey, setPersonalKey] = useState('');
   const [search, setSearch] = useState('');
   const [strict, setStrict] = useState(false);
+  const [nearOnly, setNearOnly] = useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
   const [coverage, setCoverage] = useState('all');
   const deferredSearch = useDeferredValue(search);
@@ -60,7 +61,7 @@ export default function ResearchPage({compareOnly=false}) {
   }, retry: false });
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
   const evaluated = useMemo(() => bundle.data?.rankings?.[method] || [], [method, bundle.data]);
-  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, onlyWatch, watch, liquid, coverage, sector]);
+  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, nearOnly, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, nearOnly, onlyWatch, watch, liquid, coverage, sector]);
   const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
   const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
   const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
@@ -121,7 +122,7 @@ export default function ResearchPage({compareOnly=false}) {
     try { localStorage.setItem('research-watch', JSON.stringify(next)); } catch { setStorageError(true); }
   }, [watch]);
   function inspectOrder(ticker) {
-    setMethod('minervini'); setSector(''); setView('list'); setSearch(ticker); setStrict(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
+    setMethod('minervini'); setSector(''); setView('list'); setSearch(ticker); setStrict(false); setNearOnly(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
   const verificationQueue = useRef(Promise.resolve());
@@ -161,7 +162,7 @@ export default function ResearchPage({compareOnly=false}) {
   const methodControls=<div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>;
   return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
-    {!compareOnly&&<ResearchHero rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
+    {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div><h1>買い位置を比較する</h1><p>縦軸は銘柄ごとに調整 · 価格位置と購入条件を分けて確認</p></div><Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
     {bundle.data&&freshness.state!=='recent'&&<Alert severity="warning">{freshness.state==='old'?`分析基準日は米国東部の日付から${freshness.days}暦日前です。更新日時と価格の基準日は別です。`:'分析基準日が未確認、または未来の日付です。'}</Alert>}
@@ -169,7 +170,9 @@ export default function ResearchPage({compareOnly=false}) {
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>
       <ResearchSearch value={search} onChange={setSearch}/>
       {methodControls}
-      <FormControlLabel control={<Switch checked={strict} onChange={e=>setStrict(e.target.checked)}/>} label="全条件通過のみ"/>
+      <FormControlLabel control={<Switch checked={strict} onChange={e=>{setStrict(e.target.checked);if(e.target.checked)setNearOnly(false);}}/>} label="全条件通過のみ"/>
+      <FormControlLabel control={<Switch checked={nearOnly} onChange={e=>{setNearOnly(e.target.checked);if(e.target.checked)setStrict(false);}}/>} label="あと1条件"/>
+      {nearOnly&&<p>通過数が全条件数−1の監視候補です。未達・未確認を区別し、合格には数えません。</p>}
       <FormControlLabel control={<Switch checked={onlyWatch} onChange={e=>setOnlyWatch(e.target.checked)}/>} label="ウォッチのみ"/>
       <label className="sector-filter">業種 <select value={sector} onChange={e=>setSector(e.target.value)}><option value="">すべての業種</option>{SECTORS.map(([key,label])=><option key={key} value={key}>{label}</option>)}<option value="Unknown">分類不明</option></select></label>
       <p>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。未確認は合格に数えません。</p>
@@ -186,7 +189,7 @@ export default function ResearchPage({compareOnly=false}) {
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard ranked={ranked} method={method} selectedSymbol={selected?.symbol} loading={bundle.isLoading} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={()=>setFiltersOpen(true)} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
+      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={()=>{setNearOnly(value=>!value);setStrict(false);}} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={()=>setFiltersOpen(true)} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     <footer className="research-method-note">

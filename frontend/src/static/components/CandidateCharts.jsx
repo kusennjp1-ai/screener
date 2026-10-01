@@ -4,10 +4,12 @@ import { Alert, Button, Paper, useMediaQuery } from '@mui/material';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 import { entryReadiness } from '../entryReadiness';
+import { assess } from '../researchEngine';
+import { singleMissingCondition } from '../missingCondition';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 import './comparison.css';
 
-const Card = memo(function ComparisonCard({ item, date, generation, method, market, now, sessions, onSelect, paused }) {
+const Card = memo(function ComparisonCard({ item, date, generation, method, nearOnly, market, now, sessions, onSelect, paused }) {
   const { row, plan } = item, ref = useRef(null), [visible, setVisible] = useState(false);
   const descriptionId = useId(), smallScreen = useMediaQuery('(max-width:767px)');
   useEffect(() => {
@@ -21,10 +23,12 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, mark
   const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
   const volume = row.entry_evidence?.volumeRatio ?? row.se_volume_vs_50d;
+  const missing = nearOnly ? singleMissingCondition(assess(row, method)) : null;
   return <Paper ref={ref} component="article" variant="outlined" className="comparison-card" data-method={method} aria-label={`${row.symbol} 比較チャート`}>
     <button className="comparison-card-click" onClick={() => onSelect(row.symbol)} aria-label={`${row.symbol} を分析`} aria-describedby={descriptionId}><span className="sr-only">{row.symbol} を分析</span></button>
     <div className="comparison-heading"><h3>{row.symbol}</h3><span className="comparison-state-chip" style={{ color: `var(--${tone})` }} title={plan.state}>{mark} {stateLabel}</span><span className="comparison-distance">ピボット比 <b style={{ color: `var(--${tone})` }}>{signed(plan.distance)}</b></span></div>
     <div className="comparison-company"><span title={row.company_name}>{row.company_name || '企業名未配信'}</span><strong>{money(row.current_price)}</strong></div>
+    {nearOnly && <p className="comparison-missing" title={missing?.csv}>{missing?.text || '判定資料を再確認'}</p>}
     <div className="comparison-canvas" data-active-chart={!invalidHistory && visible && !paused && Boolean(bars?.length)}>
       {query.isError || invalidIdentity ? <Alert severity="warning">銘柄・日付の整合性または取得状態を確認できません。</Alert>
         : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || '最終日足が分析日と不一致'}。現在の比較チャートには使用しません。</Alert>
@@ -38,12 +42,12 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, mark
   </Paper>;
 });
 
-export default function CandidateCharts({ ordered, method, date, generation, market, now, onSelect, paused }) {
+export default function CandidateCharts({ ordered, method, nearOnly=false, date, generation, market, now, onSelect, paused }) {
   const [page, setPage] = useState(0), [sessions, setSessions] = useState(63);
   const current = Math.min(page, Math.max(0, Math.ceil(ordered.length / 6) - 1));
   return <div className="candidate-comparison">
     <div className="comparison-controls"><label>全チャートの期間 <select value={sessions} onChange={event => setSessions(Number(event.target.value))}><option value={21}>1か月</option><option value={63}>3か月</option><option value={126}>6か月</option><option value={252}>1年</option></select></label><span>日次 {date} · 縦軸は銘柄ごと · 帯＝買いゾーン · 破線＝損切り例</span></div>
-    <div className="comparison-grid">{ordered.slice(current * 6, current * 6 + 6).map(item => <Card key={item.row.symbol} {...{ item, method, date, generation, market, now, sessions, onSelect, paused }} />)}</div>
+    <div className="comparison-grid">{ordered.slice(current * 6, current * 6 + 6).map(item => <Card key={item.row.symbol} {...{ item, method, nearOnly, date, generation, market, now, sessions, onSelect, paused }} />)}</div>
     {!ordered.length && <p>条件に一致する銘柄はありません。</p>}
     <div className="candidate-pagination"><Button disabled={!current} onClick={() => setPage(current - 1)}>前の6銘柄</Button><span>{ordered.length ? current * 6 + 1 : 0}–{Math.min((current + 1) * 6, ordered.length)} / {ordered.length}</span><Button disabled={(current + 1) * 6 >= ordered.length} onClick={() => setPage(current + 1)}>次の6銘柄</Button><a className="comparison-attribution" href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a></div>
   </div>;

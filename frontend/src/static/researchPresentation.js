@@ -8,12 +8,13 @@ export function canonicalPivot(row) {
   return { price: raw, reason: row.se_pivot_price != null ? 'Setup Engine（日次）' : 'VCP（日次）' };
 }
 
-export function filterRanked(ranked, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false, coverage = 'all', sector = '' } = {}) {
+export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearOnly = false, watchlist = null, liquidOnly = false, coverage = 'all', sector = '' } = {}) {
   const query = search.trim().toUpperCase();
   return ranked.filter(({row:r, assessment:a}) =>
     (!sector || sectorKey(r.gics_sector)===sector) &&
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || a.qualified) && (!watchlist || watchlist.includes(r.symbol)) &&
+    (!nearOnly || (a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
     `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query) &&
     (coverage === 'all' || (coverage === 'verified') === (r.technical_audit?.valid === true)));
 }

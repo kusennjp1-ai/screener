@@ -3,6 +3,7 @@ import { auditValues, RS_METHOD } from './qualificationAudit.js';
 import { financialHistory } from './financialHistory.js';
 import { institutionalGrowth } from './institutionalEvidence.js';
 import { decodeAssessment } from './assessmentEncoding.js';
+import { singleMissingCondition } from './missingCondition.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // Calendar age is deliberately not an exchange-session count (holidays vary).
@@ -22,9 +23,9 @@ export function researchCsv(ranked, method, date) {
     if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules'];
+  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition'];
   const lines = ranked.map(({row})=>({row,assessment:assess(row,method)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
-    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / ')]);
+    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '']);
   return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
 }
 // The feature store exports positive % BELOW the high; the legacy technical
