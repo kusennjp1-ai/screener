@@ -19,3 +19,13 @@ export function setResearchRange(chart, bars, sessions) {
   const from=scale.timeToIndex(first,true),to=scale.timeToIndex(last,true);
   if(from != null && to != null)scale.setVisibleLogicalRange({from:from-.5,to:to+2});
 }
+export function researchVolumeBars(bars, window, palette) {
+  let trailing = 0;
+  return bars.map((bar, index) => {
+    const average = index >= window ? trailing / window : null;
+    const emphasized = average > 0 && bar.value >= average * 1.4;
+    trailing += bar.value;
+    if (index >= window) trailing -= bars[index - window].value;
+    return { ...bar, color: emphasized ? palette['vol-hi'] : palette.vol };
+  });
+}

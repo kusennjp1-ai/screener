@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { chartHistoryWarning, relativeStrengthScale, setResearchRange } from './researchChartModel';
+import { chartHistoryWarning, relativeStrengthScale, setResearchRange, researchVolumeBars } from './researchChartModel';
 import { transformToCandlestickData } from './candlestickData';
 
 describe('research chart regressions', () => {
+  it('emphasizes volume against the preceding fifty bars, with unknown warm-up volume remaining neutral', () => {
+    const bars = Array.from({length:50},(_,i)=>({time:`date-${i}`,value:100}));
+    const result=researchVolumeBars([...bars,{time:'breakout',value:140}],50,{vol:'neutral','vol-hi':'emphasized'});
+    expect(result.slice(0,50).every(bar=>bar.color==='neutral')).toBe(true);
+    expect(result.at(-1).color).toBe('emphasized');
+    expect(researchVolumeBars([...bars,{time:'quiet',value:139.99}],50,{vol:'neutral','vol-hi':'emphasized'}).at(-1).color).toBe('neutral');
+  });
   it('warns on unresolved split discontinuities and invalid OHLC instead of drawing a valid shape', () => {
     const before={date:'2026-06-11',open:2400,high:2430,low:2300,close:2411,volume:1700000};
     const after={date:'2026-06-12',open:237,high:255,low:236,close:254,volume:10000000};

@@ -12,7 +12,7 @@ import {
 // handle the component needs to drive. Vertical bands (scaleMargins) are neutral
 // defaults here; the component's "RS strip layout" and "dynamic RS band" effects
 // reapply them reactively based on whether the RS line is shown.
-export function createPriceChartSeries(container, { width, height, isDarkMode, interactive, researchView = false }) {
+export function createPriceChartSeries(container, { width, height, isDarkMode, interactive, researchView = false, compact = false }) {
   const palette = palettes[isDarkMode ? 'dark' : 'light'];
   const chart = createChart(container, {
     width,
@@ -130,9 +130,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     }
     sma150Series.applyOptions({ lineStyle: 2 });
     sma200Series.applyOptions({ lineStyle: 1 });
-    chart.panes()[0].setStretchFactor(.70);
-    chart.panes()[1].setStretchFactor(.12);
-    chart.panes()[2].setStretchFactor(.18);
+    chart.panes()[0].setStretchFactor(compact ? .64 : .70);
+    chart.panes()[1].setStretchFactor(compact ? .15 : .12);
+    chart.panes()[2].setStretchFactor(compact ? .21 : .18);
     candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: .12, bottom: .12 } });
     rsLineSeries.priceScale().applyOptions({ scaleMargins: { top: .2, bottom: .2 } });
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: .2, bottom: 0 } });

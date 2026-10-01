@@ -1,9 +1,10 @@
-import { chartHistoryWarning, dateKey, relativeStrengthScale, setResearchRange } from './researchChartModel';
+import { chartHistoryWarning, dateKey, relativeStrengthScale, setResearchRange, researchVolumeBars } from './researchChartModel';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
 import { buildBookAnnotations } from './bookAnnotations';
 import { VcpBoxPrimitive } from './vcpBoxPrimitive';
+import { TradeLevelsPrimitive } from './tradeLevelsPrimitive';
 import { BandStripPrimitive } from './bandStripPrimitive';
 import { BuyPointPrimitive } from './buyPointPrimitive';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -58,6 +59,8 @@ function CandlestickChart({
   hideOhlcLegend = false,
   interactive = true,
   pivotPrice = null,
+  buyCeiling = null,
+  stopPrice = null,
   pivotLabel = 'Pivot',
   vcpBoxes = null,
   bookAnnotations = false,
@@ -239,6 +242,7 @@ function CandlestickChart({
       isDarkMode,
       interactive,
       researchView,
+      compact,
     });
     chartRef.current = chart;
     isFirstDataLoadRef.current = true;
@@ -388,7 +392,7 @@ function CandlestickChart({
 
     // Update volume data
     if (volumeSeriesRef.current && chartData.volume.length > 0) {
-      volumeSeriesRef.current.setData(chartData.volume);
+      volumeSeriesRef.current.setData(researchView ? researchVolumeBars(chartData.volume, effectiveTimeframe === 'weekly' ? 10 : 50, chartPalette) : chartData.volume);
     }
 
     // ~50-day average-volume line (Minervini-style). Trailing simple average of
@@ -399,10 +403,11 @@ function CandlestickChart({
       const avg = [];
       let running = 0;
       for (let i = 0; i < vol.length; i += 1) {
+        if (researchView && i >= AVG_WINDOW) avg.push({ time: vol[i].time, value: running / AVG_WINDOW });
         running += vol[i].value;
         if (i >= AVG_WINDOW) running -= vol[i - AVG_WINDOW].value;
         const denom = Math.min(i + 1, AVG_WINDOW);
-        if (i >= AVG_WINDOW - 1) avg.push({ time: vol[i].time, value: running / denom });
+        if (!researchView && i >= AVG_WINDOW - 1) avg.push({ time: vol[i].time, value: running / denom });
       }
       avgVolumeSeriesRef.current.setData(avg);
     }
@@ -507,8 +512,8 @@ function CandlestickChart({
         color: chartPalette.zone,
         lineWidth: 1,
         lineStyle: 2, // dashed
-        axisLabelVisible: true,
-        title: annotatedPivot ? '収縮高値（推定）' : pivotLabel,
+        axisLabelVisible: !researchView,
+        title: researchView ? '' : annotatedPivot ? '収縮高値（推定）' : pivotLabel,
       });
     }
 
@@ -520,6 +525,14 @@ function CandlestickChart({
       }
     };
   }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView, historyWarning, chartPalette]);
+
+  useEffect(() => {
+    const series = candlestickSeriesRef.current;
+    if (!researchView || historyWarning || !series) return undefined;
+    const levels = new TradeLevelsPrimitive({ pivot: pivotPrice, upper: buyCeiling, stop: stopPrice }, chartPalette);
+    series.attachPrimitive(levels);
+    return () => { try { series.detachPrimitive(levels); } catch { /* series recreated */ } };
+  }, [researchView, historyWarning, pivotPrice, buyCeiling, stopPrice, chartPalette, chartData, symbol, height, compact]);
 
   // Draw VCP consolidation boxes over the candles (full chart only). The
   // primitive follows pan/zoom on its own; we only (re)create it when the
@@ -755,7 +768,7 @@ function CandlestickChart({
 
   return (
     <>
-    {comparisonSessions && <Typography data-testid="comparison-visible-range" sx={{px:2,py:.5,fontSize:12}}>SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
+    {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
     {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
     {researchView && !compact && hasData && <Box aria-label="チャート操作" sx={{display:'flex',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
       <ToggleButtonGroup size="small" exclusive value={timeframe} onChange={(_,value)=>{if(value){isFirstDataLoadRef.current=true;setTimeframe(value);}}} aria-label="足の種類"><ToggleButton value="daily">日足</ToggleButton><ToggleButton value="weekly">週足</ToggleButton></ToggleButtonGroup>
@@ -908,8 +921,8 @@ function CandlestickChart({
       )}
 
       {researchView && hasData && <>
-        <Typography sx={{position:'absolute',top:'70%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>RS · {rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}</Typography>
-        <Typography sx={{position:'absolute',top:'82%',left:8,fontSize:12,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>出来高 · 灰線は{effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均</Typography>
+        <Typography sx={{position:'absolute',top:compact?'57%':'70%',left:8,fontSize:11,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>RS{compact ? rsStripShown ? '' : ' 未配信' : ` · ${rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}`}</Typography>
+        <Typography sx={{position:'absolute',top:compact?'72%':'82%',left:8,fontSize:11,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>出来高{!compact && ` · 破線は${effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均`}</Typography>
       </>}
       {/* Loading skeleton overlay */}
       {showLoading && (
