@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import vitestPlugin from 'eslint-plugin-vitest';
 
 export default [
-  { ignores: ['dist'] },
+  { ignores: ['dist', 'test-results', 'playwright-report'] },
 
   // Main source files
   {

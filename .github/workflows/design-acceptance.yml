@@ -89,11 +89,13 @@ jobs:
             (cd "$source" && npx vite build)
             ln -s "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
           done
+          (cd frontend && node tools/build-radar-benchmark.mjs)
       - name: Measure all routes, screenshots, accessibility and CPU 4x
         working-directory: frontend
         env:
           CURRENT_BUILD: dist
           BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
+          RADAR_BUILD: test-results/radar-build
           DESIGN_REVIEW_OUTPUT: test-results/design-review
         run: node tools/design-review.mjs
       - name: Require reviewed screenshots and four design scores of at least 8.0

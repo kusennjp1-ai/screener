@@ -15,6 +15,7 @@ const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).
 const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
 const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
+const radarRoot = process.env.RADAR_BUILD && resolve(process.env.RADAR_BUILD);
 const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   method: 'Production Chromium. CDP CPU 4x, same-data baseline/current, HTTP responses cached in memory after warm-up. No human satisfaction inference.', screens: [], performance: [], failures: [] };
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
@@ -36,6 +37,7 @@ async function serve(root) {
 }
 const current = await serve(currentRoot);
 const baseline = baselineRoot && await serve(baselineRoot);
+const radar = radarRoot && await serve(radarRoot);
 const browser = await chromium.launch();
 const manifest = JSON.parse(await readFile(resolve(currentRoot, 'static-data/manifest.json'), 'utf8'));
 report.data = { as_of_date: (manifest.markets?.US || manifest).as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation };
@@ -68,6 +70,12 @@ function objectiveMetrics() {
     const size = Number.parseFloat(getComputedStyle(element).fontSize);
     return !allowedFonts.some(value => Math.abs(value - size) < .1) ? [{ ...describe(element), size }] : [];
   });
+  const asciiNegativeValues = elements.flatMap(element => {
+    const ownText = [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(' ');
+    // Standalone signed numeric values only. Dates, URLs, ticker symbols and
+    // ordinary hyphenated text have no qualifying numeric-token boundary.
+    return /(?:^|[\s(（:：$])-(?:\$)?\d/.test(ownText) ? [{ ...describe(element), value: ownText.trim().slice(0, 140) }] : [];
+  });
   const radiusIssues = elements.filter(element => !chartInternal(element)).flatMap(element => {
     const style = getComputedStyle(element), box = element.getBoundingClientRect();
     const corners = [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius];
@@ -89,13 +97,25 @@ function objectiveMetrics() {
     }
     return true;
   };
+  const visibleFraction = element => {
+    const box = element.getBoundingClientRect();
+    let top = Math.max(box.top, contentTop), bottom = Math.min(box.bottom, contentBottom);
+    for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+      if (/(auto|scroll|hidden)/.test(getComputedStyle(parent).overflowY)) {
+        const clip = parent.getBoundingClientRect(); top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom);
+      }
+    }
+    return box.height ? Math.max(0, bottom - top) / box.height : 0;
+  };
   const animations = document.getAnimations().filter(animation => animation.playState === 'running' && (!animation.effect?.getTiming().iterations || animation.effect.getTiming().iterations === Infinity || animation.effect.getTiming().duration > 1));
-  return { smallTargets, fontIssues, radiusIssues, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+  return { smallTargets, fontIssues, radiusIssues, asciiNegativeValues, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
     pageHeight: document.documentElement.scrollHeight, viewport: { width: innerWidth, height: innerHeight },
     headerHeight: header?.height || 0, bottomNavHeight: nav?.height || 0, chromeHeight: (header?.height || 0) + (nav?.height || 0),
     hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas') || rect('.research-detail .research-chart [data-chart-plot]'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
     visibleCandidates: [...document.querySelectorAll('.candidate-row')].filter(shown).filter(completelyVisible).length,
     visibleCompareCards: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).filter(completelyVisible).length,
+    visibleCompareCardFraction: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).reduce((sum, card) => sum + visibleFraction(card), 0),
+    comparisonGrid: rect('.comparison-grid'),
     runningAnimations: animations.length };
 }
 
@@ -113,6 +133,7 @@ async function capture(page, viewport, theme, screen) {
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
   check(metrics.radiusIssues.length === 0, `${key}: ${metrics.radiusIssues.length} radius-step violations`);
+  check(metrics.asciiNegativeValues.length === 0, `${key}: ${metrics.asciiNegativeValues.length} financial values use ASCII minus`);
   check(!metrics.horizontalOverflow, `${key}: horizontal page overflow`);
   if (viewport.width === 390) check(metrics.chromeHeight <= 110, `${key}: fixed chrome ${metrics.chromeHeight}px > 110px`);
   if (['home', 'near-pass'].includes(screen) && viewport.width === 1440) {
@@ -129,7 +150,9 @@ async function capture(page, viewport, theme, screen) {
   if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 1440) {
     check(metrics.pageHeight <= 900, `${key}: page height ${metrics.pageHeight}px > 900px`);
     check(metrics.visibleCompareCards >= 6, `${key}: ${metrics.visibleCompareCards} visible comparison cards < 6`);
+    check(metrics.comparisonGrid?.height <= 700, `${key}: comparison grid height ${metrics.comparisonGrid?.height}px > 700px or missing`);
   }
+  if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 390) check(metrics.visibleCompareCardFraction >= 1.5, `${key}: ${metrics.visibleCompareCardFraction.toFixed(3)} visible cards < 1.5`);
   if (screen === 'market') check(metrics.pageHeight <= (viewport.width === 390 ? 1600 : 1000), `${key}: market page height ${metrics.pageHeight}px exceeds budget`);
   if (screen === 'scan') {
     if (viewport.width === 390) check(metrics.pageHeight <= 3000, `${key}: scan page height ${metrics.pageHeight}px > 3000px`);
@@ -265,6 +288,19 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
         runs.push({ candidate_ms: candidateMs, method_switch_ms: switchMs, longest_initial_task_ms: initialTasks.longest, initial_tasks: initialTasks.tasks,
           memory: await page.evaluate(() => performance.memory ? { usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize } : null) });
       }
+      if (label === 'current' && runs.some(run => run.candidate_ms > 3500 || run.method_switch_ms > 400 || run.longest_initial_task_ms > 200)) {
+        // Diagnostic recording is a separate fourth run and cannot influence
+        // any of the three budget measurements above.
+        try {
+          await cdp.send('Profiler.enable'); await cdp.send('Profiler.start');
+          await page.goto(server.url); await visible(page.locator(readySelector));
+          await page.getByRole('button', { name: /^オニール/ }).click();
+          await page.waitForTimeout(500);
+          const { profile } = await cdp.send('Profiler.stop');
+          await writeFile(resolve(output, `diagnostic-${viewport.width}.cpuprofile`), JSON.stringify(profile));
+          await cdp.send('Profiler.disable');
+        } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
+      }
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     } catch (error) { report.failures.push(`${label}/${viewport.width}: performance interrupted: ${error.message}`); }
     const metrics = { label, viewport, runs, candidate_median_ms: runs.length === 3 ? median(runs.map(run => run.candidate_ms)) : null,
@@ -283,7 +319,22 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
     await context.close();
   }
 }
-await browser.close(); await current.close(); if (baseline) await baseline.close();
+report.radar = [];
+if (!radar) check(false, 'D9: the isolated production radar benchmark build is required');
+if (radar) for (const viewport of viewportSizes) {
+  const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
+  const page = await context.newPage(), runs = [];
+  try {
+    await page.goto(radar.url); await page.waitForFunction(() => typeof window.measureRadar === 'function');
+    const cdp = await context.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    for (let index = 0; index < 3; index++) runs.push(await page.evaluate(() => window.measureRadar()));
+    check(runs.every(run => run.point_count === 207), `${viewport.width}: D9 needs exactly 207 actual historical points`);
+    check(runs.length === 3 && runs.every(run => run.first_frame_ms <= 50), `${viewport.width}: D9 first paint opportunity ${Math.max(...runs.map(run => run.first_frame_ms)).toFixed(1)}ms > 50ms`);
+  } catch (error) { report.failures.push(`${viewport.width}: D9 benchmark interrupted: ${error.message}`); }
+  report.radar.push({ viewport, cpu_rate: 4, method: 'actual SetupRadar, 207 canonical real 2026-09-29 observations; production initial mount, synchronous layout and next animation frame; no network/data preparation in render interval', runs });
+  await context.close();
+}
+await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();
 await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
 await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
 console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
