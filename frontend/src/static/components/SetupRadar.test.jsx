@@ -71,6 +71,7 @@ it('updates only the selection overlay on hover and selection, and clears stale 
  const onSelect=vi.fn();const {container,rerender}=render(<SetupRadar ranked={ranked} selectedSymbol="SAFE" onSelect={onSelect}/>);
  const point=container.querySelector('[data-radar-point]');const marks=container.querySelector('[data-radar-marks]');
  fireEvent.mouseOver(point);expect(container.querySelector('[data-radar-marks]')).toBe(marks);
+ const label=container.querySelector('.radar-point-label');fireEvent.mouseOver(point);expect(container.querySelector('.radar-point-label')).toBe(label);
  rerender(<SetupRadar ranked={ranked} selectedSymbol={ranked[1].row.symbol} onSelect={onSelect}/>);
  expect(container.querySelector('.radar-point-label')).toHaveTextContent(ranked[1].row.symbol);expect(container.querySelector('script')).toBeNull();
  expect(container.querySelector('[data-radar-point]')).toBe(point);
