@@ -28,7 +28,7 @@ for (const width of [1440,390]) test(`research navigation and contrast at ${widt
   if(width===390) await page.getByRole('button',{name:/^LEAD の分析を表示/}).click();
   for(const mode of ['dark','light']) {
     if(mode==='light') await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
-    await expect(page.locator('canvas').first()).toBeVisible();
+    await expect(page.locator('.research-detail canvas').first()).toBeVisible();
     const results=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
     expect(results.violations).toEqual([]);
     const screenshotPath=testInfo.outputPath(`${width}-${mode}.png`);
