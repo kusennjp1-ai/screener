@@ -1,8 +1,9 @@
 import { Alert, Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BOOK_MARKET_VERSION } from '../bookMarketEvidence';
+import { signed, times } from '../positionGeometry';
 const n = (v, digits = 0) => typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('ja-JP', { maximumFractionDigits: digits }) : '未確認';
-const pct = v => typeof v === 'number' && Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(2)}%` : '未確認';
+const pct = v => typeof v === 'number' && Number.isFinite(v) ? signed(v, 2) : '未確認';
 const flag = v => v === true ? '該当' : v === false ? '非該当' : '未確認';
 
 export default function BookMarketEvidence({ evidence, expectedDate }) {
@@ -12,7 +13,7 @@ export default function BookMarketEvidence({ evidence, expectedDate }) {
   }
   const c = d.latest, index = c.benchmark, cohort = c.cohort;
   const events = d.breakoutEvents?.slice(-20) || [];
-  return <Paper component="section" aria-label="書籍の市場観測" elevation={0} sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+  return <Paper component="section" aria-label="書籍の市場観測" elevation={0} sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: '16px' }}>
     <Typography component="h2" variant="h6" fontWeight={700}>先導株と市場の内訳</Typography>
     <Typography color="text.secondary" sx={{ fontSize: 13, mt: 1 }}>分析日 {c.date} ／ 日足を確認できた {n(c.coverage)} / {n(c.expectedUniverseSize)}銘柄（{n(c.coveragePct, 1)}%）。公開チャート集合の観測で、市場全体や当時の全銘柄を再現した統計ではありません。</Typography>
     {!d.currentSnapshotComplete && <Alert severity="warning" sx={{ mt: 1 }}>最新の分析日に必要なチャートが揃っていません。表示は {c.date} 時点です。</Alert>}
@@ -35,7 +36,7 @@ export default function BookMarketEvidence({ evidence, expectedDate }) {
     <Typography component="h3" sx={{ fontWeight: 700, mt: 3 }}>出来高と指数</Typography>
     <Typography sx={{ fontSize: 13, mt: 1 }}>個別株の上昇日出来高 {n(c.upVolume)}株 ／ 下落日 {n(c.downVolume)}株。終値換算では上昇側 ${n(c.upDollarVolume)} ／ 下落側 ${n(c.downDollarVolume)}。株数とドル換算を混同しません。</Typography>
     {!index ? <Alert severity="info" sx={{ mt: 1 }}>同日の指数OHLCVが不足し、指数の価格・出来高関係は未確認です。</Alert> : <>
-      <Typography sx={{ fontSize: 13, mt: 1 }}>{index.symbol} 前日比 {pct(index.dailyChangePct)} ／ 出来高は前日の {n(index.volumeRatio, 2)}倍</Typography>
+      <Typography sx={{ fontSize: 13, mt: 1 }}>{index.symbol} 前日比 {pct(index.dailyChangePct)} ／ 出来高は前日比 {Number.isFinite(index.volumeRatio) ? times(index.volumeRatio) : '未確認'}</Typography>
       <Typography sx={{ fontSize: 13 }}>上昇・増商い {flag(index.upOnHigherVolume)} ／ 下落・減商い {flag(index.downOnLowerVolume)} ／ 下落・増商い {flag(index.downOnHigherVolume)}</Typography>
       <Typography sx={{ fontSize: 13, mt: 1 }}>指数20営業日比 {pct(index.return20)}。指数が下落する期間に上昇した当日の先導候補：{n(c.leadersPositiveWhileIndexNegative)}銘柄</Typography>
     </>}

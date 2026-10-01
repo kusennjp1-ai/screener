@@ -410,11 +410,11 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 45, minWidth: 45 }}>
-        {row.beta != null ? row.beta.toFixed(2) : '-'}
+        {row.beta != null ? row.beta.toFixed(2).replace(/^-/, '−') : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 45, minWidth: 45 }}>
-        {row.beta_adj_rs != null ? row.beta_adj_rs.toFixed(0) : '-'}
+        {row.beta_adj_rs != null ? row.beta_adj_rs.toFixed(0).replace(/^-/, '−') : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', color: getEpsRatingColor(row.eps_rating), width: 55, minWidth: 55 }}>

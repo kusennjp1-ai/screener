@@ -1,4 +1,5 @@
 import { industryLabel } from './industryLabels';
+import { signed } from '../../static/positionGeometry';
 import { useMemo, memo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { Box, Tooltip, Typography, useTheme } from '@mui/material';
@@ -63,8 +64,7 @@ function PriceSparkline({
   // Format 1-day change for display
   const changeText = useMemo(() => {
     if (change1d === null || change1d === undefined) return null;
-    const sign = change1d >= 0 ? '+' : '';
-    return `${sign}${change1d.toFixed(1)}%`;
+    return signed(change1d);
   }, [change1d]);
 
   const changeColor = useMemo(() => {
@@ -85,7 +85,7 @@ function PriceSparkline({
     const trendText = trend === 1 ? '上昇' : trend === -1 ? '下落' : '横ばい';
     if (data && data.length > 0) {
       const overallChange = ((data[data.length - 1] - data[0]) / data[0]) * 100;
-      parts.push(`直近${data.length}営業日: ${overallChange >= 0 ? '+' : ''}${overallChange.toFixed(1)}% (${trendText})`);
+      parts.push(`直近${data.length}営業日: ${signed(overallChange)} (${trendText})`);
     }
 
     return parts.join(' | ') || '株価推移データ未配信';
