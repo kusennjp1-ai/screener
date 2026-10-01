@@ -1,0 +1,210 @@
+{
+  "observed_commit": "525d68b2b627de0f6a4f382af14e8d773f447205",
+  "scope": "F1 supplemental real-data conditional allocation review; 8 CUA captures (top/lower, desktop/mobile, dark/light)",
+  "data": {
+    "analysis_date": "2026-09-29",
+    "clock": "actual current clock on 2026-10-01; no historical clock override",
+    "symbols": [
+      "DELL",
+      "STNG"
+    ],
+    "distinction": "Historical published input used unchanged on local production app to exercise nonempty conditional positions. These images are distinct from the latest-snapshot CI portfolio with zero positions."
+  },
+  "objective_checks": {
+    "axe": "Not measured for these 8 supplemental CUA images. Do not infer axe pass from visual inspection or from the separate 90-image CI report.",
+    "other_automated_gates": "Not claimed for these supplemental captures."
+  },
+  "observations": [
+    "Both light captures initially had capture failures (closed drawer / wrong height). Those files were recaptured and the final 8 files were visually inspected again.",
+    "DELL has 4 failed condition names, STNG has 3; no conditional-row missing condition is hidden behind the optional calculation-detail disclosure.",
+    "The 2026-09-29 calendar is expired at the actual current clock, and its failure includes the explicit 2026-10-01 05:00 JST expiry. No condition was promoted to pass for the screenshots.",
+    "The two lower captures establish STNG condition readability; not all final cash totals are visible in every individual crop, so no one-viewport completeness claim is made.",
+    "These are internal visual scores, not a survey, award certification, or 100-user satisfaction result."
+  ],
+  "screens": [
+    {
+      "key": "conditional-plan/1440/dark",
+      "screenshot": "conditional-plan-1440-dark.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "約520pxの引き出しに銘柄、条件数、金額、未達理由を順に配置し、暗い背景の明度差で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "DELLの4未達を初期カード内ですべて読める。12株、条件成立時の目安551.95、損切り例513.31を同じ行で比較できる。2件目と合計にはスクロールが必要であり、一画面に全計画が収まるとは扱わない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "DELLは購入条件3/7、未達4・未確認0を表示し、最新取引日の検証期限切れ、買い位置539.59対ピボット551.39、出来高0.73倍、ベース形状未達を全列挙する。有効期限2026-10-01 05:00 JSTの説明があり、単に同じ取引日なのに失敗している表示にはなっていない。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan-lower/1440/dark",
+      "screenshot": "conditional-plan-1440-dark-lower.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "約520pxの引き出しに銘柄、条件数、金額、未達理由を順に配置し、暗い背景の明度差で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "STNGの3未達をカード内で一覧でき、根拠チャートへの導線と条件付き合計へ続く。全理由を省略せず示すため縦スクロールは必要だが、閉じる操作は固定され、項目の途中で隠される折りたたみはない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "STNGは購入条件4/7、未達3・未確認0を表示し、最新取引日の検証期限切れ、買い位置83.57対ピボット86.10、形状未達を全列挙する。条件付き配分13,690.98ドル・想定損失958.96ドルは日次通過0ドルと分離される。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan/1440/light",
+      "screenshot": "conditional-plan-1440-light.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "約520pxの引き出しに銘柄、条件数、金額、未達理由を順に配置し、白いカードと薄い地色で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "DELLの4未達を初期カード内ですべて読める。12株、条件成立時の目安551.95、損切り例513.31を同じ行で比較できる。2件目と合計にはスクロールが必要であり、一画面に全計画が収まるとは扱わない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "DELLは購入条件3/7、未達4・未確認0を表示し、最新取引日の検証期限切れ、買い位置539.59対ピボット551.39、出来高0.73倍、ベース形状未達を全列挙する。有効期限2026-10-01 05:00 JSTの説明があり、単に同じ取引日なのに失敗している表示にはなっていない。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan-lower/1440/light",
+      "screenshot": "conditional-plan-1440-light-lower.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "約520pxの引き出しに銘柄、条件数、金額、未達理由を順に配置し、白いカードと薄い地色で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "STNGの3未達をカード内で一覧でき、根拠チャートへの導線と条件付き合計へ続く。全理由を省略せず示すため縦スクロールは必要だが、閉じる操作は固定され、項目の途中で隠される折りたたみはない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "STNGは購入条件4/7、未達3・未確認0を表示し、最新取引日の検証期限切れ、買い位置83.57対ピボット86.10、形状未達を全列挙する。条件付き配分13,690.98ドル・想定損失958.96ドルは日次通過0ドルと分離される。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan/390/dark",
+      "screenshot": "conditional-plan-390-dark.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "全幅のカードに銘柄、条件数、金額、未達理由を順に配置し、暗い背景の明度差で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "DELLの4未達を初期カード内ですべて読める。12株、条件成立時の目安551.95、損切り例513.31を同じ行で比較できる。2件目と合計にはスクロールが必要であり、一画面に全計画が収まるとは扱わない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "DELLは購入条件3/7、未達4・未確認0を表示し、最新取引日の検証期限切れ、買い位置539.59対ピボット551.39、出来高0.73倍、ベース形状未達を全列挙する。有効期限2026-10-01 05:00 JSTの説明があり、単に同じ取引日なのに失敗している表示にはなっていない。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan-lower/390/dark",
+      "screenshot": "conditional-plan-390-dark-lower.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "全幅のカードに銘柄、条件数、金額、未達理由を順に配置し、暗い背景の明度差で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "STNGの3未達をカード内で一覧でき、根拠チャートへの導線と条件付き合計へ続く。全理由を省略せず示すため縦スクロールは必要だが、閉じる操作は固定され、項目の途中で隠される折りたたみはない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "STNGは購入条件4/7、未達3・未確認0を表示し、最新取引日の検証期限切れ、買い位置83.57対ピボット86.10、形状未達を全列挙する。条件付き配分13,690.98ドル・想定損失958.96ドルは日次通過0ドルと分離される。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan/390/light",
+      "screenshot": "conditional-plan-390-light.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "全幅のカードに銘柄、条件数、金額、未達理由を順に配置し、白いカードと薄い地色で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "DELLの4未達を初期カード内ですべて読める。12株、条件成立時の目安551.95、損切り例513.31を同じ行で比較できる。2件目と合計にはスクロールが必要であり、一画面に全計画が収まるとは扱わない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "DELLは購入条件3/7、未達4・未確認0を表示し、最新取引日の検証期限切れ、買い位置539.59対ピボット551.39、出来高0.73倍、ベース形状未達を全列挙する。有効期限2026-10-01 05:00 JSTの説明があり、単に同じ取引日なのに失敗している表示にはなっていない。"
+        }
+      }
+    },
+    {
+      "key": "conditional-plan-lower/390/light",
+      "screenshot": "conditional-plan-390-light-lower.png",
+      "reviewer": "Codex handoff_f1_plan: all 8 original supplemental PNGs visually inspected after light recapture",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "全幅のカードに銘柄、条件数、金額、未達理由を順に配置し、白いカードと薄い地色で区切る。数値は整列し、色に加えて×と未達の文字を併記する。"
+        },
+        "usability": {
+          "value": 8,
+          "reason": "STNGの3未達をカード内で一覧でき、根拠チャートへの導線と条件付き合計へ続く。全理由を省略せず示すため縦スクロールは必要だが、閉じる操作は固定され、項目の途中で隠される折りたたみはない。"
+        },
+        "originality": {
+          "value": 8,
+          "reason": "一般的な注文カードにせず、日次通過と条件付きを分離し、全条件成立時の試算と未約定の現金を区別する情報設計が一貫している。未達の具体的根拠を試算値と並べる点が分析目的に合う。"
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "STNGは購入条件4/7、未達3・未確認0を表示し、最新取引日の検証期限切れ、買い位置83.57対ピボット86.10、形状未達を全列挙する。条件付き配分13,690.98ドル・想定損失958.96ドルは日次通過0ドルと分離される。"
+        }
+      }
+    }
+  ]
+}

@@ -13,6 +13,9 @@
 
 ## CIの観測
 
+- [525d68b の通常CI](https://github.com/kusennjp1-ai/screener/actions/runs/36870592355): 全ジョブ合格。Frontendは156ファイル・1,152テスト合格、216.41秒、lintエラー0（既存警告8）。Static Browser Regression・Backend Quality Gates・Assistant Compose Smoke・Docker公開も合格。
+- [525d68b のデザイン検証](https://github.com/kusennjp1-ai/screener/actions/runs/36870592123): 最新の公開成功成果物36818410505を使用。90画面のaxe・操作領域・文字・角丸・横幅・レイアウトは合格。ただしP1の手法切替とD9の初回描画が未達。PC切替535ms、スマホ479ms（上限400ms）、レーダー67.2 / 62.2ms（上限50ms）。主観採点でこれを免除しない。
+
 - [7d9bde8 の通常CI](https://github.com/kusennjp1-ai/screener/actions/runs/36863695780): Static Browser Regressionは合格。全ジョブの完了結果は確認後に追記する。
 - [7d9bde8 のデザイン・性能計測](https://github.com/kusennjp1-ai/screener/actions/runs/36863695911): 同じ公開データで旧版と新版を比較する。実測値と画面別採点は成果物確認後に追記する。
 

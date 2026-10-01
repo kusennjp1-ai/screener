@@ -1,0 +1,5071 @@
+{
+  "commit": "525d68b2b627de0f6a4f382af14e8d773f447205",
+  "measured_at": "2026-10-01T13:45:46.809Z",
+  "source_run": "36818410505",
+  "clock": "actual browser Date.now; no historical date override",
+  "data": {
+    "as_of_date": "2026-09-30",
+    "generated_at": "2026-10-01T04:59:43Z",
+    "research_generation": "6d36f9fc4004b4d457c4d9c1143a225b53898bd36e9a3f4aa18d77a04c7d02f1"
+  },
+  "method": "Production Chromium. CDP CPU 4x, same-data baseline/current, HTTP responses cached in memory after warm-up. No human satisfaction inference.",
+  "screens": [
+    {
+      "key": "home/1440/dark",
+      "screenshot": "home-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 366,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 502,
+          "bottom": 553,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 366,
+          "bottom": 2180.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 7,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "near-pass/1440/dark",
+      "screenshot": "near-pass-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 366,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 502,
+          "bottom": 553,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 816
+        },
+        "chartCard": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 366,
+          "bottom": 2180.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 7,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "compact/1440/dark",
+      "screenshot": "compact-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2244,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 120,
+          "height": 64,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 256,
+          "bottom": 307,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 290,
+          "bottom": 577,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 208,
+          "bottom": 791,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 120,
+          "bottom": 1934.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 12,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "detail/1440/dark",
+      "screenshot": "detail-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 366,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 502,
+          "bottom": 553,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 366,
+          "bottom": 2180.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 7,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "chart/1440/dark",
+      "screenshot": "chart-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "portfolio/1440/dark",
+      "screenshot": "portfolio-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison/1440/dark",
+      "screenshot": "comparison-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 900,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGrid": {
+          "top": 193,
+          "bottom": 864,
+          "height": 671,
+          "width": 1412
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison-near-pass/1440/dark",
+      "screenshot": "comparison-near-pass-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 900,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGrid": {
+          "top": 193,
+          "bottom": 864,
+          "height": 671,
+          "width": 1412
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "market/1440/dark",
+      "screenshot": "market-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 988,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "breadth/1440/dark",
+      "screenshot": "breadth-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1706,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "scan/1440/dark",
+      "screenshot": "scan-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1201,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline/1440/dark",
+      "screenshot": "case-MSM-inline-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline-annotations/1440/dark",
+      "screenshot": "case-MSM-inline-annotations-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded/1440/dark",
+      "screenshot": "case-MSM-expanded-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded-annotations/1440/dark",
+      "screenshot": "case-MSM-expanded-annotations-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline/1440/dark",
+      "screenshot": "case-ADI-inline-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 13,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline-annotations/1440/dark",
+      "screenshot": "case-ADI-inline-annotations-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 13,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded/1440/dark",
+      "screenshot": "case-ADI-expanded-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded-annotations/1440/dark",
+      "screenshot": "case-ADI-expanded-annotations-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline/1440/dark",
+      "screenshot": "case-TGTX-inline-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline-annotations/1440/dark",
+      "screenshot": "case-TGTX-inline-annotations-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded/1440/dark",
+      "screenshot": "case-TGTX-expanded-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/1440/dark",
+      "screenshot": "case-TGTX-expanded-annotations-1440x900-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "home/1440/light",
+      "screenshot": "home-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 366,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 502,
+          "bottom": 553,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 366,
+          "bottom": 2180.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 7,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 1
+      },
+      "axe": []
+    },
+    {
+      "key": "near-pass/1440/light",
+      "screenshot": "near-pass-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 366,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 502,
+          "bottom": 553,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 816
+        },
+        "chartCard": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 366,
+          "bottom": 2180.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 7,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "compact/1440/light",
+      "screenshot": "compact-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2244,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 120,
+          "height": 64,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 256,
+          "bottom": 307,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 290,
+          "bottom": 577,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 208,
+          "bottom": 791,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 120,
+          "bottom": 1934.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 12,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "detail/1440/light",
+      "screenshot": "detail-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": 56,
+          "bottom": 366,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 502,
+          "bottom": 553,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 536,
+          "bottom": 823,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 454,
+          "bottom": 1037,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 366,
+          "bottom": 2180.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 7,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "chart/1440/light",
+      "screenshot": "chart-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "portfolio/1440/light",
+      "screenshot": "portfolio-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison/1440/light",
+      "screenshot": "comparison-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 900,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGrid": {
+          "top": 193,
+          "bottom": 864,
+          "height": 671,
+          "width": 1412
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison-near-pass/1440/light",
+      "screenshot": "comparison-near-pass-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 900,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 6,
+        "visibleCompareCardFraction": 6,
+        "comparisonGrid": {
+          "top": 193,
+          "bottom": 864,
+          "height": 671,
+          "width": 1412
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "market/1440/light",
+      "screenshot": "market-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 988,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "breadth/1440/light",
+      "screenshot": "breadth-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1706,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "scan/1440/light",
+      "screenshot": "scan-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1201,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline/1440/light",
+      "screenshot": "case-MSM-inline-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 1
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline-annotations/1440/light",
+      "screenshot": "case-MSM-inline-annotations-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded/1440/light",
+      "screenshot": "case-MSM-expanded-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded-annotations/1440/light",
+      "screenshot": "case-MSM-expanded-annotations-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline/1440/light",
+      "screenshot": "case-ADI-inline-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 13,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 1
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline-annotations/1440/light",
+      "screenshot": "case-ADI-inline-annotations-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 824
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 13,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded/1440/light",
+      "screenshot": "case-ADI-expanded-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded-annotations/1440/light",
+      "screenshot": "case-ADI-expanded-annotations-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline/1440/light",
+      "screenshot": "case-TGTX-inline-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 1
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline-annotations/1440/light",
+      "screenshot": "case-TGTX-inline-annotations-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 56,
+        "bottomNavHeight": 0,
+        "chromeHeight": 56,
+        "hero": {
+          "top": -254,
+          "bottom": 56,
+          "height": 310,
+          "width": 1440
+        },
+        "firstRow": {
+          "top": 192,
+          "bottom": 243,
+          "height": 51,
+          "width": 451
+        },
+        "chart": {
+          "top": 226,
+          "bottom": 513,
+          "height": 287,
+          "width": 830
+        },
+        "chartCard": {
+          "top": 144,
+          "bottom": 727,
+          "height": 583,
+          "width": 940
+        },
+        "detail": {
+          "top": 56,
+          "bottom": 1870.3125,
+          "height": 1814.3125,
+          "width": 988
+        },
+        "visibleCandidates": 1,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded/1440/light",
+      "screenshot": "case-TGTX-expanded-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/1440/light",
+      "screenshot": "case-TGTX-expanded-annotations-1440x900-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2490,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "home/390/dark",
+      "screenshot": "home-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 4491,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": {
+          "top": 48,
+          "bottom": 465.671875,
+          "height": 417.671875,
+          "width": 390
+        },
+        "firstRow": {
+          "top": 557.671875,
+          "bottom": 627.671875,
+          "height": 70,
+          "width": 390
+        },
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 3,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "near-pass/390/dark",
+      "screenshot": "near-pass-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 4491,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": {
+          "top": 48,
+          "bottom": 465.671875,
+          "height": 417.671875,
+          "width": 390
+        },
+        "firstRow": {
+          "top": 557.671875,
+          "bottom": 627.671875,
+          "height": 70,
+          "width": 390
+        },
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 3,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "detail/390/dark",
+      "screenshot": "detail-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "chart/390/dark",
+      "screenshot": "chart-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "portfolio/390/dark",
+      "screenshot": "portfolio-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 4491,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison/390/dark",
+      "screenshot": "comparison-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2458,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGrid": {
+          "top": 245,
+          "bottom": 2402,
+          "height": 2157,
+          "width": 390
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison-near-pass/390/dark",
+      "screenshot": "comparison-near-pass-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2458,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGrid": {
+          "top": 245,
+          "bottom": 2402,
+          "height": 2157,
+          "width": 390
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "market/390/dark",
+      "screenshot": "market-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1597,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "breadth/390/dark",
+      "screenshot": "breadth-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1946,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "scan/390/dark",
+      "screenshot": "scan-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2652,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline/390/dark",
+      "screenshot": "case-MSM-inline-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1995,
+          "height": 1947,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline-annotations/390/dark",
+      "screenshot": "case-MSM-inline-annotations-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1995,
+          "height": 1947,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded/390/dark",
+      "screenshot": "case-MSM-expanded-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded-annotations/390/dark",
+      "screenshot": "case-MSM-expanded-annotations-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline/390/dark",
+      "screenshot": "case-ADI-inline-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline-annotations/390/dark",
+      "screenshot": "case-ADI-inline-annotations-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded/390/dark",
+      "screenshot": "case-ADI-expanded-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded-annotations/390/dark",
+      "screenshot": "case-ADI-expanded-annotations-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline/390/dark",
+      "screenshot": "case-TGTX-inline-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline-annotations/390/dark",
+      "screenshot": "case-TGTX-inline-annotations-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded/390/dark",
+      "screenshot": "case-TGTX-expanded-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/390/dark",
+      "screenshot": "case-TGTX-expanded-annotations-390x844-dark.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "home/390/light",
+      "screenshot": "home-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 4491,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": {
+          "top": 48,
+          "bottom": 465.671875,
+          "height": 417.671875,
+          "width": 390
+        },
+        "firstRow": {
+          "top": 557.671875,
+          "bottom": 627.671875,
+          "height": 70,
+          "width": 390
+        },
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 3,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 1
+      },
+      "axe": []
+    },
+    {
+      "key": "near-pass/390/light",
+      "screenshot": "near-pass-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 4491,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": {
+          "top": 48,
+          "bottom": 465.671875,
+          "height": 417.671875,
+          "width": 390
+        },
+        "firstRow": {
+          "top": 557.671875,
+          "bottom": 627.671875,
+          "height": 70,
+          "width": 390
+        },
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 3,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "detail/390/light",
+      "screenshot": "detail-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "chart/390/light",
+      "screenshot": "chart-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "portfolio/390/light",
+      "screenshot": "portfolio-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 4491,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison/390/light",
+      "screenshot": "comparison-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2458,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGrid": {
+          "top": 245,
+          "bottom": 2402,
+          "height": 2157,
+          "width": 390
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "comparison-near-pass/390/light",
+      "screenshot": "comparison-near-pass-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2458,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 1,
+        "visibleCompareCardFraction": 1.51931330472103,
+        "comparisonGrid": {
+          "top": 245,
+          "bottom": 2402,
+          "height": 2157,
+          "width": 390
+        },
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "market/390/light",
+      "screenshot": "market-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1597,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "breadth/390/light",
+      "screenshot": "breadth-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 1946,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "scan/390/light",
+      "screenshot": "scan-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2652,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 1
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline/390/light",
+      "screenshot": "case-MSM-inline-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1995,
+          "height": 1947,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-inline-annotations/390/light",
+      "screenshot": "case-MSM-inline-annotations-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1995,
+          "height": 1947,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded/390/light",
+      "screenshot": "case-MSM-expanded-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-MSM-expanded-annotations/390/light",
+      "screenshot": "case-MSM-expanded-annotations-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2051,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline/390/light",
+      "screenshot": "case-ADI-inline-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-inline-annotations/390/light",
+      "screenshot": "case-ADI-inline-annotations-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 242
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded/390/light",
+      "screenshot": "case-ADI-expanded-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-ADI-expanded-annotations/390/light",
+      "screenshot": "case-ADI-expanded-annotations-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline/390/light",
+      "screenshot": "case-TGTX-inline-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-inline-annotations/390/light",
+      "screenshot": "case-TGTX-inline-annotations-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 48,
+        "bottomNavHeight": 56,
+        "chromeHeight": 104,
+        "hero": null,
+        "firstRow": null,
+        "chart": {
+          "top": 266,
+          "bottom": 497,
+          "height": 231,
+          "width": 248
+        },
+        "chartCard": {
+          "top": 168,
+          "bottom": 687,
+          "height": 519,
+          "width": 358
+        },
+        "detail": {
+          "top": 48,
+          "bottom": 1964.5,
+          "height": 1916.5,
+          "width": 390
+        },
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded/390/light",
+      "screenshot": "case-TGTX-expanded-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/390/light",
+      "screenshot": "case-TGTX-expanded-annotations-390x844-light.png",
+      "metrics": {
+        "smallTargets": [],
+        "fontIssues": [],
+        "radiusIssues": [],
+        "asciiNegativeValues": [],
+        "horizontalOverflow": false,
+        "pageHeight": 2021,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "headerHeight": 0,
+        "bottomNavHeight": 0,
+        "chromeHeight": 0,
+        "hero": null,
+        "firstRow": null,
+        "chart": null,
+        "chartCard": null,
+        "detail": null,
+        "visibleCandidates": 0,
+        "visibleCompareCards": 0,
+        "visibleCompareCardFraction": 0,
+        "comparisonGrid": null,
+        "runningAnimations": 0
+      },
+      "axe": []
+    }
+  ],
+  "performance": [
+    {
+      "label": "baseline",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "runs": [
+        {
+          "candidate_ms": 2193,
+          "method_switch_ms": 791,
+          "longest_initial_task_ms": 322,
+          "initial_tasks": [
+            {
+              "start": 124.19999999995343,
+              "duration": 72
+            },
+            {
+              "start": 199.19999999995343,
+              "duration": 181
+            },
+            {
+              "start": 522.5999999999767,
+              "duration": 76
+            },
+            {
+              "start": 819.3999999999069,
+              "duration": 72
+            },
+            {
+              "start": 1471.5999999999767,
+              "duration": 322
+            },
+            {
+              "start": 1794.5,
+              "duration": 74
+            },
+            {
+              "start": 1929.8999999999069,
+              "duration": 88
+            },
+            {
+              "start": 2018.3999999999069,
+              "duration": 142
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 64000000,
+            "totalJSHeapSize": 103000000
+          }
+        },
+        {
+          "candidate_ms": 2155,
+          "method_switch_ms": 658,
+          "longest_initial_task_ms": 301,
+          "initial_tasks": [
+            {
+              "start": 167.60000000009313,
+              "duration": 59
+            },
+            {
+              "start": 230.5,
+              "duration": 182
+            },
+            {
+              "start": 556,
+              "duration": 77
+            },
+            {
+              "start": 863.3000000000466,
+              "duration": 83
+            },
+            {
+              "start": 1462,
+              "duration": 301
+            },
+            {
+              "start": 1764.7000000000698,
+              "duration": 70
+            },
+            {
+              "start": 1888.6000000000931,
+              "duration": 78
+            },
+            {
+              "start": 1967.2000000000698,
+              "duration": 149
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 64000000,
+            "totalJSHeapSize": 103000000
+          }
+        },
+        {
+          "candidate_ms": 2224,
+          "method_switch_ms": 681,
+          "longest_initial_task_ms": 284,
+          "initial_tasks": [
+            {
+              "start": 212,
+              "duration": 52
+            },
+            {
+              "start": 268.5,
+              "duration": 171
+            },
+            {
+              "start": 574.2000000000698,
+              "duration": 68
+            },
+            {
+              "start": 856.5,
+              "duration": 69
+            },
+            {
+              "start": 1509.4000000000233,
+              "duration": 284
+            },
+            {
+              "start": 1794.5,
+              "duration": 78
+            },
+            {
+              "start": 1949.8000000000466,
+              "duration": 82
+            },
+            {
+              "start": 2033.4000000000233,
+              "duration": 137
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 64000000,
+            "totalJSHeapSize": 103000000
+          }
+        }
+      ],
+      "candidate_median_ms": 2193,
+      "maximum_switch_ms": 791,
+      "longest_initial_task_ms": 322,
+      "cached_response_count": 15
+    },
+    {
+      "label": "baseline",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "runs": [
+        {
+          "candidate_ms": 2013,
+          "method_switch_ms": 593,
+          "longest_initial_task_ms": 304,
+          "initial_tasks": [
+            {
+              "start": 122.09999999997672,
+              "duration": 74
+            },
+            {
+              "start": 199.40000000002328,
+              "duration": 165
+            },
+            {
+              "start": 489.9000000000233,
+              "duration": 73
+            },
+            {
+              "start": 788.1999999999534,
+              "duration": 75
+            },
+            {
+              "start": 1431,
+              "duration": 304
+            },
+            {
+              "start": 1735.6999999999534,
+              "duration": 63
+            },
+            {
+              "start": 1847.6999999999534,
+              "duration": 72
+            },
+            {
+              "start": 1920.4000000000233,
+              "duration": 69
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 64000000,
+            "totalJSHeapSize": 103000000
+          }
+        },
+        {
+          "candidate_ms": 1987,
+          "method_switch_ms": 461,
+          "longest_initial_task_ms": 311,
+          "initial_tasks": [
+            {
+              "start": 127.19999999995343,
+              "duration": 71
+            },
+            {
+              "start": 203.40000000002328,
+              "duration": 172
+            },
+            {
+              "start": 512.9000000000233,
+              "duration": 81
+            },
+            {
+              "start": 822.7999999999302,
+              "duration": 73
+            },
+            {
+              "start": 1413.1999999999534,
+              "duration": 311
+            },
+            {
+              "start": 1724.5,
+              "duration": 57
+            },
+            {
+              "start": 1823.5999999999767,
+              "duration": 72
+            },
+            {
+              "start": 1896,
+              "duration": 68
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 64000000,
+            "totalJSHeapSize": 103000000
+          }
+        },
+        {
+          "candidate_ms": 2099,
+          "method_switch_ms": 476,
+          "longest_initial_task_ms": 305,
+          "initial_tasks": [
+            {
+              "start": 149.69999999995343,
+              "duration": 51
+            },
+            {
+              "start": 204.79999999993015,
+              "duration": 169
+            },
+            {
+              "start": 510.89999999990687,
+              "duration": 73
+            },
+            {
+              "start": 776.5,
+              "duration": 62
+            },
+            {
+              "start": 1453.5,
+              "duration": 305
+            },
+            {
+              "start": 1758.5,
+              "duration": 62
+            },
+            {
+              "start": 1867.0999999999767,
+              "duration": 73
+            },
+            {
+              "start": 1972.3999999999069,
+              "duration": 74
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 64000000,
+            "totalJSHeapSize": 103000000
+          }
+        }
+      ],
+      "candidate_median_ms": 2013,
+      "maximum_switch_ms": 593,
+      "longest_initial_task_ms": 311,
+      "cached_response_count": 15
+    },
+    {
+      "label": "current",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "runs": [
+        {
+          "candidate_ms": 1943,
+          "method_switch_ms": 535,
+          "longest_initial_task_ms": 190,
+          "initial_tasks": [
+            {
+              "start": 192.19999999995343,
+              "duration": 55
+            },
+            {
+              "start": 258.30000000004657,
+              "duration": 115
+            },
+            {
+              "start": 374.5,
+              "duration": 71
+            },
+            {
+              "start": 547.1999999999534,
+              "duration": 72
+            },
+            {
+              "start": 1219.9000000000233,
+              "duration": 148
+            },
+            {
+              "start": 1367.9000000000233,
+              "duration": 119
+            },
+            {
+              "start": 1519.3000000000466,
+              "duration": 65
+            },
+            {
+              "start": 1608.1999999999534,
+              "duration": 113
+            },
+            {
+              "start": 1722.9000000000233,
+              "duration": 190
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 37300000,
+            "totalJSHeapSize": 97400000
+          }
+        },
+        {
+          "candidate_ms": 2283,
+          "method_switch_ms": 389,
+          "longest_initial_task_ms": 200,
+          "initial_tasks": [
+            {
+              "start": 232.39999999990687,
+              "duration": 53
+            },
+            {
+              "start": 292.79999999993015,
+              "duration": 101
+            },
+            {
+              "start": 394.79999999993015,
+              "duration": 64
+            },
+            {
+              "start": 502,
+              "duration": 66
+            },
+            {
+              "start": 616.3999999999069,
+              "duration": 64
+            },
+            {
+              "start": 1327,
+              "duration": 144
+            },
+            {
+              "start": 1471.1999999999534,
+              "duration": 121
+            },
+            {
+              "start": 1616.3999999999069,
+              "duration": 54
+            },
+            {
+              "start": 1710.5,
+              "duration": 112
+            },
+            {
+              "start": 1823.0999999999767,
+              "duration": 200
+            },
+            {
+              "start": 2054.5,
+              "duration": 116
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 37300000,
+            "totalJSHeapSize": 97400000
+          }
+        },
+        {
+          "candidate_ms": 2230,
+          "method_switch_ms": 458,
+          "longest_initial_task_ms": 198,
+          "initial_tasks": [
+            {
+              "start": 243.80000000004657,
+              "duration": 51
+            },
+            {
+              "start": 301.9000000000233,
+              "duration": 103
+            },
+            {
+              "start": 405.4000000000233,
+              "duration": 68
+            },
+            {
+              "start": 535.8000000000466,
+              "duration": 91
+            },
+            {
+              "start": 1293,
+              "duration": 149
+            },
+            {
+              "start": 1442.9000000000233,
+              "duration": 120
+            },
+            {
+              "start": 1592.5,
+              "duration": 73
+            },
+            {
+              "start": 1670.3000000000466,
+              "duration": 112
+            },
+            {
+              "start": 1783.4000000000233,
+              "duration": 198
+            },
+            {
+              "start": 2014.4000000000233,
+              "duration": 121
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 37300000,
+            "totalJSHeapSize": 97400000
+          }
+        }
+      ],
+      "candidate_median_ms": 2230,
+      "maximum_switch_ms": 535,
+      "longest_initial_task_ms": 200,
+      "cached_response_count": 88,
+      "p1_pass": false
+    },
+    {
+      "label": "current",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "runs": [
+        {
+          "candidate_ms": 1827,
+          "method_switch_ms": 479,
+          "longest_initial_task_ms": 149,
+          "initial_tasks": [
+            {
+              "start": 140.69999999995343,
+              "duration": 100
+            },
+            {
+              "start": 244.30000000004657,
+              "duration": 110
+            },
+            {
+              "start": 354.4000000000233,
+              "duration": 55
+            },
+            {
+              "start": 448.30000000004657,
+              "duration": 52
+            },
+            {
+              "start": 1236.8000000000466,
+              "duration": 149
+            },
+            {
+              "start": 1386.1999999999534,
+              "duration": 79
+            },
+            {
+              "start": 1496.1999999999534,
+              "duration": 56
+            },
+            {
+              "start": 1565,
+              "duration": 102
+            },
+            {
+              "start": 1667.3000000000466,
+              "duration": 133
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 53500000,
+            "totalJSHeapSize": 91700000
+          }
+        },
+        {
+          "candidate_ms": 2031,
+          "method_switch_ms": 380,
+          "longest_initial_task_ms": 158,
+          "initial_tasks": [
+            {
+              "start": 190.79999999993015,
+              "duration": 54
+            },
+            {
+              "start": 248.90000000002328,
+              "duration": 104
+            },
+            {
+              "start": 354,
+              "duration": 56
+            },
+            {
+              "start": 444.4000000000233,
+              "duration": 54
+            },
+            {
+              "start": 1246.1999999999534,
+              "duration": 158
+            },
+            {
+              "start": 1405.0999999999767,
+              "duration": 88
+            },
+            {
+              "start": 1579,
+              "duration": 114
+            },
+            {
+              "start": 1693.4000000000233,
+              "duration": 148
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 53500000,
+            "totalJSHeapSize": 91700000
+          }
+        },
+        {
+          "candidate_ms": 2031,
+          "method_switch_ms": 299,
+          "longest_initial_task_ms": 196,
+          "initial_tasks": [
+            {
+              "start": 188.5,
+              "duration": 51
+            },
+            {
+              "start": 248.30000000004657,
+              "duration": 113
+            },
+            {
+              "start": 361.5999999999767,
+              "duration": 65
+            },
+            {
+              "start": 472.9000000000233,
+              "duration": 59
+            },
+            {
+              "start": 1220.5999999999767,
+              "duration": 165
+            },
+            {
+              "start": 1386.0999999999767,
+              "duration": 92
+            },
+            {
+              "start": 1566.7000000000698,
+              "duration": 105
+            },
+            {
+              "start": 1671.8000000000466,
+              "duration": 196
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 53500000,
+            "totalJSHeapSize": 91700000
+          }
+        }
+      ],
+      "candidate_median_ms": 2031,
+      "maximum_switch_ms": 479,
+      "longest_initial_task_ms": 196,
+      "cached_response_count": 71,
+      "p1_pass": false
+    }
+  ],
+  "failures": [
+    "1440: Q1 method switch 535ms > 480ms",
+    "1440: P1 exact limits not met (3500ms / 400ms / 200ms)",
+    "390: P1 exact limits not met (3500ms / 400ms / 200ms)",
+    "1440: D9 first paint opportunity 67.2ms > 50ms",
+    "390: D9 first paint opportunity 62.2ms > 50ms"
+  ],
+  "transport": [
+    {
+      "label": "current",
+      "as_of_date": "2026-09-30",
+      "raw_bytes": 3747100,
+      "gzip_bytes": 979040
+    },
+    {
+      "label": "baseline",
+      "as_of_date": "2026-09-30",
+      "raw_bytes": 17557195,
+      "gzip_bytes": 1765178
+    }
+  ],
+  "chart_cases": [
+    {
+      "symbol": "MSM",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "dark",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": false,
+      "annotation_summary": "ベース候補のみ。VCPの収縮条件は未確認。",
+      "shapes": [
+        {
+          "start": "2026-08-05",
+          "end": "2026-09-30",
+          "label": "ベース候補 40日 / 深さ11.3%",
+          "curve": false,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 124.51,
+        "upper": 130.7355,
+        "stop": 115.0596
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "ADI",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "dark",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 9.1% → C2 8.7% → C3 7.8% → C4 5.7% → C5 3.4%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-06-22",
+          "end": "2026-09-30",
+          "label": "ベース候補 71日 / 深さ21.9%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-07-21",
+          "end": "2026-07-29",
+          "label": "C1 −9.1%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-17",
+          "end": "2026-08-24",
+          "label": "C2 −8.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-26",
+          "end": "2026-09-03",
+          "label": "C3 −7.8%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-11",
+          "end": "2026-09-16",
+          "label": "C4 −5.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-22",
+          "end": "2026-09-24",
+          "label": "C5 −3.4%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 377.49,
+        "upper": 396.3645,
+        "stop": 368.9403
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "TGTX",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "dark",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 10.2% → C2 7.0%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-07-09",
+          "end": "2026-09-30",
+          "label": "ベース候補 59日 / 深さ23.5%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-03",
+          "end": "2026-09-15",
+          "label": "C1 −10.2%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-21",
+          "end": "2026-09-23",
+          "label": "C2 −7.0%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 57.14,
+        "upper": 59.997,
+        "stop": 51.875400000000006
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "MSM",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "light",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": false,
+      "annotation_summary": "ベース候補のみ。VCPの収縮条件は未確認。",
+      "shapes": [
+        {
+          "start": "2026-08-05",
+          "end": "2026-09-30",
+          "label": "ベース候補 40日 / 深さ11.3%",
+          "curve": false,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 124.51,
+        "upper": 130.7355,
+        "stop": 115.0596
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "ADI",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "light",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 9.1% → C2 8.7% → C3 7.8% → C4 5.7% → C5 3.4%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-06-22",
+          "end": "2026-09-30",
+          "label": "ベース候補 71日 / 深さ21.9%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-07-21",
+          "end": "2026-07-29",
+          "label": "C1 −9.1%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-17",
+          "end": "2026-08-24",
+          "label": "C2 −8.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-26",
+          "end": "2026-09-03",
+          "label": "C3 −7.8%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-11",
+          "end": "2026-09-16",
+          "label": "C4 −5.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-22",
+          "end": "2026-09-24",
+          "label": "C5 −3.4%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 377.49,
+        "upper": 396.3645,
+        "stop": 368.9403
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "TGTX",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "light",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 10.2% → C2 7.0%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-07-09",
+          "end": "2026-09-30",
+          "label": "ベース候補 59日 / 深さ23.5%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-03",
+          "end": "2026-09-15",
+          "label": "C1 −10.2%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-21",
+          "end": "2026-09-23",
+          "label": "C2 −7.0%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 57.14,
+        "upper": 59.997,
+        "stop": 51.875400000000006
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "MSM",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": false,
+      "annotation_summary": "ベース候補のみ。VCPの収縮条件は未確認。",
+      "shapes": [
+        {
+          "start": "2026-08-05",
+          "end": "2026-09-30",
+          "label": "ベース候補 40日 / 深さ11.3%",
+          "curve": false,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 124.51,
+        "upper": 130.7355,
+        "stop": 115.0596
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "ADI",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 9.1% → C2 8.7% → C3 7.8% → C4 5.7% → C5 3.4%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-06-22",
+          "end": "2026-09-30",
+          "label": "ベース候補 71日 / 深さ21.9%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-07-21",
+          "end": "2026-07-29",
+          "label": "C1 −9.1%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-17",
+          "end": "2026-08-24",
+          "label": "C2 −8.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-26",
+          "end": "2026-09-03",
+          "label": "C3 −7.8%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-11",
+          "end": "2026-09-16",
+          "label": "C4 −5.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-22",
+          "end": "2026-09-24",
+          "label": "C5 −3.4%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 377.49,
+        "upper": 396.3645,
+        "stop": 368.9403
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "TGTX",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 10.2% → C2 7.0%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-07-09",
+          "end": "2026-09-30",
+          "label": "ベース候補 59日 / 深さ23.5%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-03",
+          "end": "2026-09-15",
+          "label": "C1 −10.2%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-21",
+          "end": "2026-09-23",
+          "label": "C2 −7.0%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 57.14,
+        "upper": 59.997,
+        "stop": 51.875400000000006
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "MSM",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": false,
+      "annotation_summary": "ベース候補のみ。VCPの収縮条件は未確認。",
+      "shapes": [
+        {
+          "start": "2026-08-05",
+          "end": "2026-09-30",
+          "label": "ベース候補 40日 / 深さ11.3%",
+          "curve": false,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 124.51,
+        "upper": 130.7355,
+        "stop": 115.0596
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "MSM",
+          "as_of_date": "2026-09-30",
+          "pivot": "124.51",
+          "upper": "130.7355",
+          "stop": "115.0596",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "ADI",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 9.1% → C2 8.7% → C3 7.8% → C4 5.7% → C5 3.4%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-06-22",
+          "end": "2026-09-30",
+          "label": "ベース候補 71日 / 深さ21.9%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-07-21",
+          "end": "2026-07-29",
+          "label": "C1 −9.1%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-17",
+          "end": "2026-08-24",
+          "label": "C2 −8.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-08-26",
+          "end": "2026-09-03",
+          "label": "C3 −7.8%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-11",
+          "end": "2026-09-16",
+          "label": "C4 −5.7%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-22",
+          "end": "2026-09-24",
+          "label": "C5 −3.4%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 377.49,
+        "upper": 396.3645,
+        "stop": 368.9403
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "ADI",
+          "as_of_date": "2026-09-30",
+          "pivot": "377.49",
+          "upper": "396.3645",
+          "stop": "368.9403",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    },
+    {
+      "symbol": "TGTX",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "as_of_date": "2026-09-30",
+      "bars": 310,
+      "history_warning": null,
+      "annotation_candidate": true,
+      "annotation_summary": "VCP候補：C1 10.2% → C2 7.0%。区間平均出来高：順次減少を確認できず。成立・買い判断は別確認。",
+      "shapes": [
+        {
+          "start": "2026-07-09",
+          "end": "2026-09-30",
+          "label": "ベース候補 59日 / 深さ23.5%",
+          "curve": false,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-03",
+          "end": "2026-09-15",
+          "label": "C1 −10.2%",
+          "curve": true,
+          "arrow": false
+        },
+        {
+          "start": "2026-09-21",
+          "end": "2026-09-23",
+          "label": "C2 −7.0%",
+          "curve": true,
+          "arrow": false
+        }
+      ],
+      "canonical": {
+        "pivot": 57.14,
+        "upper": 59.997,
+        "stop": 51.875400000000006
+      },
+      "views": [
+        {
+          "view": "inline-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-default",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "simple"
+        },
+        {
+          "view": "expanded-annotations",
+          "symbol": "TGTX",
+          "as_of_date": "2026-09-30",
+          "pivot": "57.14",
+          "upper": "59.997",
+          "stop": "51.875400000000006",
+          "annotation_mode": "detail"
+        }
+      ],
+      "visual_overlap_review": "Screenshot review required; metadata equality does not prove pixel-level label placement."
+    }
+  ],
+  "radar": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "cpu_rate": 4,
+      "method": "actual SetupRadar, 207 canonical real 2026-09-29 observations; production initial mount, synchronous layout and next animation frame; no network/data preparation in render interval",
+      "runs": [
+        {
+          "render_layout_ms": 61.89999999990687,
+          "first_frame_ms": 67.19999999995343,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        {
+          "render_layout_ms": 14.800000000046566,
+          "first_frame_ms": 17.900000000023283,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        {
+          "render_layout_ms": 16.599999999976717,
+          "first_frame_ms": 18.900000000023283,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        }
+      ]
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "cpu_rate": 4,
+      "method": "actual SetupRadar, 207 canonical real 2026-09-29 observations; production initial mount, synchronous layout and next animation frame; no network/data preparation in render interval",
+      "runs": [
+        {
+          "render_layout_ms": 57.60000000009313,
+          "first_frame_ms": 62.20000000006985,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        {
+          "render_layout_ms": 13.400000000023283,
+          "first_frame_ms": 17,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        },
+        {
+          "render_layout_ms": 17,
+          "first_frame_ms": 19.699999999953434,
+          "point_count": 207,
+          "as_of_date": "2026-09-29",
+          "source_sha256": "3841eaefff22a87c61a2ba5be42bb3c2e1eb254c44008827eb2b152798c52452"
+        }
+      ]
+    }
+  ]
+}
