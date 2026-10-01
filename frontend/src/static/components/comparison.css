@@ -32,6 +32,7 @@
   .candidate-comparison .comparison-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media(max-width:767px) {
+  .comparison-page .comparison-page-heading { padding:12px 16px; }
   .candidate-comparison { padding:0!important; }
   .candidate-comparison .comparison-grid { grid-template-columns:1fr; gap:12px; }
   .candidate-comparison .comparison-controls { padding:4px 0 8px; }
