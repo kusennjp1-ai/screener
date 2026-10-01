@@ -89,6 +89,17 @@ export default function ResearchPage({compareOnly=false}) {
       return value;
     }});
   const selected = useMemo(() => selectedSummary && detail.data?.symbol === selectedSummary.symbol && detail.data?.as_of_date === bundle.data?.date ? {...detail.data, ...selectedSummary, price_quality:{...detail.data.price_quality,...selectedSummary.price_quality}, setup_recalculation:{...detail.data.setup_recalculation,...selectedSummary.setup_recalculation}} : selectedSummary, [selectedSummary, detail.data, bundle.data?.date]);
+  const initialSymbol = useRef(params.get('symbol'));
+  useEffect(() => {
+    if (!initialSymbol.current || selected?.symbol !== initialSymbol.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (!detailRef.current) return;
+      detailRef.current.focus?.({ preventScroll: true });
+      detailRef.current.scrollIntoView?.({ block: 'start', behavior: 'auto' });
+      initialSymbol.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected?.symbol]);
   const embeddedCharts = useMemo(() => rows.some(r=>Object.hasOwn(r,'chart_path')) ? {symbols:rows.filter(r=>r.chart_path).map(r=>({symbol:r.symbol,path:r.chart_path}))} : null, [rows]);
   const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts);
   const index = {data:embeddedCharts || fetchedIndex.data};

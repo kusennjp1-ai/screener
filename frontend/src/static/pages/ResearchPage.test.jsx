@@ -44,6 +44,26 @@ const methods = ['ミネルヴィニ', 'オニール', 'IBD型'];
 const candidates = () => screen.getByRole('list', {name:'投資手法別の銘柄候補'});
 const openFilters = () => { fireEvent.click(screen.getByRole('button', {name:'候補を絞り込む'})); return screen.getByRole('dialog', {name:'候補を絞り込む'}); };
 const closeFilters = () => fireEvent.click(screen.getByRole('button', {name:'絞り込みを閉じる'}));
+it('opens an initial symbol link at the selected detail once its data arrives', async () => {
+  const previousHash = window.location.hash;
+  const previousScroll = Element.prototype.scrollIntoView;
+  const scroll = vi.fn();
+  Element.prototype.scrollIntoView = scroll;
+  window.history.replaceState(null, '', '#/?symbol=FAIL');
+  try {
+    mount();
+    await screen.findByRole('button', { name: /^FAIL の分析/ });
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'auto' }));
+    expect(document.activeElement).toHaveClass('research-detail');
+    expect(document.activeElement).toHaveTextContent('FAIL');
+    const count = scroll.mock.calls.length;
+    fireEvent.click(screen.getByRole('tab', { name: 'メモ' }));
+    expect(scroll).toHaveBeenCalledTimes(count);
+  } finally {
+    window.history.replaceState(null, '', previousHash || '#/');
+    Element.prototype.scrollIntoView = previousScroll;
+  }
+});
 describe('100 virtual expert task profiles', () => {
   specialties.forEach((specialty, s) => tasks.forEach((task, t) => {
     it(`P${String(s * 10 + t + 1).padStart(3, '0')} ${specialty}専門家 / ${task}`, async () => {
