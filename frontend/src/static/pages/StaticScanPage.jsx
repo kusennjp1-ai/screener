@@ -52,13 +52,13 @@ function StaticScanPage() {
   const chartIndexQuery = useStaticChartIndex(scanManifestQuery.data?.charts?.path, !scanManifestQuery.data?.embedded_chart_paths);
 
   const theme = useTheme();
-  // モバイルでは初期状態でフィルタを折りたたみ、結果テーブルをすぐ見られるようにする
+  // 初期状態は適用件数を残して折りたたみ、結果を先に見せる。
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [filters, setFilters] = useState(buildDefaultScanFilters);
-  const [showFilters, setShowFilters] = useState(!isMobile);
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [fullTable,setFullTable]=useState(false);
-  useEffect(() => { setShowFilters(!isMobile); setPage(1); }, [isMobile]);
+  useEffect(() => { setPage(1); }, [isMobile]);
   const searchRows=useCallback(text=>{setFilters(old=>({...old,symbolSearch:text}));setPage(1);},[]);
   const [desktopPerPage, setPerPage] = useState(50);
   const perPage = isMobile ? 20 : desktopPerPage;
@@ -333,15 +333,20 @@ function StaticScanPage() {
   }
 
   return (
-    <Box>
-      <Typography variant="h5" component="h1" sx={{ whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+    <Box sx={{ p: { xs: 2, md: 3 } }}>
+      <Typography variant="h5" component="h1" sx={{ whiteSpace: 'nowrap', fontSize: 26, fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
         詳細スキャン
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
         基準日 {scanManifestQuery.data.as_of_date} · 補助条件で絞り込み
       </Typography>
 
-      <Alert severity="info" sx={{mb:2}}>この画面は追加条件を自由に組み合わせる補助ビューです。プリセットの件数は独自の複合フィルターの結果で、ホームの書籍条件通過数とは異なります。</Alert>
+      <Box component="details" sx={{ mb: 1, '&[open] .scan-help-indicator': { transform: 'rotate(180deg)' } }}>
+        <Box component="summary" sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: { xs: 44, md: 24 }, cursor: 'pointer', color: 'text.secondary', fontSize: 12 }}>
+          件数・補助フィルターの見方<Box component="span" className="scan-help-indicator" aria-hidden="true">⌄</Box>
+        </Box>
+        <Alert severity="info" sx={{ mt: 1 }}>この画面は追加条件を自由に組み合わせる補助ビューです。プリセットの件数は独自の複合フィルターの結果で、ホームの書籍条件通過数とは異なります。</Alert>
+      </Box>
       <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
         <Box display="flex" alignItems="baseline" gap={1.5}>
           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
@@ -357,7 +362,7 @@ function StaticScanPage() {
       </Paper>
 
       {hydrationComplete && presetScreens?.length > 0 && (
-        <Box component={isMobile?'details':'div'} sx={{mb:1}}>{isMobile && <Box component="summary" sx={{minHeight:44,lineHeight:'44px',cursor:'pointer'}}>補助フィルターを選択</Box>}<ScreenSelector
+        <Box component={isMobile?'details':'div'} sx={{mb:1,'&[open] .preset-disclosure-indicator':{transform:'rotate(180deg)'}}}>{isMobile && <Box component="summary" sx={{minHeight:44,lineHeight:'44px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',px:1,color:'primary.main'}}>補助フィルターを選択<Box component="span" className="preset-disclosure-indicator" aria-hidden="true">⌄</Box></Box>}<ScreenSelector
           screens={presetScreens}
           activeScreenId={activeScreenId}
           onSelectScreen={handleSelectScreen}
