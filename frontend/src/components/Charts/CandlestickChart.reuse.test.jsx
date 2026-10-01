@@ -64,15 +64,20 @@ describe('validated static chart instance reuse',()=>{
   it('empties every series and guide while new data is unavailable, then applies only the replacement payload',()=>{
     const view=setup({priceData:longBars});const instance=instances[0];
     expect(instance.sma200Series.setData.mock.lastCall[0]).toHaveLength(61);
+    const monthButton=screen.getByRole('button',{name:'1か月'});
     const pending={symbol:'BBB',chartIdentity:'BBB:2',priceData:[],rsLineData:null,pivotPrice:null,buyCeiling:null,stopPrice:null};
     view.update(pending);
     for(const key of seriesKeys)expect(instance[key].setData.mock.lastCall[0]).toEqual([]);
+    expect(monthButton).not.toBeVisible();
+    expect(view.container.querySelector('.chart-research-meta')).toHaveStyle({display:'none'});
+    expect(screen.queryByRole('group',{name:'チャート操作'})).not.toBeInTheDocument();
     expect(instance.rsMarkers.setMarkers).toHaveBeenLastCalledWith([]);
     expect(view.container.querySelector('[data-chart-symbol="BBB"]')).toHaveAttribute('data-chart-pivot','');
     expect(view.container.querySelector('[data-chart-symbol="BBB"]')).toHaveAttribute('data-chart-upper','');
     expect(view.container.querySelector('[data-chart-symbol="BBB"]')).toHaveAttribute('data-chart-stop','');
     view.update({...pending,priceData:bars(300),rsLineData:rs(30),pivotPrice:301});
     expect(factory).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button',{name:'1か月'})).toBe(monthButton);
     expect(instance.candlestickSeries.setData.mock.lastCall[0].map(p=>p.close)).toEqual([300,301]);
     expect(instance.rsLineSeries.setData.mock.lastCall[0]).toEqual(rs(30));
   });

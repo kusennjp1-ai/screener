@@ -798,6 +798,10 @@ function CandlestickChart({
   // Determine overlay state
   // Only show full loading state if we have no data at all (not even placeholder)
   const hasData = chartData && chartData.candlesticks.length > 0;
+  // A validated static container remains mounted while its next payload is
+  // pending. Keep its control DOM too; hide it rather than rebuilding all MUI
+  // buttons when the replacement data arrives. No old price values are kept.
+  const keepResearchChrome = hasData || chartIdentity != null;
   const showLoading = effectiveIsLoading && !hasData;
   const showError = !effectiveIsLoading && effectiveError && !hasData;
   const showNoData = !effectiveIsLoading && !effectiveError && !hasData;
@@ -819,7 +823,7 @@ function CandlestickChart({
     <>
     {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
     {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
-    {researchView && !compact && hasData && <Box role="group" aria-label="チャート操作" sx={{display:'flex',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
+    {researchView && !compact && keepResearchChrome && <Box role="group" aria-label="チャート操作" aria-hidden={!hasData} sx={{display:hasData?'flex':'none',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
       <ToggleButtonGroup size="small" exclusive value={timeframe} onChange={(_,value)=>{if(value){isFirstDataLoadRef.current=true;setTimeframe(value);}}} aria-label="足の種類"><ToggleButton value="daily">日足</ToggleButton><ToggleButton value="weekly">週足</ToggleButton></ToggleButtonGroup>
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</Button>)}
       <Button aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</Button>
@@ -827,11 +831,11 @@ function CandlestickChart({
       <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</Button>
       <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</Button>{researchActions}
     </Box>}
-    {researchView && !compact && hasData && <Box className="chart-research-meta" sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary'}}>
+    {researchView && !compact && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary'}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
       <Box component={smallScreen ? 'details' : 'div'} sx={{mt:.5,'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>
         {smallScreen && <summary>移動平均線・株価の乖離率</summary>}
-        {[[50,chartData.sma50],[150,chartData.sma150],[200,chartData.sma200]].map(([period,points])=>{const value=points.at(-1)?.value, delta=(chartData.candlesticks.at(-1).close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
+        {[[50,chartData?.sma50],[150,chartData?.sma150],[200,chartData?.sma200]].map(([period,points])=>{const value=points?.at(-1)?.value, delta=(chartData?.candlesticks.at(-1)?.close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
       </Box>
     </Box>}
     {researchView && !compact && !smallScreen && !hideOhlcLegend && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
