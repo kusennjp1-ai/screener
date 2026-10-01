@@ -9,9 +9,12 @@
 // the chart bounds, and a fully-off-screen box is skipped. Attaching/using the
 // primitive must never throw into the chart, so callers wrap usage in try/catch.
 
+import { placeAnnotationLabels } from './annotationLabelLayout';
+
 class VcpBoxRenderer {
-  constructor(rects) {
+  constructor(rects, candles) {
     this._rects = rects;
+    this._candles = candles;
   }
 
   draw(target) {
@@ -19,7 +22,6 @@ class VcpBoxRenderer {
       const ctx = scope.context;
       const hr = scope.horizontalPixelRatio;
       const vr = scope.verticalPixelRatio;
-      const occupiedLabels = [];
       for (const r of this._rects) {
         const left = Math.round(Math.min(r.x1, r.x2) * hr);
         const right = Math.round(Math.max(r.x1, r.x2) * hr);
@@ -27,19 +29,14 @@ class VcpBoxRenderer {
         const bottom = Math.round(Math.max(r.y1, r.y2) * vr);
         const w = Math.max(right - left, 1);
         const h = Math.max(bottom - top, 1);
-        // Clean, understated base outline: faint fill + thin dashed amber edge,
-        // so it reads as the base footprint rather than a heavy orange box.
-        if (!r.curve && !r.arrow) {
-          ctx.fillStyle = 'rgba(255, 152, 0, 0.025)';
-          ctx.fillRect(left, top, w, h);
-        }
         ctx.save();
         ctx.strokeStyle = r.color || 'rgba(255, 167, 38, 0.45)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = hr;
+        ctx.globalAlpha = r.curve ? 0.55 : 0.7;
+        ctx.setLineDash([3 * hr, 3 * hr]);
         if (!r.curve && !r.arrow) ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
         if (r.curve && r.x3 != null && r.y3 != null) {
-          ctx.lineWidth = 2 * hr; ctx.setLineDash([5 * hr, 3 * hr]);
+          ctx.lineWidth = hr; ctx.setLineDash([5 * hr, 3 * hr]);
           ctx.beginPath(); ctx.moveTo(r.x1 * hr, r.y1 * vr);
           const middle1 = (r.x1 + r.x2) / 2 * hr, middle2 = (r.x2 + r.x3) / 2 * hr;
           ctx.bezierCurveTo(middle1, r.y1 * vr, middle1, r.y2 * vr, r.x2 * hr, r.y2 * vr);
@@ -48,37 +45,27 @@ class VcpBoxRenderer {
         }
         if (r.arrow) {
           const x = r.x1 * hr, y = r.y1 * vr;
-          ctx.setLineDash([]); ctx.lineWidth = 2 * hr;
+          ctx.setLineDash([]); ctx.lineWidth = hr;
           ctx.beginPath(); ctx.moveTo(x - 28 * hr, y - 32 * vr); ctx.lineTo(x, y - 3 * vr);
           ctx.lineTo(x - 9 * hr, y - 6 * vr); ctx.moveTo(x, y - 3 * vr); ctx.lineTo(x - 2 * hr, y - 12 * vr); ctx.stroke();
         }
         if (r.diagonal) {
-          ctx.setLineDash([]); ctx.lineWidth = 2 * hr;
+          ctx.setLineDash([]); ctx.lineWidth = hr;
           ctx.beginPath(); ctx.moveTo(r.x1 * hr, r.y1 * vr); ctx.lineTo(r.x2 * hr, r.y2 * vr); ctx.stroke();
-        }
-        if (r.label) {
-          ctx.font = `${11 * vr}px sans-serif`;
-          const labelWidth = Math.min(ctx.measureText(r.label).width + 10 * hr, scope.bitmapSize.width);
-          // Anchor contraction captions to the trough, not an off-screen peak.
-          const anchorX = r.curve ? r.x2 * hr : left;
-          if (r.curve && (anchorX < 0 || anchorX > scope.bitmapSize.width)) { ctx.restore(); continue; }
-          const labelX = Math.max(0, Math.min(r.curve ? anchorX - labelWidth / 2 : left, scope.bitmapSize.width - labelWidth));
-          let labelY = Math.max(58 * vr, Math.min(r.arrow ? top - 52 * vr : bottom + ((r.diagonal || r.curve) ? 4 : 22) * vr, scope.bitmapSize.height - 18 * vr));
-          for (let attempt = 0; attempt < 8; attempt++) {
-            if (!occupiedLabels.some(b => labelX < b.right + 4 * hr && labelX + labelWidth > b.left - 4 * hr && labelY < b.bottom && labelY + 17 * vr > b.top)) break;
-            labelY += 19 * vr;
-            if (labelY > scope.bitmapSize.height - 18 * vr) labelY = Math.max(58 * vr, top - (attempt + 2) * 19 * vr);
-          }
-          occupiedLabels.push({ left: labelX, right: labelX + labelWidth, top: labelY, bottom: labelY + 17 * vr });
-          if (r.curve) {
-            ctx.setLineDash([2 * hr, 2 * hr]); ctx.lineWidth = hr;
-            ctx.beginPath(); ctx.moveTo(anchorX, r.y2 * vr); ctx.lineTo(labelX + labelWidth / 2, labelY); ctx.stroke();
-          }
-          ctx.fillStyle = r.labelBackground || 'rgba(20,27,42,.94)'; ctx.fillRect(labelX, labelY, labelWidth, 17 * vr);
-          ctx.fillStyle = r.color || '#ffb74d'; ctx.fillText(r.label, labelX + 5 * hr, labelY + 12 * vr, labelWidth - 10 * hr);
         }
         ctx.restore();
       }
+      ctx.save();
+      ctx.font = `${11 * vr}px sans-serif`;
+      const labels = placeAnnotationLabels(this._rects, this._candles, scope.bitmapSize.width / hr, scope.bitmapSize.height / vr, text => ctx.measureText(text).width / hr);
+      for (const label of labels) {
+        const { shape: r, x, y, width, height } = label;
+        ctx.fillStyle = r.labelBackground || 'rgba(20,27,42,.94)';
+        ctx.fillRect(x * hr, y * vr, width * hr, height * vr);
+        ctx.fillStyle = r.color || '#ffb74d';
+        ctx.fillText(r.label, (x + 5) * hr, (y + 12) * vr, (width - 10) * hr);
+      }
+      ctx.restore();
     });
   }
 }
@@ -87,14 +74,20 @@ class VcpBoxPaneView {
   constructor(source) {
     this._source = source;
     this._rects = [];
+    this._candles = [];
   }
 
   update() {
-    const { _chart: chart, _series: series, _boxes: boxes } = this._source;
+    const { _chart: chart, _series: series, _boxes: boxes, _candles: candles } = this._source;
     this._rects = [];
+    this._candles = [];
     if (!chart || !series || !Array.isArray(boxes) || boxes.length === 0) return;
     const timeScale = chart.timeScale();
     const width = timeScale.width();
+    this._candles = candles.map(candle => {
+      const x = timeScale.timeToCoordinate(candle.time ?? candle.date), high = series.priceToCoordinate(candle.high), low = series.priceToCoordinate(candle.low);
+      return x == null || high == null || low == null || x < -4 || x > width + 4 ? null : { x: x - 4, y: Math.min(high, low), width: 8, height: Math.max(1, Math.abs(low - high)) };
+    }).filter(Boolean);
     for (const box of boxes) {
       const y1 = series.priceToCoordinate(box.high);
       const y2 = series.priceToCoordinate(box.low);
@@ -116,13 +109,14 @@ class VcpBoxPaneView {
   zOrder() { return 'top'; }
 
   renderer() {
-    return new VcpBoxRenderer(this._rects);
+    return new VcpBoxRenderer(this._rects, this._candles);
   }
 }
 
 export class VcpBoxPrimitive {
-  constructor(boxes = []) {
+  constructor(boxes = [], candles = []) {
     this._boxes = boxes;
+    this._candles = candles;
     this._chart = null;
     this._series = null;
     this._requestUpdate = null;

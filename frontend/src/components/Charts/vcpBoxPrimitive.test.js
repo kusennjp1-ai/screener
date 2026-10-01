@@ -24,3 +24,13 @@ it('draws recovery curves through measured coordinates and an observed-event arr
   expect(ctx.strokeRect).not.toHaveBeenCalled();
   expect(ctx.fillText).toHaveBeenCalledTimes(2);
 });
+it('uses one CSS pixel and 0.55 opacity for detailed contraction curves at double density', () => {
+  const strokes = [];
+  const ctx = Object.fromEntries(['save','restore','setLineDash','beginPath','moveTo','bezierCurveTo','fillRect','fillText'].map(k => [k, vi.fn()]));
+  ctx.stroke = () => strokes.push({width:ctx.lineWidth,alpha:ctx.globalAlpha});
+  ctx.measureText = () => ({width:20});
+  const primitive = new VcpBoxPrimitive([{start:'a',end:'b',high:100,low:80,curve:true,recoveryDate:'c',recoveryHigh:98}]);
+  primitive.attached({chart:{timeScale:()=>({width:()=>300,timeToCoordinate:t=>({a:20,b:60,c:100})[t]})},series:{priceToCoordinate:p=>200-p},requestUpdate:vi.fn()});
+  primitive.paneViews()[0].renderer().draw({useBitmapCoordinateSpace:fn=>fn({context:ctx,horizontalPixelRatio:2,verticalPixelRatio:2,bitmapSize:{width:600,height:600}})});
+  expect(strokes).toEqual([{width:2,alpha:0.55}]);
+});

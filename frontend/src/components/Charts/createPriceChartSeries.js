@@ -1,3 +1,4 @@
+import { palettes } from '../../static/theme/tokens';
 import {
   createChart,
   CrosshairMode,
@@ -12,24 +13,27 @@ import {
 // defaults here; the component's "RS strip layout" and "dynamic RS band" effects
 // reapply them reactively based on whether the RS line is shown.
 export function createPriceChartSeries(container, { width, height, isDarkMode, interactive, researchView = false }) {
+  const palette = palettes[isDarkMode ? 'dark' : 'light'];
   const chart = createChart(container, {
     width,
     height,
     layout: {
-      background: { type: 'solid', color: isDarkMode ? '#101827' : '#ffffff' },
-      textColor: isDarkMode ? '#d1d4dc' : '#333333',
+      background: { type: 'solid', color: palette.panel },
+      textColor: palette['text-2'],
+      fontSize: 11,
+      fontFamily: '"Geist Mono", monospace',
     },
     grid: {
-      vertLines: { color: isDarkMode ? '#1e293b' : '#edf0f4' },
-      horzLines: { color: isDarkMode ? '#1e293b' : '#edf0f4' },
+      vertLines: { color: palette.grid },
+      horzLines: { color: palette.grid },
     },
     crosshair: { mode: CrosshairMode.Normal },
     rightPriceScale: {
-      borderColor: isDarkMode ? '#485263' : '#cccccc',
+      borderColor: palette.line,
       mode: 1, // Logarithmic scale
     },
     timeScale: {
-      borderColor: isDarkMode ? '#485263' : '#cccccc',
+      borderColor: palette.line,
       timeVisible: false,
       secondsVisible: false,
       lockVisibleTimeRangeOnResize: researchView,
@@ -48,8 +52,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // Average-volume line (Minervini-style ~50-day avg) on the same volume scale,
   // so above/below-average volume reads at a glance. Data set by the component.
   const avgVolumeSeries = chart.addSeries(LineSeries, {
-    color: isDarkMode ? '#94a3b8' : '#64748b',
+    color: palette['text-3'],
     lineWidth: 1,
+    lineStyle: 2,
     priceScaleId: 'volume',
     lastValueVisible: false,
     priceLineVisible: false,
@@ -57,11 +62,11 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
 
   // Candlesticks. Neutral scaleMargins; reapplied by the RS strip layout effect.
   const candlestickSeries = chart.addSeries(CandlestickSeries, {
-    upColor: '#10b981',
-    downColor: '#ef4444',
+    upColor: palette.up,
+    downColor: palette.down,
     borderVisible: false,
-    wickUpColor: '#10b981',
-    wickDownColor: '#ef4444',
+    wickUpColor: palette.up,
+    wickDownColor: palette.down,
     priceScaleId: 'right',
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
@@ -71,23 +76,23 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // EMA 10 / 20 / 50 — short-term entry guides. Share the price ('right') scale.
   // Thin (1px). Distinct hues (gray / cyan / yellow) so the MAs don't cluster in
   // one color family and stay clear of the green earnings line and amber RS line.
-  const ema10Series = chart.addSeries(LineSeries, { color: '#E0E0E0', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const ema20Series = chart.addSeries(LineSeries, { color: '#4DD0E1', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const ema50Series = chart.addSeries(LineSeries, { color: '#FFEE58', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema10Series = chart.addSeries(LineSeries, { color: palette['text-2'], lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema20Series = chart.addSeries(LineSeries, { color: palette.wait, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const ema50Series = chart.addSeries(LineSeries, { color: palette.ext, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
   // Minervini trend-template SMA stack (50 / 150 / 200-day). Blue / slate / lavender,
   // a distinct family from the EMAs so the long-term trend stack reads clearly:
   // price should sit above 50 > 150 > 200 with a rising 200-day line. Avoids the
   // orange pivot line and amber RS line. Full chart only.
-  const sma50Series = chart.addSeries(LineSeries, { color: isDarkMode ? '#60a5fa' : '#2563eb', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const sma150Series = chart.addSeries(LineSeries, { color: isDarkMode ? '#94a3b8' : '#64748b', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-  const sma200Series = chart.addSeries(LineSeries, { color: isDarkMode ? '#c4b5fd' : '#7c3aed', lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma50Series = chart.addSeries(LineSeries, { color: palette.accent, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma150Series = chart.addSeries(LineSeries, { color: palette['text-3'], lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+  const sma200Series = chart.addSeries(LineSeries, { color: palette.wait, lineWidth: 1, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
 
   // RS line on its own hidden overlay scale (orange — distinct from the EMAs). It
   // sits in a band below the candles; blue-dot markers attach to it. The band is
   // sized dynamically by the "dynamic RS band" effect.
   const rsLineSeries = chart.addSeries(LineSeries, {
-    color: isDarkMode ? '#a5b4fc' : '#4f46e5',
+    color: palette.accent,
     lineWidth: 2,
     priceScaleId: 'rs',
     lastValueVisible: false,
@@ -106,7 +111,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   // the candles into a sliver — the candles/MAs set the scale; the line draws
   // within it (clipping only in extreme over/under-valuation).
   const epsLineSeries = chart.addSeries(LineSeries, {
-    color: '#2EAD5B',
+    color: palette.zone,
     lineWidth: 2,
     priceScaleId: 'right',
     lastValueVisible: false,

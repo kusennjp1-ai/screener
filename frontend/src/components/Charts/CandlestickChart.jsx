@@ -11,6 +11,7 @@ import { fetchPriceHistory, fetchRSLine, priceHistoryKeys, PRICE_HISTORY_STALE_T
 import { rsBandForRange } from './rsBand';
 import ChartSkeleton from './ChartSkeleton';
 import { transformToCandlestickData } from './candlestickData';
+import { palettes } from '../../static/theme/tokens';
 
 // Debounce utility
 const debounce = (fn, ms) => {
@@ -91,7 +92,9 @@ function CandlestickChart({
   const prevCloseMapRef = useRef(new Map()); // Map of date -> previous close for % change calculation
   const latestCandleRef = useRef(null); // Store latest candle for default display
 
-  const [showBookAnnotations, setShowBookAnnotations] = useState(true);
+  const [annotationDetail, setAnnotationDetail] = useState(null);
+  const showBookAnnotations = annotationDetail ?? !smallScreen;
+  const setShowBookAnnotations = value => setAnnotationDetail(typeof value === 'function' ? value(showBookAnnotations) : value);
   const historyWarning = useMemo(() => chartHistoryWarning(priceData), [priceData]);
   const annotations = useMemo(() => buildBookAnnotations(bookAnnotations && !historyWarning ? priceData : null), [bookAnnotations, priceData, historyWarning]);
   const [windowRange, setWindowRange] = useState(null);
@@ -101,6 +104,7 @@ function CandlestickChart({
   const [rsBandTop, setRsBandTop] = useState(0.66); // top margin of the live RS band
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+  const chartPalette = palettes[isDarkMode ? 'dark' : 'light'];
 
   // Where the top color-band row starts (px from the pane top). When the OHLC
   // legend or the timeframe toggle float at the top, push the bands (and the
@@ -500,11 +504,11 @@ function CandlestickChart({
     if (!historyWarning && displayedPivot != null && Number.isFinite(displayedPivot) && displayedPivot > 0) {
       pivotLineRef.current = series.createPriceLine({
         price: displayedPivot,
-        color: '#ff9800',
-        lineWidth: 2,
+        color: chartPalette.zone,
+        lineWidth: 1,
         lineStyle: 2, // dashed
-        axisLabelVisible: !researchView,
-        title: researchView ? '' : annotatedPivot ? '収縮高値（推定）' : pivotLabel,
+        axisLabelVisible: true,
+        title: annotatedPivot ? '収縮高値（推定）' : pivotLabel,
       });
     }
 
@@ -515,7 +519,7 @@ function CandlestickChart({
         pivotLineRef.current = null;
       }
     };
-  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView, historyWarning]);
+  }, [pivotPrice, pivotLabel, chartData, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, compact, researchView, historyWarning, chartPalette]);
 
   // Draw VCP consolidation boxes over the candles (full chart only). The
   // primitive follows pan/zoom on its own; we only (re)create it when the
@@ -524,10 +528,14 @@ function CandlestickChart({
   useEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!series || compact) return undefined;
-    const boxes = bookAnnotations ? (showBookAnnotations && effectiveTimeframe === 'daily' ? annotations.boxes : []) : (Array.isArray(vcpBoxes) ? vcpBoxes : []);
+    const sourceBoxes = bookAnnotations ? (effectiveTimeframe === 'daily' ? annotations.boxes : []) : (Array.isArray(vcpBoxes) ? vcpBoxes : []);
+    const boxes = researchView ? sourceBoxes.filter(box => showBookAnnotations || (!box.curve && !box.arrow)).map(box => ({
+      ...box, label: showBookAnnotations ? (box.curve ? box.label : box.arrow ? '過去の上抜け' : '') : '',
+      labelBackground: chartPalette.surface, color: chartPalette.wait,
+    })) : showBookAnnotations ? sourceBoxes : [];
     try {
       if (!vcpBoxPrimitiveRef.current) {
-        vcpBoxPrimitiveRef.current = new VcpBoxPrimitive(researchView ? boxes.map(b=>({...b,label:b.curve?b.label.split(' ')[0]:b.arrow?'過去の上抜け':'',labelBackground:isDarkMode?'#101827':'#ffffff',color:b.curve?(isDarkMode?'#67e8f9':'#0e7490'):(isDarkMode?'#c4b5fd':'#7c3aed')})) : boxes);
+        vcpBoxPrimitiveRef.current = new VcpBoxPrimitive(boxes, chartData?.candlesticks || []);
         series.attachPrimitive(vcpBoxPrimitiveRef.current);
       } else {
         vcpBoxPrimitiveRef.current.setBoxes(boxes);
@@ -541,7 +549,7 @@ function CandlestickChart({
       }
       vcpBoxPrimitiveRef.current = null;
     };
-  }, [vcpBoxes, chartData, compact, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, researchView]);
+  }, [vcpBoxes, chartData, compact, bookAnnotations, showBookAnnotations, effectiveTimeframe, annotations, height, isDarkMode, symbol, researchView, chartPalette]);
 
   // MM360 color-band strips (Pressure / Buy Risk / TPR) across the top of the
   // price pane, time-aligned to the candles. Re-aligns on pan/zoom because the
@@ -755,7 +763,7 @@ function CandlestickChart({
       <Button aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</Button>
       <Button aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</Button>
       <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</Button>
-      <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'ON':'OFF'}</Button>
+      <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</Button>
     </Box>}
     {researchView && !compact && hasData && <Box sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary'}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
@@ -1009,8 +1017,8 @@ function CandlestickChart({
     </Box>
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
         {!researchView && <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>}
-        <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : '自動注記を非表示にしています。'}</Typography>
-        <details><summary style={{ cursor: 'pointer', fontSize: 12 }}>図解の見方・判定方法</summary><Typography sx={{ fontSize: 12 }}>紫の枠＝ベース候補。水色の破線C1、C2…＝高値→後続安値→回復高値を結ぶガイド曲線と下落率。曲線そのものは価格の軌跡ではありません。矢印＝収縮高値を日中に上抜けた日で、買い指示ではありません。直近126日、15日以上の調整、深さ5〜50%・底から1/3以上の回復を探索します。前後2本で極値を確認し、2%以上の押しが2〜6回縮小、最終10%以内・安値から20日以内をVCP候補とします。数値はアプリの探索設定で書籍の固定条件ではありません。日足の後からの図解で、当時利用可能なシグナルではありません。ステージ・需給・財務・市場環境は別確認です。</Typography>
+        <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : researchView ? '簡易表示：ベース候補の枠と共通ピボット。図解ボタンで収縮区間・過去の上抜けを表示します。' : '自動注記を非表示にしています。'}</Typography>
+        <details><summary style={{ cursor: 'pointer', fontSize: 12, minHeight:44 }}>図解の見方・判定方法</summary><Typography sx={{ fontSize: 12 }}>破線の枠＝ベース候補。細い破線C1、C2…＝高値→後続安値→回復高値を結ぶガイド曲線と下落率。曲線そのものは価格の軌跡ではありません。矢印＝収縮高値を日中に上抜けた日で、買い指示ではありません。ラベルが価格と重なる場合は図上では省略し、下の一覧に残します。直近126日、15日以上の調整、深さ5〜50%・底から1/3以上の回復を探索します。前後2本で極値を確認し、2%以上の押しが2〜6回縮小、最終10%以内・安値から20日以内をVCP候補とします。数値はアプリの探索設定で書籍の固定条件ではありません。日足の後からの図解で、当時利用可能なシグナルではありません。ステージ・需給・財務・市場環境は別確認です。</Typography>
           {annotations.boxes.map((box, i) => <Typography key={i} sx={{ fontSize: 12 }}>{box.label}：{box.start}〜{box.end} / 高値 {box.high.toFixed(2)}・安値 {box.low.toFixed(2)}</Typography>)}
         </details>
       </Box>}
