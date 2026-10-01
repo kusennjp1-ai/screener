@@ -28,3 +28,10 @@ it('does not let unready high-RS rows crowd out qualified daily positions',()=>{
  const rows=Array.from({length:8},(_,i)=>withAuditFixture({...row(),symbol:`S${i}`,gics_sector:`Sector${i}`,rs_rating:99-i,entry_evidence:{...row().entry_evidence,volumeRatio:i===7?2:.5}},date));
  const plan=buildPortfolioPlan(rows,date,100000,now);expect(plan.dailyPositions[0].symbol).toBe('S7');
 });
+it('describes compact shape evidence without labelling known results as missing',()=>{
+ for(const [candidate,state,detail] of [[true,'pass','日足の自動検出による形状候補'],[false,'fail','現在の形状条件は未達'],[null,'unknown','日足による形状検証が未取得']]){
+  const r=row();r.entry_evidence.shape={candidate};
+  const shape=entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules.find(rule=>rule.id==='shape');
+  expect(shape.state).toBe(state);expect(shape.detail).toContain(detail);
+ }
+});

@@ -1,0 +1,31 @@
+.portfolio-drawer-title { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.portfolio-plan-drawer { font-variant-numeric:tabular-nums; }
+.portfolio-position { padding:16px; border:1px solid; border-radius:16px; margin-bottom:16px; min-width:0; }
+.portfolio-position-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.portfolio-status { font-size:12px; border:1px solid; border-radius:999px; padding:4px 8px; }
+.portfolio-price-grid { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr); gap:12px; margin:16px 0; }
+.portfolio-price-grid dt { font-size:12px; color:var(--text-2, inherit); }
+.portfolio-price-grid dd { margin:4px 0 0; font-family:var(--font-mono, monospace); font-size:16px; overflow-wrap:anywhere; }
+.portfolio-stop { color:var(--neg, inherit); }
+.portfolio-unmet { list-style:none; padding:0; margin:12px 0; display:grid; gap:8px; }
+.portfolio-unmet li { font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.portfolio-unmet strong { display:block; font-weight:500; }
+.portfolio-unmet [data-condition-state="fail"] strong { color:var(--neg, inherit); }
+.portfolio-unmet [data-condition-state="unknown"] strong { color:var(--neutral, inherit); }
+.portfolio-unmet span { color:var(--text-2, inherit); }
+.portfolio-position-secondary { display:flex; flex-wrap:wrap; gap:8px 16px; font-size:12px; color:var(--text-2, inherit); }
+.portfolio-position-secondary b { font-family:var(--font-mono, monospace); font-weight:500; }
+.portfolio-optional { font-size:13px; line-height:1.7; }
+.portfolio-optional > summary { display:list-item; cursor:pointer; padding:12px 0; min-height:44px; box-sizing:border-box; }
+.portfolio-optional p { margin:8px 0; }
+.portfolio-plan-totals { border-top:1px solid; padding-top:16px; margin-top:24px; }
+.portfolio-plan-totals table { width:100%; border-collapse:collapse; margin:12px 0; font-size:12px; }
+.portfolio-plan-totals caption { text-align:left; padding-bottom:8px; color:var(--text-2, inherit); }
+.portfolio-plan-totals th,.portfolio-plan-totals td { padding:8px 4px; text-align:right; }
+.portfolio-plan-totals th:first-child { text-align:left; }
+.portfolio-plan-totals td { font-family:var(--font-mono, monospace); }
+.portfolio-plan-drawer button:focus-visible,.portfolio-plan-drawer summary:focus-visible { outline:2px solid var(--accent, currentColor); outline-offset:3px; }
+@media(max-width:600px) {
+  .portfolio-position { padding:12px; }
+  .portfolio-price-grid { gap:8px; }
+}

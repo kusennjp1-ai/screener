@@ -20,7 +20,7 @@ export function entryReadiness(row, date, market, now = Date.now()) {
     check('date','最新の取引日', calendar ? fresh : null, calendar ? `基準日 ${date}・最新完了取引日 ${calendar.latest_completed_session}` : `分析基準日 ${date}。取引カレンダー未取得`),
     check('price','買い位置', finite(row.current_price) && finite(pivot) && pivot > 0 ? row.current_price >= pivot && row.current_price <= pivot * 1.05 : null, `日次価格 ${finite(row.current_price) ? row.current_price.toFixed(2) : '未確認'} / ピボット ${finite(pivot) ? pivot.toFixed(2) : '未確認'}。0〜5%はこのモデルの設定`),
     check('volume','出来高', dated && finite(evidence.volumeRatio) ? evidence.volumeRatio >= 1.4 : null, dated && finite(evidence.volumeRatio) ? `直前50日平均比 ${evidence.volumeRatio.toFixed(2)}倍（モデルの基準1.4倍）` : '直前50日比較の実測値が未取得'),
-    check('shape','ベース形状', shape ? shape.candidate : null, shape?.summary || '日足による形状検証が未取得'),
+    check('shape','ベース形状', shape ? shape.candidate : null, shape?.summary || (shape?.candidate === true ? '日足の自動検出による形状候補。詳細は銘柄の根拠を確認' : shape?.candidate === false ? '現在の形状条件は未達。詳細は銘柄の根拠を確認' : '日足による形状検証が未取得')),
     check('earnings','決算までの余裕', recentEarnings && earningsDays != null ? earningsDays > 7 && earningsDays <= 180 : null, recentEarnings && earningsDays != null ? `予定 ${earnings.date}・あと${earningsDays}日（予想日。7日以内は新規購入を見送るモデル設定）` : '決算予定日が未取得または取得から72時間超。自動取得の対象・結果を確認'),
   ];
   const passed = rules.filter(r => r.state === 'pass').length;
