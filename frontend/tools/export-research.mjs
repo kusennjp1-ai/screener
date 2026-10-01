@@ -1,5 +1,6 @@
 import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { encodeAssessment } from '../src/static/assessmentEncoding.js';
 import { encodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
 import { scanListRow } from './scan-list-payload.mjs';
@@ -170,6 +171,9 @@ const researchOrders = Object.fromEntries(RESEARCH_METHODS.map(method => [method
   rankCandidates(researchIndex.rows, method).map(({ row }) => researchRowIds.get(row.symbol)),
 ]));
 const researchContent = JSON.stringify(encodeResearchIndex(researchIndex, researchOrders));
+if (Buffer.byteLength(researchContent) > 8000000 || gzipSync(researchContent).length > 1000000) {
+  throw Error(`Research index exceeds its unchanged 8 MB raw / 1 MB gzip budget: ${Buffer.byteLength(researchContent)} raw / ${gzipSync(researchContent).length} gzip bytes`);
+}
 // The scan list has all global filter/sort values, but no full detector reports.
 await mkdir(resolve(root,'scan-list'),{recursive:true});
 const scanRows=[...compactRows.values()].map(scanListRow), scanChunks=[];

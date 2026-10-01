@@ -1,0 +1,109 @@
+name: Design Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Baseline source revision; both builds use exactly the same published input bundle'
+        default: 'cd3a6a2'
+        type: string
+  push:
+    branches: [main]
+    paths: ['frontend/**', 'docs/design-review/**', '.github/workflows/design-acceptance.yml']
+  pull_request:
+    paths: ['frontend/**', 'docs/design-review/**', '.github/workflows/design-acceptance.yml']
+
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: design-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  design-acceptance:
+    name: Real-data design and performance budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Restore identical real input for both versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASELINE_REF: ${{ inputs.baseline_ref || 'cd3a6a2' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          restored=false
+          for run_id in $(gh api --paginate "repos/$GH_REPO/actions/artifacts?name=github-pages&per_page=100" --jq '.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main") | .workflow_run.id' | head -8); do
+            if [ "$(gh run view "$run_id" --json conclusion --jq .conclusion)" = success ]; then
+              gh run download "$run_id" --name github-pages --dir "$RUNNER_TEMP/design-pages"
+              echo "SOURCE_RUN=$run_id" >> "$GITHUB_ENV"
+              restored=true
+              break
+            fi
+          done
+          test "$restored" = true
+          mkdir -p "$RUNNER_TEMP/design-source"
+          tar -xf "$RUNNER_TEMP/design-pages/artifact.tar" -C "$RUNNER_TEMP/design-source"
+          test -f "$RUNNER_TEMP/design-source/static-data/manifest.json"
+          git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
+          git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
+          cp -a "$RUNNER_TEMP/design-source/static-data" frontend/public/static-data
+          cp -a "$RUNNER_TEMP/design-source/static-data" "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
+            ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
+          else
+            (cd "$RUNNER_TEMP/design-baseline/frontend" && npm ci --no-audit --no-fund)
+          fi
+      - name: Build both production versions without duplicating the large data tree
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: '/screener/'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in baseline current; do
+            if [ "$target" = baseline ]; then
+              source="$RUNNER_TEMP/design-baseline/frontend"
+            else
+              source="$GITHUB_WORKSPACE/frontend"
+            fi
+            (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
+            if [ "$target" = current ]; then
+              (cd "$source" && node tools/check-data-quality.mjs)
+            fi
+            mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
+            (cd "$source" && npx vite build)
+            ln -s "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+          done
+      - name: Measure all routes, screenshots, accessibility and CPU 4x
+        working-directory: frontend
+        env:
+          CURRENT_BUILD: dist
+          BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
+          DESIGN_REVIEW_OUTPUT: test-results/design-review
+        run: node tools/design-review.mjs
+      - name: Require reviewed screenshots and four design scores of at least 8.0
+        if: always()
+        working-directory: frontend
+        run: node tools/check-design-review.mjs
+      - name: Preserve all results even when a budget fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-acceptance-${{ github.sha }}
+          path: frontend/test-results/design-review/
+          retention-days: 14
