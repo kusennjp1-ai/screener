@@ -4,7 +4,7 @@ import SetupRadar from './SetupRadar';
 import PortfolioDecision from './PortfolioDecision';
 import DailyChanges from './DailyChanges';
 import { entryPlan } from '../researchEngine';
-export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSelect,onInspect,onBrowse,workbench,method,availableSymbols,loading=false}) {
+export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSelect,onInspect,onInspectChanged=onInspect,onBrowse,workbench,method,availableSymbols,loading=false}) {
  const small=useMediaQuery('(max-width:700px)');
  const [collapsed,setCollapsed]=useState(()=>{try{return localStorage.getItem('research-hero-collapsed')==='true';}catch{return false;}});
  const [changesOpen,setChangesOpen]=useState(false);
@@ -29,7 +29,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
   <button className="hero-toggle" aria-expanded={!collapsed} aria-label={collapsed?'概況を展開':'概況をたたむ'} onClick={toggle}>{collapsed?'⌄':'⌃'}</button>
   <Drawer anchor="right" open={changesOpen} onClose={()=>setChangesOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'daily-changes-title',sx:{width:{xs:'100%',sm:520},p:3}}}>
    <header className="drawer-title"><h2 id="daily-changes-title">候補の日次変化</h2><IconButton aria-label="候補の変化を閉じる" onClick={()=>setChangesOpen(false)}>×</IconButton></header>
-   <DailyChanges query={workbench} method={method} onSelect={ticker=>{setChangesOpen(false);onInspect(ticker);}} availableSymbols={availableSymbols}/>
+   <DailyChanges query={workbench} method={method} onSelect={ticker=>{setChangesOpen(false);onInspectChanged(ticker);}} availableSymbols={availableSymbols}/>
   </Drawer>
  </section>;
 }

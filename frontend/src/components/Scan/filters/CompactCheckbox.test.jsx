@@ -11,13 +11,13 @@ describe('CompactCheckbox', () => {
     expect(screen.getByText('SE Ready')).toBeInTheDocument();
   });
 
-  it('shows All / Yes / No toggle buttons', () => {
+  it('shows Japanese unspecified / yes / no buttons with field names', () => {
     renderWithProviders(
       <CompactCheckbox label="Ready" value={null} onChange={vi.fn()} />
     );
-    expect(screen.getByText('All')).toBeInTheDocument();
-    expect(screen.getByText('Yes')).toBeInTheDocument();
-    expect(screen.getByText('No')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Readyの指定なし' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Readyあり' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Readyなし' })).toBeInTheDocument();
   });
 
   it('calls onChange(true) when Yes is clicked', async () => {
@@ -27,7 +27,7 @@ describe('CompactCheckbox', () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText('Yes'));
+    await user.click(screen.getByRole('button', { name: 'Readyあり' }));
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
@@ -38,7 +38,7 @@ describe('CompactCheckbox', () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText('No'));
+    await user.click(screen.getByRole('button', { name: 'Readyなし' }));
     expect(onChange).toHaveBeenCalledWith(false);
   });
 
@@ -49,7 +49,7 @@ describe('CompactCheckbox', () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText('Yes'));
+    await user.click(screen.getByRole('button', { name: 'Readyあり' }));
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
@@ -57,7 +57,7 @@ describe('CompactCheckbox', () => {
     renderWithProviders(
       <CompactCheckbox label="Ready" value={true} onChange={vi.fn()} />
     );
-    const yesButton = screen.getByRole('button', { name: /yes/i });
+    const yesButton = screen.getByRole('button', { name: 'Readyあり' });
     expect(yesButton).toHaveAttribute('aria-pressed', 'true');
   });
 });

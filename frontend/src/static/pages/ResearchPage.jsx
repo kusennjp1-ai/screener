@@ -2,6 +2,7 @@ import ConnectionStatus from '../components/ConnectionStatus';
 import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
+import CandidatePerformance from '../components/CandidatePerformance';
 import { filterRanked, sessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,7 +47,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [liquid, setLiquid] = useState(true);
   const detailRef = useRef(null);
   const [onlyWatch, setOnlyWatch] = useState(false);
-  const [symbol, setSymbol] = useState(null);
+  const [symbol, setSymbol] = useState(() => params.get('symbol') || null);
   const [chart, setChart] = useState(null);
   const [storageError, setStorageError] = useState(false);
   const [verificationNotice, setVerificationNotice] = useState(null);
@@ -125,6 +126,10 @@ export default function ResearchPage({compareOnly=false}) {
     setMethod('minervini'); setSector(''); setView('list'); setSearch(ticker); setStrict(false); setNearOnly(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
+  function inspectChanged(ticker) {
+    setSector(''); setView('list'); setSearch(ticker); setStrict(false); setNearOnly(false); setOnlyWatch(false); setCoverage('all'); setLiquid(false); setSymbol(ticker); setMobileView('detail');
+    focusDetail();
+  }
   const verificationQueue = useRef(Promise.resolve());
   const applyVerification = useCallback((ticker, result, date, generation) => {
     // Ignore an in-flight result from a replaced daily snapshot.
@@ -162,7 +167,7 @@ export default function ResearchPage({compareOnly=false}) {
   const methodControls=<div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>;
   return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
-    {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
+    {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div><h1>買い位置を比較する</h1><p>縦軸は銘柄ごとに調整 · 価格位置と購入条件を分けて確認</p></div><Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
     {bundle.data&&freshness.state!=='recent'&&<Alert severity="warning">{freshness.state==='old'?`分析基準日は米国東部の日付から${freshness.days}暦日前です。更新日時と価格の基準日は別です。`:'分析基準日が未確認、または未来の日付です。'}</Alert>}
@@ -193,6 +198,7 @@ export default function ResearchPage({compareOnly=false}) {
       {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     <footer className="research-method-note">
+      {!compareOnly&&<CandidatePerformance entry={entry}/>}
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">{overlap ? `IBD公式リストとの一致：${Math.round(overlap.recall * 100)}%` : '公開ルールに基づく独自スクリーナー'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>

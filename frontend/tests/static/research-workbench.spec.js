@@ -12,7 +12,7 @@ const workbench={as_of:date,snapshot_id:'test',history:{previous_as_of:'2026-09-
 const raw=JSON.stringify(workbench),sha256=createHash('sha256').update(raw).digest('hex');
 for(const width of [1440,390])test(`comparison, daily changes, sector navigation at ${width}px`,async({page},info)=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.setViewportSize({width,height:900});
+  await page.setViewportSize({width,height:width===390?844:900});
   await page.route('**/static-data/**',async route=>{
     const file=new URL(route.request().url()).pathname.split('/').pop();
     if(file==='workbench.json')return route.fulfill({body:raw,contentType:'application/json'});
@@ -22,13 +22,15 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
     await route.fulfill({json:payload});
   });
   await page.goto('/');
+  await page.getByRole('button',{name:/^変化：新たに通過/}).click();
   await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('今回通過 7');
   await page.getByText('変化の内訳を開く',{exact:true}).click();
   await page.getByText('AMD · 今回通過 · 1条件が変化',{exact:true}).click();
   await expect(page.getByRole('region',{name:'候補の日次変化'})).toContainText('前回：未通過');
-  await page.getByText('変化の内訳を開く',{exact:true}).click();
-  await page.getByRole('button',{name:'候補を確認する →'}).click();
-  await page.getByRole('button',{name:'チャート比較',exact:true}).click();
+  await page.getByRole('button',{name:'候補の変化を閉じる'}).click();
+  const navigation=page.getByRole('navigation',{name:width===390?'モバイルナビゲーション':'メインナビゲーション'});
+  await navigation.getByRole('link',{name:'比較',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'買い位置を比較する'})).toBeVisible();
   await expect(page.getByRole('article',{name:'AMD 比較チャート'}).locator('canvas').first()).toBeVisible();
   expect(await page.locator('.tv-lightweight-charts').count()).toBeLessThanOrEqual(6);
   const range=page.getByRole('article',{name:'AMD 比較チャート'}).getByTestId('comparison-visible-range');
@@ -41,18 +43,19 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('combobox',{name:'全チャートの期間',exact:true})).toHaveValue('126');
-  await page.getByRole('link',{name:'市場環境',exact:true}).click();
+  await navigation.getByRole('link',{name:'市場',exact:true}).click();
   await page.getByRole('tab',{name:'業種の強さ',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'金融 XLF'})).toBeVisible();
+  await expect(page.getByRole('list',{name:'相対指数順の業種一覧'}).getByRole('link',{name:/金融、相対指数/})).toBeVisible();
   await page.getByRole('button',{name:'表',exact:true}).click();
   await expect(page.getByRole('table',{name:'業種の相対強度一覧'})).toContainText('3 / 3');
   await page.getByRole('link',{name:'情報技術 / XLK',exact:true}).click();
-  await expect(page.getByRole('combobox',{name:'業種',exact:true})).toHaveValue('Technology');
   await expect(page.getByRole('heading',{name:'候補リスト 4件'})).toBeVisible();
+  await page.getByRole('button',{name:'候補を絞り込む'}).click();
+  await expect(page.getByRole('combobox',{name:'業種',exact:true})).toHaveValue('Technology');
   await page.getByRole('button',{name:'候補を確認する →'}).click();
   for(const mode of ['dark','light']){
     if(mode==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
-    const axe=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+    const axe=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
     expect(axe.violations).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
     await page.screenshot({path:info.outputPath(`workbench-${width}-${mode}.png`)});

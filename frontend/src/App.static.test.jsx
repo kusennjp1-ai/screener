@@ -1,4 +1,4 @@
-import { render, screen, waitFor, cleanup, act } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, act, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./pages/ScanPage', () => ({ default: () => <div>Live Scan Page</div> }));
@@ -338,7 +338,9 @@ describe('App static mode', () => {
     };
     if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'今日の概況'}, {timeout:10000})).toBeInTheDocument();
     else expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getByRole('banner')).toHaveTextContent('分析');
+    const navigation=screen.getByRole('navigation',{name:'メインナビゲーション'});
+    expect(navigation.closest('header')).toHaveTextContent('分析');
+    expect(within(navigation).getByRole('link',{name:'比較',exact:true})).toHaveAttribute('href','#/compare');
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
 
     await waitFor(() => {
