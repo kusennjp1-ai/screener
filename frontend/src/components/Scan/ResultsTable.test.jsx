@@ -52,6 +52,15 @@ const defaultProps = {
 };
 
 describe('ResultsTable', () => {
+  it.each([[false,false],[true,false],[false,true],[true,true]])('keeps header/data parity while hiding absent sparkline columns: RS %s price %s', (rs,price) => {
+    const {container}=renderWithProviders(<ResultsTable {...defaultProps} results={[{...fullSeRow,rs_sparkline_data:rs?[1,1.1]:null,price_sparkline_data:price?[1,1.2]:null}]} />);
+    const headers=[...container.querySelectorAll('thead th')];
+    const row=[...container.querySelectorAll('tbody tr')].find(r=>r.textContent.includes(fullSeRow.symbol));
+    expect(headers.some(h=>h.dataset.column==='rs_trend')).toBe(rs);
+    expect(headers.some(h=>h.dataset.column==='price_change_1d')).toBe(price);
+    expect(row.querySelectorAll('td').length).toBe(headers.length);
+  });
+
   it('names every chart action and data-only state graphic in Japanese', () => {
     renderWithProviders(<ResultsTable {...defaultProps} results={[{...fullSeRow, pressure_state:'buy', pressure_value:0.5, buy_risk_state:'low', tpr_state:'strong'}]} />);
     expect(screen.getByRole('button', {name:`${fullSeRow.symbol} のチャートを開く`})).toBeInTheDocument();
@@ -80,8 +89,8 @@ describe('ResultsTable', () => {
       expect(screen.getByText('78.3')).toBeInTheDocument();
     });
 
-    it('renders se_pattern_primary as cup_with_handle', () => {
-      expect(screen.getByText('cup_with_handle')).toBeInTheDocument();
+    it('renders se_pattern_primary as カップ・ウィズ・ハンドル', () => {
+      expect(screen.getByText('カップ・ウィズ・ハンドル')).toBeInTheDocument();
     });
 
     it('renders se_distance_to_pivot_pct as -3.2%', () => {
@@ -92,8 +101,8 @@ describe('ResultsTable', () => {
       expect(screen.getByText('15')).toBeInTheDocument();
     });
 
-    it('renders se_volume_vs_50d as 1.8x', () => {
-      expect(screen.getByText('1.8x')).toBeInTheDocument();
+    it('renders se_volume_vs_50d as 1.8倍', () => {
+      expect(screen.getByText('1.8倍')).toBeInTheDocument();
     });
 
     it('renders CheckIcon for se_rs_line_new_high=true', () => {
@@ -115,9 +124,9 @@ describe('ResultsTable', () => {
       // The table has many '-' dashes (other null columns too). We verify
       // by checking that none of the SE-specific formatted values appear.
       expect(screen.queryByText('78.3')).not.toBeInTheDocument();
-      expect(screen.queryByText('cup_with_handle')).not.toBeInTheDocument();
+      expect(screen.queryByText('カップ・ウィズ・ハンドル')).not.toBeInTheDocument();
       expect(screen.queryByText('-3.2%')).not.toBeInTheDocument();
-      expect(screen.queryByText('1.8x')).not.toBeInTheDocument();
+      expect(screen.queryByText('1.8倍')).not.toBeInTheDocument();
       expect(screen.queryByText('$198.50')).not.toBeInTheDocument();
       // No CheckIcon should appear for se_rs_line_new_high=null
       // (other booleans like ma_alignment still render icons)
@@ -139,7 +148,7 @@ describe('ResultsTable', () => {
     it('renders populated SE values alongside dashes for null ones', () => {
       expect(screen.getByText('62.1')).toBeInTheDocument();
       expect(screen.getByText('4.7%')).toBeInTheDocument();
-      expect(screen.getByText('2.3x')).toBeInTheDocument();
+      expect(screen.getByText('2.3倍')).toBeInTheDocument();
     });
   });
 
@@ -148,7 +157,7 @@ describe('ResultsTable', () => {
       const youngIpoRow = {
         ...nullSeRow,
         symbol: 'NEWIPO',
-        company_name: 'New IPO Inc.',
+        company_name: '上場直後 Inc.',
         composite_score: null,
         rating: 'Insufficient Data',
         data_status: 'insufficient_history',
@@ -171,7 +180,7 @@ describe('ResultsTable', () => {
 
       renderWithProviders(<ResultsTable {...defaultProps} results={[youngIpoRow]} />);
 
-      expect(screen.getByText('New IPO')).toBeInTheDocument();
+      expect(screen.getByText('上場直後')).toBeInTheDocument();
       expect(screen.getByText('RS:30:1')).toBeInTheDocument();
       expect(screen.getByText('Price:30:1:2.5')).toBeInTheDocument();
       expect(screen.getByText('50')).toBeInTheDocument();
@@ -184,7 +193,7 @@ describe('ResultsTable', () => {
   describe('SE column headers', () => {
     it('renders all 7 SE header labels', () => {
       renderWithProviders(<ResultsTable {...defaultProps} />);
-      const headers = ['SE', 'Pat', 'Pvt%', 'Sqz', 'V50', 'RSH', 'Pvt$'];
+      const headers = ['セットアップ点', 'パターン', 'ピボット比', '収縮度', '出来高50日比', 'RS新高値', '共通ピボット'];
       headers.forEach((label) => {
         expect(screen.getByText(label)).toBeInTheDocument();
       });
@@ -198,8 +207,8 @@ describe('ResultsTable', () => {
         />
       );
 
-      expect(screen.getByText('IBD Industry')).toBeInTheDocument();
-      expect(screen.getByText('Semiconductors')).toBeInTheDocument();
+      expect(screen.getByText('IBD業種')).toBeInTheDocument();
+      expect(screen.getByText('半導体')).toBeInTheDocument();
     });
 
     it('renders a compact market themes column', () => {
@@ -214,7 +223,7 @@ describe('ResultsTable', () => {
         />
       );
 
-      expect(screen.getByText('Themes')).toBeInTheDocument();
+      expect(screen.getByText('テーマ')).toBeInTheDocument();
       // Compact variant: first theme renders as a chip, with a +N counter for overflow.
       expect(screen.getByText('AI Infrastructure')).toBeInTheDocument();
       expect(screen.getByText('+1')).toBeInTheDocument();
@@ -223,11 +232,11 @@ describe('ResultsTable', () => {
 
   // ── structural ───────────────────────────────────────────────────────
   describe('structural', () => {
-    it('shows "No results found" when results is empty', () => {
+    it('shows "該当銘柄なし" when results is empty', () => {
       renderWithProviders(
         <ResultsTable {...defaultProps} results={[]} total={0} />
       );
-      expect(screen.getByText('No results found')).toBeInTheDocument();
+      expect(screen.getByText('該当銘柄なし')).toBeInTheDocument();
     });
 
     it('shows loading spinner when loading=true', () => {
@@ -242,7 +251,7 @@ describe('ResultsTable', () => {
         <ResultsTable {...defaultProps} results={[fullSeRow]} total={50} />
       );
       // MUI TablePagination renders "Rows per page:" text
-      expect(screen.getByText(/rows per page/i)).toBeInTheDocument();
+      expect(screen.getByText(/表示件数/)).toBeInTheDocument();
     });
 
     it('rerenders when showActions changes so the action column is removed', () => {
@@ -291,7 +300,7 @@ describe('ResultsTable', () => {
         />
       );
 
-      expect(screen.getByText('New IPO')).toBeInTheDocument();
+      expect(screen.getByText('上場直後')).toBeInTheDocument();
       expect(screen.queryByTestId('ShowChartIcon')).not.toBeInTheDocument();
     });
 
@@ -313,8 +322,8 @@ describe('ResultsTable', () => {
         />
       );
 
-      expect(screen.queryByText('New IPO')).not.toBeInTheDocument();
-      expect(screen.getByText('Error')).toBeInTheDocument();
+      expect(screen.queryByText('上場直後')).not.toBeInTheDocument();
+      expect(screen.getByText('取得エラー')).toBeInTheDocument();
       expect(screen.queryByTestId('ShowChartIcon')).not.toBeInTheDocument();
     });
   });
@@ -339,7 +348,7 @@ describe('ResultsTable', () => {
 
       const user = userEvent.setup();
       // Click the "SE" header (sortable)
-      await user.click(screen.getByText('SE'));
+      await user.click(screen.getByText('セットアップ点'));
       expect(onSortChange).toHaveBeenCalledWith('se_setup_score', 'asc');
     });
 
@@ -356,7 +365,7 @@ describe('ResultsTable', () => {
       );
 
       const user = userEvent.setup();
-      await user.click(screen.getByText('SE'));
+      await user.click(screen.getByText('セットアップ点'));
       // Since current is asc, clicking again should flip to desc
       expect(onSortChange).toHaveBeenCalledWith('se_setup_score', 'desc');
     });

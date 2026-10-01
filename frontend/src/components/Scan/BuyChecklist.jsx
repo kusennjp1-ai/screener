@@ -13,9 +13,9 @@ import { enterSlideFade } from '../../theme/motion';
 // is a GlossaryLabel — tap any term for the Japanese explanation. The rule
 // itself is printed, not implied: 3 barrels lit = Triple Barrel; otherwise a
 // staged breakout signal (Alert → Ready → Buy Point) can still fire.
-const OK = '#22ab94';
-const NG = '#f23645';
-const NA = '#787b86';
+const OK = 'var(--zone)';
+const NG = 'var(--neg)';
+const NA = 'var(--neutral)';
 
 function Row({ met, term, label, detail, index }) {
   const Icon = met == null ? RemoveCircleOutlineIcon : met ? CheckCircleIcon : CancelIcon;
@@ -55,14 +55,14 @@ export default function BuyChecklist({ buyContext, stockData }) {
   return (
     <Box data-testid="buy-checklist" sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
-        <BoltIcon sx={{ fontSize: 16, color: signal.active ? '#3aa0ff' : NA }} />
+        <BoltIcon sx={{ fontSize: 16, color: signal.active ? 'var(--wait)' : NA }} />
         <GlossaryLabel term="triple_barrel">
           <Typography component="span" sx={{ fontWeight: 800, fontSize: 13 }}>
             Buy Signal（買い点灯条件）
           </Typography>
         </GlossaryLabel>
         {signal.active ? (
-          <Typography component="span" sx={{ ml: 'auto', fontSize: 12, fontWeight: 700, color: '#3aa0ff' }}>
+          <Typography component="span" sx={{ ml: 'auto', fontSize: 12, fontWeight: 700, color: 'var(--wait)' }}>
             {signal.label || 'Buying Now!'}
             {signal.trigger_price != null ? ` @ ${Number(signal.trigger_price).toFixed(2)}` : ''}
           </Typography>

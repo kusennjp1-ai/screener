@@ -96,7 +96,7 @@ function FilterPresets({
           disabled={isLoading}
         >
           <MenuItem value="">
-            <em style={{ color: '#999' }}>Select Preset</em>
+            <em style={{ color: 'var(--text-3)' }}>保存した条件を選択</em>
           </MenuItem>
           {presets.map((preset) => (
             <MenuItem key={preset.id} value={preset.id}>

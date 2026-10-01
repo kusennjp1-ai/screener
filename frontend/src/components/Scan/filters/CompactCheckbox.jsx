@@ -34,23 +34,23 @@ function CompactCheckbox({ label, value, onChange }) {
         onChange={handleChange}
         size="small"
         sx={{
-          height: 28,
+          minHeight: { xs: 44, md: 28 },
           '& .MuiToggleButton-root': {
             padding: '2px 6px',
             fontSize: '12px',
             textTransform: 'none',
-            minWidth: 28,
+            minWidth: { xs: 44, md: 28 }, whiteSpace: 'nowrap',
           },
         }}
       >
         <ToggleButton value={ALL_VALUE} aria-label={`${label}の指定なし`}>
-          All
+          指定なし
         </ToggleButton>
         <ToggleButton value={true} aria-label={`${label}あり`} sx={{ color: 'success.main' }}>
-          Yes
+          あり
         </ToggleButton>
         <ToggleButton value={false} aria-label={`${label}なし`} sx={{ color: 'error.main' }}>
-          No
+          なし
         </ToggleButton>
       </ToggleButtonGroup>
     </Box>

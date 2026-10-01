@@ -125,7 +125,7 @@ function FilterPanel({
         <Box sx={{ flexGrow: 1 }} />
 
         {!expanded && activeFilters.length > 0 && (
-          <Box sx={{ display: 'flex', gap: 0.5, mr: 1, flexWrap: 'wrap', maxWidth: '60%' }}>
+          <Box sx={{ gap: 0.5, mr: 1, flexWrap: 'wrap', maxWidth: '60%', display: { xs: 'none', md: 'flex' } }}>
             {activeFilters.slice(0, 5).map(({ key, label }) => (
               <Chip
                 key={key}
@@ -160,7 +160,7 @@ function FilterPanel({
             onReset();
           }}
           size="small"
-          sx={{ fontSize: '12px', py: 0.25, px: 0.75, minWidth: 0 }}
+          sx={{ fontSize: '12px', py: 0.25, px: 0.75, minWidth: 76, minHeight: 44, whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           リセット
         </Button>
@@ -200,7 +200,7 @@ function FilterPanel({
             <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5, alignSelf: 'center' }}>
-                  Active:
+                  適用中:
                 </Typography>
                 {activeFilters.map(({ key, label }) => (
                   <Chip

@@ -24,7 +24,7 @@ function RatingFiltersSection({
       <Grid container spacing={1.5}>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Composite"
+            label="補助スコア"
             minValue={filters.compositeScore?.min}
             maxValue={filters.compositeScore?.max}
             onChange={(range) => updateRangeFilter('compositeScore', range)}
@@ -36,7 +36,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Minervini"
+            label="ミネルヴィニ点"
             minValue={filters.minerviniScore?.min}
             maxValue={filters.minerviniScore?.max}
             onChange={(range) => updateRangeFilter('minerviniScore', range)}
@@ -48,7 +48,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="CANSLIM"
+            label="CAN SLIM点"
             minValue={filters.canslimScore?.min}
             maxValue={filters.canslimScore?.max}
             onChange={(range) => updateRangeFilter('canslimScore', range)}
@@ -72,7 +72,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Custom"
+            label="カスタム点"
             minValue={filters.customScore?.min}
             maxValue={filters.customScore?.max}
             onChange={(range) => updateRangeFilter('customScore', range)}
@@ -84,7 +84,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Vol BT"
+            label="出来高ブレイク点"
             minValue={filters.volBreakthroughScore?.min}
             maxValue={filters.volBreakthroughScore?.max}
             onChange={(range) => updateRangeFilter('volBreakthroughScore', range)}
@@ -96,7 +96,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="SE Score"
+            label="セットアップ点"
             minValue={filters.seSetupScore?.min}
             maxValue={filters.seSetupScore?.max}
             onChange={(range) => updateRangeFilter('seSetupScore', range)}
@@ -108,7 +108,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Pvt Dist"
+            label="ピボット比"
             minValue={filters.seDistanceToPivot?.min}
             maxValue={filters.seDistanceToPivot?.max}
             onChange={(range) => updateRangeFilter('seDistanceToPivot', range)}
@@ -118,7 +118,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Squeeze"
+            label="収縮度"
             minValue={filters.seBbSqueeze?.min}
             maxValue={filters.seBbSqueeze?.max}
             onChange={(range) => updateRangeFilter('seBbSqueeze', range)}
@@ -129,7 +129,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="Vol/50d"
+            label="出来高50日比"
             minValue={filters.seVolumeVs50d?.min}
             maxValue={filters.seVolumeVs50d?.max}
             onChange={(range) => updateRangeFilter('seVolumeVs50d', range)}
@@ -140,7 +140,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="U/D Vol"
+            label="上昇日対下落日の出来高比"
             minValue={filters.seUpDownVolume?.min}
             maxValue={filters.seUpDownVolume?.max}
             onChange={(range) => updateRangeFilter('seUpDownVolume', range)}
@@ -151,28 +151,28 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="SE Ready"
+            label="準備条件"
             value={filters.seSetupReady}
             onChange={(value) => updateFilter('seSetupReady', value)}
           />
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="RS Hi"
+            label="RS新高値"
             value={filters.seRsLineNewHigh}
             onChange={(value) => updateFilter('seRsLineNewHigh', value)}
           />
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="Blue Dot"
+            label="RS先行高値"
             value={filters.seRsLineBlueDot}
             onChange={(value) => updateFilter('seRsLineBlueDot', value)}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <CompactMultiSelect
-            label="SE Pattern"
+            label="パターン"
             values={filters.sePatternPrimary || []}
             options={SE_PATTERN_OPTIONS}
             onChange={(values) => updateFilter('sePatternPrimary', values)}
@@ -180,7 +180,7 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.2}>
           <CompactRangeInput
-            label="VCP Score"
+            label="VCP点"
             minValue={filters.vcpScore?.min}
             maxValue={filters.vcpScore?.max}
             onChange={(range) => updateRangeFilter('vcpScore', range)}
@@ -199,21 +199,21 @@ function RatingFiltersSection({
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="VCP Ready"
+            label="VCP準備"
             value={filters.vcpReady}
             onChange={(value) => updateFilter('vcpReady', value)}
           />
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="Passes"
+            label="条件通過"
             value={filters.passesTemplate}
             onChange={(value) => updateFilter('passesTemplate', value)}
           />
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="Code 33"
+            label="業績加速（3期）"
             value={filters.code33}
             onChange={(value) => updateFilter('code33', value)}
           />

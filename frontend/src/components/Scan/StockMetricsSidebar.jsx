@@ -25,17 +25,17 @@ const getGrowthColor = getGrowthColorHex;
  * RS Trend icon component
  */
 const RSTrendIcon = ({ trend }) => {
-  if (trend === 1) return <TrendingUpIcon sx={{ fontSize: 16, color: '#4caf50' }} />;
-  if (trend === -1) return <TrendingDownIcon sx={{ fontSize: 16, color: '#f44336' }} />;
-  return <TrendingFlatIcon sx={{ fontSize: 16, color: '#9e9e9e' }} />;
+  if (trend === 1) return <TrendingUpIcon sx={{ fontSize: 16, color: 'var(--zone)' }} />;
+  if (trend === -1) return <TrendingDownIcon sx={{ fontSize: 16, color: 'var(--neg)' }} />;
+  return <TrendingFlatIcon sx={{ fontSize: 16, color: 'var(--neutral)' }} />;
 };
 
 /**
  * Boolean indicator (checkmark or X)
  */
 const BoolIndicator = ({ value }) => {
-  if (value) return <CheckCircleIcon sx={{ fontSize: 16, color: '#4caf50' }} />;
-  return <CancelIcon sx={{ fontSize: 16, color: '#9e9e9e' }} />;
+  if (value) return <CheckCircleIcon sx={{ fontSize: 16, color: 'var(--zone)' }} />;
+  return <CancelIcon sx={{ fontSize: 16, color: 'var(--neutral)' }} />;
 };
 
 /**
@@ -102,10 +102,10 @@ const FundamentalBonusBreakdown = ({ bonus, detail }) => {
                   height: 20,
                   fontSize: '0.65rem',
                   fontWeight: comp.met ? 600 : 400,
-                  bgcolor: comp.met ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
+                  bgcolor: comp.met ? 'color-mix(in srgb, var(--zone) 9%, var(--surface))' : 'transparent',
                   color: comp.met ? 'success.main' : 'text.disabled',
                   border: '1px solid',
-                  borderColor: comp.met ? 'rgba(76, 175, 80, 0.4)' : 'divider',
+                  borderColor: comp.met ? 'color-mix(in srgb, var(--zone) 40%, var(--surface))' : 'divider',
                 }}
               />
             </GlossaryLabel>

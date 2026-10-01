@@ -58,8 +58,10 @@ function StaticScanPage() {
   const [showFilters, setShowFilters] = useState(!isMobile);
   const [page, setPage] = useState(1);
   const [fullTable,setFullTable]=useState(false);
+  useEffect(() => { setShowFilters(!isMobile); setPage(1); }, [isMobile]);
   const searchRows=useCallback(text=>{setFilters(old=>({...old,symbolSearch:text}));setPage(1);},[]);
-  const [perPage, setPerPage] = useState(50);
+  const [desktopPerPage, setPerPage] = useState(50);
+  const perPage = isMobile ? 20 : desktopPerPage;
   const [sortBy, setSortBy] = useState('composite_score');
   const [sortOrder, setSortOrder] = useState('desc');
   // チャートモーダルとプリセットスクリーン選択はURLと同期させる。
@@ -292,7 +294,7 @@ function StaticScanPage() {
     [activeScreenLimit, sortedRows]
   );
   const pagedRows = useMemo(
-    () => (hydrationComplete ? paginateStaticScanRows(cappedRows, page, perPage) : filteredRows),
+    () => (hydrationComplete ? paginateStaticScanRows(cappedRows, page, perPage) : paginateStaticScanRows(filteredRows, 1, perPage)),
     [cappedRows, filteredRows, hydrationComplete, page, perPage]
   );
   const chartsAvailable = chartEnabledSymbols.size > 0;
@@ -332,11 +334,11 @@ function StaticScanPage() {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
-        デイリースキャン（補助フィルター）
+      <Typography variant="h5" component="h1" sx={{ whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: '-0.5px', mb: 0.5 }}>
+        詳細スキャン
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '12px' }}>
-        基準日 {scanManifestQuery.data.as_of_date}（実行ID: {scanManifestQuery.data.run_id}）
+        基準日 {scanManifestQuery.data.as_of_date} · 補助条件で絞り込み
       </Typography>
 
       <Alert severity="info" sx={{mb:2}}>この画面は追加条件を自由に組み合わせる補助ビューです。プリセットの件数は独自の複合フィルターの結果で、ホームの書籍条件通過数とは異なります。</Alert>
@@ -410,7 +412,7 @@ function StaticScanPage() {
         />
       )}
 
-      <Box sx={{display:'flex',gap:1,alignItems:'center',my:1.5}}><ResearchSearch value={filters.symbolSearch || ''} onChange={searchRows} />{isMobile && <Button onClick={()=>setFullTable(v=>!v)}>{fullTable?'カード表示':'全項目の表'}</Button>}</Box>
+      <Box sx={{display:'flex',gap:1,alignItems:'center',my:1.5,'& > :first-of-type':{minWidth:0,flex:1}}}><ResearchSearch value={filters.symbolSearch || ''} onChange={searchRows} />{isMobile && <Button sx={{whiteSpace:'nowrap',minWidth:100,minHeight:44,flexShrink:0}} onClick={()=>setFullTable(v=>!v)}>{fullTable?'カード表示':'全項目の表'}</Button>}</Box>
       {isMobile && !fullTable ? <MobileScanResults rows={pagedRows} total={hydrationComplete?cappedRows.length:pagedRows.length} page={page} perPage={perPage} sortBy={sortBy} sortOrder={sortOrder} onSort={(field,order)=>{if(hydrationComplete){setSortBy(field);setSortOrder(order);setPage(1);}}} onPage={setPage} onOpenChart={handleOpenChart} isChartEnabled={isChartEnabled} /> : <ResultsTable
         results={pagedRows}
         total={hydrationComplete ? cappedRows.length : pagedRows.length}

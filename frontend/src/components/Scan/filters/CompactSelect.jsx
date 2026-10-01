@@ -3,7 +3,7 @@ import { Box, FormControl, Select, MenuItem, Typography } from '@mui/material';
 /**
  * Compact dropdown select for categorical filters
  */
-function CompactSelect({ label, value, options, onChange, placeholder = 'All' }) {
+function CompactSelect({ label, value, options, onChange, placeholder = '指定なし' }) {
   const handleChange = (e) => {
     const val = e.target.value;
     if (val === '') {
@@ -30,7 +30,7 @@ function CompactSelect({ label, value, options, onChange, placeholder = 'All' })
           onChange={handleChange}
           displayEmpty
           sx={{
-            height: 28,
+            minHeight: { xs: 44, md: 28 },
             fontSize: '0.75rem',
             '& .MuiSelect-select': {
               padding: '4px 8px',

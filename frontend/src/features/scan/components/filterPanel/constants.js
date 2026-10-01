@@ -1,10 +1,10 @@
 import { UNIVERSE_GEOGRAPHIC_MARKETS } from '../../constants';
 
 export const STAGE_OPTIONS = [
-  { value: 1, label: 'S1 - Basing' },
-  { value: 2, label: 'S2 - Advancing' },
-  { value: 3, label: 'S3 - Topping' },
-  { value: 4, label: 'S4 - Declining' },
+  { value: 1, label: '第1段階・ベース形成' },
+  { value: 2, label: '第2段階・上昇' },
+  { value: 3, label: '第3段階・天井形成' },
+  { value: 4, label: '第4段階・下落' },
 ];
 
 export const VOLUME_OPTIONS = [

@@ -71,7 +71,7 @@ function CompactRangeInput({
           type="number"
           value={localMin}
           onChange={handleMinChange}
-          placeholder={minOnly ? '≥' : 'Min'}
+          placeholder={minOnly ? '≥' : '下限'}
           inputProps={{
             'aria-label': `${label}の下限`,
             step,
@@ -82,7 +82,7 @@ function CompactRangeInput({
           sx={{
             width: minOnly ? 70 : 55,
             '& .MuiOutlinedInput-root': {
-              height: 28,
+              minHeight: { xs: 44, md: 28 },
             },
             '& input[type=number]': {
               MozAppearance: 'textfield',
@@ -115,7 +115,7 @@ function CompactRangeInput({
               type="number"
               value={localMax}
               onChange={handleMaxChange}
-              placeholder="Max"
+              placeholder="上限"
               inputProps={{
                 'aria-label': `${label}の上限`,
                 step,
@@ -126,7 +126,7 @@ function CompactRangeInput({
               sx={{
                 width: 55,
                 '& .MuiOutlinedInput-root': {
-                  height: 28,
+                  minHeight: { xs: 44, md: 28 },
                 },
                 '& input[type=number]': {
                   MozAppearance: 'textfield',

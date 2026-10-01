@@ -35,7 +35,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={3} md={1.5}>
           <CompactSelect
-            label="Stage"
+            label="段階"
             value={filters.stage}
             options={STAGE_OPTIONS}
             onChange={(value) => updateFilter('stage', value)}
@@ -43,7 +43,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="RS Rating"
+            label="RS推計"
             minValue={filters.rsRating?.min}
             maxValue={filters.rsRating?.max}
             onChange={(range) => updateRangeFilter('rsRating', range)}
@@ -55,7 +55,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="RS 1M"
+            label="RS 1か月"
             minValue={filters.rs1m?.min}
             maxValue={filters.rs1m?.max}
             onChange={(range) => updateRangeFilter('rs1m', range)}
@@ -67,7 +67,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="RS 3M"
+            label="RS 3か月"
             minValue={filters.rs3m?.min}
             maxValue={filters.rs3m?.max}
             onChange={(range) => updateRangeFilter('rs3m', range)}
@@ -79,7 +79,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="RS 12M"
+            label="RS 12か月"
             minValue={filters.rs12m?.min}
             maxValue={filters.rs12m?.max}
             onChange={(range) => updateRangeFilter('rs12m', range)}
@@ -91,7 +91,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="Beta"
+            label="ベータ"
             minValue={filters.beta?.min}
             maxValue={filters.beta?.max}
             onChange={(range) => updateRangeFilter('beta', range)}
@@ -102,7 +102,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="β-adj RS"
+            label="ベータ調整RS"
             minValue={filters.betaAdjRs?.min}
             maxValue={filters.betaAdjRs?.max}
             onChange={(range) => updateRangeFilter('betaAdjRs', range)}
@@ -114,28 +114,28 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="MA Align"
+            label="移動平均整列"
             value={filters.maAlignment}
             onChange={(value) => updateFilter('maAlignment', value)}
           />
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="Pkt Pivot"
+            label="ポケットピボット"
             value={filters.pocketPivot}
             onChange={(value) => updateFilter('pocketPivot', value)}
           />
         </Grid>
         <Grid item xs={6} sm={3} md={1}>
           <CompactCheckbox
-            label="Pwr Trend"
+            label="強い上昇トレンド"
             value={filters.powerTrend}
             onChange={(value) => updateFilter('powerTrend', value)}
           />
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="1D Chg %"
+            label="前日比 %"
             minValue={filters.perfDay?.min}
             maxValue={filters.perfDay?.max}
             onChange={(range) => updateRangeFilter('perfDay', range)}
@@ -146,7 +146,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="1W Chg %"
+            label="1週間騰落 %"
             minValue={filters.perfWeek?.min}
             maxValue={filters.perfWeek?.max}
             onChange={(range) => updateRangeFilter('perfWeek', range)}
@@ -157,7 +157,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="1M Chg %"
+            label="1か月騰落 %"
             minValue={filters.perfMonth?.min}
             maxValue={filters.perfMonth?.max}
             onChange={(range) => updateRangeFilter('perfMonth', range)}
@@ -168,7 +168,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="3M Chg %"
+            label="3か月騰落 %"
             minValue={filters.perf3m?.min}
             maxValue={filters.perf3m?.max}
             onChange={(range) => updateRangeFilter('perf3m', range)}
@@ -179,7 +179,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="6M Chg %"
+            label="6か月騰落 %"
             minValue={filters.perf6m?.min}
             maxValue={filters.perf6m?.max}
             onChange={(range) => updateRangeFilter('perf6m', range)}
@@ -190,7 +190,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="Gap %"
+            label="窓開け %"
             minValue={filters.gapPercent?.min}
             maxValue={filters.gapPercent?.max}
             onChange={(range) => updateRangeFilter('gapPercent', range)}
@@ -200,7 +200,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="Vol Surge"
+            label="出来高増加率"
             minValue={filters.volumeSurge?.min}
             maxValue={filters.volumeSurge?.max}
             onChange={(range) => updateRangeFilter('volumeSurge', range)}
@@ -211,7 +211,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="% vs EMA10"
+            label="10日指数平均から %"
             minValue={filters.ema10Distance?.min}
             maxValue={filters.ema10Distance?.max}
             onChange={(range) => updateRangeFilter('ema10Distance', range)}
@@ -222,7 +222,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="% vs EMA20"
+            label="20日指数平均から %"
             minValue={filters.ema20Distance?.min}
             maxValue={filters.ema20Distance?.max}
             onChange={(range) => updateRangeFilter('ema20Distance', range)}
@@ -233,7 +233,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="% vs EMA50"
+            label="50日指数平均から %"
             minValue={filters.ema50Distance?.min}
             maxValue={filters.ema50Distance?.max}
             onChange={(range) => updateRangeFilter('ema50Distance', range)}
@@ -244,7 +244,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="% from 52W Hi"
+            label="52週高値から %"
             minValue={filters.week52HighDistance?.min}
             maxValue={filters.week52HighDistance?.max}
             onChange={(range) => updateRangeFilter('week52HighDistance', range)}
@@ -254,7 +254,7 @@ function TechnicalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="% from 52W Lo"
+            label="52週安値から %"
             minValue={filters.week52LowDistance?.min}
             maxValue={filters.week52LowDistance?.max}
             onChange={(range) => updateRangeFilter('week52LowDistance', range)}

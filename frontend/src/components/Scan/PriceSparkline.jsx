@@ -1,3 +1,4 @@
+import { industryLabel } from './industryLabels';
 import { useMemo, memo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { Box, Tooltip, Typography, useTheme } from '@mui/material';
@@ -77,7 +78,7 @@ function PriceSparkline({
 
     // Add industry if available
     if (industry) {
-      parts.push(industry);
+      parts.push(industryLabel(industry));
     }
 
     // Add 30-day trend description

@@ -96,7 +96,7 @@ function FilterSection({
 
         {activeCount > 0 && (
           <Chip
-            label={`${activeCount} active`}
+            label={`${activeCount}件適用中`}
             size="small"
             sx={{
               height: 18,

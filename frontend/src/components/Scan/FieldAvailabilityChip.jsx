@@ -43,7 +43,7 @@ function FieldAvailabilityChip({ fieldAvailability, growthMetricBasis }) {
   }
 
   const cadenceNote = growthMetricBasis === 'unavailable'
-    ? 'Growth metrics are unavailable for this row (insufficient statement history).'
+    ? '財務履歴が不足しているため、成長指標は未確認です。'
     : null;
 
   const count = entries.length;
@@ -59,8 +59,8 @@ function FieldAvailabilityChip({ fieldAvailability, growthMetricBasis }) {
   if (count === 0 && !cadenceNote) return null;
 
   const tooltipText = count > 0
-    ? `${count} field${count === 1 ? '' : 's'} unavailable or computed — click for details`
-    : 'Growth metrics unavailable — click for details';
+    ? `${count}項目が未確認または代替計算です。詳細を確認`
+    : '成長指標は未確認です。詳細を確認';
 
   return (
     <>
@@ -84,7 +84,7 @@ function FieldAvailabilityChip({ fieldAvailability, growthMetricBasis }) {
         />
       </Tooltip>
       <Dialog open={open} onClose={handleClose} onClick={(e) => e.stopPropagation()}>
-        <DialogTitle>Data Availability</DialogTitle>
+        <DialogTitle>データの不足・計算方法</DialogTitle>
         <DialogContent dividers>
           {cadenceNote && (
             <Typography variant="body2" sx={{ mb: entries.length ? 2 : 0 }}>
@@ -96,11 +96,11 @@ function FieldAvailabilityChip({ fieldAvailability, growthMetricBasis }) {
               {entries.map(({ field, status, reason_code }) => (
                 <ListItem key={field} disableGutters>
                   <ListItemText
-                    primary={field}
+                    primary={{institutional_ownership:'機関保有比率',insider_ownership:'内部者保有比率',short_interest:'空売り残高',eps_growth_qq:'四半期EPS成長率',sales_growth_qq:'四半期売上成長率'}[field] || '未確認の項目'}
                     secondary={
                       reason_code
-                        ? `${status} — ${reason_code}`
-                        : status
+                        ? `${{computed:'代替計算',unsupported:'取得対象外',unavailable:'取得不可',missing:'未確認'}[status]} — ${{unsupported_market_policy_excludes_canonical_provider:'この市場は取得元の対象外',comparable_period_yoy_fallback:'比較可能な前年同期で計算',missing_supported_field_value:'取得元の値が欠損'}[reason_code] || '取得元の制約により確認できません'}`
+                        : {computed:'代替計算',unsupported:'取得対象外',unavailable:'取得不可',missing:'未確認'}[status]
                     }
                     primaryTypographyProps={{
                       sx: { fontFamily: 'monospace', fontSize: 13 },
@@ -113,7 +113,7 @@ function FieldAvailabilityChip({ fieldAvailability, growthMetricBasis }) {
           )}
         </DialogContent>
         <DialogActions>
-          <Button size="small" onClick={handleClose}>Close</Button>
+          <Button size="small" onClick={handleClose}>閉じる</Button>
         </DialogActions>
       </Dialog>
     </>

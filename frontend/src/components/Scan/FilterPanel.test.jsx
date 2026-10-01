@@ -20,7 +20,7 @@ const defaultFilters = () => ({
   volBreakthroughScore: { min: null, max: null },
   seSetupScore: { min: null, max: null },
   seDistanceToPivot: { min: null, max: null },
-  seBbSqueeze: { min: null, max: null },
+  seBb収縮度: { min: null, max: null },
   seVolumeVs50d: { min: null, max: null },
   seSetupReady: null,
   seRsLineNewHigh: null,
@@ -69,34 +69,34 @@ const makeProps = (overrides = {}) => ({
 describe('FilterPanel', () => {
   // ── SE filter controls render ────────────────────────────────────────
   describe('SE filter controls render', () => {
-    it('renders SE Score range input', () => {
+    it('renders セットアップ点 range input', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('SE Score')).toBeInTheDocument();
+      expect(screen.getByText('セットアップ点')).toBeInTheDocument();
     });
 
-    it('renders Pvt Dist range input', () => {
+    it('renders ピボット比 range input', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('Pvt Dist')).toBeInTheDocument();
+      expect(screen.getByText('ピボット比')).toBeInTheDocument();
     });
 
-    it('renders Squeeze range input', () => {
+    it('renders 収縮度 range input', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('Squeeze')).toBeInTheDocument();
+      expect(screen.getByText('収縮度')).toBeInTheDocument();
     });
 
-    it('renders Vol/50d range input', () => {
+    it('renders 出来高50日比 range input', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('Vol/50d')).toBeInTheDocument();
+      expect(screen.getByText('出来高50日比')).toBeInTheDocument();
     });
 
-    it('renders SE Ready checkbox', () => {
+    it('renders 準備条件 checkbox', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('SE Ready')).toBeInTheDocument();
+      expect(screen.getByText('準備条件')).toBeInTheDocument();
     });
 
-    it('renders RS Hi checkbox', () => {
+    it('renders RS新高値 checkbox', () => {
       renderWithProviders(<FilterPanel {...makeProps()} />);
-      expect(screen.getByText('RS Hi')).toBeInTheDocument();
+      expect(screen.getByText('RS新高値')).toBeInTheDocument();
     });
   });
 
@@ -109,9 +109,9 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      // SE Score is a minOnly range input — find its single spinbutton
+      // セットアップ点 is a minOnly range input — find its single spinbutton
       // by locating the label first, then the input within the same grid item
-      const seScoreLabel = screen.getByText('SE Score');
+      const seScoreLabel = screen.getByText('セットアップ点');
       const seScoreContainer = seScoreLabel.closest('[class*="MuiGrid-item"]');
       const input = within(seScoreContainer).getByRole('spinbutton');
 
@@ -131,10 +131,10 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      const pvtLabel = screen.getByText('Pvt Dist');
+      const pvtLabel = screen.getByText('ピボット比');
       const pvtContainer = pvtLabel.closest('[class*="MuiGrid-item"]');
       const inputs = within(pvtContainer).getAllByRole('spinbutton');
-      // Pvt Dist has both min and max inputs
+      // ピボット比 has both min and max inputs
       expect(inputs.length).toBe(2);
 
       await user.type(inputs[0], '-5');
@@ -156,9 +156,9 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      const seReadyLabel = screen.getByText('SE Ready');
+      const seReadyLabel = screen.getByText('準備条件');
       const seReadyContainer = seReadyLabel.closest('[class*="MuiGrid-item"]');
-      const yesBtn = within(seReadyContainer).getByText('Yes');
+      const yesBtn = within(seReadyContainer).getByText('あり');
 
       await user.click(yesBtn);
       expect(onFilterChange).toHaveBeenCalledWith(
@@ -173,9 +173,9 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      const rsHiLabel = screen.getByText('RS Hi');
+      const rsHiLabel = screen.getByText('RS新高値');
       const rsHiContainer = rsHiLabel.closest('[class*="MuiGrid-item"]');
-      const noBtn = within(rsHiContainer).getByText('No');
+      const noBtn = within(rsHiContainer).getByText('なし');
 
       await user.click(noBtn);
       expect(onFilterChange).toHaveBeenCalledWith(
@@ -191,9 +191,9 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      const seReadyLabel = screen.getByText('SE Ready');
+      const seReadyLabel = screen.getByText('準備条件');
       const seReadyContainer = seReadyLabel.closest('[class*="MuiGrid-item"]');
-      const yesBtn = within(seReadyContainer).getByText('Yes');
+      const yesBtn = within(seReadyContainer).getByText('あり');
 
       await user.click(yesBtn);
       // CompactCheckbox toggles: clicking already-active value -> null
@@ -212,7 +212,7 @@ describe('FilterPanel', () => {
 
       const user = userEvent.setup();
 
-      const marketCapContainer = screen.getByText('Mkt Cap (local)').closest('[class*="MuiGrid-item"]');
+      const marketCapContainer = screen.getByText('時価総額（現地通貨）').closest('[class*="MuiGrid-item"]');
       const marketCapSelect = within(marketCapContainer).getByRole('combobox');
       await user.click(marketCapSelect);
       await user.click(await screen.findByRole('option', { name: '>$1B' }));
@@ -221,7 +221,7 @@ describe('FilterPanel', () => {
         expect.objectContaining({ minMarketCap: 1000000000 })
       );
 
-      const volumeContainer = screen.getByText('Dollar Vol (local)').closest('[class*="MuiGrid-item"]');
+      const volumeContainer = screen.getByText('売買代金（現地通貨）').closest('[class*="MuiGrid-item"]');
       const volumeSelect = within(volumeContainer).getByRole('combobox');
       await user.click(volumeSelect);
       await user.click(await screen.findByRole('option', { name: '>$100M' }));
@@ -234,29 +234,29 @@ describe('FilterPanel', () => {
 
   // ── SE active filter chips ───────────────────────────────────────────
   describe('SE active filter chips', () => {
-    it('shows "SE Score: >=70" chip when seSetupScore.min is set', () => {
+    it('shows "セットアップ点: >=70" chip when seSetupScore.min is set', () => {
       const filters = { ...defaultFilters(), seSetupScore: { min: 70, max: null } };
       renderWithProviders(
         <FilterPanel {...makeProps({ filters })} />
       );
       // The expanded area shows all active chips with the "Active:" prefix
-      expect(screen.getByText(/SE Score:.*≥70/)).toBeInTheDocument();
+      expect(screen.getByText(/セットアップ点:.*≥70/)).toBeInTheDocument();
     });
 
-    it('shows "SE Ready: Yes" chip when seSetupReady=true', () => {
+    it('shows "準備条件: あり" chip when seSetupReady=true', () => {
       const filters = { ...defaultFilters(), seSetupReady: true };
       renderWithProviders(
         <FilterPanel {...makeProps({ filters })} />
       );
-      expect(screen.getByText('SE Ready: Yes')).toBeInTheDocument();
+      expect(screen.getByText('準備条件: あり')).toBeInTheDocument();
     });
 
-    it('shows "RS New Hi: No" chip when seRsLineNewHigh=false', () => {
+    it('shows "RS新高値: なし" chip when seRsLineNewHigh=false', () => {
       const filters = { ...defaultFilters(), seRsLineNewHigh: false };
       renderWithProviders(
         <FilterPanel {...makeProps({ filters })} />
       );
-      expect(screen.getByText('RS New Hi: No')).toBeInTheDocument();
+      expect(screen.getByText('RS新高値: なし')).toBeInTheDocument();
     });
 
     it('removes filter when chip delete is clicked', async () => {
@@ -267,8 +267,8 @@ describe('FilterPanel', () => {
       );
 
       const user = userEvent.setup();
-      // Find the "SE Ready: Yes" chip in the expanded active area
-      const chip = screen.getByText('SE Ready: Yes').closest('.MuiChip-root');
+      // Find the "準備条件: あり" chip in the expanded active area
+      const chip = screen.getByText('準備条件: あり').closest('.MuiChip-root');
       const deleteBtn = within(chip).getByTestId('CancelIcon');
 
       await user.click(deleteBtn);
@@ -304,7 +304,7 @@ describe('FilterPanel', () => {
         <FilterPanel {...makeProps({ filters })} />
       );
       // FilterSection shows "{N} active" chip when activeCount > 0
-      expect(screen.getByText('1 active')).toBeInTheDocument();
+      expect(screen.getByText('1件適用中')).toBeInTheDocument();
     });
 
     it('rerenders when presetsEnabled changes so preset controls disappear', () => {
@@ -312,11 +312,11 @@ describe('FilterPanel', () => {
       const baseProps = makeProps({ filters, presetsEnabled: true });
       const { rerender } = renderWithProviders(<FilterPanel {...baseProps} />);
 
-      expect(screen.getByText('Select Preset')).toBeInTheDocument();
+      expect(screen.getByText('保存した条件を選択')).toBeInTheDocument();
 
       rerender(<FilterPanel {...baseProps} presetsEnabled={false} />);
 
-      expect(screen.queryByText('Select Preset')).not.toBeInTheDocument();
+      expect(screen.queryByText('保存した条件を選択')).not.toBeInTheDocument();
     });
   });
 });

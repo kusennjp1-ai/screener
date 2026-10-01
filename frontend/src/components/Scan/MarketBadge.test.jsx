@@ -1,3 +1,4 @@
+import { marketLabel } from './scanLabels';
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
@@ -13,7 +14,7 @@ describe('MarketBadge', () => {
     for (const code of ['US', 'HK', 'IN', 'JP', 'KR', 'TW', 'CN', 'CA', 'DE', 'SG', 'AU', 'MY']) {
       const { unmount } = renderWithProviders(<MarketBadge market={code} />);
       expect(screen.getByTestId(`market-badge-${code}`)).toBeInTheDocument();
-      expect(screen.getByText(code)).toBeInTheDocument();
+      expect(screen.getByText(marketLabel(code))).toBeInTheDocument();
       unmount();
     }
   });
@@ -22,6 +23,6 @@ describe('MarketBadge', () => {
     renderWithProviders(<MarketBadge market="XX" />);
     // getByTestId still works and label shows the passed code
     expect(screen.getByTestId('market-badge-XX')).toBeInTheDocument();
-    expect(screen.getByText('XX')).toBeInTheDocument();
+    expect(screen.getByText('市場未確認')).toBeInTheDocument();
   });
 });

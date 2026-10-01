@@ -100,16 +100,16 @@ describe('ResultsTable — 3axp market / currency / USD toggle', () => {
     renderWithProviders(<ResultsTable {...defaultProps} results={[tencentHk]} />);
 
     // Default display: USD
-    expect(screen.getByTestId('mcap-display-toggle').textContent).toContain('USD');
+    expect(screen.getByTestId('mcap-display-toggle').textContent).toContain('米ドル');
     // Header reflects USD
-    expect(screen.getByText('MCap ($)')).toBeInTheDocument();
+    expect(screen.getByText('時価総額（米ドル）')).toBeInTheDocument();
     // Cell shows the USD value formatted via formatLargeNumber ($500B)
     expect(screen.getByText('$500.0B')).toBeInTheDocument();
 
     // Flip to Local
     fireEvent.click(screen.getByTestId('mcap-display-toggle'));
     expect(screen.getByTestId('mcap-display-toggle').textContent).toContain('現地通貨');
-    expect(screen.getByText('MCap (local)')).toBeInTheDocument();
+    expect(screen.getByText('時価総額（現地通貨）')).toBeInTheDocument();
     // Local value uses HK$ prefix for the HKD-denominated market_cap.
     expect(screen.getByText('HK$3.9T')).toBeInTheDocument();
   });

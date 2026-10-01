@@ -17,43 +17,43 @@ const BOOLEAN_RESET_KEYS = new Set([
 ]);
 
 const SCORE_FILTERS = [
-  { key: 'compositeScore', label: 'Composite' },
-  { key: 'minerviniScore', label: 'Minervini' },
-  { key: 'canslimScore', label: 'CANSLIM' },
+  { key: 'compositeScore', label: '補助スコア' },
+  { key: 'minerviniScore', label: 'ミネルヴィニ点' },
+  { key: 'canslimScore', label: 'CAN SLIM点' },
   { key: 'ipoScore', label: 'IPO' },
-  { key: 'customScore', label: 'Custom' },
-  { key: 'volBreakthroughScore', label: 'Vol BT' },
-  { key: 'seSetupScore', label: 'SE Score' },
+  { key: 'customScore', label: 'カスタム点' },
+  { key: 'volBreakthroughScore', label: '出来高ブレイク点' },
+  { key: 'seSetupScore', label: 'セットアップ点' },
 ];
 
 const RS_FILTERS = [
   { key: 'rsRating', label: 'RS' },
-  { key: 'rs1m', label: 'RS 1M' },
-  { key: 'rs3m', label: 'RS 3M' },
-  { key: 'rs12m', label: 'RS 12M' },
-  { key: 'epsRating', label: 'EPS Rtg' },
-  { key: 'ibdGroupRank', label: 'Grp Rank' },
+  { key: 'rs1m', label: 'RS 1か月' },
+  { key: 'rs3m', label: 'RS 3か月' },
+  { key: 'rs12m', label: 'RS 12か月' },
+  { key: 'epsRating', label: 'EPS評価' },
+  { key: 'ibdGroupRank', label: '業種順位' },
 ];
 
 const TECH_FILTERS = [
-  { key: 'perfDay', label: '1D Chg' },
-  { key: 'perfWeek', label: '1W Chg' },
-  { key: 'perfMonth', label: '1M Chg' },
-  { key: 'perf3m', label: '3M Chg' },
-  { key: 'perf6m', label: '6M Chg' },
-  { key: 'gapPercent', label: 'Gap' },
-  { key: 'volumeSurge', label: 'Vol Surge', suffix: 'x' },
-  { key: 'ema10Distance', label: 'vs EMA10' },
-  { key: 'ema20Distance', label: 'vs EMA20' },
-  { key: 'ema50Distance', label: 'vs EMA50' },
-  { key: 'week52HighDistance', label: '52W Hi' },
-  { key: 'week52LowDistance', label: '52W Lo' },
-  { key: 'beta', label: 'Beta' },
-  { key: 'betaAdjRs', label: 'β-adj RS' },
-  { key: 'seDistanceToPivot', label: 'Pvt Dist' },
-  { key: 'seBbSqueeze', label: 'Squeeze' },
-  { key: 'seVolumeVs50d', label: 'Vol/50d', suffix: 'x' },
-  { key: 'seUpDownVolume', label: 'U/D Vol', suffix: 'x' },
+  { key: 'perfDay', label: '前日比' },
+  { key: 'perfWeek', label: '1週間騰落' },
+  { key: 'perfMonth', label: '1か月騰落' },
+  { key: 'perf3m', label: '3か月騰落' },
+  { key: 'perf6m', label: '6か月騰落' },
+  { key: 'gapPercent', label: '窓開け' },
+  { key: 'volumeSurge', label: '出来高増加率', suffix: 'x' },
+  { key: 'ema10Distance', label: '10日指数平均から' },
+  { key: 'ema20Distance', label: '20日指数平均から' },
+  { key: 'ema50Distance', label: '50日指数平均から' },
+  { key: 'week52HighDistance', label: '52週高値から' },
+  { key: 'week52LowDistance', label: '52週安値から' },
+  { key: 'beta', label: 'ベータ' },
+  { key: 'betaAdjRs', label: 'ベータ調整RS' },
+  { key: 'seDistanceToPivot', label: 'ピボット比' },
+  { key: 'seBbSqueeze', label: '収縮度' },
+  { key: 'seVolumeVs50d', label: '出来高50日比', suffix: 'x' },
+  { key: 'seUpDownVolume', label: '上昇日対下落日の出来高比', suffix: 'x' },
 ];
 
 function hasRangeValue(range) {
@@ -91,29 +91,29 @@ export function buildActiveFilters(filters) {
   const active = [];
 
   if (filters.symbolSearch) {
-    active.push({ key: 'symbolSearch', label: `Symbol: ${filters.symbolSearch}` });
+    active.push({ key: 'symbolSearch', label: `銘柄: ${filters.symbolSearch}` });
   }
   if (filters.stage != null) {
-    active.push({ key: 'stage', label: `Stage: ${filters.stage}` });
+    active.push({ key: 'stage', label: `段階: ${filters.stage}` });
   }
   if (filters.ratings?.length) {
-    active.push({ key: 'ratings', label: `Rating: ${filters.ratings.join(', ')}` });
+    active.push({ key: 'ratings', label: `補助評価: ${filters.ratings.join(', ')}` });
   }
   if (filters.ibdIndustries?.values?.length) {
-    const modeLabel = filters.ibdIndustries.mode === 'exclude' ? ' (Exclude)' : '';
-    active.push({ key: 'ibdIndustries', label: `Industry${modeLabel}: ${filters.ibdIndustries.values.length} selected` });
+    const modeLabel = filters.ibdIndustries.mode === 'exclude' ? '（除外）' : '';
+    active.push({ key: 'ibdIndustries', label: `IBD業種${modeLabel}: ${filters.ibdIndustries.values.length}件選択` });
   }
   if (filters.gicsSectors?.values?.length) {
-    const modeLabel = filters.gicsSectors.mode === 'exclude' ? ' (Exclude)' : '';
-    active.push({ key: 'gicsSectors', label: `Sector${modeLabel}: ${filters.gicsSectors.values.length} selected` });
+    const modeLabel = filters.gicsSectors.mode === 'exclude' ? '（除外）' : '';
+    active.push({ key: 'gicsSectors', label: `業種${modeLabel}: ${filters.gicsSectors.values.length}件選択` });
   }
   if (filters.minVolume != null) {
     const volLabel = VOLUME_OPTIONS.find((option) => option.value === filters.minVolume)?.label || `>${filters.minVolume}`;
-    active.push({ key: 'minVolume', label: `Dollar Vol: ${volLabel}` });
+    active.push({ key: 'minVolume', label: `売買代金: ${volLabel}` });
   }
   if (filters.minMarketCap != null) {
     const capLabel = MARKET_CAP_OPTIONS.find((option) => option.value === filters.minMarketCap)?.label || `>${filters.minMarketCap}`;
-    active.push({ key: 'minMarketCap', label: `Mkt Cap: ${capLabel}` });
+    active.push({ key: 'minMarketCap', label: `時価総額: ${capLabel}` });
   }
   if (filters.ipoAfter) {
     active.push({ key: 'ipoAfter', label: `IPO: >${filters.ipoAfter.toUpperCase()}` });
@@ -137,7 +137,7 @@ export function buildActiveFilters(filters) {
     const { min, max } = filters.price;
     active.push({
       key: 'price',
-      label: `Price: ${min != null ? `≥$${min}` : ''}${max != null ? ` ≤$${max}` : ''}`,
+      label: `株価: ${min != null ? `≥$${min}` : ''}${max != null ? ` ≤$${max}` : ''}`,
     });
   }
   if (hasRangeValue(filters.adrPercent)) {
@@ -158,7 +158,7 @@ export function buildActiveFilters(filters) {
     const { min, max } = filters.salesGrowth;
     active.push({
       key: 'salesGrowth',
-      label: `Sales: ${min != null ? `≥${min}%` : ''}${max != null ? ` ≤${max}%` : ''}`,
+      label: `売上成長: ${min != null ? `≥${min}%` : ''}${max != null ? ` ≤${max}%` : ''}`,
     });
   }
 
@@ -166,49 +166,49 @@ export function buildActiveFilters(filters) {
     const { min, max } = filters.vcpScore;
     active.push({
       key: 'vcpScore',
-      label: `VCP Score: ${min != null ? `≥${min}` : ''}${max != null ? ` ≤${max}` : ''}`,
+      label: `VCP点: ${min != null ? `≥${min}` : ''}${max != null ? ` ≤${max}` : ''}`,
     });
   }
   if (hasRangeValue(filters.vcpPivot)) {
     const { min, max } = filters.vcpPivot;
     active.push({
       key: 'vcpPivot',
-      label: `VCP Pivot: ${min != null ? `≥$${min}` : ''}${max != null ? ` ≤$${max}` : ''}`,
+      label: `VCPピボット: ${min != null ? `≥$${min}` : ''}${max != null ? ` ≤$${max}` : ''}`,
     });
   }
 
   if (filters.vcpDetected != null) {
-    active.push({ key: 'vcpDetected', label: `VCP: ${filters.vcpDetected ? 'Yes' : 'No'}` });
+    active.push({ key: 'vcpDetected', label: `VCP: ${filters.vcpDetected ? 'あり' : 'なし'}` });
   }
   if (filters.vcpReady != null) {
-    active.push({ key: 'vcpReady', label: `VCP Ready: ${filters.vcpReady ? 'Yes' : 'No'}` });
+    active.push({ key: 'vcpReady', label: `VCP準備: ${filters.vcpReady ? 'あり' : 'なし'}` });
   }
   if (filters.maAlignment != null) {
-    active.push({ key: 'maAlignment', label: `MA Align: ${filters.maAlignment ? 'Yes' : 'No'}` });
+    active.push({ key: 'maAlignment', label: `移動平均整列: ${filters.maAlignment ? 'あり' : 'なし'}` });
   }
   if (filters.passesTemplate != null) {
-    active.push({ key: 'passesTemplate', label: `Passes: ${filters.passesTemplate ? 'Yes' : 'No'}` });
+    active.push({ key: 'passesTemplate', label: `条件通過: ${filters.passesTemplate ? 'あり' : 'なし'}` });
   }
   if (filters.code33 != null) {
-    active.push({ key: 'code33', label: `Code 33: ${filters.code33 ? 'Yes' : 'No'}` });
+    active.push({ key: 'code33', label: `業績加速（3期）: ${filters.code33 ? 'あり' : 'なし'}` });
   }
   if (filters.seSetupReady != null) {
-    active.push({ key: 'seSetupReady', label: `SE Ready: ${filters.seSetupReady ? 'Yes' : 'No'}` });
+    active.push({ key: 'seSetupReady', label: `準備条件: ${filters.seSetupReady ? 'あり' : 'なし'}` });
   }
   if (filters.seRsLineNewHigh != null) {
-    active.push({ key: 'seRsLineNewHigh', label: `RS New Hi: ${filters.seRsLineNewHigh ? 'Yes' : 'No'}` });
+    active.push({ key: 'seRsLineNewHigh', label: `RS新高値: ${filters.seRsLineNewHigh ? 'あり' : 'なし'}` });
   }
   if (filters.seRsLineBlueDot != null) {
-    active.push({ key: 'seRsLineBlueDot', label: `Blue Dot: ${filters.seRsLineBlueDot ? 'Yes' : 'No'}` });
+    active.push({ key: 'seRsLineBlueDot', label: `RS先行高値: ${filters.seRsLineBlueDot ? 'あり' : 'なし'}` });
   }
   if (filters.pocketPivot != null) {
-    active.push({ key: 'pocketPivot', label: `Pocket Pivot: ${filters.pocketPivot ? 'Yes' : 'No'}` });
+    active.push({ key: 'pocketPivot', label: `ポケットピボット: ${filters.pocketPivot ? 'あり' : 'なし'}` });
   }
   if (filters.powerTrend != null) {
-    active.push({ key: 'powerTrend', label: `Power Trend: ${filters.powerTrend ? 'Yes' : 'No'}` });
+    active.push({ key: 'powerTrend', label: `強い上昇トレンド: ${filters.powerTrend ? 'あり' : 'なし'}` });
   }
   if (filters.sePatternPrimary?.length) {
-    active.push({ key: 'sePatternPrimary', label: `Pattern: ${filters.sePatternPrimary.length} selected` });
+    active.push({ key: 'sePatternPrimary', label: `パターン: ${filters.sePatternPrimary.length}件選択` });
   }
 
   for (const { key, label, suffix = '%' } of TECH_FILTERS) {

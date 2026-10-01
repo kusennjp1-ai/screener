@@ -37,12 +37,12 @@ describe('FieldAvailabilityChip', () => {
     expect(chip.textContent).toContain('2');
 
     fireEvent.click(chip);
-    expect(screen.getByText('Data Availability')).toBeInTheDocument();
-    expect(screen.getByText('institutional_ownership')).toBeInTheDocument();
-    expect(screen.getByText('short_interest')).toBeInTheDocument();
+    expect(screen.getByText('データの不足・計算方法')).toBeInTheDocument();
+    expect(screen.getByText('機関保有比率')).toBeInTheDocument();
+    expect(screen.getByText('空売り残高')).toBeInTheDocument();
     // Secondary shows status + reason_code
     expect(
-      screen.getAllByText(/unsupported — unsupported_market_policy/).length
+      screen.getAllByText(/取得対象外 — この市場は取得元の対象外/).length
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -81,7 +81,7 @@ describe('FieldAvailabilityChip', () => {
     const chip = screen.getByTestId('field-availability-chip');
     expect(chip).toBeInTheDocument();
     fireEvent.click(chip);
-    expect(screen.getByText(/Growth metrics are unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/財務履歴が不足/)).toBeInTheDocument();
   });
 
   it('click on chip does not bubble up to parent handlers', () => {

@@ -1,3 +1,5 @@
+import { industryLabel } from './industryLabels';
+import { patternLabel, sectorLabel, ratingLabel } from './scanLabels';
 import { useMemo, useRef, useState, useCallback, memo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
@@ -22,13 +24,13 @@ import {
 // to a buyable pivot). Shown under the rating so an extended/overextended leader
 // reads as "great pattern, not a buyable entry now".
 const EXECUTION_STATE_LABELS = {
-  pre_breakout: 'Pre-breakout',
-  breakout: 'Breakout',
-  early_post_breakout: 'Early post',
-  extended: 'Extended',
-  overextended: 'Overextended',
-  damaged: 'Damaged',
-  invalid: 'Invalid',
+  pre_breakout: 'ピボット待ち',
+  breakout: '上抜け',
+  early_post_breakout: '上抜け直後',
+  extended: '買いゾーン超過',
+  overextended: '大幅超過',
+  damaged: '形状悪化',
+  invalid: '無効',
 };
 
 // MM360 band state -> existing palette token (no new colors): buy/low/strong =
@@ -101,56 +103,56 @@ const columns = [
   { id: 'rs_trend', label: 'RS推移', sortable: true, width: 110 },
   { id: 'price_change_1d', label: '株価推移', sortable: true, width: 110 },
   { id: 'gics_sector', label: 'セクター', sortable: true, width: 80 },
-  { id: 'ibd_industry_group', label: 'IBD Industry', sortable: true, width: 140 },
-  { id: 'market_themes', label: 'Themes', sortable: false, width: 180 },
+  { id: 'ibd_industry_group', label: 'IBD業種', sortable: true, width: 140 },
+  { id: 'market_themes', label: 'テーマ', sortable: false, width: 180 },
   { id: 'ibd_group_rank', label: '業種順位', sortable: true, width: 65 },
   { id: 'composite_score', label: '補助スコア', sortable: true, width: 50 },
-  { id: 'minervini_score', label: 'Min', sortable: true, width: 45 },
-  { id: 'canslim_score', label: 'CAN', sortable: true, width: 45 },
-  { id: 'ipo_score', label: 'IPO', sortable: true, width: 45 },
-  { id: 'custom_score', label: 'Cust', sortable: true, width: 45 },
-  { id: 'volume_breakthrough_score', label: 'VolB', sortable: true, width: 50 },
-  { id: 'se_setup_score', label: 'SE', sortable: true, width: 45 },
-  { id: 'se_pattern_primary', label: 'Pat', sortable: true, width: 55 },
-  { id: 'se_distance_to_pivot_pct', label: 'Pvt%', sortable: true, width: 50 },
-  { id: 'se_bb_width_pctile_252', label: 'Sqz', sortable: true, width: 45 },
-  { id: 'se_volume_vs_50d', label: 'V50', sortable: true, width: 45 },
-  { id: 'se_rs_line_new_high', label: 'RSH', sortable: false, width: 35 },
-  { id: 'se_rs_line_blue_dot', label: 'BD', sortable: false, width: 35 },
-  { id: 'se_pivot_price', label: 'Pvt$', sortable: true, width: 55 },
+  { id: 'minervini_score', label: 'ミネルヴィニ点', sortable: true, width: 45 },
+  { id: 'canslim_score', label: 'CAN SLIM点', sortable: true, width: 45 },
+  { id: 'ipo_score', label: 'IPO点', sortable: true, width: 45 },
+  { id: 'custom_score', label: 'カスタム点', sortable: true, width: 45 },
+  { id: 'volume_breakthrough_score', label: '出来高ブレイク点', sortable: true, width: 50 },
+  { id: 'se_setup_score', label: 'セットアップ点', sortable: true, width: 45 },
+  { id: 'se_pattern_primary', label: 'パターン', sortable: true, width: 55 },
+  { id: 'se_distance_to_pivot_pct', label: 'ピボット比', sortable: true, width: 50 },
+  { id: 'se_bb_width_pctile_252', label: '収縮度', sortable: true, width: 45 },
+  { id: 'se_volume_vs_50d', label: '出来高50日比', sortable: true, width: 45 },
+  { id: 'se_rs_line_new_high', label: 'RS新高値', sortable: false, width: 35 },
+  { id: 'se_rs_line_blue_dot', label: 'RS先行高値', sortable: false, width: 35 },
+  { id: 'se_pivot_price', label: '共通ピボット', sortable: true, width: 55 },
   { id: 'rs_rating', label: 'RS', sortable: true, width: 40 },
-  { id: 'rs_rating_1m', label: '1M', sortable: true, width: 40 },
-  { id: 'rs_rating_3m', label: '3M', sortable: true, width: 40 },
-  { id: 'rs_rating_12m', label: '12M', sortable: true, width: 45 },
+  { id: 'rs_rating_1m', label: '1か月', sortable: true, width: 40 },
+  { id: 'rs_rating_3m', label: '3か月', sortable: true, width: 40 },
+  { id: 'rs_rating_12m', label: '12か月', sortable: true, width: 45 },
   { id: 'beta', label: 'β', sortable: true, width: 45 },
   { id: 'beta_adj_rs', label: 'βRS', sortable: true, width: 45 },
-  { id: 'eps_rating', label: 'EPS Rtg', sortable: true, width: 55 },
+  { id: 'eps_rating', label: 'EPS評価', sortable: true, width: 55 },
   { id: 'stage', label: '段階', sortable: true, width: 40 },
   { id: 'current_price', label: '株価', sortable: true, width: 65 },
-  { id: 'volume', label: '$Vol', sortable: true, width: 60 },
+  { id: 'volume', label: '売買代金', sortable: true, width: 60 },
   // MCap column header label is overridden per-render based on the USD/Local
   // toggle; keep the underlying sort key stable at 'market_cap' so the
   // sort-by dropdown / URL state doesn't shift when the user flips modes.
-  { id: 'market_cap', label: 'MCap', sortable: true, width: 75 },
-  { id: 'adv_usd', label: 'ADV ($)', sortable: true, width: 70 },
-  { id: 'ipo_date', label: 'IPO', sortable: true, width: 50 },
+  { id: 'market_cap', label: '時価総額', sortable: true, width: 75 },
+  { id: 'adv_usd', label: '平均売買代金', sortable: true, width: 70 },
+  { id: 'ipo_date', label: '上場から', sortable: true, width: 70 },
   { id: 'eps_growth_qq', label: 'EPS', sortable: true, width: 50 },
-  { id: 'sales_growth_qq', label: 'Sales', sortable: true, width: 50 },
+  { id: 'sales_growth_qq', label: '売上成長', sortable: true, width: 50 },
   { id: 'adr_percent', label: 'ADR', sortable: true, width: 50 },
-  { id: 'ma_alignment', label: 'MA', sortable: false, width: 35 },
+  { id: 'ma_alignment', label: '移動平均整列', sortable: false, width: 35 },
   // The VCP header sorts by quality_rank (VCP-detected setups first, ties by
   // composite desc) — the shipped design principle "pick the best setup first"
   // (docs/DESIGN_PRINCIPLE_SELECTION.md). sortField overrides the emitted sort
   // key while the column keeps rendering the vcp_detected check.
   { id: 'vcp_detected', label: 'VCP', sortable: true, sortField: 'quality_rank', width: 40 },
-  { id: 'vcp_score', label: 'VScr', sortable: true, width: 50 },
-  { id: 'vcp_pivot', label: 'Pvt', sortable: true, width: 55 },
-  { id: 'vcp_ready_for_breakout', label: 'Rdy', sortable: false, width: 35 },
-  { id: 'passes_template', label: 'Pass', sortable: false, width: 40 },
-  { id: 'rating', label: 'Rate', sortable: false, width: 80 },
-  { id: 'pressure_state', label: 'Prs', sortable: false, width: 40 },
-  { id: 'buy_risk_state', label: 'Risk', sortable: false, width: 40 },
-  { id: 'tpr_state', label: 'TPR', sortable: false, width: 40 },
+  { id: 'vcp_score', label: 'VCP点', sortable: true, width: 50 },
+  { id: 'vcp_pivot', label: 'VCPピボット', sortable: true, width: 55 },
+  { id: 'vcp_ready_for_breakout', label: '準備完了', sortable: false, width: 35 },
+  { id: 'passes_template', label: '条件通過', sortable: false, width: 40 },
+  { id: 'rating', label: '補助評価', sortable: false, width: 80 },
+  { id: 'pressure_state', label: '需給', sortable: false, width: 40 },
+  { id: 'buy_risk_state', label: 'リスク', sortable: false, width: 40 },
+  { id: 'tpr_state', label: 'トレンド評価', sortable: false, width: 40 },
 ];
 
 const getStatusChipProps = (row) => {
@@ -159,18 +161,18 @@ const getStatusChipProps = (row) => {
 
   if (row.scan_mode === 'listing_only' && isInsufficientHistoryRow) {
     return {
-      label: 'New IPO',
+      label: '上場直後',
       color: 'warning',
-      title: 'Visible in the scan table, but not yet scannable because price history is still limited.',
+      title: '一覧には表示していますが、価格履歴が不足しているため詳細判定は未確認です。',
     };
   }
   if (row.scan_mode === 'ipo_weighted' && isInsufficientHistoryRow) {
     return {
-      label: 'IPO Weighted',
+      label: 'IPO補正',
       color: 'info',
       title: row.composite_reason === 'ipo_uplift'
-        ? 'Composite uses applicable screeners plus an IPO uplift while the stock is still young.'
-        : 'Composite uses only the screeners that have enough history to run.',
+        ? '判定できる手法の点数に上場直後の補正を加えた補助スコアです。'
+        : '必要な履歴がある手法のみで計算した補助スコアです。',
     };
   }
   return null;
@@ -186,6 +188,8 @@ const VirtualTableRow = memo(function VirtualTableRow({
   onOpenChart,
   showActions,
   showThemes,
+  showRsSparkline,
+  showPriceSparkline,
   showWatchlistMenu,
   chartEnabled,
   mcapDisplay,
@@ -224,7 +228,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
               size="small"
               onClick={handleChartClick}
               aria-label={`${row.symbol} のチャートを開く`}
-              sx={{ color: 'primary.main', minWidth: 24, minHeight: 24, p: 0 }}
+              sx={{ color: 'primary.main', minWidth: { xs: 44, md: 24 }, minHeight: { xs: 44, md: 24 }, p: 0 }}
             >
               <ShowChartIcon sx={{ fontSize: 14 }} />
             </IconButton>
@@ -280,16 +284,16 @@ const VirtualTableRow = memo(function VirtualTableRow({
         </Box>
       </TableCell>
 
-      <TableCell align="center" sx={{ p: '4px', width: 110, minWidth: 110 }}>
+      {showRsSparkline && <TableCell align="center" sx={{ p: '4px', width: 110, minWidth: 110 }}>
         <RSSparkline
           data={row.rs_sparkline_data}
           trend={row.rs_trend}
           width={100}
           height={28}
         />
-      </TableCell>
+      </TableCell>}
 
-      <TableCell align="center" sx={{ p: '4px', width: 110, minWidth: 110 }}>
+      {showPriceSparkline && <TableCell align="center" sx={{ p: '4px', width: 110, minWidth: 110 }}>
         <PriceSparkline
           data={row.price_sparkline_data}
           trend={row.price_trend}
@@ -298,14 +302,14 @@ const VirtualTableRow = memo(function VirtualTableRow({
           width={100}
           height={28}
         />
-      </TableCell>
+      </TableCell>}
 
       <TableCell align="center" sx={{ color: 'text.secondary', width: 80, minWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {row.gics_sector || '-'}
+        {sectorLabel(row.gics_sector)}
       </TableCell>
 
       <TableCell align="left" sx={{ color: 'text.secondary', width: 140, minWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {row.ibd_industry_group || '-'}
+        {industryLabel(row.ibd_industry_group)}
       </TableCell>
 
       {showThemes && <TableCell align="left" sx={{ color: 'text.secondary', width: 180, minWidth: 180, py: 0.5 }}>
@@ -350,7 +354,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ color: 'text.secondary', width: 55, minWidth: 55, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {row.se_pattern_primary || '-'}
+        {patternLabel(row.se_pattern_primary)}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 50, minWidth: 50 }}>
@@ -362,7 +366,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 45, minWidth: 45 }}>
-        {row.se_volume_vs_50d != null ? `${row.se_volume_vs_50d.toFixed(1)}x` : '-'}
+        {row.se_volume_vs_50d != null ? `${row.se_volume_vs_50d.toFixed(1)}倍` : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ width: 35, minWidth: 35 }}>
@@ -455,7 +459,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', color: 'text.secondary', width: 50, minWidth: 50 }}>
-        {formatIpoAge(row.ipo_date)}
+        {formatIpoAge(row.ipo_date).replace('mo','か月').replace('y','年')}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.eps_growth_qq == null ? 'text.secondary' : row.eps_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
@@ -471,7 +475,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ width: 35, minWidth: 35 }}>
-        {row.ma_alignment ? (
+        {row.ma_alignment == null ? '—' : row.ma_alignment ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
           <CloseIcon sx={{ fontSize: 14, color: 'error.main' }} />
@@ -479,7 +483,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ width: 40, minWidth: 40 }}>
-        {row.vcp_detected ? (
+        {row.vcp_detected == null ? '—' : row.vcp_detected ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
           <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
@@ -495,7 +499,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ width: 35, minWidth: 35 }}>
-        {row.vcp_ready_for_breakout ? (
+        {row.vcp_ready_for_breakout == null ? '—' : row.vcp_ready_for_breakout ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
           <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
@@ -503,7 +507,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ width: 40, minWidth: 40 }}>
-        {row.passes_template ? (
+        {row.passes_template == null ? '—' : row.passes_template ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
           <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
@@ -512,12 +516,12 @@ const VirtualTableRow = memo(function VirtualTableRow({
 
       <TableCell align="center" sx={{ width: 80, minWidth: 80 }}>
         <Chip
-          label={row.rating}
+          label={ratingLabel(row.rating)}
           color={getRatingColor(row.rating)}
           size="small" variant="outlined"
         />
         {row.execution_state && row.execution_state !== 'unknown' && (
-          <Tooltip title={row.execution_cap_reason || ''} arrow disableHoverListener={!row.execution_cap_reason}>
+          <Tooltip describeChild title={row.execution_cap_reason ? '価格位置による補助評価の上限制約' : ''} arrow disableHoverListener={!row.execution_cap_reason}>
             <Typography
               variant="caption"
               sx={{
@@ -529,7 +533,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
                 color: row.execution_cap_applied ? 'warning.main' : 'text.secondary',
               }}
             >
-              {EXECUTION_STATE_LABELS[row.execution_state] || row.execution_state}
+              {EXECUTION_STATE_LABELS[row.execution_state] || '未確認'}
             </Typography>
           </Tooltip>
         )}
@@ -578,6 +582,8 @@ const VirtualTableRow = memo(function VirtualTableRow({
          prevProps.mcapDisplay === nextProps.mcapDisplay &&
          prevProps.showActions === nextProps.showActions &&
          prevProps.showThemes === nextProps.showThemes &&
+         prevProps.showRsSparkline === nextProps.showRsSparkline &&
+         prevProps.showPriceSparkline === nextProps.showPriceSparkline &&
          prevProps.showWatchlistMenu === nextProps.showWatchlistMenu &&
          prevProps.chartEnabled === nextProps.chartEnabled;
 });
@@ -610,11 +616,15 @@ function ResultsTable({
   // can lift this up later if users want it to survive navigation.
   const [mcapDisplay, setMcapDisplay] = useState(MCAP_DISPLAY.USD);
   const visibleColumns = useMemo(() => {
-    const base = columns.filter(column => (showActions || column.id !== 'chart') && (column.id !== 'market_themes' || results.some(row => row.market_themes?.length)));
+    const hasSeries = key => results.some(row => Array.isArray(row[key]) && row[key].filter(Number.isFinite).length >= 2);
+    const base = columns.filter(column => (showActions || column.id !== 'chart')
+      && (column.id !== 'market_themes' || results.some(row => row.market_themes?.length))
+      && (column.id !== 'rs_trend' || hasSeries('rs_sparkline_data'))
+      && (column.id !== 'price_change_1d' || hasSeries('price_sparkline_data')));
     return base.map((column) =>
       column.id === 'market_cap'
-        ? { ...column, label: mcapDisplay === MCAP_DISPLAY.USD ? 'MCap ($)' : 'MCap (local)' }
-        : column,
+        ? { ...column, width: 190, label: mcapDisplay === MCAP_DISPLAY.USD ? '時価総額（米ドル）' : '時価総額（現地通貨）' }
+        : { ...column, width: Math.max(column.width, column.label.length * 14 + 52) },
     );
   }, [showActions, mcapDisplay, results]);
 
@@ -666,7 +676,7 @@ function ResultsTable({
     return (
       <Paper sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="body1" color="text.secondary">
-          No results found
+          該当銘柄なし
         </Typography>
       </Paper>
     );
@@ -679,7 +689,7 @@ function ResultsTable({
           時価総額の表示:
         </Typography>
         <Chip
-          label={mcapDisplay === MCAP_DISPLAY.USD ? 'USD' : '現地通貨'}
+          label={mcapDisplay === MCAP_DISPLAY.USD ? '米ドル' : '現地通貨'}
           size="small"
           variant="outlined"
           onClick={toggleMcapDisplay}
@@ -700,7 +710,7 @@ function ResultsTable({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <Table stickyHeader size="small" sx={{ minWidth: showActions ? 2673 : 2613 }}>
+        <Table stickyHeader size="small" sx={{ minWidth: visibleColumns.reduce((sum, column) => sum + column.width, 0) }}>
           <TableHead>
             <TableRow>
               {visibleColumns.map((column) => (
@@ -712,6 +722,8 @@ function ResultsTable({
                     width: column.width,
                     minWidth: column.width,
                     maxWidth: column.width,
+                    overflow: 'visible',
+                    fontSize: 12,
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -720,6 +732,8 @@ function ResultsTable({
                       const sortKey = column.sortField || column.id;
                       return (
                         <TableSortLabel
+                          title={column.label}
+                          sx={{ minHeight: { xs: 44, md: 24 }, fontSize: 12 }}
                           active={sortBy === sortKey}
                           direction={sortBy === sortKey ? sortOrder : 'asc'}
                           onClick={() => handleRequestSort(sortKey)}
@@ -736,7 +750,7 @@ function ResultsTable({
                       size="small"
                       onClick={(event) => openInfo(event, column.id)}
                       aria-label={`${column.label} の説明`}
-                      sx={{ p: 0, ml: 0.25, verticalAlign: 'middle', color: 'inherit', minWidth: 24, minHeight: 24 }}
+                      sx={{ p: 0, ml: 0.25, verticalAlign: 'middle', color: 'inherit', minWidth: { xs: 44, md: 24 }, minHeight: { xs: 44, md: 24 } }}
                     >
                       <HelpOutlineIcon sx={{ fontSize: 12 }} />
                     </IconButton>
@@ -760,6 +774,8 @@ function ResultsTable({
                   onRowHover={onRowHover}
                   onOpenChart={onOpenChart}
                   showThemes={visibleColumns.some(c => c.id === "market_themes")}
+                  showRsSparkline={visibleColumns.some(c => c.id === "rs_trend")}
+                  showPriceSparkline={visibleColumns.some(c => c.id === "price_change_1d")}
                   showActions={showActions}
                   showWatchlistMenu={showWatchlistMenu}
                   chartEnabled={
@@ -779,7 +795,10 @@ function ResultsTable({
       </TableContainer>
 
       <TablePagination
-        rowsPerPageOptions={[10, 25, 50, 100]}
+        labelRowsPerPage="表示件数"
+        labelDisplayedRows={({from,to,count})=>`${from}–${to} / ${count}件`}
+        getItemAriaLabel={type=>type==='next'?'次のページ':'前のページ'}
+        rowsPerPageOptions={[10, 20, 25, 50, 100]}
         component="div"
         count={total}
         rowsPerPage={perPage}

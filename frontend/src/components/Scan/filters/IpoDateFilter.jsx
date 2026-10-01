@@ -6,11 +6,11 @@ import { Box, Chip, Typography } from '@mui/material';
  * Toggle behavior: click again to clear
  */
 const IPO_PRESETS = [
-  { value: '6m', label: '6M' },
-  { value: '1y', label: '1Y' },
-  { value: '2y', label: '2Y' },
-  { value: '3y', label: '3Y' },
-  { value: '5y', label: '5Y' },
+  { value: '6m', label: '6か月以内' },
+  { value: '1y', label: '1年以内' },
+  { value: '2y', label: '2年以内' },
+  { value: '3y', label: '3年以内' },
+  { value: '5y', label: '5年以内' },
 ];
 
 function IpoDateFilter({ value, onChange }) {
@@ -30,7 +30,7 @@ function IpoDateFilter({ value, onChange }) {
         color="text.secondary"
         sx={{ display: 'block', mb: 0.5, fontSize: '12px' }}
       >
-        IPO Age
+        上場から
       </Typography>
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
         {IPO_PRESETS.map((preset) => (
@@ -42,7 +42,7 @@ function IpoDateFilter({ value, onChange }) {
             color={value === preset.value ? 'primary' : 'default'}
             onClick={() => handleChipClick(preset.value)}
             sx={{
-              height: 22,
+              minHeight: { xs: 44, md: 24 },
               fontSize: '12px',
               '& .MuiChip-label': { px: 0.75 },
             }}
