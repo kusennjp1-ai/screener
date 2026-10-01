@@ -15,6 +15,7 @@ describe('automatic book chart aids', () => {
     expect(result.legs.map(x => x.depthPct)).toEqual(expect.arrayContaining([expect.any(Number)]));
     expect(result.legs[0].depthPct).toBeCloseTo((100.2 - 79.8) / 100.2 * 100);
     expect(result.boxes[1]).toMatchObject({curve:true,recoveryDate:bars[80].date,recoveryHigh:98.2});
+    expect(result.boxes.filter(box=>box.curve).every(box=>/^C\d+ −\d+\.\d%$/.test(box.label))).toBe(true);
     expect(result.pivot).toBeCloseTo(96.2); expect(result.summary).toContain('成立・買い判断は別確認');
   });
   it('does not label widening pullbacks as VCP', () => {

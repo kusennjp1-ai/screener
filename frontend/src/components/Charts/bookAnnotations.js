@@ -1,5 +1,6 @@
 // Retrospective visual aids. Thresholds below are application heuristics, not
 // book certification, real-time signals, or inputs to the screening engine.
+import { palettes } from '../../static/theme/tokens.js';
 const finite = Number.isFinite;
 const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 export function buildBookAnnotations(bars) {
@@ -18,7 +19,7 @@ export function buildBookAnnotations(bars) {
   if (depth < 5 || depth > 50 || base.some(b => b.high > high * 1.05) || (bars[end].close - low) / (high - low) < .33)
     return empty('自動注記：現在の探索条件でベース候補を確認できません。');
   const boxes = [{ start: bars[anchor].date, end: bars[end].date, high, low,
-    label: `ベース候補 ${base.length}日 / 深さ${depth.toFixed(1)}%`, color: '#b39ddb' }];
+    label: `ベース候補 ${base.length}日 / 深さ${depth.toFixed(1)}%`, color: palettes.dark.accent }];
   // Confirm local extrema only after two subsequent bars. Ignore same-bar high/low
   // ordering because OHLC cannot tell which occurred first.
   const pivots = [{ index: anchor, type: 'high', value: high }];
@@ -54,7 +55,7 @@ export function buildBookAnnotations(bars) {
     const limit = next ? bars.findIndex(b => b.date === next.start) : end;
     let recovery = leg.index + 1;
     for (let j = recovery; j <= limit; j++) if (bars[j].high >= bars[recovery].high) recovery = j;
-    boxes.push({ ...leg, color: '#4dd0e1', label: `C${i + 1} −${leg.depthPct.toFixed(1)}%`,
+    boxes.push({ ...leg, color: palettes.dark.wait, label: `C${i + 1} −${leg.depthPct.toFixed(1)}%`,
       recoveryDate: bars[recovery].date, recoveryHigh: bars[recovery].high, curve: true });
   });
   // An observed high crossing, not a buy signal. Wait until the local trough
@@ -68,7 +69,7 @@ export function buildBookAnnotations(bars) {
       breakout = { date: bar.date, high: bar.high, low: bar.low, close: bar.close, pivot: last.high, weakClose,
         label: weakClose ? '高値上抜け・下半分で引け' : '収縮高値を上抜け' };
       boxes.push({ start: bar.date, end: bar.date, high: bar.high, low: bar.low, arrow: true,
-        color: weakClose ? '#ffb74d' : '#80cbc4', label: breakout.label });
+        color: weakClose ? palettes.dark.ext : palettes.dark.zone, label: breakout.label });
     }
   }
   return { boxes, breakout, legs: candidate ? legs : [], pivot: candidate ? last.high : null, candidate,
