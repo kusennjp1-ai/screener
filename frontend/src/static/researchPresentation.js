@@ -15,7 +15,7 @@ export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearO
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || a.qualified) && (!watchlist || watchlist.includes(r.symbol)) &&
     (!nearOnly || (a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
-    `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query) &&
+    (!query || `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query)) &&
     (coverage === 'all' || (coverage === 'verified') === (r.technical_audit?.valid === true)));
 }
 
@@ -23,6 +23,22 @@ export function sessionCurrent(rows, date, now) {
   return rows.some(r => r.entry_evidence?.as_of_date === date &&
     r.entry_evidence?.calendar?.latest_completed_session === date &&
     now >= Date.parse(r.entry_evidence.calendar.evaluated_at) && now < Date.parse(r.entry_evidence.calendar.valid_until));
+}
+
+// A publication repeats the same exchange calendar on many stock rows. Parse
+// each distinct interval once when that immutable publication/date changes;
+// clock ticks and method changes only need the original inclusive/exclusive
+// time comparison, without parsing thousands of identical ISO timestamps.
+export function prepareSessionCurrent(rows, date) {
+  const intervals = new Map();
+  for (const row of rows) {
+    const evidence = row.entry_evidence, calendar = evidence?.calendar;
+    if (!calendar || evidence.as_of_date !== date || calendar.latest_completed_session !== date) continue;
+    const from = Date.parse(calendar.evaluated_at), until = Date.parse(calendar.valid_until);
+    if (Number.isFinite(from) && Number.isFinite(until)) intervals.set(`${from}/${until}`, [from, until]);
+  }
+  const ranges = [...intervals.values()];
+  return now => ranges.some(([from, until]) => now >= from && now < until);
 }
 
 export function formatPublished(value) {

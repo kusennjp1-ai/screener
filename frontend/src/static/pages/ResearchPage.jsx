@@ -4,7 +4,7 @@ import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
-import { filterRanked, sessionCurrent } from '../researchPresentation';
+import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography } from '@mui/material';
@@ -75,10 +75,12 @@ export default function ResearchPage({compareOnly=false}) {
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
   const evaluated = useMemo(() => bundle.data?.rankings?.[method] || [], [method, bundle.data]);
   const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, nearOnly, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, nearOnly, onlyWatch, watch, liquid, coverage, sector]);
-  const coverageRows = useMemo(() => filterRanked(evaluated, {liquidOnly:liquid}), [evaluated, liquid]);
-  const verifiedCount = coverageRows.filter(r => r.row.technical_audit?.valid === true).length;
   const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
   const radarRanked=useMemo(()=>filterRanked(bundle.data?.rankings?.minervini||[],{liquidOnly:liquid}),[bundle.data,liquid]);
+  // Coverage is independent of method; all exported rankings share one universe.
+  const coverageRows = radarRanked;
+  const verifiedCount = useMemo(() => coverageRows.filter(r => r.row.technical_audit?.valid === true).length, [coverageRows]);
+  const sessionCurrentAt = useMemo(() => prepareSessionCurrent(rows, bundle.data?.date), [rows, bundle.data?.date]);
   const availableSymbols = useMemo(() => new Set(rows.map(r => r.symbol)), [rows]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
   const detail = useQuery({queryKey:['researchDetail', selectedSummary?.research_detail_path, version],
@@ -123,10 +125,10 @@ export default function ResearchPage({compareOnly=false}) {
   const clockSelector = useCallback(time => JSON.stringify([
     quoteStatus(personalKey ? personal.quote : quote.data,time),
     snapshotFreshness(bundle.data?.date || entry.as_of_date,time),
-    sessionCurrent(rows,bundle.data?.date,time),
+    sessionCurrentAt(time),
     time-Date.parse(manifest.data?.generated_at)>96*3600000,
     clockRows.map(row=>entryReadiness(row,bundle.data?.date,market,time).rules.map(r=>r.state)),
-  ]),[personalKey,personal.quote,quote.data,bundle.data?.date,entry.as_of_date,rows,clockRows,market,manifest.data?.generated_at]);
+  ]),[personalKey,personal.quote,quote.data,bundle.data?.date,entry.as_of_date,sessionCurrentAt,clockRows,market,manifest.data?.generated_at]);
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
@@ -137,7 +139,7 @@ export default function ResearchPage({compareOnly=false}) {
   const leaders = useMemo(() => filterRanked(bundle.data?.rankings?.ibd || [], { liquidOnly: true, qualifiedOnly: true }).slice(0, 50).map(r => r.row), [bundle.data]);
   const overlap = compareReference(leaders, reference.data, bundle.data?.date);
   const age = now - Date.parse(manifest.data?.generated_at);
-  const currentSession = sessionCurrent(rows, bundle.data?.date, now);
+  const currentSession = sessionCurrentAt(now);
   const stale = !currentSession && (!Number.isFinite(age) || age > 96 * 3600000);
   const freshness = snapshotFreshness(bundle.data?.date || entry.as_of_date, now);
   const toggleWatch = useCallback((ticker) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalPivot, filterRanked, formatPublished, sessionCurrent } from './researchPresentation';
+import { canonicalPivot, filterRanked, formatPublished, prepareSessionCurrent, sessionCurrent } from './researchPresentation';
 import { entryPlan, rankCandidates } from './researchEngine';
 import { withAuditFixture } from './testAuditFixture';
 
@@ -25,6 +25,20 @@ describe('audit remediation contracts', () => {
   it('labels UTC and naive UTC timestamps in Japanese local time', () => {
     expect(formatPublished('2026-09-26T04:37:23')).toBe(formatPublished('2026-09-26T04:37:23Z'));
     expect(formatPublished('2026-09-26T04:37:23Z')).toContain('13:37:23 JST');
+  });
+  it('prepares the identical calendar truth for all publication intervals and boundary times', () => {
+    const date='2026-09-25', first={as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:'2026-09-26T00:00:00Z',valid_until:'2026-09-28T20:00:00Z'}};
+    const rows=[...Array.from({length:5901},()=>({entry_evidence:first})),
+      {entry_evidence:{...first,calendar:{...first.calendar,evaluated_at:'2026-09-29T00:00:00Z',valid_until:'2026-09-30T20:00:00Z'}}},
+      {entry_evidence:{...first,calendar:{...first.calendar,evaluated_at:'invalid'}}},
+      {entry_evidence:{...first,calendar:{...first.calendar,latest_completed_session:'2026-09-24'}}}, {}];
+    const current=prepareSessionCurrent(rows,date);
+    for(const value of ['2026-09-25T23:59:59Z','2026-09-26T00:00:00Z','2026-09-28T19:59:59Z','2026-09-28T20:00:00Z','2026-09-28T21:00:00Z','2026-09-29T00:00:00Z','2026-09-30T20:00:00Z']) {
+      const time=Date.parse(value);expect(current(time)).toBe(sessionCurrent(rows,date,time));
+    }
+    expect(current(NaN)).toBe(false);
+    expect(prepareSessionCurrent(rows,'2026-09-24')(Date.parse('2026-09-27'))).toBe(false);
+    expect(prepareSessionCurrent([{}],undefined)(Date.now())).toBe(false);
   });
   it('puts a qualified near-trigger candidate ahead of an extended high-RS name', () => {
     const base = withAuditFixture({symbol:'NEAR',market:'US',current_price:102,se_pivot_price:100,rs_rating:80});
