@@ -1,8 +1,9 @@
-.market-workbench { --market-card:var(--surface); --market-ink:var(--text); padding:28px 0; max-width:1440px; margin:auto; font-variant-numeric:tabular-nums; }
+.market-workbench { --market-card:var(--surface); --market-ink:var(--text); padding:28px 24px; max-width:1440px; margin:auto; font-variant-numeric:tabular-nums; }
 .market-workbench[data-theme="dark"] { --market-card:var(--panel); --market-ink:var(--text); }
 .market-page-head,.market-section-head { display:flex; justify-content:space-between; gap:24px; align-items:center; margin-bottom:24px; }
 .market-date { display:flex; flex-direction:column; align-items:flex-end; gap:4px; font-size:12px; }
 .market-date strong { font-size:16px; }
+.market-date strong,.market-ratio strong,.market-stat strong { font-family:var(--font-mono);font-variant-numeric:tabular-nums; }
 .market-workbench .MuiTabs-root { margin-bottom:24px; }
 .market-workbench .MuiTab-root { min-height:48px; font-size:14px; }
 .market-workbench .Mui-selected { color:var(--accent)!important; }
@@ -37,7 +38,7 @@
 .market-footnote { margin-top:24px; font-size:12px; opacity:.8; line-height:2; }
 .market-footnote a { color:var(--accent); display:inline-block; margin-top:12px; font-size:14px; }
 @media(max-width:700px) {
-  .market-workbench { padding-top:20px; }
+  .market-workbench { padding:20px 16px; }
   .market-page-head { gap:12px; align-items:start; }
   .market-date strong { font-size:14px; }
   .market-hero { grid-template-columns:1fr; gap:20px; padding:22px; }
@@ -58,7 +59,7 @@
 .market-workbench[data-theme="light"] .market-footnote { opacity:1; color:var(--text-2); }
 
 /* D8: ranked relative strength board; fixed data semantics, compact layout. */
-.sector-workbench { padding:16px 0; }
+.sector-workbench { padding:16px 24px; }
 .sector-workbench .MuiTabs-root { margin-bottom:12px; }
 .sector-page-meta { display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:var(--text-2); }
 .sector-page-meta a { color:var(--accent);min-height:24px;display:inline-flex;align-items:center; }
@@ -129,7 +130,7 @@
  .sector-rate-top>i { width:36px; }
 }
 @media(max-width:700px) {
- .sector-workbench { padding:8px 0; }
+ .sector-workbench { padding:8px 16px; }
  .sector-page-meta { font-size:11px; }
  .sector-dashboard { grid-template-columns:1fr;gap:12px; }
  .sector-heading h1 { font-size:34px; }

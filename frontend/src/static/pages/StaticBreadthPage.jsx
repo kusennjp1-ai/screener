@@ -67,7 +67,7 @@ function StaticBreadthPage() {
   const payload = breadthQuery.data?.payload || {};
   const groupAttribution = payload.group_attribution || null;
   const attributionAvailable = Boolean(groupAttribution?.available);
-  const displayName = marketEntry.display_name;
+  const displayName = marketEntry.market === 'US' ? '米国株' : marketEntry.display_name;
   const analysisDate = payload.current?.date;
   const filteredChartData = useMemo(() => {
     const allData = [...(payload.history_90d || []), ...(payload.chart_data || [])];
@@ -103,7 +103,7 @@ function StaticBreadthPage() {
   return (
     <Box component="main" className={`market-workbench${selectedTab===2?' sector-workbench':''}`} data-theme={theme.palette.mode}>
       <ConnectionStatus date={marketEntry.as_of_date} />
-      {selectedTab === 2 ? <div className="sector-page-meta"><span>分析 {marketEntry.as_of_date || '未確認'}</span></div> : <header className="market-page-head"><div><div className="research-kicker">市場の概況</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 28, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>データを再確認 ↻</Button></div></header>}
+      {selectedTab === 2 ? <div className="sector-page-meta"><span>分析 {marketEntry.as_of_date || '未確認'}</span></div> : <header className="market-page-head"><div><div className="research-kicker">市場の概況</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>データを再確認 ↻</Button></div></header>}
       {selectedTab !== 2 && (summary.fresh.state !== 'recent' || mismatch) && <Alert severity="warning" sx={{ mb: 2 }}>分析日が古い、未確認、または公開データと一致しません。最新の市場状態として扱わないでください。</Alert>}
       <Tabs
         value={selectedTab}

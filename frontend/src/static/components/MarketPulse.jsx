@@ -3,12 +3,12 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Too
 import { breadthSummary } from '../breadthSummary';
 import { finite } from '../researchEngine';
 
-const value = n => finite(n) ? n.toLocaleString('ja-JP') : '—';
+const value = n => finite(n) ? n.toLocaleString('ja-JP').replace('-', '−') : '—';
 export default function MarketPulse({ current, history, range, onRangeChange }) {
   const summary = breadthSummary(current);
   return <>
     <Paper elevation={0} className={`market-hero market-tone-${summary.tone}`}>
-      <div className="market-hero-copy"><div className="research-kicker">MARKET PULSE / 市場の広がり</div>
+      <div className="market-hero-copy"><div className="research-kicker">市場の広がり</div>
         <Typography component="h2" sx={{ fontWeight: 700, fontSize: { xs: 26, md: 34 }, letterSpacing: '-.04em', my: 1.5 }}>{summary.title}</Typography>
         <Typography color="text.secondary" sx={{ lineHeight: 1.9, maxWidth: 620 }}>{summary.note}</Typography>
         <div className="market-context-note">ブレッドスの独自要約です。指数トレンド・分配日・決算を含む総合的な買い判定ではありません。</div>
