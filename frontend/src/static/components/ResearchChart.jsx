@@ -29,7 +29,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
       : query.isError ? <Alert severity="error" action={<Button onClick={() => query.refetch()}>再試行</Button>}>チャートを取得できません。</Alert>
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography> : null}
     {(ready || initialized) && <div hidden={!ready} aria-hidden={!ready}>
-      <CandlestickChart smallScreen={small} researchActions={<Button size="small" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</Button>} researchView bookAnnotations symbol={symbol} height={small ? 360 : 440}
+      <CandlestickChart smallScreen={small} researchActions={<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>} researchView bookAnnotations symbol={symbol} height={small ? 360 : 440}
         chartIdentity={JSON.stringify([symbol, date, generation, entry?.path])}
         priceData={ready ? data.bars : EMPTY_BARS} rsLineData={ready ? data.rs_line || null : null} rsRatingValue={ready ? rsRating ?? null : null}
         epsLine={ready ? data.eps_line || null : null} blueDots={ready ? data.blue_dots || null : null}

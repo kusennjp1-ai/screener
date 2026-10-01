@@ -1,0 +1,13 @@
+/* Native controls avoid per-button Emotion/style/ripple work on data switches.
+   Theme values come from the same MUI theme used by the legacy controls. */
+.research-chart-controls{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:4px;border-bottom:1px solid var(--chart-control-line)}
+.research-chart-controls>*{flex-shrink:0}
+.research-chart-controls button{appearance:none;display:inline-flex;align-items:center;justify-content:center;position:relative;box-sizing:border-box;min-width:32px;min-height:44px;padding:6px 8px;margin:0;border:0;border-radius:8px;background:transparent;color:var(--chart-control-accent);font:inherit;font-size:13px;font-weight:500;line-height:1.75;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.research-chart-controls button:hover{background:var(--chart-control-hover)}
+.research-chart-controls button:focus-visible{outline:2px solid var(--chart-control-accent);outline-offset:-2px}
+.research-chart-timeframe{display:inline-flex;border-radius:8px}
+.research-chart-timeframe button{padding:7px;border:1px solid var(--chart-control-line);border-radius:0;color:var(--chart-control-muted)}
+.research-chart-timeframe button:first-child{border-radius:8px 0 0 8px}
+.research-chart-timeframe button:last-child{border-radius:0 8px 8px 0;margin-left:-1px}
+.research-chart-timeframe button[aria-pressed=true]{background:var(--chart-control-selected);color:var(--chart-control-text)}
+@media(max-width:700px){.research-chart-controls button{min-width:44px}.research-chart-controls{scrollbar-width:none}}

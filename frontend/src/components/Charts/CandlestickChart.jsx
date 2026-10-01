@@ -13,6 +13,7 @@ import { rsBandForRange } from './rsBand';
 import ChartSkeleton from './ChartSkeleton';
 import { transformToCandlestickData } from './candlestickData';
 import { palettes } from '../../static/theme/tokens';
+import './researchChartControls.css';
 
 // Debounce utility
 const debounce = (fn, ms) => {
@@ -98,6 +99,8 @@ function CandlestickChart({
   const prevCloseMapRef = useRef(new Map()); // Map of date -> previous close for % change calculation
   const latestCandleRef = useRef(null); // Store latest candle for default display
   const previousIdentityRef = useRef(chartIdentity);
+  const previousComparisonSessionsRef = useRef(comparisonSessions);
+  const identityChanged = previousIdentityRef.current !== chartIdentity;
   // Validated static surfaces can reuse their canvas; live/legacy charts retain
   // symbol-scoped instances. The identity covers symbol, date, path and generation.
   const instanceSymbol = chartIdentity == null ? symbol : null;
@@ -383,7 +386,7 @@ function CandlestickChart({
   }, [interactive, height, isDarkMode, symbol, compact]);
 
   // Subscribe to visible time range changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!chartRef.current || (!onVisibleRangeChange && !researchView)) return;
 
     const debouncedRangeChange = debounce((range) => {
@@ -512,31 +515,6 @@ function CandlestickChart({
       return;
     }
 
-    // Wait until all panes (especially daily -> weekly RS) have replaced their
-    // time points before converting dates to logical indices.
-    const restore = shouldRestoreRangeRef.current;
-    const initialize = isFirstDataLoadRef.current;
-    shouldRestoreRangeRef.current = false;
-    isFirstDataLoadRef.current = false;
-    if (restore || initialize) {
-      const chart = chartRef.current;
-      let applied = false;
-      const frame = requestAnimationFrame(() => {
-        if (chartRef.current !== chart) return;
-        applied = true;
-        if (restore && visibleRange?.from && visibleRange?.to) chart.timeScale().setVisibleRange(visibleRange);
-        else setDefaultVisibleWindow(chartData.candlesticks.length);
-      });
-      return () => {
-        cancelAnimationFrame(frame);
-        // A synchronous timeframe reset may cancel this frame before the new
-        // daily bars commit. The replacement still needs its initial window.
-        if (!applied && chartRef.current === chart) isFirstDataLoadRef.current = true;
-      };
-    }
-    // Otherwise, don't touch the zoom - let user adjust freely
-  // setDefaultVisibleWindow is stable (defined below from refs); excluded to
-  // keep this effect keyed only on data/range changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartData, effectiveTimeframe, height, isDarkMode, symbol, compact, bookAnnotations]);
 
@@ -757,6 +735,26 @@ function CandlestickChart({
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   }, [rsStripShown, symbol, height, isDarkMode, compact, bandReservePx, researchView]);
 
+  // All series now have the new dates, so resolve the initial window before
+  // Lightweight Charts' pending paint. A later rAF would first paint its default
+  // window and then schedule another paint for this range. A cached symbol may
+  // still be committing its weekly -> daily reset; leave initialization pending
+  // until that synchronous daily render completes.
+  useLayoutEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !chartData?.candlesticks?.length) return;
+    if (chartIdentity != null && identityChanged && timeframe !== 'daily') return;
+    const comparisonChanged = previousComparisonSessionsRef.current !== comparisonSessions;
+    previousComparisonSessionsRef.current = comparisonSessions;
+    const restore = shouldRestoreRangeRef.current;
+    const initialize = isFirstDataLoadRef.current;
+    if (!restore && !initialize && !(comparisonSessions && comparisonChanged)) return;
+    shouldRestoreRangeRef.current = false;
+    isFirstDataLoadRef.current = false;
+    if (restore && visibleRange?.from && visibleRange?.to) chart.timeScale().setVisibleRange(visibleRange);
+    else setDefaultVisibleWindow(chartData.candlesticks.length);
+  }, [chartData, chartIdentity, identityChanged, timeframe, comparisonSessions, visibleRange, setDefaultVisibleWindow, height, isDarkMode, symbol, compact, bookAnnotations]);
+
   // Dynamic RS band: size the RS overlay scale so the line fills the empty space
   // below the candles without overlapping them. Recomputes on data change and on
   // pan/zoom (price re-auto-scales to the visible window, so the safe band moves).
@@ -799,7 +797,7 @@ function CandlestickChart({
   // Only show full loading state if we have no data at all (not even placeholder)
   const hasData = chartData && chartData.candlesticks.length > 0;
   // A validated static container remains mounted while its next payload is
-  // pending. Keep its control DOM too; hide it rather than rebuilding all MUI
+  // pending. Keep its control DOM too; hide it rather than rebuilding the
   // buttons when the replacement data arrives. No old price values are kept.
   const keepResearchChrome = hasData || chartIdentity != null;
   const showLoading = effectiveIsLoading && !hasData;
@@ -813,24 +811,18 @@ function CandlestickChart({
   // suppressed for dense grid tiles.
   const rsLineVisible = !researchView && !compact && rsStripShown;
 
-  useEffect(() => {
-    if (!comparisonSessions || !chartData?.candlesticks?.length) return;
-    const frame=requestAnimationFrame(()=>{if(chartRef.current)setResearchRange(chartRef.current,chartData.candlesticks,comparisonSessions);});
-    return ()=>cancelAnimationFrame(frame);
-  },[comparisonSessions,chartData,height,isDarkMode,symbol]);
-
   return (
     <>
     {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
     {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
-    {researchView && !compact && keepResearchChrome && <Box role="group" aria-label="チャート操作" aria-hidden={!hasData} sx={{display:hasData?'flex':'none',flexWrap:'nowrap',overflowX:'auto',gap:.25,p:.5,'& > *':{flexShrink:0},borderBottom:1,borderColor:'divider','& button':{minHeight:44,fontSize:13}}}>
-      <ToggleButtonGroup size="small" exclusive value={timeframe} onChange={(_,value)=>{if(value){isFirstDataLoadRef.current=true;setTimeframe(value);}}} aria-label="足の種類"><ToggleButton value="daily">日足</ToggleButton><ToggleButton value="weekly">週足</ToggleButton></ToggleButtonGroup>
-      {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <Button key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</Button>)}
-      <Button aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</Button>
-      <Button aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</Button>
-      <Button onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</Button>
-      <Button aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</Button>{researchActions}
-    </Box>}
+    {researchView && !compact && keepResearchChrome && <div className="research-chart-controls" role="group" aria-label="チャート操作" aria-hidden={!hasData} style={{display:hasData?'flex':'none','--chart-control-accent':theme.palette.primary.main,'--chart-control-text':theme.palette.text.primary,'--chart-control-muted':theme.palette.text.secondary,'--chart-control-line':theme.palette.divider,'--chart-control-hover':theme.palette.action.hover,'--chart-control-selected':theme.palette.action.selected}}>
+      <div className="research-chart-timeframe" role="group" aria-label="足の種類">{[['daily','日足'],['weekly','週足']].map(([value,label])=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{if(timeframe!==value){isFirstDataLoadRef.current=true;setTimeframe(value);}}}>{label}</button>)}</div>
+      {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <button type="button" key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</button>)}
+      <button type="button" aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</button>
+      <button type="button" aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</button>
+      <button type="button" onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</button>
+      <button type="button" aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</button>{researchActions}
+    </div>}
     {researchView && !compact && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary'}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
       <Box component={smallScreen ? 'details' : 'div'} sx={{mt:.5,'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>

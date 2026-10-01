@@ -21,8 +21,14 @@ beforeEach(()=>{
     const context={save:vi.fn(),restore:vi.fn(),resetTransform:vi.fn(),clearRect:vi.fn()};
     const canvas=document.createElement('canvas');
     canvas.getContext=()=>context;container.appendChild(canvas);
-    const timeScale={subscribeVisibleTimeRangeChange:vi.fn(),unsubscribeVisibleTimeRangeChange:vi.fn(),getVisibleRange:()=>null};
-    const item={chart:{subscribeCrosshairMove:vi.fn(),clearCrosshairPosition:vi.fn(),resize:vi.fn(),remove:vi.fn(),applyOptions:vi.fn(),timeScale:()=>timeScale},context};
+    let logicalRange=null;
+    const rangeApplications=[];
+    const timeScale={subscribeVisibleTimeRangeChange:vi.fn(),unsubscribeVisibleTimeRangeChange:vi.fn(),getVisibleRange:()=>null,
+      timeToIndex:vi.fn(time=>item.candlestickSeries.setData.mock.lastCall?.[0].findIndex(p=>p.time===time)),
+      getVisibleLogicalRange:()=>logicalRange,fitContent:vi.fn(),setVisibleRange:vi.fn(),
+      setVisibleLogicalRange:vi.fn(range=>{logicalRange=range;rangeApplications.push({range,close:item.candlestickSeries.setData.mock.lastCall?.[0].at(-1)?.close,rs:item.rsLineSeries.setData.mock.lastCall?.[0].slice()});})};
+    const scaleOptions=vi.fn();
+    const item={chart:{subscribeCrosshairMove:vi.fn(),clearCrosshairPosition:vi.fn(),resize:vi.fn(),remove:vi.fn(),applyOptions:vi.fn(),timeScale:()=>timeScale,priceScale:()=>({applyOptions:scaleOptions})},context,timeScale,rangeApplications,scaleOptions};
     for(const key of seriesKeys){
       const primitiveSet=new Set();
       item[key]={setData:vi.fn(),applyOptions:vi.fn(),priceScale:()=>({applyOptions:vi.fn()}),
@@ -54,6 +60,7 @@ describe('validated static chart instance reuse',()=>{
     expect(instance.chart.clearCrosshairPosition).toHaveBeenCalledTimes(1);
     expect(instance.candlestickSeries.setData.mock.lastCall[0].map(p=>p.close)).toEqual([200,201]);
     expect(instance.rsLineSeries.setData.mock.lastCall[0]).toEqual(rs(20));
+    expect(instance.rangeApplications.at(-1)).toEqual({range:{from:-.5,to:3},close:201,rs:rs(20)});
     expect(instance.volumeSeries.setData.mock.lastCall[0].map(p=>p.value)).toEqual([1000,2000]);
     for(const primitive of previousPrimitives)expect(instance.candlestickSeries.primitiveSet.has(primitive)).toBe(false);
     expect(instance.candlestickSeries.removePriceLine).toHaveBeenCalledWith(expect.objectContaining({price:101}));
@@ -92,5 +99,50 @@ describe('validated static chart instance reuse',()=>{
     expect(instance.chart.remove).toHaveBeenCalledTimes(1);
     view.update({symbol:'BBB',chartIdentity:null,priceData:bars(150)});
     expect(factory).toHaveBeenCalledTimes(3);
+  });
+  it('applies the first window synchronously after RS, and keeps native range, zoom and annotation controls functional',()=>{
+    const line=longBars.map((p,i)=>({time:p.date,value:10+i/100}));
+    setup({priceData:longBars,rsLineData:line});
+    const instance=instances[0],scale=instance.timeScale;
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(instance.rangeApplications).toEqual([{range:{from:133.5,to:261},close:100,rs:line}]);
+    for(const [label,from] of [['1か月',238.5],['3か月',196.5],['6か月',133.5],['1年',7.5]]){
+      fireEvent.click(screen.getByRole('button',{name:label}));
+      expect(scale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from,to:261});
+    }
+    const original=scale.getVisibleLogicalRange();
+    fireEvent.click(screen.getByRole('button',{name:'チャートを拡大'}));
+    expect(scale.getVisibleLogicalRange().from).toBeCloseTo(original.to-(original.to-original.from)*.7);
+    fireEvent.click(screen.getByRole('button',{name:'チャートを縮小'}));
+    expect(scale.getVisibleLogicalRange().from).toBeCloseTo(original.from);
+    fireEvent.click(screen.getByRole('button',{name:'リセット'}));
+    expect(instance.scaleOptions).toHaveBeenLastCalledWith({autoScale:true});
+    expect(scale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from:133.5,to:261});
+    fireEvent.click(screen.getByRole('button',{name:'図解 詳細'}));
+    expect(screen.getByRole('button',{name:'図解 簡易'})).toHaveAttribute('aria-pressed','false');
+    fireEvent.click(screen.getByRole('button',{name:'週足'}));
+    const weekCount=instance.candlestickSeries.setData.mock.lastCall[0].length;
+    fireEvent.click(screen.getByRole('button',{name:'3か月'}));
+    expect(scale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from:weekCount-13-.5,to:weekCount+1});
+  });
+  it('preserves manual pan for unchanged identity and initializes the replacement only after all new series arrive',()=>{
+    const view=setup({priceData:longBars}),instance=instances[0];
+    instance.timeScale.setVisibleLogicalRange({from:10,to:50});
+    const count=instance.rangeApplications.length;
+    view.update({priceData:longBars,pivotPrice:102});
+    expect(instance.rangeApplications).toHaveLength(count);
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:10,to:50});
+    view.update({symbol:'BBB',chartIdentity:'BBB:2',priceData:[],rsLineData:null});
+    expect(instance.rangeApplications).toHaveLength(count);
+    view.update({symbol:'BBB',chartIdentity:'BBB:2',priceData:bars(200),rsLineData:rs(20)});
+    expect(instance.rangeApplications.at(-1)).toEqual({range:{from:-.5,to:3},close:201,rs:rs(20)});
+  });
+  it('changes comparison duration synchronously without an extra animation frame',()=>{
+    const view=setup({priceData:longBars,comparisonSessions:126}),instance=instances[0];
+    const count=instance.rangeApplications.length;
+    view.update({priceData:longBars,comparisonSessions:63});
+    expect(instance.rangeApplications).toHaveLength(count+1);
+    expect(instance.timeScale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from:196.5,to:261});
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
   });
 });
