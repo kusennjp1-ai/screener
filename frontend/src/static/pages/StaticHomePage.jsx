@@ -486,6 +486,7 @@ function StaticHomePage() {
       </Paper>
 
       <StaticChartViewerModal
+        date={marketEntry.as_of_date}
         open={chartModalOpen}
         onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
