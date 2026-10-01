@@ -35,9 +35,9 @@ import {
   YAxis,
 } from 'recharts';
 
-const UP_COLOR = '#4caf50';
-const DOWN_COLOR = '#f44336';
-const FLAT_COLOR = '#9e9e9e';
+const UP_COLOR = 'var(--zone)';
+const DOWN_COLOR = 'var(--neg)';
+const FLAT_COLOR = 'var(--text-3)';
 const NO_GROUP_LABEL = 'No Group';
 
 const formatPct = (value) => {
@@ -140,7 +140,7 @@ function NetTrendSparkline({ data }) {
           alignItems: 'center',
           justifyContent: 'center',
           color: 'text.disabled',
-          fontSize: 10,
+          fontSize: 11,
         }}
       >
         -
@@ -155,7 +155,7 @@ function NetTrendSparkline({ data }) {
     >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
-          <ReferenceLine y={0} stroke="#bdbdbd" strokeWidth={0.5} />
+          <ReferenceLine y={0} stroke="var(--text-3)" strokeWidth={0.5} />
           <Line
             type="monotone"
             dataKey="net"
@@ -233,16 +233,16 @@ function GroupActivityBarChart({ topGroups, date }) {
             margin={{ top: 4, right: 16, bottom: 4, left: 0 }}
             barCategoryGap={4}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#eeeeee" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
             <YAxis
               type="category"
               dataKey="group"
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: 11 }}
               width={170}
               interval={0}
             />
-            <RechartsTooltip content={<HeroBarChartTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+            <RechartsTooltip content={<HeroBarChartTooltip />} cursor={{ fill: 'color-mix(in srgb, var(--scrim) 4%, transparent)' }} />
             <Bar dataKey="up_count" stackId="activity" fill={UP_COLOR} />
             <Bar dataKey="down_count" stackId="activity" fill={DOWN_COLOR} />
           </BarChart>
@@ -260,9 +260,9 @@ function GroupRow({ row, maxAbsNet, trendData }) {
   const netIntensity = maxAbsNet > 0 ? Math.min(Math.abs(row.net) / maxAbsNet, 1) : 0;
   const netBgColor =
     row.net > 0
-      ? `rgba(76, 175, 80, ${(netIntensity * 0.32).toFixed(3)})`
+      ? `color-mix(in srgb, var(--zone) ${(netIntensity * 32).toFixed(1)}%, transparent)`
       : row.net < 0
-        ? `rgba(244, 67, 54, ${(netIntensity * 0.32).toFixed(3)})`
+        ? `color-mix(in srgb, var(--neg) ${(netIntensity * 32).toFixed(1)}%, transparent)`
         : 'transparent';
 
   return (
@@ -496,12 +496,12 @@ function BreadthGroupAttribution({ attribution }) {
           <Chip
             size="small"
             label={`4%超 上昇: ${selectedDay.stocks_up_4pct}`}
-            sx={{ bgcolor: 'rgba(76,175,80,0.16)', color: 'success.main', fontWeight: 600 }}
+            sx={{ bgcolor: 'color-mix(in srgb, var(--zone) 16%, transparent)', color: 'success.main', fontWeight: 600 }}
           />
           <Chip
             size="small"
             label={`4%超 下落: ${selectedDay.stocks_down_4pct}`}
-            sx={{ bgcolor: 'rgba(244,67,54,0.16)', color: 'error.main', fontWeight: 600 }}
+            sx={{ bgcolor: 'color-mix(in srgb, var(--neg) 16%, transparent)', color: 'error.main', fontWeight: 600 }}
           />
           <Chip
             size="small"

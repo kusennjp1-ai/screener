@@ -54,9 +54,9 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
           target="_blank"
           rel="noopener noreferrer"
           underline="none"
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, color: '#4f8cff', fontWeight: 600 }}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, color: 'var(--wait)', fontWeight: 600 }}
         >
-          <OpenInNewIcon sx={{ fontSize: 15 }} />
+          <OpenInNewIcon sx={{ fontSize: 16 }} />
           TradingViewで開く
         </Link>
       )}
@@ -67,13 +67,13 @@ export default function TradingViewBridge({ symbol, market, signal, riskPlan, as
           tabIndex={0}
           onClick={copyPine}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') copyPine(); }}
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, color: copied ? '#22ab94' : '#4f8cff', fontWeight: 600, cursor: 'pointer' }}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, color: copied ? 'var(--zone)' : 'var(--wait)', fontWeight: 600, cursor: 'pointer' }}
         >
-          <ContentCopyIcon sx={{ fontSize: 15 }} />
+          <ContentCopyIcon sx={{ fontSize: 16 }} />
           {copied ? 'コピーしました' : 'Pineオーバーレイをコピー'}
         </Box>
       )}
-      <Typography sx={{ fontSize: 10.5, color: 'text.disabled' }}>
+      <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>
         ピボット・ストップ・2R/3R・買いゾーンを自分のTradingViewチャートに重ねて表示（要Pineエディタ貼付）。
       </Typography>
     </Box>

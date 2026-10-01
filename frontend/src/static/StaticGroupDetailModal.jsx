@@ -170,25 +170,25 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                         scale="log"
                         domain={[1, 200]}
                         reversed
-                        tick={{ fontSize: 10 }}
+                        tick={{ fontSize: 11 }}
                         tickFormatter={(value) => value}
                         ticks={[1, 5, 10, 20, 50, 100, 197]}
                       />
                       <RechartsTooltip
                         contentStyle={{
-                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                          backgroundColor: 'color-mix(in srgb, var(--scrim) 80%, transparent)',
                           border: 'none',
                           borderRadius: 4,
                           fontSize: 12,
                         }}
-                        labelStyle={{ color: '#fff' }}
-                        itemStyle={{ color: '#fff' }}
+                        labelStyle={{ color: 'var(--surface)' }}
+                        itemStyle={{ color: 'var(--surface)' }}
                         formatter={(value) => [`順位: ${value}`, '']}
                         labelFormatter={(label, payload) => payload?.[0]?.payload?.date || label}
                       />
-                      <ReferenceLine y={20} stroke="#4caf50" strokeDasharray="3 3" opacity={0.5} />
-                      <ReferenceLine y={177} stroke="#f44336" strokeDasharray="3 3" opacity={0.5} />
-                      <Line type="monotone" dataKey="rank" stroke="#2196f3" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                      <ReferenceLine y={20} stroke="var(--zone)" strokeDasharray="3 3" opacity={0.5} />
+                      <ReferenceLine y={177} stroke="var(--neg)" strokeDasharray="3 3" opacity={0.5} />
+                      <Line type="monotone" dataKey="rank" stroke="var(--wait)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </Box>

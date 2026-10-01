@@ -67,8 +67,8 @@ function VerdictBadge({ meta, suffix }) {
   const Icon = meta.Icon;
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-      <Icon sx={{ fontSize: 15, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: 12.5, color: meta.color }}>
+      <Icon sx={{ fontSize: 16, color: meta.color }} />
+      <Typography sx={{ fontWeight: 800, fontSize: 13, color: meta.color }}>
         {meta.label}{suffix}
       </Typography>
     </Box>
@@ -85,7 +85,7 @@ function RsPill({ value }) {
       <Box sx={{ width: 26, height: 4, borderRadius: 2, bgcolor: C.track, overflow: 'hidden' }}>
         <Box sx={{ width: `${v}%`, height: '100%', bgcolor: col }} />
       </Box>
-      <Typography sx={{ fontSize: 10.5, color: col, fontFamily: 'monospace' }}>RS {v}</Typography>
+      <Typography sx={{ fontSize: 11, color: col, fontFamily: 'monospace' }}>RS {v}</Typography>
     </Box>
   );
 }
@@ -118,7 +118,7 @@ function RiskRewardLadder({ buy }) {
         transform: align === 'end' ? 'translateX(-100%)' : align === 'mid' ? 'translateX(-50%)' : 'none',
         textAlign: align === 'end' ? 'right' : align === 'mid' ? 'center' : 'left', whiteSpace: 'nowrap',
       }}>
-        <Typography sx={{ fontSize: 9.5, color: C.grey, lineHeight: 1.1 }}>{label}</Typography>
+        <Typography sx={{ fontSize: 11, color: C.grey, lineHeight: 1.1 }}>{label}</Typography>
         <Typography sx={{ fontSize: 11, fontWeight: 700, color, fontFamily: 'monospace', lineHeight: 1.15 }}>{sub}</Typography>
       </Box>
     )
@@ -130,23 +130,23 @@ function RiskRewardLadder({ buy }) {
       <Box sx={{ position: 'relative', height: 12, borderRadius: 1, overflow: 'hidden', bgcolor: C.track }}>
         {/* risk zone (stop..pivot) */}
         {pivotPct != null && (
-          <Box sx={{ position: 'absolute', left: 0, width: `${pivotPct}%`, top: 0, bottom: 0, bgcolor: 'rgba(242,54,69,0.28)' }} />
+          <Box sx={{ position: 'absolute', left: 0, width: `${pivotPct}%`, top: 0, bottom: 0, bgcolor: 'color-mix(in srgb, var(--neg) 28%, transparent)' }} />
         )}
         {/* reward zone (pivot..3R) */}
         {pivotPct != null && (
-          <Box sx={{ position: 'absolute', left: `${pivotPct}%`, right: 0, top: 0, bottom: 0, bgcolor: 'rgba(34,171,148,0.22)' }} />
+          <Box sx={{ position: 'absolute', left: `${pivotPct}%`, right: 0, top: 0, bottom: 0, bgcolor: 'color-mix(in srgb, var(--zone) 22%, transparent)' }} />
         )}
         {/* buy zone highlight (pivot..+5%) */}
         {pivotPct != null && zoneHiPct != null && (
-          <Box sx={{ position: 'absolute', left: `${pivotPct}%`, width: `${Math.max(2, zoneHiPct - pivotPct)}%`, top: 0, bottom: 0, bgcolor: 'rgba(34,171,148,0.55)', borderLeft: `2px solid ${C.green}` }} />
+          <Box sx={{ position: 'absolute', left: `${pivotPct}%`, width: `${Math.max(2, zoneHiPct - pivotPct)}%`, top: 0, bottom: 0, bgcolor: 'color-mix(in srgb, var(--zone) 55%, transparent)', borderLeft: `2px solid ${C.green}` }} />
         )}
         {/* 2R gridline */}
         {pct(t2) != null && (
-          <Box sx={{ position: 'absolute', left: `${pct(t2)}%`, top: 0, bottom: 0, width: '1px', bgcolor: 'rgba(34,171,148,0.9)' }} />
+          <Box sx={{ position: 'absolute', left: `${pct(t2)}%`, top: 0, bottom: 0, width: '1px', bgcolor: 'color-mix(in srgb, var(--zone) 90%, transparent)' }} />
         )}
         {/* live price marker */}
         {pxPct != null && (
-          <Box sx={{ position: 'absolute', left: `${pxPct}%`, top: -1, bottom: -1, width: 3, borderRadius: 1, bgcolor: inZone ? C.inkStrong : C.amber, transform: 'translateX(-50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.6)' }} />
+          <Box sx={{ position: 'absolute', left: `${pxPct}%`, top: -1, bottom: -1, width: 3, borderRadius: 1, bgcolor: inZone ? C.inkStrong : C.amber, transform: 'translateX(-50%)', boxShadow: '0 0 0 1px color-mix(in srgb, var(--scrim) 60%, transparent)' }} />
         )}
       </Box>
       {/* tick labels */}
@@ -158,7 +158,7 @@ function RiskRewardLadder({ buy }) {
       </Box>
       {/* live read line */}
       {px != null && (
-        <Typography sx={{ fontSize: 11.5, color: inZone ? C.green : C.amber, fontFamily: 'monospace', mt: 0.25 }}>
+        <Typography sx={{ fontSize: 12, color: inZone ? C.green : C.amber, fontFamily: 'monospace', mt: 0.25 }}>
           ● now {fmt(px)} {inZone ? `— ゾーン内 (+${delta}%)` : `(${delta > 0 ? '+' : ''}${delta}%)`}
           {buy.stop_pct != null && <Box component="span" sx={{ color: C.red, ml: 1 }}>risk −{fmt(buy.stop_pct, 1)}%</Box>}
         </Typography>
@@ -188,7 +188,7 @@ function MiniZone({ buy }) {
         )}
       </Box>
       <Box sx={{ position: 'relative', height: 5, mt: 0.4, borderRadius: 3, bgcolor: C.track }}>
-        <Box sx={{ position: 'absolute', inset: 0, borderRadius: 3, bgcolor: within ? 'rgba(34,171,148,0.35)' : 'rgba(120,123,134,0.25)' }} />
+        <Box sx={{ position: 'absolute', inset: 0, borderRadius: 3, bgcolor: within ? 'color-mix(in srgb, var(--zone) 35%, transparent)' : 'color-mix(in srgb, var(--accent) 25%, transparent)' }} />
         {posPct != null && (
           <Box sx={{ position: 'absolute', top: -2, left: `${posPct}%`, width: 3, height: 9, borderRadius: 1, bgcolor: within ? C.green : C.amber, transform: 'translateX(-50%)' }} />
         )}
@@ -209,7 +209,7 @@ function SizeAndBarrels({ buy, shares }) {
           <Box sx={{ width: 40, height: 6, borderRadius: 3, bgcolor: C.track, overflow: 'hidden' }}>
             <Box sx={{ width: `${sizePct}%`, height: '100%', bgcolor: C.blue }} />
           </Box>
-          <Typography sx={{ fontSize: 11.5, color: C.ink, fontFamily: 'monospace' }}>
+          <Typography sx={{ fontSize: 12, color: C.ink, fontFamily: 'monospace' }}>
             size {fmt(size, 1)}%{shares != null ? ` · ${shares}株` : ''}
           </Typography>
         </Box>
@@ -219,7 +219,7 @@ function SizeAndBarrels({ buy, shares }) {
       </Typography>
       {barrels != null && (
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, ml: 'auto' }}>
-          <Typography sx={{ fontSize: 10.5, color: C.grey }}>barrels</Typography>
+          <Typography sx={{ fontSize: 11, color: C.grey }}>barrels</Typography>
           {[0, 1, 2].map((i) => (
             <Box key={i} sx={{ width: 7, height: 7, borderRadius: '50%',
               bgcolor: i < barrels ? C.green : 'transparent', border: `1px solid ${i < barrels ? C.green : C.dim}` }} />
@@ -253,10 +253,10 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: meta.color, flexShrink: 0 }} />
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>{entry.symbol}</Typography>
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16 }}>{entry.symbol}</Typography>
         {buy?.vcp_detected && buy?.vcp_source && (
           <Chip size="small" label={SOURCE_LABEL[buy.vcp_source] || buy.vcp_source}
-            sx={{ height: 18, fontSize: 10, color: C.blue, border: `1px solid ${C.blue}`, bgcolor: 'transparent' }} />
+            sx={{ height: 18, fontSize: 11, color: C.blue, border: `1px solid ${C.blue}`, bgcolor: 'transparent' }} />
         )}
         <RsPill value={entry.rs_rating} />
         <Box sx={{ flex: 1 }} />
@@ -271,12 +271,12 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
           sx={{ display: 'inline-flex', cursor: 'pointer', color: watched ? C.amber : C.dim }}
           aria-label={watched ? `${entry.symbol}を監視リストから外す` : `${entry.symbol}を監視リストに追加`}
         >
-          {watched ? <StarIcon sx={{ fontSize: 17 }} /> : <StarBorderIcon sx={{ fontSize: 17 }} />}
+          {watched ? <StarIcon sx={{ fontSize: 16 }} /> : <StarBorderIcon sx={{ fontSize: 16 }} />}
         </Box>
       </Box>
 
       {verdict === 'no_signal' && (
-        <Typography sx={{ fontSize: 11.5, color: C.grey, mt: 0.5 }}>
+        <Typography sx={{ fontSize: 12, color: C.grey, mt: 0.5 }}>
           pivot情報なし — チャートで確認
         </Typography>
       )}
@@ -285,7 +285,7 @@ function BuyRow({ entry, verdict, equity, onOpenChart, watched, onToggleWatch })
         <>
           <RiskRewardLadder buy={buy} />
           <SizeAndBarrels buy={buy} shares={shares} />
-          <Typography sx={{ fontSize: 10, color: C.grey, fontFamily: 'monospace', mt: 0.4 }}>
+          <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', mt: 0.4 }}>
             stop {fmt(buy.stop_loss)}{buy.stop_basis ? ` · ${buy.stop_basis}` : ''}
             {buy.signal_as_of ? ` · signal ${String(buy.signal_as_of).slice(0, 10)}` : ''}
           </Typography>
@@ -352,15 +352,15 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
   return (
     <Box sx={{ mb: 2 }} data-testid="todays-buys-card">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16, whiteSpace: 'nowrap', flexShrink: 0 }}>今日の買い候補</Typography>
         {buyNowCount > 0 && (
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
             <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: C.green }} />
-            <Typography sx={{ fontSize: 11.5, color: C.green, fontWeight: 700 }}>買い{buyNowCount}</Typography>
+            <Typography sx={{ fontSize: 12, color: C.green, fontWeight: 700 }}>買い{buyNowCount}</Typography>
           </Box>
         )}
         <Box sx={{ flex: 1, minWidth: 0 }} />
-        <Typography noWrap sx={{ fontSize: 10.5, color: C.grey, fontFamily: 'monospace', flexShrink: 1, minWidth: 0 }}>{asOf || '-'}</Typography>
+        <Typography noWrap sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', flexShrink: 1, minWidth: 0 }}>{asOf || '-'}</Typography>
         <Typography
           onClick={() => {
             const raw = window.prompt('運用資金（ドル）を入力（株数の目安表示に使用・端末内保存）', equity || '');
@@ -377,21 +377,21 @@ export default function TodaysBuysCard({ indexData, scanRows, onOpenChart }) {
       </Box>
 
       {marketRed ? (
-        <Box sx={{ p: 1.25, borderRadius: 1.5, border: `1px solid ${C.red}`, bgcolor: 'rgba(242,54,69,0.08)' }}
+        <Box sx={{ p: 1.25, borderRadius: 1.5, border: `1px solid ${C.red}`, bgcolor: 'color-mix(in srgb, var(--neg) 8%, transparent)' }}
           data-testid="todays-buys-market-red">
           <Typography sx={{ color: C.red, fontWeight: 700, fontSize: 13 }}>
             新規買い停止 — 地合い{regime === 'correction' ? '調整入り' : '下降トレンド'}（FTD待ち）
           </Typography>
-          <Typography sx={{ color: C.grey, fontSize: 11.5, mt: 0.25 }}>
+          <Typography sx={{ color: C.grey, fontSize: 12, mt: 0.25 }}>
             SEPAルール1: 確認済み上昇トレンド以外で新規買いはしない。候補{ordered.length}件は待機。
           </Typography>
         </Box>
       ) : (
         <>
           {underPressure && !stale && (
-            <Box sx={{ p: 1, mb: 1, borderRadius: 1.5, border: `1px solid ${C.amber}`, bgcolor: 'rgba(224,165,46,0.08)' }}
+            <Box sx={{ p: 1, mb: 1, borderRadius: 1.5, border: `1px solid ${C.amber}`, bgcolor: 'color-mix(in srgb, var(--ext) 8%, transparent)' }}
               data-testid="todays-buys-under-pressure">
-              <Typography sx={{ color: C.amber, fontWeight: 700, fontSize: 12.5 }}>
+              <Typography sx={{ color: C.amber, fontWeight: 700, fontSize: 13 }}>
                 地合いに売り圧力 — 数を絞る{distDays != null ? `（分配日 ${distDays}）` : ''}
               </Typography>
               <Typography sx={{ color: C.grey, fontSize: 11, mt: 0.25 }}>

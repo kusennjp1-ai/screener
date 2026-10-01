@@ -28,8 +28,8 @@ export default function BookMarketEvidence({ evidence, expectedDate }) {
         <CartesianGrid vertical={false} stroke="currentColor" opacity={.08} />
         <XAxis dataKey="date" tickFormatter={v => v.slice(5)} minTickGap={30} />
         <YAxis allowDecimals={false} /><Tooltip /><Legend />
-        <Line dataKey="newHighs" name="52週高値更新" stroke="#48b89e" dot={false} isAnimationActive={false} connectNulls={false} />
-        <Line dataKey="newLows" name="52週安値更新" stroke="#db738c" dot={false} isAnimationActive={false} connectNulls={false} />
+        <Line dataKey="newHighs" name="52週高値更新" stroke="var(--zone)" dot={false} isAnimationActive={false} connectNulls={false} />
+        <Line dataKey="newLows" name="52週安値更新" stroke="var(--neg)" dot={false} isAnimationActive={false} connectNulls={false} />
       </LineChart></ResponsiveContainer>
     </Box>
     <Typography component="h3" sx={{ fontWeight: 700, mt: 3 }}>出来高と指数</Typography>

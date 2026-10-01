@@ -33,7 +33,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
         pivotLabel="共通ピボット" vcpBoxes={data.vcp_boxes || null} />}
     {<ChartDecisionSummary row={row} date={date || data?.as_of_date} method={method} quote={quote} market={market} now={now} />}
     <Stack direction="row" flexWrap="wrap" gap={2} sx={{ px: 2, py: 1, fontSize: 12, color: 'text.secondary', borderTop: '1px solid', borderColor: 'divider' }}>
-      <span style={{ color: dark ? '#60a5fa' : '#2563eb' }}>━ SMA50日 / 10週</span><span style={{ color: dark ? '#94a3b8' : '#64748b' }}>┄ SMA150日 / 30週</span><span style={{ color: dark ? '#c4b5fd' : '#7c3aed' }}>┈ SMA200日 / 40週</span><span>RS：対市場の強さ</span><span>日次データ / {data?.as_of_date || '未確認'}</span>
+      <span style={{ color: dark ? 'var(--wait)' : 'var(--wait)' }}>━ SMA50日 / 10週</span><span style={{ color: dark ? 'var(--text-2)' : 'var(--text-2)' }}>┄ SMA150日 / 30週</span><span style={{ color: dark ? 'var(--accent)' : 'var(--accent)' }}>┈ SMA200日 / 40週</span><span>RS：対市場の強さ</span><span>日次データ / {data?.as_of_date || '未確認'}</span>
     </Stack>
   </Box>;
 }

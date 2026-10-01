@@ -29,15 +29,15 @@ export default function TrendTemplateScorecard({ trendTemplate }) {
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Typography data-testid="trend-template-score"
-          sx={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', color: allPass ? C.green : C.amber }}>
+          sx={{ fontSize: 13, fontWeight: 800, fontFamily: 'monospace', color: allPass ? C.green : C.amber }}>
           {score}/{max}
         </Typography>
       </Box>
       {conditions.map((c) => (
         <Box key={c.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.6, py: 0.15 }}>
           {c.passed
-            ? <CheckCircleIcon sx={{ fontSize: 15, color: C.green, flexShrink: 0 }} />
-            : <CancelIcon sx={{ fontSize: 15, color: C.dim, flexShrink: 0 }} />}
+            ? <CheckCircleIcon sx={{ fontSize: 16, color: C.green, flexShrink: 0 }} />
+            : <CancelIcon sx={{ fontSize: 16, color: C.dim, flexShrink: 0 }} />}
           <Typography sx={{ fontSize: 12, color: c.passed ? C.ink : C.grey }}>{c.label}</Typography>
         </Box>
       ))}

@@ -19,15 +19,15 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
         {selected && <>
           <Paper className="research-panel">
             <div className="research-symbol-head">
-              <Box><Stack direction="row" gap={1.5} alignItems="baseline"><Typography component="h2" sx={{ fontSize: 32, lineHeight: 1.2, fontWeight: 700, fontFamily: 'monospace' }}>{selected.symbol}</Typography><Chip size="small" label={selected.exchange || 'US'} variant="outlined" sx={{ height: 22, borderRadius: 1 }} /></Stack><Typography sx={{ mt: .75, fontSize: 14 }} color="text.secondary">{selected.company_name}</Typography><Typography sx={{ mt: .75, fontSize: 12 }} color="text.secondary">{selected.ibd_industry_group || '業種未確認'}</Typography></Box>
-              <div className="research-symbol-price"><Typography sx={{ fontSize: 30, fontWeight: 600, lineHeight: 1.2 }}>${fmt(plan.price, 2)}</Typography><Typography sx={{ fontSize: 13, mt: .75, color: selected.price_change_1d >= 0 ? 'success.main' : 'error.main' }}>{finite(selected.price_change_1d) ? `${selected.price_change_1d >= 0 ? '+' : ''}${fmt(selected.price_change_1d)}% 前日比（日次）` : '前日比未確認'}</Typography><Button size="small" sx={{ mt: .5 }} onClick={() => onWatch(selected.symbol)} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol) ? '★ 保存済み' : '☆ ウォッチ'}</Button></div>
+              <Box><Stack direction="row" gap={1.5} alignItems="baseline"><Typography component="h2" sx={{ fontSize: 34, lineHeight: 1.2, fontWeight: 700, fontFamily: 'monospace' }}>{selected.symbol}</Typography><Chip size="small" label={selected.exchange || 'US'} variant="outlined" sx={{ height: 22, borderRadius: 1 }} /></Stack><Typography sx={{ mt: .75, fontSize: 14 }} color="text.secondary">{selected.company_name}</Typography><Typography sx={{ mt: .75, fontSize: 12 }} color="text.secondary">{selected.ibd_industry_group || '業種未確認'}</Typography></Box>
+              <div className="research-symbol-price"><Typography sx={{ fontSize: 34, fontWeight: 600, lineHeight: 1.2 }}>${fmt(plan.price, 2)}</Typography><Typography sx={{ fontSize: 13, mt: .75, color: selected.price_change_1d >= 0 ? 'success.main' : 'error.main' }}>{finite(selected.price_change_1d) ? `${selected.price_change_1d >= 0 ? '+' : ''}${fmt(selected.price_change_1d)}% 前日比（日次）` : '前日比未確認'}</Typography><Button size="small" sx={{ mt: .5 }} onClick={() => onWatch(selected.symbol)} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol) ? '★ 保存済み' : '☆ ウォッチ'}</Button></div>
             </div>
             <ResearchChart method={method} quote={usableQuote} date={date} market={market} now={now} row={selected} rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={onExpand} />
             <div className="research-metrics">{[['RS 推計', fmt(selected.rs_rating, 0)], ['Composite 推計', fmt(selected.composite_rating, 0)], ['EPS 前年同期比', finite(selected.eps_growth_yy) ? `${fmt(selected.eps_growth_yy)}%` : '—'], ['業種順位 推計', fmt(selected.ibd_group_rank, 0)]].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
           </Paper>
           <div className="research-bottom">
             <Paper sx={panel}>
-              <div className="research-kicker">選定条件</div><Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>{METHODS[method]}の判定根拠</Typography>
+              <div className="research-kicker">選定条件</div><Typography component="h3" sx={{ fontSize: 16, fontWeight: 700, mt: .75 }}>{METHODS[method]}の判定根拠</Typography>
               <Typography sx={{ fontSize: 14, my: 1 }}>適合 {checks.passed} / {checks.total}・未確認 {checks.unknown}</Typography>
               <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>一次選定の結果です。購入条件は下の詳細検証で確認できます。</Typography>
               <details className="research-disclosure"><summary>条件ごとの結果を見る</summary>
@@ -41,7 +41,7 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
             </Paper>
             <Paper sx={panel}>
               <Stack direction="row" justifyContent="space-between"><div className="research-kicker">価格接続・購入条件</div><Chip size="small" label={liveStatus} color={liveStatus === 'リアルタイム' ? 'success' : 'default'} sx={{ height: 22, fontSize: 12 }} /></Stack>
-              <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: .75 }}>場中価格と詳細条件</Typography>
+              <Typography component="h3" sx={{ fontSize: 16, fontWeight: 700, mt: .75 }}>場中価格と詳細条件</Typography>
               <QuoteConnection key={`${selected.symbol}-${Boolean(personalKey)}`} connected={Boolean(personalKey)} apiKey={personalKey} symbol={selected.symbol} cusip={selected.institutional_evidence?.cusip} status={personal.status} quote={personal.quote} onConnect={onConnect} onDisconnect={onDisconnect} />
               <details className="research-disclosure"><summary>買い条件の自動確認：{readiness.passed}/{readiness.total}</summary>
                 {readiness.rules.map(rule=><Typography key={rule.id} sx={{fontSize:12,my:1}}>{rule.state==='pass'?'✓':rule.state==='fail'?'×':'?'} {rule.label}：{rule.detail}</Typography>)}

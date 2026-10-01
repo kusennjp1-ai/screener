@@ -74,7 +74,7 @@ export default function SellTiming({ sell, compact = false, stale = false, curre
     <Box data-testid="sell-timing" data-action={n.action}
       sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', rowGap: 0.25 }}>
       {stale && (
-        <Typography sx={{ fontSize: 9.5, color: C.dim, fontWeight: 700 }}>前回</Typography>
+        <Typography sx={{ fontSize: 11, color: C.dim, fontWeight: 700 }}>前回</Typography>
       )}
       <Pill meta={meta} compact={compact} />
       {n.stop != null ? (

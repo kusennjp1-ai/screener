@@ -95,17 +95,17 @@ function WatchRow({ row, onOpenChart, onRemove }) {
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: present ? meta.color : C.dim, flexShrink: 0 }} />
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 14.5 }}>{symbol}</Typography>
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 14 }}>{symbol}</Typography>
         <Box sx={{ flex: 1 }} />
         {present ? (
           <Box data-testid={`watchlist-action-${symbol}`}><ActionPill meta={meta} /></Box>
         ) : staleMeta ? (
           <Box data-testid={`watchlist-action-${symbol}`} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-            <Typography sx={{ fontSize: 9.5, color: C.dim, fontWeight: 700 }}>前回</Typography>
+            <Typography sx={{ fontSize: 11, color: C.dim, fontWeight: 700 }}>前回</Typography>
             <ActionPill meta={staleMeta} />
           </Box>
         ) : (
-          <Typography sx={{ fontSize: 11.5, color: C.grey }}>本日データ未取得</Typography>
+          <Typography sx={{ fontSize: 12, color: C.grey }}>本日データ未取得</Typography>
         )}
         <Box
           component="span"
@@ -187,10 +187,10 @@ export default function WatchlistCard({ indexData, onOpenChart }) {
   return (
     <Box sx={{ mb: 2 }} data-testid="watchlist-card">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 15 }}>保有・監視リスト</Typography>
+        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16 }}>保有・監視リスト</Typography>
         {alertCount > 0 && (
           <Box data-testid="watchlist-alert-count"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px', borderRadius: 1, bgcolor: `${C.red}22`, border: `1px solid ${C.red}` }}>
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px', borderRadius: 1, bgcolor: 'color-mix(in srgb, var(--neg) 13%, transparent)', border: `1px solid ${C.red}` }}>
             <BlockIcon sx={{ fontSize: 12, color: C.red }} />
             <Typography sx={{ fontSize: 11, color: C.red, fontWeight: 800 }}>要売却 {alertCount}件</Typography>
           </Box>

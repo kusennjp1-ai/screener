@@ -36,7 +36,7 @@ const CHART_INFO_STRIP_HEIGHT = 34;
 function ChartInfoStrip() {
   const dark = useTheme().palette.mode === 'dark';
   return <Box sx={{ minHeight: CHART_INFO_STRIP_HEIGHT, display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 1.5, py: .75, bgcolor: 'background.paper', fontSize: 12 }}>
-    {[['▲ 上昇', dark ? '#10b981' : '#087c63'], ['▼ 下落', dark ? '#ef4444' : '#ba3344'], ['━ SMA50日 / 10週', dark ? '#60a5fa' : '#2563eb'], ['┄ SMA150日 / 30週', dark ? '#94a3b8' : '#64748b'], ['┈ SMA200日 / 40週', dark ? '#c4b5fd' : '#7c3aed'], ['━ RS', dark ? '#a5b4fc' : '#4f46e5']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
+    {[['▲ 上昇', dark ? 'var(--zone)' : 'var(--zone)'], ['▼ 下落', dark ? 'var(--neg)' : 'var(--neg)'], ['━ SMA50日 / 10週', dark ? 'var(--wait)' : 'var(--wait)'], ['┄ SMA150日 / 30週', dark ? 'var(--text-2)' : 'var(--text-2)'], ['┈ SMA200日 / 40週', dark ? 'var(--accent)' : 'var(--accent)'], ['━ RS', dark ? 'var(--accent)' : 'var(--accent)']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
   </Box>;
 }
 

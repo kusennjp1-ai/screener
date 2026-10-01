@@ -1,0 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap');
+.leader-shell { --font-mono:"Geist Mono",monospace; font-family:'Zen Kaku Gothic New',sans-serif; font-feature-settings:'palt'; color:var(--text); background:var(--ground); }
+.leader-shell * { box-sizing:border-box; }
+.leader-shell button,.leader-shell input,.leader-shell select { font-family:inherit; }
+.leader-shell .mono,.leader-shell .numeric { font-family:'Geist Mono',monospace; font-variant-numeric:tabular-nums; font-feature-settings:normal; }
+.leader-shell button:focus-visible,.leader-shell a:focus-visible,.leader-shell select:focus-visible,.leader-shell summary:focus-visible { outline:2px solid var(--accent);outline-offset:3px; }
+.leader-shell button,.leader-shell a,.leader-shell summary,.leader-shell select { min-height:24px; }
+.leader-shell ::selection { background:var(--accent);color:var(--accent-ink); }
+@media(max-width:700px),(pointer:coarse) { .leader-shell button,.leader-shell a:not(p a),.leader-shell summary,.leader-shell select,.leader-shell input:not([type=checkbox]):not([type=radio]) { min-height:44px;min-width:44px; } }
+@media(prefers-reduced-motion:reduce) { .leader-shell *,.leader-shell *::before,.leader-shell *::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; } }
