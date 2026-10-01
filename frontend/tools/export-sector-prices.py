@@ -16,7 +16,7 @@ def main():
     if schedule.empty or schedule.index[-1].date()!=target or schedule.iloc[-1]['market_close'].to_pydatetime()>datetime.now(timezone.utc):
         raise ValueError('Sector analysis date is not a completed trading session')
     expected=[t.date().isoformat() for t in schedule.index]
-    result={'as_of_date':as_of,'retrieved_at':datetime.now(timezone.utc).isoformat(),'source':'Yahoo Finance via yfinance','adjustment':'split-adjusted-close-no-dividend','calendar':'NYSE','series':{},'errors':{}}
+    result={'as_of_date':as_of,'retrieved_at':datetime.now(timezone.utc).isoformat(),'source':'Yahoo Finance via yfinance','adjustment':'split-adjusted-close-no-dividend','calendar':'NYSE','sessions':expected,'series':{},'errors':{}}
     for symbol in ['SPY','XLB','XLC','XLE','XLF','XLI','XLK','XLP','XLRE','XLU','XLV','XLY']:
         try:
             frame=yf.Ticker(symbol).history(start=start.isoformat(),end=(target+timedelta(days=1)).isoformat(),auto_adjust=False,actions=False,timeout=25)

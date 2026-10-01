@@ -23,7 +23,7 @@ export default function DailyChanges({query,method,onSelect,availableSymbols}) {
       </details>)}
       {!items.length&&<p>この分類の銘柄はありません。</p>}
       {items.length>20&&<div className="candidate-pagination"><Button disabled={!current} onClick={()=>setPage(current-1)}>前へ</Button><span>{current+1} / {Math.ceil(items.length/20)}</span><Button disabled={(current+1)*20>=items.length} onClick={()=>setPage(current+1)}>次へ</Button></div>}
-      <p className="research-muted">「今回通過」は直前の未通過からの変化。「再通過」は同じ定義で過去の通過を確認できた場合です。保存範囲：最大30営業日。欠損・定義変更・対象範囲変更は比較不能です。</p>
+      <p className="research-muted">「今回通過」は直前の未通過からの変化。「再通過」は同じ定義で過去の通過を確認できた場合です。保存範囲：最大{data.history.limit || 126}営業日。欠損・定義変更・対象範囲変更は比較不能です。</p>
     </details>
   </Paper>;
 }
