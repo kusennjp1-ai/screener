@@ -1,57 +1,54 @@
 import { signed, STATES } from './positionGeometry';
 
 const text = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-// Same SVG marks as before, constructed in a single DOM insertion. Event
-// delegation avoids mounting hundreds of identical React event handlers.
-export function radarMarks(points) {
-  let stateGroup=null, markup='';
-  for (const [index,point] of points.entries()) {
-    const { x, y, radius, state, symbol, distance, rs, pickable } = point;
-    if (![x,y,radius,distance,rs].every(Number.isFinite) || radius < 0 || !Object.hasOwn(STATES,state)) throw Error('Invalid radar point');
-    if (state!==stateGroup) {
-      if(stateGroup!==null) markup+='</g>';
-      // Inherited fill-opacity keeps per-circle alpha and overlap identical;
-      // group opacity would incorrectly composite intersecting marks together.
-      markup+=`<g fill="var(--${STATES[state][2]})" fill-opacity="${state==='zone'?.95:.6}" style="cursor:pointer">`;
-      stateGroup=state;
-    }
-    const title = `${symbol} · ${signed(distance)} · RS ${Math.round(rs)}${pickable?'':' · 詳細なし'}`;
-    markup+=`<circle data-radar-point="${index}" cx="${x}" cy="${y}" r="${radius}"${pickable?'':' style="cursor:default"'}><title>${text(title)}</title></circle>`;
-  }
-  return markup+(stateGroup===null?'':'</g>');
-}
-
-// The grid changes only with the geometry, just like its marks. Keep its exact
-// SVG attributes and stacking order while mounting the static plot in one DOM
-// insertion; selection/hover overlays remain managed by React above this group.
-export function radarPlot(geometry) {
-  const {left,top,pw,ph,x,y,points}=geometry;
-  const xs=[-15,-10,-5,0,5,10,25].map(value=>[value,x(value)]);
-  const ys=[70,80,90,100].map(value=>y(value));
-  if (![left,top,pw,ph,...xs.map(([,position])=>position),...ys].every(Number.isFinite)) throw Error('Invalid radar geometry');
-  const zero=xs[3][1],five=xs[4][1];
-  const zone=`<rect x="${zero}" y="${top}" width="${five-zero}" height="${ph}" fill="var(--zone-fill)"></rect>`;
-  const vertical=xs.map(([value,position])=>`<path d="M${position} ${top}V${top+ph}" stroke="var(--${value===0||value===5?'zone-edge':'grid'})"${value===0||value===5?' stroke-dasharray="3 3"':''}></path>`).join('');
-  const horizontal=ys.map(position=>`<path d="M${left} ${position}H${left+pw}" stroke="var(--grid)"></path>`).join('');
-  return zone+vertical+horizontal+radarMarks(points);
-}
-
-// The plot, HTML labels and legend are immutable for a ranked publication and
-// viewport. Insert them together instead of asking React to create and set
-// styles on each individual static node during the cold render. All data text
-// continues through text(); coordinates are validated by radarPlot().
+// HTML labels, canvas and legend are immutable for a ranked publication and
+// viewport. Insert them together; the canvas is painted synchronously before
+// React returns from mounting. Only the selection overlay changes on hover.
 export function radarFrame(g, small) {
-  if (![g.width,g.height].every(value=>Number.isFinite(value)&&value>0)) throw Error('Invalid radar frame');
-  const plot=radarPlot(g), percent=(value,size)=>`${value/size*100}%`;
+  if (![g.width,g.height].every(value=>Number.isFinite(value)&&value>0)||![g.left,g.top,g.pw,g.ph,...[-15,-10,-5,0,5,10,25].map(g.x),...[70,80,90,100].map(g.y)].every(Number.isFinite)) throw Error('Invalid radar frame');
+  const percent=(value,size)=>`${value/size*100}%`;
   const xs=[-15,-10,-5,0,5,10,25].filter(value=>!small||[-15,0,5,25].includes(value))
     .map(value=>`<span class="radar-x mono" style="left:${percent(g.x(value),g.width)};top:${percent(g.top+g.ph+5,g.height)}">${value===0?'0%':signed(value,0)}</span>`).join('');
   const ys=[70,80,90,100].map(value=>`<span class="radar-y mono" style="left:${percent(g.left-6,g.width)};top:${percent(g.y(value),g.height)}">${value}</span>`).join('');
   return `<header><strong>セットアップ・レーダー</strong><span>横：ピボット比 · 縦：RS推計</span></header>`+
     `<div class="radar-plot" style="aspect-ratio:${g.width}/${g.height}">`+
-    `<svg viewBox="0 0 ${g.width} ${g.height}" role="img" aria-label="ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。">`+
-    `<g data-radar-marks>${plot}</g><g data-radar-selection></g><path d="M${g.x(10)-3} ${g.top+g.ph+4}l3 -8m1 8l3 -8" stroke="var(--text-3)"></path></svg>`+
-    xs+ys+`<span class="radar-zone-label" style="left:${percent((g.x(0)+g.x(5))/2,g.width)}">買いゾーン</span><span data-radar-label></span></div>`+
+    `<canvas data-radar-canvas width="${g.width}" height="${g.height}" style="display:block;width:100%;height:100%" role="img" aria-label="ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。"></canvas>`+
+    `<svg viewBox="0 0 ${g.width} ${g.height}" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"><g data-radar-selection></g><path d="M${g.x(10)-3} ${g.top+g.ph+4}l3 -8m1 8l3 -8" stroke="var(--text-3)"></path></svg>`+
+    xs+ys+`<span class="radar-zone-label" style="left:${percent((g.x(0)+g.x(5))/2,g.width)}">買いゾーン</span><span data-radar-label style="display:contents"></span></div>`+
     '<footer><span>◔ ピボット待ち</span><span>● ゾーン内</span><span>▲ 超過</span><span>+10%以降は圧縮</span></footer>';
+}
+
+// Canvas shares exactly the same canonical geometry and painter's order as the
+// SVG implementation. Alpha is applied to each circle, never to a state group.
+// Return the number of circles actually drawn, not merely the source length.
+export function drawRadar(context, g, palette) {
+  const {left,top,pw,ph,x,y,points}=g;
+  if (![left,top,pw,ph].every(Number.isFinite)) throw Error('Invalid radar geometry');
+  context.clearRect(0,0,g.width,g.height);
+  context.globalAlpha=1;context.globalCompositeOperation='source-over';context.lineWidth=1;
+  context.fillStyle=palette['zone-fill'];context.fillRect(x(0),top,x(5)-x(0),ph);
+  for(const value of [-15,-10,-5,0,5,10,25]) {
+    context.strokeStyle=palette[value===0||value===5?'zone-edge':'grid'];context.setLineDash(value===0||value===5?[3,3]:[]);
+    context.beginPath();context.moveTo(x(value),top);context.lineTo(x(value),top+ph);context.stroke();
+  }
+  context.strokeStyle=palette.grid;context.setLineDash([]);
+  for(const value of [70,80,90,100]) {context.beginPath();context.moveTo(left,y(value));context.lineTo(left+pw,y(value));context.stroke();}
+  let count=0;
+  for(const point of points) {
+    if (![point.x,point.y,point.radius,point.distance,point.rs].every(Number.isFinite)||point.radius<0||!Object.hasOwn(STATES,point.state)) throw Error('Invalid radar point');
+    context.fillStyle=palette[STATES[point.state][2]];context.globalAlpha=point.state==='zone'?.95:.6;
+    context.beginPath();context.arc(point.x,point.y,point.radius,0,Math.PI*2);context.fill();count++;
+  }
+  context.globalAlpha=1;
+  return count;
+}
+
+export function radarHit(points, x, y) {
+  if(!Number.isFinite(x)||!Number.isFinite(y))return null;
+  for(let index=points.length-1;index>=0;index--) {
+    const point=points[index];if((point.x-x)**2+(point.y-y)**2<=point.radius**2)return point;
+  }
+  return null;
 }
 
 export function radarSelection(g, active) {

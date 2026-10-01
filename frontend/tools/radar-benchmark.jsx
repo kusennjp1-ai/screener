@@ -23,7 +23,9 @@ window.measureRadar = async () => {
   flushSync(() => root.render(<SetupRadar ranked={fixture.ranked} small={innerWidth < 768} onSelect={() => {}} />));
   container.getBoundingClientRect();
   const renderLayout = performance.now() - start;
-  const count = container.querySelectorAll('circle > title').length;
+  // Set by the real canvas draw loop only after every circle has been painted.
+  // A missing/failed draw is NaN and therefore cannot pass the 207-point gate.
+  const count = Number(container.querySelector('[data-radar-canvas]')?.dataset.radarPointCount);
   await new Promise(resolve => requestAnimationFrame(resolve));
   const nextFrame = performance.now() - start;
   const result = { render_layout_ms: renderLayout, first_frame_ms: nextFrame, point_count: count, as_of_date: fixture.as_of_date, source_sha256: fixture.source_sha256 };
