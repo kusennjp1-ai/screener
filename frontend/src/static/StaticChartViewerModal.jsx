@@ -1,6 +1,6 @@
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
-import { assess } from './researchEngine';
+import { assess, entryPlan } from './researchEngine';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Alert,
@@ -13,7 +13,6 @@ import {
   Modal,
   Typography,
   useMediaQuery,
-  useTheme,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
@@ -34,9 +33,8 @@ import { fetchStaticJson } from './dataClient';
 const CHART_INFO_STRIP_HEIGHT = 34;
 
 function ChartInfoStrip() {
-  const dark = useTheme().palette.mode === 'dark';
   return <Box sx={{ minHeight: CHART_INFO_STRIP_HEIGHT, display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 1.5, py: .75, bgcolor: 'background.paper', fontSize: 12 }}>
-    {[['▲ 上昇', dark ? 'var(--zone)' : 'var(--zone)'], ['▼ 下落', dark ? 'var(--neg)' : 'var(--neg)'], ['━ SMA50日 / 10週', dark ? 'var(--wait)' : 'var(--wait)'], ['┄ SMA150日 / 30週', dark ? 'var(--text-2)' : 'var(--text-2)'], ['┈ SMA200日 / 40週', dark ? 'var(--accent)' : 'var(--accent)'], ['━ RS', dark ? 'var(--accent)' : 'var(--accent)']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
+    {[['▲ 上昇','var(--up)'],['▼ 下落','var(--down)'],['━ SMA50日 / 10週','var(--accent)'],['┄ SMA150日 / 30週','var(--wait)'],['┈ SMA200日 / 40週','var(--text-3)'],['━ RS','var(--accent)']].map(([label,color]) => <span key={label} style={{color}}>{label}</span>)}
   </Box>;
 }
 
@@ -198,6 +196,7 @@ function StaticChartViewerModal({
   const fundamentals = chartPayload?.fundamentals || null;
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
   const pivotPrice = canonicalPivot(stockData).price;
+  const plan = entryPlan(stockData || {}, quote?.symbol === currentSymbol ? quote : null, method);
   const pivotLabel = '共通ピボット';
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
@@ -311,9 +310,11 @@ function StaticChartViewerModal({
                       epsLine={chartPayload?.eps_line || null}
                       blueDots={chartPayload?.blue_dots || null}
                       dataUpdatedAtOverride={dataUpdatedAtOverride}
-                      hideOhlcLegend={isMobile}
-                      hideTimeframeToggle={isMobile}
+                      hideOhlcLegend
+                      hideTimeframeToggle={false}
                       pivotPrice={pivotPrice}
+                      buyCeiling={plan.upper}
+                      stopPrice={plan.stopExample}
                       pivotLabel={pivotLabel}
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                     />
