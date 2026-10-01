@@ -43,7 +43,18 @@ export default function ResearchPage({compareOnly=false}) {
   const [filtersOpen,setFiltersOpen]=useState(false);
   const [coverage, setCoverage] = useState('all');
   const deferredSearch = useDeferredValue(search);
-  useEffect(()=>{const searchEvent=e=>setSearch(e.detail||'');const backEvent=()=>setMobileView('list');window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};},[]);
+  useEffect(()=>{
+    const searchEvent=e=>setSearch(e.detail||'');
+    const backEvent=()=>setMobileView('list');
+    const symbolEvent=()=>{
+      const ticker=new URLSearchParams(window.location.hash.split('?')[1]||'').get('symbol');
+      if(!ticker)return;
+      setSymbol(ticker);setSearch(ticker);setLiquid(false);setCoverage('all');setStrict(false);setNearOnly(false);setOnlyWatch(false);setSector('');setView('list');setMobileView('detail');
+      requestAnimationFrame(()=>detailRef.current?.scrollIntoView?.({block:'start'}));
+    };
+    window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);window.addEventListener('hashchange',symbolEvent);
+    return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);window.removeEventListener('hashchange',symbolEvent);};
+  },[]);
   const [mobileView, setMobileView] = useState(() => params.get('symbol') ? 'detail' : 'list');
   const [liquid, setLiquid] = useState(() => !params.get('symbol'));
   const detailRef = useRef(null);
