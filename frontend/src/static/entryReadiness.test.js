@@ -35,3 +35,22 @@ it('describes compact shape evidence without labelling known results as missing'
   expect(shape.state).toBe(state);expect(shape.detail).toContain(detail);
  }
 });
+it.each([
+ ['current',()=>{},'pass','まで有効'],
+ ['expired',r=>r.entry_evidence.calendar.valid_until='2026-09-25T20:00:00Z','fail','有効期限切れ'],
+ ['exact expiry',r=>r.entry_evidence.calendar.valid_until=new Date(now).toISOString(),'fail','有効期限切れ'],
+ ['future evaluation',r=>r.entry_evidence.calendar.evaluated_at='2026-09-26T11:00:00Z','fail','検証時刻が未来'],
+ ['invalid evaluation',r=>r.entry_evidence.calendar.evaluated_at='invalid','fail','検証時刻または有効期限が不正'],
+ ['invalid expiry',r=>r.entry_evidence.calendar.valid_until='invalid','fail','検証時刻または有効期限が不正'],
+ ['different session',r=>r.entry_evidence.calendar.latest_completed_session='2026-09-24','fail','取引日が不一致'],
+ ['different evidence date',r=>r.entry_evidence.as_of_date='2026-09-24','unknown','検証基準日 2026-09-24 が不一致'],
+ ['missing calendar',r=>r.entry_evidence.calendar=null,'unknown','取引カレンダー未取得'],
+])('explains %s calendar while preserving its state',(_label,modify,state,reason)=>{
+ const r=row();modify(r);
+ const rule=entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules.find(item=>item.id==='date');
+ expect(rule.state).toBe(state);expect(rule.detail).toContain(reason);
+ if(reason==='有効期限切れ'){
+  expect(rule.detail).toContain('最新完了取引日 2026-09-25');
+  expect(rule.detail).toContain('JST');
+ }
+});

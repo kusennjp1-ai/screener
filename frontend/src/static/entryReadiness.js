@@ -7,6 +7,18 @@ export function entryReadiness(row, date, market, now = Date.now()) {
   const dated = Boolean(evidence && day(date) && evidence.as_of_date === date);
   const calendar = dated ? evidence.calendar : null;
   const fresh = calendar && calendar.latest_completed_session === date && Number.isFinite(Date.parse(calendar.valid_until)) && now < Date.parse(calendar.valid_until) && now >= Date.parse(calendar.evaluated_at);
+  // Explain the existing freshness result without changing its pass/fail rule.
+  const calendarDetail = (() => {
+    if (evidence && evidence.as_of_date !== date) return `分析基準日 ${date}・検証基準日 ${evidence.as_of_date || '未確認'} が不一致。基準日の取引カレンダーは未確認`;
+    if (!calendar) return `分析基準日 ${date}。取引カレンダー未取得`;
+    const dates = `基準日 ${date}・最新完了取引日 ${calendar.latest_completed_session || '未確認'}`;
+    if (calendar.latest_completed_session !== date) return `${dates}。取引日が不一致。最新の日次データを確認`;
+    if (!Number.isFinite(Date.parse(calendar.evaluated_at)) || !Number.isFinite(Date.parse(calendar.valid_until))) return `${dates}。検証時刻または有効期限が不正・未確認`;
+    if (now < Date.parse(calendar.evaluated_at)) return `${dates}。検証時刻が未来（${calendar.evaluated_at}）のため未検証`;
+    const expiry = `${new Date(Date.parse(calendar.valid_until) + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ')} JST`;
+    if (now >= Date.parse(calendar.valid_until)) return `${dates}。取引日検証の有効期限切れ（${expiry}）。最新のカレンダー検証が必要`;
+    return `${dates}。取引日検証は ${expiry} まで有効`;
+  })();
   const earnings = dated ? evidence.earnings : null;
   const today = new Intl.DateTimeFormat('en-CA', {timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   const earningsDays = day(earnings?.date) ? (Date.parse(earnings.date) - Date.parse(today)) / 86400000 : null;
@@ -17,7 +29,7 @@ export function entryReadiness(row, date, market, now = Date.now()) {
   const rules = [
     check('selection','選定条件', minervini.qualified && ibd.qualified && !row.corporate_action?.cash_acquisition && !row.price_activity?.lowRange, `${row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外。' : row.price_activity?.lowRange ? '60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。' : ''}ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未確認 ${minervini.unknown + ibd.unknown}）`),
     check('market','市場環境', market.cap > 0, market.label),
-    check('date','最新の取引日', calendar ? fresh : null, calendar ? `基準日 ${date}・最新完了取引日 ${calendar.latest_completed_session}` : `分析基準日 ${date}。取引カレンダー未取得`),
+    check('date','最新の取引日', calendar ? fresh : null, calendarDetail),
     check('price','買い位置', finite(row.current_price) && finite(pivot) && pivot > 0 ? row.current_price >= pivot && row.current_price <= pivot * 1.05 : null, `日次価格 ${finite(row.current_price) ? row.current_price.toFixed(2) : '未確認'} / ピボット ${finite(pivot) ? pivot.toFixed(2) : '未確認'}。0〜5%はこのモデルの設定`),
     check('volume','出来高', dated && finite(evidence.volumeRatio) ? evidence.volumeRatio >= 1.4 : null, dated && finite(evidence.volumeRatio) ? `直前50日平均比 ${evidence.volumeRatio.toFixed(2)}倍（モデルの基準1.4倍）` : '直前50日比較の実測値が未取得'),
     check('shape','ベース形状', shape ? shape.candidate : null, shape?.summary || (shape?.candidate === true ? '日足の自動検出による形状候補。詳細は銘柄の根拠を確認' : shape?.candidate === false ? '現在の形状条件は未達。詳細は銘柄の根拠を確認' : '日足による形状検証が未取得')),
