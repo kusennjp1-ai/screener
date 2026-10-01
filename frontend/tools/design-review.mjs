@@ -346,6 +346,7 @@ if (radar) for (const viewport of viewportSizes) {
     const cdp = await context.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     for (let index = 0; index < 3; index++) runs.push(await page.evaluate(() => window.measureRadar()));
     check(runs.every(run => run.point_count === 207), `${viewport.width}: D9 needs exactly 207 actual historical points`);
+    check(runs.every(run => run.final_point_count === 207 && run.pixel_alignment?.matches === true), `${viewport.width}: D9 must finish all 207 points at actual CSS size and DPR by the first-frame boundary`);
     check(runs.length === 3 && runs.every(run => run.first_frame_ms <= 50), `${viewport.width}: D9 first paint opportunity ${Math.max(...runs.map(run => run.first_frame_ms)).toFixed(1)}ms > 50ms`);
   } catch (error) { report.failures.push(`${viewport.width}: D9 benchmark interrupted: ${error.message}`); }
   report.radar.push({ viewport, cpu_rate: 4, method: 'actual SetupRadar, 207 canonical real 2026-09-29 observations; production initial mount, synchronous layout and next animation frame; no network/data preparation in render interval', runs });

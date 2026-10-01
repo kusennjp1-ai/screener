@@ -28,10 +28,14 @@ export default class SetupRadar extends PureComponent {
   const g=this.geometry,node=this.container,canvas=node.querySelector('[data-radar-canvas]'),context=canvas.getContext('2d');
   this.mountedGeometry=g;this.canvasAvailable=Boolean(context);
   if(!context){canvas.setAttribute('aria-label','レーダーを描画できません。銘柄一覧から確認できます。');return;}
-  const themeOwner=node.closest('[data-theme]');let previous='';
+  const themeOwner=node.closest('[data-theme]'),hasResizeObserver=typeof ResizeObserver==='function';let previous='';
+  // Draw the full logical plot synchronously, without forcing layout in React's
+  // commit. ResizeObserver delivers the real CSS box before browser paint; its
+  // contentRect avoids another layout read on every resize/theme notification.
+  let size=hasResizeObserver?{width:g.width,height:g.height}:canvas.getBoundingClientRect();
   const paint=()=>{
-   const rect=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
-   const width=Math.max(1,Math.round((rect.width||g.width)*ratio)),height=Math.max(1,Math.round((rect.height||g.height)*ratio));
+   const ratio=window.devicePixelRatio||1;
+   const width=Math.max(1,Math.round((size.width||g.width)*ratio)),height=Math.max(1,Math.round((size.height||g.height)*ratio));
    const mode=themeOwner?.dataset.theme||document.documentElement.dataset.theme||'dark';
    const signature=`${width}/${height}/${mode}`;if(previous===signature)return;
    // Unchanged dimensions must not discard/reallocate the backing store.
@@ -40,11 +44,16 @@ export default class SetupRadar extends PureComponent {
    canvas.dataset.radarPointCount=String(drawRadar(context,g,palettes[mode]||palettes.dark));previous=signature;
   };
   paint();
-  const resize=typeof ResizeObserver==='function'?new ResizeObserver(paint):null;resize?.observe(canvas);
+  const resize=hasResizeObserver?new ResizeObserver(entries=>{
+   const box=entries.find(entry=>entry.target===canvas)?.contentRect;
+   if(!box||!Number.isFinite(box.width)||!Number.isFinite(box.height)||box.width<=0||box.height<=0)return;
+   size=box;paint();
+  }):null;resize?.observe(canvas);
   const themes=new MutationObserver(paint);themes.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   if(themeOwner&&themeOwner!==document.documentElement)themes.observe(themeOwner,{attributes:true,attributeFilter:['data-theme']});
-  window.addEventListener('resize',paint);
-  this.stopPainting=()=>{resize?.disconnect();themes.disconnect();window.removeEventListener('resize',paint);};
+  const windowResize=()=>{if(!hasResizeObserver)size=canvas.getBoundingClientRect();paint();};
+  window.addEventListener('resize',windowResize);
+  this.stopPainting=()=>{resize?.disconnect();themes.disconnect();window.removeEventListener('resize',windowResize);};
  }
  eventPoint(event){
   const canvas=this.container.querySelector('[data-radar-canvas]'),g=this.mountedGeometry;if(event.target!==canvas||!(Number(canvas.dataset.radarPointCount)>0))return null;

@@ -23,6 +23,7 @@ afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();delete docum
 const ranked=['SAFE','<script>alert("x")</script>'].map((symbol,index)=>({assessment:{qualified:true},row:{symbol,current_price:101+index,se_pivot_price:100,rs_rating:90+index,se_volume_vs_50d:1.5,chart_path:index?null:'actual.json'}}));
 const geometryFor=(rows,small=false)=>radarGeometry(rows.filter(item=>item.assessment.qualified).map(({row})=>{const plan=entryPlan(row);return {symbol:row.symbol,distance:plan.distance,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(plan.state),pickable:Boolean(row.chart_path)};}),small?340:620,small?124:224);
 const coordinates=point=>({clientX:rect.left+point.x/620*rect.width,clientY:rect.top+point.y/224*rect.height});
+const notifySize=()=>resizeCallbacks[0]([{target:screen.getByRole('img'),contentRect:rect}]);
 it('preserves canvas hover labels, selection, tooltip and disabled-point behavior without interpreting symbols as HTML',()=>{
  const onSelect=vi.fn();const {container}=render(<SetupRadar ranked={ranked} selectedSymbol="SAFE" onSelect={onSelect}/>);
  const canvas=screen.getByRole('img'),geometry=geometryFor(ranked);
@@ -66,11 +67,11 @@ it('redraws on theme, CSS size and pixel-density changes while hit testing stays
  expect(widthWrites).not.toHaveBeenCalled();expect(heightWrites).not.toHaveBeenCalled();
  expect(context.points[0].color).toBe(palettes.dark.zone);
  document.documentElement.dataset.theme='light';await waitFor(()=>expect(context.points.at(-1).color).toBe(palettes.light.zone));
- const count=context.points.length;resizeCallbacks[0]();expect(context.points).toHaveLength(count);
- rect={...rect,width:310,height:112};vi.stubGlobal('devicePixelRatio',2);fireEvent(window,new Event('resize'));
+ const count=context.points.length;notifySize();expect(context.points).toHaveLength(count);
+ rect={...rect,width:310,height:112};vi.stubGlobal('devicePixelRatio',2);notifySize();fireEvent(window,new Event('resize'));
  expect(canvas.width).toBe(620);expect(canvas.height).toBe(224);expect(context.setTransform).toHaveBeenLastCalledWith(1,0,0,1,0,0);
  fireEvent.click(canvas,coordinates(geometryFor(ranked).points[0]));expect(onSelect).toHaveBeenCalledWith('SAFE');
- rect={...rect,width:620,height:224};resizeCallbacks[0]();expect(canvas.width).toBe(1240);expect(canvas.height).toBe(448);expect(context.setTransform).toHaveBeenLastCalledWith(2,0,0,2,0,0);
+ rect={...rect,width:620,height:224};notifySize();expect(canvas.width).toBe(1240);expect(canvas.height).toBe(448);expect(context.setTransform).toHaveBeenLastCalledWith(2,0,0,2,0,0);
 });
 it('uses the topmost actually painted circle for overlap hit testing and does not make missing points selectable',()=>{
  const points=geometryFor(ranked).points;const top={...points[0],symbol:'TOP',pickable:false};
@@ -81,11 +82,37 @@ it('uses the topmost actually painted circle for overlap hit testing and does no
 it('keeps the canvas, HTML label and SVG selection aligned when maximum height makes the viewport non-proportional',()=>{
  rect={left:10,top:20,width:820,height:228};const onSelect=vi.fn(),point=geometryFor(ranked).points[0];
  const {container}=render(<SetupRadar ranked={ranked} selectedSymbol="SAFE" onSelect={onSelect}/>);
+ notifySize();
  expect(context.setTransform).toHaveBeenLastCalledWith(820/620,0,0,228/224,0,0);
  const overlay=container.querySelector('svg');expect(overlay).toHaveAttribute('preserveAspectRatio','none');
  expect(overlay.querySelector('circle')).toHaveAttribute('cx',String(point.x));expect(overlay.querySelector('circle')).toHaveAttribute('cy',String(point.y));
  const label=container.querySelector('.radar-point-label');expect(parseFloat(label.style.left)).toBeCloseTo(point.x/620*100);expect(parseFloat(label.style.top)).toBeCloseTo(point.y/224*100);
  fireEvent.click(screen.getByRole('img'),coordinates(point));expect(onSelect).toHaveBeenCalledWith('SAFE');
+});
+it('paints every point synchronously and uses observed dimensions without forced layout reads',async()=>{
+ rect={left:10,top:20,width:820,height:228};vi.stubGlobal('devicePixelRatio',2);
+ render(<SetupRadar ranked={fixture.ranked} onSelect={()=>{}}/>);const canvas=screen.getByRole('img');
+ expect(context.points).toHaveLength(207);expect(canvas).toHaveAttribute('data-radar-point-count','207');
+ expect(canvas.width).toBe(1240);expect(canvas.height).toBe(448);
+ expect(HTMLCanvasElement.prototype.getBoundingClientRect).not.toHaveBeenCalled();
+ notifySize();expect(context.points).toHaveLength(414);expect(canvas.width).toBe(1640);expect(canvas.height).toBe(456);
+ expect(context.setTransform).toHaveBeenLastCalledWith(1640/620,0,0,456/224,0,0);
+ notifySize();expect(context.points).toHaveLength(414);
+ document.documentElement.dataset.theme='light';await waitFor(()=>expect(context.points.at(-1).color).toBe(palettes.light.zone));
+ vi.stubGlobal('devicePixelRatio',1);fireEvent(window,new Event('resize'));expect(canvas.width).toBe(820);expect(canvas.height).toBe(228);
+ expect(HTMLCanvasElement.prototype.getBoundingClientRect).not.toHaveBeenCalled();
+ const count=context.points.length;
+ resizeCallbacks[0]([{target:canvas,contentRect:{width:0,height:0}}]);
+ resizeCallbacks[0]([{target:canvas,contentRect:{width:NaN,height:228}}]);
+ expect(context.points).toHaveLength(count);expect(canvas).toHaveAttribute('data-radar-point-count','207');
+});
+it('retains synchronous actual-size painting when ResizeObserver is unavailable',()=>{
+ vi.stubGlobal('ResizeObserver',undefined);rect={left:0,top:0,width:820,height:228};
+ render(<SetupRadar ranked={ranked} onSelect={()=>{}}/>);const canvas=screen.getByRole('img');
+ expect(canvas.width).toBe(820);expect(canvas.height).toBe(228);expect(context.points).toHaveLength(2);
+ expect(HTMLCanvasElement.prototype.getBoundingClientRect).toHaveBeenCalledTimes(1);
+ rect={...rect,width:410,height:114};fireEvent(window,new Event('resize'));
+ expect(canvas.width).toBe(410);expect(canvas.height).toBe(114);expect(context.points).toHaveLength(4);
 });
 it('rejects invalid geometry and escapes every data-bearing HTML label',()=>{
  const geometry=geometryFor(ranked);

@@ -35,7 +35,15 @@ try {
   await writeFile(resolve(output,`radar-${viewport.width}.cpuprofile`),JSON.stringify(profile));
   await writeFile(resolve(output,`radar-${viewport.width}.trace.json`),JSON.stringify({traceEvents:events}));
   await diagnostic.close();
-  report.push({viewport,cpu_rate:4,runs,instrumented,pass:runs.length===3&&runs.every(run=>run.point_count===207&&run.first_frame_ms<=50)});
+  // A separate non-proportional DPR2 viewport confirms ResizeObserver sizing
+  // reaches the real physical resolution before the timed next-frame boundary.
+  // It is additional evidence, never a replacement for any cold acceptance run.
+  const alignmentContext=await browser.newContext({viewport,deviceScaleFactor:2,serviceWorkers:'block'}),alignmentPage=await alignmentContext.newPage();
+  await alignmentPage.goto(url);await alignmentPage.waitForFunction(()=>typeof window.measureRadar==='function');
+  const alignmentSession=await alignmentContext.newCDPSession(alignmentPage);await alignmentSession.send('Emulation.setCPUThrottlingRate',{rate:4});
+  const alignment=await alignmentPage.evaluate(()=>window.measureRadar({width:innerWidth<768?358:828}));
+  await alignmentContext.close();
+  report.push({viewport,cpu_rate:4,runs,instrumented,alignment,pass:runs.length===3&&runs.every(run=>run.point_count===207&&run.final_point_count===207&&run.pixel_alignment.matches&&run.first_frame_ms<=50)&&alignment.pixel_alignment.matches&&alignment.final_point_count===207});
  }
  await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2));
  await writeFile(resolve(output,'benchmark.js.map'),await readFile(resolve(root,'benchmark.js.map')));
