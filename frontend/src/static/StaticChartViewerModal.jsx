@@ -2,6 +2,8 @@ import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
 import { assess, entryPlan } from './researchEngine';
+import { entryReadiness } from './entryReadiness';
+import { modelMarket } from './portfolioPlan';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Alert,
@@ -196,6 +198,11 @@ function StaticChartViewerModal({
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
   const pivotPrice = canonicalPivot(stockData).price;
   const plan = entryPlan(stockData || {}, quote?.symbol === currentSymbol ? quote : null, method);
+  const mobileReadiness = isMobile && stockData
+    ? entryReadiness(stockData, expectedDate || chartPayload?.as_of_date, market || modelMarket([stockData]), now)
+    : null;
+  const mobileUnknown = mobileReadiness?.rules.filter(rule => rule.state === 'unknown').length || 0;
+  const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
   const pivotLabel = '共通ピボット';
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
   // モバイルは画面の約55%をチャートに割り当て、残りを指標のスクロール領域にする
@@ -227,9 +234,14 @@ function StaticChartViewerModal({
         >
           {rowDetail.isError && <Alert severity="warning">詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>}
           <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between',px:2,py:1,borderBottom:1,borderColor:'divider'}}>
-            <Box><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
-              <Typography sx={{fontSize:12,color:'text.secondary'}}>{stockData?.company_name || '日次チャート分析'} · {Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）</Typography></Box>
-            <IconButton onClick={onClose} aria-label="チャートを閉じる"><CloseIcon /></IconButton>
+            <Box sx={{minWidth:0,flex:1}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
+              <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
+              {isMobile && <Box data-testid="mobile-chart-readiness" sx={{fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
+                <strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong>
+                {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : '日次条件を確認済み。現在価格は発注時に確認。'}</Box>}
+              </Box>}
+            </Box>
+            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{alignSelf:'flex-start'}}><CloseIcon /></IconButton>
           </Box>
           <Box
             sx={{

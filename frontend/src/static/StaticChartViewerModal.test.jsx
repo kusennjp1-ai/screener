@@ -150,6 +150,11 @@ describe('StaticChartViewerModal', () => {
       expect(screen.getByTestId('static-candlestick-chart')).toHaveTextContent('NVDA:2');
       expect(screen.getByTestId('static-stock-sidebar')).toHaveTextContent('NVDA:NVDA');
     });
+    const compactReadiness = screen.getByTestId('mobile-chart-readiness');
+    expect(compactReadiness).toHaveTextContent('購入条件 0/7（未確認 5）');
+    expect(compactReadiness).toHaveTextContent('未達・未確認：選定条件 ／ 市場環境 ／ 最新の取引日');
+    expect(compactReadiness).not.toHaveTextContent('日次条件を確認済み');
+    expect(screen.getByText('価格未確認 · 2026-04-02 日次終値')).toBeInTheDocument();
 
     expect(chartSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -189,6 +194,14 @@ describe('StaticChartViewerModal', () => {
     expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
   }, 10000);
+
+  it('does not turn a pending mobile chart selection into zero confirmed conditions', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    renderModal({open:true,onClose:vi.fn(),initialSymbol:'AMD',date:'2026-04-02',chartIndex:{symbols:[{symbol:'AMD',path:'charts/pending-AMD.json'}]}});
+    expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件を読み込み中…');
+    expect(screen.getByTestId('mobile-chart-readiness')).not.toHaveTextContent('0/7');
+  });
 });
 
 it.each([
