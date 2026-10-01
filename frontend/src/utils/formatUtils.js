@@ -80,7 +80,7 @@ export const getIpoAgeColor = (ipoDate) => {
  */
 export const formatPercent = (value, decimals = 1) => {
   if (value == null) return '-';
-  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+  return `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(decimals)}%`;
 };
 
 /**

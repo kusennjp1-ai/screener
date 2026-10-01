@@ -1,6 +1,6 @@
 import { canonicalPivot } from '../researchPresentation';
 import { Box, Button, MenuItem, Paper, Select, Stack, Typography } from '@mui/material';
-const value = (n, digits = 2) => Number.isFinite(n) ? n.toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits}) : '—';
+const value = (n, digits = 2) => Number.isFinite(n) ? n.toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits}).replace(/^-/, "−") : '—';
 
 export default function MobileScanResults({rows, total, page, perPage, sortBy, sortOrder, onSort, onPage, onOpenChart, isChartEnabled}) {
   return <section aria-label="詳細スキャンの銘柄一覧">

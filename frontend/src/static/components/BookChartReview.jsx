@@ -1,5 +1,5 @@
 import { Alert, Typography } from '@mui/material';
-const number = (n, unit = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2)}${unit}` : '未確認';
+const number = (n, unit = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2).replace(/^-/, '−')}${unit}` : '未確認';
 const status = n => n === true ? '該当' : n === false ? '非該当' : '未確認';
 export default function BookChartReview({ diagnostics: d }) {
   return <details style={{ marginTop: 12 }}>

@@ -1,3 +1,4 @@
+import { signed, times, money } from '../../static/positionGeometry';
 import { industryLabel } from './industryLabels';
 import { patternLabel, sectorLabel, ratingLabel } from './scanLabels';
 import { useMemo, useRef, useState, useCallback, memo } from 'react';
@@ -358,7 +359,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 50, minWidth: 50 }}>
-        {row.se_distance_to_pivot_pct != null ? `${row.se_distance_to_pivot_pct.toFixed(1)}%` : '-'}
+        {row.se_distance_to_pivot_pct != null ? signed(row.se_distance_to_pivot_pct) : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 45, minWidth: 45 }}>
@@ -366,7 +367,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 45, minWidth: 45 }}>
-        {row.se_volume_vs_50d != null ? `${row.se_volume_vs_50d.toFixed(1)}倍` : '-'}
+        {row.se_volume_vs_50d != null ? times(row.se_volume_vs_50d) : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ width: 35, minWidth: 35 }}>
@@ -389,7 +390,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="right" sx={{ fontFamily: 'monospace', width: 55, minWidth: 55 }}>
-        {row.se_pivot_price != null ? `$${row.se_pivot_price.toFixed(2)}` : '-'}
+        {row.se_pivot_price != null ? money(row.se_pivot_price) : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 40, minWidth: 40 }}>
@@ -463,11 +464,11 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.eps_growth_qq == null ? 'text.secondary' : row.eps_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
-        {row.eps_growth_qq != null ? `${row.eps_growth_qq.toFixed(0)}%` : '-'}
+        {row.eps_growth_qq != null ? signed(row.eps_growth_qq,0) : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.sales_growth_qq == null ? 'text.secondary' : row.sales_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
-        {row.sales_growth_qq != null ? `${row.sales_growth_qq.toFixed(0)}%` : '-'}
+        {row.sales_growth_qq != null ? signed(row.sales_growth_qq,0) : '-'}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 50, minWidth: 50 }}>

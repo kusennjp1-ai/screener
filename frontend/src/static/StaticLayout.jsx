@@ -15,6 +15,7 @@ import ResearchSearch from './components/ResearchSearch';
 import { useStaticMarket } from './StaticMarketContext';
 import './research.css';
 import './theme/foundation.css';
+import './theme/motion.css';
 import './workbench.css';
 const NAV_ITEMS=[{path:'/',label:'本日の判断',Icon:ShowChartIcon},{path:'/compare',label:'比較',Icon:GridViewIcon},{path:'/breadth',label:'市場',Icon:BarChartIcon}];
 export default function StaticLayout({children}) {

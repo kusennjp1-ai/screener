@@ -1,3 +1,4 @@
+import { signed } from '../positionGeometry';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -42,8 +43,7 @@ const NO_GROUP_LABEL = 'No Group';
 
 const formatPct = (value) => {
   if (value == null || Number.isNaN(value)) return '-';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
+  return signed(value,2);
 };
 
 const totalActivity = (row) => (row?.up_count ?? 0) + (row?.down_count ?? 0);

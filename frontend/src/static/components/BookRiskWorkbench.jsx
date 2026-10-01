@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Box, Button, TextField, Typography } from '@mui/material';
 import { parseTradeReturns, tradeEvidence, reviewPosition } from '../bookRiskPolicy';
-const show = (n, unit = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2)}${unit}` : '未確認';
+const show = (n, unit = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2).replace(/^-/, '−')}${unit}` : '未確認';
 const empty = { entry: '', current: '', peak: '', initialStop: '', currentStop: '', shares: '' };
 export default function BookRiskWorkbench() {
   const [history, setHistory] = useState('');

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Typography } from '@mui/material';
 import { fetchStaticChartPayload } from '../chartClient';
 import { buildBookExitEvidence } from '../bookExitEvidence';
-const n = v => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '未確認';
+const n = v => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2).replace(/^-/, '−') : '未確認';
 const yes = v => v === null ? '未確認' : v ? '該当' : '非該当';
 
 function ExitForm({ row, entry, date }) {

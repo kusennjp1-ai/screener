@@ -3,7 +3,7 @@ import { Alert, Button, Typography } from '@mui/material';
 import { fetchStaticChartPayload } from '../chartClient';
 import { reviewBookPattern } from '../bookPatternReview';
 
-const show = n => typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2) : '未確認';
+const show = n => typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2).replace(/^-/, '−') : '未確認';
 const fields = [['advanceStart', '先行上昇の起点'], ['baseStart', 'ベース開始'], ['troughDate', 'ベースの底'], ['cheatStart', 'チート開始'], ['cheatEnd', 'チート終了'], ['breakoutDate', 'ブレイク日（未発生なら空欄）']];
 
 function PatternForm({ row, entry, date }) {

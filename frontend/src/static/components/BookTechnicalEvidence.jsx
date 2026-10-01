@@ -1,6 +1,6 @@
 import { Alert, Typography } from '@mui/material';
 
-const number = (n, unit = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2)}${unit}` : '未確認';
+const number = (n, unit = '') => typeof n === 'number' && Number.isFinite(n) ? `${n.toFixed(2).replace(/^-/, '−')}${unit}` : '未確認';
 const direction = d => d?.state === 'sustained-up' ? `全${d.sessions}営業日で上向き` : d?.state === 'sustained-down' ? `全${d.sessions}営業日で下向き` : d?.state === 'mixed' ? `上昇${d.upSteps}・下降${d.downSteps}・横ばい${d.flatSteps}日（形状確認）` : '必要な履歴が不足';
 
 export default function BookTechnicalEvidence({ evidence: e }) {
