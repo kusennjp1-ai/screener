@@ -158,3 +158,48 @@
  .sector-table-scroll .sector-rate-top>i { display:none; }
  .sector-table-scroll a { font-size:12px; }
 }
+
+/* D11: geometry follows the actual container width; labels never scale with SVG. */
+.sector-rotation { padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;margin-bottom:12px; }
+.sector-rotation h2 { font-size:14px;margin:0 0 8px; }
+.sector-rotation p { font-size:11px;line-height:1.5;color:var(--text-3);margin:0 0 12px; }
+.sector-rotation-plot { position:relative;height:238px; }
+.sector-rotation-plot svg { display:block;overflow:visible; }
+.sector-rotation-plot circle { cursor:default; }
+.sector-quadrant-label,.sector-node-label,.sector-axis-label { position:absolute;pointer-events:none;white-space:nowrap; }
+.sector-quadrant-label { font-size:11px;line-height:16px;font-weight:700; }
+.sector-node-label { font-size:12px;line-height:16px;color:var(--text-2);font-weight:500; }
+.sector-node-label.highlighted { color:var(--text);font-weight:700; }
+.sector-axis-label { font:11px var(--font-mono);color:var(--text-3); }
+.sector-rotation .sector-rotation-note { margin-top:8px;margin-bottom:0;font-size:11px; }
+.sector-readings>summary { font-size:14px;font-weight:700;min-height:24px;cursor:pointer; }
+.sector-readings[open]>summary { margin-bottom:12px; }
+@media(max-width:700px) {
+ .sector-page-meta { display:none; }
+ .sector-controls { display:grid;grid-template-columns:76px minmax(110px,1fr) 110px;align-items:end; }
+ .sector-controls label { min-width:0; }
+ .sector-view { gap:2px; }
+ .sector-view button { padding:4px; }
+ .sector-rotation { padding:12px; }
+ .sector-readings { padding:0 12px; }
+ .sector-readings>summary { min-height:44px;display:flex;align-items:center; }
+ .sector-readings>summary::after { content:'＋';margin-left:auto;color:var(--text-3); }
+ .sector-readings[open]>summary::after { content:'−'; }
+ .sector-readings[open] { padding-bottom:12px; }
+}
+
+@media(min-width:701px) {
+ .sector-workbench { position:relative; }
+ .sector-workbench>.MuiTabs-root { position:absolute;right:0;top:8px;width:372px;margin-bottom:0; }
+ .sector-workbench .sector-page-meta { display:none; }
+ .sector-strength { display:grid;grid-template-columns:minmax(0,1fr) 372px;column-gap:24px; }
+ .sector-heading,.sector-controls,.sector-list-panel { grid-column:1; }
+ .sector-dashboard { display:contents; }
+ .sector-aside { grid-column:2;grid-row:1 / span 3;padding-top:52px; }
+ .sector-disclosure { grid-column:1 / -1; }
+}
+@media(min-width:701px) and (max-width:1100px) {
+ .sector-strength { grid-template-columns:minmax(0,1fr) 320px;column-gap:16px; }
+ .sector-workbench>.MuiTabs-root { width:320px; }
+}
+.sector-workbench .market-footnote a { margin:0;display:inline-flex;align-items:center;font-size:12px; }

@@ -1,5 +1,6 @@
+import SectorRotation from './SectorRotation';
 import { useMemo, useState } from 'react';
-import { Alert } from '@mui/material';
+import { Alert,useMediaQuery } from '@mui/material';
 import { useWorkbench } from '../useWorkbench';
 import { rankedSectors,sectorBar,sectorChange,sectorHref,sectorNumber,sectorReadings,sectorValue } from '../sectorPresentation';
 
@@ -23,13 +24,14 @@ function Reading({groups,render}) {return groups.length?groups.slice(0,3).map(re
 export default function SectorStrength({entry}) {
   const query=useWorkbench(entry),[period,setPeriod]=useState('63'),[method,setMethod]=useState('minervini'),[view,setView]=useState('bars');
   const [highlight,setHighlight]=useState(null);
+  const isMobile=useMediaQuery('(max-width:700px)');
   const sectors=query.data?.sectors;
   const groups=useMemo(()=>rankedSectors(sectors?.groups || [],period),[sectors,period]);
   const readings=useMemo(()=>sectorReadings(groups,period,method),[groups,period,method]);
   if(query.isError)return <Alert severity="error">業種データの基準日または取得状態を確認できません。</Alert>;
   if(!sectors)return <p>業種の相対強度を読み込み中…</p>;
   return <section className="sector-strength" aria-label="業種の相対強度と通過率">
-    <header className="sector-heading"><div className="research-kicker">市場 · 業種の強さ</div><h1>{readings.heading}</h1><p className="sector-subheading">{readings.subheading}</p><p>代理ETFの対SPY相対価格と、同日の分類内の条件通過率。</p></header>
+    <header className="sector-heading"><div className="research-kicker">市場 · 業種の強さ · {entry.as_of_date || sectors.as_of || '未確認'}</div><h1>{readings.heading}</h1><p className="sector-subheading">{readings.subheading}</p></header>
     <div className="sector-controls">
       <label>期間<select value={period} onChange={e=>setPeriod(e.target.value)} aria-label="相対強度の期間"><option value="63">63営業日</option><option value="126">126営業日</option></select></label>
       <label>選定方式<select value={method} onChange={e=>setMethod(e.target.value)}><option value="minervini">ミネルヴィニ</option><option value="minervini2">基本と原則</option><option value="oneil">オニール / CAN SLIM</option><option value="ibd">IBD型リーダー</option></select></label>
@@ -50,12 +52,13 @@ export default function SectorStrength({entry}) {
         <p className="sector-list-note">未確認は分母に含め、通過には含めません。* 10銘柄未満。棒は80〜120に制限し、実際の指数はそのまま表示。</p>
       </div>
       <aside className="sector-aside" aria-label="業種データの読み方">
-        <section className="sector-readings"><h2>今日の読み方</h2><dl>
+        <SectorRotation groups={groups} period={period} highlight={highlight} onHighlight={setHighlight} compact={isMobile}/>
+        <details className="sector-readings" open={!isMobile}><summary>今日の読み方</summary><dl>
           <div><dt className="positive">追い風（指数100超）</dt><dd><Reading groups={readings.tailwind} render={g=>`${g.label}（${sectorNumber(sectorValue(g,period))}）`}/></dd></div>
           <div><dt className="negative">逆風（指数95未満）</dt><dd><Reading groups={readings.headwind} render={g=>`${g.label}（${sectorNumber(sectorValue(g,period))}）`}/></dd></div>
           <div><dt className="improving">改善中（100未満・21日上昇）</dt><dd><Reading groups={readings.improving} render={g=>`${g.label}（${sectorChange(g.momentum21.value-100)}）`}/></dd></div>
           <div><dt>通過率が高い業種</dt><dd><Reading groups={readings.highPass} render={g=>`${g.label} ${sectorNumber(g.rates[method].percent)}%`}/></dd></div>
-        </dl></section>
+        </dl></details>
       </aside>
     </div>
     <details className="market-disclosure sector-disclosure"><summary>計算方法・対象範囲・欠損の扱い</summary><p>指数＝100 ×（当日のETF終値 / SPY終値）÷（{period}営業日前のETF終値 / SPY終値）。100が基点です。21日変化は同じ式で計算した直近21営業日の指数から100を引いた値。配当込みリターンではありません。</p><p>ETFは業種の代理です。銘柄分類の集計対象とETF構成は一致しません。通過率の分母は株価10ドル以上・平均売買代金2,000万ドル以上の全対象銘柄。分類不明は別集計です。少数標本は解釈に注意してください。</p><p>価格出典：{sectors.source||'未取得'} / 取得：{sectors.retrieved_at||'未確認'} / 調整：分割調整済み終値・配当調整なし。同日・同じ調整方針で取得し、途中の日足が欠ける場合は相対指数を表示しません。IBD公式RSではありません。</p></details>
