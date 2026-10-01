@@ -23,7 +23,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
     <div><small>市場 · 新規上限 {loading?'—':Math.round(plan.allocationCap*100)}%</small><strong className="hero-market">{plan.market.label.replace('（独自判定）','')}</strong></div>
    </div>
    <div className="hero-actions"><PortfolioDecision compact rows={rows} date={date} plan={plan} onInspect={onInspect} onBrowse={onBrowse} renderTrigger={({openPlan,label})=><button onClick={openPlan} aria-haspopup="dialog" aria-label={label}><span className="desktop-plan-label">{label}</span><span className="mobile-plan-label">配分</span></button>}/><a href="#/breadth?tab=sectors">業種の追い風を見る →</a></div>
-   <button className="changes-trigger" onClick={()=>setChangesOpen(true)}>{workbench.isError?'変化：取得できません':first?'変化：記録開始（次回から）':`変化：新たに通過 ${changes?.counts?.new??'—'} · 再通過 ${changes?.counts?.returned??'—'} · 脱落 ${changes?.counts?.dropped??'—'}`}</button>
+   <button className="changes-trigger" aria-label="候補の日次変化" onClick={()=>setChangesOpen(true)}><span className="changes-desktop">{workbench.isError?'変化：取得できません':first?'変化：記録開始（次回から）':`変化：新たに通過 ${changes?.counts?.new??'—'} · 再通過 ${changes?.counts?.returned??'—'} · 脱落 ${changes?.counts?.dropped??'—'}`}</span><span className="changes-mobile">変化</span></button>
   </div>
   {(!collapsed||small)&&<SetupRadar ranked={ranked} selectedSymbol={selectedSymbol} onSelect={onSelect} small={small}/>}
   <button className="hero-toggle" aria-expanded={!collapsed} aria-label={collapsed?'概況を展開':'概況をたたむ'} onClick={toggle}>{collapsed?'⌄':'⌃'}</button>
