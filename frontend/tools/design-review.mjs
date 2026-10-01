@@ -6,6 +6,7 @@ import { readFile, mkdir, writeFile, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve, extname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { gzipSync } from 'node:zlib';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
 
@@ -45,8 +46,12 @@ report.data = { as_of_date: (manifest.markets?.US || manifest).as_of_date, gener
 if (baselineRoot) {
   const previousManifest = JSON.parse(await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
   const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
-  const ids = async (root, entry) => decodeResearchIndex(JSON.parse(await readFile(resolve(root, 'static-data', entry.assets.research.path), 'utf8'))).rows.map(row => row.symbol).sort().join(',');
-  check(currentEntry.as_of_date === previousEntry.as_of_date && await ids(currentRoot, currentEntry) === await ids(baselineRoot, previousEntry), 'Baseline/current snapshots have different dates or symbols; performance comparison is invalid');
+  const ids = async (root, entry, label) => {
+    const raw = await readFile(resolve(root, 'static-data', entry.assets.research.path));
+    (report.transport ||= []).push({ label, as_of_date: entry.as_of_date, raw_bytes: raw.length, gzip_bytes: gzipSync(raw).length });
+    return decodeResearchIndex(JSON.parse(raw.toString('utf8'))).rows.map(row => row.symbol).sort().join(',');
+  };
+  check(currentEntry.as_of_date === previousEntry.as_of_date && await ids(currentRoot, currentEntry, 'current') === await ids(baselineRoot, previousEntry, 'baseline'), 'Baseline/current snapshots have different dates or symbols; performance comparison is invalid');
 }
 const readySelector = '.candidate-row, .research-list tbody tr';
 const visible = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
