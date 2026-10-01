@@ -6,6 +6,7 @@ import { readFile, mkdir, writeFile, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve, extname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { decodeResearchIndex } from '../src/static/researchTransport.js';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -14,7 +15,7 @@ const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).
 const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
 const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
-const report = { commit, measured_at: new Date().toISOString(), clock: 'actual browser Date.now; no historical date override', data: null,
+const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   method: 'Production Chromium. CDP CPU 4x, same-data baseline/current, HTTP responses cached in memory after warm-up. No human satisfaction inference.', screens: [], performance: [], failures: [] };
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
@@ -38,6 +39,12 @@ const baseline = baselineRoot && await serve(baselineRoot);
 const browser = await chromium.launch();
 const manifest = JSON.parse(await readFile(resolve(currentRoot, 'static-data/manifest.json'), 'utf8'));
 report.data = { as_of_date: (manifest.markets?.US || manifest).as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation };
+if (baselineRoot) {
+  const previousManifest = JSON.parse(await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
+  const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
+  const ids = async (root, entry) => decodeResearchIndex(JSON.parse(await readFile(resolve(root, 'static-data', entry.assets.research.path), 'utf8'))).rows.map(row => row.symbol).sort().join(',');
+  check(currentEntry.as_of_date === previousEntry.as_of_date && await ids(currentRoot, currentEntry) === await ids(baselineRoot, previousEntry), 'Baseline/current snapshots have different dates or symbols; performance comparison is invalid');
+}
 const readySelector = '.candidate-row, .research-list tbody tr';
 const visible = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
 
@@ -51,7 +58,7 @@ function objectiveMetrics() {
     return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0' && !element.closest('[hidden],[aria-hidden="true"]');
   };
   const chartInternal = element => element.closest('.tv-lightweight-charts, [data-chart-internal], canvas');
-  const elements = [...document.querySelectorAll('#root *')].filter(shown);
+  const elements = [...document.querySelectorAll('body *')].filter(shown);
   const smallTargets = [...document.querySelectorAll('button,a,[role="button"],summary,select,input')].filter(element => shown(element) && !element.closest('p') && !element.disabled).flatMap(element => {
     const target = element.matches('input') ? element.labels?.[0] || element.closest('label') || element : element;
     const box = target.getBoundingClientRect(), minimum = innerWidth < 768 ? 44 : 24;
@@ -86,7 +93,7 @@ function objectiveMetrics() {
   return { smallTargets, fontIssues, radiusIssues, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
     pageHeight: document.documentElement.scrollHeight, viewport: { width: innerWidth, height: innerHeight },
     headerHeight: header?.height || 0, bottomNavHeight: nav?.height || 0, chromeHeight: (header?.height || 0) + (nav?.height || 0),
-    hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas, .research-detail .research-chart svg'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
+    hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas') || rect('.research-detail .research-chart [data-chart-plot]'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
     visibleCandidates: [...document.querySelectorAll('.candidate-row')].filter(shown).filter(completelyVisible).length,
     visibleCompareCards: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).filter(completelyVisible).length,
     runningAnimations: animations.length };
@@ -97,7 +104,7 @@ async function capture(page, viewport, theme, screen) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(800);
   const metrics = await page.evaluate(objectiveMetrics);
-  const axe = await new AxeBuilder({ page }).include('#root').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
   await page.screenshot({ path: resolve(output, screenshot) });
   const key = `${screen}/${viewport.width}/${theme}`;
