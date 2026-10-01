@@ -40,7 +40,7 @@ const bandColor = (state) => {
   if (BAND_GREEN.has(state)) return 'success.main';
   if (BAND_RED.has(state)) return 'error.main';
   if (BAND_AMBER.has(state)) return 'warning.main';
-  return 'text.disabled';
+  return 'text.secondary';
 };
 
 function BandDotCell({ state, tooltip }) {
@@ -48,10 +48,10 @@ function BandDotCell({ state, tooltip }) {
     <TableCell align="center" sx={{ width: 40, minWidth: 40 }}>
       {state ? (
         <Tooltip title={tooltip} arrow>
-          <Box sx={{ width: 13, height: 13, borderRadius: '50%', bgcolor: bandColor(state), mx: 'auto' }} />
+          <Box role="img" aria-label={tooltip} sx={{ width: 13, height: 13, borderRadius: '50%', bgcolor: bandColor(state), mx: 'auto' }} />
         </Tooltip>
       ) : (
-        <Typography variant="caption" sx={{ color: 'text.disabled' }}>-</Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>-</Typography>
       )}
     </TableCell>
   );
@@ -69,16 +69,13 @@ import AddToWatchlistMenu from '../common/AddToWatchlistMenu';
 import { useMetricInfoPopover } from '../common/MetricInfoPopover';
 import { hasGlossaryEntry } from '../../constants/metricGlossary';
 import {
-  getStageColor,
   getRatingColor,
-  getGrowthColor,
   getEpsRatingColor,
   getGroupRankColor,
 } from '../../utils/colorUtils';
 import {
   formatLargeNumber,
   formatIpoAge,
-  getIpoAgeColor,
   getCurrencyPrefix,
   formatLocalCurrency,
 } from '../../utils/formatUtils';
@@ -226,7 +223,8 @@ const VirtualTableRow = memo(function VirtualTableRow({
             <IconButton
               size="small"
               onClick={handleChartClick}
-              sx={{ color: 'primary.main', p: 0 }}
+              aria-label={`${row.symbol} のチャートを開く`}
+              sx={{ color: 'primary.main', minWidth: 24, minHeight: 24, p: 0 }}
             >
               <ShowChartIcon sx={{ fontSize: 14 }} />
             </IconButton>
@@ -274,7 +272,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
                   color={statusChip.color}
                   size="small"
                   title={statusChip.title}
-                  sx={{ height: 18, fontSize: 10, flexShrink: 0 }}
+                  sx={{ height: 18, fontSize: 12, flexShrink: 0 }}
                 />
               ) : null}
             </Box>
@@ -371,18 +369,18 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {row.se_rs_line_new_high == null ? '-' : row.se_rs_line_new_high ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
-          <CloseIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+          <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
         )}
       </TableCell>
 
       <TableCell align="center" sx={{ width: 35, minWidth: 35 }}>
         {row.se_rs_line_blue_dot ? (
           <Box
-            sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#2196f3', display: 'inline-block' }}
-            title="RS line at new high before price (blue dot)"
+            sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'info.main', display: 'inline-block' }}
+            role="img" aria-label="RS線が株価に先行して新高値"
           />
         ) : (
-          <Box component="span" sx={{ color: 'text.disabled' }}>-</Box>
+          <Box component="span" sx={{ color: 'text.secondary' }}>-</Box>
         )}
       </TableCell>
 
@@ -423,11 +421,11 @@ const VirtualTableRow = memo(function VirtualTableRow({
           <Box
             component="span"
             sx={{
-              backgroundColor: getStageColor(row.stage),
-              color: 'white',
+              backgroundColor: 'background.default',
+              color: row.stage === 2 ? 'success.main' : row.stage === 4 ? 'error.main' : 'text.secondary',
               padding: '1px 4px',
-              borderRadius: '2px',
-              fontSize: '10px',
+              borderRadius: '4px',
+              fontSize: '12px',
               fontWeight: 500,
             }}
           >
@@ -456,15 +454,15 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {formatLargeNumber(row.adv_usd, '$')}
       </TableCell>
 
-      <TableCell align="center" sx={{ fontFamily: 'monospace', color: getIpoAgeColor(row.ipo_date), width: 50, minWidth: 50 }}>
+      <TableCell align="center" sx={{ fontFamily: 'monospace', color: 'text.secondary', width: 50, minWidth: 50 }}>
         {formatIpoAge(row.ipo_date)}
       </TableCell>
 
-      <TableCell align="center" sx={{ fontFamily: 'monospace', color: getGrowthColor(row.eps_growth_qq), width: 50, minWidth: 50 }}>
+      <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.eps_growth_qq == null ? 'text.secondary' : row.eps_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
         {row.eps_growth_qq != null ? `${row.eps_growth_qq.toFixed(0)}%` : '-'}
       </TableCell>
 
-      <TableCell align="center" sx={{ fontFamily: 'monospace', color: getGrowthColor(row.sales_growth_qq), width: 50, minWidth: 50 }}>
+      <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.sales_growth_qq == null ? 'text.secondary' : row.sales_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
         {row.sales_growth_qq != null ? `${row.sales_growth_qq.toFixed(0)}%` : '-'}
       </TableCell>
 
@@ -484,7 +482,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {row.vcp_detected ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
-          <CloseIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+          <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
         )}
       </TableCell>
 
@@ -500,7 +498,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {row.vcp_ready_for_breakout ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
-          <CloseIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+          <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
         )}
       </TableCell>
 
@@ -508,7 +506,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {row.passes_template ? (
           <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
         ) : (
-          <CloseIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+          <CloseIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
         )}
       </TableCell>
 
@@ -516,7 +514,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
         <Chip
           label={row.rating}
           color={getRatingColor(row.rating)}
-          size="small"
+          size="small" variant="outlined"
         />
         {row.execution_state && row.execution_state !== 'unknown' && (
           <Tooltip title={row.execution_cap_reason || ''} arrow disableHoverListener={!row.execution_cap_reason}>
@@ -525,7 +523,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
               sx={{
                 display: 'block',
                 mt: 0.25,
-                fontSize: 10,
+                fontSize: 12,
                 lineHeight: 1.2,
                 whiteSpace: 'nowrap',
                 color: row.execution_cap_applied ? 'warning.main' : 'text.secondary',
@@ -539,15 +537,15 @@ const VirtualTableRow = memo(function VirtualTableRow({
 
       <BandDotCell
         state={row.pressure_state}
-        tooltip={`Pressure: ${row.pressure_state ?? '-'}${row.pressure_value != null ? ` (${row.pressure_value})` : ''}`}
+        tooltip={`需給: ${{buy:'買い優勢',sell:'売り優勢',neutral:'中立'}[row.pressure_state] ?? '未確認'}${row.pressure_value != null ? ` (${row.pressure_value})` : ''}`}
       />
       <BandDotCell
         state={row.buy_risk_state}
-        tooltip={`Buy Risk: ${row.buy_risk_state ?? '-'}${row.buy_risk_atr != null ? ` (${row.buy_risk_atr} ATR)` : ''}`}
+        tooltip={`買いリスク: ${{low:'低い',medium:'中程度',high:'高い'}[row.buy_risk_state] ?? '未確認'}${row.buy_risk_atr != null ? ` (${row.buy_risk_atr} ATR)` : ''}`}
       />
       <BandDotCell
         state={row.tpr_state}
-        tooltip={`TPR: ${row.tpr_state ?? '-'}${row.tpr_score != null ? ` (${row.tpr_score}/${row.tpr_max ?? 7})` : ''}`}
+        tooltip={`トレンド評価: ${{strong:'強い',transition:'移行中',weak:'弱い'}[row.tpr_state] ?? '未確認'}${row.tpr_score != null ? ` (${row.tpr_score}/${row.tpr_max ?? 7})` : ''}`}
       />
     </TableRow>
   );
@@ -686,7 +684,7 @@ function ResultsTable({
           variant="outlined"
           onClick={toggleMcapDisplay}
           data-testid="mcap-display-toggle"
-          sx={{ cursor: 'pointer', fontSize: 11, height: 20 }}
+          sx={{ cursor: 'pointer', fontSize: 12, minHeight: { xs: 44, md: 24 } }}
         />
       </Box>
       <TableContainer
@@ -738,7 +736,7 @@ function ResultsTable({
                       size="small"
                       onClick={(event) => openInfo(event, column.id)}
                       aria-label={`${column.label} の説明`}
-                      sx={{ p: 0, ml: 0.25, verticalAlign: 'middle', color: 'inherit', opacity: 0.65 }}
+                      sx={{ p: 0, ml: 0.25, verticalAlign: 'middle', color: 'inherit', minWidth: 24, minHeight: 24 }}
                     >
                       <HelpOutlineIcon sx={{ fontSize: 12 }} />
                     </IconButton>

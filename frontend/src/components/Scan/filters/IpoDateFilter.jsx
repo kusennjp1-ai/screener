@@ -28,7 +28,7 @@ function IpoDateFilter({ value, onChange }) {
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}
+        sx={{ display: 'block', mb: 0.5, fontSize: '12px' }}
       >
         IPO Age
       </Typography>
@@ -43,7 +43,7 @@ function IpoDateFilter({ value, onChange }) {
             onClick={() => handleChipClick(preset.value)}
             sx={{
               height: 22,
-              fontSize: '0.65rem',
+              fontSize: '12px',
               '& .MuiChip-label': { px: 0.75 },
             }}
           />

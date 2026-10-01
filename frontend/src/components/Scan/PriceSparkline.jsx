@@ -1,6 +1,6 @@
 import { useMemo, memo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
-import { Box, Tooltip, Typography } from '@mui/material';
+import { Box, Tooltip, Typography, useTheme } from '@mui/material';
 
 /**
  * Price Sparkline Component
@@ -25,10 +25,11 @@ function PriceSparkline({
   showChange = true,  // Whether to show the 1-day change text
   sparklineWidth = 60,  // Width of the inner sparkline chart when showChange is true
 }) {
+  const theme = useTheme();
   // Transform data for chart
   const { chartData, domain, color, fillColor } = useMemo(() => {
     if (!data || !Array.isArray(data) || data.length === 0) {
-      return { chartData: [], domain: [0, 1], color: '#9e9e9e', fillColor: '#9e9e9e' };
+      return { chartData: [], domain: [0, 1], color: theme.palette.text.secondary, fillColor: theme.palette.text.secondary };
     }
 
     // Convert to chart format
@@ -47,8 +48,8 @@ function PriceSparkline({
     // Determine color based on trend
     // trend: 1 = up, -1 = down, 0 = flat
     const isUp = trend === 1;
-    const color = isUp ? '#4caf50' : '#f44336';
-    const fillColor = isUp ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)';
+    const color = isUp ? theme.palette.success.main : theme.palette.error.main;
+    const fillColor = color;
 
     return {
       chartData,
@@ -56,7 +57,7 @@ function PriceSparkline({
       color,
       fillColor,
     };
-  }, [data, trend]);
+  }, [data, trend, theme]);
 
   // Format 1-day change for display
   const changeText = useMemo(() => {
@@ -80,13 +81,13 @@ function PriceSparkline({
     }
 
     // Add 30-day trend description
-    const trendText = trend === 1 ? 'Up' : trend === -1 ? 'Down' : 'Flat';
+    const trendText = trend === 1 ? '上昇' : trend === -1 ? '下落' : '横ばい';
     if (data && data.length > 0) {
       const overallChange = ((data[data.length - 1] - data[0]) / data[0]) * 100;
-      parts.push(`30d: ${overallChange >= 0 ? '+' : ''}${overallChange.toFixed(1)}% (${trendText})`);
+      parts.push(`直近${data.length}営業日: ${overallChange >= 0 ? '+' : ''}${overallChange.toFixed(1)}% (${trendText})`);
     }
 
-    return parts.join(' | ') || 'No data';
+    return parts.join(' | ') || '株価推移データ未配信';
   }, [industry, trend, data]);
 
   // No data - show placeholder
@@ -99,8 +100,8 @@ function PriceSparkline({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'text.disabled',
-          fontSize: 10,
+          color: 'text.secondary',
+          fontSize: 12,
         }}
       >
         -
@@ -110,7 +111,7 @@ function PriceSparkline({
 
   return (
     <Tooltip title={tooltipText} arrow placement="top">
-      <Box
+      <Box role="img" aria-label={tooltipText}
         sx={{
           width,
           height,
@@ -129,7 +130,7 @@ function PriceSparkline({
             minWidth: 0,
           }}
         >
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" aria-hidden="true">
             <AreaChart
               data={chartData}
               margin={{ top: 2, right: 0, left: 0, bottom: 2 }}
@@ -141,6 +142,8 @@ function PriceSparkline({
                 stroke={color}
                 strokeWidth={1.5}
                 fill={fillColor}
+                fillOpacity={0.12}
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -150,7 +153,7 @@ function PriceSparkline({
         {showChange && changeText && (
           <Typography
             sx={{
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: 600,
               fontFamily: 'monospace',
               color: changeColor,
@@ -166,30 +169,4 @@ function PriceSparkline({
   );
 }
 
-// Memoize component - only re-render when data or key props change
-export default memo(PriceSparkline, (prevProps, nextProps) => {
-  // Deep compare data arrays
-  if (prevProps.data === nextProps.data) {
-    return (
-      prevProps.trend === nextProps.trend &&
-      prevProps.change1d === nextProps.change1d &&
-      prevProps.width === nextProps.width &&
-      prevProps.height === nextProps.height &&
-      prevProps.sparklineWidth === nextProps.sparklineWidth
-    );
-  }
-
-  if (!prevProps.data || !nextProps.data) return false;
-  if (prevProps.data.length !== nextProps.data.length) return false;
-
-  // For sparkline data, compare first, last, and length (sufficient for visual comparison)
-  return (
-    prevProps.data[0] === nextProps.data[0] &&
-    prevProps.data[prevProps.data.length - 1] === nextProps.data[nextProps.data.length - 1] &&
-    prevProps.trend === nextProps.trend &&
-    prevProps.change1d === nextProps.change1d &&
-    prevProps.width === nextProps.width &&
-    prevProps.height === nextProps.height &&
-    prevProps.sparklineWidth === nextProps.sparklineWidth
-  );
-});
+export default memo(PriceSparkline);

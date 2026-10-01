@@ -97,7 +97,7 @@ function FilterPanel({
               label={activeFilters.length}
               size="small"
               color="primary"
-              sx={{ ml: 1, height: 18, fontSize: '10px', '& .MuiChip-label': { px: 0.75 } }}
+              sx={{ ml: 1, height: 18, fontSize: '12px', '& .MuiChip-label': { px: 0.75 } }}
             />
           )}
         </Typography>
@@ -137,7 +137,7 @@ function FilterPanel({
                 }}
                 sx={{
                   height: 20,
-                  fontSize: '10px',
+                  fontSize: '12px',
                   '& .MuiChip-label': { px: 0.75 },
                   '& .MuiChip-deleteIcon': { fontSize: '14px' },
                 }}
@@ -147,7 +147,7 @@ function FilterPanel({
               <Chip
                 label={`+${activeFilters.length - 5}`}
                 size="small"
-                sx={{ height: 20, fontSize: '10px', '& .MuiChip-label': { px: 0.75 } }}
+                sx={{ height: 20, fontSize: '12px', '& .MuiChip-label': { px: 0.75 } }}
               />
             )}
           </Box>
@@ -160,7 +160,7 @@ function FilterPanel({
             onReset();
           }}
           size="small"
-          sx={{ fontSize: '0.7rem', py: 0.25, px: 0.75, minWidth: 0 }}
+          sx={{ fontSize: '12px', py: 0.25, px: 0.75, minWidth: 0 }}
         >
           リセット
         </Button>
@@ -210,7 +210,7 @@ function FilterPanel({
                     onDelete={() => handleDeleteFilter(key)}
                     sx={{
                       height: 22,
-                      fontSize: '0.7rem',
+                      fontSize: '12px',
                       '& .MuiChip-label': { px: 1 },
                       '& .MuiChip-deleteIcon': { fontSize: '0.9rem' },
                     }}

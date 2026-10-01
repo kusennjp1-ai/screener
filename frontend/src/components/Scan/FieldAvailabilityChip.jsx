@@ -70,9 +70,10 @@ function FieldAvailabilityChip({ fieldAvailability, growthMetricBasis }) {
           icon={<InfoOutlinedIcon sx={{ fontSize: 12 }} />}
           label={count > 0 ? String(count) : '!'}
           onClick={handleOpen}
+          aria-label="データの不足・計算方法を確認"
           sx={{
-            height: 16,
-            fontSize: 10,
+            minHeight: { xs: 44, md: 24 },
+            fontSize: 12,
             ml: 0.5,
             '& .MuiChip-label': { px: 0.5 },
             '& .MuiChip-icon': { ml: 0.25, mr: -0.25 },

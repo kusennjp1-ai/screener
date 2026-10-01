@@ -52,6 +52,14 @@ const defaultProps = {
 };
 
 describe('ResultsTable', () => {
+  it('names every chart action and data-only state graphic in Japanese', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} results={[{...fullSeRow, pressure_state:'buy', pressure_value:0.5, buy_risk_state:'low', tpr_state:'strong'}]} />);
+    expect(screen.getByRole('button', {name:`${fullSeRow.symbol} のチャートを開く`})).toBeInTheDocument();
+    expect(screen.getByRole('img', {name:'需給: 買い優勢 (0.5)'})).toBeInTheDocument();
+    expect(screen.getByRole('img', {name:'買いリスク: 低い'})).toBeInTheDocument();
+    expect(screen.getByRole('img', {name:'トレンド評価: 強い'})).toBeInTheDocument();
+  });
+
   it.each([[false,false],[false,true],[true,false],[true,true]])('aligns every value with its header: themes %s, actions %s', (themes,showActions) => {
     const {container}=renderWithProviders(<ResultsTable {...defaultProps} showActions={showActions} results={[{...fullSeRow,market_themes:themes?['AI']:[]}]} />);
     const headers=container.querySelectorAll('thead th');

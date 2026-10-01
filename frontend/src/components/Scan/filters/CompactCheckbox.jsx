@@ -24,7 +24,7 @@ function CompactCheckbox({ label, value, onChange }) {
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}
+        sx={{ display: 'block', mb: 0.5, fontSize: '12px' }}
       >
         {label}
       </Typography>
@@ -37,19 +37,19 @@ function CompactCheckbox({ label, value, onChange }) {
           height: 28,
           '& .MuiToggleButton-root': {
             padding: '2px 6px',
-            fontSize: '0.65rem',
+            fontSize: '12px',
             textTransform: 'none',
             minWidth: 28,
           },
         }}
       >
-        <ToggleButton value={ALL_VALUE} aria-label="all">
+        <ToggleButton value={ALL_VALUE} aria-label={`${label}の指定なし`}>
           All
         </ToggleButton>
-        <ToggleButton value={true} aria-label="yes" sx={{ color: 'success.main' }}>
+        <ToggleButton value={true} aria-label={`${label}あり`} sx={{ color: 'success.main' }}>
           Yes
         </ToggleButton>
-        <ToggleButton value={false} aria-label="no" sx={{ color: 'error.main' }}>
+        <ToggleButton value={false} aria-label={`${label}なし`} sx={{ color: 'error.main' }}>
           No
         </ToggleButton>
       </ToggleButtonGroup>

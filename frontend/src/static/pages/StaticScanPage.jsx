@@ -345,7 +345,7 @@ function StaticScanPage() {
           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
             {(hydrationComplete ? cappedRows.length : hydrationState.loadedRows).toLocaleString()}
           </Typography>
-          <Typography variant="caption" color="text.disabled" sx={{ fontSize: '10px' }}>
+          <Typography variant="caption" color="text.disabled" sx={{ fontSize: '12px' }}>
             件 / 全 {scanManifestQuery.data.rows_total.toLocaleString()} 件
             {scanManifestQuery.data.charts?.available
               ? ` · チャート ${(scanManifestQuery.data.charts.symbols_total ?? scanManifestQuery.data.charts.limit).toLocaleString()} 銘柄`

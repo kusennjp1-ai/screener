@@ -61,7 +61,7 @@ function CompactRangeInput({
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}
+        sx={{ display: 'block', mb: 0.5, fontSize: '12px' }}
       >
         {label}
       </Typography>
@@ -73,6 +73,7 @@ function CompactRangeInput({
           onChange={handleMinChange}
           placeholder={minOnly ? '≥' : 'Min'}
           inputProps={{
+            'aria-label': `${label}の下限`,
             step,
             min: minLimit,
             max: maxLimit,
@@ -116,6 +117,7 @@ function CompactRangeInput({
               onChange={handleMaxChange}
               placeholder="Max"
               inputProps={{
+                'aria-label': `${label}の上限`,
                 step,
                 min: minLimit,
                 max: maxLimit,

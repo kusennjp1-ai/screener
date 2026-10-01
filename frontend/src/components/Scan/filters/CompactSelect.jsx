@@ -20,12 +20,12 @@ function CompactSelect({ label, value, options, onChange, placeholder = 'All' })
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}
+        sx={{ display: 'block', mb: 0.5, fontSize: '12px' }}
       >
         {label}
       </Typography>
       <FormControl size="small" fullWidth>
-        <Select
+        <Select inputProps={{ 'aria-label': label }}
           value={value ?? ''}
           onChange={handleChange}
           displayEmpty

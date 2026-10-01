@@ -15,21 +15,21 @@ import StarIcon from '@mui/icons-material/Star';
 const CATEGORY_CONFIG = {
   fundamental: {
     icon: AccountBalanceIcon,
-    color: '#1976d2',
-    bgColor: 'rgba(25, 118, 210, 0.04)',
-    borderColor: 'rgba(25, 118, 210, 0.2)',
+    color: 'primary.main',
+    bgColor: 'background.paper',
+    borderColor: 'divider',
   },
   technical: {
     icon: ShowChartIcon,
-    color: '#1976d2',
-    bgColor: 'rgba(25, 118, 210, 0.04)',
-    borderColor: 'rgba(25, 118, 210, 0.2)',
+    color: 'primary.main',
+    bgColor: 'background.paper',
+    borderColor: 'divider',
   },
   rating: {
     icon: StarIcon,
-    color: '#1976d2',
-    bgColor: 'rgba(25, 118, 210, 0.04)',
-    borderColor: 'rgba(25, 118, 210, 0.2)',
+    color: 'primary.main',
+    bgColor: 'background.paper',
+    borderColor: 'divider',
   },
 };
 
@@ -69,7 +69,7 @@ function FilterSection({
           cursor: 'pointer',
           userSelect: 'none',
           '&:hover': {
-            backgroundColor: 'rgba(0, 0, 0, 0.02)',
+            backgroundColor: 'action.hover',
           },
         }}
       >
@@ -100,10 +100,10 @@ function FilterSection({
             size="small"
             sx={{
               height: 18,
-              fontSize: '0.65rem',
+              fontSize: '12px',
               fontWeight: 500,
-              backgroundColor: config.color,
-              color: 'white',
+              backgroundColor: 'action.selected',
+              color: 'text.primary',
               mr: 1,
               '& .MuiChip-label': { px: 1 },
             }}
@@ -111,9 +111,11 @@ function FilterSection({
         )}
 
         <IconButton
+          aria-label={`${title}を${expanded ? '閉じる' : '開く'}`}
+          aria-expanded={expanded}
           size="small"
           sx={{
-            p: 0.25,
+            p: 0.25, minWidth: { xs: 44, md: 24 }, minHeight: { xs: 44, md: 24 },
             color: config.color,
           }}
           onClick={(e) => {

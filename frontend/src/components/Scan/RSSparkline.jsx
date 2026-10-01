@@ -1,6 +1,6 @@
 import { useMemo, memo } from 'react';
 import { BarChart, Bar, Cell, ResponsiveContainer, YAxis } from 'recharts';
-import { Box, Tooltip } from '@mui/material';
+import { Box, Tooltip, useTheme } from '@mui/material';
 
 /**
  * RS Sparkline Component
@@ -15,6 +15,7 @@ import { Box, Tooltip } from '@mui/material';
  * - Red bar: Single lowest RS ratio value (weakest point)
  */
 function RSSparkline({ data, trend, width = 60, height = 20 }) {
+  const theme = useTheme();
   // Transform data for chart - use raw RS ratios like Google Sheets
   const { chartData, domain, maxIndex, minIndex } = useMemo(() => {
     if (!data || !Array.isArray(data) || data.length === 0) {
@@ -49,13 +50,13 @@ function RSSparkline({ data, trend, width = 60, height = 20 }) {
 
   // Get trend text and percentage for tooltip
   const tooltipText = useMemo(() => {
-    if (!chartData || chartData.length === 0) return 'No RS data';
-    const trendText = trend === 1 ? 'Improving' : trend === -1 ? 'Declining' : 'Flat';
+    if (!chartData || chartData.length === 0) return 'RSデータ未配信';
+    const trendText = trend === 1 ? '改善' : trend === -1 ? '低下' : '横ばい';
     const firstVal = chartData[0]?.value || 1;
     const lastVal = chartData[chartData.length - 1]?.value || 1;
     const change = ((lastVal - firstVal) / firstVal) * 100;
     const sign = change >= 0 ? '+' : '';
-    return `RS ${trendText} (${sign}${change.toFixed(1)}% over 30d)`;
+    return `RS ${trendText} (${sign}${change.toFixed(1)}%・直近${chartData.length}営業日)`;
   }, [trend, chartData]);
 
   // No data - show placeholder
@@ -68,8 +69,8 @@ function RSSparkline({ data, trend, width = 60, height = 20 }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'text.disabled',
-          fontSize: 10,
+          color: 'text.secondary',
+          fontSize: 12,
         }}
       >
         -
@@ -83,8 +84,8 @@ function RSSparkline({ data, trend, width = 60, height = 20 }) {
       arrow
       placement="top"
     >
-      <Box sx={{ width, height, cursor: 'pointer' }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <Box role="img" aria-label={tooltipText} sx={{ width, height, cursor: 'pointer' }}>
+        <ResponsiveContainer width="100%" height="100%" aria-hidden="true">
           <BarChart
             data={chartData}
             margin={{ top: 1, right: 0, left: 0, bottom: 1 }}
@@ -92,6 +93,7 @@ function RSSparkline({ data, trend, width = 60, height = 20 }) {
             <YAxis domain={domain} hide />
             <Bar
               dataKey="value"
+              isAnimationActive={false}
               maxBarSize={3}
               radius={[1, 1, 0, 0]}
             >
@@ -100,11 +102,11 @@ function RSSparkline({ data, trend, width = 60, height = 20 }) {
                 // - Blue: highest value (highcolor)
                 // - Red: lowest value (lowcolor)
                 // - Light green: all other bars (color)
-                let fillColor = '#90EE90'; // lightgreen (default)
+                let fillColor = theme.palette.success.main; // lightgreen (default)
                 if (index === maxIndex) {
-                  fillColor = '#1F97F4'; // blue for highest
+                  fillColor = theme.palette.info.main; // blue for highest
                 } else if (index === minIndex) {
-                  fillColor = '#f44336'; // red for lowest
+                  fillColor = theme.palette.error.main; // red for lowest
                 }
                 return (
                   <Cell
@@ -122,19 +124,4 @@ function RSSparkline({ data, trend, width = 60, height = 20 }) {
   );
 }
 
-// Memoize component - only re-render when data or dimensions change
-export default memo(RSSparkline, (prevProps, nextProps) => {
-  // Deep compare data arrays
-  if (prevProps.data === nextProps.data) return true;
-  if (!prevProps.data || !nextProps.data) return false;
-  if (prevProps.data.length !== nextProps.data.length) return false;
-
-  // For sparkline data, compare first, last, and length (sufficient for visual comparison)
-  return (
-    prevProps.data[0] === nextProps.data[0] &&
-    prevProps.data[prevProps.data.length - 1] === nextProps.data[nextProps.data.length - 1] &&
-    prevProps.trend === nextProps.trend &&
-    prevProps.width === nextProps.width &&
-    prevProps.height === nextProps.height
-  );
-});
+export default memo(RSSparkline);

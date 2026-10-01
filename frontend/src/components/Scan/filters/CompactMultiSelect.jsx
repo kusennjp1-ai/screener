@@ -31,24 +31,25 @@ function CompactMultiSelect({
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ fontSize: '0.7rem', flexGrow: 1 }}
+          sx={{ fontSize: '12px', flexGrow: 1 }}
         >
           {label}
         </Typography>
         {showModeToggle && (
           <Tooltip title={isExcludeMode ? 'Excluding selected (click to include)' : 'Including selected (click to exclude)'}>
             <IconButton
+              aria-label={`${label}を${isExcludeMode ? '含める' : '除外する'}`}
               size="small"
               onClick={handleModeToggle}
               sx={{
                 p: 0,
                 ml: 0.5,
-                width: 18,
-                height: 18,
-                bgcolor: isExcludeMode ? 'error.main' : 'primary.main',
-                color: 'white',
+                minWidth: { xs: 44, md: 24 },
+                minHeight: { xs: 44, md: 24 },
+                bgcolor: 'action.selected',
+                color: isExcludeMode ? 'error.main' : 'primary.main',
                 '&:hover': {
-                  bgcolor: isExcludeMode ? 'error.dark' : 'primary.dark',
+                  bgcolor: 'action.hover',
                 },
               }}
             >
@@ -63,6 +64,9 @@ function CompactMultiSelect({
       </Box>
       <Autocomplete
         multiple
+        clearText="選択を解除"
+        openText="選択肢を開く"
+        closeText="選択肢を閉じる"
         size="small"
         value={values || []}
         onChange={(event, newValue) => onChange(newValue)}
@@ -71,6 +75,7 @@ function CompactMultiSelect({
         renderInput={(params) => (
           <TextField
             {...params}
+            inputProps={{ ...params.inputProps, 'aria-label': label }}
             placeholder={values?.length ? '' : placeholder}
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -107,7 +112,7 @@ function CompactMultiSelect({
               color={isExcludeMode ? 'error' : 'default'}
               sx={{
                 height: 20,
-                fontSize: '0.65rem',
+                fontSize: '12px',
                 '& .MuiChip-label': {
                   px: 0.75,
                 },

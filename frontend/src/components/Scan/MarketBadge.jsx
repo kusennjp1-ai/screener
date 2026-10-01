@@ -44,7 +44,7 @@ function MarketBadge({ market, exchange }) {
         data-testid={`market-badge-${market}`}
         sx={{
           height: 16,
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 600,
           ml: 0.5,
           '& .MuiChip-label': { px: 0.5 },

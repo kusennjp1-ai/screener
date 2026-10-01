@@ -29,7 +29,7 @@ function FundamentalFiltersSection({
             <Typography
               variant="caption"
               color="text.secondary"
-              sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}
+              sx={{ display: 'block', mb: 0.5, fontSize: '12px' }}
             >
               Symbol
             </Typography>
@@ -38,6 +38,7 @@ function FundamentalFiltersSection({
               value={filters.symbolSearch || ''}
               onChange={(event) => updateFilter('symbolSearch', event.target.value)}
               placeholder="Search..."
+              inputProps={{ 'aria-label': '銘柄の検索' }}
               sx={{
                 width: '100%',
                 '& .MuiOutlinedInput-root': { height: 28 },
@@ -141,7 +142,7 @@ function FundamentalFiltersSection({
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', mb: 1, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: 0.5 }}
+        sx={{ display: 'block', mb: 1, fontSize: '12px', textTransform: 'uppercase', letterSpacing: 0.5 }}
       >
         Cross-Market (USD-normalised)
       </Typography>
