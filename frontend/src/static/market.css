@@ -93,6 +93,7 @@
 .sector-relative-value { position:absolute;top:50%;font-size:13px;line-height:18px;font-family:var(--font-mono);white-space:nowrap; }
 .sector-relative-value.positive { transform:translate(7px,-50%); }
 .sector-relative-value.negative { transform:translate(calc(-100% - 7px),-50%); }
+.sector-index-mobile { display:none; }
 .sector-relative-missing { text-align:center;color:var(--text-3);font-size:12px; }
 .sector-momentum { font-family:var(--font-mono);font-size:13px;white-space:nowrap; }
 .sector-mobile-momentum { display:none; }
@@ -144,6 +145,11 @@
  .sector-rank-head,.sector-rank-row { grid-template-columns:minmax(90px,1fr) 116px 94px;gap:6px; }
  .sector-rank-head { font-size:11px; }
  .sector-rank-head>span:nth-child(2) { font-size:11px; }
+ .sector-index-desktop { display:none; }
+ .sector-index-mobile { display:inline; white-space:nowrap; }
+ /* Keep index values in their own column instead of abutting pass counts. */
+ .sector-relative { padding:0 58px 0 0; }
+ .sector-relative-value.positive,.sector-relative-value.negative { left:auto!important; right:-58px; width:52px; text-align:left; transform:translateY(-50%); font-size:12px; }
  .sector-rank-row { padding:0; }
  .sector-name strong { display:block;line-height:14px;white-space:nowrap; }
  .sector-name small { display:none; }

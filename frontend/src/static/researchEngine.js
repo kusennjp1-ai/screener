@@ -67,7 +67,7 @@ export function assess(row, method = 'minervini') {
     rule('売上高 前年同期比 ≥ 25%', row.sales_growth_yy, v => v >= 25, '%'),
     rule('A：直近3年の各年 EPS 成長率 ≥ 25%（最小値）', annualMinimum, v => v >= 25, '%'),
     rule('N：52週高値からの距離 ≤ 15%（代替指標）', highDistance(row), v => v <= 15, '%'),
-    rule('S：上昇日の出来高 / 50日平均 ≥ 1.4（代替指標）', finite(row.price_change_1d) ? row.se_volume_vs_50d : null, v => v >= 1.4 && row.price_change_1d > 0, '倍'),
+    rule('S：上昇日の出来高 / 直前50日平均 ≥ 1.4（代替指標）', finite(v.change) && finite(v.volumeRatio) && v.volumeRatio >= 0 ? v.volumeRatio : null, ratio => ratio >= 1.4 && v.change > 0, '倍'),
     ...common,
     {...rule('I：13F報告運用会社の保有社数が増加', institutionalGrowth(row.institutional_evidence,row.symbol,row.technical_audit?.as_of_date).increasing, v => v === true, '', true), evidence:institutionalGrowth(row.institutional_evidence,row.symbol,row.technical_audit?.as_of_date).reason},
     rule('M：市場が50日線・200日線より上（代替指標）', typeof row.market_above_50dma !== 'boolean' || typeof row.market_above_200dma !== 'boolean' ? null : row.market_above_50dma && row.market_above_200dma, v => v === true, '', true),
@@ -96,7 +96,7 @@ export function assess(row, method = 'minervini') {
 
 // Generated from the same rule function; unknowns stay unknown. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v2';
+export const RULE_SUMMARY_VERSION = 'research-summary-v3';
 export function assessmentSummary(row, method) {
   const result = row.method_summary?.version === RULE_SUMMARY_VERSION && decodeAssessment(row.method_summary[method]);
   return result || assess(row, method);

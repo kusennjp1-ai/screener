@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assess, compareReference, entryPlan, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from './researchEngine';
+import { withAuditFixture } from './testAuditFixture';
+import { assess, assessmentSummary, compareReference, entryPlan, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from './researchEngine';
 
 describe('research rules and financial data integrity', () => {
   it('requires three annual growth rates rather than substituting CAGR', () => {
@@ -8,10 +9,35 @@ describe('research rules and financial data integrity', () => {
     expect(assess({ annual_eps_growth_3y: [25, 30, 40] }, 'oneil').rules[2].state).toBe('pass');
     expect(assess({ annual_eps_growth_3y: [25, 30] }, 'oneil').rules[2].state).toBe('unknown');
   });
-  it('does not mistake high-volume selling for demand', () => {
-    for (const change of [-5, 0]) expect(assess({ price_change_1d: change, se_volume_vs_50d: 3 }, 'oneil').rules[4].state).toBe('fail');
-    expect(assess({ se_volume_vs_50d: 3 }, 'oneil').rules[4].state).toBe('unknown');
-    expect(assess({ price_change_1d: 2, se_volume_vs_50d: 1.4 }, 'oneil').rules[4].state).toBe('pass');
+  it('uses the audited preceding-session volume and change for the demand proxy', () => {
+    const row=withAuditFixture({symbol:'TEST',current_price:100,price_change_1d:2,se_volume_vs_50d:3});
+    for(const change of [-5,0]) {
+      row.technical_audit.values.change=change;
+      expect(assess(row,'oneil').rules[4].state).toBe('fail');
+    }
+    row.technical_audit.values.change=2;
+    row.technical_audit.values.volumeRatio=1.2;
+    expect(assess(row,'oneil').rules[4]).toMatchObject({value:1.2,state:'fail'});
+    row.se_volume_vs_50d=.5;row.price_change_1d=-3;
+    row.technical_audit.values.volumeRatio=1.4;
+    expect(assess(row,'oneil').rules[4]).toMatchObject({value:1.4,state:'pass'});
+    for(const invalid of [null,NaN,undefined,'2']) {
+      row.technical_audit.values.change=invalid;
+      expect(assess(row,'oneil').rules[4].state).toBe('unknown');
+    }
+    row.technical_audit.values.change=2;
+    for(const invalid of [-1,NaN,Infinity,null,'1.6']) {
+      row.technical_audit.values.volumeRatio=invalid;
+      expect(assess(row,'oneil').rules[4].state).toBe('unknown');
+    }
+    expect(assess({price_change_1d:2,se_volume_vs_50d:3},'oneil').rules[4].state).toBe('unknown');
+  });
+  it('does not trust an earlier-rule cached score after the volume source correction',()=>{
+    const row=withAuditFixture({symbol:'TEST',current_price:100,se_volume_vs_50d:3});
+    row.technical_audit.values.volumeRatio=1.2;
+    row.method_summary={version:'research-summary-v2',oneil:[8,0,0,8,0]};
+    expect(assessmentSummary(row,'oneil')).toEqual(assess(row,'oneil'));
+    expect(assessmentSummary(row,'oneil').qualified).toBe(false);
   });
   it('rejects coerced values and applies the top-20 industry threshold', () => {
     expect(assess({ eps_growth_yy: '30' }, 'oneil').rules[0].state).toBe('unknown');

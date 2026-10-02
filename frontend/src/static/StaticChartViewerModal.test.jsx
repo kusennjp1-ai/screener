@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import StaticChartViewerModal from './StaticChartViewerModal';
+import { staticChartKeys } from './chartClient';
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -11,7 +12,7 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <div data-testid="static-candlestick-chart">{props.symbol}:{props.priceData?.length || 0}</div>;
+    return <div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div>;
   },
 }));
 
@@ -26,7 +27,7 @@ vi.mock('../components/Scan/StockMetricsSidebar', () => ({
   },
 }));
 
-const renderModal = (props) => {
+const renderModal = (props, cachedPayload = null) => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -36,13 +37,16 @@ const renderModal = (props) => {
     },
   });
 
-  return render(
+  if (cachedPayload) queryClient.setQueryData(staticChartKeys.payload(props.initialSymbol, props.chartIndex.symbols[0].path), cachedPayload);
+  const element = nextProps => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createTheme()}>
-        <StaticChartViewerModal {...props} />
+        <StaticChartViewerModal {...nextProps} />
       </ThemeProvider>
     </QueryClientProvider>
   );
+  const view = render(element(props));
+  return { ...view, rerenderModal: nextProps => view.rerender(element(nextProps)) };
 };
 
 describe('StaticChartViewerModal', () => {
@@ -193,7 +197,7 @@ describe('StaticChartViewerModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' }));
     swipe(80, 110);
     expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
-    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
+    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true, height: 420 }));
   }, 10000);
 
   it('does not turn a pending mobile chart selection into zero confirmed conditions', () => {
@@ -267,4 +271,54 @@ it.each([[103.2,'minervini',true],[112.7,'minervini',true],[103,'minervini',fals
  await screen.findByTestId('static-candlestick-chart');
  if(warns)expect(screen.getByText('アプリ設定と書籍の確認範囲')).toBeInTheDocument();
  unmount();vi.unstubAllGlobals();
+});
+
+
+it('fits cached portal opens/reopens, refits chrome and keeps scrolling independent of plot height', async () => {
+  let contentHeight = 789, plotOffset = 332, scheduledFit;
+  vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { scheduledFit = callback; return 1; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const observers = [];
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); observers.push(this); }
+    observe() {}
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
+    return this.dataset.testid === 'expanded-chart-scroll' ? contentHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const scrollTop = document.querySelector('[data-testid="expanded-chart-scroll"]')?.scrollTop || 0;
+    return { top: this.dataset.chartSymbol ? 56 + plotOffset - scrollTop : 56 };
+  });
+  vi.stubGlobal('fetch', vi.fn());
+  const props = { open: true, onClose: vi.fn(), initialSymbol: 'FIT', date: '2026-10-01', chartIndex: { symbols: [{ symbol: 'FIT', path: 'charts/FIT.json' }] } };
+  const payload = { symbol: 'FIT', as_of_date: '2026-10-01', bars: [{ date: '2026-10-01', close: 104 }], stock_data: { symbol: 'FIT', current_price: 104, se_pivot_price: 100 } };
+  const { unmount, rerenderModal } = renderModal(props, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 457 })));
+  expect(screen.getByText('△ 書籍の追随目安外')).toBeInTheDocument();
+  const observer = observers.at(-1);
+  act(() => { plotOffset += 48; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 409 }));
+  act(() => { contentHeight = 649; plotOffset = 332; fireEvent(window, new Event('resize')); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 317 }));
+  act(() => { screen.getByTestId('expanded-chart-scroll').scrollTop = 120; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 317 }));
+  act(() => { contentHeight = 400; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 300 }));
+  expect(screen.getByTestId('expanded-chart-footer')).toHaveStyle({ position: 'relative', flexShrink: '0' });
+  rerenderModal({ ...props, open: false });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+  contentHeight = 749; plotOffset = 320;
+  rerenderModal(props);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 429 })));
+  const reopenedObserver = observers.at(-1);
+  expect(reopenedObserver).not.toBe(observer);
+  expect(fetch).not.toHaveBeenCalled();
+  unmount();
+  expect(reopenedObserver.disconnect).toHaveBeenCalledOnce();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
 });

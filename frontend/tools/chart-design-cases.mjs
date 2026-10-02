@@ -3,6 +3,7 @@ import { entryPlan } from '../src/static/researchEngine.js';
 import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.js';
 import { chartHistoryWarning } from '../src/components/Charts/researchChartModel.js';
 import { money } from '../src/static/positionGeometry.js';
+import { expandedChartGeometry, checkExpandedChartGeometry } from './expanded-chart-geometry.mjs';
 
 export const CHART_DESIGN_SYMBOLS = ['MSM', 'ADI', 'TGTX'];
 const ready = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
@@ -78,16 +79,86 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         check(record.source_warning.mobile_expanded_visible, `${key}: first-book proximity warning is missing from the expanded mobile header`);
       }
       await capture(page, viewport, theme, `case-${symbol}-expanded`);
+      record.expanded_geometry = await dialog.evaluate(expandedChartGeometry);
+      checkExpandedChartGeometry(record.expanded_geometry, check, `${key}/expanded`, { fullChart: viewport.width >= 900 });
+      if (record.source_warning.expected && viewport.width >= 900) {
+        record.source_warning.desktop_expanded_visible = await sourceWarningVisible(dialog.locator('[aria-label="チャートの判断要約"] .entry-source-note [role="note"]'));
+        check(record.source_warning.desktop_expanded_visible, `${key}: desktop source warning is not visible with the fitted chart`);
+      }
       const expandedToggle = dialog.getByRole('button', { name: /^図解/ });
       if (await expandedToggle.getAttribute('aria-pressed') !== 'true') await expandedToggle.click();
       await inspect(expanded, 'expanded-annotations');
       await capture(page, viewport, theme, `case-${symbol}-expanded-annotations`);
+      // Additional geometry checks never replace the required 900px/844px
+      // screenshots or alter performance measurement viewports/budgets.
+      const shortViewport = { width: viewport.width, height: viewport.width >= 900 ? 760 : 568 };
+      await page.setViewportSize(shortViewport);
+      await capture(page, shortViewport, theme, `case-${symbol}-expanded-short`);
+      record.expanded_short_geometry = await dialog.evaluate(expandedChartGeometry);
+      checkExpandedChartGeometry(record.expanded_short_geometry, check, `${key}/expanded-short`, { fullChart: viewport.width >= 900 });
+      if (viewport.width < 900) check(Math.abs(record.expanded_short_geometry.plot.height - 420) <= 1, `${key}: mobile plot no longer retains its readable 420px height`);
+      const scroller = dialog.locator('[data-testid="expanded-chart-scroll"]');
+      // On a very short viewport the plot must remain readable, and scrolling
+      // must expose the real date axis without moving/covering footer controls.
+      await page.setViewportSize({ width: viewport.width, height: 480 });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await expanded.evaluate(node => {
+        const body = node.closest('[role="dialog"]').querySelector('[data-testid="expanded-chart-scroll"]');
+        const axis = node.querySelector('.tv-lightweight-charts > table').rows;
+        const bottom = axis[axis.length - 1].getBoundingClientRect().bottom;
+        body.scrollTop += bottom - body.getBoundingClientRect().bottom;
+      });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      record.expanded_scrolled_geometry = await dialog.evaluate(expandedChartGeometry);
+      checkExpandedChartGeometry(record.expanded_scrolled_geometry, check, `${key}/expanded-scrolled`);
+      check(record.expanded_scrolled_geometry.date_axis_visible && record.expanded_scrolled_geometry.date_axis_hit, `${key}: date axis is not reachable by scrolling the short modal`);
+      check(record.expanded_scrolled_geometry.scroll_top > 0, `${key}: short modal did not provide scrollable chart content`);
+      await page.setViewportSize(viewport);
+      await scroller.evaluate(node => { node.scrollTop = 0; });
+      const sourceSummary = dialog.locator('.entry-source-note summary');
+      if (await sourceSummary.count()) {
+        for (let repetition = 0; repetition < 2; repetition++) {
+          await sourceSummary.click();
+          check(await sourceSummary.evaluate(node => node.parentElement.open), `${key}: source disclosure did not open`);
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          checkExpandedChartGeometry(await dialog.evaluate(expandedChartGeometry), check, `${key}/source-disclosure`);
+          await sourceSummary.click();
+          check(!await sourceSummary.evaluate(node => node.parentElement.open), `${key}: source disclosure did not close`);
+        }
+        await scroller.evaluate(node => { node.scrollTop = 0; });
+      }
+      const nextButton = dialog.getByRole('button', { name: '次の銘柄', exact: true });
+      if (await nextButton.count()) {
+        await nextButton.click();
+        await page.waitForFunction(previous => {
+          const current = document.querySelector('[role="dialog"] [data-chart-symbol]')?.dataset.chartSymbol;
+          return current && current !== previous;
+        }, symbol);
+        await ready(dialog.locator('[data-chart-symbol] canvas'));
+        await dialog.getByRole('button', { name: '前の銘柄', exact: true }).click();
+        await ready(expanded.locator('canvas'));
+        await inspect(expanded, 'expanded-return-navigation');
+      }
       record.visual_overlap_review = 'Screenshot review required; metadata equality does not prove pixel-level label placement.';
       report.chart_cases.push(record);
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'hidden', timeout: 10000 });
+      const opener = page.getByRole('button', { name: '日次チャートを分析', exact: true });
+      check(await opener.evaluate(node => node === document.activeElement), `${key}: closing expanded chart did not restore focus to its opener`);
+      // Cached reopen has no loading transition: verify that the portal still
+      // attaches its size observer and exposes the close button and full chart.
+      await opener.click();
+      await ready(expanded.locator('canvas'));
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      record.expanded_reopened_geometry = await dialog.evaluate(expandedChartGeometry);
+      checkExpandedChartGeometry(record.expanded_reopened_geometry, check, `${key}/expanded-cached-reopen`, { fullChart: viewport.width >= 900 });
+      await dialog.getByRole('button', { name: 'チャートを閉じる', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden', timeout: 10000 });
+      check(await opener.evaluate(node => node === document.activeElement), `${key}: close button did not restore focus to its opener`);
     } catch (error) {
       check(false, `${key}: chart case verification interrupted: ${error.message}`);
+    } finally {
+      await page.setViewportSize(viewport);
     }
   }
 }

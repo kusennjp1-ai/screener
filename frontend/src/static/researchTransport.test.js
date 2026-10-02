@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex, decodeResearchIndex, researchListRow, RESEARCH_METHODS } from './researchTransport';
 import { prepareResearchBundle } from './researchPreprocess';
-import { assess, rankCandidates, researchCsv } from './researchEngine';
+import { assess, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from './researchEngine';
 import { withAuditFixture } from './testAuditFixture';
 
 const date = '2026-09-29';
@@ -65,4 +65,46 @@ describe('lossless compact research transport', () => {
     expect(next.prepared.candidates).toEqual([]);
     expect(next.rankings.minervini[0].row).toBe(next.rows[0]);
   });
+});
+
+
+describe('published rule-summary invalidation',()=>{
+ const summarize=row=>({...row,method_summary:{version:RULE_SUMMARY_VERSION,...Object.fromEntries(RESEARCH_METHODS.map(method=>{const {rules,...summary}=assess(row,method);expect(summary.total).toBe(rules.length);return [method,summary];}))}});
+ it.each(['research-summary-v2',undefined])('does not preserve old ordering with %s summaries',version=>{
+  const rows=[sample({symbol:'OLD_FIRST',rs_rating:60}),sample({symbol:'NOW_FIRST',rs_rating:90})].map(summarize);
+  for(const row of rows) row.method_summary=version?{...row.method_summary,version}:undefined;
+  const orders=Object.fromEntries(RESEARCH_METHODS.map(method=>[method,[0,1]]));
+  const bundle=prepareResearchBundle([{as_of_date:date,rows,orders}],date);
+  for(const method of RESEARCH_METHODS)expect(bundle.rankings[method].map(x=>x.row.symbol)).toEqual(rankCandidates(bundle.rows,method).map(x=>x.row.symbol));
+  expect(bundle.rankings.minervini[0].row.symbol).toBe('NOW_FIRST');
+ });
+ it.each(['conflict','stale','missing'])('drops cached success when the audit becomes %s',mode=>{
+  const strong=summarize(sample({symbol:'OLD_FIRST',rs_rating:95}));
+  const other=summarize(sample({symbol:'NOW_FIRST',rs_rating:90}));
+  const replacement=structuredClone(strong);
+  if(mode==='conflict')replacement.current_price=103;
+  if(mode==='stale')replacement.technical_audit.as_of_date='2026-09-28';
+  if(mode==='missing')delete replacement.technical_audit;
+  const rows=mode==='conflict'?[strong,replacement,other]:[replacement,other];
+  const orders=Object.fromEntries(RESEARCH_METHODS.map(method=>[method,[0,1]]));
+  const bundle=prepareResearchBundle([{as_of_date:date,rows,orders}],date);
+  expect(bundle.rows[0].method_summary).toBeUndefined();
+  expect(bundle.rankings.minervini[0].row.symbol).toBe('NOW_FIRST');
+  expect(bundle.rankings.minervini.find(x=>x.row.symbol==='OLD_FIRST').assessment.qualified).toBe(false);
+ });
+ it('retains validated current-version published order and shared row identity',()=>{
+  const rows=[sample({symbol:'A'}),sample({symbol:'B'})].map(summarize),orders=ordersFor(rows);
+  const bundle=prepareResearchBundle([{as_of_date:date,rows,orders}],date);
+  for(const method of RESEARCH_METHODS)expect(bundle.rankings[method].map(item=>bundle.rows.indexOf(item.row))).toEqual(orders[method]);
+ });
+});
+
+it.each([[],[9,0,1,9,0],{}, {passed:9,failed:0,unknown:0,total:9,qualified:true,score:99,templateMismatch:false}])('reranks when current-version summary content is malformed: %j',malformed=>{
+ const rows=[sample({symbol:'LOW',rs_rating:60}),sample({symbol:'HIGH',rs_rating:90})];
+ for(const row of rows) row.method_summary={version:RULE_SUMMARY_VERSION,...Object.fromEntries(RESEARCH_METHODS.map(method=>{const {rules,...summary}=assess(row,method);expect(summary.total).toBe(rules.length);return [method,summary];}))};
+ const orders=ordersFor(rows);orders.minervini=[0,1];
+ rows[0].method_summary.minervini=malformed;
+ const bundle=prepareResearchBundle([{as_of_date:date,rows,orders}],date);
+ expect(bundle.rankings.minervini.map(x=>x.row.symbol)).toEqual(['HIGH','LOW']);
+ expect(bundle.rankings.minervini[1].assessment).toEqual(assess(rows[0],'minervini'));
 });

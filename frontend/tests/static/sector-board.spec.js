@@ -25,6 +25,17 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`sector b
  }
  await page.getByRole('combobox',{name:'相対強度の期間'}).selectOption('63');
  await page.evaluate(()=>window.scrollTo(0,0));
+ if(width===390) {
+  await expect(page.locator('.sector-index-mobile')).toBeVisible();
+  await expect(page.locator('.sector-index-desktop')).toBeHidden();
+  const separation=await page.locator('.sector-rank-row').evaluateAll(rows=>rows.map(row=>{
+   const value=row.querySelector('.sector-relative-value'),rate=row.querySelector('.sector-rate');
+   return value&&rate?rate.getBoundingClientRect().left-value.getBoundingClientRect().right:null;
+  }).filter(value=>value!==null));
+  expect(separation.length).toBe(11);
+  expect(Math.min(...separation)).toBeGreaterThanOrEqual(6);
+ }
+
  const height=await page.evaluate(()=>document.documentElement.scrollHeight);
  expect(height).toBeLessThanOrEqual(width===390?1600:1000);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);

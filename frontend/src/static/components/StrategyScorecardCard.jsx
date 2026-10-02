@@ -1,17 +1,10 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Tooltip from '@mui/material/Tooltip';
 import { C } from '../designTokens';
 
-// Strategy scorecard (C95) — the "約束" made visible on the phone.
-//
-// Shows how the whole strategy scores over the long backtest, in the AGREED
-// priority order (docs/OBJECTIVE.md): CAGR > max drawdown > risk-adjusted
-// (Sortino primary) > per-trade expectancy > win rate. Plus the right-tail
-// concentration bar, because the edge depends on NOT capping the big winners.
-//
-// Reads a static JSON transcribed from backtest_minervini_tactics.py; renders
-// nothing when that file is absent (so a market with no backtest shows no card).
+// Archive only: keep the transcribed metrics and provenance visible without
+// treating them as a validated estimate for the current selection method.
+// The warning is component-owned so older cached payloads cannot omit it.
 
 const fmtPct = (v, digits = 1) =>
   v == null || Number.isNaN(Number(v)) ? '—' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(digits)}%`;
@@ -75,10 +68,21 @@ export default function StrategyScorecardCard({ data }) {
       <Box sx={{ px: 1.5, pt: 1.25, pb: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: 14, fontWeight: 800, color: C.inkStrong, letterSpacing: 0.2 }}>
-            戦略スコアカード
+            旧バックテスト記録
           </Typography>
-          <Typography sx={{ fontSize: 11, color: C.grey }}>
-            過去データ検証・この優先順位で磨きます
+          <Typography sx={{ fontSize: 12, fontWeight: 800, color: C.amber }}>
+            現行手法は未再検証
+          </Typography>
+        </Box>
+        <Box data-testid="legacy-evaluation-warning" sx={{ mt: 1 }}>
+          <Typography sx={{ fontSize: 12, color: C.inkStrong, lineHeight: 1.6 }}>
+            旧集計の参考記録です。現在の候補リストや日次の購入条件の成績ではありません。
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: C.grey, lineHeight: 1.6 }}>
+            今回確認した検証コードに、寄付きの判断・数量計算で当日終値を参照する先読みを確認。下記の旧集計への影響は未算定です。
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: C.grey, lineHeight: 1.6 }}>
+            現在取得できる銘柄群に偏りがあり、上場廃止銘柄は復元していません。銘柄の適格判定方法も検証窓で異なります。
           </Typography>
         </Box>
         {windowLabel && (
@@ -86,9 +90,15 @@ export default function StrategyScorecardCard({ data }) {
             {windowLabel}{data?.universe_size ? ` · 米国${data.universe_size}銘柄` : ''}
           </Typography>
         )}
+        {(data.source || data.variant) && (
+          <Typography sx={{ fontSize: 11, color: C.dim, mt: 0.5, overflowWrap: 'anywhere' }}>
+            出典: {data.source || '未記録'}{data.variant ? ` · variant: ${data.variant}` : ''}
+            {data.as_of ? ` · 基準日: ${data.as_of}` : ''}
+          </Typography>
+        )}
       </Box>
 
-      {/* priority rows 1..5 */}
+      {/* Archived priority rows 1..5; values are not recalculated here. */}
       <Box sx={{ px: 1.5, py: 0.75 }}>
         <Row rank={1}
           value={fmtPct(m.cagr_pct)}
@@ -117,9 +127,7 @@ export default function StrategyScorecardCard({ data }) {
           meaning={m.trades != null ? `${m.trades}トレードで検証・勝率は最重視しない` : '勝率は最重視しない'} />
       </Box>
 
-      {/* honest window-dependence caveat + the wider (mostly-bull) window,
-          where just holding the index wins. Never hide the less flattering
-          number — the priority order judges CAGR first. */}
+      {/* Preserve the wider-window record and its eligibility correction history. */}
       {(data.caveat || data.wider_window) && (
         <Box sx={{ px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
           {data.caveat && (
@@ -128,29 +136,39 @@ export default function StrategyScorecardCard({ data }) {
             </Typography>
           )}
           {data.wider_window && (
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.inkStrong }}>
-                {data.wider_window.window?.years}年窓
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.inkStrong }}>
+                  約{data.wider_window.window?.years}年窓（旧集計）
+                </Typography>
+                <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: C.amber }}>
+                  CAGR {fmtPct(data.wider_window.cagr_pct)}
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: C.grey }}>
+                  （S&P500 {fmtPct(data.wider_window.benchmark_cagr_pct)}）· 最大DD {fmtPct(data.wider_window.max_drawdown_pct)}
+                </Typography>
+              </Box>
+              <Typography sx={{ fontSize: 11, color: C.dim, mt: 0.5, overflowWrap: 'anywhere' }}>
+                {data.wider_window.window?.start} 〜 {data.wider_window.window?.end}
+                {data.wider_window.source ? ` · 出典: ${data.wider_window.source}` : ''}
+                {data.wider_window.variant ? ` · variant: ${data.wider_window.variant}` : ''}
               </Typography>
-              <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: C.amber }}>
-                CAGR {fmtPct(data.wider_window.cagr_pct)}
-              </Typography>
-              <Typography sx={{ fontSize: 11, color: C.grey }}>
-                （S&P500 {fmtPct(data.wider_window.benchmark_cagr_pct)}）· 最大DD {fmtPct(data.wider_window.max_drawdown_pct)}
-              </Typography>
+              {data.wider_window.correction && (
+                <Typography data-testid="legacy-window-correction" sx={{ fontSize: 11, color: C.grey, lineHeight: 1.6, mt: 0.5 }}>
+                  訂正履歴: {data.wider_window.correction}
+                </Typography>
+              )}
             </Box>
           )}
         </Box>
       )}
 
-      {/* right-tail concentration — why we never cap winners */}
+      {/* Descriptive concentration of gains in the archived run, not a trading recommendation. */}
       {top10 != null && (
         <Box sx={{ px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.inkStrong }}>大勝ちの効き（右テール）</Typography>
-            <Tooltip title="利益の大半はごく一部の大勝ちが生む。だから途中で利確せず伸ばす（20%固定利確はこの効きを壊す）。">
-              <Typography sx={{ fontSize: 11, color: C.grey, cursor: 'help' }}>上位10%の勝ちが利益の {top10}%</Typography>
-            </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.5, flexWrap: 'wrap' }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, color: C.inkStrong }}>旧集計の利益集中（右テール）</Typography>
+            <Typography sx={{ fontSize: 11, color: C.grey }}>上位10%の勝ちが利益の {top10}%</Typography>
           </Box>
           <Box sx={{ position: 'relative', height: 8, borderRadius: 4, bgcolor: C.track, overflow: 'hidden' }}>
             <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(100, top10)}%`, bgcolor: C.green, opacity: 0.85 }} />
@@ -159,7 +177,7 @@ export default function StrategyScorecardCard({ data }) {
             )}
           </Box>
           <Typography sx={{ fontSize: 11, color: C.grey, mt: 0.5 }}>
-            {best != null ? `濃い部分＝最大の勝ち1件で利益の ${best}%。` : ''}少数の大勝ちを切らないのが要。
+            {best != null ? `濃い部分＝最大の勝ち1件で利益の ${best}%。` : ''}この旧集計内の分布です。
           </Typography>
         </Box>
       )}

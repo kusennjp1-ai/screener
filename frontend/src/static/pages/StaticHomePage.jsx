@@ -92,12 +92,11 @@ function StaticHomePage() {
     gcTime: Infinity,
   });
   const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
-  // Strategy scorecard (C95): a root-level backtest snapshot, shown in the
-  // agreed priority order. Independent of the daily market export and refreshed
-  // only when the tactics backtest reruns — fail soft to null so the card just
-  // disappears if the file is not published yet.
+  // Archived US-only backtest transcription, independent of today's candidate
+  // filters. Fail soft when unavailable; never associate it with another market.
   const scorecardQuery = useQuery({
     queryKey: ['staticStrategyScorecard'],
+    enabled: marketEntry.market === 'US',
     queryFn: async () => {
       // Baked into the app build as a tracked public asset (not the pipeline-
       // generated static-data/), refreshed only when the tactics backtest reruns.
@@ -150,11 +149,9 @@ function StaticHomePage() {
     }),
     [marketCapMin, scanDefaultFilters]
   );
-  // Backtest-aligned candidate list (C97): the SAME pool the +15.2% 6-year
-  // backtest (full_tactics) actually picks from — the strict 8-point Trend
-  // Template plus RS >= 70 — with NO fundamental/group gate, strongest RS first.
-  // Kept ALONGSIDE the quality-leader headline above (C93) so both views exist:
-  // the strict leaders the user asked for, and the exact names the backtest trades.
+  // Technical reference list: current market defaults plus Trend Template and
+  // RS >= 70, strongest RS first. These are not the historical backtest universe,
+  // setup/portfolio gates, or a replay of its trades. Keep selection unchanged.
   const backtestAlignedFilters = useMemo(
     () => applyScanFilterDefaults({
       ...scanDefaultFilters,
@@ -288,10 +285,8 @@ function StaticHomePage() {
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} researchExposure={Math.min(modelMarket(scanRows).cap,.25)*100} />
 
-      {/* C95: the strategy's long-run scorecard in the agreed priority order
-          (CAGR > maxDD > risk-adjusted > expectancy > win rate) + the right-
-          tail concentration. Renders nothing until the backtest snapshot ships. */}
-      <StrategyScorecardCard data={scorecardQuery.data} />
+      {/* US archive only; its figures do not validate the current method. */}
+      {marketEntry.market === 'US' && <StrategyScorecardCard data={scorecardQuery.data} />}
 
       {/* C86: held/watched names first — the exit is the edge. Surfaces each
           watched symbol's exported sell action + stop, most-urgent first. */}
@@ -435,14 +430,11 @@ function StaticHomePage() {
         priceSparklineInnerWidth={150}
       />
 
-      {/* C97: the exact pool the +15.2% 6-year backtest picks from — Trend
-          Template + RS>=70, strongest RS first, NO fundamental/group gate. Sits
-          beside the strict leaders list so both the quality view and the
-          backtest-faithful view are available. */}
+      {/* Technical reference only; shared thresholds do not establish backtest equivalence. */}
       <DailyScanRowsTable
         testId="backtest-aligned-section"
-        title="バックテスト準拠候補（検証と同じ選び方）"
-        subtitle="トレンドテンプレート合格＋RS 70以上をRSの高い順に表示。6年検証（年率+15.2%）が実際に選ぶ母集団と同じ条件で、業績・業種の追加関門はかけていません。行をクリックするとチャートが開きます。"
+        title="テクニカル参考候補 トップ20"
+        subtitle="現在のスナップショットから、トレンドテンプレート合格・RS 70以上をRS順に最大20銘柄表示。市場の既定フィルターと選択中の時価総額下限を適用します。過去の売買再現や現行手法の成績を示すリストではありません。"
         rows={backtestAlignedRows}
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={backtestAlignedNavigationSymbols}
