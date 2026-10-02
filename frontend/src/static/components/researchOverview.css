@@ -15,7 +15,13 @@
 .research-overview .overview-next-check { font-family:inherit; font-size:16px; font-weight:700; line-height:2.1; }
 .overview-next-check > span { color:var(--text-3); }
 .overview-market { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; font-size:11px; color:var(--text-3); margin:4px 0; }
-.overview-market a { display:flex; align-items:center; min-height:24px; color:var(--text-2); text-decoration:none; }
+.overview-market a { display:flex; align-items:center; min-height:44px; scroll-margin-top:64px; color:var(--text-2); text-decoration:none; }
+/* The desktop market link is a full touch target too. Trade empty space above
+   the summary for its larger hit area, keeping the bottom clearance and first-screen budget. */
+@media (min-width:701px) {
+ .research-hero.research-overview:not(.hero-collapsed) { padding-block:8px 20px; }
+ .research-overview:not(.hero-collapsed) .hero-subtitle { margin:2px 0; }
+}
 .research-overview .hero-actions { gap:12px; flex-wrap:wrap; }
 /* Both actions keep the same hit area without enlarging their existing row.
    Leave clearance above focused actions for the sticky desktop header. */

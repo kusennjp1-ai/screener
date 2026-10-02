@@ -48,6 +48,13 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     expect(await trigger.evaluate(element => parseFloat(getComputedStyle(element).scrollMarginTop))).toBeGreaterThanOrEqual(64);
     geometry[mode] = { hero: (await page.getByTestId('home-hero').boundingBox()).height, header: (await page.locator('.leader-header').boundingBox()).height };
     if (width === 1440) expect(geometry[mode].hero).toBeLessThanOrEqual(320);
+    if (width === 1440) {
+      const marketLink = page.getByRole('link', { name: '業種の追い風を見る →' });
+      expect((await marketLink.boundingBox()).height).toBeGreaterThanOrEqual(44);
+      await marketLink.focus();
+      await expect(marketLink).toBeFocused();
+      expect(await marketLink.evaluate(element => parseFloat(getComputedStyle(element).scrollMarginTop))).toBeGreaterThanOrEqual(64);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     await trigger.focus();

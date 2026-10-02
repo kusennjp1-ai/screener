@@ -21,3 +21,14 @@ it.each([[103,'minervini'],[104,'minervini2'],[104,'oneil']])('does not add a fi
  const {container}=render(<ResearchDetail {...props} method={method} selected={{...row,current_price:price}}/>);
  expect(within(container.querySelector('.research-symbol-head')).queryByRole('note')).not.toBeInTheDocument();
 });
+
+it.each(['minervini','minervini2'])('explains the checked source and implementation boundary for %s',method=>{
+ render(<ResearchDetail {...props} method={method} selected={row}/>);
+ const disclosure=screen.getByText('トレンド条件の出典とアプリの近似').closest('details');
+ expect(disclosure).not.toHaveAttribute('open');
+ expect(disclosure).toHaveTextContent(method==='minervini'?'近似判定8件と独自の日足品質確認1件':'第2冊の25%指定は未確認');
+});
+it.each(['oneil','ibd'])('keeps source disclosure scoped away from %s',method=>{
+ render(<ResearchDetail {...props} method={method} selected={row}/>);
+ expect(screen.queryByText('トレンド条件の出典とアプリの近似')).not.toBeInTheDocument();
+});

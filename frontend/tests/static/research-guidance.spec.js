@@ -10,7 +10,7 @@ const rows = ['EDGE', 'LONGTICKER12', 'WAIT'].map((symbol, index) => withAuditFi
   market_regime: 'confirmed_uptrend', market_above_50dma: true, market_above_200dma: true,
 }, date));
 
-for (const width of [1024, 320]) test(`readiness guidance, disclosures and source warning at ${width}px`, async ({ page }, info) => {
+for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and source warning at ${width}px`, async ({ page }, info) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.setViewportSize({ width, height: 900 });
@@ -52,6 +52,9 @@ for (const width of [1024, 320]) test(`readiness guidance, disclosures and sourc
     const gap=await detail.evaluate(node=>node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom);
     expect(gap).toBeGreaterThanOrEqual(16);
     await expect(detail.locator('.entry-source-badge')).toBeInViewport({ratio:1});
+    // The prior hero link can lie at the viewport boundary after this focus
+    // jump. It must retain a full target and never collide with sticky nav.
+    expect((await new AxeBuilder({ page }).include('#root').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
   }
   expect(errors).toEqual([]);
 });

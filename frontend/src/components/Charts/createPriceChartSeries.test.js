@@ -40,7 +40,7 @@ describe('research chart pane layout',()=>{
     expect(result.sma200Series.options.lineStyle).toBe(1);
     expect(result.candlestickSeries.options.autoscaleInfoProvider).toBeUndefined();
     expect(result.candlestickSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.12,bottom:.12}});
-    expect(result.rsLineSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.2,bottom:.2},visible:false});
+    expect(result.rsLineSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.18,bottom:.12},visible:false,autoScale:true,mode:0});
     expect(result.volumeSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.2,bottom:0}});
     expect(charts[0].options.timeScale.lockVisibleTimeRangeOnResize).toBe(true);
   });

@@ -1,5 +1,5 @@
 import { PureComponent } from 'react';
-import { entryPlan } from '../researchEngine';
+import { entryPosition } from '../researchEngine';
 import { radarGeometry, signed, stateKey } from '../positionGeometry';
 import { radarFrame, radarSelection, drawRadar, radarHit } from '../radarMarks';
 import { palettes } from '../theme/tokens';
@@ -70,7 +70,7 @@ export default class SetupRadar extends PureComponent {
  render(){
   const {ranked,small=false}=this.props;
   if(!this.geometry||ranked!==this.ranked||small!==this.small){
-   const points=ranked.filter(item=>item.assessment.qualified).map(({row})=>{const plan=entryPlan(row,null,'minervini');return {symbol:row.symbol,distance:plan.pivot?plan.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(plan.state),pickable:Boolean(row.chart_path)};});
+   const points=ranked.filter(item=>item.assessment.qualified).map(({row})=>{const plan=entryPosition(row,null,'minervini');return {symbol:row.symbol,distance:plan.pivot?plan.distance:null,rs:row.rs_rating,volume:row.se_volume_vs_50d,state:stateKey(plan.state),pickable:Boolean(row.chart_path)};});
    this.geometry=radarGeometry(points,small?340:620,small?124:224);this.frame={__html:radarFrame(this.geometry,small)};this.ranked=ranked;this.small=small;
   }
   return <section ref={this.setContainer} className="setup-radar" aria-label="セットアップ・レーダー" dangerouslySetInnerHTML={this.frame}

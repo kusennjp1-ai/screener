@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CandlestickChart from './CandlestickChart';
@@ -28,10 +28,11 @@ beforeEach(()=>{
       getVisibleLogicalRange:()=>logicalRange,fitContent:vi.fn(),setVisibleRange:vi.fn(),
       setVisibleLogicalRange:vi.fn(range=>{logicalRange=range;rangeApplications.push({range,close:item.candlestickSeries.setData.mock.lastCall?.[0].at(-1)?.close,rs:item.rsLineSeries.setData.mock.lastCall?.[0].slice()});})};
     const scaleOptions=vi.fn();
-    const item={chart:{subscribeCrosshairMove:vi.fn(),clearCrosshairPosition:vi.fn(),resize:vi.fn(),remove:vi.fn(),applyOptions:vi.fn(),timeScale:()=>timeScale,priceScale:()=>({applyOptions:scaleOptions})},context,timeScale,rangeApplications,scaleOptions};
+    const item={chart:{subscribeCrosshairMove:vi.fn(),unsubscribeCrosshairMove:vi.fn(),clearCrosshairPosition:vi.fn(),resize:vi.fn(),remove:vi.fn(),applyOptions:vi.fn(),timeScale:()=>timeScale,priceScale:()=>({applyOptions:scaleOptions})},context,timeScale,rangeApplications,scaleOptions};
     for(const key of seriesKeys){
       const primitiveSet=new Set();
-      item[key]={setData:vi.fn(),applyOptions:vi.fn(),priceScale:()=>({applyOptions:vi.fn()}),
+      const seriesScale={applyOptions:vi.fn()};
+      item[key]={setData:vi.fn(),applyOptions:vi.fn(),priceScale:()=>seriesScale,
         attachPrimitive:vi.fn(p=>primitiveSet.add(p)),detachPrimitive:vi.fn(p=>primitiveSet.delete(p)),primitiveSet,
         createPriceLine:vi.fn(o=>o),removePriceLine:vi.fn()};
     }
@@ -48,6 +49,40 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it('does not invalidate chart options or RS scale options for a reused static symbol',()=>{
+    const view=setup(),instance=instances[0];
+    expect(instance.chart.applyOptions).not.toHaveBeenCalled();
+    expect(instance.rsLineSeries.priceScale().applyOptions).not.toHaveBeenCalled();
+    view.update({symbol:'BBB',chartIdentity:'BBB:2',priceData:bars(200),rsLineData:rs(20)});
+    expect(instance.chart.applyOptions).not.toHaveBeenCalled();
+    expect(instance.rsLineSeries.priceScale().applyOptions).not.toHaveBeenCalled();
+    view.update({symbol:'BBB',chartIdentity:'BBB:2',interactive:false});
+    expect(instance.chart.applyOptions).toHaveBeenCalledExactlyOnceWith({handleScroll:false,handleScale:false});
+    view.update({symbol:'CCC',chartIdentity:'CCC:3',interactive:false});
+    expect(instance.chart.applyOptions).toHaveBeenCalledTimes(1);
+    view.update({symbol:'CCC',chartIdentity:'CCC:3',interactive:true});
+    expect(instance.chart.applyOptions).toHaveBeenCalledTimes(2);
+    expect(instance.chart.applyOptions).toHaveBeenLastCalledWith({handleScroll:true,handleScale:true});
+  });
+  it('subscribes to crosshair updates only while an OHLC legend is visible',()=>{
+    const view=setup({hideOhlcLegend:true}),instance=instances[0];
+    expect(instance.chart.subscribeCrosshairMove).not.toHaveBeenCalled();
+    view.update({hideOhlcLegend:false});
+    expect(instance.chart.subscribeCrosshairMove).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/始 100.00/)).toBeInTheDocument();
+    const handler=instance.chart.subscribeCrosshairMove.mock.calls[0][0];
+    act(()=>handler({time:'2026-09-21',seriesData:new Map([[instance.candlestickSeries,{time:'2026-09-21',open:80,high:85,low:78,close:82}]])}));
+    expect(screen.getByText(/始 80.00/)).toBeInTheDocument();
+    act(()=>handler({}));
+    expect(screen.getByText(/始 100.00/)).toBeInTheDocument();
+    view.update({hideOhlcLegend:true});
+    expect(instance.chart.unsubscribeCrosshairMove).toHaveBeenCalledExactlyOnceWith(handler);
+    view.update({hideOhlcLegend:false,smallScreen:true});
+    expect(instance.chart.subscribeCrosshairMove).toHaveBeenCalledTimes(1);
+    view.update({hideOhlcLegend:false,smallScreen:false});
+    expect(instance.chart.subscribeCrosshairMove).toHaveBeenCalledTimes(2);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
   it('keeps one instance but immediately replaces all data and old annotations on a cached symbol switch',()=>{
     const view=setup({priceData:longBars});const instance=instances[0];
     expect(instance.sma200Series.setData.mock.lastCall[0]).toHaveLength(61);

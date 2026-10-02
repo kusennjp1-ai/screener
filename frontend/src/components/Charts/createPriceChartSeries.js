@@ -106,7 +106,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     lastValueVisible: false,
     priceLineVisible: false,
   }, researchView ? 1 : 0);
-  rsLineSeries.priceScale().applyOptions({ scaleMargins: researchView ? { top: 0.2, bottom: 0.2 } : { top: 0.66, bottom: 0.22 }, visible: false });
+  // These are the final RS strip options. Reapplying scale options with every
+  // new payload triggers chart-wide axis/layout work even when unchanged.
+  rsLineSeries.priceScale().applyOptions({ scaleMargins: researchView ? { top: 0.18, bottom: 0.12 } : { top: 0.66, bottom: 0.22 }, visible: false, ...(researchView ? { autoScale: true, mode: 0 } : {}) });
   const rsMarkers = researchView ? null : createSeriesMarkers(rsLineSeries, []);
 
   // Earnings line (収益ライン / Redford-MarketSurge style): a smooth fair-value

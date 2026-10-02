@@ -3,7 +3,7 @@ import { useMediaQuery, Drawer, IconButton } from '@mui/material';
 import SetupRadar from './SetupRadar';
 import PortfolioDecision from './PortfolioDecision';
 import DailyChanges from './DailyChanges';
-import { entryPlan } from '../researchEngine';
+import { entryPosition } from '../researchEngine';
 import { useWorkbenchDetails } from '../useWorkbench';
 import { dailyChangePresentation } from '../dailyChangePresentation';
 import './researchOverview.css';
@@ -16,7 +16,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const small=useMediaQuery('(max-width:700px)');
  const [collapsed,setCollapsed]=useState(()=>{try{return localStorage.getItem('research-hero-collapsed')==='true';}catch{return false;}});
  const [changesOpen,setChangesOpen]=useState(false);
- const counts=useMemo(()=>({qualified:ranked.filter(x=>x.assessment.qualified).length,zone:ranked.filter(x=>x.assessment.qualified&&entryPlan(x.row,null,'minervini').state==='買いゾーン内').length,verified:ranked.filter(x=>x.row.technical_audit?.valid===true).length}),[ranked]);
+ const counts=useMemo(()=>({qualified:ranked.filter(x=>x.assessment.qualified).length,zone:ranked.filter(x=>x.assessment.qualified&&entryPosition(x.row,null,'minervini').state==='買いゾーン内').length,verified:ranked.filter(x=>x.row.technical_audit?.valid===true).length}),[ranked]);
  const toggle=()=>{setCollapsed(!collapsed);try{localStorage.setItem('research-hero-collapsed',String(!collapsed));}catch{/* Default remains usable when storage is disabled. */}};
  const changes=dailyChangePresentation(workbench,method);
  return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}`} aria-label="今日の概況">

@@ -113,18 +113,28 @@ export function entryChecks(row, method = 'minervini') {
   ];
 }
 
-export function entryPlan(row, quote, method = 'minervini') {
+// Position-only views use the same canonical price/pivot/state rules without
+// allocating the full entry-plan explanation and source strings per point.
+export function entryPosition(row, quote, method = 'minervini') {
   const price = finite(quote?.price) && quote.price > 0 ? quote.price : row.current_price;
   const pivotInfo = canonicalPivot(row);
   const pivot = pivotInfo.price;
   const zone = entryZonePercent(method);
-  if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: pivotInfo.reason.includes('25%') ? '有効な買い水準なし' : '未判定', price, pivot: null, distance: null, pivotSource: pivotInfo.reason, sourceContext:entrySourceContext(method,zone,null) };
+  if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: pivotInfo.reason.includes('25%') ? '有効な買い水準なし' : '未判定', price, pivot: null, distance: null, pivotSource: pivotInfo.reason };
   const distance = (price / pivot - 1) * 100;
-  return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: pivotInfo.reason,
-    sourceContext:entrySourceContext(method,zone,distance),
-    state: row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外' : row.price_activity?.lowRange ? '低変動・監視のみ' : distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
+  return { price, pivot, distance, zone, pivotSource: pivotInfo.reason,
+    state: row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外' : row.price_activity?.lowRange ? '低変動・監視のみ' : distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過' };
+}
+
+export function entryPlan(row, quote, method = 'minervini') {
+  const plan = entryPosition(row, quote, method);
+  plan.sourceContext = entrySourceContext(method, entryZonePercent(method), plan.distance);
+  if (plan.pivot !== null) {
+    plan.upper = plan.pivot * (1 + plan.zone / 100);
     // A transparent example, not a claim that a pattern-specific stop was detected.
-    stopExample: price * .93 };
+    plan.stopExample = plan.price * .93;
+  }
+  return plan;
 }
 
 export function rankCandidates(rows, method, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false } = {}) {

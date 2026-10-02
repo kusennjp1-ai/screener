@@ -87,6 +87,11 @@ it('keeps both overview actions at 44px without inherited margins and clears the
  expect(desktop).toMatch(/\.research-overview \.hero-actions button \{[^}]*min-height:44px;[^}]*margin:0;[^}]*scroll-margin-top:64px;/);
  expect(desktop).not.toMatch(/\.research-overview \.hero-actions \.changes-trigger \{[^}]*min-height:24px/);
 });
+it('gives the market link a full touch target and sticky-header focus clearance',()=>{
+ const styles=readFileSync('src/static/components/researchOverview.css','utf8');
+ expect(styles).toMatch(/\.overview-market a \{[^}]*min-height:44px;[^}]*scroll-margin-top:64px;/);
+ expect(styles).toMatch(/@media \(min-width:701px\) \{\s*\.research-hero\.research-overview:not\(\.hero-collapsed\) \{ padding-block:8px 20px;/);
+});
 it('opens daily changes from the keyboard and restores the trigger after Escape and Close',async()=>{
  const user=userEvent.setup();
  render(<ResearchHero {...props}/>);
