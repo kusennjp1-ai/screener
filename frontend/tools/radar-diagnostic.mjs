@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, extname, relative, isAbsolute } from 'node:path';
 import { chromium } from '@playwright/test';
-const root=resolve('test-results/radar-build'), output=resolve('test-results/radar-diagnostic');
+const root=resolve('test-results/radar-build'), output=resolve(process.env.RADAR_DIAGNOSTIC_OUTPUT || 'test-results/radar-diagnostic');
 await mkdir(output,{recursive:true});
 const server=createServer(async(req,res)=>{
  try {

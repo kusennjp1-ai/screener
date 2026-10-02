@@ -116,7 +116,12 @@ function objectiveMetrics() {
     return box.height ? Math.max(0, bottom - top) / box.height : 0;
   };
   const animations = document.getAnimations().filter(animation => animation.playState === 'running' && (!animation.effect?.getTiming().iterations || animation.effect.getTiming().iterations === Infinity || animation.effect.getTiming().duration > 1));
-  return { smallTargets, fontIssues, radiusIssues, asciiNegativeValues, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+  const heroActionTargets = [...document.querySelectorAll('.hero-actions button')].map(element => {
+    const box=element.getBoundingClientRect(), style=getComputedStyle(element);
+    return {...describe(element), rect:{top:box.top,bottom:box.bottom,left:box.left,right:box.right,width:box.width,height:box.height},
+      minHeight:style.minHeight,margin:style.margin,lineHeight:style.lineHeight,display:style.display,position:style.position};
+  });
+  return { smallTargets, fontIssues, radiusIssues, asciiNegativeValues, heroActionTargets, scrollY, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
     pageHeight: document.documentElement.scrollHeight, viewport: { width: innerWidth, height: innerHeight },
     headerHeight: header?.height || 0, bottomNavHeight: nav?.height || 0, chromeHeight: (header?.height || 0) + (nav?.height || 0),
     hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas') || rect('.research-detail .research-chart [data-chart-plot]'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
@@ -138,7 +143,8 @@ async function capture(page, viewport, theme, screen) {
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
   await page.screenshot({ path: resolve(output, screenshot) });
   const key = `${screen}/${viewport.width}/${theme}`;
-  report.screens.push({ key, screenshot, metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary })) })) });
+  const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
+  report.screens.push({ key, screenshot, metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
@@ -310,10 +316,17 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
         try {
           await cdp.send('Profiler.enable'); await cdp.send('Profiler.start');
           await page.goto(server.url); await visible(page.locator(readySelector));
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          const initial = await cdp.send('Profiler.stop');
+          await writeFile(resolve(output, `diagnostic-initial-${viewport.width}.cpuprofile`), JSON.stringify(initial.profile));
+          // Keep method switching isolated from initial Worker delivery. These
+          // diagnostic phases never replace any of the three measured runs.
+          await cdp.send('Profiler.start');
           await page.getByRole('button', { name: /^オニール/ }).click();
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           await page.waitForTimeout(500);
           const { profile } = await cdp.send('Profiler.stop');
-          await writeFile(resolve(output, `diagnostic-${viewport.width}.cpuprofile`), JSON.stringify(profile));
+          await writeFile(resolve(output, `diagnostic-method-${viewport.width}.cpuprofile`), JSON.stringify(profile));
           await cdp.send('Profiler.disable');
         } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
       }
@@ -353,6 +366,18 @@ if (radar) for (const viewport of viewportSizes) {
   await context.close();
 }
 await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();
+if (radar && report.failures.some(failure => failure.includes('D9'))) {
+  // The existing focused harness records a separate cold CPU/timeline trace.
+  // It runs after all acceptance measurements and cannot turn their failures
+  // into passes or move work out of the timed render boundary.
+  try {
+    execFileSync(process.execPath, ['tools/radar-diagnostic.mjs'], {
+      env: {...process.env,RADAR_DIAGNOSTIC_OUTPUT:resolve(output,'radar-diagnostic')}, stdio:'inherit',
+    });
+  } catch (error) {
+    console.log(`Focused radar diagnostic exited ${error.status ?? 'with an error'}; retain its artifacts alongside the original acceptance failure.`);
+  }
+}
 await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
 await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
 console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));

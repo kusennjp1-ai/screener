@@ -38,7 +38,7 @@ it('keeps keyboard focus when crossing both directions at a 50-row boundary in a
  expect(screen.getByRole('heading',{name:'候補リスト 501件'})).toBeInTheDocument();
 });
 
-it.each([true,false])('explicit pagination focuses the first row without selecting it, with mobile=%s',mobile=>{
+it.each([[true,0],[true,.578125],[false,0]])('explicit pagination focuses the first row without selecting it, with mobile=%s and fractional offset=%s',(mobile,fraction)=>{
  const ranked=Array.from({length:101},(_,index)=>({row:{symbol:`S${index}`,current_price:102,se_pivot_price:100,rs_rating:90},assessment:{qualified:true,passed:9,total:9}}));
  const onSelect=vi.fn(),scrollTo=vi.fn();
  vi.stubGlobal('scrollTo',scrollTo);vi.stubGlobal('scrollY',1000);vi.stubGlobal('innerHeight',900);
@@ -46,7 +46,7 @@ it.each([true,false])('explicit pagination focuses the first row without selecti
  vi.spyOn(Element.prototype,'getBoundingClientRect').mockImplementation(function(){
   if(this.classList.contains('leader-header'))return {top:0,bottom:mobile?48:56,height:mobile?48:56};
   if(this.classList.contains('candidate-row'))return {top:mobile?-100:500,bottom:mobile?-30:551,height:mobile?70:51};
-  if(this.classList.contains('candidate-board-heading'))return {top:mobile?-136:464,bottom:mobile?-100:500,height:36};
+  if(this.classList.contains('candidate-board-heading'))return {top:mobile?-136+fraction:464,bottom:mobile?-100:500,height:36};
   return {top:0,bottom:0,height:0};
  });
  const {container}=render(<><header className="leader-header"/><CandidateBoard ranked={ranked} method="minervini" onSelect={onSelect}/></>);

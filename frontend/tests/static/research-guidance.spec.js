@@ -45,5 +45,13 @@ for (const width of [1024, 320]) test(`readiness guidance, disclosures and sourc
   await page.screenshot({ path: info.outputPath(`source-warning-${width}.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).include('#root').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+  if (width > 700) {
+    await page.goto('/#/?symbol=EDGE');
+    const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
+    await expect(detail).toBeFocused();
+    const gap=await detail.evaluate(node=>node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom);
+    expect(gap).toBeGreaterThanOrEqual(16);
+    await expect(detail.locator('.entry-source-badge')).toBeInViewport({ratio:1});
+  }
   expect(errors).toEqual([]);
 });

@@ -1,9 +1,11 @@
-import { cleanup,fireEvent,render,screen } from '@testing-library/react';
+import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import ResearchHero from './ResearchHero';
 import { readFileSync } from 'node:fs';
 vi.mock('./PortfolioDecision',()=>({default:()=>null}));
 vi.mock('./SetupRadar',()=>({default:()=> <section aria-label="セットアップ・レーダー"/>}));
+vi.mock('../useWorkbench',()=>({useWorkbenchDetails:()=>({isLoading:true})}));
 const props={rows:[],ranked:[],date:'2026-09-29',plan:{dailyPositions:[],allocationCap:0,market:{label:'市場未確認'}},workbench:{},availableSymbols:new Set()};
 beforeEach(()=>localStorage.clear());
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
@@ -57,4 +59,31 @@ it('separates compact desktop stages while retaining the mobile three-column spa
  const [desktop,mobile]=overviewStyles.split('@media (max-width:700px)');
  expect(desktop).toMatch(/\.research-overview\.hero-collapsed \.overview-steps \{[^}]*gap:20px/);
  expect(mobile).toMatch(/\.research-overview\.hero-collapsed \.overview-steps \{[^}]*gap:0/);
+});
+it('keeps both overview actions at 44px without inherited margins and clears the sticky header on focus scroll',()=>{
+ const overviewStyles=readFileSync('src/static/components/researchOverview.css','utf8');
+ const [desktop]=overviewStyles.split('@media (max-width:700px)');
+ expect(desktop).toMatch(/\.research-overview \.hero-actions button \{[^}]*min-height:44px;[^}]*margin:0;[^}]*scroll-margin-top:64px;/);
+ expect(desktop).not.toMatch(/\.research-overview \.hero-actions \.changes-trigger \{[^}]*min-height:24px/);
+});
+it('opens daily changes from the keyboard and restores the trigger after Escape and Close',async()=>{
+ const user=userEvent.setup();
+ render(<ResearchHero {...props}/>);
+ const trigger=screen.getByRole('button',{name:'候補の日次変化'});
+ expect(trigger).toHaveAttribute('aria-haspopup','dialog');
+ expect(trigger).toHaveAttribute('aria-expanded','false');
+ trigger.focus();
+ await user.keyboard('{Enter}');
+ expect(await screen.findByRole('dialog',{name:'候補の日次変化'})).toBeInTheDocument();
+ expect(trigger).toHaveAttribute('aria-expanded','true');
+ await user.keyboard('{Escape}');
+ await waitFor(()=>expect(screen.queryByRole('dialog',{name:'候補の日次変化'})).not.toBeInTheDocument());
+ expect(trigger).toHaveAttribute('aria-expanded','false');
+ expect(trigger).toHaveFocus();
+ await user.keyboard('{Enter}');
+ expect(await screen.findByRole('dialog',{name:'候補の日次変化'})).toBeInTheDocument();
+ await user.click(screen.getByRole('button',{name:'候補の変化を閉じる'}));
+ await waitFor(()=>expect(screen.queryByRole('dialog',{name:'候補の日次変化'})).not.toBeInTheDocument());
+ expect(trigger).toHaveAttribute('aria-expanded','false');
+ expect(trigger).toHaveFocus();
 });

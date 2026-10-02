@@ -30,11 +30,15 @@ export function sessionCurrent(rows, date, now) {
 // time comparison, without parsing thousands of identical ISO timestamps.
 export function prepareSessionCurrent(rows, date) {
   if (!validEvidenceDay(date)) return () => false;
-  const intervals = new Map();
+  const intervals = new Map(), timestamps = new Map();
+  const stamp = value => {
+    if (!timestamps.has(value)) timestamps.set(value, evidenceTimestamp(value));
+    return timestamps.get(value);
+  };
   for (const row of rows) {
     const evidence = row.entry_evidence, calendar = evidence?.calendar;
     if (!calendar || evidence.as_of_date !== date || calendar.latest_completed_session !== date) continue;
-    const from = evidenceTimestamp(calendar.evaluated_at), until = evidenceTimestamp(calendar.valid_until);
+    const from = stamp(calendar.evaluated_at), until = stamp(calendar.valid_until);
     if (Number.isFinite(from) && Number.isFinite(until)) intervals.set(`${from}/${until}`, [from, until]);
   }
   const ranges = [...intervals.values()];

@@ -55,7 +55,8 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
   if(window.innerWidth<=700){
    const heading=scroll.closest('.research-list')?.querySelector('.candidate-board-heading');
    const top=(heading||first).getBoundingClientRect().top,headerBottom=document.querySelector('.leader-header')?.getBoundingClientRect().bottom||0;
-   window.scrollTo({top:Math.max(0,window.scrollY+top-headerBottom),behavior:'instant'});
+   // Round toward the previous pixel so a fractional target cannot tuck the heading under the fixed header.
+   window.scrollTo({top:Math.max(0,Math.floor(window.scrollY+top-headerBottom)),behavior:'instant'});
   }
  },[current]);
  const showPage=useCallback(next=>{pageStartRef.current=next;setPage(next);},[]);
