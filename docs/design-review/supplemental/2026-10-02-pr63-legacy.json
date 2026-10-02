@@ -1,0 +1,102 @@
+{
+  "observed_commit": "9b65a1334a8687042c80765cb0a4f69500060271",
+  "captured_checkout": "b4e96998b51af10f3b41b4f96f4c7fc9fdedf1af",
+  "equivalent_tree": "b3fad58e7d85e0fe4bb62acb49d2612c6ce43045",
+  "reviewer": "Independent AI-assisted screenshot inspection; internal design judgments, not a human-user study or award",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/37057317414",
+  "scope": "Four element crops, not whole-page captures. The committed strategy-scorecard.json was served unmocked and byte-compared; candidate rows are explicitly synthetic fixtures. Visual disclosure approval does not validate the historical metrics.",
+  "screens": [
+    {
+      "key": "daily-technical-reference/1440/dark",
+      "screenshot": "legacy-evaluation-disclosu-8fe7a-hnical-candidates-at-1440px/daily-technical-reference-1440.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The compact dark card places the technical-candidate title and explanatory line above a clean table; the synthetic row, column labels and values align without clipping."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "Ticker/company, score, RS, price, capitalization and industry-rank fields are readable across1440px; the single-row crop cannot establish long-list interaction or mobile behavior."
+        },
+        "originality": {
+          "value": 8.0,
+          "reason": "The table itself is conventional, but its explicit current-snapshot technical-reference framing and separation from historical returns are purposeful domain-specific communication."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "The heading says technical reference candidates top20; the caption explains current-snapshot template/RS screening and explicitly denies that the list shows past returns or current-method results. The row visibly saysFIXTURE / Synthetic daily fixture, so no real-candidate claim is made."
+        }
+      },
+      "sha256": "5e2175c8d97ec293fa3b214a634c3c52cf0f21937a9b5c089474861fe0b05316"
+    },
+    {
+      "key": "daily-legacy-archive/1440/dark",
+      "screenshot": "legacy-evaluation-disclosu-8fe7a-hnical-candidates-at-1440px/daily-legacy-archive-1440.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The old-backtest heading and amber current-method-not-revalidated label precede all performance figures; grouped metrics, caveats and concentration strip remain readable without overlapping."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Warnings, source/run/date provenance and the five main historical metrics are all visible in the511px card crop. The copy is dense but orderly, and the nine-year correction remains readable at original size."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "The card combines provenance, correction history, non-comparability and gain-concentration disclosure instead of presenting a generic celebratory returns tile."
+        },
+        "content": {
+          "value": 9.0,
+          "reason": "The visible card clearly labels old aggregate records rather than current candidate/daily-condition performance. It discloses same-day-close look-ahead in open-time decisions/sizing, unquantified impact, current-universe and missing-delisting limitations, unrevalidated eligibility, five-versus-nine-year non-comparability, source runs and correction history. It explicitly denies current-method profitability/future-performance inference. These are clarity findings, not validation of the archived numbers."
+        }
+      },
+      "sha256": "025dd1cb7b313c68c7e79143cfd93cfcb2e8aa408f77ecf2c167c2107de03286"
+    },
+    {
+      "key": "daily-legacy-archive/390/dark",
+      "screenshot": "legacy-evaluation-disclosu-0b090-chnical-candidates-at-390px/daily-legacy-archive-390.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The archive title and amber 現行手法は未再検証 label precede the larger return figures; ranked numeric rows are orderly. Dense small provenance text is readable at native pixels but remains a polish limit."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "The first card view exposes the current-method warning, look-ahead limitation, survivorship/universe caveat, dates and source before the metrics. Lower card content continues past the captured area/bottom navigation, so this crop does not establish all below-fold content or scrolling."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The visual framing deliberately separates archived backtest figures from current screening, combining correction history and data-bias caveats with the usual performance metrics."
+        },
+        "content": {
+          "value": 9.3,
+          "reason": "The visible card states that old figures are not results for the current candidate list or daily purchase conditions, names look-ahead use and unquantified impact, and discloses missing delisted securities. The committed archive is actually served by the test; that proves payload provenance, not the validity of the figures."
+        }
+      },
+      "sha256": "2785e50bf4ef88f2b9147bedb99444eb15ed671ea73ae1f70d97b24c228501e4"
+    },
+    {
+      "key": "daily-technical-reference/390/dark",
+      "screenshot": "legacy-evaluation-disclosu-0b090-chnical-candidates-at-390px/daily-technical-reference-390.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "The テクニカル参考候補 トップ20 heading and qualifying description sit cleanly above a compact table. The rightmost table header is cropped at the narrow card boundary, so the image cannot establish the full horizontal table layout."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "The visible ticker, score90.0, RS95, price$100 and market-cap$2.0B columns can be read. The crop only shows the leading columns; no claim is made that right-side columns or horizontal interaction were visually verified."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "A dedicated technical-reference framing with an explicit non-validation statement gives the familiar table a clear, distinct role from the archived performance card."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "The description says candidates are current-snapshot technical references and do not show past trading reproduction or current-method results. FIXTURE / Synthetic daily fixture is visibly synthetic; these stock rows are test data, not real stock-selection evidence."
+        }
+      },
+      "sha256": "a1d42d39ce5a1731edbd6ecf6cd9dd237abbb22f392e66a595ee5664c32c99b0"
+    }
+  ]
+}
