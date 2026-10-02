@@ -29,7 +29,6 @@ import TickerCell from '../../components/common/TickerCell';
 import MarketRegimeBanner from '../../features/scan/components/MarketRegimeBanner';
 import TodaysBuysCard from '../components/TodaysBuysCard';
 import WatchlistCard from '../components/WatchlistCard';
-import StrategyScorecardCard from '../components/StrategyScorecardCard';
 import { MOTION, enterSlideFade } from '../../theme/motion';
 import { formatLocalCurrency } from '../../utils/formatUtils';
 import { useStaticMarket } from '../StaticMarketContext';
@@ -92,27 +91,6 @@ function StaticHomePage() {
     gcTime: Infinity,
   });
   const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
-  // Archived US-only backtest transcription, independent of today's candidate
-  // filters. Fail soft when unavailable; never associate it with another market.
-  const scorecardQuery = useQuery({
-    queryKey: ['staticStrategyScorecard'],
-    enabled: marketEntry.market === 'US',
-    queryFn: async () => {
-      // Baked into the app build as a tracked public asset (not the pipeline-
-      // generated static-data/), refreshed only when the tactics backtest reruns.
-      try {
-        const res = await fetch(`${import.meta.env.BASE_URL}strategy-scorecard.json`, {
-          headers: { Accept: 'application/json' },
-        });
-        return res.ok ? await res.json() : null;
-      } catch {
-        return null;
-      }
-    },
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
-
   // チャートモーダルはURL（?chart=銘柄）と同期させる。
   // モーダルを開くと履歴が1つ積まれるため、ブラウザ/アプリの「戻る」で自然に閉じる。
   const [searchParams, setSearchParams] = useSearchParams();
@@ -284,9 +262,6 @@ function StaticHomePage() {
       {/* Minervini rule 1 — same market-regime banner as the PC scan page,
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} researchExposure={Math.min(modelMarket(scanRows).cap,.25)*100} />
-
-      {/* US archive only; its figures do not validate the current method. */}
-      {marketEntry.market === 'US' && <StrategyScorecardCard data={scorecardQuery.data} />}
 
       {/* C86: held/watched names first — the exit is the edge. Surfaces each
           watched symbol's exported sell action + stop, most-urgent first. */}

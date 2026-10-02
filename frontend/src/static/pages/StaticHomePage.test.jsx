@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import StaticHomePage from './StaticHomePage';
-import legacyScorecard from '../../../public/strategy-scorecard.json';
 
 const fetchStaticJson = vi.fn();
 const useStaticManifest = vi.fn();
@@ -254,44 +253,18 @@ describe('StaticHomePage', () => {
     expect(within(section).getByText('LEAD21')).toBeInTheDocument();
   });
 
-  it('loads the committed US archive with its warning without putting returns in the candidate section', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => legacyScorecard });
-    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
-    expect(await screen.findByTestId('legacy-evaluation-warning')).toHaveTextContent('旧集計への影響は未算定');
-    expect(screen.getByTestId('strategy-scorecard')).toHaveTextContent('2021-08-05 〜 2026-07-23（約5年）');
-    expect(screen.getByTestId('backtest-aligned-section')).not.toHaveTextContent('15.2');
-  });
-
-  it('keeps candidates usable while the optional archive is loading', async () => {
-    let finish;
-    fetch.mockReturnValue(new Promise(resolve => { finish = resolve; }));
-    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
-    expect(await screen.findByTestId('backtest-aligned-section')).toBeInTheDocument();
-    expect(screen.queryByTestId('strategy-scorecard')).not.toBeInTheDocument();
-    finish({ ok: true, json: async () => legacyScorecard });
-    expect(await screen.findByTestId('strategy-scorecard')).toHaveTextContent('現行手法は未再検証');
-  });
-
-  it.each(['missing', 'network error'])('keeps candidates usable when the optional archive is %s', async state => {
-    if (state === 'network error') fetch.mockRejectedValue(new Error('offline'));
-    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
-    expect(await screen.findByTestId('backtest-aligned-section')).toBeInTheDocument();
-    expect(screen.queryByTestId('strategy-scorecard')).not.toBeInTheDocument();
-    expect(screen.queryByText(/日次スナップショットの読み込みに失敗/)).not.toBeInTheDocument();
-  });
-
-  it('does not fetch or associate the US legacy archive with non-US candidates', async () => {
+  it.each(['US', 'HK'])('never requests or renders retired performance results for %s', async market => {
     useStaticManifest.mockReturnValue({
       data: { markets: { ...manifest.markets, HK: { ...manifest.markets.US, display_name: 'Hong Kong' } } },
       isLoading: false, isError: false,
     });
-    useStaticMarket.mockReturnValue({ selectedMarket: 'HK' });
-    homePayload.market_display_name = 'Hong Kong';
+    useStaticMarket.mockReturnValue({ selectedMarket: market });
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
     const section = await screen.findByTestId('backtest-aligned-section');
     expect(section).toHaveTextContent('テクニカル参考候補 トップ20');
-    expect(section).not.toHaveTextContent(/15\.2|CAGR|バックテスト準拠/);
     expect(screen.queryByTestId('strategy-scorecard')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('legacy-evaluation-warning')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/15\.2|CAGR|6年|旧バックテスト記録/);
     expect(fetch).not.toHaveBeenCalled();
   });
 
