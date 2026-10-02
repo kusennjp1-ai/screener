@@ -1,6 +1,7 @@
 import { cleanup,fireEvent,render,screen } from '@testing-library/react';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import ResearchHero from './ResearchHero';
+import { readFileSync } from 'node:fs';
 vi.mock('./PortfolioDecision',()=>({default:()=>null}));
 vi.mock('./SetupRadar',()=>({default:()=> <section aria-label="セットアップ・レーダー"/>}));
 const props={rows:[],ranked:[],date:'2026-09-29',plan:{dailyPositions:[],allocationCap:0,market:{label:'市場未確認'}},workbench:{},availableSymbols:new Set()};
@@ -42,4 +43,18 @@ it('does not report a real candidate count while the publication is loading',()=
  render(<ResearchHero {...props} loading/>);
  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('データを読み込み中。');
  expect(screen.getByText('日足検証 —')).toBeInTheDocument();
+});
+it('groups daily changes with the portfolio action while retaining the full desktop counts',()=>{
+ const workbench={data:{history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:{new:7,returned:2,dropped:3}}}}};
+ render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
+ const trigger=screen.getByRole('button',{name:'候補の日次変化'});
+ expect(trigger.closest('.hero-actions')).not.toBeNull();
+ expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('新たに通過 7 · 再通過 2 · 脱落 3');
+ expect(screen.getByRole('link',{name:'業種の追い風を見る →'}).closest('.overview-market')).not.toBeNull();
+});
+it('separates compact desktop stages while retaining the mobile three-column spacing',()=>{
+ const overviewStyles=readFileSync('src/static/components/researchOverview.css','utf8');
+ const [desktop,mobile]=overviewStyles.split('@media (max-width:700px)');
+ expect(desktop).toMatch(/\.research-overview\.hero-collapsed \.overview-steps \{[^}]*gap:20px/);
+ expect(mobile).toMatch(/\.research-overview\.hero-collapsed \.overview-steps \{[^}]*gap:0/);
 });

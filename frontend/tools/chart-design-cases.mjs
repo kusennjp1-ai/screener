@@ -37,6 +37,15 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         annotation_candidate: annotations.candidate, annotation_summary: annotations.summary,
         shapes: annotations.boxes.map(({ start, end, label, curve, arrow }) => ({ start, end, label, curve: Boolean(curve), arrow: Boolean(arrow) })),
         canonical: { pivot: plan.pivot ?? null, upper: plan.upper ?? null, stop: plan.stopExample ?? null }, views: [] };
+      const sourceWarningVisible = async locator => {
+        if (await locator.count() !== 1 || !await locator.isVisible()) return false;
+        return locator.evaluate(node => {
+          const box = node.getBoundingClientRect();
+          const header = node.closest('[role="dialog"]') ? null : document.querySelector('.leader-header');
+          const top = header?.getBoundingClientRect().bottom || 0;
+          return box.top >= top && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth;
+        });
+      };
       const inspect = async (element, view) => {
         const values = await element.evaluate(node => ({ symbol: node.dataset.chartSymbol, as_of_date: node.dataset.chartAsof, pivot: node.dataset.chartPivot, upper: node.dataset.chartUpper, stop: node.dataset.chartStop, annotation_mode: node.dataset.chartAnnotationMode }));
         check(values.symbol === symbol && values.as_of_date === asOf, `${key}/${view}: rendered symbol/as-of mismatch`);
@@ -46,6 +55,11 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await inspect(chart, 'inline-default');
       if (viewport.width === 390) check(await chart.getAttribute('data-chart-annotation-mode') === 'simple', `${key}: mobile initial annotations are not simple`);
       await chart.scrollIntoViewIfNeeded();
+      record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
+      if (record.source_warning.expected) {
+        record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
+        check(record.source_warning.inline_visible, `${key}: first-book proximity warning is missing from the initial inline viewport`);
+      }
       await capture(page, viewport, theme, `case-${symbol}-inline`);
       const inlineToggle = page.locator('.research-chart').getByRole('button', { name: /^図解/ });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
@@ -59,6 +73,10 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       const dialog = page.getByRole('dialog'), expanded = dialog.locator(`[data-chart-symbol="${symbol}"]`);
       await ready(expanded.locator('canvas'));
       await inspect(expanded, 'expanded-default');
+      if (record.source_warning.expected && viewport.width === 390) {
+        record.source_warning.mobile_expanded_visible = await sourceWarningVisible(dialog.locator('[data-testid="mobile-chart-readiness"] .entry-source-badge'));
+        check(record.source_warning.mobile_expanded_visible, `${key}: first-book proximity warning is missing from the expanded mobile header`);
+      }
       await capture(page, viewport, theme, `case-${symbol}-expanded`);
       const expandedToggle = dialog.getByRole('button', { name: /^図解/ });
       if (await expandedToggle.getAttribute('aria-pressed') !== 'true') await expandedToggle.click();

@@ -1,3 +1,5 @@
+import { evidenceTimestamp, validClock } from './evidenceTime.js';
+
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const days = (a, b) => (Date.parse(a) - Date.parse(b)) / 86400000;
 const validDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
@@ -5,11 +7,11 @@ const validDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.tes
 // Current research only. This fallback never populates dated SEC/book evidence.
 export function financialHistory(data, symbol, date, now = Date.now()) {
   const result = { valid: false, annualComplete: null, annualGrowth: null, epsYoY: null, salesYoY: null, annual: [], quarterly: [] };
-  const age = now - Date.parse(data?.retrieved_at);
+  const age = validClock(now) ? now - evidenceTimestamp(data?.retrieved_at) : NaN;
   if (!data || data.symbol !== symbol || data.as_of_date !== date || !validDay(date) ||
       data.status !== 'available' || data.basis !== 'reported_diluted_eps' || data.currency !== 'USD' ||
       !Number.isFinite(age) || age < -5000 || age > 72 * 3600000) return result;
-  const clean = values => Array.isArray(values) && values.every((p, i) => validDay(p.end) && p.end <= date && (!i || p.end > values[i-1].end)) ? values : [];
+  const clean = values => Array.isArray(values) && values.every((p, i) => p && validDay(p.end) && p.end <= date && (!i || p.end > values[i-1].end)) ? values : [];
   result.annual = clean(data.annual);
   result.quarterly = clean(data.quarterly);
   result.valid = result.annual.length > 0 || result.quarterly.length > 0;

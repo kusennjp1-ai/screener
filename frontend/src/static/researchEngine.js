@@ -5,16 +5,18 @@ import { institutionalGrowth } from './institutionalEvidence.js';
 import { decodeAssessment } from './assessmentEncoding.js';
 import { singleMissingCondition } from './missingCondition.js';
 import { entrySourceContext } from './bookSourceContext.js';
+import { evidenceTimestamp, newYorkDate, validClock, validEvidenceDay } from './evidenceTime.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // One application parameter for the price gauge, rule list and daily readiness.
 export const entryZonePercent = method => method === 'minervini2' ? 3 : 5;
 // Calendar age is deliberately not an exchange-session count (holidays vary).
 export function snapshotFreshness(date, now = Date.now()) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { state: 'unknown', days: null };
+  if (!validEvidenceDay(date)) return { state: 'unknown', days: null };
   const stamp = Date.parse(`${date}T00:00:00Z`);
   if (!Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== date) return { state: 'unknown', days: null };
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const today = newYorkDate(now);
+  if (!today) return { state: 'unknown', days: null };
   const days = Math.round((Date.parse(`${today}T00:00:00Z`) - stamp) / 86400000);
   return { state: days < 0 ? 'future' : days >= 4 ? 'old' : 'recent', days };
 }
@@ -83,7 +85,7 @@ export function assess(row, method = 'minervini') {
   ];
   const passed = rules.filter(r => r.state === 'pass').length;
   if (row.financial_history) for (const item of rules.filter(r => r.label.includes('3年'))) {
-    item.evidence = `${row.financial_history.source} / 報告希薄化EPS / 取得 ${row.financial_history.retrieved_at}。取得時点データで、過去時点の公表確認ではありません。`;
+    item.evidence = `${typeof row.financial_history.source === 'string' ? row.financial_history.source : '出典未確認'} / 報告希薄化EPS / 取得 ${typeof row.financial_history.retrieved_at === 'string' ? row.financial_history.retrieved_at : '未確認'}。取得時点データで、過去時点の公表確認ではありません。`;
   }
   const failed = rules.filter(r => r.state === 'fail').length;
   const templatePass = trend.every(r => r.state === 'pass') && integrity.state === 'pass';
@@ -138,7 +140,7 @@ export function rankCandidates(rows, method, { search = '', qualifiedOnly = fals
 
 export function quoteStatus(quote, now = Date.now()) {
   if (!quote || !finite(quote.price) || quote.price <= 0) return '未接続';
-  const age = now - Date.parse(quote.as_of);
+  const age = validClock(now) ? now - evidenceTimestamp(quote.as_of) : NaN;
   if (!Number.isFinite(age) || age < -5000 || age > 90000) return '期限切れ';
   return quote.is_realtime === true && quote.delay_seconds === 0 ? 'リアルタイム' : '遅延データ';
 }

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import CandidateCharts from './CandidateCharts';
+import { withAuditFixture } from '../testAuditFixture';
 import { fetchStaticChartPayload } from '../chartClient';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 
@@ -30,6 +31,12 @@ it('rejects a stale final bar even when the payload and audit claim the current 
   mount({valid:true},'2026-09-28');
   expect(await screen.findByRole('alert')).toHaveTextContent('最終日足が分析日と不一致');
   expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
+});
+it('uses the same audited daily volume as the checklist and candidate list',()=>{
+ const row=withAuditFixture({symbol:'VOLUME',current_price:102,se_pivot_price:100,rs_rating:95,se_volume_vs_50d:3,entry_evidence:{volumeRatio:2}},date);
+ row.technical_audit.values.volumeRatio=1.39;
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,assessment:{passed:9,total:9}}]} date={date} method="minervini" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
+ expect(screen.getByRole('article',{name:'VOLUME 比較チャート'})).toHaveTextContent('95 · 1.39×');
 });
 it('renders six cards, preserves canonical three-percent levels and changes the shared period together',async()=>{
   fetchStaticChartPayload.mockImplementation(path=>Promise.resolve({symbol:path.split('.')[0],as_of_date:date,bars:[{date,open:100,close:100,high:101,low:99,volume:1000}],rs_line:[]}));

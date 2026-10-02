@@ -1,6 +1,7 @@
 import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
+import { EntrySourceBadge } from './components/EntrySourceNote';
 import { assess, entryPlan } from './researchEngine';
 import { entryReadiness } from './entryReadiness';
 import { modelMarket } from './portfolioPlan';
@@ -237,7 +238,7 @@ function StaticChartViewerModal({
             <Box sx={{minWidth:0,flex:1}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
               <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
               {isMobile && <Box data-testid="mobile-chart-readiness" sx={{fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
-                <strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong>
+                <Box sx={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:'0 8px'}}><strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong><EntrySourceBadge plan={plan}/></Box>
                 {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : '日次条件を確認済み。現在価格は発注時に確認。'}</Box>}
               </Box>}
             </Box>

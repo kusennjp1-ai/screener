@@ -4,21 +4,24 @@
 .overview-compact-scope { display:none; }
 .research-overview.hero-collapsed .overview-compact-scope { display:block; font-size:11px; font-weight:500; color:var(--text-3); letter-spacing:0; margin-bottom:2px; }
 .research-overview .hero-copy h1 { font-size:34px; }
-.research-overview .hero-subtitle { font-size:14px; font-weight:500; margin:8px 0 16px; }
-.research-overview .overview-steps { grid-template-columns:1fr 1fr 1.3fr; gap:0; padding:12px 0; border-bottom:1px solid var(--line); }
+.research-overview .hero-date { margin-bottom:4px; }
+.research-overview .hero-subtitle { font-size:14px; font-weight:500; margin:4px 0 8px; }
+.research-overview .overview-steps { grid-template-columns:1fr 1fr 1.3fr; gap:0; padding:8px 0; border-bottom:1px solid var(--line); }
 .research-overview .overview-steps > div { padding:0 12px; border-left:1px solid var(--line); min-width:0; }
 .research-overview .overview-steps > div:first-child { padding-left:0; border-left:0; }
 .research-overview .overview-steps small { color:var(--text-2); white-space:nowrap; }
 .overview-step-number { font-family:var(--font-mono); color:var(--text-3); margin-right:3px; }
-.overview-step-note { display:block; font-size:11px; color:var(--text-3); margin-top:5px; line-height:1.5; }
+.overview-step-note { display:block; font-size:11px; color:var(--text-3); margin-top:3px; line-height:1.5; }
 .research-overview .overview-next-check { font-family:inherit; font-size:16px; font-weight:700; line-height:2.1; }
 .overview-next-check > span { color:var(--text-3); }
-.overview-market { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:11px; color:var(--text-3); margin:8px 0; }
-.research-overview .hero-actions { gap:16px; }
+.overview-market { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; font-size:11px; color:var(--text-3); margin:4px 0; }
+.overview-market a { display:flex; align-items:center; min-height:24px; color:var(--text-2); text-decoration:none; }
+.research-overview .hero-actions { gap:12px; flex-wrap:wrap; }
 .research-overview .hero-actions button { padding:6px 12px; }
+.research-overview .hero-actions .changes-trigger { border:0; padding:0; min-height:24px; border-radius:0; background:none; color:var(--text-3); font-size:11px; font-weight:400; text-align:left; }
 .research-overview.hero-collapsed { display:block; }
 .research-overview.hero-collapsed .hero-copy h1 { font-size:20px; }
-.research-overview.hero-collapsed .overview-steps { border:0; padding:0; }
+.research-overview.hero-collapsed .overview-steps { border:0; padding:0; gap:20px; }
 .research-overview.hero-collapsed .overview-steps > div { border:0; padding:0; }
 .research-overview.hero-collapsed .overview-step-note,.research-overview.hero-collapsed .overview-market,.research-overview.hero-collapsed .overview-step-number { display:none; }
 .research-overview.hero-collapsed .overview-steps > div:first-child { display:none; }
@@ -37,17 +40,19 @@
  .research-overview.hero-collapsed .overview-compact-scope { display:none; }
  .research-overview .hero-date { padding-right:96px; line-height:1.5; }
  .research-overview .hero-copy h1,.research-overview.hero-collapsed .hero-copy h1 { font-size:26px; }
- .research-overview .hero-subtitle { font-size:12px; margin:6px 0 10px; }
- .research-overview .overview-steps { padding:8px 0; grid-template-columns:1fr 1fr 1.3fr; }
+ /* The list repeats the next action; keep the three stages and their counts in view. */
+ .research-overview .hero-subtitle,.research-overview .overview-step-note,.research-overview.hero-collapsed .overview-step-note { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+ .research-overview .overview-steps { margin-top:8px; padding:8px 0; grid-template-columns:1fr 1fr 1.3fr; }
  .research-overview .overview-steps > div { padding:0 8px; }
  .research-overview .overview-steps strong { font-size:20px; }
  .research-overview .overview-steps .overview-next-check { font-size:13px; line-height:2; }
- .research-overview .overview-step-note { font-size:11px; margin-top:2px; }
  .research-overview .overview-step-number { display:none; }
  .research-overview .overview-market { margin:6px 0 10px; gap:2px 12px; }
+ .research-overview .overview-market a { display:none; }
+ .research-overview .hero-actions .changes-trigger { top:0; right:48px; min-height:44px; min-width:44px; margin:0; font-size:12px; text-align:center; }
  .research-overview.hero-collapsed .overview-steps > div:first-child { display:block; }
  .research-overview.hero-collapsed .overview-step-note,.research-overview.hero-collapsed .overview-market { display:block; }
- .research-overview.hero-collapsed .overview-steps { border-block:1px solid var(--line); padding:8px 0; }
+ .research-overview.hero-collapsed .overview-steps { border-block:1px solid var(--line); padding:8px 0; gap:0; }
  .research-overview.hero-collapsed .overview-steps > div { padding:0 8px; border-left:1px solid var(--line); }
  .research-overview.hero-collapsed .overview-steps > div:first-child { border:0; padding-left:0; }
 }

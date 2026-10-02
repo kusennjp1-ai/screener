@@ -1,4 +1,4 @@
-.candidate-guidance .candidate-guide { display:flex; align-items:center; gap:8px; padding:0 16px; min-height:28px; flex-shrink:0; color:var(--text-3); font-size:11px; }
+.candidate-guidance .candidate-guide { display:flex; align-items:center; gap:8px; padding:0 16px; min-height:24px; flex-shrink:0; color:var(--text-3); font-size:11px; }
 .candidate-guide > p { margin:0; line-height:1.5; }
 .candidate-guide > p strong { color:var(--text-2); font-weight:500; }
 .candidate-glossary { margin-left:auto; }

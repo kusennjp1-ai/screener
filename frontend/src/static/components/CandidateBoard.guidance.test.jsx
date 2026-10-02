@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import CandidateBoard from './CandidateBoard';
 import { entryReadiness } from '../entryReadiness';
+import { withAuditFixture } from '../testAuditFixture';
 vi.mock('../entryReadiness',()=>({entryReadiness:vi.fn()}));
 vi.mock('./CandidateCharts',()=>({default:()=> <div>比較チャート</div>}));
 afterEach(()=>{cleanup();vi.resetAllMocks();});
@@ -64,4 +65,17 @@ it('offers focusable progressive explanations without hiding sorting controls',a
  expect(details).not.toHaveAttribute('open');
  expect(container.querySelectorAll('.candidate-row')).toHaveLength(1);
  expect(screen.getByRole('button',{name:'買い位置で並べ替え'})).toBeInTheDocument();
+});
+it('displays and sorts the audited daily volume without falling back to a conflicting legacy copy',()=>{
+ entryReadiness.mockReturnValue(waiting);
+ const items=['A','B','UNKNOWN'].map((symbol,index)=>{
+  const row=withAuditFixture({symbol,current_price:102,se_pivot_price:100,se_volume_vs_50d:3-index,entry_evidence:{volumeRatio:9}},props.date);
+  row.technical_audit.values.volumeRatio=[1.39,1.4,null][index];
+  return {row,assessment:{qualified:true,passed:9,total:9}};
+ });
+ const {container}=render(<CandidateBoard {...props} ranked={items}/>);
+ expect(screen.getByRole('button',{name:/^A の分析/})).toHaveAccessibleName(/出来高 1.39×/);
+ expect(screen.getByRole('button',{name:/^UNKNOWN の分析/})).toHaveAccessibleName(/出来高 —/);
+ fireEvent.click(screen.getByRole('button',{name:'出来高で並べ替え'}));
+ expect([...container.querySelectorAll('.candidate-row')].map(row=>row.querySelector('.candidate-name strong').textContent)).toEqual(['B','A','UNKNOWN']);
 });

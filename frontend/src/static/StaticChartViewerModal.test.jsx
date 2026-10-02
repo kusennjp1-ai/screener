@@ -252,3 +252,19 @@ it('applies the selected 3% buy limit to the mobile expanded-chart checklist',as
  await screen.findByTestId('static-candlestick-chart');
  unmount();vi.unstubAllGlobals();
 });
+it.each([[103.2,'minervini',true],[112.7,'minervini',true],[103,'minervini',false],[104,'minervini2',false]])('keeps the mobile first-book warning with readiness at %s for %s',async(price,method,warns)=>{
+ const row={symbol:'SOURCE',company_name:'Source Test',current_price:price,se_pivot_price:100};
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({symbol:'SOURCE',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:price}],stock_data:row})})));
+ const {unmount}=renderModal({open:true,onClose:vi.fn(),initialSymbol:'SOURCE',date:'2026-10-01',method,researchRows:[row],chartIndex:{symbols:[{symbol:'SOURCE',path:`charts/SOURCE-${price}-${method}.json`}]}});
+ const header=screen.getByTestId('mobile-chart-readiness');
+ const badge=header.querySelector('.entry-source-badge');
+ if(warns){
+  expect(badge).toHaveTextContent('△ 書籍目安2〜3%超');
+  expect(badge).toHaveAttribute('aria-label',expect.stringContaining('書籍の追随目安外'));
+  if(price>105)expect(badge).not.toHaveAttribute('aria-label',expect.stringContaining('アプリの範囲内'));
+ }else expect(badge).toBeNull();
+ await screen.findByTestId('static-candlestick-chart');
+ if(warns)expect(screen.getByText('アプリ設定と書籍の確認範囲')).toBeInTheDocument();
+ unmount();vi.unstubAllGlobals();
+});

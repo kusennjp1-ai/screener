@@ -9,6 +9,7 @@ import { singleMissingCondition } from '../missingCondition';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 import './comparison.css';
 import EntrySourceNote from './EntrySourceNote';
+import { verifiedVolumeRatio } from '../qualificationAudit';
 
 const Card = memo(function ComparisonCard({ item, date, generation, method, nearOnly, market, now, sessions, onSelect, paused }) {
   const { row } = item, ref = useRef(null), [visible, setVisible] = useState(false);
@@ -24,7 +25,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
   const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
-  const volume = row.entry_evidence?.volumeRatio ?? row.se_volume_vs_50d;
+  const volume = verifiedVolumeRatio(row, date);
   const missing = nearOnly ? singleMissingCondition(assess(row, method)) : null;
   return <Paper ref={ref} component="article" variant="outlined" className="comparison-card" data-method={method} aria-label={`${row.symbol} 比較チャート`}>
     <button className="comparison-card-click" onClick={() => onSelect(row.symbol)} aria-label={`${row.symbol} を分析`} aria-describedby={descriptionId}><span className="sr-only">{row.symbol} を分析</span></button>

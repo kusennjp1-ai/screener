@@ -1,4 +1,4 @@
-import { canonicalPivot } from './researchPresentation.js';
+import { canonicalPivot, sessionCurrent } from './researchPresentation.js';
 import { assessmentSummary as assess, finite, snapshotFreshness } from './researchEngine.js';
 import { entryReadiness } from './entryReadiness.js';
 
@@ -45,7 +45,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   const freshness = snapshotFreshness(date, now);
   // Static scans cannot establish current execution conditions, even with a fresh date.
   const blockers = [];
-  if ((freshness.state !== 'recent' || freshness.days > 1) && !rows.some(r => r.entry_evidence?.calendar?.latest_completed_session === date && now < Date.parse(r.entry_evidence.calendar.valid_until))) blockers.unshift('分析基準日を最新の取引日と照合してください');
+  if ((freshness.state !== 'recent' || freshness.days > 1) && !sessionCurrent(rows, date, now)) blockers.unshift('分析基準日を最新の取引日と照合してください');
   if (!market.cap) blockers.unshift(market.label);
   const candidates = [...prepared.candidates];
   const readiness = candidates.map(row => entryReadiness(row,date,market,now));
