@@ -12,7 +12,7 @@ export function modelMarket(rows) {
   const observed = us.filter(r => r.market_regime && typeof r.market_above_50dma === 'boolean' && typeof r.market_above_200dma === 'boolean');
   // Market context is replicated on stock rows. Unscanned stocks have no context;
   // do not let those erase known observations, but reject conflicting regimes.
-  if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0 };
+  if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown' };
   if (observed.some(r => r.market_above_200dma === false)) return { label: '長期トレンド警戒', cap: 0 };
   if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認・弱含み', cap: 0 };
   if (regimes[0] === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: .5 };

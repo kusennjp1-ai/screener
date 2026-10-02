@@ -1,0 +1,38 @@
+.candidate-guidance .candidate-guide { display:flex; align-items:center; gap:8px; padding:0 16px; min-height:28px; flex-shrink:0; color:var(--text-3); font-size:11px; }
+.candidate-guide > p { margin:0; line-height:1.5; }
+.candidate-guide > p strong { color:var(--text-2); font-weight:500; }
+.candidate-glossary { margin-left:auto; }
+.candidate-glossary > summary { white-space:nowrap; cursor:pointer; color:var(--accent); min-height:24px; display:flex; align-items:center; gap:4px; }
+.candidate-glossary > summary::before { content:'＋'; }
+.candidate-glossary[open] > summary::before { content:'−'; }
+.candidate-glossary > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.candidate-guide:has(.candidate-glossary[open]) { flex-wrap:wrap; padding-bottom:8px; }
+.candidate-glossary[open] { width:100%; margin:0; }
+.candidate-glossary dl { display:grid; gap:8px; margin:4px 0; border:1px solid var(--line-2); border-radius:8px; padding:12px; background:var(--surface); font-size:12px; line-height:1.6; }
+.candidate-glossary dt { color:var(--text); font-weight:700; }
+.candidate-glossary dd { margin:2px 0 0; color:var(--text-2); }
+.candidate-guidance .candidate-columns,.candidate-guidance .candidate-row { grid-template-columns:minmax(130px,1fr) 96px 62px 30px 48px; }
+.candidate-guidance .candidate-name-header { display:flex; align-items:center; gap:6px; min-width:0; }
+.candidate-guidance .candidate-name-header > strong { flex-shrink:0; }
+.candidate-daily-check { font-size:11px; white-space:nowrap; line-height:1.5; color:var(--text-2); border:1px solid var(--line-2); border-radius:4px; padding:0 4px; }
+.candidate-daily-check[data-ready=true] { color:var(--zone); border-color:var(--zone-edge); background:var(--zone-fill); }
+.candidate-guidance .candidate-state.ordinary { display:inline; }
+.candidate-guidance .candidate-state { font-size:11px; }
+.candidate-guidance .candidate-position svg { width:90px; height:12px; }
+.candidate-guidance .candidate-incomplete { font-size:11px; }
+@media (min-width:701px) and (max-width:1279px) {
+ .candidate-guidance .candidate-columns,.candidate-guidance .candidate-row { grid-template-columns:minmax(112px,1fr) 96px 56px 26px 44px; gap:3px; }
+ .candidate-guidance .candidate-name-header { gap:4px; }
+ .candidate-guidance .candidate-daily-check { padding:0 2px; }
+}
+@media (max-width:700px) {
+ .candidate-guidance .candidate-guide { min-height:32px; }
+ .candidate-glossary > summary { min-height:44px; }
+ .candidate-guidance .candidate-row { grid-template-columns:minmax(0,1fr) 58px 54px; }
+ .candidate-guidance .candidate-name { min-width:0; }
+ .candidate-guidance .candidate-name-header { flex-shrink:0; }
+ .candidate-guidance .candidate-name small { min-width:0; }
+ .candidate-guidance .candidate-position svg { width:76px; }
+ .candidate-guidance .candidate-position { gap:6px; }
+ .candidate-guidance .candidate-guide:has(.candidate-glossary[open]) { padding-bottom:12px; }
+}

@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
 import { prepareResearchBundle } from '../researchPreprocess';
@@ -23,7 +24,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); });
 
 it('keeps the active comparison method and unqualified one-away state visible after closing filters', () => {
-  render(<QueryClientProvider client={client}><ResearchPage compareOnly /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><ResearchPage compareOnly /></MemoryRouter></QueryClientProvider>);
   expect(screen.getByRole('heading', { name: '買い位置を比較する' })).toBeInTheDocument();
   expect(screen.getByText('ミネルヴィニ · 価格位置と購入条件は別判定')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '手法・絞り込み' }));
@@ -40,7 +41,7 @@ it('keeps the active comparison method and unqualified one-away state visible af
 });
 
 it('keeps full-pass and one-away toggles exclusive and displays failed versus unknown labels', () => {
-  render(<QueryClientProvider client={client}><ResearchPage /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><ResearchPage /></MemoryRouter></QueryClientProvider>);
   fireEvent.click(screen.getByRole('button', { name: '候補を絞り込む' }));
   fireEvent.click(screen.getByLabelText('全条件通過のみ'));
   expect(screen.getByLabelText('全条件通過のみ')).toBeChecked();

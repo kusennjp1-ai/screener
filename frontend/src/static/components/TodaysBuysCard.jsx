@@ -26,7 +26,7 @@ import SellTiming from './SellTiming';
 // (past the +5% chase cap) -> BUY NOW (active + in zone) -> NOT TRIGGERED.
 // Rows with buy=null degrade to a pivot-only line — the UI never fabricates a
 // trigger. No performance claims on the card.
-const CHASE_CAP = 1.05; // pivot +5% — Minervini's chase limit (signals.py)
+const CHASE_CAP = 1.05; // pivot +5% — legacy application model, not a verified first-book limit
 // A bare breakout with none of the three behavioural barrels (trend / buy
 // pressure / volume-confirmed breakout) is NOT a "BUY NOW". Minervini buys the
 // confirmed setup, not any new high — require at least 2 of 3 barrels.

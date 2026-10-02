@@ -17,7 +17,7 @@ function SymbolNotes({symbol}) {
 }
 const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,usableQuote,date,market,now,chartEntry,version,onExpand,watch,onWatch,liveStatus,personalKey,personal,onConnect,onDisconnect,onVerificationToggle,detail,onVerified}, detailRef) {
  const [tab,setTab]=useState('evidence'),[connecting,setConnecting]=useState(false);
- const checks=selected?assess(selected,method):null,plan=selected?entryPlan(selected,usableQuote,method):null,readiness=selected?entryReadiness(selected,date,market,now):null;
+ const checks=selected?assess(selected,method):null,plan=selected?entryPlan(selected,usableQuote,method):null,readiness=selected?entryReadiness(selected,date,market,now,method):null;
  const choose=value=>{setTab(value);if(['financial','book'].includes(value))onVerificationToggle(selected.symbol);};
  const showConditions=()=>{choose('conditions');requestAnimationFrame(()=>document.getElementById('research-detail-tabs')?.scrollIntoView({block:'nearest'}));};
  return <div role="region" className="research-detail" ref={detailRef} tabIndex={-1} aria-label="銘柄詳細">

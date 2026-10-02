@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, cleanup, waitFor, within, configure } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HashRouter } from 'react-router-dom';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
 import { withAuditFixture } from '../testAuditFixture';
@@ -27,13 +28,14 @@ const leader = { symbol: 'LEAD', company_name: 'Leader Research Fixture', market
   market_above_50dma: true, market_above_200dma: true };
 let client;
 beforeEach(() => {
+  window.history.replaceState(null, '', '#/');
   localStorage.clear(); data.fail = false; data.charts = true; data.date = '2026-09-21'; data.modalRenders=0;
   data.rows = [withAuditFixture(leader, data.date), { ...leader, symbol: 'FAIL', company_name: 'Weak Fixture', passes_template: false, rs_rating: 10, eps_growth_yy: -20, composite_rating: 10 }, { symbol: 'NONE', market: 'US', company_name: 'Unknown Fixture', current_price: 50, adv_usd: 30000000 }];
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 });
 afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-const mount = () => render(<QueryClientProvider client={client}><ResearchPage /></QueryClientProvider>);
+const mount = () => render(<QueryClientProvider client={client}><HashRouter><ResearchPage /></HashRouter></QueryClientProvider>);
 
 // 100 synthetic task profiles, NOT 100 human participants or independent opinions.
 // Each profile operates the real component with controlled fixtures. Browser layout
@@ -145,7 +147,7 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByRole('tabpanel')).toHaveTextContent('未接続');
         expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
-        expect(within(screen.getByRole('button',{name:/^LEAD の分析を表示/})).getByText('買いゾーン内')).toBeInTheDocument();
+        expect(within(screen.getByRole('button',{name:/^LEAD の分析を表示/})).getByText(/買いゾーン内/)).toBeInTheDocument();
       } else if (t === 8) {
         expect(screen.getByText('公開ルールに基づく独自スクリーナー')).toBeInTheDocument();
         expect(screen.getByText(/IBD公式の選定銘柄・非公開の計算式を再現したものではありません/)).toBeInTheDocument();
@@ -202,7 +204,7 @@ it('preserves canonical entry prices and unknown conditions while switching deta
   mount();
   await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   const gauge=screen.getByRole('img',{name:/現在価格.*共通ピボット/});
-  expect(gauge).toHaveAccessibleName(/現在価格 \$102.00、共通ピボット \$100.00、買い上限 \$105.00/);
+  expect(gauge).toHaveAccessibleName(/現在価格 \$102.00、共通ピボット \$100.00、アプリ買い上限 \$105.00/);
   const evidence=screen.getByRole('tab',{name:'判定根拠'});
   act(()=>evidence.focus());
   fireEvent.keyDown(evidence,{key:'ArrowRight'});
@@ -212,7 +214,7 @@ it('preserves canonical entry prices and unknown conditions while switching deta
   expect(screen.getByRole('tab',{name:'メモ'})).toHaveFocus();
   fireEvent.keyDown(screen.getByRole('tab',{name:'メモ'}),{key:'Home'});
   expect(evidence).toHaveFocus();
-  expect(gauge).toHaveAccessibleName(/共通ピボット \$100.00、買い上限 \$105.00/);
+  expect(gauge).toHaveAccessibleName(/共通ピボット \$100.00、アプリ買い上限 \$105.00/);
 });
 
 it('moves candidate focus with arrow keys and opens the focused stock with Enter', async () => {

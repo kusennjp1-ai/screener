@@ -4,8 +4,11 @@ import { financialHistory } from './financialHistory.js';
 import { institutionalGrowth } from './institutionalEvidence.js';
 import { decodeAssessment } from './assessmentEncoding.js';
 import { singleMissingCondition } from './missingCondition.js';
+import { entrySourceContext } from './bookSourceContext.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+// One application parameter for the price gauge, rule list and daily readiness.
+export const entryZonePercent = method => method === 'minervini2' ? 3 : 5;
 // Calendar age is deliberately not an exchange-session count (holidays vary).
 export function snapshotFreshness(date, now = Date.now()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { state: 'unknown', days: null };
@@ -99,7 +102,7 @@ export function assessmentSummary(row, method) {
 
 export function entryChecks(row, method = 'minervini') {
   const v = auditValues(row), pivot = canonicalPivot(row).price;
-  const zone = method === 'minervini2' ? 3 : 5;
+  const zone = entryZonePercent(method);
   return [
     comparison(`ピボット以上・${zone}%以内`, [v.close, pivot], (p, b) => p >= b && p <= b * (1 + zone / 100)),
     rule('上昇日の出来高 ≥ 直前50日平均の1.4倍（アプリの代理閾値）', finite(v.change) ? v.volumeRatio : null, x => x >= 1.4 && v.change > 0, '倍'),
@@ -112,10 +115,11 @@ export function entryPlan(row, quote, method = 'minervini') {
   const price = finite(quote?.price) && quote.price > 0 ? quote.price : row.current_price;
   const pivotInfo = canonicalPivot(row);
   const pivot = pivotInfo.price;
-  if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: pivotInfo.reason.includes('25%') ? '有効な買い水準なし' : '未判定', price, pivot: null, distance: null, pivotSource: pivotInfo.reason };
+  const zone = entryZonePercent(method);
+  if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: pivotInfo.reason.includes('25%') ? '有効な買い水準なし' : '未判定', price, pivot: null, distance: null, pivotSource: pivotInfo.reason, sourceContext:entrySourceContext(method,zone,null) };
   const distance = (price / pivot - 1) * 100;
-  const zone = method === 'minervini2' ? 3 : 5;
   return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: pivotInfo.reason,
+    sourceContext:entrySourceContext(method,zone,distance),
     state: row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外' : row.price_activity?.lowRange ? '低変動・監視のみ' : distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
     // A transparent example, not a claim that a pattern-specific stop was detected.
     stopExample: price * .93 };

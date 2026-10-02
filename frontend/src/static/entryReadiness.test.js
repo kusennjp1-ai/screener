@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {entryReadiness} from './entryReadiness';
+import {entryReadiness,prepareReadinessTimeline} from './entryReadiness';
 import {buildPortfolioPlan} from './portfolioPlan';
 import {withAuditFixture} from './testAuditFixture';
 const now=Date.parse('2026-09-26T10:00:00Z'),date='2026-09-25';
@@ -53,4 +53,53 @@ it.each([
   expect(rule.detail).toContain('最新完了取引日 2026-09-25');
   expect(rule.detail).toContain('JST');
  }
+});
+
+it('keeps missing selection evidence unknown instead of calling it a measured failure',()=>{
+ const r=row();r.eps_growth_yy=null;
+ const result=entryReadiness(r,date,{cap:.5,label:'上昇'},now);
+ expect(result.rules.find(rule=>rule.id==='selection').state).toBe('unknown');
+ expect(result.unknown).toBe(1);expect(result.failed).toBe(0);expect(result.ready).toBe(false);
+ r.eps_growth_yy=10;
+ expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules[0].state).toBe('fail');
+});
+it('distinguishes unknown market context from a known restrictive market',()=>{
+ for(const market of [undefined,{cap:0,state:'unknown',label:'市場未確認'}]) {
+  const result=entryReadiness(row(),date,market,now);
+  expect(result.rules.find(rule=>rule.id==='market').state).toBe('unknown');expect(result.ready).toBe(false);
+ }
+ expect(entryReadiness(row(),date,{cap:0,label:'長期トレンド警戒'},now).rules.find(rule=>rule.id==='market').state).toBe('fail');
+});
+it.each(['true','false',1,0,{},[]])('rejects malformed shape evidence %j',candidate=>{
+ const r=row();r.entry_evidence.shape={candidate};
+ expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules.find(rule=>rule.id==='shape').state).toBe('unknown');
+});
+it.each([[0,'fail'],[-2,'fail'],[null,'unknown'],[2,'pass']])('requires a verified rising day for volume confirmation: %j',(change,state)=>{
+ const r=row();r.technical_audit.values.change=change;
+ expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules.find(rule=>rule.id==='volume').state).toBe(state);
+});
+it('uses the displayed method-specific buy limit in the purchase checklist',()=>{
+ const r=withAuditFixture({...row(),current_price:104},date);
+ const result=entryReadiness(r,date,{cap:.5,label:'上昇'},now,'minervini2');
+ expect(result.rules.find(rule=>rule.id==='price')).toMatchObject({state:'fail',detail:expect.stringContaining('0〜3%')});
+ expect(result.ready).toBe(false);
+ expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now,'minervini').rules.find(rule=>rule.id==='price').state).toBe('pass');
+});
+it('indexes expiry for nonselected rows outside the portfolio sample',()=>{
+ const selected=row(),other=row();other.symbol='OTHER';other.se_pattern_confidence=0;
+ other.entry_evidence={...other.entry_evidence,earnings:{date:'2026-10-20',checked_at:new Date(now-72*3600000+10000).toISOString()}};
+ other.technical_audit={...other.technical_audit,symbol:'OTHER'};
+ const timeline=prepareReadinessTimeline([selected,other]);
+ expect(entryReadiness(other,date,{cap:.5,label:'上昇'},now).ready).toBe(true);
+ expect(timeline(now+10000)).toBe(timeline(now)); // still valid at exactly 72h
+ expect(timeline(now+15000)).toBeGreaterThan(timeline(now));
+ expect(entryReadiness(other,date,{cap:.5,label:'上昇'},now+15000).ready).toBe(false);
+ expect(entryReadiness(selected,date,{cap:.5,label:'上昇'},now+15000).ready).toBe(true);
+});
+it('indexes calendar and financial boundaries once and ignores invalid dates',()=>{
+ const rows=[{entry_evidence:{calendar:{evaluated_at:new Date(now).toISOString(),valid_until:new Date(now+1000).toISOString()}},financial_history:{retrieved_at:new Date(now).toISOString()}}];
+ const timeline=prepareReadinessTimeline([...rows,...rows,{entry_evidence:{earnings:{checked_at:'invalid'}}}]);
+ expect(timeline(now-5001)).toBe(0);expect(timeline(now-5000)).toBe(1);
+ expect(timeline(now)).toBe(2);expect(timeline(now+1000)).toBe(3);
+ expect(timeline(now+72*3600000)).toBe(3);expect(timeline(now+72*3600000+1)).toBe(4);
 });

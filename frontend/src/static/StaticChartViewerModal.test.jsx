@@ -151,7 +151,8 @@ describe('StaticChartViewerModal', () => {
       expect(screen.getByTestId('static-stock-sidebar')).toHaveTextContent('NVDA:NVDA');
     });
     const compactReadiness = screen.getByTestId('mobile-chart-readiness');
-    expect(compactReadiness).toHaveTextContent('購入条件 0/7（未確認 5）');
+    // No selection/market observations are a lack of evidence, not two failures.
+    expect(compactReadiness).toHaveTextContent('購入条件 0/7（未確認 7）');
     expect(compactReadiness).toHaveTextContent('未達・未確認：選定条件 ／ 市場環境 ／ 最新の取引日');
     expect(compactReadiness).not.toHaveTextContent('日次条件を確認済み');
     expect(screen.getByText('価格未確認 · 2026-04-02 日次終値')).toBeInTheDocument();
@@ -236,4 +237,18 @@ it('keeps canonical summary price and pivot when the expanded detail arrives',as
  expect(screen.getAllByText(/\$100.00/).length).toBeGreaterThan(0);
  expect(screen.queryByText(/\$80.00/)).not.toBeInTheDocument();
  vi.unstubAllGlobals();
+});
+
+it('applies the selected 3% buy limit to the mobile expanded-chart checklist',async()=>{
+ const {withAuditFixture}=await import('./testAuditFixture');
+ const date='2026-09-29',now=Date.parse(`${date}T22:00:00Z`);
+ const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
+  entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({symbol:'LIMIT',as_of_date:date,bars:[{date,close:104}],stock_data:row})})));
+ const {unmount}=renderModal({open:true,onClose:vi.fn(),initialSymbol:'LIMIT',date,now,method:'minervini2',market:{cap:.5,label:'上昇'},researchRows:[row],chartIndex:{symbols:[{symbol:'LIMIT',path:'LIMIT.json'}]}});
+ expect(await screen.findByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件 6/7');
+ expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('買い位置');
+ await screen.findByTestId('static-candlestick-chart');
+ unmount();vi.unstubAllGlobals();
 });

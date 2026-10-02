@@ -58,3 +58,19 @@ it('reports absent data instead of converting it into a zero or a chart',async()
   expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
   expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
 });
+
+it.each([['minervini2','6/7',103,false],['minervini','7/7',105,true]])('keeps %s application limits and first-book context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
+ const {withAuditFixture}=await import('../testAuditFixture');
+ const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
+  chart_path:'LIMIT.json',entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
+ fetchStaticChartPayload.mockResolvedValue({symbol:'LIMIT',as_of_date:date,bars:[{date,close:104}],rs_line:[]});
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,assessment:{passed:9,total:9}}]} date={date} method={method} market={{cap:.5,label:'上昇'}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
+ const card=screen.getByRole('article',{name:'LIMIT 比較チャート'});
+ expect(within(card).getByText(`$${upper}.00`)).toBeInTheDocument();
+ expect(within(card).getByText(score)).toBeInTheDocument();
+ const description=card.querySelector('p.sr-only');
+ expect(description).toHaveTextContent('アプリ上限');
+ if(sourceWarning){expect(description).toHaveTextContent('書籍の追随目安外');expect(within(card).getByRole('note')).toBeInTheDocument();}
+ else expect(description).not.toHaveTextContent('書籍の追随目安外');
+ await screen.findByTestId('price-chart');
+});

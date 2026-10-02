@@ -199,7 +199,7 @@ function StaticChartViewerModal({
   const pivotPrice = canonicalPivot(stockData).price;
   const plan = entryPlan(stockData || {}, quote?.symbol === currentSymbol ? quote : null, method);
   const mobileReadiness = isMobile && stockData
-    ? entryReadiness(stockData, expectedDate || chartPayload?.as_of_date, market || modelMarket([stockData]), now)
+    ? entryReadiness(stockData, expectedDate || chartPayload?.as_of_date, market || modelMarket([stockData]), now, method)
     : null;
   const mobileUnknown = mobileReadiness?.rules.filter(rule => rule.state === 'unknown').length || 0;
   const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
