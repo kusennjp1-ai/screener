@@ -33,10 +33,16 @@ export function drawRadar(context, g, palette) {
   }
   context.strokeStyle=palette.grid;context.setLineDash([]);
   for(const value of [70,80,90,100]) {context.beginPath();context.moveTo(left,y(value));context.lineTo(left+pw,y(value));context.stroke();}
-  let count=0;
+  let count=0,previousState=null;
   for(const point of points) {
     if (![point.x,point.y,point.radius,point.distance,point.rs].every(Number.isFinite)||point.radius<0||!Object.hasOwn(STATES,point.state)) throw Error('Invalid radar point');
-    context.fillStyle=palette[STATES[point.state][2]];context.globalAlpha=point.state==='zone'?.95:.6;
+    // Geometry already supplies painter order. Avoid repeatedly crossing into
+    // canvas to set an unchanged color/alpha, but keep every circle a separate
+    // fill so overlapping translucent points composite exactly as before.
+    if(point.state!==previousState) {
+      context.fillStyle=palette[STATES[point.state][2]];context.globalAlpha=point.state==='zone'?.95:.6;
+      previousState=point.state;
+    }
     context.beginPath();context.arc(point.x,point.y,point.radius,0,Math.PI*2);context.fill();count++;
   }
   context.globalAlpha=1;

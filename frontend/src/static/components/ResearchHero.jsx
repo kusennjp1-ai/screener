@@ -5,6 +5,7 @@ import PortfolioDecision from './PortfolioDecision';
 import DailyChanges from './DailyChanges';
 import { entryPlan } from '../researchEngine';
 import { useWorkbenchDetails } from '../useWorkbench';
+import { dailyChangePresentation } from '../dailyChangePresentation';
 import './researchOverview.css';
 
 function ChangesContents({workbench, ...props}) {
@@ -17,8 +18,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const [changesOpen,setChangesOpen]=useState(false);
  const counts=useMemo(()=>({qualified:ranked.filter(x=>x.assessment.qualified).length,zone:ranked.filter(x=>x.assessment.qualified&&entryPlan(x.row,null,'minervini').state==='買いゾーン内').length,verified:ranked.filter(x=>x.row.technical_audit?.valid===true).length}),[ranked]);
  const toggle=()=>{setCollapsed(!collapsed);try{localStorage.setItem('research-hero-collapsed',String(!collapsed));}catch{/* Default remains usable when storage is disabled. */}};
- const changes=workbench.data?.changes?.[method];
- const first=!workbench.data?.history?.previous_as_of;
+ const changes=dailyChangePresentation(workbench,method);
  return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}`} aria-label="今日の概況">
   <div className="hero-copy"><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
    <h1><span className="overview-compact-scope">ミネルヴィニ</span>{loading?'データを読み込み中。':counts.qualified?`選定候補は ${counts.qualified.toLocaleString()} 銘柄。`:'選定候補はありません。'}</h1>
@@ -30,7 +30,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
    </div>
    <p className="overview-market"><span>{plan.market.label.replace('（独自判定）','')} · 新規上限 {loading?'—':Math.round(plan.allocationCap*100)}%</span><span>日足検証 {loading||!ranked.length?'—':`${(counts.verified/ranked.length*100).toFixed(small?0:1)}%`}</span><a href="#/breadth?tab=sectors">業種の追い風を見る →</a></p>
    <div className="hero-actions"><PortfolioDecision compact rows={rows} date={date} plan={plan} onInspect={onInspect} onBrowse={onBrowse} renderTrigger={({openPlan,label})=><button onClick={openPlan} aria-haspopup="dialog" aria-label={label}><span className="desktop-plan-label">{label}</span><span className="mobile-plan-label">配分</span></button>}/>
-   <button className="changes-trigger" aria-label="候補の日次変化" aria-haspopup="dialog" aria-expanded={changesOpen} onClick={()=>setChangesOpen(true)}><span className="changes-desktop">{workbench.isError?'変化：取得できません':!workbench.data?'変化：読み込み中':first?'変化：記録開始（次回から）':`変化：新たに通過 ${changes?.counts?.new??'—'} · 再通過 ${changes?.counts?.returned??'—'} · 脱落 ${changes?.counts?.dropped??'—'}`}</span><span className="changes-mobile">変化</span></button></div>
+   <button className="changes-trigger" aria-label="候補の日次変化" aria-haspopup="dialog" aria-expanded={changesOpen} onClick={()=>setChangesOpen(true)}><span className="changes-desktop">{changes.label}</span><span className="changes-mobile">変化</span></button></div>
   </div>
   {(!collapsed||small)&&<SetupRadar ranked={ranked} selectedSymbol={selectedSymbol} onSelect={onSelect} small={small}/>}
   <button className="hero-toggle" aria-expanded={!collapsed} aria-label={collapsed?'概況を展開':'概況をたたむ'} onClick={toggle}>{collapsed?'⌄':'⌃'}</button>

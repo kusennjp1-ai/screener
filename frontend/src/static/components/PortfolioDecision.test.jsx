@@ -29,6 +29,23 @@ it('shows each failed and unknown condition alongside the conditional prices wit
   fireEvent.click(within(card).getByRole('button', { name: 'LEAD の配分根拠を確認' }));
   expect(inspect).toHaveBeenCalledWith('LEAD');
 });
+it('does not read display-only amounts while the plan is closed and restores content on repeated opens', async () => {
+  const plan=makePlan(), capital=vi.fn(()=>100000);
+  Object.defineProperty(plan,'capital',{get:capital,enumerable:true});
+  render(<PortfolioDecision plan={plan} compact/>);
+  expect(capital).not.toHaveBeenCalled();
+  const trigger=screen.getByRole('button',{name:/条件付きの配分/});
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog',{name:'配分の試算・未達条件'})).toBeVisible();
+  expect(capital).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'配分の試算を閉じる'}));
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  const reads=capital.mock.calls.length;
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog',{name:'配分の試算・未達条件'})).toBeVisible();
+  expect(screen.getByText(/新規資金\$100,000.00の未約定モデル/)).toBeVisible();
+  expect(capital.mock.calls.length).toBeGreaterThan(reads);
+});
 
 it('separates all-pass amounts and risk from conditional rows without modifying allocation', () => {
   const plan = makePlan();
