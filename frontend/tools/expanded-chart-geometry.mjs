@@ -31,7 +31,7 @@ export function expandedChartGeometry(dialog) {
   return {
     viewport: { width: innerWidth, height: innerHeight },
     plot: rect(plot), date_axis: rect(dateAxis), footer: rect(footer), content: rect(scroll),
-    scroll_top: scroll?.scrollTop, scroll_height: scroll?.scrollHeight,
+    scroll_top: scroll?.scrollTop, scroll_height: scroll?.scrollHeight, content_client_height: scroll?.clientHeight,
     plot_visible: visible(plot), date_axis_visible: visible(dateAxis), date_axis_hit: hit(dateAxis),
     date_axis_canvases: dateAxis?.querySelectorAll('canvas').length || 0,
     footer_visible: visible(footer), footer_hit: hit(footer), footer_position: footer && getComputedStyle(footer).position,
@@ -46,7 +46,15 @@ export function checkExpandedChartGeometry(geometry, check, label, { fullChart =
   check(geometry.footer_visible && geometry.footer_hit, `${label}: expanded footer is clipped or covered by the chart`);
   check(geometry.close_visible && geometry.close_hit, `${label}: expanded close control is clipped or covered`);
   for (const button of geometry.footer_controls) check(button.visible && button.hit, `${label}: footer control ${button.text} is clipped or covered`);
-  if (fullChart) {
+  let mobileFits = false;
+  if (geometry.viewport?.width < 900 && geometry.plot && geometry.content) {
+    const plotOffset = geometry.plot.top - geometry.content.top + geometry.scroll_top;
+    const available = Math.floor(geometry.content_client_height - Math.max(0, plotOffset));
+    const expected = Math.min(420, Math.max(300, available));
+    check(Math.abs(geometry.plot.height - expected) <= 1, `${label}: mobile plot must fit available space within its readable 300–420px range`);
+    mobileFits = available >= 300 && geometry.scroll_top === 0;
+  }
+  if (fullChart || mobileFits) {
     check(geometry.plot_visible && geometry.date_axis_visible && geometry.date_axis_hit, `${label}: complete plot/date axis is not visible above the footer`);
     check(Boolean(geometry.plot && geometry.footer && geometry.plot.bottom <= geometry.footer.top + .5), `${label}: chart extends behind footer`);
   }

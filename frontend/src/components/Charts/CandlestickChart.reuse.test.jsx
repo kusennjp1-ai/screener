@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CandlestickChart from './CandlestickChart';
 
-const { instances, factory } = vi.hoisted(() => ({ instances: [], factory: vi.fn() }));
+const { instances, factory, resizeObservers } = vi.hoisted(() => ({ instances: [], factory: vi.fn(), resizeObservers: [] }));
 vi.mock('./createPriceChartSeries', () => ({ createPriceChartSeries: factory }));
 const seriesKeys=['candlestickSeries','volumeSeries','avgVolumeSeries','ema10Series','ema20Series','ema50Series','sma50Series','sma150Series','sma200Series','rsLineSeries','epsLineSeries'];
 const bars=price=>[
@@ -14,7 +14,11 @@ const rs=value=>[{time:'2026-09-21',value},{time:'2026-09-22',value:value+1}];
 const longBars=Array.from({length:260},(_,index)=>({date:new Date(Date.UTC(2025,0,index+1)).toISOString().slice(0,10),open:100,high:103,low:98,close:100,volume:1000}));
 beforeEach(()=>{
   instances.length=0;
-  vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}});
+  resizeObservers.length=0;
+  vi.stubGlobal('ResizeObserver',class {
+    constructor(callback){this.callback=callback;this.disconnect=vi.fn();resizeObservers.push(this);}
+    observe(){}
+  });
   vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));
   vi.stubGlobal('cancelAnimationFrame',vi.fn());
   factory.mockImplementation(container=>{
@@ -179,5 +183,47 @@ describe('validated static chart instance reuse',()=>{
     expect(instance.rangeApplications).toHaveLength(count+1);
     expect(instance.timeScale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from:196.5,to:261});
     expect(requestAnimationFrame).not.toHaveBeenCalled();
+  });
+  it.each([null,'AAA:1'])('preserves selected ranges and manual pan across fitted heights (identity: %s)',chartIdentity=>{
+    const props={chartIdentity,priceData:longBars,height:420,smallScreen:true};
+    const view=setup(props),instance=instances[0],observer=resizeObservers[0];
+    for(const [label,height] of [['1か月',310],['3か月',300],['pan',420]]){
+      if(label==='pan')instance.timeScale.setVisibleLogicalRange({from:10.25,to:50.5});
+      else fireEvent.click(screen.getByRole('button',{name:label}));
+      const selected={...instance.timeScale.getVisibleLogicalRange()};
+      view.update({...props,height});
+      expect(instances.at(-1).timeScale.getVisibleLogicalRange()).toEqual(selected);
+      expect(factory).toHaveBeenCalledTimes(1);
+      act(()=>observer.callback([{contentRect:{width:390,height}}]));
+      expect(instance.chart.resize).toHaveBeenLastCalledWith(390,height);
+      expect(instance.timeScale.getVisibleLogicalRange()).toEqual(selected);
+    }
+    expect(instance.chart.remove).not.toHaveBeenCalled();
+    expect(observer.disconnect).not.toHaveBeenCalled();
+    view.unmount();
+    expect(instance.chart.remove).toHaveBeenCalledOnce();
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+  });
+  it('keeps timeframe defaults and legacy symbol range restoration distinct from resizing',()=>{
+    const visibleRange={from:'2025-08-01',to:'2025-09-01'};
+    const props={chartIdentity:null,priceData:longBars,height:420,visibleRange};
+    const view=setup(props),instance=instances[0];
+    fireEvent.click(screen.getByRole('button',{name:'週足'}));
+    const weekCount=instance.candlestickSeries.setData.mock.lastCall[0].length;
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:Math.max(0,weekCount-52)-.5,to:weekCount+1});
+    fireEvent.click(screen.getByRole('button',{name:'3か月'}));
+    const selected={...instance.timeScale.getVisibleLogicalRange()};
+    view.update({...props,height:310});
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual(selected);
+    expect(screen.getByRole('button',{name:'週足'})).toHaveAttribute('aria-pressed','true');
+    expect(instance.timeScale.setVisibleRange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'日足'}));
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:133.5,to:261});
+    view.update({...props,height:300});
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:133.5,to:261});
+    view.update({...props,height:300,symbol:'BBB'});
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(instance.chart.remove).toHaveBeenCalledOnce();
+    expect(instances[1].timeScale.setVisibleRange).toHaveBeenCalledExactlyOnceWith(visibleRange);
   });
 });

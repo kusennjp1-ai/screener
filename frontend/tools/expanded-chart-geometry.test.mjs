@@ -30,4 +30,12 @@ describe('expanded chart browser acceptance checks', () => {
     expect(failuresFor({ plot_visible: false, date_axis_visible: false, date_axis_hit: false }, false)).toEqual([]);
     expect(failuresFor({ plot: { height: 0 }, date_axis_canvases: 0 }, false)).toHaveLength(2);
   });
+  it('requires mobile to use available plot space between the readable minimum and normal cap', () => {
+    const mobile = { viewport:{width:390,height:568},content:{top:97},content_client_height:446,scroll_top:0,plot:{top:233,bottom:543,height:310},footer:{top:543} };
+    expect(failuresFor(mobile,false)).toEqual([]);
+    expect(failuresFor({...mobile,plot:{top:233,bottom:653,height:420}},false)).toContainEqual(expect.stringContaining('readable 300–420px'));
+    expect(failuresFor({...mobile,plot_visible:false},false)).toContainEqual(expect.stringContaining('complete plot/date axis'));
+    expect(failuresFor({...mobile,content_client_height:402,footer:{top:499},plot:{top:233,bottom:533,height:300},plot_visible:false,date_axis_visible:false,date_axis_hit:false},false)).toEqual([]);
+    expect(failuresFor({...mobile,content_client_height:678,footer:{top:775},plot:{top:233,bottom:653,height:420}},false)).toEqual([]);
+  });
 });

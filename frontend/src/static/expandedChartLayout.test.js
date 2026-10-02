@@ -17,6 +17,13 @@ describe('expanded chart viewport fit', () => {
     expect(fitExpandedChartHeight(380, 500)).toBe(MIN_EXPANDED_CHART_HEIGHT);
     expect(MOBILE_EXPANDED_CHART_HEIGHT).toBe(420);
   });
+  it('fits short phones without shrinking below 300px and caps taller phones at 420px', () => {
+    expect(fitExpandedChartHeight(844 - 97 - 69, 136, { mobile: true })).toBe(420);
+    expect(fitExpandedChartHeight(568 - 97 - 25, 136, { mobile: true })).toBe(310);
+    expect(fitExpandedChartHeight(568 - 97 - 69, 136, { mobile: true })).toBe(300);
+    expect(fitExpandedChartHeight(314.5, 10.8, { mobile: true })).toBe(303);
+    expect(fitExpandedChartHeight(380, 500, { mobile: true })).toBe(300);
+  });
   it('rounds fractional dimensions inward and tolerates a not-yet-measurable layout', () => {
     expect(fitExpandedChartHeight(789.5, 332.8)).toBe(456);
     expect(fitExpandedChartHeight(0, 332)).toBe(MIN_EXPANDED_CHART_HEIGHT);

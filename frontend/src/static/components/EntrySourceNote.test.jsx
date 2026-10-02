@@ -13,9 +13,15 @@ it('warns visibly at +4% even while the unchanged model is inside its5% zone',()
  expect(screen.getByText(/買いゾーン内（価格位置）/)).toBeInTheDocument();
 });
 it('keeps source scope on demand and never claims the second book was checked',()=>{
- render(<EntrySourceNote plan={entryPlan({current_price:102,se_pivot_price:100},null,'minervini2')}/>);
+ const {container}=render(<EntrySourceNote plan={entryPlan({current_price:102,se_pivot_price:100},null,'minervini2')}/>);
  expect(screen.queryByRole('note')).not.toBeInTheDocument();
+ expect(container.querySelectorAll('details')).toHaveLength(1);
+ expect(container.querySelector('summary')).toHaveTextContent('アプリ設定と書籍の確認範囲');
  expect(screen.getByText(/第2冊の数値指定の根拠にはしていません/)).toBeInTheDocument();
+});
+it('omits an empty warning slot when its source details have moved to a shared disclosure',()=>{
+ const {container}=render(<EntrySourceNote showDetails={false} plan={entryPlan({current_price:102,se_pivot_price:100},null,'minervini')}/>);
+ expect(container).toBeEmptyDOMElement();
 });
 it('shows a compact warning without adding a disclosure inside a chart click target',()=>{
  const {container}=render(<EntrySourceNote compact plan={entryPlan({current_price:104,se_pivot_price:100},null,'minervini')}/>);

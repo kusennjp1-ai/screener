@@ -160,6 +160,13 @@ describe('StaticChartViewerModal', () => {
     expect(compactReadiness).toHaveTextContent('未達・未確認：選定条件 ／ 市場環境 ／ 最新の取引日');
     expect(compactReadiness).not.toHaveTextContent('日次条件を確認済み');
     expect(screen.getByText('価格未確認 · 2026-04-02 日次終値')).toBeInTheDocument();
+    const legend = screen.getByTestId('mobile-chart-legend');
+    expect(legend).not.toHaveAttribute('open');
+    expect(legend).toHaveTextContent('チャートの凡例（移動平均線・RS）');
+    expect(legend).toHaveTextContent('SMA50日 / 10週');
+    expect(screen.getByTestId('static-candlestick-chart').compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('左スワイプ：次 ／ 右：前');
+    expect(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' })).toHaveStyle({ minHeight: '44px' });
 
     expect(chartSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -198,6 +205,9 @@ describe('StaticChartViewerModal', () => {
     swipe(80, 110);
     expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true, height: 420 }));
+    expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('チャートを拡大・移動中');
+    fireEvent.click(screen.getByRole('button', { name: '銘柄スワイプに戻る' }));
+    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: false }));
   }, 10000);
 
   it('does not turn a pending mobile chart selection into zero confirmed conditions', () => {
@@ -207,6 +217,55 @@ describe('StaticChartViewerModal', () => {
     expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件を読み込み中…');
     expect(screen.getByTestId('mobile-chart-readiness')).not.toHaveTextContent('0/7');
   });
+});
+
+it('fits mobile cached opens and resizes without allowing scrolling or below-chart disclosures to shrink the plot', async () => {
+  let contentHeight = 678, plotOffset = 136, scheduledFit;
+  vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { scheduledFit = callback; return 1; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const observers = [];
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); observers.push(this); }
+    observe() {}
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
+    return this.dataset.testid === 'expanded-chart-scroll' ? contentHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const scrollTop = document.querySelector('[data-testid="expanded-chart-scroll"]')?.scrollTop || 0;
+    return { top: this.dataset.chartSymbol ? 97 + plotOffset - scrollTop : 97 };
+  });
+  vi.stubGlobal('fetch', vi.fn());
+  const props = { open: true, onClose: vi.fn(), initialSymbol: 'FIT', date: '2026-10-01', chartIndex: { symbols: [{ symbol: 'FIT', path: 'charts/FIT.json' }] } };
+  const payload = { symbol: 'FIT', as_of_date: '2026-10-01', bars: [{ date: '2026-10-01', close: 104 }], stock_data: { symbol: 'FIT', current_price: 104, se_pivot_price: 100 } };
+  const { unmount, rerenderModal } = renderModal(props, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 420 })));
+  const observer = observers.at(-1);
+  act(() => { contentHeight = 446; fireEvent(window, new Event('resize')); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 310 }));
+  fireEvent.click(screen.getByTestId('mobile-chart-legend').querySelector('summary'));
+  act(() => { screen.getByTestId('expanded-chart-scroll').scrollTop = 120; observer.callback(); scheduledFit(); });
+  expect(screen.getByTestId('mobile-chart-legend')).toHaveAttribute('open');
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 310 }));
+  // Opening the measured MA readout above the plot reduces available space;
+  // the plot still keeps its readable minimum and the container can scroll.
+  act(() => { plotOffset += 80; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 300 }));
+  rerenderModal({ ...props, open: false });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+  contentHeight = 678; plotOffset = 136;
+  rerenderModal(props);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 420 })));
+  const reopenedObserver = observers.at(-1);
+  expect(reopenedObserver).not.toBe(observer);
+  expect(fetch).not.toHaveBeenCalled();
+  unmount();
+  expect(reopenedObserver.disconnect).toHaveBeenCalledOnce();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
 });
 
 it.each([

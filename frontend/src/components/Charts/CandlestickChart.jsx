@@ -308,12 +308,14 @@ function CandlestickChart({
       epsLineSeriesRef.current = null;
       rsMarkersRef.current = null;
     };
+    // `height` is handled by the ResizeObserver above. Recreating for a fitted
+    // height change would reset a selected time window or pan to the default.
     // `interactive` is intentionally not in the deps: it's only used as the
     // chart's initial handleScroll/handleScale value here, and the dedicated
     // applyOptions effect below picks up subsequent changes without remounting
     // the chart (which would reset visible range / EMAs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
+  }, [isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
 
   useLayoutEffect(() => {
     if (previousIdentityRef.current === chartIdentity) return;

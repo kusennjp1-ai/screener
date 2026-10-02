@@ -74,6 +74,13 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       const dialog = page.getByRole('dialog'), expanded = dialog.locator(`[data-chart-symbol="${symbol}"]`);
       await ready(expanded.locator('canvas'));
       await inspect(expanded, 'expanded-default');
+      const decisionDetails = dialog.locator('.chart-decision-details');
+      check(await decisionDetails.count() === 1 && await dialog.locator('[aria-label="チャートの判断要約"] details').count() === 1, `${key}: chart source/risk/rule context must share one disclosure`);
+      if (viewport.width < 900) {
+        const legend = dialog.getByTestId('mobile-chart-legend');
+        check(await legend.evaluate(node => !node.open && Boolean(node.closest('[role="dialog"]').querySelector('[data-chart-symbol]').compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)), `${key}: mobile color legend must remain available below the plot on demand`);
+        check(await dialog.locator('summary').filter({ hasText: '移動平均線・株価の乖離率' }).count() === 1, `${key}: measured moving-average disclosure is missing`);
+      }
       if (record.source_warning.expected && viewport.width === 390) {
         record.source_warning.mobile_expanded_visible = await sourceWarningVisible(dialog.locator('[data-testid="mobile-chart-readiness"] .entry-source-badge'));
         check(record.source_warning.mobile_expanded_visible, `${key}: first-book proximity warning is missing from the expanded mobile header`);
@@ -96,7 +103,6 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await capture(page, shortViewport, theme, `case-${symbol}-expanded-short`);
       record.expanded_short_geometry = await dialog.evaluate(expandedChartGeometry);
       checkExpandedChartGeometry(record.expanded_short_geometry, check, `${key}/expanded-short`, { fullChart: viewport.width >= 900 });
-      if (viewport.width < 900) check(Math.abs(record.expanded_short_geometry.plot.height - 420) <= 1, `${key}: mobile plot no longer retains its readable 420px height`);
       const scroller = dialog.locator('[data-testid="expanded-chart-scroll"]');
       // On a very short viewport the plot must remain readable, and scrolling
       // must expose the real date axis without moving/covering footer controls.
@@ -115,10 +121,21 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       check(record.expanded_scrolled_geometry.scroll_top > 0, `${key}: short modal did not provide scrollable chart content`);
       await page.setViewportSize(viewport);
       await scroller.evaluate(node => { node.scrollTop = 0; });
-      const sourceSummary = dialog.locator('.entry-source-note summary');
+      // Fitted height changes must not reset a chosen period. This functional
+      // check runs after all required captures, outside performance timing.
+      const rangeLabel = dialog.getByTestId('chart-visible-range');
+      const initialRange = await rangeLabel.textContent();
+      await dialog.getByRole('button', { name: '1か月', exact: true }).click();
+      await page.waitForFunction(previous => {
+        const text = document.querySelector('[role="dialog"] [data-testid="chart-visible-range"]')?.textContent;
+        return Boolean(text && text !== previous);
+      }, initialRange);
+      record.selected_one_month_range = await rangeLabel.textContent();
+      const sourceSummary = dialog.locator('.chart-decision-details > summary');
       if (await sourceSummary.count()) {
         for (let repetition = 0; repetition < 2; repetition++) {
-          await sourceSummary.click();
+          if (repetition === 0) await sourceSummary.press('Enter');
+          else await sourceSummary.click();
           check(await sourceSummary.evaluate(node => node.parentElement.open), `${key}: source disclosure did not open`);
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           checkExpandedChartGeometry(await dialog.evaluate(expandedChartGeometry), check, `${key}/source-disclosure`);
@@ -127,6 +144,13 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         }
         await scroller.evaluate(node => { node.scrollTop = 0; });
       }
+      // Let the existing100ms visible-range notification settle after resize.
+      await page.setViewportSize(shortViewport);
+      await page.waitForTimeout(180);
+      check(await rangeLabel.textContent() === record.selected_one_month_range, `${key}: fitted resize reset the selected period`);
+      await page.setViewportSize(viewport);
+      await page.waitForTimeout(180);
+      check(await rangeLabel.textContent() === record.selected_one_month_range, `${key}: disclosure or restored height reset the selected period`);
       const nextButton = dialog.getByRole('button', { name: '次の銘柄', exact: true });
       if (await nextButton.count()) {
         await nextButton.click();

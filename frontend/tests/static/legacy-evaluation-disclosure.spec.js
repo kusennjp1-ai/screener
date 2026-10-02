@@ -56,8 +56,13 @@ for (const width of [1440, 390]) {
     await expect(candidates).not.toContainText(/15\.2|CAGR|6年|同じ選び方|バックテスト準拠/);
     await page.evaluate(() => document.fonts.ready);
     expect(await card.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-    await testInfo.attach(`daily-legacy-archive-${width}.png`, { body: await card.screenshot(), contentType: 'image/png' });
-    await testInfo.attach(`daily-technical-reference-${width}.png`, { body: await candidates.screenshot(), contentType: 'image/png' });
+    // Persist files inside test-results as well as reporter attachments: CI
+    // uploads that directory even when its reporter does not save body blobs.
+    for (const [name, locator] of [['legacy-archive', card], ['technical-reference', candidates]]) {
+      const file = `daily-${name}-${width}.png`, path = testInfo.outputPath(file);
+      await locator.screenshot({ path });
+      await testInfo.attach(file, { path, contentType: 'image/png' });
+    }
 
     // Cached US performance must not leak into another market after navigation.
     await page.getByRole('combobox', { name: '市場切替' }).selectOption('HK');

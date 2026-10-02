@@ -62,7 +62,7 @@ function StaticChartViewerModal({
   // Portal descendants can mount after this component's layout effect, also
   // on a cached reopen without a loading transition. Observe the actual node.
   const [chartSection, setChartSection] = useState(null);
-  const [desktopChartHeight, setDesktopChartHeight] = useState(MIN_EXPANDED_CHART_HEIGHT);
+  const [fittedChartHeight, setFittedChartHeight] = useState(null);
   const theme = useTheme();
   // モバイルでは縦積みレイアウト（チャート上・指標下）＋画面上の前後ボタンに切り替える
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -211,10 +211,10 @@ function StaticChartViewerModal({
   const mobileUnknown = mobileReadiness?.rules.filter(rule => rule.state === 'unknown').length || 0;
   const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
   const pivotLabel = '共通ピボット';
-  const chartHeight = isMobile ? MOBILE_EXPANDED_CHART_HEIGHT : desktopChartHeight;
+  const chartHeight = fittedChartHeight ?? (isMobile ? MOBILE_EXPANDED_CHART_HEIGHT : MIN_EXPANDED_CHART_HEIGHT);
 
   useLayoutEffect(() => {
-    if (!open || isMobile) return undefined;
+    if (!open) return undefined;
     const content = contentRef.current, section = chartSection;
     const plot = section?.querySelector('[data-chart-symbol]');
     if (!content || !plot) return undefined;
@@ -223,7 +223,7 @@ function StaticChartViewerModal({
       // warning, legend and chart controls. Scrolling must not resize the plot.
       if (!content.clientHeight) return;
       const plotOffset = plot.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop;
-      setDesktopChartHeight(fitExpandedChartHeight(content.clientHeight, plotOffset));
+      setFittedChartHeight(fitExpandedChartHeight(content.clientHeight, plotOffset, { mobile: isMobile }));
     };
     fit();
     // The content box already excludes the in-flow header and safe-area footer.
@@ -327,15 +327,14 @@ function StaticChartViewerModal({
                 </Box>
               ) : currentSymbol ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                  {/* Info strip ABOVE the chart so the moving-average legend and
-                      Minervini readout never cover the candles (a leader near
-                      new highs prints at the top-right). One line, scrolls
-                      horizontally on narrow screens. */}
+                  {/* Keep warnings/readouts outside the candles. On phones the
+                      color key lives below the chart; measured MA values keep
+                      their existing accessible disclosure above the plot. */}
                   {!isMobile && <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
-                  <ChartInfoStrip />
-                  {isMobile && <Box sx={{ px: 1.5, fontSize: 12, color: 'text.secondary' }}>
-                    左スワイプ：次の銘柄 ／ 右：前の銘柄
-                    <Button size="small" aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'}</Button>
+                  {!isMobile && <ChartInfoStrip />}
+                  {isMobile && <Box data-testid="mobile-chart-interaction" sx={{ px: 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:1, minHeight:44, fontSize:12, color:'text.secondary' }}>
+                    <span>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
+                    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : '拡大・移動'}</Button>
                   </Box>}
                   <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
@@ -361,7 +360,13 @@ function StaticChartViewerModal({
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                     />
                   </Box>
-                  {isMobile && <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
+                  {isMobile && <>
+                    <Box component="details" data-testid="mobile-chart-legend" sx={{px:1.5,fontSize:12,borderBottom:1,borderColor:'divider'}}>
+                      <summary style={{cursor:'pointer',minHeight:44,lineHeight:'24px',padding:'10px 0',boxSizing:'border-box'}}>チャートの凡例（移動平均線・RS）</summary>
+                      <ChartInfoStrip />
+                    </Box>
+                    <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />
+                  </>}
                 </Box>
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: chartHeight }}>
