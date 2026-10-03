@@ -1,8 +1,23 @@
+import pickle
+from datetime import date, datetime
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pandas as pd
-from datetime import datetime
+import pytest
+
+from app.models.stock import StockPrice
 
 from app.services.benchmark_cache_service import BenchmarkCacheService
 import app.services.benchmark_cache_service as benchmark_cache_module
+
+
+def _benchmark_history(close, session="2026-04-10"):
+    return pd.DataFrame(
+        {"Open": [close], "High": [close * 1.01], "Low": [close * .99],
+         "Close": [close], "Volume": [1000.]},
+        index=pd.DatetimeIndex([session], name="Date"),
+    )
 
 
 def test_get_benchmark_symbol_supports_all_markets():
@@ -55,7 +70,7 @@ def test_fetch_and_cache_benchmark_without_redis_fetches_directly_and_persists()
     service._redis_client = None
 
     calls = {"wait": 0, "store_db": 0}
-    data = pd.DataFrame({"Close": [100.0]}, index=pd.to_datetime(["2026-04-10"]))
+    data = _benchmark_history(100.)
 
     def fail_if_wait(*args, **kwargs):
         calls["wait"] += 1
@@ -82,7 +97,7 @@ def test_get_benchmark_data_uses_fallback_when_primary_fails():
     service._redis_client = None
 
     calls = []
-    fallback_df = pd.DataFrame({"Close": [1.0]}, index=pd.to_datetime(["2026-04-10"]))
+    fallback_df = _benchmark_history(1.)
 
     def fake_fetch(symbol, period):
         calls.append(symbol)
@@ -105,7 +120,7 @@ def test_get_benchmark_data_prefers_cached_fallback_before_primary_network_fetch
     service = BenchmarkCacheService(redis_client=None, session_factory=lambda: None)
     service._redis_client = None
 
-    fallback_df = pd.DataFrame({"Close": [1.0]}, index=pd.to_datetime(["2026-04-10"]))
+    fallback_df = _benchmark_history(1.)
     calls = []
 
     def fake_get_from_db(*, benchmark_symbol, period, market):
@@ -131,8 +146,8 @@ def test_get_benchmark_data_skips_stale_redis_hit():
     service = BenchmarkCacheService(redis_client=None, session_factory=lambda: None)
     service._redis_client = None
 
-    stale_df = pd.DataFrame({"Close": [1.0]}, index=pd.to_datetime(["2026-04-01"]))
-    fresh_df = pd.DataFrame({"Close": [2.0]}, index=pd.to_datetime(["2026-04-10"]))
+    stale_df = _benchmark_history(1., "2026-04-01")
+    fresh_df = _benchmark_history(2.)
 
     def fake_get_from_redis(*, benchmark_symbol, period, market="US"):
         assert market == "HK"
@@ -159,7 +174,7 @@ def test_get_benchmark_data_skips_stale_redis_hit():
 
 def test_is_data_fresh_fallback_allows_weekend_without_calendar(monkeypatch):
     service = BenchmarkCacheService(redis_client=None, session_factory=lambda: None)
-    data = pd.DataFrame({"Close": [100.0]}, index=pd.to_datetime(["2026-04-10"]))  # Friday
+    data = _benchmark_history(100.)  # Friday
     service._market_calendar.last_completed_trading_day = lambda market: None  # type: ignore[method-assign]
 
     monkeypatch.setattr(
@@ -173,7 +188,7 @@ def test_is_data_fresh_fallback_allows_weekend_without_calendar(monkeypatch):
 
 def test_is_data_fresh_uses_us_market_hours_fallback_when_calendar_unavailable(monkeypatch):
     service = BenchmarkCacheService(redis_client=None, session_factory=lambda: None)
-    data = pd.DataFrame({"Close": [100.0]}, index=pd.to_datetime(["2026-04-10"]))  # Friday
+    data = _benchmark_history(100.)  # Friday
     service._market_calendar.last_completed_trading_day = lambda market: (_ for _ in ()).throw(RuntimeError("no calendar"))  # type: ignore[method-assign]
 
     monkeypatch.setattr(
@@ -194,7 +209,7 @@ def test_is_data_fresh_uses_us_market_hours_fallback_when_calendar_unavailable(m
 
 def test_is_data_fresh_us_fallback_premarket_uses_previous_trading_day(monkeypatch):
     service = BenchmarkCacheService(redis_client=None, session_factory=lambda: None)
-    data = pd.DataFrame({"Close": [100.0]}, index=pd.to_datetime(["2026-04-10"]))  # Friday close
+    data = _benchmark_history(100.)  # Friday close
     service._market_calendar.last_completed_trading_day = lambda market: (_ for _ in ()).throw(RuntimeError("no calendar"))  # type: ignore[method-assign]
 
     monkeypatch.setattr(
@@ -215,7 +230,7 @@ def test_is_data_fresh_us_fallback_premarket_uses_previous_trading_day(monkeypat
 
 def test_is_data_fresh_us_fallback_after_close_requires_same_day(monkeypatch):
     service = BenchmarkCacheService(redis_client=None, session_factory=lambda: None)
-    stale_data = pd.DataFrame({"Close": [100.0]}, index=pd.to_datetime(["2026-04-10"]))  # Friday close
+    stale_data = _benchmark_history(100.)  # Friday close
     service._market_calendar.last_completed_trading_day = lambda market: (_ for _ in ()).throw(RuntimeError("no calendar"))  # type: ignore[method-assign]
 
     monkeypatch.setattr(
@@ -232,3 +247,167 @@ def test_is_data_fresh_us_fallback_after_close_requires_same_day(monkeypatch):
     )
 
     assert service._is_data_fresh(stale_data, market="US") is False
+
+
+# These cases use complete OHLCV, so freshness cannot mask corrupt cached data.
+
+
+@pytest.fixture
+def benchmark_history():
+    sessions = pd.bdate_range(end=date.today(), periods=120, name="Date")
+    close = pd.Series([100. + i * .1 for i in range(120)], index=sessions)
+    return pd.DataFrame({
+        "Open": close, "High": close * 1.01, "Low": close * .99,
+        "Close": close, "Volume": 1000.,
+    })
+
+
+@pytest.fixture(params=["bad_bar", "discontinuity", "missing_column", "nonnumeric", "wrong_type"])
+def malformed_history(request, benchmark_history):
+    data = benchmark_history.copy()
+    if request.param == "bad_bar":
+        data.iloc[30, data.columns.get_loc("High")] = 1
+    elif request.param == "discontinuity":
+        data.loc[data.index[-30:], ["Open", "High", "Low", "Close"]] /= 10
+    elif request.param == "missing_column":
+        data = data.drop(columns="Open")
+    elif request.param == "nonnumeric":
+        data["Close"] = "broken"
+    else:
+        data = {"Close": [100.]}
+    return data
+
+
+def test_benchmark_redis_read_rejects_malformed_payload(malformed_history):
+    redis = Mock()
+    redis.get.return_value = pickle.dumps(malformed_history)
+    service = BenchmarkCacheService(redis_client=redis)
+
+    assert service._get_from_redis("SPY", "2y", "US") is None
+
+    redis.setex.assert_not_called()
+
+
+def test_benchmark_storage_rejects_malformed_payload_without_changing_artifacts(malformed_history):
+    redis = Mock()
+    database = Mock()
+    service = BenchmarkCacheService(redis_client=redis, session_factory=database)
+
+    service._store_in_redis("SPY", "2y", malformed_history)
+    service._store_in_database("SPY", malformed_history)
+
+    redis.setex.assert_not_called()
+    database.assert_not_called()
+
+
+@pytest.mark.parametrize("coordination", ["no_redis", "lock_acquired", "lock_timeout"])
+def test_benchmark_fetch_rejects_malformed_payload_and_releases_lock(
+    monkeypatch, malformed_history, coordination,
+):
+    redis = Mock()
+    redis.set.return_value = coordination == "lock_acquired"
+    service = BenchmarkCacheService(redis_client=redis)
+    if coordination == "no_redis":
+        service._redis_client = None
+    service.LOCK_TIMEOUT_SECONDS = 0
+    fetch = Mock(return_value=malformed_history)
+    store_redis, store_database = Mock(), Mock()
+    monkeypatch.setattr(service, "_fetch_from_yfinance", fetch)
+    monkeypatch.setattr(service, "_store_in_redis", store_redis)
+    monkeypatch.setattr(service, "_store_in_database", store_database)
+
+    assert service._fetch_and_cache_benchmark("SPY", "US", "2y") is None
+
+    fetch.assert_called_once_with("SPY", "2y")
+    store_redis.assert_not_called()
+    store_database.assert_not_called()
+    if coordination == "lock_acquired":
+        redis.delete.assert_called_once_with(service._redis_lock_key("SPY", "2y", "US"))
+    else:
+        redis.delete.assert_not_called()
+
+
+@pytest.mark.parametrize("coordination", ["lock_acquired", "lock_timeout"])
+def test_benchmark_valid_fetch_survives_coordination(monkeypatch, benchmark_history, coordination):
+    redis = Mock()
+    redis.set.return_value = coordination == "lock_acquired"
+    service = BenchmarkCacheService(redis_client=redis)
+    service.LOCK_TIMEOUT_SECONDS = 0
+    monkeypatch.setattr(service, "_fetch_from_yfinance", Mock(return_value=benchmark_history))
+    store_redis, store_database = Mock(), Mock()
+    monkeypatch.setattr(service, "_store_in_redis", store_redis)
+    monkeypatch.setattr(service, "_store_in_database", store_database)
+
+    result = service._fetch_and_cache_benchmark("SPY", "US", "2y")
+
+    assert result is benchmark_history
+    store_database.assert_called_once()
+    assert store_redis.call_count == (1 if coordination == "lock_acquired" else 0)
+    assert redis.delete.call_count == (1 if coordination == "lock_acquired" else 0)
+
+
+@pytest.mark.parametrize("valid", [False, True])
+def test_benchmark_waiter_validates_redis_before_returning(monkeypatch, benchmark_history, valid):
+    data = benchmark_history.copy()
+    if not valid:
+        data.iloc[30, data.columns.get_loc("High")] = 1
+    redis = Mock()
+    redis.get.return_value = pickle.dumps(data)
+    service = BenchmarkCacheService(redis_client=redis)
+    fetch = Mock(return_value=None)
+    monkeypatch.setattr(service, "_fetch_from_yfinance", fetch)
+    monkeypatch.setattr(
+        benchmark_cache_module, "time",
+        SimpleNamespace(time=Mock(side_effect=[0, 0, 2]), sleep=Mock()),
+    )
+
+    result = service._wait_for_cache("SPY", "2y", "US", max_wait_seconds=1)
+
+    if valid:
+        pd.testing.assert_frame_equal(result, data)
+        fetch.assert_not_called()
+    else:
+        assert result is None
+        fetch.assert_called_once_with("SPY", "2y")
+
+
+@pytest.mark.parametrize("valid", [False, True])
+def test_benchmark_database_read_checks_persisted_ohlcv(db_session, benchmark_history, valid):
+    data = benchmark_history.copy()
+    if not valid:
+        data.iloc[30, data.columns.get_loc("High")] = 1
+    db_session.add_all([
+        StockPrice(
+            symbol="SPY", date=session.date(), open=row.Open, high=row.High,
+            low=row.Low, close=row.Close, volume=int(row.Volume), adj_close=row.Close,
+        )
+        for session, row in data.iterrows()
+    ])
+    db_session.commit()
+    service = BenchmarkCacheService(redis_client=Mock())
+
+    result = service._get_from_database("SPY", "2y")
+
+    if valid:
+        pd.testing.assert_frame_equal(result, data, check_dtype=False, check_freq=False)
+    else:
+        assert result is None
+    assert db_session.query(StockPrice).filter(StockPrice.symbol == "SPY").count() == len(data)
+
+
+def test_benchmark_storage_round_trip_preserves_valid_history(db_session, benchmark_history):
+    redis = Mock()
+    stored = {}
+    redis.setex.side_effect = lambda key, ttl, value: stored.__setitem__(key, value)
+    redis.get.side_effect = stored.get
+    service = BenchmarkCacheService(redis_client=redis)
+
+    service._store_in_redis("SPY", "2y", benchmark_history)
+    service._store_in_database("SPY", benchmark_history)
+
+    pd.testing.assert_frame_equal(service._get_from_redis("SPY", "2y", "US"), benchmark_history)
+    pd.testing.assert_frame_equal(
+        service._get_from_database("SPY", "2y"), benchmark_history,
+        check_dtype=False, check_freq=False,
+    )
+    assert db_session.query(StockPrice).filter(StockPrice.symbol == "SPY").count() == len(benchmark_history)

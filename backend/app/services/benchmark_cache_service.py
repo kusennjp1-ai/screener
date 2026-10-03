@@ -25,6 +25,7 @@ from .redis_pool import get_redis_client, is_redis_enabled
 from .market_calendar_service import MarketCalendarService
 from .benchmark_registry_service import benchmark_registry
 from .cache.market_cache_policy import MarketAwareCachePolicy, market_cache_policy
+from .cache.price_history_integrity import coherent_history
 from ..utils.market_hours import get_eastern_now, get_last_trading_day, is_market_open, is_trading_day
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,16 @@ class BenchmarkCacheService:
 
     def _normalize_market(self, market: str | None) -> str:
         return self._benchmark_registry.normalize_market(market)
+
+    @staticmethod
+    def _is_valid_history(data: pd.DataFrame | None) -> bool:
+        """Apply the price-history contract to provider and persisted payloads."""
+        if not isinstance(data, pd.DataFrame):
+            return False
+        try:
+            return coherent_history(data)
+        except (TypeError, ValueError, ArithmeticError):
+            return False
 
     def get_benchmark_symbol(self, market: str = "US") -> str:
         return self._benchmark_registry.get_primary_symbol(market)
@@ -319,6 +330,9 @@ class BenchmarkCacheService:
 
             if cached_bytes:
                 df = pickle.loads(cached_bytes)
+                if not self._is_valid_history(df):
+                    logger.warning("Invalid cached benchmark history for %s (Redis)", benchmark_symbol)
+                    return None
                 logger.debug("Retrieved benchmark %s %s from Redis (%s rows)", benchmark_symbol, period, len(df))
                 return df
 
@@ -374,6 +388,9 @@ class BenchmarkCacheService:
             df['Date'] = pd.to_datetime(df['Date'])
             df.set_index('Date', inplace=True)
 
+            if not self._is_valid_history(df):
+                logger.warning("Invalid cached benchmark history for %s (Database)", benchmark_symbol)
+                return None
             logger.debug("Retrieved benchmark %s %s from database (%s rows)", benchmark_symbol, period, len(df))
             return df
 
@@ -402,7 +419,7 @@ class BenchmarkCacheService:
         # and persist to DB so subsequent calls can still hit local cache.
         if not self._redis_client:
             benchmark_data = self._fetch_from_yfinance(benchmark_symbol, period)
-            if benchmark_data is None or benchmark_data.empty:
+            if not self._is_valid_history(benchmark_data):
                 logger.error("Failed to fetch benchmark %s data from yfinance", benchmark_symbol)
                 return None
             self._store_in_database(benchmark_symbol=benchmark_symbol, data=benchmark_data)
@@ -437,7 +454,7 @@ class BenchmarkCacheService:
 
             benchmark_data = self._fetch_from_yfinance(benchmark_symbol, period)
 
-            if benchmark_data is None or benchmark_data.empty:
+            if not self._is_valid_history(benchmark_data):
                 logger.error("Failed to fetch benchmark %s data from yfinance", benchmark_symbol)
                 return None
 
@@ -497,10 +514,11 @@ class BenchmarkCacheService:
         # Timeout - fetch directly as fallback
         logger.warning("Timeout waiting for benchmark %s %s cache - fetching directly", benchmark_symbol, period)
         benchmark_data = self._fetch_from_yfinance(benchmark_symbol, period)
-        if benchmark_data is not None and not benchmark_data.empty:
-            # Persist fallback fetch so future calls can use DB cache even when
-            # lock-holder failed to populate Redis.
-            self._store_in_database(benchmark_symbol=benchmark_symbol, data=benchmark_data)
+        if not self._is_valid_history(benchmark_data):
+            return None
+        # Persist fallback fetch so future calls can use DB cache even when
+        # lock-holder failed to populate Redis.
+        self._store_in_database(benchmark_symbol=benchmark_symbol, data=benchmark_data)
         return benchmark_data
 
     def _store_in_redis(
@@ -511,7 +529,7 @@ class BenchmarkCacheService:
         market: str = "US",
     ) -> None:
         """Store benchmark data in Redis."""
-        if not self._redis_client:
+        if not self._redis_client or not self._is_valid_history(data):
             return
 
         try:
@@ -540,6 +558,8 @@ class BenchmarkCacheService:
 
         Uses bulk insert for efficiency (same pattern as PriceCacheService).
         """
+        if not self._is_valid_history(data):
+            return
         db = self._session_factory()
 
         try:

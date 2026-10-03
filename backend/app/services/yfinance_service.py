@@ -147,19 +147,16 @@ class YFinanceService:
                 from ..wiring.bootstrap import get_price_cache
 
                 cache_service = get_price_cache()
-                cached_data = cache_service.get_historical_data(symbol, period=period)
-
-                if cached_data is not None:
-                    return cached_data
-
-                # If cache returns None, fall through to direct fetch
-                logger.debug(f"Cache returned None for {symbol}, fetching directly")
+                # The cache owns provider fetches on a miss and validates refreshes.
+                # None is an authoritative unavailable result, including a rejected
+                # replacement; a raw retry here would bypass those checks.
+                return cache_service.get_historical_data(symbol, period=period)
 
             except Exception as e:
-                logger.warning(f"Cache error for {symbol}: {e}, falling back to direct fetch")
-                # Fall through to direct fetch on cache error
+                logger.warning(f"Cache error for {symbol}: {e}")
+                return None
 
-        # Direct fetch from yfinance (either cache disabled or cache failed)
+        # Direct fetch for explicit bypasses and requests unsupported by the cache.
         try:
             self._wait_for_yfinance_rate_limit()
 
