@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       baseline_ref:
-        description: 'Baseline source revision; both builds use exactly the same published input bundle'
+        description: 'Baseline source revision; both builds use exactly the same checked input bundle'
         default: 'cd3a6a2'
         type: string
   push:
     branches: [main]
-    paths: ['frontend/**', 'docs/design-review/**', '.github/workflows/design-acceptance.yml']
   pull_request:
-    paths: ['frontend/**', 'docs/design-review/**', '.github/workflows/design-acceptance.yml']
+    paths: ['frontend/**', 'docs/design-review/**', '.github/scripts/**', '.github/workflows/design-acceptance.yml', '.github/workflows/research-ui-release.yml', '.github/workflows/static-site.yml']
 
 permissions:
   contents: read
@@ -43,26 +42,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           BASELINE_REF: ${{ inputs.baseline_ref || 'cd3a6a2' }}
+          RELEASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          restored=false
-          for run_id in $(gh api --paginate --slurp "repos/$GH_REPO/actions/artifacts?name=github-pages&per_page=100" | node .github/scripts/select-published-runs.mjs); do
-            if [ "$(gh run view "$run_id" --json conclusion --jq .conclusion)" = success ]; then
-              gh run download "$run_id" --name github-pages --dir "$RUNNER_TEMP/design-pages"
-              echo "SOURCE_RUN=$run_id" >> "$GITHUB_ENV"
-              restored=true
-              break
-            fi
-          done
-          test "$restored" = true
-          mkdir -p "$RUNNER_TEMP/design-source"
-          tar -xf "$RUNNER_TEMP/design-pages/artifact.tar" -C "$RUNNER_TEMP/design-source"
-          test -f "$RUNNER_TEMP/design-source/static-data/manifest.json"
+          # Both versions consume identical checked export/live input. Fresh
+          # exports remain usable when the old Pages artifact has expired.
+          node .github/scripts/select-release-source.mjs design
+          cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
           git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
           git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
-          cp -a "$RUNNER_TEMP/design-source/static-data" frontend/public/static-data
-          cp -a "$RUNNER_TEMP/design-source/static-data" "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
           if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
             ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
           else
@@ -84,6 +74,7 @@ jobs:
             (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
             if [ "$target" = current ]; then
               (cd "$source" && node tools/check-data-quality.mjs)
+              node .github/scripts/select-release-source.mjs check-design-data
             fi
             mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
             (cd "$source" && npx vite build)
@@ -107,5 +98,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: design-acceptance-${{ github.sha }}
-          path: frontend/test-results/design-review/
+          path: |
+            frontend/test-results/design-review/
+            ${{ runner.temp }}/design-input-provenance.json
+            ${{ runner.temp }}/verified-publication/retained-universe-report.json
           retention-days: 14
