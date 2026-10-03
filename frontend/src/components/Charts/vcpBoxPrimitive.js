@@ -90,8 +90,10 @@ class VcpBoxPaneView {
     const spacing = timeScale.options?.().barSpacing;
     const candleWidth = Number.isFinite(spacing) && spacing > 0 ? Math.max(1, spacing) : 8;
     this._candles = candles.map(candle => {
-      const x = timeScale.timeToCoordinate(candle.time ?? candle.date), high = series.priceToCoordinate(candle.high), low = series.priceToCoordinate(candle.low);
-      return x == null || high == null || low == null || x < -candleWidth / 2 || x > width + candleWidth / 2 ? null : { x: x - candleWidth / 2, y: Math.min(high, low), width: candleWidth, height: Math.max(1, Math.abs(low - high)) };
+      const x = timeScale.timeToCoordinate(candle.time ?? candle.date);
+      if (x == null || x < -candleWidth / 2 || x > width + candleWidth / 2) return null;
+      const high = series.priceToCoordinate(candle.high), low = series.priceToCoordinate(candle.low);
+      return high == null || low == null ? null : { x: x - candleWidth / 2, y: Math.min(high, low), width: candleWidth, height: Math.max(1, Math.abs(low - high)) };
     }).filter(Boolean);
     for (const box of boxes) {
       const y1 = series.priceToCoordinate(box.high);

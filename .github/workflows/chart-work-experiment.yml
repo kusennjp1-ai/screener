@@ -1,0 +1,100 @@
+# A single controlled experiment, not an alternative release gate.
+# Both builds use the same checked real data; only the baseline revision differs
+# from the normal Design workflow. Acceptance measurement and limits are unchanged.
+name: Chart Work Avoidance Experiment
+on:
+  push:
+    branches: [perf/avoid-redundant-chart-work]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: chart-work-avoidance-experiment
+  cancel-in-progress: false
+
+jobs:
+  design-acceptance:
+    name: Controlled chart work comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Verify the combined functional invariants
+        run: npm run test:run -- src/components/Charts/vcpBoxPrimitive.test.js src/components/Charts/annotationLabelLayout.test.js src/components/Charts/ResearchChartControls.test.jsx src/components/Charts/CandlestickChart.reuse.test.jsx --maxWorkers=2
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Verify native scrolling, keyboard and chart interactions
+        run: npx playwright test --config playwright.static.config.js
+        working-directory: frontend
+      - name: Restore identical real input for both versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASELINE_REF: '338a1191a223c403d6b649791abe1bf94149a2b4'
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Both versions consume identical checked export/live input. Fresh
+          # exports remain usable when the old Pages artifact has expired.
+          node .github/scripts/select-release-source.mjs design
+          cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
+          git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
+          git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
+          cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
+            ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
+          else
+            (cd "$RUNNER_TEMP/design-baseline/frontend" && npm ci --no-audit --no-fund)
+          fi
+      - name: Build both production versions without duplicating the large data tree
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: '/screener/'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in baseline current; do
+            if [ "$target" = baseline ]; then
+              source="$RUNNER_TEMP/design-baseline/frontend"
+            else
+              source="$GITHUB_WORKSPACE/frontend"
+            fi
+            (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
+            if [ "$target" = current ]; then
+              (cd "$source" && node tools/check-data-quality.mjs)
+              node .github/scripts/select-release-source.mjs check-design-data
+            fi
+            mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
+            (cd "$source" && npx vite build)
+            ln -s "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+          done
+          (cd frontend && node tools/build-radar-benchmark.mjs)
+      - name: Measure all routes, screenshots, accessibility and CPU 4x
+        working-directory: frontend
+        env:
+          CURRENT_BUILD: dist
+          BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
+          RADAR_BUILD: test-results/radar-build
+          DESIGN_REVIEW_OUTPUT: test-results/design-review
+        run: node tools/design-review.mjs
+      - name: Preserve all results even when a budget fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chart-work-experiment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results/
+            ${{ runner.temp }}/design-input-provenance.json
+            ${{ runner.temp }}/verified-publication/retained-universe-report.json
+          retention-days: 14

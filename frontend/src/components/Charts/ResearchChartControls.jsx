@@ -10,6 +10,7 @@ export default function ResearchChartControls({ children, visible = true, style 
   const [edges, setEdges] = useState({ overflow: false, before: false, after: false });
 
   const measure = useCallback(() => {
+    if (!visible) return;
     const toolbar = toolbarRef.current, viewport = viewportRef.current, items = itemsRef.current;
     if (!toolbar || !viewport || !items) return;
     // Compare the natural row to the entire toolbar, so the arrows disappear
@@ -19,17 +20,22 @@ export default function ResearchChartControls({ children, visible = true, style 
     const after = overflow && viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft > 1;
     setEdges(current => current.overflow === overflow && current.before === before && current.after === after
       ? current : { overflow, before, after });
-  }, []);
+  }, [visible]);
 
   useLayoutEffect(() => {
+    if (!visible) return;
+    let active = true;
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => {
+      // A delivery already queued before hide or unmount must stay inert.
+      if (active) measure();
+    });
     for (const element of [toolbarRef.current, viewportRef.current, itemsRef.current]) observer.observe(element);
-    return () => observer.disconnect();
-  }, [measure]);
-  useLayoutEffect(measure, [measure, visible]);
+    return () => { active = false; observer.disconnect(); };
+  }, [measure, visible]);
 
   const scroll = direction => {
+    if (!visible) return;
     const viewport = viewportRef.current;
     if (!viewport || !(direction < 0 ? edges.before : edges.after)) return;
     // Retain one touch target of context and avoid animated scrolling, including
