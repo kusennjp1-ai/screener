@@ -33,7 +33,7 @@ function ObservationRow({ entry, freshness, onOpenChart, watched, onToggleWatch,
         <Box sx={{ flex: 1 }} />
         <IconButton size="small" data-testid={`todays-buys-watch-${entry.symbol}`}
           onClick={() => onToggleWatch(entry.symbol)}
-          sx={{ minWidth: 44, minHeight: 44, color: watched ? C.amber : C.grey }}
+          sx={{ '&&': { minWidth: 44, minHeight: 44 }, color: watched ? C.amber : C.grey }}
           aria-label={watched ? `${entry.symbol}を監視リストから外す` : `${entry.symbol}を監視リストに追加`}>
           {watched ? <StarIcon sx={{ fontSize: 18 }} /> : <StarBorderIcon sx={{ fontSize: 18 }} />}
         </IconButton>
@@ -47,10 +47,10 @@ function ObservationRow({ entry, freshness, onOpenChart, watched, onToggleWatch,
       </Typography>
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
         {market === 'US' && <Button component={RouterLink} to={`/?symbol=${encodeURIComponent(entry.symbol)}`} size="small"
-          sx={{ minHeight: 44 }} aria-label={`${entry.symbol}の購入条件をResearchで確認`}>
+          sx={{ '&&': { minHeight: 44 } }} aria-label={`${entry.symbol}の購入条件をResearchで確認`}>
           購入条件をResearchで確認
         </Button>}
-        {onOpenChart && <Button size="small" sx={{ minHeight: 44 }} onClick={() => onOpenChart(entry.symbol)}
+        {onOpenChart && <Button size="small" sx={{ '&&': { minHeight: 44 } }} onClick={() => onOpenChart(entry.symbol)}
           aria-label={`${entry.symbol}の記録チャートを開く`}>記録チャート</Button>}
       </Box>
       <Box sx={{ mt: 0.5, pt: 0.75, borderTop: `1px solid ${C.track}` }}>
@@ -85,7 +85,7 @@ export default function TodaysBuysCard({ indexData, scanRows, marketAsOf, onOpen
       </Typography>
       {visible.map(entry => <ObservationRow key={entry.symbol} entry={entry} freshness={freshness}
         onOpenChart={onOpenChart} watched={isWatched(entry.symbol)} onToggleWatch={toggleWatch} market={market} now={now} />)}
-      {entries.length > 20 && !showAll && <Button onClick={() => setShowAll(true)} sx={{ minHeight: 44 }}>
+      {entries.length > 20 && !showAll && <Button onClick={() => setShowAll(true)} sx={{ '&&': { minHeight: 44 } }}>
         すべて表示（{entries.length}件）
       </Button>}
     </Box>

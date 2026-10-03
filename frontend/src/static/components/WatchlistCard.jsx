@@ -39,7 +39,7 @@ function WatchRow({ row, asOfDate, now, onOpenChart, onRemove, market }) {
         <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 14 }}>{symbol}</Typography>
         <Box sx={{ flex: 1 }} />
         <IconButton size="small" data-testid={`watchlist-remove-${symbol}`} onClick={() => onRemove(symbol)}
-          sx={{ color: C.amber, minWidth: 44, minHeight: 44 }} aria-label={`${symbol}を監視リストから外す`}>
+          sx={{ color: C.amber, '&&': { minWidth: 44, minHeight: 44 } }} aria-label={`${symbol}を監視リストから外す`}>
           <StarIcon sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>
@@ -49,8 +49,8 @@ function WatchRow({ row, asOfDate, now, onOpenChart, onRemove, market }) {
       </Box>
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
         {market === 'US' && present && <Button component={RouterLink} to={`/?symbol=${encodeURIComponent(symbol)}`} size="small"
-          sx={{ minHeight: 44 }} aria-label={`${symbol}の購入条件をResearchで確認`}>購入条件をResearchで確認</Button>}
-        {onOpenChart && present && <Button size="small" sx={{ minHeight: 44 }} onClick={() => onOpenChart(symbol)}
+          sx={{ '&&': { minHeight: 44 } }} aria-label={`${symbol}の購入条件をResearchで確認`}>購入条件をResearchで確認</Button>}
+        {onOpenChart && present && <Button size="small" sx={{ '&&': { minHeight: 44 } }} onClick={() => onOpenChart(symbol)}
           aria-label={`${symbol}の記録チャートを開く`}>記録チャート</Button>}
       </Box>
     </Box>

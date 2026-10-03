@@ -51,10 +51,16 @@ for (const width of [1440, 320]) test(`Daily observations lead to existing Resea
   await page.evaluate(() => document.fonts.ready);
   expect(await card.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await card.screenshot({ path: info.outputPath(`daily-observations-${width}.png`) });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: info.outputPath(`daily-observations-${width}.png`), fullPage: true });
 
   const link = ter.getByRole('link', { name: 'TERの購入条件をResearchで確認' });
-  expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  // Primary row actions retain their target size despite the shell's compact-link defaults.
+  for (const action of [link, watch, watchlist.getByRole('link', { name: 'CDNAの購入条件をResearchで確認' }), watchlist.getByRole('button', { name: 'CDNAを監視リストから外す' })]) {
+    const bounds = await action.boundingBox();
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    expect(bounds.width).toBeGreaterThanOrEqual(44);
+  }
   await link.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#\/\?symbol=TER$/);
