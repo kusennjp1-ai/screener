@@ -56,7 +56,7 @@ for (const width of [1440, 320]) test(`Daily observations lead to existing Resea
 
   const link = ter.getByRole('link', { name: 'TERの購入条件をResearchで確認' });
   // Primary row actions retain their target size despite the shell's compact-link defaults.
-  for (const action of [link, watch, watchlist.getByRole('link', { name: 'CDNAの購入条件をResearchで確認' }), watchlist.getByRole('button', { name: 'CDNAを監視リストから外す' })]) {
+  for (const action of [link, cdna.getByRole('button', { name: 'CDNAを監視リストから外す' }), watchlist.getByRole('link', { name: 'CDNAの購入条件をResearchで確認' }), watchlist.getByRole('button', { name: 'CDNAを監視リストから外す' })]) {
     const bounds = await action.boundingBox();
     expect(bounds.height).toBeGreaterThanOrEqual(44);
     expect(bounds.width).toBeGreaterThanOrEqual(44);
