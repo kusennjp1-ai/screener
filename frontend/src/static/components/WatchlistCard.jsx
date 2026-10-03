@@ -1,31 +1,21 @@
 import { useEffect, useMemo } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import BlockIcon from '@mui/icons-material/Block';
 import StarIcon from '@mui/icons-material/Star';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
-import { ACTION_META, DEFAULT_META } from './SellTiming';
+import { observationFreshness, useObservationClock } from '../technicalObservation';
+import SellTiming, { ACTION_META, DEFAULT_META } from './SellTiming';
 
-// 保有・監視リスト — same-day exit surfacing for names the user holds (C86,
-// graphical rebuild C87).
-//
-// Reads each watched symbol's exported `sell` block (static charts index) and
-// shows the current exit action as a colored pill + an R-multiple bar (where the
-// open trade sits from −1R to +3R) + the protective stop, most-urgent first.
-// This is the discipline half of SEPA: the screener finds buys well; the gap was
-// that a held name breaking its 50-DMA was invisible unless you opened its chart.
-// Names not in today's export show a "no data" line rather than vanish.
-
-// Exit vocabulary (icons/colors/labels/ranks) is shared with SellTiming so the
-// watchlist and every other surface speak the same language. rank<=1 == sell now.
-const fmt = (v, d = 2) => (v == null ? '-' : Number(v).toFixed(d));
-
+// A stored symbol is a watch, not evidence of an actual holding or entry price.
+// Keep existing storage and model-priority ordering, without inferring P&L.
 const LAST_SELL_KEY = 'wlLastSell';
 const readLastSell = () => {
   try { return JSON.parse(localStorage.getItem(LAST_SELL_KEY) || '{}') || {}; } catch { return {}; }
 };
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export function orderWatchRows(rows) {
   return [...rows].sort((a, b) => {
@@ -36,120 +26,49 @@ export function orderWatchRows(rows) {
   });
 }
 
-function ActionPill({ meta }) {
-  const Icon = meta.Icon;
-  return (
-    <Box sx={{
-      display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
-      borderRadius: 1, bgcolor: `${meta.color}22`, border: `1px solid ${meta.color}`,
-    }}>
-      <Icon sx={{ fontSize: 13, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: 11, color: meta.color, lineHeight: 1.2 }}>{meta.label}</Typography>
-    </Box>
-  );
-}
-
-// −1R ────0────▲──── +3R : where the open trade sits. 0 is entry (breakeven).
-function RBar({ r }) {
-  if (r == null) return null;
-  const LO = -1, HI = 3;
-  const pos = clamp(((r - LO) / (HI - LO)) * 100, 0, 100);
-  const zero = ((0 - LO) / (HI - LO)) * 100;
-  const col = r >= 0 ? C.green : C.red;
-  return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minWidth: 96 }}>
-      <Box sx={{ position: 'relative', flex: 1, height: 6, borderRadius: 3, bgcolor: C.track, minWidth: 56 }}>
-        {/* breakeven line */}
-        <Box sx={{ position: 'absolute', left: `${zero}%`, top: -1, bottom: -1, width: '1px', bgcolor: C.grey }} />
-        {/* fill from breakeven to R */}
-        <Box sx={{
-          position: 'absolute', top: 0, bottom: 0, borderRadius: 3, bgcolor: `${col}88`,
-          left: `${Math.min(zero, pos)}%`, width: `${Math.abs(pos - zero)}%`,
-        }} />
-        {/* marker */}
-        <Box sx={{ position: 'absolute', left: `${pos}%`, top: -2, width: 3, height: 10, borderRadius: 1, bgcolor: col, transform: 'translateX(-50%)' }} />
-      </Box>
-      <Typography sx={{ fontSize: 11, fontWeight: 700, color: col, fontFamily: 'monospace' }}>
-        {r >= 0 ? '+' : ''}{fmt(r, 1)}R
-      </Typography>
-    </Box>
-  );
-}
-
-function WatchRow({ row, onOpenChart, onRemove }) {
+function WatchRow({ row, asOfDate, now, onOpenChart, onRemove, market }) {
   const { symbol, sell, present, lastKnown } = row;
-  const meta = ACTION_META[sell?.action] || DEFAULT_META;
-  // A watched name absent from today's export still shows its LAST-KNOWN exit
-  // (offline/stale) rather than vanishing — the discipline must survive a
-  // missed refresh. Only falls to "no data" when nothing was ever recorded.
-  const staleMeta = lastKnown ? (ACTION_META[lastKnown.sell?.action] || DEFAULT_META) : null;
+  const observedSell = present ? sell : lastKnown?.sell;
+  // The legacy cache has no market identity. An absent row cannot inherit
+  // the selected market's calendar or its Research membership.
+  const freshness = observationFreshness(present ? asOfDate : lastKnown?.date, now, present ? market : null);
   return (
-    <Box
-      data-testid={`watchlist-row-${symbol}`}
-      onClick={() => onOpenChart?.(symbol)}
-      sx={{
-        // Hairline all around (no side-stripe); the accent square carries urgency.
-        p: 1.1, mb: 0.75, borderRadius: 1.5, cursor: 'pointer',
-        border: `1px solid ${C.track}`, bgcolor: C.panel,
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: present ? meta.color : C.dim, flexShrink: 0 }} />
+    <Box data-testid={`watchlist-row-${symbol}`}
+      sx={{ p: 1.1, mb: 0.75, borderRadius: 1.5, border: `1px solid ${C.track}`, bgcolor: C.panel }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
         <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 14 }}>{symbol}</Typography>
         <Box sx={{ flex: 1 }} />
-        {present ? (
-          <Box data-testid={`watchlist-action-${symbol}`}><ActionPill meta={meta} /></Box>
-        ) : staleMeta ? (
-          <Box data-testid={`watchlist-action-${symbol}`} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-            <Typography sx={{ fontSize: 11, color: C.dim, fontWeight: 700 }}>前回</Typography>
-            <ActionPill meta={staleMeta} />
-          </Box>
-        ) : (
-          <Typography sx={{ fontSize: 12, color: C.grey }}>本日データ未取得</Typography>
-        )}
-        <Box
-          component="span"
-          role="button"
-          data-testid={`watchlist-remove-${symbol}`}
-          onClick={(e) => { e.stopPropagation(); onRemove?.(symbol); }}
-          sx={{ display: 'inline-flex', color: C.amber, cursor: 'pointer', ml: 0.5 }}
-          aria-label={`${symbol}を監視リストから外す`}
-        >
-          <StarIcon sx={{ fontSize: 16 }} />
-        </Box>
+        <IconButton size="small" data-testid={`watchlist-remove-${symbol}`} onClick={() => onRemove(symbol)}
+          sx={{ color: C.amber, minWidth: 44, minHeight: 44 }} aria-label={`${symbol}を監視リストから外す`}>
+          <StarIcon sx={{ fontSize: 18 }} />
+        </IconButton>
       </Box>
-      {present && sell && (sell.stop != null || sell.r_multiple != null) && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-          <RBar r={sell.r_multiple} />
-          {sell.stop != null && (
-            <Typography sx={{ fontSize: 11, color: C.ink, fontFamily: 'monospace' }}>
-              stop {fmt(sell.stop)}{sell.stop_basis ? ` · ${sell.stop_basis}` : ''}
-            </Typography>
-          )}
-        </Box>
-      )}
-      {!present && lastKnown?.sell?.stop != null && (
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace', mt: 0.5 }}>
-          前回 stop {fmt(lastKnown.sell.stop)}{lastKnown.date ? ` · ${String(lastKnown.date).slice(5, 10)}` : ''}
-        </Typography>
-      )}
+      {!present && <Typography sx={{ fontSize: 12, color: C.grey }}>今回の配信に記録なし{lastKnown ? ' · 前回の保存記録' : ''}</Typography>}
+      <Box data-testid={`watchlist-action-${symbol}`}>
+        <SellTiming sell={observedSell} freshness={freshness} stale={!present && Boolean(lastKnown)} compact />
+      </Box>
+      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+        {market === 'US' && present && <Button component={RouterLink} to={`/?symbol=${encodeURIComponent(symbol)}`} size="small"
+          sx={{ minHeight: 44 }} aria-label={`${symbol}の購入条件をResearchで確認`}>購入条件をResearchで確認</Button>}
+        {onOpenChart && present && <Button size="small" sx={{ minHeight: 44 }} onClick={() => onOpenChart(symbol)}
+          aria-label={`${symbol}の記録チャートを開く`}>記録チャート</Button>}
+      </Box>
     </Box>
   );
 }
 
-export default function WatchlistCard({ indexData, onOpenChart }) {
+export default function WatchlistCard({ indexData, onOpenChart, market = 'US' }) {
   const { symbols, toggle } = useWatchlist();
-
+  const now = useObservationClock();
   const bySymbol = useMemo(() => {
     const map = new Map();
-    for (const e of indexData?.symbols || []) {
-      if (e?.symbol) map.set(e.symbol, e);
+    for (const entry of indexData?.symbols || []) {
+      if (entry?.symbol) map.set(entry.symbol, entry);
     }
     return map;
   }, [indexData]);
 
-  // Persist each present name's exit so a later offline/stale load can still
-  // show its last-known sell timing instead of dropping the held name.
+  // Preserve last exported model records for watched symbols missing next time.
   const asOfDate = indexData?.as_of_date || null;
   useEffect(() => {
     if (!bySymbol.size) return;
@@ -166,41 +85,30 @@ export default function WatchlistCard({ indexData, onOpenChart }) {
 
   const rows = useMemo(() => {
     const store = readLastSell();
-    return orderWatchRows(
-      symbols.map((symbol) => {
-        const entry = bySymbol.get(symbol);
-        const present = Boolean(entry);
-        return {
-          symbol,
-          sell: entry?.sell || null,
-          present,
-          lastKnown: present ? null : (store[symbol] || null),
-        };
-      }),
-    );
+    return orderWatchRows(symbols.map(symbol => {
+      const entry = bySymbol.get(symbol);
+      const present = Boolean(entry);
+      return { symbol, sell: entry?.sell || null, present, lastKnown: present ? null : (store[symbol] || null) };
+    }));
   }, [symbols, bySymbol]);
 
   if (!symbols.length) return null;
-
-  const alertCount = rows.filter((r) => r.present && (ACTION_META[r.sell?.action]?.rank ?? 9) <= 1).length;
+  const recordedCount = rows.filter(row => row.present && (ACTION_META[row.sell?.action]?.rank ?? 9) <= 1).length;
 
   return (
     <Box sx={{ mb: 2 }} data-testid="watchlist-card">
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16 }}>保有・監視リスト</Typography>
-        {alertCount > 0 && (
-          <Box data-testid="watchlist-alert-count"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px', borderRadius: 1, bgcolor: 'color-mix(in srgb, var(--neg) 13%, transparent)', border: `1px solid ${C.red}` }}>
-            <BlockIcon sx={{ fontSize: 12, color: C.red }} />
-            <Typography sx={{ fontSize: 11, color: C.red, fontWeight: 800 }}>要売却 {alertCount}件</Typography>
-          </Box>
-        )}
-        <Box sx={{ flex: 1 }} />
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>{rows.length}銘柄</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 0.75, flexWrap: 'wrap' }}>
+        <Typography component="h2" sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16 }}>監視リストのモデル記録</Typography>
+        {recordedCount > 0 && <Typography data-testid="watchlist-alert-count" sx={{ fontSize: 11, color: C.grey }}>
+          水準割れの記録 {recordedCount}件
+        </Typography>}
+        <Typography sx={{ fontSize: 11, color: C.grey }}>{rows.length}銘柄</Typography>
       </Box>
-      {rows.map((row) => (
-        <WatchRow key={row.symbol} row={row} onOpenChart={onOpenChart} onRemove={toggle} />
-      ))}
+      <Typography sx={{ fontSize: 12, color: C.grey, mb: 1 }}>
+        保存した銘柄の売却モデル参考値です。実際の保有・買値・注文は未確認のため、損益や売買の指示を示しません。
+      </Typography>
+      {rows.map(row => <WatchRow key={row.symbol} row={row} asOfDate={asOfDate} now={now}
+        onOpenChart={onOpenChart} onRemove={toggle} market={market} />)}
     </Box>
   );
 }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import StaticChartViewerModal from './StaticChartViewerModal';
 import { staticChartKeys } from './chartClient';
+import { dailyObservationIndex } from './testDailyObservationFixture';
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -12,7 +13,12 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div>;
+    return <>
+      <div className="research-chart-toolbar" data-testid="mock-chart-toolbar">
+        <div className="research-chart-controls" data-testid="mock-chart-controls"><button type="button">1か月</button></div>
+      </div>
+      <div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div>
+    </>;
   },
 }));
 
@@ -210,6 +216,31 @@ describe('StaticChartViewerModal', () => {
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: false }));
   }, 10000);
 
+  it('keeps toolbar gaps out of stock swipes while retaining plot navigation in both directions', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+    const payload = symbol => ({ symbol, as_of_date: '2026-04-02', bars: [{ date: '2026-04-02', close: 100 }] });
+    vi.stubGlobal('fetch', vi.fn(async url => ({ ok: true, json: async () => payload(String(url).includes('MSFT') ? 'MSFT' : 'NVDA') })));
+    renderModal({ open: true, onClose: vi.fn(), initialSymbol: 'NVDA', date: '2026-04-02',
+      chartIndex: { symbols: [{ symbol: 'NVDA', path: 'charts/NVDA.json' }, { symbol: 'MSFT', path: 'charts/MSFT.json' }] },
+    }, payload('NVDA'));
+    const swipe = (target, x) => {
+      fireEvent.touchStart(target, { touches: [{ clientX: 200, clientY: 100 }] });
+      fireEvent.touchEnd(target, { changedTouches: [{ clientX: x, clientY: 110 }] });
+    };
+    for (const id of ['mock-chart-toolbar', 'mock-chart-controls']) {
+      swipe(screen.getByTestId(id), 80);
+      expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
+    }
+    swipe(screen.getByTestId('static-candlestick-chart'), 80);
+    expect(await screen.findByText('2 / 2 銘柄')).toBeInTheDocument();
+    for (const id of ['mock-chart-toolbar', 'mock-chart-controls']) {
+      swipe(await screen.findByTestId(id), 330);
+      expect(screen.getByText('2 / 2 銘柄')).toBeInTheDocument();
+    }
+    swipe(screen.getByTestId('static-candlestick-chart'), 330);
+    expect(await screen.findByText('1 / 2 銘柄')).toBeInTheDocument();
+  });
+
   it('does not turn a pending mobile chart selection into zero confirmed conditions', () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
@@ -379,5 +410,34 @@ it('fits cached portal opens/reopens, refits chrome and keeps scrolling independ
   expect(fetch).not.toHaveBeenCalled();
   unmount();
   expect(reopenedObserver.disconnect).toHaveBeenCalledOnce();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
+});
+
+
+it.each(dailyObservationIndex.symbols)('keeps $symbol legacy model blocks out of the modal export UI', async entry => {
+  const { symbol, buy, path } = entry;
+  const date = dailyObservationIndex.as_of_date;
+  const payload = {
+    symbol, as_of_date: date, bars: [{ date, close: buy.last_close }],
+    stock_data: { symbol, current_price: buy.last_close, se_pivot_price: buy.trigger_price },
+    signal: { trigger_price: buy.trigger_price, target_price_2r: buy.target_price_2r, target_price_3r: buy.target_price_3r },
+    risk_plan: { stop_loss: buy.stop_loss, stop_pct: buy.stop_pct, position_size_pct: buy.position_size_pct },
+  };
+  const before = JSON.stringify(payload);
+  const writeText = vi.fn(), prompt = vi.spyOn(window, 'prompt');
+  vi.stubGlobal('fetch', vi.fn());
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  const { unmount } = renderModal({ open: true, onClose: vi.fn(), initialSymbol: symbol, date, chartIndex: { symbols: [{ symbol, path }] } }, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  const bridge = screen.getByTestId('tradingview-bridge');
+  expect(screen.getByRole('link', { name: 'TradingViewで外部チャートを開く' })).toHaveAttribute('href', `https://www.tradingview.com/chart/?symbol=${symbol}`);
+  expect(bridge).toHaveTextContent('日次記録の基準日 2026-10-01');
+  expect(bridge).toHaveTextContent('価格・配信時刻・遅延はTradingView側');
+  expect(screen.queryByTestId('tradingview-copy-pine')).not.toBeInTheDocument();
+  expect(bridge.textContent).not.toMatch(/Pine|2R|3R|買いゾーン|43\.59|407\.69/);
+  expect(writeText).not.toHaveBeenCalled();
+  expect(prompt).not.toHaveBeenCalled();
+  expect(JSON.stringify(payload)).toBe(before);
+  unmount();
   vi.restoreAllMocks(); vi.unstubAllGlobals();
 });
