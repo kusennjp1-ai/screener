@@ -9,9 +9,8 @@ on:
         type: string
   push:
     branches: [main]
-    paths: ['frontend/**', 'docs/design-review/**', '.github/workflows/design-acceptance.yml']
   pull_request:
-    paths: ['frontend/**', 'docs/design-review/**', '.github/workflows/design-acceptance.yml']
+    paths: ['frontend/**', 'docs/design-review/**', '.github/scripts/**', '.github/workflows/design-acceptance.yml', '.github/workflows/research-ui-release.yml', '.github/workflows/static-site.yml']
 
 permissions:
   contents: read

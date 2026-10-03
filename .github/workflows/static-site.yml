@@ -52,8 +52,6 @@ concurrency:
 permissions:
   actions: write
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
   select-markets:
@@ -498,10 +496,6 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
 
@@ -858,19 +852,22 @@ jobs:
           npm run build
           node tools/check-data-quality.mjs
 
-      - name: Upload Pages artifact
-        id: upload-pages-artifact
+      # Preserve fresh exports while the UI release gates are pending or failing.
+      # Research UI Release rebuilds this data using the exact verified main SHA.
+      - name: Upload verified data export
+        id: upload-data-artifact
         uses: actions/upload-pages-artifact@v4
         with:
+          name: static-site-data
           path: frontend/dist
           retention-days: 7
 
-      - name: Prune duplicate Pages artifacts
+      - name: Prune duplicate data exports
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
-          KEEP_ARTIFACT_ID: ${{ steps.upload-pages-artifact.outputs.artifact_id }}
+          KEEP_ARTIFACT_ID: ${{ steps.upload-data-artifact.outputs.artifact_id }}
         run: |
           python - <<'PY'
           import json
@@ -904,15 +901,15 @@ jobs:
           duplicates = [
               artifact["id"]
               for artifact in payload.get("artifacts", [])
-              if artifact.get("name") == "github-pages" and artifact.get("id") != keep_artifact_id
+              if artifact.get("name") == "static-site-data" and artifact.get("id") != keep_artifact_id
           ]
 
           if not duplicates:
-              print("No duplicate github-pages artifacts found.", flush=True)
+              print("No duplicate static-site-data artifacts found.", flush=True)
               raise SystemExit(0)
 
           print(
-              f"::warning::Pruning {len(duplicates)} duplicate github-pages artifact(s) "
+              f"::warning::Pruning {len(duplicates)} duplicate static-site-data artifact(s) "
               f"from run {run_id}; keeping {keep_artifact_id}.",
               flush=True,
           )
@@ -921,17 +918,5 @@ jobs:
                   ["gh", "api", "--method", "DELETE", f"repos/{repo}/actions/artifacts/{artifact_id}"],
                   check=True,
               )
-              print(f"Deleted duplicate github-pages artifact {artifact_id}.", flush=True)
+              print(f"Deleted duplicate static-site-data artifact {artifact_id}.", flush=True)
           PY
-
-  deploy:
-    if: ${{ always() && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.combine-and-build.result == 'success' }}
-    needs: combine-and-build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
