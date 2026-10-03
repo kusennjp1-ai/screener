@@ -1066,9 +1066,13 @@ def test_get_many_without_redis_uses_bulk_database_fallback(monkeypatch):
 def test_get_many_reads_market_scoped_redis_keys(monkeypatch):
     import app.services.price_cache_service as module
 
+    # Exercise market-key routing with a valid cached OHLCV history. A
+    # Close-only frame is correctly quarantined by the ingestion guard.
+    close = pd.Series([100. + i * .1 for i in range(200)],
+                      index=pd.date_range(end="2026-03-18", periods=200))
     data = pd.DataFrame(
-        {"Close": list(range(200))},
-        index=pd.date_range(end="2026-03-18", periods=200),
+        {"Open": close, "High": close + 1, "Low": close - 1,
+         "Close": close, "Volume": 1_000_000},
     )
     fake_redis = _FakeRedis([pickle.dumps(data), json.dumps({"needs_refresh_after_close": False})])
     service = PriceCacheService(redis_client=fake_redis, session_factory=lambda: MagicMock())

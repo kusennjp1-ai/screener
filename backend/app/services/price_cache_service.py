@@ -467,6 +467,8 @@ class PriceCacheService:
         symbol: str,
         period: str,
         market: str | None = None,
+        *,
+        required_dates: pd.DatetimeIndex | None = None,
     ) -> Optional[pd.DataFrame]:
         """
         Fetch full historical data from the market provider and cache it.
@@ -481,6 +483,15 @@ class PriceCacheService:
             if not coherent_history(data):
                 logger.warning('Provider history failed OHLCV validation for %s', symbol)
                 return None
+            if required_dates is not None:
+                supplied_dates = pd.to_datetime(data.index).tz_localize(None).normalize()
+                missing_dates = required_dates.difference(supplied_dates)
+                if len(missing_dates):
+                    logger.warning(
+                        'Full replacement for %s omitted %d known sessions; keeping existing caches',
+                        symbol, len(missing_dates),
+                    )
+                    return None
             logger.info(f"Fetched {symbol}: {len(data)} rows")
 
             # Cache in Redis (recent data only)
@@ -607,7 +618,18 @@ class PriceCacheService:
                 return None  # A failed refresh must not revalidate yesterday's setup.
 
             if requires_full_history(cached_data, new_data):
-                return self._fetch_full_and_cache(symbol, period, market=market)
+                # A short but coherent response must not replace only part of
+                # an adjusted history and leave older database rows on another
+                # price basis. Preserve every known session in this window and
+                # every session just observed from the provider before writing.
+                period_days = {"5y": 1825, "2y": 730, "1y": 365, "max": 3650}
+                cutoff = pd.Timestamp(today - timedelta(days=period_days.get(period, 730)))
+                cached_dates = pd.to_datetime(cached_data.index).tz_localize(None).normalize()
+                recent_dates = pd.to_datetime(new_data.index).tz_localize(None).normalize()
+                required_dates = cached_dates[cached_dates >= cutoff].union(recent_dates)
+                return self._fetch_full_and_cache(
+                    symbol, period, market=market, required_dates=required_dates,
+                )
 
             # Include the provider's entire overlap to replace corrected bars.
             new_data_filtered = new_data.copy()

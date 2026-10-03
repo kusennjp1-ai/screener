@@ -32,7 +32,13 @@ jobs:
 
       - name: Screening evidence regression tests
         working-directory: backend
-        run: python -m pytest tests/unit/scanners/test_minervini_template_canonical.py tests/unit/scanners/test_minervini_market_gate.py tests/unit/test_precomputed_scan_context.py tests/unit/test_minervini_scanner.py tests/unit/test_eps_rating_calendar_years.py tests/unit/test_legacy_vcp_detection.py tests/unit/test_sec_edgar_financials.py tests/unit/test_refresh_code33_flags.py tests/unit/test_static_site_export_service.py tests/unit/test_price_history_integrity.py -q
+        run: python -m pytest tests/unit/scanners/test_minervini_template_canonical.py tests/unit/scanners/test_minervini_market_gate.py tests/unit/test_precomputed_scan_context.py tests/unit/test_minervini_scanner.py tests/unit/test_eps_rating_calendar_years.py tests/unit/test_legacy_vcp_detection.py tests/unit/test_sec_edgar_financials.py tests/unit/test_refresh_code33_flags.py tests/unit/test_static_site_export_service.py -q
+
+      - name: Price cache merge and refetch regression
+        working-directory: backend
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: python -m pytest tests/unit/test_price_history_integrity.py tests/unit/test_cache_refresh_unification.py tests/unit/test_price_cache_warmup_store.py tests/unit/test_yahoo_batch_ingestion.py tests/unit/test_rate_budget_policy.py -q
 
       - name: "Gate 0: Theme identity invariants"
         run: make gate-identity
