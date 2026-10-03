@@ -13,7 +13,7 @@ import { rsBandForRange } from './rsBand';
 import ChartSkeleton from './ChartSkeleton';
 import { transformToCandlestickData } from './candlestickData';
 import { palettes } from '../../static/theme/tokens';
-import './researchChartControls.css';
+import ResearchChartControls from './ResearchChartControls';
 
 // Debounce utility
 const debounce = (fn, ms) => {
@@ -815,14 +815,14 @@ function CandlestickChart({
     <>
     {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
     {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
-    {researchView && !compact && keepResearchChrome && <div className="research-chart-controls" role="group" aria-label="チャート操作" aria-hidden={!hasData} style={{display:hasData?'flex':'none','--chart-control-accent':theme.palette.primary.main,'--chart-control-text':theme.palette.text.primary,'--chart-control-muted':theme.palette.text.secondary,'--chart-control-line':theme.palette.divider,'--chart-control-hover':theme.palette.action.hover,'--chart-control-selected':theme.palette.action.selected}}>
+    {researchView && !compact && keepResearchChrome && <ResearchChartControls visible={!!hasData} style={{'--chart-control-accent':theme.palette.primary.main,'--chart-control-text':theme.palette.text.primary,'--chart-control-muted':theme.palette.text.secondary,'--chart-control-line':theme.palette.divider,'--chart-control-hover':theme.palette.action.hover,'--chart-control-selected':theme.palette.action.selected}}>
       <div className="research-chart-timeframe" role="group" aria-label="足の種類">{[['daily','日足'],['weekly','週足']].map(([value,label])=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{if(timeframe!==value){isFirstDataLoadRef.current=true;setTimeframe(value);}}}>{label}</button>)}</div>
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <button type="button" key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</button>)}
       <button type="button" aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</button>
       <button type="button" aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</button>
       <button type="button" onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</button>
       <button type="button" aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</button>{researchActions}
-    </div>}
+    </ResearchChartControls>}
     {researchView && !compact && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary'}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
       <Box component={smallScreen ? 'details' : 'div'} sx={{mt:.5,'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>
