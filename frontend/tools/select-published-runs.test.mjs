@@ -1,43 +1,68 @@
 import { describe, expect, it } from 'vitest';
-import { latestPublishedRun, publishedRuns, wasPublished } from '../../.github/scripts/select-published-runs.mjs';
-const item=(id,created_at,branch='main',expired=false)=>({id:id+100,created_at,expired,workflow_run:{id,head_branch:branch}});
-describe('published artifact restoration',()=>{
- it('sorts all API pages by creation time instead of artifact ids or page order',()=>{
-  expect(publishedRuns([{artifacts:[item(36805022628,'2026-10-01T05:08:47Z')]},{artifacts:[item(36818410505,'2026-10-01T05:26:00Z')]}])).toEqual([36818410505,36805022628]);
- });
- it('ignores expired, other-branch and malformed entries and deduplicates runs',()=>{
-  const good=item(12,'2026-10-01T05:26:00Z');
-  expect(publishedRuns([{artifacts:[good,good,item(13,'invalid'),item(14,'2026-10-02','feature'),item(15,'2026-10-02','main',true),item('unsafe','2026-10-02')]}])).toEqual([12]);
-  expect(()=>publishedRuns([{unexpected:[]}])).toThrow('Invalid artifact response');
-});
- it('does not hide the last deployed bundle behind eight skipped uploads',()=>{
-  const artifacts=Array.from({length:12},(_,i)=>item(i+1,`2026-10-${String(i+1).padStart(2,'0')}T00:00:00Z`));
-  expect(publishedRuns([{artifacts}])).toHaveLength(12);
- });
+import { eligibleArtifacts, publishedRuns, uniqueArtifact } from '../../.github/scripts/select-published-runs.mjs';
+
+const artifact = (id = 501, runId = 20, attempt = 1, overrides = {}) => ({
+  id, name: `github-pages-${runId}-${attempt}`, expired: false, created_at: '2026-10-03T01:00:00Z',
+  workflow_run: { id: runId, head_branch: 'main', head_sha: 'a'.repeat(40) }, ...overrides,
 });
 
-const repository = 'owner/screener';
-const run = { status: 'completed', conclusion: 'success', head_branch: 'main',
- path: '.github/workflows/research-ui-release.yml', repository: { full_name: repository }, head_repository: { full_name: repository } };
-const deployed = [{ conclusion: 'success', steps: [{ name: 'Deploy to GitHub Pages', conclusion: 'success' }] }];
-describe('actual deployment evidence',()=>{
- it('accepts current and legacy successful deployment steps',()=>{
-  expect(wasPublished(run,deployed,repository)).toBe(true);
-  expect(wasPublished({...run,path:'.github/workflows/static-site.yml'},[{conclusion:'success',steps:[{name:'Run actions/deploy-pages@v4',conclusion:'success'}]}],repository)).toBe(true);
- });
- it('rejects successful workflows with skipped, failed or absent deployment',()=>{
-  for(const conclusion of ['skipped','failure',null]){
-   expect(wasPublished(run,[{conclusion:'success',steps:[{name:'Deploy to GitHub Pages',conclusion}]}],repository)).toBe(false);
-  }
-  expect(wasPublished(run,[],repository)).toBe(false);
-  expect(wasPublished({...run,conclusion:'failure'},deployed,repository)).toBe(false);
-  expect(wasPublished({...run,head_repository:{full_name:'fork/screener'}},deployed,repository)).toBe(false);
-  expect(wasPublished({...run,path:'.github/workflows/other.yml'},deployed,repository)).toBe(false);
- });
- it('walks past skipped release artifacts to the last real publication',()=>{
-  const pages=[{artifacts:[item(20,'2026-10-02'),item(10,'2026-10-01')]}];
-  const api=endpoint=>endpoint.includes('/jobs?') ? [{jobs:endpoint.includes('/20/')?[]:deployed}] : run;
-  expect(latestPublishedRun(pages,repository,api)).toBe(10);
-  expect(()=>latestPublishedRun(pages,repository,endpoint=>endpoint.includes('/jobs?')?[{jobs:[]}]:run)).toThrow('No verified');
- });
+describe('retained artifact candidates', () => {
+  it('orders all pages by creation time without treating IDs or page order as freshness evidence', () => {
+    const earlier = artifact(900, 90, 1, { created_at: '2026-10-01T01:00:00Z' });
+    const later = artifact(100, 10, 1, { created_at: '2026-10-03T01:00:00Z' });
+    expect(eligibleArtifacts([{ artifacts: [earlier] }, { artifacts: [later] }])).toEqual([later, earlier]);
+  });
+
+  it.each([
+    { expired: true }, { expired: undefined }, { created_at: 'invalid' }, { id: 0 }, { id: '501' },
+    { id: Number.MAX_SAFE_INTEGER + 1 }, { workflow_run: { id: 20, head_branch: 'feature' } },
+    { workflow_run: { id: 0, head_branch: 'main' } }, { workflow_run: { id: '20', head_branch: 'main' } },
+    { workflow_run: null },
+  ])('ignores an expired, malformed, or other-branch candidate %j', overrides => {
+    expect(eligibleArtifacts([{ artifacts: [artifact(501, 20, 1, overrides)] }])).toEqual([]);
+  });
+
+  it.each([{}, null, [{ unexpected: [] }], [{ artifacts: {} }]])('fails closed on an incomplete API response %j', pages => {
+    expect(() => eligibleArtifacts(pages)).toThrow('Invalid artifact response');
+  });
+
+  it('does not truncate the candidate set to a few recent uploads', () => {
+    const artifacts = Array.from({ length: 12 }, (_, index) => artifact(100 + index, 20 + index));
+    expect(eligibleArtifacts([{ artifacts: artifacts.slice(0, 6) }, { artifacts: artifacts.slice(6) }])).toHaveLength(12);
+  });
+
+  it('deduplicates run candidates without declaring that any was deployed', () => {
+    expect(publishedRuns([{ artifacts: [artifact(501), artifact(502), artifact(503, 21)] }])).toEqual([20, 21]);
+  });
+});
+
+describe('immutable artifact identity', () => {
+  it('returns the exact artifact ID for one run and attempt across paginated results', () => {
+    const expected = artifact(700, 20, 2);
+    const pages = [{ artifacts: [artifact(501, 20, 1), artifact(601, 21, 2)] }, { artifacts: [expected] }];
+    expect(uniqueArtifact(pages, 'github-pages-20-2', 20)).toBe(expected);
+    expect(uniqueArtifact(pages, 'github-pages-20-2', 20).id).toBe(700);
+  });
+
+  it('does not borrow a same-named artifact from a different run', () => {
+    const wrongRun = artifact(500, 21, 2, { name: 'github-pages-20-2' });
+    expect(() => uniqueArtifact([{ artifacts: [wrongRun] }], 'github-pages-20-2', 20)).toThrow('No unique retained artifact');
+  });
+
+  it('does not substitute a retained earlier attempt for an expired latest attempt', () => {
+    const pages = [{ artifacts: [artifact(501, 20, 1), artifact(502, 20, 2, { expired: true })] }];
+    expect(() => uniqueArtifact(pages, 'github-pages-20-2', 20)).toThrow('No unique retained artifact');
+  });
+
+  it('rejects duplicate artifact names within the same run and attempt instead of picking an ID', () => {
+    const pages = [{ artifacts: [artifact(501, 20, 2)] }, { artifacts: [artifact(502, 20, 2)] }];
+    expect(() => uniqueArtifact(pages, 'github-pages-20-2', 20)).toThrow('No unique retained artifact');
+  });
+
+  it('requires the exact companion-manifest name and attempt', () => {
+    const expected = artifact(802, 20, 2, { name: 'static-site-data-manifest-20-2' });
+    const pages = [{ artifacts: [artifact(801, 20, 1, { name: 'static-site-data-manifest-20-1' }), expected] }];
+    expect(uniqueArtifact(pages, 'static-site-data-manifest-20-2', 20)).toBe(expected);
+    expect(() => uniqueArtifact(pages, 'static-site-data-manifest-20-3', 20)).toThrow();
+  });
 });

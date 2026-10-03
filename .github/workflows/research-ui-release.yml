@@ -3,14 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       ui_only:
-        description: 'Reuse verified published fundamentals and setups for display-only changes'
+        description: 'Reuse verified evidence; new UI still requires both quality gates'
         type: boolean
         default: false
-  # Either quality gate can finish last; exports may finish before or after them.
-  # This is the only workflow that deploys Pages.
   workflow_run:
     workflows: [CI, Design Acceptance, Static Site]
     types: [completed]
+    branches: [main]
 permissions:
   contents: read
   actions: read
@@ -19,77 +18,71 @@ permissions:
 concurrency:
   group: research-ui-release
   cancel-in-progress: false
-env:
-  # workflow_run's default checkout is the latest default branch, not its tested head.
-  RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name != 'Static Site' && github.event.workflow_run.head_sha || github.sha }}
 jobs:
-  eligibility:
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.event.workflow_run.repository.full_name == github.repository &&
-        (github.event.workflow_run.name == 'Static Site' || github.event.workflow_run.event == 'push')))
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      publish: ${{ steps.gate.outputs.publish }}
-      sha: ${{ steps.gate.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_SHA }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Require the exact current main revision and both automatic release gates
-        id: gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node .github/scripts/publication-gate.mjs
-
   publish:
-    needs: eligibility
-    if: needs.eligibility.outputs.publish == 'true'
+    if: github.event_name == 'workflow_run' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # Reconcile main after taking the serial lock. A stale completion event may
+      # replace a newer pending event, but can never choose an unverified UI SHA.
+      - name: Resolve current main under the publication lock
+        id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sha=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_SHA=$sha" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.eligibility.outputs.sha }}
+          ref: ${{ steps.main.outputs.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Choose non-regressing data and skip duplicate publications
-        id: source
+      - name: Verify live provenance, UI gates and non-regressing data
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node .github/scripts/select-release-source.mjs
+        run: node .github/scripts/select-release-source.mjs plan
+      - name: Checkout the exact verified UI source
+        if: steps.plan.outputs.publish == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.plan.outputs.sha }}
+          path: release
+      - uses: actions/setup-node@v4
+        if: steps.plan.outputs.publish == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: release/frontend/package-lock.json
+      - name: Restore the exact selected data artifact
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs restore
       - run: npm ci --no-audit --no-fund
-        if: steps.source.outputs.publish == 'true'
-        working-directory: frontend
+        if: steps.plan.outputs.publish == 'true'
+        working-directory: release/frontend
       - name: Verify research rules and 100 synthetic task profiles
-        if: steps.source.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true'
         run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/components/DailyChanges.test.jsx src/static/components/CandidateCharts.test.jsx --maxWorkers=2
-        working-directory: frontend
+        working-directory: release/frontend
       - name: Cache public SEC archives and security mappings
-        if: steps.source.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true'
         uses: actions/cache@v4
         with:
-          path: .cache/sec13f
+          path: release/.cache/sec13f
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
-        if: ${{ steps.source.outputs.publish == 'true' && !inputs.ui_only }}
-        working-directory: frontend
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && !inputs.ui_only }}
+        working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
@@ -112,40 +105,54 @@ jobs:
           node tools/export-research.mjs
           python tools/export-entry-context.py
       - name: Prepare workbench using verified published evidence
-        if: ${{ steps.source.outputs.publish == 'true' && inputs.ui_only }}
-        working-directory: frontend
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && inputs.ui_only }}
+        working-directory: release/frontend
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/export-book-benchmark.py --allow-unavailable
           python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
       - name: Build with daily selection export
-        if: steps.source.outputs.publish == 'true'
-        working-directory: frontend
+        if: steps.plan.outputs.publish == 'true'
+        working-directory: release/frontend
         env:
+          METADATA_MIGRATION: ${{ steps.plan.outputs.migration }}
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: |
-          npm run build
+          if [ "$METADATA_MIGRATION" != true ]; then npm run build; fi
           node tools/check-data-quality.mjs
-          cp "$RUNNER_TEMP/publication.json" dist/publication.json
-      - name: Recheck main and quality gates before uploading
-        if: steps.source.outputs.publish == 'true'
+      - name: Preserve approved UI bytes or record verified new UI
+        if: steps.plan.outputs.publish == 'true'
+        run: node .github/scripts/select-release-source.mjs compose
+      - name: Preserve retained-universe verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verified-publication/retained-universe-report.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Recheck live identity, main and final data before uploading
+        if: steps.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node .github/scripts/publication-gate.mjs --require
+        run: node .github/scripts/select-release-source.mjs recheck
       - uses: actions/upload-pages-artifact@v4
-        if: steps.source.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true'
         with:
-          path: frontend/dist
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/frontend/dist
           retention-days: 7
       - name: Reject a superseded release immediately before deployment
-        if: steps.source.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node .github/scripts/publication-gate.mjs --require
+        run: node .github/scripts/select-release-source.mjs recheck
       - name: Deploy to GitHub Pages
-        if: steps.source.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true'
         uses: actions/deploy-pages@v4
         id: deploy
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}

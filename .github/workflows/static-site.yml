@@ -858,74 +858,16 @@ jobs:
         id: upload-data-artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          name: static-site-data
+          name: static-site-data-${{ github.run_id }}-${{ github.run_attempt }}
           path: frontend/dist
           retention-days: 7
 
+      - name: Record exact export attempt and dated evidence
+        run: node .github/scripts/select-release-source.mjs export-metadata
       - name: Preserve dated export provenance for release selection
         uses: actions/upload-artifact@v4
         with:
-          name: static-site-data-manifest
-          path: frontend/dist/static-data/manifest.json
+          name: static-site-data-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/export-provenance/source.json
           retention-days: 7
           if-no-files-found: error
-          overwrite: true
-
-      - name: Prune duplicate data exports
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          KEEP_ARTIFACT_ID: ${{ steps.upload-data-artifact.outputs.artifact_id }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-
-          repo = os.environ["REPOSITORY"]
-          run_id = os.environ["RUN_ID"]
-          keep_artifact_id = int(os.environ["KEEP_ARTIFACT_ID"])
-
-          result = subprocess.run(
-              [
-                  "gh",
-                  "api",
-                  "--paginate",
-                  "--slurp",
-                  f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
-              ],
-              check=True,
-              capture_output=True,
-              text=True,
-          )
-          pages = json.loads(result.stdout)
-          payload = {
-              "artifacts": [
-                  artifact
-                  for page in pages
-                  for artifact in page.get("artifacts", [])
-              ]
-          }
-          duplicates = [
-              artifact["id"]
-              for artifact in payload.get("artifacts", [])
-              if artifact.get("name") == "static-site-data" and artifact.get("id") != keep_artifact_id
-          ]
-
-          if not duplicates:
-              print("No duplicate static-site-data artifacts found.", flush=True)
-              raise SystemExit(0)
-
-          print(
-              f"::warning::Pruning {len(duplicates)} duplicate static-site-data artifact(s) "
-              f"from run {run_id}; keeping {keep_artifact_id}.",
-              flush=True,
-          )
-          for artifact_id in duplicates:
-              subprocess.run(
-                  ["gh", "api", "--method", "DELETE", f"repos/{repo}/actions/artifacts/{artifact_id}"],
-                  check=True,
-              )
-              print(f"Deleted duplicate static-site-data artifact {artifact_id}.", flush=True)
-          PY
