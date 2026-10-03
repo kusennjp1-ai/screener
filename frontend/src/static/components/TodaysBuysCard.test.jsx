@@ -1,185 +1,112 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { renderWithProviders } from '../../test/renderWithProviders';
-import TodaysBuysCard, { classifyEntry } from './TodaysBuysCard';
+import TodaysBuysCard from './TodaysBuysCard';
+import { dailyObservationIndex } from '../testDailyObservationFixture';
 
-const buyBlock = (over = {}) => ({
-  active: true,
-  trigger_price: 132.5,
-  stop_loss: 124.1,
-  stop_pct: 6.3,
-  stop_basis: 'base_low',
-  position_size_pct: 19.8,
-  account_risk_pct: 1.25,
-  target_price_2r: 149.3,
-  target_price_3r: 157.7,
-  vcp_detected: true,
-  vcp_source: 'vcp',
-  barrels_passed: 3,
-  signal_as_of: '2026-07-17T00:00:00',
-  last_close: 134.2, // in zone (+1.3%)
-  ...over,
+const entries = dailyObservationIndex.symbols;
+const renderCard = (props = {}) => renderWithProviders(<MemoryRouter><TodaysBuysCard indexData={dailyObservationIndex} {...props} /></MemoryRouter>);
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-02T22:00:00Z')); });
+afterEach(() => { localStorage.clear(); vi.useRealTimers(); });
+
+it('keeps exact CDNA and TER observations without joining incompatible trade models', () => {
+  const before = JSON.stringify(dailyObservationIndex);
+  localStorage.setItem('todaysBuysEquity', '100000');
+  renderCard({ scanRows: [{ market_regime: 'confirmed_uptrend' }] });
+  const card = screen.getByTestId('todays-buys-card');
+  expect(card).toHaveTextContent('テクニカル観測記録');
+  expect(card).toHaveTextContent('2銘柄 · 基準日 2026-10-01');
+  const cdna = screen.getByTestId('todays-buys-row-CDNA'), ter = screen.getByTestId('todays-buys-row-TER');
+  expect(cdna).toHaveTextContent('記録終値 66.23 · シグナル基準値 65.63 · 基準値比 +0.9%');
+  expect(ter).toHaveTextContent('記録終値 415.79 · シグナル基準値 403.56 · 基準値比 +3.0%');
+  expect(cdna).toHaveTextContent('モデル停止水準 59.07 · 初期モデル');
+  expect(ter).toHaveTextContent('モデル停止水準 377.33 · 初期モデル');
+  expect(card).toHaveTextContent('別の売却モデルの参考値');
+  expect(card.textContent).not.toMatch(/BUY NOW|今日の買い候補|買い2|now |STOP|2R|3R|risk |size |株数|資金|43\.59|407\.69|78\.76|85\.32|456\.03|482\.26|15\.6%|1\.25%|8\.0%/);
+  expect(JSON.stringify(dailyObservationIndex)).toBe(before);
+  expect(localStorage.getItem('todaysBuysEquity')).toBe('100000');
 });
 
-const today = new Date().toISOString().slice(0, 10);
-
-const indexData = (entries) => ({ as_of_date: today, symbols: entries });
-const uptrendRows = [{ market_regime: 'confirmed_uptrend', market_health: 78 }];
-
-describe('classifyEntry', () => {
-  it('follows the verdict precedence', () => {
-    const e = { buy: buyBlock() };
-    expect(classifyEntry(e, { marketRed: false, stale: false })).toBe('buy_now');
-    expect(classifyEntry(e, { marketRed: false, stale: true })).toBe('stale');
-    // past the +5% chase cap -> extended even when active
-    const ext = { buy: buyBlock({ last_close: 132.5 * 1.07 }) };
-    expect(classifyEntry(ext, { marketRed: false, stale: false })).toBe('extended');
-    // no buy block -> pivot-only degrade, never a fabricated trigger
-    expect(classifyEntry({ buy: null }, { marketRed: false, stale: false })).toBe('no_signal');
-    // inactive signal below trigger -> waiting
-    const waiting = { buy: buyBlock({ active: false, last_close: 128.0 }) };
-    expect(classifyEntry(waiting, { marketRed: false, stale: false })).toBe('not_triggered');
-    // active + in zone but only 0-1 confirmation barrels -> NOT a BUY NOW
-    const unconfirmed = { buy: buyBlock({ barrels_passed: 0 }) };
-    expect(classifyEntry(unconfirmed, { marketRed: false, stale: false })).toBe('not_triggered');
-    const oneBarrel = { buy: buyBlock({ barrels_passed: 1 }) };
-    expect(classifyEntry(oneBarrel, { marketRed: false, stale: false })).toBe('not_triggered');
-    // 2 of 3 barrels is enough
-    const twoBarrels = { buy: buyBlock({ barrels_passed: 2 }) };
-    expect(classifyEntry(twoBarrels, { marketRed: false, stale: false })).toBe('buy_now');
-    // unknown barrel count (older export) keeps the old behaviour
-    const legacy = { buy: buyBlock({ barrels_passed: undefined }) };
-    expect(classifyEntry(legacy, { marketRed: false, stale: false })).toBe('buy_now');
-  });
+it.each([undefined, null, 0, 1, 2, 3])('does not turn unknown market or barrel count %j into a purchase verdict', barrels => {
+  renderCard({ scanRows: [], indexData: { ...dailyObservationIndex, symbols: [{ ...entries[0], buy: { ...entries[0].buy, barrels_passed: barrels } }] } });
+  expect(screen.getByTestId('todays-buys-market-context')).toHaveTextContent('未確認');
+  expect(screen.getByTestId('todays-buys-position-CDNA')).toHaveTextContent('基準値より上');
+  expect(screen.getByTestId('todays-buys-card').textContent).not.toMatch(/BUY NOW|WAIT|EXTENDED|買い1/);
 });
 
-describe('TodaysBuysCard', () => {
-  it('renders a full BUY NOW card with zone, stop, size and targets', () => {
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'NVDA', rank: 1, rs_rating: 94, buy: buyBlock() }])}
-        scanRows={uptrendRows}
-      />,
-    );
-    expect(screen.getByText('BUY NOW')).toBeInTheDocument();
-    // the risk→reward ladder ticks (graphical C87) carry the real prices
-    expect(screen.getByText('STOP')).toBeInTheDocument();
-    expect(screen.getByText('PIVOT')).toBeInTheDocument();
-    expect(screen.getByText('132.50')).toBeInTheDocument(); // pivot tick
-    expect(screen.getByText('149.30')).toBeInTheDocument(); // 2R tick
-    expect(screen.getByText('157.70')).toBeInTheDocument(); // 3R tick
-    expect(screen.getByText(/stop 124\.10/)).toBeInTheDocument(); // footer basis line
-    expect(screen.getByText(/size 19\.8%/)).toBeInTheDocument();
-  });
+it.each(['correction', 'downtrend', 'uptrend_under_pressure', 'confirmed_uptrend'])('keeps the exported records and factual market context for %s', regime => {
+  renderCard({ scanRows: [{ market_regime: regime, market_distribution_days: 8 }] });
+  expect(screen.getByTestId('todays-buys-market-context')).toHaveTextContent('分配日 8');
+  expect(screen.getByTestId('todays-buys-row-CDNA')).toBeInTheDocument();
+  expect(screen.getByTestId('todays-buys-card').textContent).not.toMatch(/新規買い停止|SEPAルール1|数を絞る|弱い時は少なく/);
+});
 
-  it('degrades a null-buy row to pivot-only honesty', () => {
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([
-          { symbol: 'NVDA', rank: 1, buy: buyBlock() },
-          { symbol: 'XYZ', rank: 9, buy: null },
-        ])}
-        scanRows={uptrendRows}
-      />,
-    );
-    const row = screen.getByTestId('todays-buys-row-XYZ');
-    expect(row).toHaveTextContent('pivot情報なし');
-    expect(row.textContent).not.toMatch(/BUY ZONE/);
-    expect(row.textContent).not.toMatch(/stop/);
-  });
+it.each([[undefined, 'unknown'], ['invalid', 'unknown'], ['2026-02-30', 'unknown'], ['2026-10-03', 'future'], ['2020-01-02', 'old']])('propagates snapshot date %j as %s to every exit-model reference', (asOf, expected) => {
+  renderCard({ indexData: { ...dailyObservationIndex, as_of_date: asOf } });
+  expect(screen.getByTestId('todays-buys-card')).toHaveAttribute('data-freshness', expected);
+  for (const reference of screen.getAllByTestId('sell-timing')) expect(reference).toHaveAttribute('data-freshness', expected);
+  expect(screen.getByTestId('todays-buys-card')).toHaveTextContent('未確認');
+});
 
-  it('renders nothing at all on a pre-v2 index without buy blocks', () => {
-    const { container } = renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'AAA', rank: 1 }, { symbol: 'BBB', rank: 2 }])}
-        scanRows={uptrendRows}
-      />,
-    );
-    expect(container.firstChild).toBeNull();
-  });
+it('updates calendar age and child references while the same snapshot remains mounted', () => {
+  vi.setSystemTime(new Date('2026-10-05T03:59:30Z'));
+  renderCard();
+  expect(screen.getByTestId('todays-buys-card')).toHaveAttribute('data-freshness', 'unverified');
+  act(() => vi.advanceTimersByTime(60_000));
+  expect(screen.getByTestId('todays-buys-card')).toHaveAttribute('data-freshness', 'old');
+  for (const reference of screen.getAllByTestId('sell-timing')) {
+    expect(reference).toHaveAttribute('data-freshness', 'old');
+    expect(reference).toHaveTextContent('4暦日・最新取引日は未確認');
+  }
+});
 
-  it('collapses the whole list when the market regime is red', () => {
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'NVDA', rank: 1, buy: buyBlock() }])}
-        scanRows={[{ market_regime: 'correction' }]}
-      />,
-    );
-    expect(screen.getByTestId('todays-buys-market-red')).toBeInTheDocument();
-    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
-  });
+it('retains source order and honest missing prices when some records have no buy block', () => {
+  renderCard({ indexData: { ...dailyObservationIndex, symbols: [entries[1], { symbol: 'MISSING' }, entries[0]] } });
+  expect(screen.getAllByTestId(/^todays-buys-row-/).map(row => row.dataset.testid)).toEqual(['todays-buys-row-TER', 'todays-buys-row-MISSING', 'todays-buys-row-CDNA']);
+  expect(screen.getByTestId('todays-buys-row-MISSING')).toHaveTextContent('記録終値 未確認 · シグナル基準値 未確認');
+});
+it('renders nothing for a legacy index without observations', () => {
+  const { container } = renderCard({ indexData: { symbols: [{ symbol: 'NO_DATA' }] } });
+  expect(container.firstChild).toBeNull();
+});
+it('expands all rows with a real button without changing order', () => {
+  renderCard({ indexData: { ...dailyObservationIndex, symbols: Array.from({ length: 21 }, (_, i) => ({ ...entries[0], symbol: `ROW${i}` })) } });
+  expect(screen.queryByTestId('todays-buys-row-ROW20')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'すべて表示（21件）' }));
+  expect(screen.getAllByTestId(/^todays-buys-row-/)).toHaveLength(21);
+});
+it('keeps watch and chart actions separate from the Research link', () => {
+  const onOpenChart = vi.fn();
+  renderCard({ onOpenChart });
+  fireEvent.click(screen.getByRole('button', { name: 'CDNAを監視リストに追加' }));
+  expect(JSON.parse(localStorage.getItem('todaysWatchlist'))).toEqual(['CDNA']);
+  expect(onOpenChart).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'CDNAの記録チャートを開く' }));
+  expect(onOpenChart).toHaveBeenCalledWith('CDNA');
+  expect(screen.getByRole('link', { name: 'TERの購入条件をResearchで確認' })).toHaveAttribute('href', '/?symbol=TER');
+});
+it('navigates to the selected Research symbol using the supported router route', () => {
+  function ResearchRoute() { return <div data-testid="destination">{useLocation().search}</div>; }
+  renderWithProviders(<MemoryRouter initialEntries={['/daily']}><Routes>
+    <Route path="/daily" element={<TodaysBuysCard indexData={dailyObservationIndex} />} />
+    <Route path="/" element={<ResearchRoute />} />
+  </Routes></MemoryRouter>);
+  fireEvent.click(within(screen.getByTestId('todays-buys-row-TER')).getByRole('link', { name: 'TERの購入条件をResearchで確認' }));
+  expect(screen.getByTestId('destination')).toHaveTextContent('?symbol=TER');
+});
+it('does not route non-US symbols into the US-only Research page', () => {
+  renderCard({ market: 'HK' });
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+});
 
-  it('forces STALE when the export as_of is old', () => {
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={{ as_of_date: '2020-01-02', symbols: [{ symbol: 'NVDA', rank: 1, buy: buyBlock() }] }}
-        scanRows={uptrendRows}
-      />,
-    );
-    expect(screen.getByText(/データ未更新/)).toBeInTheDocument();
-    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
-  });
-
-  it('shows exact share count once equity is set', () => {
-    localStorage.setItem('todaysBuysEquity', '10000');
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'NVDA', rank: 1, buy: buyBlock() }])}
-        scanRows={uptrendRows}
-      />,
-    );
-    // floor(10000 * 0.198 / 134.20) = 14
-    expect(screen.getByText(/14株/)).toBeInTheDocument();
-    localStorage.removeItem('todaysBuysEquity');
-  });
-
-  it('adds a symbol to the watchlist when its star is tapped', () => {
-    localStorage.removeItem('todaysWatchlist');
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'NVDA', rank: 1, rs_rating: 94, buy: buyBlock() }])}
-        scanRows={uptrendRows}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('todays-buys-watch-NVDA'));
-    expect(JSON.parse(localStorage.getItem('todaysWatchlist'))).toEqual(['NVDA']);
-    localStorage.removeItem('todaysWatchlist');
-  });
-
-  it('shows a "do less" caution when the market is under pressure', () => {
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'NVDA', rank: 1, buy: buyBlock() }])}
-        scanRows={[{ market_regime: 'uptrend_under_pressure', market_distribution_days: 8 }]}
-      />,
-    );
-    const note = screen.getByTestId('todays-buys-under-pressure');
-    expect(note).toHaveTextContent('数を絞る');
-    expect(note).toHaveTextContent('分配日 8');
-    // candidates still list (unlike a red market) — the user just does less
-    expect(screen.getByText('BUY NOW')).toBeInTheDocument();
-  });
-
-  it('downgrades an unconfirmed breakout (0 barrels) from BUY NOW to WAIT', () => {
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'AVT', rank: 1, buy: buyBlock({ barrels_passed: 0 }) }])}
-        scanRows={uptrendRows}
-      />,
-    );
-    expect(screen.queryByText('BUY NOW')).not.toBeInTheDocument();
-    expect(screen.getByText('WAIT')).toBeInTheDocument();
-  });
-
-  it('opens the chart when a row is tapped', () => {
-    const onOpen = vi.fn();
-    renderWithProviders(
-      <TodaysBuysCard
-        indexData={indexData([{ symbol: 'NVDA', rank: 1, buy: buyBlock() }])}
-        scanRows={uptrendRows}
-        onOpenChart={onOpen}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('todays-buys-row-NVDA'));
-    expect(onOpen).toHaveBeenCalledWith('NVDA');
-  });
+it.each(['JP', 'HK'])('does not apply the US future-date test to %s scan and signal labels', market => {
+  vi.setSystemTime(new Date('2026-10-02T03:00:00Z'));
+  renderCard({ market, marketAsOf: '2026-10-02', scanRows: [{ market_regime: 'confirmed_uptrend' }],
+    indexData: { as_of_date: '2026-10-02', symbols: [{ ...entries[0], buy: { ...entries[0].buy, signal_as_of: '2026-10-02T00:00:00' } }] } });
+  const card = screen.getByTestId('todays-buys-card');
+  expect(card).toHaveAttribute('data-freshness', 'unverified');
+  expect(card).toHaveTextContent('最新取引日は未確認');
+  expect(card).toHaveTextContent('シグナル基準日 2026-10-02');
+  expect(screen.getByTestId('todays-buys-market-context')).toHaveTextContent('スキャン基準日 2026-10-02');
+  expect(card).not.toHaveTextContent('未来');
 });

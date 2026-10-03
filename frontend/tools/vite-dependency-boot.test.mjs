@@ -30,12 +30,13 @@ describe('cold Vite dependency initialization', () => {
   // optimizer's split-chunk ordering bug. Evaluate the actual generated ESM in
   // a fresh process per entry: loading styles first would hide the Box failure.
   // Only direct entrypoints still imported by the app are expected in Vite
-  // discovery. Tooltip is now provided through @mui/material, not a deep import.
+  // discovery. Chip and Tooltip now use @mui/material instead of deep imports.
   it.each([
     '@mui/material/Box',
     '@mui/material',
     '@mui/material/styles',
-    '@mui/material/Chip',
+    '@mui/material/Button',
+    '@mui/material/IconButton',
     '@mui/material/CircularProgress',
     '@mui/material/Link',
     '@mui/material/Typography',

@@ -1,13 +1,20 @@
 /* Native controls avoid per-button Emotion/style/ripple work on data switches.
    Theme values come from the same MUI theme used by the legacy controls. */
-.research-chart-controls{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:4px;border-bottom:1px solid var(--chart-control-line)}
-.research-chart-controls>*{flex-shrink:0}
-.research-chart-controls button{appearance:none;display:inline-flex;align-items:center;justify-content:center;position:relative;box-sizing:border-box;min-width:32px;min-height:44px;padding:6px 8px;margin:0;border:0;border-radius:8px;background:transparent;color:var(--chart-control-accent);font:inherit;font-size:13px;font-weight:500;line-height:1.75;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.research-chart-controls button:hover{background:var(--chart-control-hover)}
-.research-chart-controls button:focus-visible{outline:2px solid var(--chart-control-accent);outline-offset:-2px}
+.research-chart-toolbar{display:flex;min-width:0;border-bottom:1px solid var(--chart-control-line)}
+.research-chart-controls{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+.research-chart-controls::-webkit-scrollbar{display:none}
+.research-chart-control-items{display:flex;flex-wrap:nowrap;gap:2px;padding:4px;width:max-content}
+.research-chart-control-items>*{flex-shrink:0}
+.research-chart-toolbar button{appearance:none;display:inline-flex;align-items:center;justify-content:center;position:relative;box-sizing:border-box;min-width:32px;min-height:44px;padding:6px 8px;margin:0;border:0;border-radius:8px;background:transparent;color:var(--chart-control-accent);font:inherit;font-size:13px;font-weight:500;line-height:1.75;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.research-chart-toolbar button:hover{background:var(--chart-control-hover)}
+.research-chart-toolbar button:focus-visible{outline:2px solid var(--chart-control-accent);outline-offset:-2px}
+.research-chart-toolbar .research-chart-scroll{flex:0 0 44px;min-width:44px;margin:4px 0;background:var(--chart-control-selected);font-size:24px;line-height:1}
+.research-chart-scroll:first-child{margin-left:4px}
+.research-chart-scroll:last-child{margin-right:4px}
+.research-chart-toolbar .research-chart-scroll[aria-disabled=true]{background:transparent;color:var(--chart-control-muted);opacity:.45;cursor:default}
 .research-chart-timeframe{display:inline-flex;border-radius:8px}
 .research-chart-timeframe button{padding:7px;border:1px solid var(--chart-control-line);border-radius:0;color:var(--chart-control-muted)}
 .research-chart-timeframe button:first-child{border-radius:8px 0 0 8px}
 .research-chart-timeframe button:last-child{border-radius:0 8px 8px 0;margin-left:-1px}
 .research-chart-timeframe button[aria-pressed=true]{background:var(--chart-control-selected);color:var(--chart-control-text)}
-@media(max-width:700px){.research-chart-controls button{min-width:44px}.research-chart-controls{scrollbar-width:none}}
+@media(max-width:700px){.research-chart-toolbar button{min-width:44px}}

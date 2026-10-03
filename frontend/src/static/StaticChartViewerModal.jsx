@@ -87,7 +87,7 @@ function StaticChartViewerModal({
   );
 
   function startSwipe(event) {
-    if (!isMobile || panMode || event.touches.length !== 1 || event.target.closest('button,a,input,select,textarea,summary')) { swipeStart.current = null; return; }
+    if (!isMobile || panMode || event.touches.length !== 1 || event.target.closest('.research-chart-toolbar,button,a,input,select,textarea,summary')) { swipeStart.current = null; return; }
     swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, at: Date.now() };
   }
   function endSwipe(event) {
@@ -300,8 +300,6 @@ function StaticChartViewerModal({
               <TradingViewBridge
                 symbol={currentSymbol}
                 market={selectedMarket}
-                signal={chartPayload?.signal}
-                riskPlan={chartPayload?.risk_plan}
                 asOf={chartPayload?.as_of_date}
               /></>}
             </Box>
