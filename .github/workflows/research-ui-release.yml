@@ -3,14 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       ui_only:
-        description: 'Reuse verified published fundamentals and setups for display-only changes'
+        description: 'Reuse verified evidence; new UI still requires both quality gates'
         type: boolean
         default: false
-  # A long-running daily export may have started before the latest UI commit.
-  # Rebuild its completed data with current rules so it cannot leave an old UI live.
   workflow_run:
-    workflows: [Static Site]
+    workflows: [CI, Design Acceptance, Static Site]
     types: [completed]
+    branches: [main]
 permissions:
   contents: read
   actions: read
@@ -21,52 +20,69 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    if: github.event_name == 'workflow_run' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci --no-audit --no-fund
-        working-directory: frontend
-      - name: Verify research rules and 100 synthetic task profiles
-        run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/components/DailyChanges.test.jsx src/static/components/CandidateCharts.test.jsx --maxWorkers=2
-        working-directory: frontend
-      - name: Restore the last successful published data without rewriting its timestamp
+      # Reconcile main after taking the serial lock. A stale completion event may
+      # replace a newer pending event, but can never choose an unverified UI SHA.
+      - name: Resolve current main under the publication lock
+        id: main
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          restored=false
-          for run_id in $(gh api --paginate --slurp "repos/$GH_REPO/actions/artifacts?name=github-pages&per_page=100" | node .github/scripts/select-published-runs.mjs); do
-            conclusion=$(gh run view "$run_id" --json conclusion --jq .conclusion)
-            if [ "$conclusion" = success ]; then
-              gh run download "$run_id" --name github-pages --dir /tmp/last-pages
-              restored=true
-              echo "Restored published data from run $run_id"
-              break
-            fi
-          done
-          test "$restored" = true
-          mkdir -p /tmp/extracted
-          tar -xf /tmp/last-pages/artifact.tar -C /tmp/extracted
-          test -f /tmp/extracted/static-data/manifest.json
-          cp -R /tmp/extracted/static-data frontend/public/static-data
+          sha=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_SHA=$sha" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.main.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify live provenance, UI gates and non-regressing data
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs plan
+      - name: Checkout the exact verified UI source
+        if: steps.plan.outputs.publish == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.plan.outputs.sha }}
+          path: release
+      - uses: actions/setup-node@v4
+        if: steps.plan.outputs.publish == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: release/frontend/package-lock.json
+      - name: Restore the exact selected data artifact
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs restore
+      - run: npm ci --no-audit --no-fund
+        if: steps.plan.outputs.publish == 'true'
+        working-directory: release/frontend
+      - name: Verify research rules and 100 synthetic task profiles
+        if: steps.plan.outputs.publish == 'true'
+        run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/components/DailyChanges.test.jsx src/static/components/CandidateCharts.test.jsx --maxWorkers=2
+        working-directory: release/frontend
       - name: Cache public SEC archives and security mappings
+        if: steps.plan.outputs.publish == 'true'
         uses: actions/cache@v4
         with:
-          path: .cache/sec13f
+          path: release/.cache/sec13f
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
-        if: ${{ !inputs.ui_only }}
-        working-directory: frontend
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && !inputs.ui_only }}
+        working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
@@ -89,25 +105,54 @@ jobs:
           node tools/export-research.mjs
           python tools/export-entry-context.py
       - name: Prepare workbench using verified published evidence
-        if: ${{ inputs.ui_only }}
-        working-directory: frontend
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && inputs.ui_only }}
+        working-directory: release/frontend
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/export-book-benchmark.py --allow-unavailable
           python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
       - name: Build with daily selection export
-        working-directory: frontend
+        if: steps.plan.outputs.publish == 'true'
+        working-directory: release/frontend
         env:
+          METADATA_MIGRATION: ${{ steps.plan.outputs.migration }}
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: |
-          npm run build
+          if [ "$METADATA_MIGRATION" != true ]; then npm run build; fi
           node tools/check-data-quality.mjs
-      - uses: actions/upload-pages-artifact@v4
+      - name: Preserve approved UI bytes or record verified new UI
+        if: steps.plan.outputs.publish == 'true'
+        run: node .github/scripts/select-release-source.mjs compose
+      - name: Preserve retained-universe verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: frontend/dist
+          name: publication-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verified-publication/retained-universe-report.json
+          if-no-files-found: ignore
           retention-days: 7
-      - uses: actions/deploy-pages@v4
+      - name: Recheck live identity, main and final data before uploading
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs recheck
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.plan.outputs.publish == 'true'
+        with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/frontend/dist
+          retention-days: 7
+      - name: Reject a superseded release immediately before deployment
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs recheck
+      - name: Deploy to GitHub Pages
+        if: steps.plan.outputs.publish == 'true'
+        uses: actions/deploy-pages@v4
         id: deploy
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
