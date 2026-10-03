@@ -862,6 +862,15 @@ jobs:
           path: frontend/dist
           retention-days: 7
 
+      - name: Preserve dated export provenance for release selection
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-site-data-manifest
+          path: frontend/dist/static-data/manifest.json
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
+
       - name: Prune duplicate data exports
         env:
           GH_TOKEN: ${{ github.token }}

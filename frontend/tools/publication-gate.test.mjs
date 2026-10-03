@@ -75,11 +75,15 @@ describe('publication workflow wiring', () => {
     expect(release.match(/publication-gate.mjs --require/g)).toHaveLength(2);
     expect(release.indexOf('node tools/check-data-quality.mjs')).toBeLessThan(release.indexOf('actions/upload-pages-artifact'));
     expect(release.lastIndexOf('publication-gate.mjs --require')).toBeLessThan(release.indexOf('uses: actions/deploy-pages'));
+    expect(release).toContain('cp "$RUNNER_TEMP/publication.json" dist/publication.json');
+    expect(release.indexOf('node .github/scripts/select-release-source.mjs')).toBeLessThan(release.indexOf('npm ci'));
+    expect(release).toContain("- uses: actions/upload-pages-artifact@v4\n        if: steps.source.outputs.publish == 'true'");
     expect(release).not.toContain('workflows: [Research UI Release');
   });
   it('retains the checked fresh export without a direct Static Site deployment', () => {
     const exports = workflow('static-site.yml');
     expect(exports).toContain('name: static-site-data');
+    expect(exports).toContain('name: static-site-data-manifest');
     expect(exports).toContain('node tools/check-data-quality.mjs');
     expect(exports).not.toContain('actions/deploy-pages');
     expect(exports).not.toContain('pages: write');
