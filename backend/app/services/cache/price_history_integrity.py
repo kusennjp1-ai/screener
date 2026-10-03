@@ -34,4 +34,12 @@ def requires_full_history(cached, recent):
     # A changed historical close may represent a split/dividend adjustment or
     # provider correction. Fetch the full history rather than joining bases.
     overlap = overlap[overlap < left.index.max()]
-    return bool(len(overlap) and not np.allclose(left.loc[overlap,'Close'], right.loc[overlap,'Close'], rtol=1e-5, atol=.0001))
+    if len(overlap) and not np.allclose(left.loc[overlap,'Close'], right.loc[overlap,'Close'], rtol=1e-5, atol=.0001):
+        return True
+
+    # Individually coherent slices can still join different adjustment bases,
+    # including when only the latest cached session overlaps. Validate the same
+    # provider-wins merge used by the incremental path before it writes anything.
+    merged = pd.concat([left, right])
+    merged = merged[~merged.index.duplicated(keep='last')].sort_index()
+    return not coherent_history(merged)
