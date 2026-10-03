@@ -1,0 +1,43 @@
+name: Radar Cost Attribution Diagnostic
+on:
+  push:
+    branches: [diagnostics/radar-cold-attribution]
+permissions:
+  contents: read
+concurrency:
+  group: radar-attribution-diagnostic
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'kusennjp1-ai/screener'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Verify attribution controls
+        run: npm run test:run -- src/static/components/SetupRadar.attribution.test.jsx src/static/components/SetupRadar.test.jsx src/static/positionGeometry.test.js --maxWorkers=2
+      - name: Install the existing Playwright Chromium runtime
+        run: npx playwright install --with-deps chromium
+      - name: Build the isolated diagnostic
+        run: node tools/build-radar-attribution.mjs
+      - name: Run one cold cost-attribution matrix
+        env:
+          RADAR_ATTRIBUTION_OUTPUT: test-results/radar-attribution
+        run: node tools/radar-attribution.mjs
+      - name: Preserve diagnostic evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radar-attribution-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend/test-results/radar-attribution/
+          if-no-files-found: warn
+          retention-days: 7
