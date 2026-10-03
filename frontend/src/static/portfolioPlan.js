@@ -1,4 +1,4 @@
-import { canonicalPivot } from './researchPresentation.js';
+import { canonicalPivot, sessionCurrent } from './researchPresentation.js';
 import { assessmentSummary as assess, finite, snapshotFreshness } from './researchEngine.js';
 import { entryReadiness } from './entryReadiness.js';
 
@@ -12,7 +12,7 @@ export function modelMarket(rows) {
   const observed = us.filter(r => r.market_regime && typeof r.market_above_50dma === 'boolean' && typeof r.market_above_200dma === 'boolean');
   // Market context is replicated on stock rows. Unscanned stocks have no context;
   // do not let those erase known observations, but reject conflicting regimes.
-  if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0 };
+  if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown' };
   if (observed.some(r => r.market_above_200dma === false)) return { label: '長期トレンド警戒', cap: 0 };
   if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認・弱含み', cap: 0 };
   if (regimes[0] === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: .5 };
@@ -45,7 +45,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   const freshness = snapshotFreshness(date, now);
   // Static scans cannot establish current execution conditions, even with a fresh date.
   const blockers = [];
-  if ((freshness.state !== 'recent' || freshness.days > 1) && !rows.some(r => r.entry_evidence?.calendar?.latest_completed_session === date && now < Date.parse(r.entry_evidence.calendar.valid_until))) blockers.unshift('分析基準日を最新の取引日と照合してください');
+  if ((freshness.state !== 'recent' || freshness.days > 1) && !sessionCurrent(rows, date, now)) blockers.unshift('分析基準日を最新の取引日と照合してください');
   if (!market.cap) blockers.unshift(market.label);
   const candidates = [...prepared.candidates];
   const readiness = candidates.map(row => entryReadiness(row,date,market,now));

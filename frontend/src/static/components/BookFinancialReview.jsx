@@ -5,6 +5,7 @@ const label = s => s === 'pass' ? '充足' : s === 'fail' ? '未充足' : '未�
 export default function BookFinancialReview({ row }) {
   const e = bookFinancialEvidence(row.book_financials, row.symbol, row.technical_audit?.as_of_date);
   return <details style={{ marginTop: 12 }}><summary>業績の連続性と利益の質を確認</summary>
+    <Typography sx={{ my: 1, fontSize: 12 }}>第1冊の確認資料では4〜8四半期の傾向と年次実績も重視します。1四半期の減速や連続加速の未充足だけで、ミネルヴィニの選定全体を不合格にはしません。以下の連続改善・20%／25%は個別の測定項目です。利益の質は売上の裏付けや一時要因も別途確認します（Kindle表示183/421・194/421）。</Typography>
     {!e.valid ? <Typography sx={{ my: 1 }}>提出日付きの四半期履歴は未取得です。単期の成長率を連続成長の証拠に置き換えません。</Typography> : <>
       <Typography sx={{ my: 1 }}>EPS成長加速：{label(e.epsAcceleration)} ／ 売上成長加速：{label(e.salesAcceleration)} ／ 純利益率改善：{label(e.marginImprovement)}</Typography>
       <Typography sx={{ my: 1 }}>コード33の図8.10に対応する4四半期・3回連続改善：{label(e.code33)}。EPS・売上は前年比、純利益率は水準そのものを比較します。SEPA全体の認定ではありません。</Typography>

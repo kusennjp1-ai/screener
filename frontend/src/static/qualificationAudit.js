@@ -59,6 +59,14 @@ export function auditValues(row) {
     positive(row.current_price) && positive(a.values?.close) && Math.abs(row.current_price - a.values.close) <= Math.max(.02, row.current_price * .0001) ? a.values : {};
 }
 
+// Use the same dated observation in list, comparison and daily purchase checks.
+// Legacy exported ratios may include the latest bar in their average.
+export function verifiedVolumeRatio(row, date) {
+  if (!validDate(date) || row?.technical_audit?.as_of_date !== date) return null;
+  const value = auditValues(row).volumeRatio;
+  return number(value) && value >= 0 ? value : null;
+}
+
 // Initial rows intentionally repeat the first chunk. Identical repeats are safe;
 // contradictory copies are excluded, independent of load order.
 export function mergeScanRows(payloads, date) {
@@ -72,7 +80,10 @@ export function mergeScanRows(payloads, date) {
       rows.set(row.symbol, row);
     }
   }
-  return [...rows.values()].map(row => ({ ...row, technical_audit: conflicts.has(row.symbol)
-    ? { errors: ['同一銘柄のデータが矛盾'], valid: false }
-    : row.technical_audit?.as_of_date === date ? row.technical_audit : undefined }));
+  return [...rows.values()].map(row => {
+    const conflict = conflicts.has(row.symbol), currentAudit = row.technical_audit?.as_of_date === date;
+    return { ...row, technical_audit: conflict ? { errors: ['同一銘柄のデータが矛盾'], valid: false } : currentAudit ? row.technical_audit : undefined,
+      // Scores derived from a rejected observation cannot remain certified.
+      ...((conflict || !currentAudit) && row.method_summary ? { method_summary: undefined } : {}) };
+  });
 }

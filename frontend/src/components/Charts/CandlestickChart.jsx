@@ -76,6 +76,7 @@ function CandlestickChart({
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
+  const appliedInteractiveRef = useRef(interactive);
   const candlestickSeriesRef = useRef(null);
   const pivotLineRef = useRef(null); // Horizontal pivot/buy-trigger price line
   const vcpBoxPrimitiveRef = useRef(null); // VCP consolidation-box overlay
@@ -101,6 +102,7 @@ function CandlestickChart({
   const previousIdentityRef = useRef(chartIdentity);
   const previousComparisonSessionsRef = useRef(comparisonSessions);
   const identityChanged = previousIdentityRef.current !== chartIdentity;
+  const ohlcLegendVisible = !compact && !hideOhlcLegend && (!researchView || !smallScreen);
   // Validated static surfaces can reuse their canvas; live/legacy charts retain
   // symbol-scoped instances. The identity covers symbol, date, path and generation.
   const instanceSymbol = chartIdentity == null ? symbol : null;
@@ -256,6 +258,7 @@ function CandlestickChart({
       bookAnnotations,
     });
     chartRef.current = chart;
+    appliedInteractiveRef.current = interactive;
     isFirstDataLoadRef.current = true;
     volumeSeriesRef.current = volumeSeries;
     avgVolumeSeriesRef.current = avgVolumeSeries;
@@ -270,33 +273,6 @@ function CandlestickChart({
     rsLineSeriesRef.current = rsLineSeries;
     rsMarkersRef.current = rsMarkers;
     epsLineSeriesRef.current = epsLineSeries;
-
-    // Subscribe to crosshair move for OHLC legend (skip in compact mode — legend is hidden)
-    if (!compact) chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !param.seriesData || !candlestickSeriesRef.current) {
-        // Mouse left the chart or no data - fall back to latest candle
-        if (latestCandleRef.current) {
-          setLegendData(latestCandleRef.current);
-        }
-        return;
-      }
-
-      const candleData = param.seriesData.get(candlestickSeriesRef.current);
-      if (candleData) {
-        const prevClose = prevCloseMapRef.current.get(candleData.time);
-        let changePercent = null;
-        if (prevClose !== undefined && prevClose !== null && prevClose !== 0) {
-          changePercent = ((candleData.close - prevClose) / prevClose) * 100;
-        }
-        setLegendData({
-          open: candleData.open,
-          high: candleData.high,
-          low: candleData.low,
-          close: candleData.close,
-          changePercent,
-        });
-      }
-    });
 
     // Handle container resize (including Modal fade completion)
     // Use ResizeObserver to detect when container becomes visible/changes size
@@ -332,12 +308,14 @@ function CandlestickChart({
       epsLineSeriesRef.current = null;
       rsMarkersRef.current = null;
     };
+    // `height` is handled by the ResizeObserver above. Recreating for a fitted
+    // height change would reset a selected time window or pan to the default.
     // `interactive` is intentionally not in the deps: it's only used as the
     // chart's initial handleScroll/handleScale value here, and the dedicated
     // applyOptions effect below picks up subsequent changes without remounting
     // the chart (which would reset visible range / EMAs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
+  }, [isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]); // Re-initialize only when required visual inputs change
 
   useLayoutEffect(() => {
     if (previousIdentityRef.current === chartIdentity) return;
@@ -378,12 +356,35 @@ function CandlestickChart({
   // Toggle pan/zoom handlers without re-initializing the chart so user state
   // (visible range, EMAs) is preserved when interactivity is enabled/disabled.
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!chartRef.current || appliedInteractiveRef.current === interactive) return;
+    appliedInteractiveRef.current = interactive;
     chartRef.current.applyOptions({
       handleScroll: interactive,
       handleScale: interactive,
     });
-  }, [interactive, height, isDarkMode, symbol, compact]);
+  }, [interactive, height, isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]);
+
+  // Hidden legends must not subscribe to pointer movement or enqueue React
+  // renders. Toggling their visibility does not recreate the chart or its data.
+  useLayoutEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !ohlcLegendVisible) return;
+    setLegendData(latestCandleRef.current);
+    const onCrosshair = param => {
+      if (!param.time || !param.seriesData || !candlestickSeriesRef.current) {
+        setLegendData(latestCandleRef.current);
+        return;
+      }
+      const candle = param.seriesData.get(candlestickSeriesRef.current);
+      if (!candle) return;
+      const previousClose = prevCloseMapRef.current.get(candle.time);
+      const changePercent = previousClose != null && previousClose !== 0
+        ? ((candle.close - previousClose) / previousClose) * 100 : null;
+      setLegendData({ open: candle.open, high: candle.high, low: candle.low, close: candle.close, changePercent });
+    };
+    chart.subscribeCrosshairMove(onCrosshair);
+    return () => { if (chartRef.current === chart) chart.unsubscribeCrosshairMove(onCrosshair); };
+  }, [ohlcLegendVisible, height, isDarkMode, instanceSymbol, compact, researchView, bookAnnotations]);
 
   // Subscribe to visible time range changes
   useLayoutEffect(() => {
@@ -507,7 +508,7 @@ function CandlestickChart({
         changePercent,
       };
       latestCandleRef.current = latestLegend;
-      setLegendData(latestLegend);
+      if (ohlcLegendVisible) setLegendData(latestLegend);
     } else {
       latestCandleRef.current = null;
       setLegendData(null);
@@ -700,7 +701,6 @@ function CandlestickChart({
     }
     if (markers) markers.setMarkers(researchView ? [] : markerList);
     if (researchView) {
-      series.priceScale().applyOptions({autoScale:true,mode:0,scaleMargins:{top:.18,bottom:.12}});
       series.applyOptions({autoscaleInfoProvider:()=>relativeStrengthScale(points,chartRef.current?.timeScale().getVisibleRange())});
     }
   }, [chartData, effectiveTimeframe, rsData, rsStripShown, rsRatingValue, height, isDarkMode, symbol, compact, researchView]);

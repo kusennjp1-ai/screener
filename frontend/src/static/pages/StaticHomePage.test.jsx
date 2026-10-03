@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MemoryRouter } from 'react-router-dom';
 import { renderWithProviders } from '../../test/renderWithProviders';
@@ -104,6 +104,7 @@ describe('StaticHomePage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
     modalSpy.mockClear();
     priceSparklineSpy.mockClear();
     useStaticManifest.mockReturnValue({
@@ -217,6 +218,54 @@ describe('StaticHomePage', () => {
 
       throw new Error(`Unexpected static path: ${path}`);
     });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the technical reference filters, RS ordering, top-20 cap and market-cap control unchanged', async () => {
+    scanManifestPayload.initial_rows = Array.from({ length: 21 }, (_, index) => makeLeaderRow(index + 1, {
+      passes_template: true,
+      rs_rating: index === 20 ? 70 : 95 - index,
+      code33: false,
+      ibd_group_rank: 150,
+      market_cap: index === 0 ? 500_000_000 : 2_000_000_000,
+    }));
+    scanChunkPayload.rows = [
+      makeLeaderRow(30, { symbol: 'WEAKRS', passes_template: true, rs_rating: 69 }),
+      makeLeaderRow(31, { symbol: 'NOTEMPLATE', passes_template: false, rs_rating: 99 }),
+      makeLeaderRow(32, { symbol: 'THINVOL', passes_template: true, volume: 99_999_999 }),
+    ];
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    const section = await screen.findByTestId('backtest-aligned-section');
+    expect(within(section).getByText('テクニカル参考候補 トップ20')).toBeInTheDocument();
+    expect(section).toHaveTextContent('市場の既定フィルターと選択中の時価総額下限');
+    expect(section).toHaveTextContent('RS順に最大20銘柄');
+    expect(section).not.toHaveTextContent(/15\.2|CAGR|6年|同じ選び方|同じ条件|バックテスト準拠/);
+    expect(within(section).getAllByRole('row').slice(1).map(row => row.textContent.match(/LEAD\d+/)?.[0]))
+      .toEqual(Array.from({ length: 20 }, (_, index) => `LEAD${String(index + 1).padStart(2, '0')}`));
+    for (const symbol of ['WEAKRS', 'NOTEMPLATE', 'THINVOL', 'LEAD21']) {
+      expect(within(section).queryByText(symbol)).not.toBeInTheDocument();
+    }
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: '時価総額（下限）' }));
+    await user.click(await screen.findByRole('option', { name: '>$1B' }));
+    await waitFor(() => expect(within(section).queryByText('LEAD01')).not.toBeInTheDocument());
+    expect(within(section).getByText('LEAD21')).toBeInTheDocument();
+  });
+
+  it.each(['US', 'HK'])('never requests or renders retired performance results for %s', async market => {
+    useStaticManifest.mockReturnValue({
+      data: { markets: { ...manifest.markets, HK: { ...manifest.markets.US, display_name: 'Hong Kong' } } },
+      isLoading: false, isError: false,
+    });
+    useStaticMarket.mockReturnValue({ selectedMarket: market });
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    const section = await screen.findByTestId('backtest-aligned-section');
+    expect(section).toHaveTextContent('テクニカル参考候補 トップ20');
+    expect(screen.queryByTestId('strategy-scorecard')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('legacy-evaluation-warning')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/15\.2|CAGR|6年|旧バックテスト記録/);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('filters key market cards to entries with renderable close history', async () => {

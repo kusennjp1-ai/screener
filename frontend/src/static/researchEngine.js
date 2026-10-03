@@ -4,14 +4,19 @@ import { financialHistory } from './financialHistory.js';
 import { institutionalGrowth } from './institutionalEvidence.js';
 import { decodeAssessment } from './assessmentEncoding.js';
 import { singleMissingCondition } from './missingCondition.js';
+import { entrySourceContext } from './bookSourceContext.js';
+import { evidenceTimestamp, newYorkDate, validClock, validEvidenceDay } from './evidenceTime.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+// One application parameter for the price gauge, rule list and daily readiness.
+export const entryZonePercent = method => method === 'minervini2' ? 3 : 5;
 // Calendar age is deliberately not an exchange-session count (holidays vary).
 export function snapshotFreshness(date, now = Date.now()) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { state: 'unknown', days: null };
+  if (!validEvidenceDay(date)) return { state: 'unknown', days: null };
   const stamp = Date.parse(`${date}T00:00:00Z`);
   if (!Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== date) return { state: 'unknown', days: null };
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const today = newYorkDate(now);
+  if (!today) return { state: 'unknown', days: null };
   const days = Math.round((Date.parse(`${today}T00:00:00Z`) - stamp) / 86400000);
   return { state: days < 0 ? 'future' : days >= 4 ? 'old' : 'recent', days };
 }
@@ -62,7 +67,7 @@ export function assess(row, method = 'minervini') {
     rule('売上高 前年同期比 ≥ 25%', row.sales_growth_yy, v => v >= 25, '%'),
     rule('A：直近3年の各年 EPS 成長率 ≥ 25%（最小値）', annualMinimum, v => v >= 25, '%'),
     rule('N：52週高値からの距離 ≤ 15%（代替指標）', highDistance(row), v => v <= 15, '%'),
-    rule('S：上昇日の出来高 / 50日平均 ≥ 1.4（代替指標）', finite(row.price_change_1d) ? row.se_volume_vs_50d : null, v => v >= 1.4 && row.price_change_1d > 0, '倍'),
+    rule('S：上昇日の出来高 / 直前50日平均 ≥ 1.4（代替指標）', finite(v.change) && finite(v.volumeRatio) && v.volumeRatio >= 0 ? v.volumeRatio : null, ratio => ratio >= 1.4 && v.change > 0, '倍'),
     ...common,
     {...rule('I：13F報告運用会社の保有社数が増加', institutionalGrowth(row.institutional_evidence,row.symbol,row.technical_audit?.as_of_date).increasing, v => v === true, '', true), evidence:institutionalGrowth(row.institutional_evidence,row.symbol,row.technical_audit?.as_of_date).reason},
     rule('M：市場が50日線・200日線より上（代替指標）', typeof row.market_above_50dma !== 'boolean' || typeof row.market_above_200dma !== 'boolean' ? null : row.market_above_50dma && row.market_above_200dma, v => v === true, '', true),
@@ -80,7 +85,7 @@ export function assess(row, method = 'minervini') {
   ];
   const passed = rules.filter(r => r.state === 'pass').length;
   if (row.financial_history) for (const item of rules.filter(r => r.label.includes('3年'))) {
-    item.evidence = `${row.financial_history.source} / 報告希薄化EPS / 取得 ${row.financial_history.retrieved_at}。取得時点データで、過去時点の公表確認ではありません。`;
+    item.evidence = `${typeof row.financial_history.source === 'string' ? row.financial_history.source : '出典未確認'} / 報告希薄化EPS / 取得 ${typeof row.financial_history.retrieved_at === 'string' ? row.financial_history.retrieved_at : '未確認'}。取得時点データで、過去時点の公表確認ではありません。`;
   }
   const failed = rules.filter(r => r.state === 'fail').length;
   const templatePass = trend.every(r => r.state === 'pass') && integrity.state === 'pass';
@@ -91,7 +96,7 @@ export function assess(row, method = 'minervini') {
 
 // Generated from the same rule function; unknowns stay unknown. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v2';
+export const RULE_SUMMARY_VERSION = 'research-summary-v3';
 export function assessmentSummary(row, method) {
   const result = row.method_summary?.version === RULE_SUMMARY_VERSION && decodeAssessment(row.method_summary[method]);
   return result || assess(row, method);
@@ -99,7 +104,7 @@ export function assessmentSummary(row, method) {
 
 export function entryChecks(row, method = 'minervini') {
   const v = auditValues(row), pivot = canonicalPivot(row).price;
-  const zone = method === 'minervini2' ? 3 : 5;
+  const zone = entryZonePercent(method);
   return [
     comparison(`ピボット以上・${zone}%以内`, [v.close, pivot], (p, b) => p >= b && p <= b * (1 + zone / 100)),
     rule('上昇日の出来高 ≥ 直前50日平均の1.4倍（アプリの代理閾値）', finite(v.change) ? v.volumeRatio : null, x => x >= 1.4 && v.change > 0, '倍'),
@@ -108,17 +113,28 @@ export function entryChecks(row, method = 'minervini') {
   ];
 }
 
-export function entryPlan(row, quote, method = 'minervini') {
+// Position-only views use the same canonical price/pivot/state rules without
+// allocating the full entry-plan explanation and source strings per point.
+export function entryPosition(row, quote, method = 'minervini') {
   const price = finite(quote?.price) && quote.price > 0 ? quote.price : row.current_price;
   const pivotInfo = canonicalPivot(row);
   const pivot = pivotInfo.price;
+  const zone = entryZonePercent(method);
   if (!finite(price) || price <= 0 || !finite(pivot) || pivot <= 0) return { state: pivotInfo.reason.includes('25%') ? '有効な買い水準なし' : '未判定', price, pivot: null, distance: null, pivotSource: pivotInfo.reason };
   const distance = (price / pivot - 1) * 100;
-  const zone = method === 'minervini2' ? 3 : 5;
-  return { price, pivot, distance, zone, upper: pivot * (1 + zone / 100), pivotSource: pivotInfo.reason,
-    state: row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外' : row.price_activity?.lowRange ? '低変動・監視のみ' : distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過',
+  return { price, pivot, distance, zone, pivotSource: pivotInfo.reason,
+    state: row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外' : row.price_activity?.lowRange ? '低変動・監視のみ' : distance < 0 ? 'ピボット待ち' : distance <= zone + 1e-9 ? '買いゾーン内' : '買いゾーン超過' };
+}
+
+export function entryPlan(row, quote, method = 'minervini') {
+  const plan = entryPosition(row, quote, method);
+  plan.sourceContext = entrySourceContext(method, entryZonePercent(method), plan.distance);
+  if (plan.pivot !== null) {
+    plan.upper = plan.pivot * (1 + plan.zone / 100);
     // A transparent example, not a claim that a pattern-specific stop was detected.
-    stopExample: price * .93 };
+    plan.stopExample = plan.price * .93;
+  }
+  return plan;
 }
 
 export function rankCandidates(rows, method, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false } = {}) {
@@ -134,7 +150,7 @@ export function rankCandidates(rows, method, { search = '', qualifiedOnly = fals
 
 export function quoteStatus(quote, now = Date.now()) {
   if (!quote || !finite(quote.price) || quote.price <= 0) return '未接続';
-  const age = now - Date.parse(quote.as_of);
+  const age = validClock(now) ? now - evidenceTimestamp(quote.as_of) : NaN;
   if (!Number.isFinite(age) || age < -5000 || age > 90000) return '期限切れ';
   return quote.is_realtime === true && quote.delay_seconds === 0 ? 'リアルタイム' : '遅延データ';
 }

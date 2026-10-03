@@ -26,3 +26,20 @@ it('does not turn missing years, negative bases or stale observations into a pas
     const data=fixture();change(data);expect(financialHistory(data,'TEST','2026-09-25',now).annualGrowth).toBeNull();
   }
 });
+it.each([null, {}, [], ['2026-09-26T07:00:00Z'], {toString:42}, 42])('rejects malformed financial timestamps without coercion: %j', retrieved_at => {
+ const data={...fixture(),retrieved_at};
+ expect(financialHistory(data,'TEST','2026-09-25',now)).toMatchObject({valid:false,annualGrowth:null});
+ const row=withAuditFixture({symbol:'TEST',financial_history:data},'2026-09-25');
+ expect(()=>assess(row,'ibd')).not.toThrow();
+});
+it('rejects missing period records and keeps malformed source labels from crashing the rules',()=>{
+ for(const field of ['annual','quarterly']) {
+  const data=fixture();data[field]=[null];
+  expect(financialHistory(data,'TEST','2026-09-25',now)[field]).toEqual([]);
+ }
+ vi.useFakeTimers();vi.setSystemTime(now);
+ try {
+  const row=withAuditFixture({symbol:'TEST',financial_history:{...fixture(),source:{toString:42}}},'2026-09-25');
+  expect(assess(row,'ibd').rules.find(r=>r.label.includes('3年')).evidence).toContain('出典未確認');
+ } finally {vi.useRealTimers();}
+});

@@ -7,7 +7,8 @@ import { planConditionDetail, presentPortfolio } from '../portfolioPresentation'
 import { SECTORS, sectorKey } from '../sectorDefinitions';
 import './portfolioPlan.css';
 
-const money = number => Number.isFinite(number) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number) : '未確認';
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = number => Number.isFinite(number) ? usd.format(number) : '未確認';
 const pct = number => Number.isFinite(number) ? `${(number * 100).toFixed(1)}%` : '未確認';
 const sectorLabel = sector => SECTORS.find(item => item[0] === sectorKey(sector))?.[1] || '業種未分類';
 
@@ -42,12 +43,16 @@ function PlanPosition({ position, onInspect }) {
   </Box>;
 }
 
-export default function PortfolioPlanDrawer({ plan, open, onClose, onInspect }) {
+export default function PortfolioPlanDrawer({ plan, presentation: suppliedPresentation, open, onClose, onInspect }) {
   const titleId = useId();
   const descriptionId = useId();
-  const presentation = useMemo(() => presentPortfolio(plan), [plan]);
+  const presentation = useMemo(() => open ? suppliedPresentation || presentPortfolio(plan) : null, [open, plan, suppliedPresentation]);
   const [journalOpen, setJournalOpen] = useState(false);
   const [riskOpen, setRiskOpen] = useState(false);
+  // Keep hook state and repeated-open behavior, but do not format an entire
+  // invisible plan table on initial load and every method/selection change.
+  // The dialog already has a zero-duration transition.
+  if (!open) return null;
   const inspect = symbol => { onClose(); onInspect?.(symbol); };
   return <Dialog open={open} onClose={onClose} aria-labelledby={titleId} aria-describedby={descriptionId} maxWidth={false}
     transitionDuration={0} className="portfolio-plan-dialog"

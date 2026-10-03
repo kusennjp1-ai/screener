@@ -1,9 +1,9 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CandlestickChart from './CandlestickChart';
 
-const { instances, factory } = vi.hoisted(() => ({ instances: [], factory: vi.fn() }));
+const { instances, factory, resizeObservers } = vi.hoisted(() => ({ instances: [], factory: vi.fn(), resizeObservers: [] }));
 vi.mock('./createPriceChartSeries', () => ({ createPriceChartSeries: factory }));
 const seriesKeys=['candlestickSeries','volumeSeries','avgVolumeSeries','ema10Series','ema20Series','ema50Series','sma50Series','sma150Series','sma200Series','rsLineSeries','epsLineSeries'];
 const bars=price=>[
@@ -14,7 +14,11 @@ const rs=value=>[{time:'2026-09-21',value},{time:'2026-09-22',value:value+1}];
 const longBars=Array.from({length:260},(_,index)=>({date:new Date(Date.UTC(2025,0,index+1)).toISOString().slice(0,10),open:100,high:103,low:98,close:100,volume:1000}));
 beforeEach(()=>{
   instances.length=0;
-  vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}});
+  resizeObservers.length=0;
+  vi.stubGlobal('ResizeObserver',class {
+    constructor(callback){this.callback=callback;this.disconnect=vi.fn();resizeObservers.push(this);}
+    observe(){}
+  });
   vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));
   vi.stubGlobal('cancelAnimationFrame',vi.fn());
   factory.mockImplementation(container=>{
@@ -28,10 +32,11 @@ beforeEach(()=>{
       getVisibleLogicalRange:()=>logicalRange,fitContent:vi.fn(),setVisibleRange:vi.fn(),
       setVisibleLogicalRange:vi.fn(range=>{logicalRange=range;rangeApplications.push({range,close:item.candlestickSeries.setData.mock.lastCall?.[0].at(-1)?.close,rs:item.rsLineSeries.setData.mock.lastCall?.[0].slice()});})};
     const scaleOptions=vi.fn();
-    const item={chart:{subscribeCrosshairMove:vi.fn(),clearCrosshairPosition:vi.fn(),resize:vi.fn(),remove:vi.fn(),applyOptions:vi.fn(),timeScale:()=>timeScale,priceScale:()=>({applyOptions:scaleOptions})},context,timeScale,rangeApplications,scaleOptions};
+    const item={chart:{subscribeCrosshairMove:vi.fn(),unsubscribeCrosshairMove:vi.fn(),clearCrosshairPosition:vi.fn(),resize:vi.fn(),remove:vi.fn(),applyOptions:vi.fn(),timeScale:()=>timeScale,priceScale:()=>({applyOptions:scaleOptions})},context,timeScale,rangeApplications,scaleOptions};
     for(const key of seriesKeys){
       const primitiveSet=new Set();
-      item[key]={setData:vi.fn(),applyOptions:vi.fn(),priceScale:()=>({applyOptions:vi.fn()}),
+      const seriesScale={applyOptions:vi.fn()};
+      item[key]={setData:vi.fn(),applyOptions:vi.fn(),priceScale:()=>seriesScale,
         attachPrimitive:vi.fn(p=>primitiveSet.add(p)),detachPrimitive:vi.fn(p=>primitiveSet.delete(p)),primitiveSet,
         createPriceLine:vi.fn(o=>o),removePriceLine:vi.fn()};
     }
@@ -48,6 +53,40 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it('does not invalidate chart options or RS scale options for a reused static symbol',()=>{
+    const view=setup(),instance=instances[0];
+    expect(instance.chart.applyOptions).not.toHaveBeenCalled();
+    expect(instance.rsLineSeries.priceScale().applyOptions).not.toHaveBeenCalled();
+    view.update({symbol:'BBB',chartIdentity:'BBB:2',priceData:bars(200),rsLineData:rs(20)});
+    expect(instance.chart.applyOptions).not.toHaveBeenCalled();
+    expect(instance.rsLineSeries.priceScale().applyOptions).not.toHaveBeenCalled();
+    view.update({symbol:'BBB',chartIdentity:'BBB:2',interactive:false});
+    expect(instance.chart.applyOptions).toHaveBeenCalledExactlyOnceWith({handleScroll:false,handleScale:false});
+    view.update({symbol:'CCC',chartIdentity:'CCC:3',interactive:false});
+    expect(instance.chart.applyOptions).toHaveBeenCalledTimes(1);
+    view.update({symbol:'CCC',chartIdentity:'CCC:3',interactive:true});
+    expect(instance.chart.applyOptions).toHaveBeenCalledTimes(2);
+    expect(instance.chart.applyOptions).toHaveBeenLastCalledWith({handleScroll:true,handleScale:true});
+  });
+  it('subscribes to crosshair updates only while an OHLC legend is visible',()=>{
+    const view=setup({hideOhlcLegend:true}),instance=instances[0];
+    expect(instance.chart.subscribeCrosshairMove).not.toHaveBeenCalled();
+    view.update({hideOhlcLegend:false});
+    expect(instance.chart.subscribeCrosshairMove).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/始 100.00/)).toBeInTheDocument();
+    const handler=instance.chart.subscribeCrosshairMove.mock.calls[0][0];
+    act(()=>handler({time:'2026-09-21',seriesData:new Map([[instance.candlestickSeries,{time:'2026-09-21',open:80,high:85,low:78,close:82}]])}));
+    expect(screen.getByText(/始 80.00/)).toBeInTheDocument();
+    act(()=>handler({}));
+    expect(screen.getByText(/始 100.00/)).toBeInTheDocument();
+    view.update({hideOhlcLegend:true});
+    expect(instance.chart.unsubscribeCrosshairMove).toHaveBeenCalledExactlyOnceWith(handler);
+    view.update({hideOhlcLegend:false,smallScreen:true});
+    expect(instance.chart.subscribeCrosshairMove).toHaveBeenCalledTimes(1);
+    view.update({hideOhlcLegend:false,smallScreen:false});
+    expect(instance.chart.subscribeCrosshairMove).toHaveBeenCalledTimes(2);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
   it('keeps one instance but immediately replaces all data and old annotations on a cached symbol switch',()=>{
     const view=setup({priceData:longBars});const instance=instances[0];
     expect(instance.sma200Series.setData.mock.lastCall[0]).toHaveLength(61);
@@ -144,5 +183,47 @@ describe('validated static chart instance reuse',()=>{
     expect(instance.rangeApplications).toHaveLength(count+1);
     expect(instance.timeScale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from:196.5,to:261});
     expect(requestAnimationFrame).not.toHaveBeenCalled();
+  });
+  it.each([null,'AAA:1'])('preserves selected ranges and manual pan across fitted heights (identity: %s)',chartIdentity=>{
+    const props={chartIdentity,priceData:longBars,height:420,smallScreen:true};
+    const view=setup(props),instance=instances[0],observer=resizeObservers[0];
+    for(const [label,height] of [['1か月',310],['3か月',300],['pan',420]]){
+      if(label==='pan')instance.timeScale.setVisibleLogicalRange({from:10.25,to:50.5});
+      else fireEvent.click(screen.getByRole('button',{name:label}));
+      const selected={...instance.timeScale.getVisibleLogicalRange()};
+      view.update({...props,height});
+      expect(instances.at(-1).timeScale.getVisibleLogicalRange()).toEqual(selected);
+      expect(factory).toHaveBeenCalledTimes(1);
+      act(()=>observer.callback([{contentRect:{width:390,height}}]));
+      expect(instance.chart.resize).toHaveBeenLastCalledWith(390,height);
+      expect(instance.timeScale.getVisibleLogicalRange()).toEqual(selected);
+    }
+    expect(instance.chart.remove).not.toHaveBeenCalled();
+    expect(observer.disconnect).not.toHaveBeenCalled();
+    view.unmount();
+    expect(instance.chart.remove).toHaveBeenCalledOnce();
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+  });
+  it('keeps timeframe defaults and legacy symbol range restoration distinct from resizing',()=>{
+    const visibleRange={from:'2025-08-01',to:'2025-09-01'};
+    const props={chartIdentity:null,priceData:longBars,height:420,visibleRange};
+    const view=setup(props),instance=instances[0];
+    fireEvent.click(screen.getByRole('button',{name:'週足'}));
+    const weekCount=instance.candlestickSeries.setData.mock.lastCall[0].length;
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:Math.max(0,weekCount-52)-.5,to:weekCount+1});
+    fireEvent.click(screen.getByRole('button',{name:'3か月'}));
+    const selected={...instance.timeScale.getVisibleLogicalRange()};
+    view.update({...props,height:310});
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual(selected);
+    expect(screen.getByRole('button',{name:'週足'})).toHaveAttribute('aria-pressed','true');
+    expect(instance.timeScale.setVisibleRange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'日足'}));
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:133.5,to:261});
+    view.update({...props,height:300});
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual({from:133.5,to:261});
+    view.update({...props,height:300,symbol:'BBB'});
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(instance.chart.remove).toHaveBeenCalledOnce();
+    expect(instances[1].timeScale.setVisibleRange).toHaveBeenCalledExactlyOnceWith(visibleRange);
   });
 });

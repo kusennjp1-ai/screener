@@ -1,9 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { canonicalPivot, filterRanked, formatPublished, prepareSessionCurrent, sessionCurrent } from './researchPresentation';
 import { entryPlan, rankCandidates } from './researchEngine';
 import { withAuditFixture } from './testAuditFixture';
 
 describe('audit remediation contracts', () => {
+  it('parses repeated publication calendar strings only once during preparation', () => {
+    const date='2026-09-25', calendar={latest_completed_session:date,evaluated_at:'2026-09-25T21:00:00Z',valid_until:'2026-09-28T20:00:00Z'};
+    const rows=Array.from({length:5901},()=>({entry_evidence:{as_of_date:date,calendar:{...calendar}}}));
+    const parse=vi.spyOn(Date,'parse');
+    try {
+      const current=prepareSessionCurrent(rows,date);
+      expect(parse.mock.calls.filter(([value])=>value===calendar.evaluated_at)).toHaveLength(1);
+      expect(parse.mock.calls.filter(([value])=>value===calendar.valid_until)).toHaveLength(1);
+      expect(current(new Date('2026-09-26T12:00:00Z').getTime())).toBe(true);
+    } finally {parse.mockRestore();}
+  });
   it('uses one level and rejects remote obsolete pivots without inventing a base', () => {
     expect(canonicalPivot({current_price:100,se_pivot_price:99,vcp_pivot:110}).price).toBe(99);
     expect(entryPlan({current_price:85.71,se_pivot_price:31.68}).pivot).toBeNull();

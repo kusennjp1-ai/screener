@@ -5,17 +5,31 @@ import { createResearchReceiver } from './researchWorkerPackets';
 export function runDataWorker(request, signal) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./researchWorker.js', import.meta.url), { type: 'module', name: 'research-data' });
-    const dispose = () => { worker.terminate(); signal?.removeEventListener('abort', abort); };
-    const abort = () => { dispose(); reject(new DOMException('Aborted', 'AbortError')); };
-    const receive=createResearchReceiver();
-    worker.onmessage = ({ data }) => {
-      if(data.packet) { try { const result=receive(data.packet);if(result){dispose();resolve(result);} } catch(error) {dispose();reject(error);} return; }
-      dispose(); if (data.error) reject(Error(data.error)); else resolve(data.result);
+    let settled = false;
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      worker.onmessage = null; worker.onerror = null;
+      worker.terminate(); signal?.removeEventListener('abort', abort);
+      if (error) reject(error); else resolve(result);
     };
-    worker.onerror = () => { dispose(); reject(Error('分析データの前処理に失敗しました')); };
+    const abort = () => finish(new DOMException('Aborted', 'AbortError'));
+    const receive=createResearchReceiver();
+    worker.onmessage = event => {
+      if (settled) return;
+      try {
+        const { data } = event;
+        if (data.packet) {
+          const result = receive(data.packet);
+          if (result) finish(null, result);
+          else worker.postMessage({ operation: 'next-packet' });
+        } else finish(data.error ? Error(data.error) : null, data.result);
+      } catch (error) { finish(error); }
+    };
+    worker.onerror = () => finish(Error('分析データの前処理に失敗しました'));
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) { abort(); return; }
-    worker.postMessage(request);
+    try { worker.postMessage(request); } catch (error) { finish(error); }
   });
 }
 

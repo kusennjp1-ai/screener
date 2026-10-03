@@ -7,6 +7,7 @@ import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography, useMediaQuery } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
@@ -15,7 +16,7 @@ import { compareReference, finite, quoteStatus, researchCsv, snapshotFreshness }
 import ResearchDetail from '../components/ResearchDetail';
 import CandidateBoard from '../components/CandidateBoard';
 import ResearchSearch from '../components/ResearchSearch';
-import { entryReadiness } from '../entryReadiness';
+import { entryReadiness, prepareReadinessTimeline } from '../entryReadiness';
 import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 import { usePersonalQuote } from '../usePersonalQuote';
 import { useResearchBundle } from '../useResearchBundle';
@@ -26,13 +27,14 @@ import '../research.css';
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
 export default function ResearchPage({compareOnly=false}) {
+  const location = useLocation();
   const smallScreen = useMediaQuery('(max-width:700px)');
   const client = useQueryClient();
   const manifest = useStaticManifest();
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
   const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
   const version = manifest.data?.research_generation || manifest.data?.generated_at;
-  const params=new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const [method, setMethod] = useState(()=>Object.hasOwn(METHODS,params.get('method'))?params.get('method'):'minervini');
   const [view,setView]=useState(()=>params.get('view')==='charts'?'charts':'list');
   const [sector,setSector]=useState(()=>params.get('sector') || '');
@@ -47,14 +49,8 @@ export default function ResearchPage({compareOnly=false}) {
   useEffect(()=>{
     const searchEvent=e=>setSearch(e.detail||'');
     const backEvent=()=>setMobileView('list');
-    const symbolEvent=()=>{
-      const ticker=new URLSearchParams(window.location.hash.split('?')[1]||'').get('symbol');
-      if(!ticker)return;
-      setSymbol(ticker);setSearch(ticker);setLiquid(false);setCoverage('all');setStrict(false);setNearOnly(false);setOnlyWatch(false);setSector('');setView('list');setMobileView('detail');
-      requestAnimationFrame(()=>detailRef.current?.scrollIntoView?.({block:'start'}));
-    };
-    window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);window.addEventListener('hashchange',symbolEvent);
-    return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);window.removeEventListener('hashchange',symbolEvent);};
+    window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);
+    return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};
   },[]);
   const [mobileView, setMobileView] = useState(() => params.get('symbol') ? 'detail' : 'list');
   const [liquid, setLiquid] = useState(() => !params.get('symbol'));
@@ -82,6 +78,7 @@ export default function ResearchPage({compareOnly=false}) {
   const coverageRows = radarRanked;
   const verifiedCount = useMemo(() => coverageRows.filter(r => r.row.technical_audit?.valid === true).length, [coverageRows]);
   const sessionCurrentAt = useMemo(() => prepareSessionCurrent(rows, bundle.data?.date), [rows, bundle.data?.date]);
+  const readinessBoundaryAt = useMemo(() => prepareReadinessTimeline(rows), [rows]);
   const availableSymbols = useMemo(() => new Set(rows.map(r => r.symbol)), [rows]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
   const detail = useQuery({queryKey:['researchDetail', selectedSummary?.research_detail_path, version],
@@ -94,6 +91,26 @@ export default function ResearchPage({compareOnly=false}) {
   const selected = useMemo(() => selectedSummary && detail.data?.symbol === selectedSummary.symbol && detail.data?.as_of_date === bundle.data?.date ? {...detail.data, ...selectedSummary, price_quality:{...detail.data.price_quality,...selectedSummary.price_quality}, setup_recalculation:{...detail.data.setup_recalculation,...selectedSummary.setup_recalculation}} : selectedSummary, [selectedSummary, detail.data, bundle.data?.date]);
   const initialSymbol = useRef(params.get('symbol'));
   useEffect(() => {
+    // RouterLink uses pushState, which does not emit hashchange. Restore every
+    // supported URL field on navigation, including fields removed by Back.
+    const ticker = params.get('symbol') || null;
+    setMethod(Object.hasOwn(METHODS, params.get('method')) ? params.get('method') : 'minervini');
+    setView(params.get('view') === 'charts' ? 'charts' : 'list');
+    setSector(params.get('sector') || '');
+    setSearch(ticker || '');
+    setSymbol(ticker);
+    setLiquid(!ticker);
+    setCoverage('all');
+    setStrict(false);
+    setNearOnly(false);
+    setOnlyWatch(false);
+    setMobileView(ticker ? 'detail' : 'list');
+    setFiltersOpen(false);
+    setChart(null);
+    setVerificationSymbol(null);
+    initialSymbol.current = ticker;
+  }, [location.key, location.pathname, params]);
+  useEffect(() => {
     if (!initialSymbol.current || selected?.symbol !== initialSymbol.current) return;
     const frame = requestAnimationFrame(() => {
       if (!detailRef.current) return;
@@ -102,7 +119,7 @@ export default function ResearchPage({compareOnly=false}) {
       initialSymbol.current = null;
     });
     return () => cancelAnimationFrame(frame);
-  }, [selected?.symbol]);
+  }, [selected?.symbol, location.key, location.pathname, location.search]);
   const embeddedCharts = useMemo(() => rows.some(r=>Object.hasOwn(r,'chart_path')) ? {symbols:rows.filter(r=>r.chart_path).map(r=>({symbol:r.symbol,path:r.chart_path}))} : null, [rows]);
   const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts);
   const index = {data:embeddedCharts || fetchedIndex.data};
@@ -127,9 +144,10 @@ export default function ResearchPage({compareOnly=false}) {
     quoteStatus(personalKey ? personal.quote : quote.data,time),
     snapshotFreshness(bundle.data?.date || entry.as_of_date,time),
     sessionCurrentAt(time),
+    readinessBoundaryAt(time),
     time-Date.parse(manifest.data?.generated_at)>96*3600000,
     clockRows.map(row=>entryReadiness(row,bundle.data?.date,market,time).rules.map(r=>r.state)),
-  ]),[personalKey,personal.quote,quote.data,bundle.data?.date,entry.as_of_date,sessionCurrentAt,clockRows,market,manifest.data?.generated_at]);
+  ]),[personalKey,personal.quote,quote.data,bundle.data?.date,entry.as_of_date,sessionCurrentAt,readinessBoundaryAt,clockRows,market,manifest.data?.generated_at]);
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
@@ -231,6 +249,7 @@ export default function ResearchPage({compareOnly=false}) {
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">{overlap ? `IBD公式リストとの一致：${Math.round(overlap.recall * 100)}%` : '公開ルールに基づく独自スクリーナー'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>資料確認の範囲：今回は『ミネルヴィニの成長株投資法』の一部を照合。ピボット追随は約2〜3%が目安です。第1方式の5%や第2方式の3%は既存アプリ設定で、第2冊の指定値を今回確認したものではありません。第1冊のトレンドテンプレート8条件も確認済み（Kindle表示115/421）。ただし、SMA・21営業日前との上向き比較・252営業日の高安値窓・独自RSの計算はアプリの近似で、原典との完全な同等性は未検証です。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint || personalKey ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : 'エントリー位置の「場中価格を接続する」から自分用APIキーで接続できます。未接続時は日次価格で計算します。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>

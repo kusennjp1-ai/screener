@@ -1,0 +1,2777 @@
+{
+  "observed_commit": "f4800b2605eb0df220901c57a613820dd0215912",
+  "captured_checkout": "84f0fa228337f9dcde9f46bcdd3788c2be902fbc",
+  "equivalent_tree": "5737ddc0a89fd1216806a7d1a132e14847cedaa3",
+  "reviewer": "Independent AI-assisted screenshot inspection; internal design judgments, not a human-user study or award",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/37052949435",
+  "source_attribution": "The captured PR merge and observed source head have identical full Git trees. All 102 rendered images were inspected, including 12 additional short-height views.",
+  "data": {
+    "as_of_date": "2026-10-01",
+    "generated_at": "2026-10-02T04:49:23Z",
+    "research_generation": "a17d9dcba4d4994ddc5d3df9c9539d4bba4c9aa748e15ab9c6ea01d79b697dbc"
+  },
+  "screens": [
+    {
+      "key": "home/1440/dark",
+      "screenshot": "home-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.6,
+          "reason": "The 223-candidate headline, three numbered steps and BRKR/$61.94 identity form a clear hierarchy; the radar and detail region have balanced widths. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Visible method tabs, candidate rows, near-pass filter and chart toolbar are easy to locate; the large introduction leaves the chart volume pane below this initial viewport, so compact/expand remains useful."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The RS-versus-pivot radar, miniature row position gauges and separate daily-condition count create a recognizably purpose-built research workflow."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "223 screened candidates, 48 app-zone names and individual daily checks are clearly separated; the radar explicitly calls 0–5% an app setting and the allocation CTA says conditional/unmet."
+        }
+      },
+      "sha256": "afd4b661beca8be5e3db6a1c9af8292f393678209dbdedd5a5172a35c7134182",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "near-pass/1440/dark",
+      "screenshot": "near-pass-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "MXL and its indeterminate badge anchor the detail pane; unmet-condition pills add density but remain aligned within the candidate list. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "The selected near-pass control and per-row unmet reasons explain the filtered view; question marks and dashes keep absent price-position evidence separate from a failed selection condition."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "Combining near-pass explanations with position gauges and a live-looking detail chart is more specific to this research task than a simple ranked table."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "MXL/VICR/FORM show indeterminate position instead of a fabricated level, while explicit high-distance/MA failures remain visible; purchase-condition fractions are separately labeled."
+        }
+      },
+      "sha256": "a4480b74663c286b6c1564625ff78b41c2881de879a8910ba60545ad0c63cd2f",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "compact/1440/dark",
+      "screenshot": "compact-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.7,
+          "reason": "The collapsed overview frees vertical space for the complete BRKR price/RS/volume chart and more candidate rows while retaining a tidy summary strip. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.8,
+          "reason": "The chart date axis, range controls and more list rows are visible together; the conditional-allocation CTA and overview expand control remain available."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The compact three-stage status strip preserves the application-specific selection-versus-entry distinction rather than replacing it with a generic toolbar."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The summary retains 223 candidates, 48 app-zone names and separate daily checks, with BRKR purchase conditions 4/7 and labeled upper/pivot/stop-example chart levels."
+        }
+      },
+      "sha256": "dd1b4ca6cdbb896273875f20a7f4592a89ce64e7535cc710e90c372f7f5fee21",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "detail/1440/dark",
+      "screenshot": "detail-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.6,
+          "reason": "The BRKR identity, price and purchase-condition badge remain prominent below the overview; shared card and typography treatment is consistent with the home capture. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "Candidate selection and chart range/expand controls are visible with no blocking overlap; this supplied detail capture starts at the same overview position, so deeper detail content is not assessable here."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The visible combination of RS/pivot radar, per-row entry gauges and selected technical chart is purpose-built for comparing selection with entry readiness."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The visible BRKR state distinguishes in-zone position from only 4/7 daily conditions; this rating does not assume anything about the unshown lower detail sections."
+        }
+      },
+      "sha256": "1095114bbc2134b4ec6760a0ce2165cb337fcc4aea7f4d85d7f637a7668ab186",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "chart/1440/dark",
+      "screenshot": "chart-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded BRKR chart now fits its price, RS, volume, date axis and footer; the generous multi-line preamble still uses substantial height at 900px. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Time-range, zoom, reset, illustration, close, previous/next and keyboard-hint controls are visibly separated; all main chart panes and dates fit without overlap."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "The shared pivot, app upper limit and stop-example overlays are integrated with condition context and keyboard-oriented symbol browsing."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "BRKR is explicitly described as in-zone by price position, with app 5% upper limit, daily timestamp and unmet/unconfirmed categories, avoiding an unconditional buy implication."
+        }
+      },
+      "sha256": "f1714e5f8c2e5d7ae1916dcac5af56455d7cff19bdf520159f4e9d39a7fbb1d4",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "portfolio/1440/dark",
+      "screenshot": "portfolio-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "The right-side drawer uses a clear title, section hierarchy and STNG card; dimming preserves context while the allocation figures stay prominent. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "The close button, evidence link and expandable calculation details are visible; the long explanatory paragraph requires careful reading but does not overlap or truncate within the card."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The conditional-allocation presentation combines unmet-versus-unconfirmed counts, example sizing and explicit app/book threshold provenance rather than resembling an execution ticket."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "Zero all-daily-condition-pass stocks and one conditional STNG idea are explicit; unmet 2/unconfirmed 0, modeled capital, hypothetical values, stop example and the 0–5% app-versus-book caveat are readable."
+        }
+      },
+      "sha256": "d25d84f0b2a1b185ef200ef7b3d7f11c70680f2ec122869ccf1dd128e2fd28de",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "comparison/1440/dark",
+      "screenshot": "comparison-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.6,
+          "reason": "Six consistently sized cards fit the desktop viewport; ticker/status, chart and four summary metrics align for rapid scanning. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.6,
+          "reason": "All six date axes and lower metric rows are visible with a clear selected-card border and paging/range controls; dense chart labels remain readable at original size."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The coordinated grid combines price, RS, volume, entry band and daily-condition counts in a task-specific comparison rather than six generic price widgets."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "BRKR/SNOW/ASX/NPO/SHO/MGNI retain individual scales, app upper and stop-example labels, RS/volume and condition fractions; the page explicitly separates price position from purchase conditions."
+        }
+      },
+      "sha256": "42b1110b7e1c14f081f754a8b0a497add57fddc5a5ab5821bd63e847860d281a",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "comparison-near-pass/1440/dark",
+      "screenshot": "comparison-near-pass-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "The 3×2 grid remains aligned despite mixed indeterminate, waiting and exceeded badges; DOCN's extra book warning fits below its metrics. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "All six charts, axes and key values fit; per-card unmet reasons and symbols support comparison without depending only on green/blue/amber color."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "Near-pass selection failures, uncertain pivots and source-specific chase warnings are combined directly with comparable technical charts."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MXL/VICR/FORM display indeterminate status and missing app limits as dashes; AEHR/SYRE are waiting, DOCN is exceeded with the book warning, and daily-condition counts remain separate."
+        }
+      },
+      "sha256": "76252b13804428d9feefff2ce869017f88d1034929a293d0fe7b71ca7a7196bd",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "market/1440/dark",
+      "screenshot": "market-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "The large energy/technology takeaway leads a well-aligned ranking with a complementary rotation panel; the lower-left scatter cluster is busy but the ranked values stay clear. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Period/method selectors and rank-versus-table toggle are visible; the main list is legible and the explanatory panel reduces the need to decode the small rotation plot alone."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "Sector-relative strength, 21-day change, method pass rates and a rotation interpretation are combined into a coherent application-specific overview."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "Dates, ETF proxies, denominator/unconfirmed counts, simplified-rotation caveat and bar-range caveat are visible; zero rates and unconfirmed values are distinguished."
+        }
+      },
+      "sha256": "12464a9025e3b45d8d26a30815edfcc52ca45d0ec31b7e42fb9d7337eaffbe8e",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "breadth/1440/dark",
+      "screenshot": "breadth-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "The 0.86 ratio, caution headline and 261/312/−51 breadth figures create strong hierarchy; the large trend panel is uncluttered. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The 1.00 reference line, dates and 1/3-month controls are clearly visible; threshold and period labels make the trend interpretable at a glance."
+        },
+        "originality": {
+          "value": 8.0,
+          "reason": "The visual form is conventional, but the threshold-based interpretation, four-percent daily breadth split and 23-session ratio context make this a purposeful market-health view."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The screen states the as-of date, 10-day ratio, below-1.00 interpretation, daily 4% move counts and displayed date range; it does not visually imply a trade recommendation."
+        }
+      },
+      "sha256": "8a068c0a0e1635f3da3da617b9dcac45eb8149be60227af5e9458778de3c09f6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "scan/1440/dark",
+      "screenshot": "scan-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The count summary, market-context banner, filter strip and table have clear separation; the wide pill strip and dense columns make this the busiest desktop surface. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Search, active-filter count, clear/reset and per-column help are visible, and row sparklines are readable; the rightmost pill is visibly clipped with weak horizontal-scroll discoverability."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "Paired RS/price sparklines and several named methodology scores make the conventional table meaningfully tailored to cross-method screening."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The as-of date, auxiliary-filter language, market allocation-context notice, result/chart counts and dollar-unit label provide useful context; no profitability claim is presented."
+        }
+      },
+      "sha256": "d56181867a14b3bf893e28fb5489d5dde7c88a003ca56a490ecc954b0085cb73",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-inline/1440/dark",
+      "screenshot": "case-MSM-inline-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "MSM's $128.50 identity and green app-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected MSM row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MSM keeps the green app-zone position distinct from 4/7 purchase conditions and a blue warning that it exceeds the book's approximate 2–3% guide; pivot 124.51, app upper 130.74 and stop example 119.51 are labeled."
+        }
+      },
+      "sha256": "d4147db77d1e65866ae2a96c9c73b25d07f502a8dfec5ad6c33f11f37e8c2578",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-inline-annotations/1440/dark",
+      "screenshot": "case-MSM-inline-annotations-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "MSM's $128.50 identity and green app-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected MSM row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MSM keeps the green app-zone position distinct from 4/7 purchase conditions and a blue warning that it exceeds the book's approximate 2–3% guide; pivot 124.51, app upper 130.74 and stop example 119.51 are labeled."
+        }
+      },
+      "sha256": "41de648225526921629705df94b9cf2c36a612faac8b6e641edbfcb718ffd537",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-expanded/1440/dark",
+      "screenshot": "case-MSM-expanded-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded MSM view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "MSM's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "MSM explicitly says the app range is satisfied while the book's approximate 2–3% guide is exceeded; the 5% app upper 130.74, shared pivot 124.51, daily timestamp and unmet/unconfirmed categories remain visible."
+        }
+      },
+      "sha256": "fa444f9d2e0776ca771858eb3735d5b1919798ce6e3e9332fa611cb93c6da1c6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-expanded-annotations/1440/dark",
+      "screenshot": "case-MSM-expanded-annotations-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded MSM view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "MSM's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "MSM explicitly says the app range is satisfied while the book's approximate 2–3% guide is exceeded; the 5% app upper 130.74, shared pivot 124.51, daily timestamp and unmet/unconfirmed categories remain visible."
+        }
+      },
+      "sha256": "fa444f9d2e0776ca771858eb3735d5b1919798ce6e3e9332fa611cb93c6da1c6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-expanded-short/1440/dark",
+      "screenshot": "case-MSM-expanded-short-1440x760-dark.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 1440×760, MSM's header/preamble/controls occupy roughly y0–388, leaving only about 200–210px for the primary price plot. Dates/footer fit, but unused upper-right space and generous explanatory spacing flatten the chart; short-height layout needs a compact preamble. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "The prior clipped time axis is fixed: MSM's date labels, RS, volume and bottom keyboard hints are all visible. Range/zoom/reset remain usable visually, although the shallow price pane makes candle detail harder to inspect."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MSM explicitly says the app range is satisfied while the book's approximate 2–3% guide is exceeded; the 5% app upper 130.74, shared pivot 124.51, daily timestamp and unmet/unconfirmed categories remain visible."
+        }
+      },
+      "sha256": "5b03602c0ff3c52c3c0a2b86b281b5583c11a1270c94dca1151c121cf9976b5b",
+      "viewport": {
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "key": "case-ADI-inline/1440/dark",
+      "screenshot": "case-ADI-inline-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "ADI's $404.60 identity and amber exceeded-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "The selected ADI row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "ADI shows app-zone exceeded, 4/7 purchase conditions and a separate book-guidance warning; shared pivot 377.49, app upper 396.36 and stop example 376.28 are individually labeled."
+        }
+      },
+      "sha256": "04967413bb6e93e3df0b9e4517c766e87996554fa17873930468f6a5e0b89f7b",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-inline-annotations/1440/dark",
+      "screenshot": "case-ADI-inline-annotations-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "ADI's $404.60 identity and amber exceeded-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. C1–C5 annotation labels and contraction box remain separated from the key right-axis levels. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "The selected ADI row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "ADI shows app-zone exceeded, 4/7 purchase conditions and a separate book-guidance warning; shared pivot 377.49, app upper 396.36 and stop example 376.28 are individually labeled."
+        }
+      },
+      "sha256": "09591bc9db618b409e9c11162eecb7ff1314667c0ce9ba7788ba91bcb90016d4",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-expanded/1440/dark",
+      "screenshot": "case-ADI-expanded-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded ADI view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "ADI's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; previous/next buttons and keyboard hints are readable."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "ADI explicitly exceeds both the app upper and the book's approximate 2–3% guide; 5% app upper 396.36, pivot 377.49, stop example 376.28 and unmet/unconfirmed categories are readable."
+        }
+      },
+      "sha256": "8b7ad44c4d9a21a6a1b97bb81989e7d34b54c6f92be8f975325cd92fc0b489e6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-expanded-annotations/1440/dark",
+      "screenshot": "case-ADI-expanded-annotations-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded ADI view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. C1–C5 annotation labels and contraction box remain separated from the key right-axis levels. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "ADI's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; previous/next buttons and keyboard hints are readable. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "ADI explicitly exceeds both the app upper and the book's approximate 2–3% guide; 5% app upper 396.36, pivot 377.49, stop example 376.28 and unmet/unconfirmed categories are readable."
+        }
+      },
+      "sha256": "8b7ad44c4d9a21a6a1b97bb81989e7d34b54c6f92be8f975325cd92fc0b489e6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-expanded-short/1440/dark",
+      "screenshot": "case-ADI-expanded-short-1440x760-dark.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 1440×760, ADI's header/preamble/controls occupy roughly y0–388, leaving only about 200–210px for the primary price plot. Dates/footer fit, but unused upper-right space and generous explanatory spacing flatten the chart; short-height layout needs a compact preamble. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "The prior clipped time axis is fixed: ADI's date labels, RS, volume and bottom previous/next buttons plus keyboard hints are all visible. Range/zoom/reset remain usable visually, although the shallow price pane makes candle detail harder to inspect."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "ADI explicitly exceeds both the app upper and the book's approximate 2–3% guide; 5% app upper 396.36, pivot 377.49, stop example 376.28 and unmet/unconfirmed categories are readable."
+        }
+      },
+      "sha256": "9c95b276cbf4ccf6a9c46b1ba6c05943be90551f4fad6e8c323566056271f8d7",
+      "viewport": {
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "key": "case-TGTX-inline/1440/dark",
+      "screenshot": "case-TGTX-inline-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "TGTX's $53.62 identity and blue pivot-waiting badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected TGTX row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "TGTX shows pivot waiting and only 2/7 purchase conditions, with current 53.62 visibly below pivot 57.14; app upper 60.00 and stop example 49.87 are labeled without a spurious chase warning."
+        }
+      },
+      "sha256": "046a4d883bb3bb179d3fe73394b56d550dcb2f2112f085936e579c1d685dc290",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-inline-annotations/1440/dark",
+      "screenshot": "case-TGTX-inline-annotations-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "TGTX's $53.62 identity and blue pivot-waiting badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected TGTX row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "TGTX shows pivot waiting and only 2/7 purchase conditions, with current 53.62 visibly below pivot 57.14; app upper 60.00 and stop example 49.87 are labeled without a spurious chase warning."
+        }
+      },
+      "sha256": "48db047099633c919aef830ff24c158d2c0dce654e81f084dcac4f2099e36172",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-expanded/1440/dark",
+      "screenshot": "case-TGTX-expanded-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The expanded TGTX view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "TGTX's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "TGTX is explicitly pivot waiting by price position, with daily timestamp, shared pivot 57.14, 5% app upper 60.00 and unmet/unconfirmed categories; the source does not falsely add an exceeded-book warning."
+        }
+      },
+      "sha256": "8a226e7982324f60ccfa2968006e84db1db58a6548254ad98c6695671d6217a8",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/1440/dark",
+      "screenshot": "case-TGTX-expanded-annotations-1440x900-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The expanded TGTX view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "TGTX's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "TGTX is explicitly pivot waiting by price position, with daily timestamp, shared pivot 57.14, 5% app upper 60.00 and unmet/unconfirmed categories; the source does not falsely add an exceeded-book warning."
+        }
+      },
+      "sha256": "8a226e7982324f60ccfa2968006e84db1db58a6548254ad98c6695671d6217a8",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-short/1440/dark",
+      "screenshot": "case-TGTX-expanded-short-1440x760-dark.png",
+      "scores": {
+        "design": {
+          "value": 7.9,
+          "reason": "At 1440×760, TGTX's header/preamble/controls occupy roughly y0–364, leaving only about 225px for the primary price plot. Dates/footer fit, but unused upper-right space and generous explanatory spacing flatten the chart; short-height layout needs a compact preamble. The dark palette keeps mint/coral candles and violet controls distinct from the near-black panels."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "The prior clipped time axis is fixed: TGTX's date labels, RS, volume and bottom keyboard hints are all visible. Range/zoom/reset remain usable visually, although the shallow price pane makes candle detail harder to inspect."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "TGTX is explicitly pivot waiting by price position, with daily timestamp, shared pivot 57.14, 5% app upper 60.00 and unmet/unconfirmed categories; the source does not falsely add an exceeded-book warning."
+        }
+      },
+      "sha256": "353176177f890a7666f433c768fc2d2eb274ef48c999a140e6a7afb87173ef2e",
+      "viewport": {
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "key": "home/1440/light",
+      "screenshot": "home-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.6,
+          "reason": "The 223-candidate headline, three numbered steps and BRKR/$61.94 identity form a clear hierarchy; the radar and detail region have balanced widths. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Visible method tabs, candidate rows, near-pass filter and chart toolbar are easy to locate; the large introduction leaves the chart volume pane below this initial viewport, so compact/expand remains useful."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The RS-versus-pivot radar, miniature row position gauges and separate daily-condition count create a recognizably purpose-built research workflow."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "223 screened candidates, 48 app-zone names and individual daily checks are clearly separated; the radar explicitly calls 0–5% an app setting and the allocation CTA says conditional/unmet."
+        }
+      },
+      "sha256": "696f8ca17e430fa12be81c0d0a4297c84cb2f1794a0ea4f3cbd163f63eafc42e",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "near-pass/1440/light",
+      "screenshot": "near-pass-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "MXL and its indeterminate badge anchor the detail pane; unmet-condition pills add density but remain aligned within the candidate list. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "The selected near-pass control and per-row unmet reasons explain the filtered view; question marks and dashes keep absent price-position evidence separate from a failed selection condition."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "Combining near-pass explanations with position gauges and a live-looking detail chart is more specific to this research task than a simple ranked table."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "MXL/VICR/FORM show indeterminate position instead of a fabricated level, while explicit high-distance/MA failures remain visible; purchase-condition fractions are separately labeled."
+        }
+      },
+      "sha256": "009b367ac648498e8e6df095ed2c26f458bbf624f795fce05407d78eb891a75c",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "compact/1440/light",
+      "screenshot": "compact-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.7,
+          "reason": "The collapsed overview frees vertical space for the complete BRKR price/RS/volume chart and more candidate rows while retaining a tidy summary strip. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.8,
+          "reason": "The chart date axis, range controls and more list rows are visible together; the conditional-allocation CTA and overview expand control remain available."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The compact three-stage status strip preserves the application-specific selection-versus-entry distinction rather than replacing it with a generic toolbar."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The summary retains 223 candidates, 48 app-zone names and separate daily checks, with BRKR purchase conditions 4/7 and labeled upper/pivot/stop-example chart levels."
+        }
+      },
+      "sha256": "7f7317b4c1f8876ac2f09ed8bccfec6245cb74f6ec6bd69c67599efd0c26c6eb",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "detail/1440/light",
+      "screenshot": "detail-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.6,
+          "reason": "The BRKR identity, price and purchase-condition badge remain prominent below the overview; shared card and typography treatment is consistent with the home capture. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "Candidate selection and chart range/expand controls are visible with no blocking overlap; this supplied detail capture starts at the same overview position, so deeper detail content is not assessable here."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The visible combination of RS/pivot radar, per-row entry gauges and selected technical chart is purpose-built for comparing selection with entry readiness."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The visible BRKR state distinguishes in-zone position from only 4/7 daily conditions; this rating does not assume anything about the unshown lower detail sections."
+        }
+      },
+      "sha256": "c416c074b1be7f890f0f1a4aba75d7d4cb51f5e444f86841d48e5b7cd147afe5",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "chart/1440/light",
+      "screenshot": "chart-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded BRKR chart now fits its price, RS, volume, date axis and footer; the generous multi-line preamble still uses substantial height at 900px. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Time-range, zoom, reset, illustration, close, previous/next and keyboard-hint controls are visibly separated; all main chart panes and dates fit without overlap."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "The shared pivot, app upper limit and stop-example overlays are integrated with condition context and keyboard-oriented symbol browsing."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "BRKR is explicitly described as in-zone by price position, with app 5% upper limit, daily timestamp and unmet/unconfirmed categories, avoiding an unconditional buy implication."
+        }
+      },
+      "sha256": "8e6a6ee1f8b71edc00a57e603f42739cdaa4d828b5eac7a65766a9062bfffe62",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "portfolio/1440/light",
+      "screenshot": "portfolio-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "The right-side drawer uses a clear title, section hierarchy and STNG card; dimming preserves context while the allocation figures stay prominent. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "The close button, evidence link and expandable calculation details are visible; the long explanatory paragraph requires careful reading but does not overlap or truncate within the card."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The conditional-allocation presentation combines unmet-versus-unconfirmed counts, example sizing and explicit app/book threshold provenance rather than resembling an execution ticket."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "Zero all-daily-condition-pass stocks and one conditional STNG idea are explicit; unmet 2/unconfirmed 0, modeled capital, hypothetical values, stop example and the 0–5% app-versus-book caveat are readable."
+        }
+      },
+      "sha256": "98b998e5bef6a5d85b8aa8408900750fb363c91c37106dde76654d61d1f5ea06",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "comparison/1440/light",
+      "screenshot": "comparison-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.6,
+          "reason": "Six consistently sized cards fit the desktop viewport; ticker/status, chart and four summary metrics align for rapid scanning. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.6,
+          "reason": "All six date axes and lower metric rows are visible with a clear selected-card border and paging/range controls; dense chart labels remain readable at original size."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The coordinated grid combines price, RS, volume, entry band and daily-condition counts in a task-specific comparison rather than six generic price widgets."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "BRKR/SNOW/ASX/NPO/SHO/MGNI retain individual scales, app upper and stop-example labels, RS/volume and condition fractions; the page explicitly separates price position from purchase conditions."
+        }
+      },
+      "sha256": "aba14e472f9d3f0031fb976835468b186c40181d1d9c87f488c6c01c73fe80c2",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "comparison-near-pass/1440/light",
+      "screenshot": "comparison-near-pass-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "The 3×2 grid remains aligned despite mixed indeterminate, waiting and exceeded badges; DOCN's extra book warning fits below its metrics. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "All six charts, axes and key values fit; per-card unmet reasons and symbols support comparison without depending only on green/blue/amber color."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "Near-pass selection failures, uncertain pivots and source-specific chase warnings are combined directly with comparable technical charts."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MXL/VICR/FORM display indeterminate status and missing app limits as dashes; AEHR/SYRE are waiting, DOCN is exceeded with the book warning, and daily-condition counts remain separate."
+        }
+      },
+      "sha256": "fad00b49250e43fa42ff0bdc4f8ff7c38fbdfe9cfb4f8fea048c46601aa41fa0",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "market/1440/light",
+      "screenshot": "market-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "The large energy/technology takeaway leads a well-aligned ranking with a complementary rotation panel; the lower-left scatter cluster is busy but the ranked values stay clear. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Period/method selectors and rank-versus-table toggle are visible; the main list is legible and the explanatory panel reduces the need to decode the small rotation plot alone."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "Sector-relative strength, 21-day change, method pass rates and a rotation interpretation are combined into a coherent application-specific overview."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "Dates, ETF proxies, denominator/unconfirmed counts, simplified-rotation caveat and bar-range caveat are visible; zero rates and unconfirmed values are distinguished."
+        }
+      },
+      "sha256": "44a65af49c4652c346711f67d34044e56145896a31c8b58f4a89bae350503a0e",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "breadth/1440/light",
+      "screenshot": "breadth-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "The 0.86 ratio, caution headline and 261/312/−51 breadth figures create strong hierarchy; the large trend panel is uncluttered. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The 1.00 reference line, dates and 1/3-month controls are clearly visible; threshold and period labels make the trend interpretable at a glance."
+        },
+        "originality": {
+          "value": 8.0,
+          "reason": "The visual form is conventional, but the threshold-based interpretation, four-percent daily breadth split and 23-session ratio context make this a purposeful market-health view."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The screen states the as-of date, 10-day ratio, below-1.00 interpretation, daily 4% move counts and displayed date range; it does not visually imply a trade recommendation."
+        }
+      },
+      "sha256": "c9dc9b8e4702df817d8a0a118e0589ddc2049ec68dceee1c6a87983e94b82176",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "scan/1440/light",
+      "screenshot": "scan-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The count summary, market-context banner, filter strip and table have clear separation; the wide pill strip and dense columns make this the busiest desktop surface. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Search, active-filter count, clear/reset and per-column help are visible, and row sparklines are readable; the rightmost pill is visibly clipped with weak horizontal-scroll discoverability."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "Paired RS/price sparklines and several named methodology scores make the conventional table meaningfully tailored to cross-method screening."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The as-of date, auxiliary-filter language, market allocation-context notice, result/chart counts and dollar-unit label provide useful context; no profitability claim is presented."
+        }
+      },
+      "sha256": "8b2cba551036cd05cfb118d333a2f122a386cb86db68d6e4b477ead9ea2c29f5",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-inline/1440/light",
+      "screenshot": "case-MSM-inline-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "MSM's $128.50 identity and green app-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected MSM row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MSM keeps the green app-zone position distinct from 4/7 purchase conditions and a blue warning that it exceeds the book's approximate 2–3% guide; pivot 124.51, app upper 130.74 and stop example 119.51 are labeled."
+        }
+      },
+      "sha256": "15acb86c84af21be5edb4ea20efc0ccd6f4534eb71732c79fa0f8e982d4ac19e",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-inline-annotations/1440/light",
+      "screenshot": "case-MSM-inline-annotations-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.3,
+          "reason": "MSM's $128.50 identity and green app-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected MSM row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MSM keeps the green app-zone position distinct from 4/7 purchase conditions and a blue warning that it exceeds the book's approximate 2–3% guide; pivot 124.51, app upper 130.74 and stop example 119.51 are labeled."
+        }
+      },
+      "sha256": "7422366a07f9645d45ba0f542ade532da89a87c4e9db1d9d182e06489fb46f9d",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-expanded/1440/light",
+      "screenshot": "case-MSM-expanded-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded MSM view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "MSM's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "MSM explicitly says the app range is satisfied while the book's approximate 2–3% guide is exceeded; the 5% app upper 130.74, shared pivot 124.51, daily timestamp and unmet/unconfirmed categories remain visible."
+        }
+      },
+      "sha256": "a39c8b15afe7a00c0a36e427478c97a7fd912be01628ec76733bacd44525dcc1",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-expanded-annotations/1440/light",
+      "screenshot": "case-MSM-expanded-annotations-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded MSM view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "MSM's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "MSM explicitly says the app range is satisfied while the book's approximate 2–3% guide is exceeded; the 5% app upper 130.74, shared pivot 124.51, daily timestamp and unmet/unconfirmed categories remain visible."
+        }
+      },
+      "sha256": "a39c8b15afe7a00c0a36e427478c97a7fd912be01628ec76733bacd44525dcc1",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-MSM-expanded-short/1440/light",
+      "screenshot": "case-MSM-expanded-short-1440x760-light.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 1440×760, MSM's header/preamble/controls occupy roughly y0–388, leaving only about 200–210px for the primary price plot. Dates/footer fit, but unused upper-right space and generous explanatory spacing flatten the chart; short-height layout needs a compact preamble. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "The prior clipped time axis is fixed: MSM's date labels, RS, volume and bottom keyboard hints are all visible. Range/zoom/reset remain usable visually, although the shallow price pane makes candle detail harder to inspect."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The same chart presents app-zone eligibility and a stricter book-guidance warning without collapsing them into one green/pass signal."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MSM explicitly says the app range is satisfied while the book's approximate 2–3% guide is exceeded; the 5% app upper 130.74, shared pivot 124.51, daily timestamp and unmet/unconfirmed categories remain visible."
+        }
+      },
+      "sha256": "24e1e2eea19f7a4895f345389e901f8daa0641986a83f21366ab5e7da658fa7d",
+      "viewport": {
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "key": "case-ADI-inline/1440/light",
+      "screenshot": "case-ADI-inline-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "ADI's $404.60 identity and amber exceeded-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "The selected ADI row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "ADI shows app-zone exceeded, 4/7 purchase conditions and a separate book-guidance warning; shared pivot 377.49, app upper 396.36 and stop example 376.28 are individually labeled."
+        }
+      },
+      "sha256": "e51c8a0f80fce37633874ffafc7bf4c3aedab779497f5fb670e1b0bbe5b52ec6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-inline-annotations/1440/light",
+      "screenshot": "case-ADI-inline-annotations-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "ADI's $404.60 identity and amber exceeded-zone badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. C1–C5 annotation labels and contraction box remain separated from the key right-axis levels. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "The selected ADI row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "ADI shows app-zone exceeded, 4/7 purchase conditions and a separate book-guidance warning; shared pivot 377.49, app upper 396.36 and stop example 376.28 are individually labeled."
+        }
+      },
+      "sha256": "e5d7a6d37e257e6dcfb3e5d51a76fa608a1c8b41c03c39cf863bed5b833dcd9c",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-expanded/1440/light",
+      "screenshot": "case-ADI-expanded-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded ADI view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "ADI's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; previous/next buttons and keyboard hints are readable."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "ADI explicitly exceeds both the app upper and the book's approximate 2–3% guide; 5% app upper 396.36, pivot 377.49, stop example 376.28 and unmet/unconfirmed categories are readable."
+        }
+      },
+      "sha256": "e2707984348340451ec3583d49dfd43040fd506f1624b7f3325304ea1cc6b350",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-expanded-annotations/1440/light",
+      "screenshot": "case-ADI-expanded-annotations-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "The expanded ADI view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. C1–C5 annotation labels and contraction box remain separated from the key right-axis levels. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "ADI's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; previous/next buttons and keyboard hints are readable. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.9,
+          "reason": "ADI explicitly exceeds both the app upper and the book's approximate 2–3% guide; 5% app upper 396.36, pivot 377.49, stop example 376.28 and unmet/unconfirmed categories are readable."
+        }
+      },
+      "sha256": "e2707984348340451ec3583d49dfd43040fd506f1624b7f3325304ea1cc6b350",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-ADI-expanded-short/1440/light",
+      "screenshot": "case-ADI-expanded-short-1440x760-light.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 1440×760, ADI's header/preamble/controls occupy roughly y0–388, leaving only about 200–210px for the primary price plot. Dates/footer fit, but unused upper-right space and generous explanatory spacing flatten the chart; short-height layout needs a compact preamble. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "The prior clipped time axis is fixed: ADI's date labels, RS, volume and bottom previous/next buttons plus keyboard hints are all visible. Range/zoom/reset remain usable visually, although the shallow price pane makes candle detail harder to inspect."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "The annotated C1–C5 contraction sequence is combined with shared pivot, app-limit and book-guidance context, giving the technical display a distinctive explanatory role."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "ADI explicitly exceeds both the app upper and the book's approximate 2–3% guide; 5% app upper 396.36, pivot 377.49, stop example 376.28 and unmet/unconfirmed categories are readable."
+        }
+      },
+      "sha256": "29ede3650016d2e039b090990d38bc07286e4044ca82b6be02a3f862f8c29d35",
+      "viewport": {
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "key": "case-TGTX-inline/1440/light",
+      "screenshot": "case-TGTX-inline-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "TGTX's $53.62 identity and blue pivot-waiting badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected TGTX row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "TGTX shows pivot waiting and only 2/7 purchase conditions, with current 53.62 visibly below pivot 57.14; app upper 60.00 and stop example 49.87 are labeled without a spurious chase warning."
+        }
+      },
+      "sha256": "2ff96ed4f045248e961d2abfc2e029679f95bb5e471f08dfb5b951aaee70dc36",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-inline-annotations/1440/light",
+      "screenshot": "case-TGTX-inline-annotations-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "TGTX's $53.62 identity and blue pivot-waiting badge lead a well-spaced chart; the price, RS and volume panes remain visually separate. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "The selected TGTX row, range/zoom/reset/expand controls and full chart date axis are visible together; labeled levels stay readable beside the candles. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "TGTX shows pivot waiting and only 2/7 purchase conditions, with current 53.62 visibly below pivot 57.14; app upper 60.00 and stop example 49.87 are labeled without a spurious chase warning."
+        }
+      },
+      "sha256": "e63d11347c022240e749eaaebf1920702f73cbf271c94d262544f971cc77474e",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-expanded/1440/light",
+      "screenshot": "case-TGTX-expanded-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The expanded TGTX view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "TGTX's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "TGTX is explicitly pivot waiting by price position, with daily timestamp, shared pivot 57.14, 5% app upper 60.00 and unmet/unconfirmed categories; the source does not falsely add an exceeded-book warning."
+        }
+      },
+      "sha256": "2ac8337c3787b715fbf7463614cbc1555d91b33afa117ee48060c7a1fe8a55f8",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/1440/light",
+      "screenshot": "case-TGTX-expanded-annotations-1440x900-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "The expanded TGTX view fits its price, RS, volume, date axis and footer; the preamble remains generous but the 900px view gives the chart usable vertical detail. The supplied annotation state keeps the base box and chart levels readable without a new overlay collision. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.5,
+          "reason": "TGTX's dates and footer are now fully visible beneath the volume pane, with close, range and zoom controls separated; keyboard hints remain visible for the single-result state. This rating is for the visible annotation capture; it does not claim the toggle interaction was tested."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.7,
+          "reason": "TGTX is explicitly pivot waiting by price position, with daily timestamp, shared pivot 57.14, 5% app upper 60.00 and unmet/unconfirmed categories; the source does not falsely add an exceeded-book warning."
+        }
+      },
+      "sha256": "2ac8337c3787b715fbf7463614cbc1555d91b33afa117ee48060c7a1fe8a55f8",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-short/1440/light",
+      "screenshot": "case-TGTX-expanded-short-1440x760-light.png",
+      "scores": {
+        "design": {
+          "value": 7.9,
+          "reason": "At 1440×760, TGTX's header/preamble/controls occupy roughly y0–364, leaving only about 225px for the primary price plot. Dates/footer fit, but unused upper-right space and generous explanatory spacing flatten the chart; short-height layout needs a compact preamble. The light palette separates white panels from the pale canvas; colored status text remains legible."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "The prior clipped time axis is fixed: TGTX's date labels, RS, volume and bottom keyboard hints are all visible. Range/zoom/reset remain usable visually, although the shallow price pane makes candle detail harder to inspect."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "The application-specific entry band, waiting position and condition context complement the base-shape, relative-strength and volume panes."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "TGTX is explicitly pivot waiting by price position, with daily timestamp, shared pivot 57.14, 5% app upper 60.00 and unmet/unconfirmed categories; the source does not falsely add an exceeded-book warning."
+        }
+      },
+      "sha256": "44a3eda4a975a0cc8541bfe7f1a338b877a7846c020fe1a17b6bfe8930514b33",
+      "viewport": {
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "key": "home/390/dark",
+      "screenshot": "home-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.7,
+          "reason": "Clear 223-candidate headline, three summary columns, radar card and three visible ticker rows establish a strong overview-to-detail hierarchy. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Method tabs, list filters and bottom navigation remain distinct; BRKR selection is visible. Dense small secondary copy is a polish limit rather than a blocked task."
+        },
+        "originality": {
+          "value": 8.8,
+          "reason": "The setup radar, pivot-position mini-bars and daily condition fractions create a distinctive screening workflow rather than a generic quote list."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "Visible アプリ設定 0〜+5% now identifies the model boundary directly; snapshot date, selection count and individual purchase-condition instruction separate the decisions."
+        }
+      },
+      "sha256": "4e2c9118f636ed29690aec9d8b1e7bd8b5a7df79c91b414dcd211b027bb68ec7",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "near-pass/390/dark",
+      "screenshot": "near-pass-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "The active あと1条件 filter and red reason pills make the three near-pass rows easy to separate beneath the radar. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "MXL, AEHR and VICR failed conditions can be scanned quickly; a bare dash still gives less missing-data explanation than the comparison screen."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "Near-pass reasons are integrated with the radar and method choice, making the screen a focused review queue rather than just a filtered ticker list."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "App-setting qualifier is visible and each failed selection rule is named; the 223 summary versus 270 filtered rows is readable but needs the surrounding labels to interpret."
+        }
+      },
+      "sha256": "c869fd10e4fad73a92f23e06225c9183bcece137c1f796428626001ff3fa7fa2",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "detail/390/dark",
+      "screenshot": "detail-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "BRKR identity, in-zone badge and $61.94 dominate appropriately; price, RS and volume panes fit above the fold in a consistent card. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Day/week and common periods are visible and back/favorite controls are distinct; the toolbar continues off the right edge, so reset/expand discoverability remains a minor weakness."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "Conventional trading panes are adapted with explicit pivot/upper/stop labels and a separate purchase-condition badge, giving the screen useful product-specific identity."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "Dated closing price, negative daily move, 4/7 purchase count and reference levels are visible; this image does not verify calculations or imply all remaining conditions are failed."
+        }
+      },
+      "sha256": "9e298134163d09e49c3148e59fb8dee0a0bb762b4c49a144a4a0bcd36637f5e7",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "chart/390/dark",
+      "screenshot": "chart-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "BRKR expanded view aligns price, RS and volume panes with an unobstructed month axis and a separate navigation footer. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close and previous/next are visible, with swipe guidance and a clear day/week toolbar; offscreen later controls remain a small discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The source-aware condition header and integrated market-relative/volume panes turn a familiar chart into a focused screening review surface."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The header explicitly shows 4/7 with 未確認1 and names outstanding categories; price date, legend and reference levels remain visible."
+        }
+      },
+      "sha256": "97232c0a00494cea171a65ede710978eb57b5b3d2efcc246af3abe0d9db03bdc",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "portfolio/390/dark",
+      "screenshot": "portfolio-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "Zero fully passing names, one conditional name and the STNG scenario card are clearly tiered; the long explanatory paragraph is dense but readable. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close, failed-condition labels, trial details and the evidence/chart link are distinguishable. The source paragraph is long for a phone but stays intact."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The allocation view exposes unmet and unknown conditions alongside the hypothetical sizing, an unusually transparent alternative to a simple recommendation card."
+        },
+        "content": {
+          "value": 9.1,
+          "reason": "Explicit hypothetical-model language, unmet2/unknown0, source location, book2–3% versus app5%, and the no-order implication are all visible. Content score concerns disclosure, not financial validity."
+        }
+      },
+      "sha256": "ba2a4fe2a6b65b394454792a4de4d89c9e688a8f8d563c51007bffc06d35b988",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "comparison/390/dark",
+      "screenshot": "comparison-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "One full BRKR card plus a useful SNOW preview balances chart legibility and scanning density; the four-value footer is aligned. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Period selector, six-item pagination and bottom navigation are readable; the full first card contains enough information to compare without opening it."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "Stacked price/RS/volume mini-charts with explicit app upper/stop and purchase fractions provide a differentiated side-by-side-review pattern on a narrow screen."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The subtitle separates price location from purchase conditions; app upper, stop example, RS/volume and 4/7 are labeled rather than implied by color."
+        }
+      },
+      "sha256": "9e31d5728fe97c16d5a7ec454a41bf1747f209e060884da90176840050e001a1",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "comparison-near-pass/390/dark",
+      "screenshot": "comparison-near-pass-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "MXL and AEHR cards preserve the same chart rhythm while distinct question-mark and waiting pills differentiate their states. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "MXL missing pivot-relative data and AEHR waiting state are readable in the first viewport, with pagination and common period controls still available."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "Embedding explicit indeterminate and failed-selection states into comparable technical cards makes the comparison workflow product-specific."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MXL ?判定不可, the named failed screening rule, absent upper/stop dashes and 2/7 condition count clearly separate unknown values from a known failure."
+        }
+      },
+      "sha256": "8cedf51d35ff7ac1c6e38239666efa7f5593e889294e944ea1d90a56a764280d",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "market/390/dark",
+      "screenshot": "market-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "The energy/technology headline leads into well-separated sector, index and pass-rate columns. The former wrapped scale and abutting numeric strings are fixed. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Index114.9 and count31/114 now have visible separation; period/method and rank/table controls remain clear. Compact bars are backed by readable numeric values."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "Combining sector relative strength, condition pass rate and unknown counts gives this ranked table a distinct screening-oriented purpose."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "指数（100=SPY） is a compact unambiguous heading; sector returns, pass numerator/denominator and 未確認 counts are retained."
+        }
+      },
+      "sha256": "95e3181b9ca39801525ac8367b86a9aa6efbab9ce355e9364e4c4ae2ac072ae0",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "breadth/390/dark",
+      "screenshot": "breadth-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "Caution headline, 0.86 ratio, three count columns and the historical line chart create a clean visual sequence with good breathing room. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.6,
+          "reason": "The reader can identify down-pressure,261 advances,312 declines and the negative51 difference quickly; one/three-month controls are visually distinct."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "The breadth card couples a decision-oriented warning with explicit advance/decline counts and historical context in a cohesive product-specific layout."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The1.00 threshold, four-percent move criterion, snapshot date and measured interval are labeled; numbers have visible units and are not presented as a prediction."
+        }
+      },
+      "sha256": "0f5e5a0dab9c06b41601a130c12d2429ee13dba8564511b311bc8f338ec8e49d",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "scan/390/dark",
+      "screenshot": "scan-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "Count, context banner, search/sort controls and compact result cards form a clear hierarchy, with three complete cards visible. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "Search, all-items table link and descending setup-point sort are easy to locate; each complete result exposes price, RS, pivot, volume and condition status."
+        },
+        "originality": {
+          "value": 8.0,
+          "reason": "The scan integrates the shared market-limit context and preparation-state labels into a familiar but purpose-adapted filter/results pattern."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The banner identifies 独自判定 and the25% trial cap; results use explicit 未達 preparation status rather than relying on low volume alone."
+        }
+      },
+      "sha256": "bef7bc5dde1b111ffb6f37caef68f9f5585e1480aa196ae738d3c187dd3c0bff",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-inline/390/dark",
+      "screenshot": "case-MSM-inline-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "MSM $128.50, 4/7 purchase conditions and green 買いゾーン内 have a strong header hierarchy; the three technical panes fit within a single aligned card. Minor regular-axis tick occlusion remains. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Back, favorite, day/week and common periods are visible. The right edge of the horizontally scrolling toolbar cuts a later control, so overflow discoverability could improve."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The MSM chart combines technical panes with condition and source-aware state labels rather than displaying an isolated price graph."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The green app-zone badge coexists with a visible 書籍目安2〜3%超 warning, preventing the two boundaries from being silently equated. Dated close, RS, volume and reference levels remain visible; the inline fraction is less explicit about unknowns than the expanded header."
+        }
+      },
+      "sha256": "86a6ef5f6966229e09da38ef33cf287035bda9a62729df803b1c80e905c641eb",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-inline-annotations/390/dark",
+      "screenshot": "case-MSM-inline-annotations-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "MSM base box and reference levels remain distinguishable in the narrow plot. The shifted toolbar begins with a partial month label, and some price ticks are partially masked. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Details and expand are now visible, while the early period controls are offscreen horizontally; this is a minor overflow-discoverability cost, not evidence that controls cannot be reached."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "MSM base box and reference levels are integrated with price/RS/volume and condition-aware context, making the annotated review more specific than a generic quote chart."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The green app-zone badge coexists with a visible 書籍目安2〜3%超 warning, preventing the two boundaries from being silently equated. Price, pivot, upper and stop-example labels remain readable. Visible patterns alone do not establish that a pattern is valid or tradable."
+        }
+      },
+      "sha256": "4b3d1154fb2cd0a1b7e08d16285321d074f9b230d42ed62ef12174edbfdb51c8",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-expanded/390/dark",
+      "screenshot": "case-MSM-expanded-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "MSM expanded chart has distinct price, RS and volume panes and a fully visible Aug/Sep/Oct date axis above the footer at844px height. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close and the complete date axis are visible; the1/1 context correctly has no previous/next buttons. The chart-control row is dense but coherent."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "MSM condition-aware header, technical reference labels and coordinated panes form a distinct screening review experience on mobile."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. Expanded header explicitly adds 未確認1 and names selection, base-shape and earnings-buffer categories. Snapshot date and chart legend are readable in the first view."
+        }
+      },
+      "sha256": "ff69d3c0c9f10a80dd3e6d485a89f7692b40fda07bf59eb51d78f10c92d3244b",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-expanded-annotations/390/dark",
+      "screenshot": "case-MSM-expanded-annotations-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "MSM base box and reference levels remain legible with no major annotation-label collision; the full lower panes and month axis stay clear of the footer. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "Close remains visible and the selected details control is clear. Early period controls move offscreen in the horizontal toolbar, a minor discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The combination of base box and reference levels, reference levels, conditional header and synchronized technical panes creates a purpose-specific annotated review."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. Expanded header explicitly adds 未確認1 and names selection, base-shape and earnings-buffer categories. The annotations add interpretable evidence without removing the visible condition caveat."
+        }
+      },
+      "sha256": "98d6e3c1d14ac5b90142dc6c14bdb116e5cff1b2e645d411c5f241b35e019547",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-expanded-short/390/dark",
+      "screenshot": "case-MSM-expanded-short-390x568-dark.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 390×568 the MSM header, legend and control stack extends to y316 before the plot. Only about227 px of the price pane remains above the25 px footer. This top-heavy first-view hierarchy merits improvement; vertical scrolling itself is not treated as a defect. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Close remains visibly available; this1/1 case has no previous/next buttons. Report evidence confirms axis/footer/Close visible and hit-testable after scrolling at390×480, and restored chart after reopen at844. Supported scrolling preserves access, although no post-scroll pixels were supplied."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The short view preserves MSM condition-aware chart context and base box and reference levels, retaining the same product-specific visual language despite the constrained height."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. Expanded header explicitly adds 未確認1 and names selection, base-shape and earnings-buffer categories. First-view screenshot omits RS, volume and date-axis pixels below the fold; as-of date and key reference labels remain visible."
+        }
+      },
+      "sha256": "7901c0f61233fb6021a1e8a1bed7599c2561c33c0594ac1ea7c5dcb74fac3ff3",
+      "viewport": {
+        "width": 390,
+        "height": 568
+      }
+    },
+    {
+      "key": "case-ADI-inline/390/dark",
+      "screenshot": "case-ADI-inline-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "ADI $404.60, 4/7 purchase conditions and amber 買いゾーン超過 have a strong header hierarchy; the three technical panes fit within a single aligned card. Minor regular-axis tick occlusion remains. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Back, favorite, day/week and common periods are visible. The right edge of the horizontally scrolling toolbar cuts a later control, so overflow discoverability could improve."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The ADI chart combines technical panes with condition and source-aware state labels rather than displaying an isolated price graph."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The visible 書籍目安2〜3%超 qualifier helps distinguish the book warning from the app status. Dated close, RS, volume and reference levels remain visible; the inline fraction is less explicit about unknowns than the expanded header."
+        }
+      },
+      "sha256": "104162d9b27266521e5c2b53d8cf5a8a53d2a547feef242018d176cab6ddacb4",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-inline-annotations/390/dark",
+      "screenshot": "case-ADI-inline-annotations-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "ADI C1–C5 contraction annotations remain distinguishable in the narrow plot. The shifted toolbar begins with a partial month label, and some price ticks are partially masked. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Details and expand are now visible, while the early period controls are offscreen horizontally; this is a minor overflow-discoverability cost, not evidence that controls cannot be reached."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "ADI C1–C5 contraction annotations are integrated with price/RS/volume and condition-aware context, making the annotated review more specific than a generic quote chart."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The visible 書籍目安2〜3%超 qualifier helps distinguish the book warning from the app status. Price, pivot, upper and stop-example labels remain readable. Visible patterns alone do not establish that a pattern is valid or tradable."
+        }
+      },
+      "sha256": "b1405fd9039c455fac89a1163accb4dca2e536daeb83a89c7a2133a5ccf0baf8",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-expanded/390/dark",
+      "screenshot": "case-ADI-expanded-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "ADI expanded chart has distinct price, RS and volume panes and a fully visible Aug/Sep/Oct date axis above the footer at844px height. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close, previous/next and the complete date axis are visibly separate. The chart-control row is dense but coherent."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "ADI condition-aware header, technical reference labels and coordinated panes form a distinct screening review experience on mobile."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. No unconfirmed count is displayed for this case; outstanding selection, buy-position and volume categories are named in expanded view. Snapshot date and chart legend are readable in the first view."
+        }
+      },
+      "sha256": "c4604ff1c73936807f354b0b6404dfb33c65baccecc7913f71d44d59464499e2",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-expanded-annotations/390/dark",
+      "screenshot": "case-ADI-expanded-annotations-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "ADI C1–C5 contraction annotations remain legible with no major annotation-label collision; the full lower panes and month axis stay clear of the footer. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "Close remains visible and the selected details control is clear. Early period controls move offscreen in the horizontal toolbar, a minor discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The combination of C1–C5 contraction annotations, reference levels, conditional header and synchronized technical panes creates a purpose-specific annotated review."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. No unconfirmed count is displayed for this case; outstanding selection, buy-position and volume categories are named in expanded view. The annotations add interpretable evidence without removing the visible condition caveat."
+        }
+      },
+      "sha256": "bca26fb7e0f4d909da24f7458c956ebc65a5c56c2a2c505ebca531c565156bf2",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-expanded-short/390/dark",
+      "screenshot": "case-ADI-expanded-short-390x568-dark.png",
+      "scores": {
+        "design": {
+          "value": 7.6,
+          "reason": "At 390×568 the ADI header, legend and control stack extends to y316 before the plot. Only about183 px of the price pane remains above the69 px navigation footer. This top-heavy first-view hierarchy merits improvement; vertical scrolling itself is not treated as a defect. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Close and previous/next remain visibly available. Report evidence confirms axis/footer/Close visible and hit-testable after scrolling at390×480, and restored chart after reopen at844. Supported scrolling preserves access, although no post-scroll pixels were supplied."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The short view preserves ADI condition-aware chart context and C1–C5 contraction annotations, retaining the same product-specific visual language despite the constrained height."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. No unconfirmed count is displayed for this case; outstanding selection, buy-position and volume categories are named in expanded view. First-view screenshot omits RS, volume and date-axis pixels below the fold; as-of date and key reference labels remain visible."
+        }
+      },
+      "sha256": "500f33ed54ce69adaa88400d1efcf65e056e74ce15d2978ad81ba3c18d7df362",
+      "viewport": {
+        "width": 390,
+        "height": 568
+      }
+    },
+    {
+      "key": "case-TGTX-inline/390/dark",
+      "screenshot": "case-TGTX-inline-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "TGTX $53.62, 2/7 purchase conditions and blue ピボット待ち have a strong header hierarchy; the three technical panes fit within a single aligned card. Minor regular-axis tick occlusion remains. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Back, favorite, day/week and common periods are visible. The right edge of the horizontally scrolling toolbar cuts a later control, so overflow discoverability could improve."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The TGTX chart combines technical panes with condition and source-aware state labels rather than displaying an isolated price graph."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The waiting label and lower2/7 purchase count do not present this case as ready to buy. Dated close, RS, volume and reference levels remain visible; the inline fraction is less explicit about unknowns than the expanded header."
+        }
+      },
+      "sha256": "561c05771867651a6b0b14007366d2bf4f9fdeab01965e6c54ae32bf27b9e307",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-inline-annotations/390/dark",
+      "screenshot": "case-TGTX-inline-annotations-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "TGTX base box and reference levels remain distinguishable in the narrow plot. The shifted toolbar begins with a partial month label, and some price ticks are partially masked. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Details and expand are now visible, while the early period controls are offscreen horizontally; this is a minor overflow-discoverability cost, not evidence that controls cannot be reached."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "TGTX base box and reference levels are integrated with price/RS/volume and condition-aware context, making the annotated review more specific than a generic quote chart."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The waiting label and lower2/7 purchase count do not present this case as ready to buy. Price, pivot, upper and stop-example labels remain readable. Visible patterns alone do not establish that a pattern is valid or tradable."
+        }
+      },
+      "sha256": "635daca550ef8d256106a71f59cbe08a041c1bbe117e7a36bba575e1602bee10",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-expanded/390/dark",
+      "screenshot": "case-TGTX-expanded-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "TGTX expanded chart has distinct price, RS and volume panes and a fully visible Aug/Sep/Oct date axis above the footer at844px height. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close and the complete date axis are visible; the1/1 context correctly has no previous/next buttons. The chart-control row is dense but coherent."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "TGTX condition-aware header, technical reference labels and coordinated panes form a distinct screening review experience on mobile."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header shows a low 2/7 purchase count rather than a ready-to-buy assertion. Expanded header explicitly adds 未確認1 and names selection, buy-position and volume categories. Snapshot date and chart legend are readable in the first view."
+        }
+      },
+      "sha256": "2b5bd7c275a3b637f9841b5658813f50ebdcb1922100f8e1af18725ca1ff753a",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/390/dark",
+      "screenshot": "case-TGTX-expanded-annotations-390x844-dark.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "TGTX base box and reference levels remain legible with no major annotation-label collision; the full lower panes and month axis stay clear of the footer. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "Close remains visible and the selected details control is clear. Early period controls move offscreen in the horizontal toolbar, a minor discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The combination of base box and reference levels, reference levels, conditional header and synchronized technical panes creates a purpose-specific annotated review."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header shows a low 2/7 purchase count rather than a ready-to-buy assertion. Expanded header explicitly adds 未確認1 and names selection, buy-position and volume categories. The annotations add interpretable evidence without removing the visible condition caveat."
+        }
+      },
+      "sha256": "f52ee4b62f175de73c2aa6d66fff4e7a91f0365569133e5a0b9493ff8667e009",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-short/390/dark",
+      "screenshot": "case-TGTX-expanded-short-390x568-dark.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 390×568 the TGTX header, legend and control stack extends to y316 before the plot. Only about227 px of the price pane remains above the25 px footer. This top-heavy first-view hierarchy merits improvement; vertical scrolling itself is not treated as a defect. Dark surfaces and pale labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Close remains visibly available; this1/1 case has no previous/next buttons. Report evidence confirms axis/footer/Close visible and hit-testable after scrolling at390×480, and restored chart after reopen at844. Supported scrolling preserves access, although no post-scroll pixels were supplied."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The short view preserves TGTX condition-aware chart context and base box and reference levels, retaining the same product-specific visual language despite the constrained height."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The expanded header shows a low 2/7 purchase count rather than a ready-to-buy assertion. Expanded header explicitly adds 未確認1 and names selection, buy-position and volume categories. First-view screenshot omits RS, volume and date-axis pixels below the fold; as-of date and key reference labels remain visible."
+        }
+      },
+      "sha256": "dfafe76851790f3b65f1fa1d69abdbde7f4c38bc0582078b4be0bd61fd875421",
+      "viewport": {
+        "width": 390,
+        "height": 568
+      }
+    },
+    {
+      "key": "home/390/light",
+      "screenshot": "home-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.7,
+          "reason": "Clear 223-candidate headline, three summary columns, radar card and three visible ticker rows establish a strong overview-to-detail hierarchy. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Method tabs, list filters and bottom navigation remain distinct; BRKR selection is visible. Dense small secondary copy is a polish limit rather than a blocked task."
+        },
+        "originality": {
+          "value": 8.8,
+          "reason": "The setup radar, pivot-position mini-bars and daily condition fractions create a distinctive screening workflow rather than a generic quote list."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "Visible アプリ設定 0〜+5% now identifies the model boundary directly; snapshot date, selection count and individual purchase-condition instruction separate the decisions."
+        }
+      },
+      "sha256": "0ed4106d3cb07401f939b6c76942896d237366931fc285eee1dfc2ce5353176c",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "near-pass/390/light",
+      "screenshot": "near-pass-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "The active あと1条件 filter and red reason pills make the three near-pass rows easy to separate beneath the radar. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "MXL, AEHR and VICR failed conditions can be scanned quickly; a bare dash still gives less missing-data explanation than the comparison screen."
+        },
+        "originality": {
+          "value": 8.6,
+          "reason": "Near-pass reasons are integrated with the radar and method choice, making the screen a focused review queue rather than just a filtered ticker list."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "App-setting qualifier is visible and each failed selection rule is named; the 223 summary versus 270 filtered rows is readable but needs the surrounding labels to interpret."
+        }
+      },
+      "sha256": "788c412b248da93f3fd3b0131803061066161fe425ae917083473632a826051c",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "detail/390/light",
+      "screenshot": "detail-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "BRKR identity, in-zone badge and $61.94 dominate appropriately; price, RS and volume panes fit above the fold in a consistent card. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Day/week and common periods are visible and back/favorite controls are distinct; the toolbar continues off the right edge, so reset/expand discoverability remains a minor weakness."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "Conventional trading panes are adapted with explicit pivot/upper/stop labels and a separate purchase-condition badge, giving the screen useful product-specific identity."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "Dated closing price, negative daily move, 4/7 purchase count and reference levels are visible; this image does not verify calculations or imply all remaining conditions are failed."
+        }
+      },
+      "sha256": "1fa7360e709571e8b36850f4d289140698b632374c8ad38bc4f126f9d0fa6c8e",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "chart/390/light",
+      "screenshot": "chart-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "BRKR expanded view aligns price, RS and volume panes with an unobstructed month axis and a separate navigation footer. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close and previous/next are visible, with swipe guidance and a clear day/week toolbar; offscreen later controls remain a small discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The source-aware condition header and integrated market-relative/volume panes turn a familiar chart into a focused screening review surface."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The header explicitly shows 4/7 with 未確認1 and names outstanding categories; price date, legend and reference levels remain visible."
+        }
+      },
+      "sha256": "8d8bfdc0b1e2d47fa01c5a9cd450ae87816b2a85bc1f3cfa65036b55adbfb647",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "portfolio/390/light",
+      "screenshot": "portfolio-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "Zero fully passing names, one conditional name and the STNG scenario card are clearly tiered; the long explanatory paragraph is dense but readable. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close, failed-condition labels, trial details and the evidence/chart link are distinguishable. The source paragraph is long for a phone but stays intact."
+        },
+        "originality": {
+          "value": 8.7,
+          "reason": "The allocation view exposes unmet and unknown conditions alongside the hypothetical sizing, an unusually transparent alternative to a simple recommendation card."
+        },
+        "content": {
+          "value": 9.1,
+          "reason": "Explicit hypothetical-model language, unmet2/unknown0, source location, book2–3% versus app5%, and the no-order implication are all visible. Content score concerns disclosure, not financial validity."
+        }
+      },
+      "sha256": "30c1195bac41b0b86a0de5913d53a0777994e1281dc7f2d728f3d4c0f2078d79",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "comparison/390/light",
+      "screenshot": "comparison-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "One full BRKR card plus a useful SNOW preview balances chart legibility and scanning density; the four-value footer is aligned. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Period selector, six-item pagination and bottom navigation are readable; the full first card contains enough information to compare without opening it."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "Stacked price/RS/volume mini-charts with explicit app upper/stop and purchase fractions provide a differentiated side-by-side-review pattern on a narrow screen."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The subtitle separates price location from purchase conditions; app upper, stop example, RS/volume and 4/7 are labeled rather than implied by color."
+        }
+      },
+      "sha256": "177d4ee054efc8050bac5eae6c4b606154cc6f731288956c444613f10c3deeea",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "comparison-near-pass/390/light",
+      "screenshot": "comparison-near-pass-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.4,
+          "reason": "MXL and AEHR cards preserve the same chart rhythm while distinct question-mark and waiting pills differentiate their states. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "MXL missing pivot-relative data and AEHR waiting state are readable in the first viewport, with pagination and common period controls still available."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "Embedding explicit indeterminate and failed-selection states into comparable technical cards makes the comparison workflow product-specific."
+        },
+        "content": {
+          "value": 8.8,
+          "reason": "MXL ?判定不可, the named failed screening rule, absent upper/stop dashes and 2/7 condition count clearly separate unknown values from a known failure."
+        }
+      },
+      "sha256": "d95e1a2bb74c5cc2c9ef21467d411bf3c417ffb4155e76b11224001cbd5ce431",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "market/390/light",
+      "screenshot": "market-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "The energy/technology headline leads into well-separated sector, index and pass-rate columns. The former wrapped scale and abutting numeric strings are fixed. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.4,
+          "reason": "Index114.9 and count31/114 now have visible separation; period/method and rank/table controls remain clear. Compact bars are backed by readable numeric values."
+        },
+        "originality": {
+          "value": 8.4,
+          "reason": "Combining sector relative strength, condition pass rate and unknown counts gives this ranked table a distinct screening-oriented purpose."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "指数（100=SPY） is a compact unambiguous heading; sector returns, pass numerator/denominator and 未確認 counts are retained."
+        }
+      },
+      "sha256": "60f94006248cbff68e85893fc4c617d5d80349b2dfdd3a445bfb6aa32ba7cd12",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "breadth/390/light",
+      "screenshot": "breadth-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.5,
+          "reason": "Caution headline, 0.86 ratio, three count columns and the historical line chart create a clean visual sequence with good breathing room. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.6,
+          "reason": "The reader can identify down-pressure,261 advances,312 declines and the negative51 difference quickly; one/three-month controls are visually distinct."
+        },
+        "originality": {
+          "value": 8.1,
+          "reason": "The breadth card couples a decision-oriented warning with explicit advance/decline counts and historical context in a cohesive product-specific layout."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The1.00 threshold, four-percent move criterion, snapshot date and measured interval are labeled; numbers have visible units and are not presented as a prediction."
+        }
+      },
+      "sha256": "00982f4dc8f1272a14242a1a7d74a3c2789e24fad6c0a3b8d94a21026565371e",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "scan/390/light",
+      "screenshot": "scan-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "Count, context banner, search/sort controls and compact result cards form a clear hierarchy, with three complete cards visible. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.3,
+          "reason": "Search, all-items table link and descending setup-point sort are easy to locate; each complete result exposes price, RS, pivot, volume and condition status."
+        },
+        "originality": {
+          "value": 8.0,
+          "reason": "The scan integrates the shared market-limit context and preparation-state labels into a familiar but purpose-adapted filter/results pattern."
+        },
+        "content": {
+          "value": 8.5,
+          "reason": "The banner identifies 独自判定 and the25% trial cap; results use explicit 未達 preparation status rather than relying on low volume alone."
+        }
+      },
+      "sha256": "fd1eb8851f65eafb64cb3be0e52dc0f091f7b81d1b1eaa2d1ae5dcc33c8de1bb",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-inline/390/light",
+      "screenshot": "case-MSM-inline-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "MSM $128.50, 4/7 purchase conditions and green 買いゾーン内 have a strong header hierarchy; the three technical panes fit within a single aligned card. Minor regular-axis tick occlusion remains. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Back, favorite, day/week and common periods are visible. The right edge of the horizontally scrolling toolbar cuts a later control, so overflow discoverability could improve."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The MSM chart combines technical panes with condition and source-aware state labels rather than displaying an isolated price graph."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The green app-zone badge coexists with a visible 書籍目安2〜3%超 warning, preventing the two boundaries from being silently equated. Dated close, RS, volume and reference levels remain visible; the inline fraction is less explicit about unknowns than the expanded header."
+        }
+      },
+      "sha256": "255f20eca2cc86384fc17451df242cd36b6a9c4532201bcfaa20be9429087ec7",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-inline-annotations/390/light",
+      "screenshot": "case-MSM-inline-annotations-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "MSM base box and reference levels remain distinguishable in the narrow plot. The shifted toolbar begins with a partial month label, and some price ticks are partially masked. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Details and expand are now visible, while the early period controls are offscreen horizontally; this is a minor overflow-discoverability cost, not evidence that controls cannot be reached."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "MSM base box and reference levels are integrated with price/RS/volume and condition-aware context, making the annotated review more specific than a generic quote chart."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The green app-zone badge coexists with a visible 書籍目安2〜3%超 warning, preventing the two boundaries from being silently equated. Price, pivot, upper and stop-example labels remain readable. Visible patterns alone do not establish that a pattern is valid or tradable."
+        }
+      },
+      "sha256": "ebfedb7d99f5f26012a8478dda2867b3fab2f161046ca073f19d985d656be46c",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-expanded/390/light",
+      "screenshot": "case-MSM-expanded-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "MSM expanded chart has distinct price, RS and volume panes and a fully visible Aug/Sep/Oct date axis above the footer at844px height. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close and the complete date axis are visible; the1/1 context correctly has no previous/next buttons. The chart-control row is dense but coherent."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "MSM condition-aware header, technical reference labels and coordinated panes form a distinct screening review experience on mobile."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. Expanded header explicitly adds 未確認1 and names selection, base-shape and earnings-buffer categories. Snapshot date and chart legend are readable in the first view."
+        }
+      },
+      "sha256": "245466a9afc1ab4172472ac70db3aa19fc84eb337004b88bdc3999b38eb3f136",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-expanded-annotations/390/light",
+      "screenshot": "case-MSM-expanded-annotations-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "MSM base box and reference levels remain legible with no major annotation-label collision; the full lower panes and month axis stay clear of the footer. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "Close remains visible and the selected details control is clear. Early period controls move offscreen in the horizontal toolbar, a minor discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The combination of base box and reference levels, reference levels, conditional header and synchronized technical panes creates a purpose-specific annotated review."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. Expanded header explicitly adds 未確認1 and names selection, base-shape and earnings-buffer categories. The annotations add interpretable evidence without removing the visible condition caveat."
+        }
+      },
+      "sha256": "f830585f13575ede07a530a465c9907a87c61d0d9bba3261721d07141ccb32e7",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-MSM-expanded-short/390/light",
+      "screenshot": "case-MSM-expanded-short-390x568-light.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 390×568 the MSM header, legend and control stack extends to y316 before the plot. Only about227 px of the price pane remains above the25 px footer. This top-heavy first-view hierarchy merits improvement; vertical scrolling itself is not treated as a defect. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Close remains visibly available; this1/1 case has no previous/next buttons. Report evidence confirms axis/footer/Close visible and hit-testable after scrolling at390×480, and restored chart after reopen at844. Supported scrolling preserves access, although no post-scroll pixels were supplied."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The short view preserves MSM condition-aware chart context and base box and reference levels, retaining the same product-specific visual language despite the constrained height."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. Expanded header explicitly adds 未確認1 and names selection, base-shape and earnings-buffer categories. First-view screenshot omits RS, volume and date-axis pixels below the fold; as-of date and key reference labels remain visible."
+        }
+      },
+      "sha256": "2a8e5165dc6114645486aadf8b21b487a06dd13f4d38454c33339a27323abf77",
+      "viewport": {
+        "width": 390,
+        "height": 568
+      }
+    },
+    {
+      "key": "case-ADI-inline/390/light",
+      "screenshot": "case-ADI-inline-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "ADI $404.60, 4/7 purchase conditions and amber 買いゾーン超過 have a strong header hierarchy; the three technical panes fit within a single aligned card. Minor regular-axis tick occlusion remains. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Back, favorite, day/week and common periods are visible. The right edge of the horizontally scrolling toolbar cuts a later control, so overflow discoverability could improve."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The ADI chart combines technical panes with condition and source-aware state labels rather than displaying an isolated price graph."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The visible 書籍目安2〜3%超 qualifier helps distinguish the book warning from the app status. Dated close, RS, volume and reference levels remain visible; the inline fraction is less explicit about unknowns than the expanded header."
+        }
+      },
+      "sha256": "f7ebadf6977eb057b11e35a2215c8cf3534e6a8fca8dd3481375cfe1edd9b989",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-inline-annotations/390/light",
+      "screenshot": "case-ADI-inline-annotations-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "ADI C1–C5 contraction annotations remain distinguishable in the narrow plot. The shifted toolbar begins with a partial month label, and some price ticks are partially masked. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Details and expand are now visible, while the early period controls are offscreen horizontally; this is a minor overflow-discoverability cost, not evidence that controls cannot be reached."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "ADI C1–C5 contraction annotations are integrated with price/RS/volume and condition-aware context, making the annotated review more specific than a generic quote chart."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The visible 書籍目安2〜3%超 qualifier helps distinguish the book warning from the app status. Price, pivot, upper and stop-example labels remain readable. Visible patterns alone do not establish that a pattern is valid or tradable."
+        }
+      },
+      "sha256": "7f055fbf0dcfd82e00ddaf9b7596c538c78a3f87a0af9f16f0d53659561356d0",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-expanded/390/light",
+      "screenshot": "case-ADI-expanded-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "ADI expanded chart has distinct price, RS and volume panes and a fully visible Aug/Sep/Oct date axis above the footer at844px height. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close, previous/next and the complete date axis are visibly separate. The chart-control row is dense but coherent."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "ADI condition-aware header, technical reference labels and coordinated panes form a distinct screening review experience on mobile."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. No unconfirmed count is displayed for this case; outstanding selection, buy-position and volume categories are named in expanded view. Snapshot date and chart legend are readable in the first view."
+        }
+      },
+      "sha256": "6607138c8b28b13761eebb1d93227b8482551064a24b45817957d3dddd87a5f4",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-expanded-annotations/390/light",
+      "screenshot": "case-ADI-expanded-annotations-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "ADI C1–C5 contraction annotations remain legible with no major annotation-label collision; the full lower panes and month axis stay clear of the footer. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "Close remains visible and the selected details control is clear. Early period controls move offscreen in the horizontal toolbar, a minor discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The combination of C1–C5 contraction annotations, reference levels, conditional header and synchronized technical panes creates a purpose-specific annotated review."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. No unconfirmed count is displayed for this case; outstanding selection, buy-position and volume categories are named in expanded view. The annotations add interpretable evidence without removing the visible condition caveat."
+        }
+      },
+      "sha256": "bc03dc7275e8d9d3f7cd56a41c6a54054d2fc74b421da0296c22ca291ad459c6",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-ADI-expanded-short/390/light",
+      "screenshot": "case-ADI-expanded-short-390x568-light.png",
+      "scores": {
+        "design": {
+          "value": 7.6,
+          "reason": "At 390×568 the ADI header, legend and control stack extends to y316 before the plot. Only about183 px of the price pane remains above the69 px navigation footer. This top-heavy first-view hierarchy merits improvement; vertical scrolling itself is not treated as a defect. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Close and previous/next remain visibly available. Report evidence confirms axis/footer/Close visible and hit-testable after scrolling at390×480, and restored chart after reopen at844. Supported scrolling preserves access, although no post-scroll pixels were supplied."
+        },
+        "originality": {
+          "value": 8.5,
+          "reason": "The short view preserves ADI condition-aware chart context and C1–C5 contraction annotations, retaining the same product-specific visual language despite the constrained height."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The expanded header visibly warns 書籍目安2〜3%超 beside the purchase fraction. No unconfirmed count is displayed for this case; outstanding selection, buy-position and volume categories are named in expanded view. First-view screenshot omits RS, volume and date-axis pixels below the fold; as-of date and key reference labels remain visible."
+        }
+      },
+      "sha256": "68b0c548c2d2c6197899cc9a413455c5681085588b08bcd0684dd93b32c3a193",
+      "viewport": {
+        "width": 390,
+        "height": 568
+      }
+    },
+    {
+      "key": "case-TGTX-inline/390/light",
+      "screenshot": "case-TGTX-inline-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "TGTX $53.62, 2/7 purchase conditions and blue ピボット待ち have a strong header hierarchy; the three technical panes fit within a single aligned card. Minor regular-axis tick occlusion remains. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Back, favorite, day/week and common periods are visible. The right edge of the horizontally scrolling toolbar cuts a later control, so overflow discoverability could improve."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The TGTX chart combines technical panes with condition and source-aware state labels rather than displaying an isolated price graph."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The waiting label and lower2/7 purchase count do not present this case as ready to buy. Dated close, RS, volume and reference levels remain visible; the inline fraction is less explicit about unknowns than the expanded header."
+        }
+      },
+      "sha256": "96c02b07e8e6a6c2344ee3175151ef42aab5d39a710ffb72e976a3674bece1de",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-inline-annotations/390/light",
+      "screenshot": "case-TGTX-inline-annotations-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.0,
+          "reason": "TGTX base box and reference levels remain distinguishable in the narrow plot. The shifted toolbar begins with a partial month label, and some price ticks are partially masked. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Details and expand are now visible, while the early period controls are offscreen horizontally; this is a minor overflow-discoverability cost, not evidence that controls cannot be reached."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "TGTX base box and reference levels are integrated with price/RS/volume and condition-aware context, making the annotated review more specific than a generic quote chart."
+        },
+        "content": {
+          "value": 8.4,
+          "reason": "The waiting label and lower2/7 purchase count do not present this case as ready to buy. Price, pivot, upper and stop-example labels remain readable. Visible patterns alone do not establish that a pattern is valid or tradable."
+        }
+      },
+      "sha256": "c8a6837695fed32fe5ce9442746869afa61df3872f84c48a1cf8a93fdfd3fc42",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-expanded/390/light",
+      "screenshot": "case-TGTX-expanded-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.2,
+          "reason": "TGTX expanded chart has distinct price, RS and volume panes and a fully visible Aug/Sep/Oct date axis above the footer at844px height. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.2,
+          "reason": "Close and the complete date axis are visible; the1/1 context correctly has no previous/next buttons. The chart-control row is dense but coherent."
+        },
+        "originality": {
+          "value": 8.3,
+          "reason": "TGTX condition-aware header, technical reference labels and coordinated panes form a distinct screening review experience on mobile."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header shows a low 2/7 purchase count rather than a ready-to-buy assertion. Expanded header explicitly adds 未確認1 and names selection, buy-position and volume categories. Snapshot date and chart legend are readable in the first view."
+        }
+      },
+      "sha256": "23d0052a45c7c401d2f80629eda715428ffd1e108a4890ce2d7ef2faed0b399e",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-annotations/390/light",
+      "screenshot": "case-TGTX-expanded-annotations-390x844-light.png",
+      "scores": {
+        "design": {
+          "value": 8.1,
+          "reason": "TGTX base box and reference levels remain legible with no major annotation-label collision; the full lower panes and month axis stay clear of the footer. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.1,
+          "reason": "Close remains visible and the selected details control is clear. Early period controls move offscreen in the horizontal toolbar, a minor discoverability tradeoff."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The combination of base box and reference levels, reference levels, conditional header and synchronized technical panes creates a purpose-specific annotated review."
+        },
+        "content": {
+          "value": 8.6,
+          "reason": "The expanded header shows a low 2/7 purchase count rather than a ready-to-buy assertion. Expanded header explicitly adds 未確認1 and names selection, buy-position and volume categories. The annotations add interpretable evidence without removing the visible condition caveat."
+        }
+      },
+      "sha256": "35577c5121c168b8d1eddc759fb5807ed80d16c37c8710533beb7abf3a5bfb86",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "key": "case-TGTX-expanded-short/390/light",
+      "screenshot": "case-TGTX-expanded-short-390x568-light.png",
+      "scores": {
+        "design": {
+          "value": 7.8,
+          "reason": "At 390×568 the TGTX header, legend and control stack extends to y316 before the plot. Only about227 px of the price pane remains above the25 px footer. This top-heavy first-view hierarchy merits improvement; vertical scrolling itself is not treated as a defect. Light cards and dark labels remain visually separated; state accents are clear."
+        },
+        "usability": {
+          "value": 8.0,
+          "reason": "Close remains visibly available; this1/1 case has no previous/next buttons. Report evidence confirms axis/footer/Close visible and hit-testable after scrolling at390×480, and restored chart after reopen at844. Supported scrolling preserves access, although no post-scroll pixels were supplied."
+        },
+        "originality": {
+          "value": 8.2,
+          "reason": "The short view preserves TGTX condition-aware chart context and base box and reference levels, retaining the same product-specific visual language despite the constrained height."
+        },
+        "content": {
+          "value": 8.3,
+          "reason": "The expanded header shows a low 2/7 purchase count rather than a ready-to-buy assertion. Expanded header explicitly adds 未確認1 and names selection, buy-position and volume categories. First-view screenshot omits RS, volume and date-axis pixels below the fold; as-of date and key reference labels remain visible."
+        }
+      },
+      "sha256": "597053877c709f645aa6cf30ca6155d1dd1488ffbe56992ff5921d56302ddd4a",
+      "viewport": {
+        "width": 390,
+        "height": 568
+      }
+    }
+  ],
+  "outcome": "Not accepted: twelve short-height design ratings are below 8 and the desktop P1 performance budget also fails. No scores were raised to override either limitation.",
+  "objective_failures": [
+    "1440: P1 exact limits not met (3500ms / 400ms / 200ms)"
+  ],
+  "remaining_visual_findings": [
+    "Desktop 1440x760 preamble consumes 364–388px; the price pane is compressed despite restored date-axis and footer visibility.",
+    "Mobile 390x568 plot begins at 316px, making the initial view dominated by context/controls. Scroll, footer, Close and cached-reopen checks pass; the concern is first-view composition."
+  ]
+}

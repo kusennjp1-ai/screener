@@ -61,6 +61,28 @@ it('updates only the selection overlay and clears stale selections and marks on 
  rerender(<SetupRadar ranked={[]} selectedSymbol="SAFE" onSelect={onSelect}/>);
  expect(screen.getByRole('img')).toHaveAttribute('data-radar-point-count','0');expect(container.querySelector('.radar-point-label')).toBeNull();expect(container.querySelector('[data-radar-selection]')).toBeEmptyDOMElement();
 });
+it('sets canvas point styles only at state transitions while compositing every circle separately',()=>{
+ const colors=[],alphas=[];let color,alpha;
+ Object.defineProperties(context,{
+  fillStyle:{get:()=>color,set:value=>{color=value;colors.push(value);}},
+  globalAlpha:{get:()=>alpha,set:value=>{alpha=value;alphas.push(value);}},
+ });
+ const base=geometryFor(ranked).points[0];
+ // Include neutral states and a later return to a prior state: the draw loop
+ // must follow the supplied order, never regroup or merge overlapping circles.
+ const states=['ext','ext','wait','wait','zone','zone','low','acq','na','ext'];
+ const geometry={...geometryFor(ranked),points:states.map(state=>({...base,state}))};
+ expect(drawRadar(context,geometry,palettes.dark)).toBe(states.length);
+ expect(context.points.map(point=>point.color)).toEqual(states.map(state=>palettes.dark[STATES[state][2]]));
+ expect(context.points.map(point=>point.alpha)).toEqual(states.map(state=>state==='zone'?.95:.6));
+ expect(context.points.every(point=>point.composite==='source-over')).toBe(true);
+ expect(colors).toEqual([palettes.dark['zone-fill'],...['ext','wait','zone','low','acq','na','ext'].map(state=>palettes.dark[STATES[state][2]])]);
+ expect(alphas).toEqual([1,.6,.6,.95,.6,.6,.6,.6,1]);
+ colors.length=0;alphas.length=0;
+ drawRadar(context,geometryFor(fixture.ranked),palettes.dark);
+ expect(colors).toHaveLength(7);expect(alphas).toHaveLength(8);
+ expect(context.points).toHaveLength(states.length+207);
+});
 it('redraws on theme, CSS size and pixel-density changes while hit testing stays in logical coordinates',async()=>{
  const widthWrites=vi.spyOn(HTMLCanvasElement.prototype,'width','set'),heightWrites=vi.spyOn(HTMLCanvasElement.prototype,'height','set');
  const onSelect=vi.fn();render(<SetupRadar ranked={ranked} onSelect={onSelect}/>);const canvas=screen.getByRole('img');
@@ -129,4 +151,11 @@ it('does not report or select undrawn points when a canvas context is unavailabl
  expect(canvas.getAttribute('aria-label')).toContain('描画できません');expect(canvas).not.toHaveAttribute('data-radar-point-count');
  expect(container.querySelector('.radar-point-label')).toBeNull();
  fireEvent.click(canvas,coordinates(geometryFor(ranked).points[0]));expect(onSelect).not.toHaveBeenCalled();
+});
+
+it.each([false,true])('labels the app-only five-percent range before interaction (mobile=%s)',small=>{
+ const {container}=render(<SetupRadar ranked={ranked} small={small}/>);
+ expect(container.querySelector('.radar-zone-label')).toHaveTextContent('アプリ設定 0〜+5%');
+ expect(container.querySelector('.radar-zone-label')).toHaveAttribute('title',expect.stringContaining('第1冊の追随目安は約2〜3%'));
+ expect(screen.getByRole('img')).toHaveAccessibleName(/0〜\+5%はアプリ設定.*第1冊の追随目安は約2〜3%.*購入条件とは別/);
 });

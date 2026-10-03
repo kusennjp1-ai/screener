@@ -1,4 +1,5 @@
 import { sectorKey } from './sectorDefinitions.js';
+import { evidenceTimestamp, newYorkDate, validEvidenceDay } from './evidenceTime.js';
 // Shared presentation contracts: a price level is not evidence of a valid base.
 export function canonicalPivot(row) {
   const raw = row?.se_pivot_price ?? row?.vcp_pivot;
@@ -20,9 +21,7 @@ export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearO
 }
 
 export function sessionCurrent(rows, date, now) {
-  return rows.some(r => r.entry_evidence?.as_of_date === date &&
-    r.entry_evidence?.calendar?.latest_completed_session === date &&
-    now >= Date.parse(r.entry_evidence.calendar.evaluated_at) && now < Date.parse(r.entry_evidence.calendar.valid_until));
+  return prepareSessionCurrent(rows, date)(now);
 }
 
 // A publication repeats the same exchange calendar on many stock rows. Parse
@@ -30,15 +29,23 @@ export function sessionCurrent(rows, date, now) {
 // clock ticks and method changes only need the original inclusive/exclusive
 // time comparison, without parsing thousands of identical ISO timestamps.
 export function prepareSessionCurrent(rows, date) {
-  const intervals = new Map();
+  if (!validEvidenceDay(date)) return () => false;
+  const intervals = new Map(), timestamps = new Map();
+  const stamp = value => {
+    if (!timestamps.has(value)) timestamps.set(value, evidenceTimestamp(value));
+    return timestamps.get(value);
+  };
   for (const row of rows) {
     const evidence = row.entry_evidence, calendar = evidence?.calendar;
     if (!calendar || evidence.as_of_date !== date || calendar.latest_completed_session !== date) continue;
-    const from = Date.parse(calendar.evaluated_at), until = Date.parse(calendar.valid_until);
+    const from = stamp(calendar.evaluated_at), until = stamp(calendar.valid_until);
     if (Number.isFinite(from) && Number.isFinite(until)) intervals.set(`${from}/${until}`, [from, until]);
   }
   const ranges = [...intervals.values()];
-  return now => ranges.some(([from, until]) => now >= from && now < until);
+  return now => {
+    const today = newYorkDate(now);
+    return Boolean(today && date <= today && ranges.some(([from, until]) => now >= from && now < until));
+  };
 }
 
 export function formatPublished(value) {

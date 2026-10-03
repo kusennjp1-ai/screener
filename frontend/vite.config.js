@@ -30,6 +30,18 @@ export default defineConfig(({ mode }) => {
   return {
     base,
     plugins: [react(), precacheManifest(base)],
+    resolve: {
+      alias: [
+        // MUI v5's deep icon entries default to CommonJS. Mixing those with
+        // material's ESM entries makes esbuild defer createTheme initialization
+        // until after Box uses it (a cold-start `createTheme_default` crash).
+        // Keep icon imports on the ESM distribution, as the package barrel is.
+        {
+          find: /^@mui\/icons-material\/(?!esm(?:\/|$))([^/]+)$/,
+          replacement: '@mui/icons-material/esm/$1',
+        },
+      ],
+    },
     test: {
       environment: 'jsdom',
       globals: true,
@@ -77,10 +89,7 @@ export default defineConfig(({ mode }) => {
         'react-dom',
         'react-router-dom',
         '@mui/material',
-        // Deep entries must be listed explicitly: lazily-routed code pulls them
-        // in AFTER the first page load, so Vite discovers them late, re-runs the
-        // optimizer, and the chunks the browser already holds go stale — which
-        // surfaces as `createTheme_default is not a function` and a blank #root.
+        // Prebundle the shared styles entry alongside the material barrel.
         '@mui/material/styles',
         '@emotion/react',
         '@emotion/styled',

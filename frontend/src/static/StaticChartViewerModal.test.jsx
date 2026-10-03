@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import StaticChartViewerModal from './StaticChartViewerModal';
+import { staticChartKeys } from './chartClient';
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -11,7 +12,7 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <div data-testid="static-candlestick-chart">{props.symbol}:{props.priceData?.length || 0}</div>;
+    return <div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div>;
   },
 }));
 
@@ -26,7 +27,7 @@ vi.mock('../components/Scan/StockMetricsSidebar', () => ({
   },
 }));
 
-const renderModal = (props) => {
+const renderModal = (props, cachedPayload = null) => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -36,13 +37,16 @@ const renderModal = (props) => {
     },
   });
 
-  return render(
+  if (cachedPayload) queryClient.setQueryData(staticChartKeys.payload(props.initialSymbol, props.chartIndex.symbols[0].path), cachedPayload);
+  const element = nextProps => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createTheme()}>
-        <StaticChartViewerModal {...props} />
+        <StaticChartViewerModal {...nextProps} />
       </ThemeProvider>
     </QueryClientProvider>
   );
+  const view = render(element(props));
+  return { ...view, rerenderModal: nextProps => view.rerender(element(nextProps)) };
 };
 
 describe('StaticChartViewerModal', () => {
@@ -151,10 +155,18 @@ describe('StaticChartViewerModal', () => {
       expect(screen.getByTestId('static-stock-sidebar')).toHaveTextContent('NVDA:NVDA');
     });
     const compactReadiness = screen.getByTestId('mobile-chart-readiness');
-    expect(compactReadiness).toHaveTextContent('購入条件 0/7（未確認 5）');
+    // No selection/market observations are a lack of evidence, not two failures.
+    expect(compactReadiness).toHaveTextContent('購入条件 0/7（未確認 7）');
     expect(compactReadiness).toHaveTextContent('未達・未確認：選定条件 ／ 市場環境 ／ 最新の取引日');
     expect(compactReadiness).not.toHaveTextContent('日次条件を確認済み');
     expect(screen.getByText('価格未確認 · 2026-04-02 日次終値')).toBeInTheDocument();
+    const legend = screen.getByTestId('mobile-chart-legend');
+    expect(legend).not.toHaveAttribute('open');
+    expect(legend).toHaveTextContent('チャートの凡例（移動平均線・RS）');
+    expect(legend).toHaveTextContent('SMA50日 / 10週');
+    expect(screen.getByTestId('static-candlestick-chart').compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('左スワイプ：次 ／ 右：前');
+    expect(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' })).toHaveStyle({ minHeight: '44px' });
 
     expect(chartSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -192,7 +204,10 @@ describe('StaticChartViewerModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' }));
     swipe(80, 110);
     expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
-    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
+    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true, height: 420 }));
+    expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('チャートを拡大・移動中');
+    fireEvent.click(screen.getByRole('button', { name: '銘柄スワイプに戻る' }));
+    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: false }));
   }, 10000);
 
   it('does not turn a pending mobile chart selection into zero confirmed conditions', () => {
@@ -202,6 +217,55 @@ describe('StaticChartViewerModal', () => {
     expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件を読み込み中…');
     expect(screen.getByTestId('mobile-chart-readiness')).not.toHaveTextContent('0/7');
   });
+});
+
+it('fits mobile cached opens and resizes without allowing scrolling or below-chart disclosures to shrink the plot', async () => {
+  let contentHeight = 678, plotOffset = 136, scheduledFit;
+  vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { scheduledFit = callback; return 1; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const observers = [];
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); observers.push(this); }
+    observe() {}
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
+    return this.dataset.testid === 'expanded-chart-scroll' ? contentHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const scrollTop = document.querySelector('[data-testid="expanded-chart-scroll"]')?.scrollTop || 0;
+    return { top: this.dataset.chartSymbol ? 97 + plotOffset - scrollTop : 97 };
+  });
+  vi.stubGlobal('fetch', vi.fn());
+  const props = { open: true, onClose: vi.fn(), initialSymbol: 'FIT', date: '2026-10-01', chartIndex: { symbols: [{ symbol: 'FIT', path: 'charts/FIT.json' }] } };
+  const payload = { symbol: 'FIT', as_of_date: '2026-10-01', bars: [{ date: '2026-10-01', close: 104 }], stock_data: { symbol: 'FIT', current_price: 104, se_pivot_price: 100 } };
+  const { unmount, rerenderModal } = renderModal(props, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 420 })));
+  const observer = observers.at(-1);
+  act(() => { contentHeight = 446; fireEvent(window, new Event('resize')); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 310 }));
+  fireEvent.click(screen.getByTestId('mobile-chart-legend').querySelector('summary'));
+  act(() => { screen.getByTestId('expanded-chart-scroll').scrollTop = 120; observer.callback(); scheduledFit(); });
+  expect(screen.getByTestId('mobile-chart-legend')).toHaveAttribute('open');
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 310 }));
+  // Opening the measured MA readout above the plot reduces available space;
+  // the plot still keeps its readable minimum and the container can scroll.
+  act(() => { plotOffset += 80; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 300 }));
+  rerenderModal({ ...props, open: false });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+  contentHeight = 678; plotOffset = 136;
+  rerenderModal(props);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 420 })));
+  const reopenedObserver = observers.at(-1);
+  expect(reopenedObserver).not.toBe(observer);
+  expect(fetch).not.toHaveBeenCalled();
+  unmount();
+  expect(reopenedObserver.disconnect).toHaveBeenCalledOnce();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
 });
 
 it.each([
@@ -236,4 +300,84 @@ it('keeps canonical summary price and pivot when the expanded detail arrives',as
  expect(screen.getAllByText(/\$100.00/).length).toBeGreaterThan(0);
  expect(screen.queryByText(/\$80.00/)).not.toBeInTheDocument();
  vi.unstubAllGlobals();
+});
+
+it('applies the selected 3% buy limit to the mobile expanded-chart checklist',async()=>{
+ const {withAuditFixture}=await import('./testAuditFixture');
+ const date='2026-09-29',now=Date.parse(`${date}T22:00:00Z`);
+ const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
+  entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({symbol:'LIMIT',as_of_date:date,bars:[{date,close:104}],stock_data:row})})));
+ const {unmount}=renderModal({open:true,onClose:vi.fn(),initialSymbol:'LIMIT',date,now,method:'minervini2',market:{cap:.5,label:'上昇'},researchRows:[row],chartIndex:{symbols:[{symbol:'LIMIT',path:'LIMIT.json'}]}});
+ expect(await screen.findByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件 6/7');
+ expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('買い位置');
+ await screen.findByTestId('static-candlestick-chart');
+ unmount();vi.unstubAllGlobals();
+});
+it.each([[103.2,'minervini',true],[112.7,'minervini',true],[103,'minervini',false],[104,'minervini2',false]])('keeps the mobile first-book warning with readiness at %s for %s',async(price,method,warns)=>{
+ const row={symbol:'SOURCE',company_name:'Source Test',current_price:price,se_pivot_price:100};
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({symbol:'SOURCE',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:price}],stock_data:row})})));
+ const {unmount}=renderModal({open:true,onClose:vi.fn(),initialSymbol:'SOURCE',date:'2026-10-01',method,researchRows:[row],chartIndex:{symbols:[{symbol:'SOURCE',path:`charts/SOURCE-${price}-${method}.json`}]}});
+ const header=screen.getByTestId('mobile-chart-readiness');
+ const badge=header.querySelector('.entry-source-badge');
+ if(warns){
+  expect(badge).toHaveTextContent('△ 書籍目安2〜3%超');
+  expect(badge).toHaveAttribute('aria-label',expect.stringContaining('書籍の追随目安外'));
+  if(price>105)expect(badge).not.toHaveAttribute('aria-label',expect.stringContaining('アプリの範囲内'));
+ }else expect(badge).toBeNull();
+ await screen.findByTestId('static-candlestick-chart');
+ if(warns)expect(screen.getByText('アプリ設定と書籍の確認範囲')).toBeInTheDocument();
+ unmount();vi.unstubAllGlobals();
+});
+
+
+it('fits cached portal opens/reopens, refits chrome and keeps scrolling independent of plot height', async () => {
+  let contentHeight = 789, plotOffset = 332, scheduledFit;
+  vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { scheduledFit = callback; return 1; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const observers = [];
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); observers.push(this); }
+    observe() {}
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
+    return this.dataset.testid === 'expanded-chart-scroll' ? contentHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const scrollTop = document.querySelector('[data-testid="expanded-chart-scroll"]')?.scrollTop || 0;
+    return { top: this.dataset.chartSymbol ? 56 + plotOffset - scrollTop : 56 };
+  });
+  vi.stubGlobal('fetch', vi.fn());
+  const props = { open: true, onClose: vi.fn(), initialSymbol: 'FIT', date: '2026-10-01', chartIndex: { symbols: [{ symbol: 'FIT', path: 'charts/FIT.json' }] } };
+  const payload = { symbol: 'FIT', as_of_date: '2026-10-01', bars: [{ date: '2026-10-01', close: 104 }], stock_data: { symbol: 'FIT', current_price: 104, se_pivot_price: 100 } };
+  const { unmount, rerenderModal } = renderModal(props, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 457 })));
+  expect(screen.getByText('△ 書籍の追随目安外')).toBeInTheDocument();
+  const observer = observers.at(-1);
+  act(() => { plotOffset += 48; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 409 }));
+  act(() => { contentHeight = 649; plotOffset = 332; fireEvent(window, new Event('resize')); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 317 }));
+  act(() => { screen.getByTestId('expanded-chart-scroll').scrollTop = 120; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 317 }));
+  act(() => { contentHeight = 400; observer.callback(); scheduledFit(); });
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 300 }));
+  expect(screen.getByTestId('expanded-chart-footer')).toHaveStyle({ position: 'relative', flexShrink: '0' });
+  rerenderModal({ ...props, open: false });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+  contentHeight = 749; plotOffset = 320;
+  rerenderModal(props);
+  await screen.findByTestId('static-candlestick-chart');
+  await waitFor(() => expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ height: 429 })));
+  const reopenedObserver = observers.at(-1);
+  expect(reopenedObserver).not.toBe(observer);
+  expect(fetch).not.toHaveBeenCalled();
+  unmount();
+  expect(reopenedObserver.disconnect).toHaveBeenCalledOnce();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
 });

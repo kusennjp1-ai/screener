@@ -16,7 +16,7 @@ export default function PortfolioDecision({ rows = [], date, now, plan: supplied
     label: presentation.conditional.length ? `条件付きの配分 ${presentation.conditional.length}銘柄・未達あり` : `配分の試算 ${presentation.daily.length}銘柄`,
   };
   const trigger = renderTrigger ? renderTrigger(triggerProps) : <Button variant="outlined" onClick={triggerProps.openPlan} aria-haspopup="dialog" sx={{ minHeight: 44 }}>{triggerProps.label}</Button>;
-  const drawer = <PortfolioPlanDrawer plan={plan} open={open} onClose={() => setOpen(false)} onInspect={onInspect} />;
+  const drawer = <PortfolioPlanDrawer plan={plan} presentation={presentation} open={open} onClose={() => setOpen(false)} onInspect={onInspect} />;
   if (compact) return <>{trigger}{drawer}</>;
   return <Paper component="section" id="today-decision" tabIndex={-1} aria-label="本日の判断と10万ドルの配分" className="decision-panel" elevation={0}>
     <div className="decision-status-bar"><div><span className="research-kicker">今日の判断</span><Typography component="h2" sx={{ fontSize: 16, fontWeight: 700 }}>{plan.decision}</Typography><Typography sx={{ fontSize: 12, color: 'text.secondary' }}>新規資金モデル · 株式0% / 現金100% · {plan.market.label}</Typography></div>{onBrowse && <Button variant="contained" onClick={onBrowse}>候補を確認する →</Button>}</div>
