@@ -7,6 +7,10 @@ import bootstrapData from './approved-ui-bootstrap.json' with { type: 'json' };
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
 
 export const bootstrap = bootstrapData;
+function approvedPriceObservations() {
+  if (priceObservationDigest(bootstrap.approved_price_observations) !== bootstrap.approved_price_observations_sha256) throw Error('Pinned price observation evidence is corrupt');
+  return bootstrap.approved_price_observations;
+}
 export const dataFiles = ['research-daily.json', 'portfolio-model.json', 'qualification-audit.json', 'ibd-reference.json'];
 export const isData = path => path.startsWith('static-data/') || dataFiles.includes(path);
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -188,7 +192,10 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   }
   const legacy = !receipt ? verifyLegacySnapshot(latest, manifestBytes, repository, api) : null;
   const priceObservations = receipt?.price_observations || legacy.priceObservations;
-  const knownPriceDates = receipt?.known_price_dates || priceObservations;
+  // The approved snapshot is already proven publication history. Preserve its
+  // absent series through migration, including receipts issued before this fix.
+  // Merge maxima without rewriting current observations or manufacturing progress.
+  const knownPriceDates = comparePriceObservations(receipt?.known_price_dates || priceObservations, approvedPriceObservations()).knownDates;
   assertPriceObservationBounds(priceObservations, latest.completed);
   assertPriceObservationBounds(knownPriceDates, latest.completed);
   const finalReceipt = await read('publication.json', true);
@@ -236,8 +243,7 @@ function verifyLegacySnapshot(latest, manifestBytes, repository, api) {
   const artifact = legacyArtifactForDeployment(artifacts, latest);
   if (!artifact && latest.runId === bootstrap.approved_run_id && latest.attempt === bootstrap.approved_attempt
     && sha256(manifestBytes) === bootstrap.approved_data_manifest_sha256) {
-    if (priceObservationDigest(bootstrap.approved_price_observations) !== bootstrap.approved_price_observations_sha256) throw Error('Pinned price observation evidence is corrupt');
-    return { artifact: null, priceObservations: bootstrap.approved_price_observations };
+    return { artifact: null, priceObservations: approvedPriceObservations() };
   }
   if (!artifact) throw Error('Legacy bootstrap needs its exact retained deployed artifact or the exact approved #59 snapshot');
   const directory = downloadArtifact(artifact, join(process.env.RUNNER_TEMP || '/tmp', `legacy-publication-${artifact.id}`), repository);
