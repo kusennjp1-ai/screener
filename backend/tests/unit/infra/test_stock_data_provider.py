@@ -58,7 +58,7 @@ def mock_price_cache():
     ) as cls:
         inst = MagicMock()
         cls.get_instance.return_value = inst
-        inst.get_historical_data.return_value = None  # default: cache miss
+        inst.get_historical_data.return_value = _make_price_df()  # cache owns miss/refresh handling
         inst.get_many.return_value = {}
         yield inst
 
@@ -115,8 +115,7 @@ class TestPartialFailureAllowPartialTrue:
     def test_price_failure_stores_error_in_fetch_errors(
         self, data_layer, mock_price_cache, mock_yfinance,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ConnectionError("refused")
+        mock_price_cache.get_historical_data.side_effect = ConnectionError("refused")
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
@@ -174,7 +173,6 @@ class TestPartialFailureAllowPartialTrue:
         mock_benchmark_cache, mock_fundamentals_cache,
     ):
         mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ConnectionError("no net")
         mock_benchmark_cache.get_benchmark_data.side_effect = TimeoutError("spy down")
         mock_fundamentals_cache.get_fundamentals.side_effect = RuntimeError("db")
 
@@ -197,8 +195,7 @@ class TestPartialFailureAllowPartialFalse:
     def test_price_failure_raises_data_fetch_error(
         self, data_layer, mock_price_cache, mock_yfinance,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ConnectionError("refused")
+        mock_price_cache.get_historical_data.side_effect = ConnectionError("refused")
 
         with pytest.raises(DataFetchError) as exc_info:
             data_layer.prepare_data("AAPL", REQUIREMENTS, allow_partial=False)
@@ -237,59 +234,54 @@ class TestRetryWithBackoff:
     """Transient errors are retried with exponential backoff."""
 
     def test_retry_succeeds_on_second_attempt(
-        self, data_layer, mock_price_cache, mock_yfinance, mock_sleep,
+        self, data_layer, mock_fundamentals_cache, mock_sleep,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = [
+        mock_fundamentals_cache.get_fundamentals.side_effect = [
             ConnectionError("transient"),
-            _make_price_df(),
+            FUNDAMENTALS,
         ]
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
-        assert "price_data" not in result.fetch_errors
-        assert mock_yfinance.get_historical_data.call_count == 2
+        assert "fundamentals" not in result.fetch_errors
+        assert mock_fundamentals_cache.get_fundamentals.call_count == 2
         assert mock_sleep.call_count == 1
 
     def test_retry_exhausted_stores_error(
-        self, data_layer, mock_price_cache, mock_yfinance, mock_sleep,
+        self, data_layer, mock_fundamentals_cache, mock_sleep,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ConnectionError("down")
+        mock_fundamentals_cache.get_fundamentals.side_effect = ConnectionError("down")
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
-        assert "price_data" in result.fetch_errors
+        assert "fundamentals" in result.fetch_errors
         # 1 initial + 2 retries = 3 attempts
-        assert mock_yfinance.get_historical_data.call_count == 3
+        assert mock_fundamentals_cache.get_fundamentals.call_count == 3
 
     def test_retry_exhausted_raises_with_strict_mode(
-        self, data_layer, mock_price_cache, mock_yfinance, mock_sleep,
+        self, data_layer, mock_fundamentals_cache, mock_sleep,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ConnectionError("down")
+        mock_fundamentals_cache.get_fundamentals.side_effect = ConnectionError("down")
 
         with pytest.raises(DataFetchError):
             data_layer.prepare_data("AAPL", REQUIREMENTS, allow_partial=False)
 
     def test_no_retry_on_non_transient_error(
-        self, data_layer, mock_price_cache, mock_yfinance, mock_sleep,
+        self, data_layer, mock_fundamentals_cache, mock_sleep,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ValueError("bad symbol")
+        mock_fundamentals_cache.get_fundamentals.side_effect = ValueError("bad symbol")
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
-        assert "price_data" in result.fetch_errors
+        assert "fundamentals" in result.fetch_errors
         # Non-transient: no retry, just 1 call
-        assert mock_yfinance.get_historical_data.call_count == 1
+        assert mock_fundamentals_cache.get_fundamentals.call_count == 1
         assert mock_sleep.call_count == 0
 
     def test_backoff_delay_is_exponential(
-        self, data_layer, mock_price_cache, mock_yfinance, mock_sleep,
+        self, data_layer, mock_fundamentals_cache, mock_sleep,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = ConnectionError("down")
+        mock_fundamentals_cache.get_fundamentals.side_effect = ConnectionError("down")
 
         data_layer.prepare_data("AAPL", REQUIREMENTS)
 
@@ -358,18 +350,17 @@ class TestRateLimitAndTimeout:
     """Rate limit and timeout errors are treated as transient."""
 
     def test_rate_limit_timeout_retried_then_stored(
-        self, data_layer, mock_price_cache, mock_yfinance, mock_sleep,
+        self, data_layer, mock_fundamentals_cache, mock_sleep,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.side_effect = RateLimitTimeoutError(
+        mock_fundamentals_cache.get_fundamentals.side_effect = RateLimitTimeoutError(
             "rate limit exceeded"
         )
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
-        assert "price_data" in result.fetch_errors
+        assert "fundamentals" in result.fetch_errors
         # Should have retried (transient error)
-        assert mock_yfinance.get_historical_data.call_count == 3
+        assert mock_fundamentals_cache.get_fundamentals.call_count == 3
 
     def test_cache_hit_skips_api_call(
         self, data_layer, mock_price_cache, mock_yfinance,
@@ -393,7 +384,6 @@ class TestMissingDataStructured:
         self, data_layer, mock_price_cache, mock_yfinance,
     ):
         mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.return_value = None
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
@@ -402,8 +392,7 @@ class TestMissingDataStructured:
     def test_empty_dataframe_marks_missing(
         self, data_layer, mock_price_cache, mock_yfinance,
     ):
-        mock_price_cache.get_historical_data.return_value = None
-        mock_yfinance.get_historical_data.return_value = pd.DataFrame()
+        mock_price_cache.get_historical_data.return_value = pd.DataFrame()
 
         result = data_layer.prepare_data("AAPL", REQUIREMENTS)
 
@@ -426,8 +415,7 @@ class TestBulkDataPreparation:
             "MSFT": _make_price_df(price=420.0),
         }
         mock_price_cache.get_many.return_value = cached
-        # GOOG misses cache → falls back to yfinance
-        mock_yfinance.get_historical_data.return_value = _make_price_df(price=170.0)
+        # GOOG remains unavailable after the cache has handled provider fetches.
 
         results = data_layer.prepare_data_bulk(
             ["AAPL", "MSFT", "GOOG"], REQUIREMENTS,
@@ -435,23 +423,21 @@ class TestBulkDataPreparation:
 
         assert len(results) == 3
         assert all(isinstance(v, StockData) for v in results.values())
-        # Only GOOG should have triggered the yfinance API
-        mock_yfinance.get_historical_data.assert_called_once()
+        assert not results["AAPL"].price_data.empty
+        assert not results["MSFT"].price_data.empty
+        assert results["GOOG"].price_data.empty
+        assert "price_data" in results["GOOG"].fetch_errors
+        mock_yfinance.get_historical_data.assert_not_called()
 
     def test_bulk_allow_partial_false_processes_all_then_raises(
         self, data_layer, mock_price_cache, mock_yfinance,
         mock_fundamentals_cache,
     ):
-        mock_price_cache.get_many.return_value = {}
-
-        # Use a callable side_effect so retries don't consume other
-        # symbols' results from a flat list.
-        def _yf_side_effect(symbol, **kwargs):
-            if symbol == "MSFT":
-                raise ValueError("MSFT bad data")  # non-transient → no retry
-            return _make_price_df(price=180.0)
-
-        mock_yfinance.get_historical_data.side_effect = _yf_side_effect
+        mock_price_cache.get_many.return_value = {
+            "AAPL": _make_price_df(price=180.0),
+            "MSFT": None,
+            "GOOG": _make_price_df(price=170.0),
+        }
 
         with pytest.raises(DataFetchError) as exc_info:
             data_layer.prepare_data_bulk(
@@ -464,6 +450,9 @@ class TestBulkDataPreparation:
         assert isinstance(err.partial_data, dict)
         assert "AAPL" in err.partial_data
         assert "GOOG" in err.partial_data
+        assert not err.partial_data["AAPL"].price_data.empty
+        assert not err.partial_data["GOOG"].price_data.empty
+        mock_yfinance.get_historical_data.assert_not_called()
 
     def test_bulk_empty_symbols_returns_empty(self, data_layer):
         result = data_layer.prepare_data_bulk([], REQUIREMENTS)

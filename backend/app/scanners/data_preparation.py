@@ -335,35 +335,14 @@ class DataPreparationLayer:
         fetch_errors = {}
 
         # 1. Fetch price data (always needed)
-        # OPTIMIZATION: Check cache first to avoid rate limiting on cache hits
         price_data = None
         try:
-            # Check cache first (no rate limiting)
-            # Note: get_historical_data() handles Redis → DB fallback internally and ensures sufficient data
+            # The cache fetches missing data and validates provider refreshes.
+            # An unavailable result must not trigger an unvalidated raw retry.
             price_data = self.price_cache.get_historical_data(
                 canonical_symbol,
                 period=requirements.price_period,
             )
-
-            if price_data is None or price_data.empty:
-                # Cache miss or insufficient - fetch directly
-                # (yfinance_service has its own rate limiter)
-                if normalized_market == "CN" and canonical_symbol.endswith(".BJ"):
-                    logger.debug("Cache MISS for %s - Yahoo fallback disabled for Beijing", normalized_symbol)
-                else:
-                    logger.debug(f"Cache MISS for {normalized_symbol} - fetching from yfinance")
-                    price_data = self._fetch_with_retry(
-                        self._yfinance_service.get_historical_data,
-                        canonical_symbol,
-                        period=requirements.price_period,
-                        use_cache=False,  # Already checked cache
-                    )
-            else:
-                logger.debug(
-                    "Cache HIT for %s (%d days) - no rate limiting",
-                    normalized_symbol,
-                    len(price_data),
-                )
 
             if price_data is None or price_data.empty:
                 fetch_errors["price_data"] = "No price data returned"
@@ -579,32 +558,17 @@ class DataPreparationLayer:
             fetch_errors = {}
             normalized_market = identity.market or "US"
 
-            # Get price data (from cache or fetch)
-            # Note: get_many() already handles sufficiency checks and database fallback
+            # Bulk cache reads own database fallback and any permitted refresh.
+            # Preserve unavailable results, including rejected provider histories
+            # and cache-only misses when the freshness gate is disabled.
             price_data = cached_prices.get(symbol)
 
             if price_data is None or price_data.empty:
-                if batch_only_prices:
-                    fetch_errors["price_data"] = "No price data returned from batch-only price path"
-                    price_data = pd.DataFrame()
-                else:
-                    # Cache miss or insufficient - fetch directly
-                    # (yfinance_service has its own rate limiter)
-                    try:
-                        if normalized_market == "CN" and symbol.endswith(".BJ"):
-                            fetch_errors["price_data"] = "No price data returned; Yahoo fallback disabled for Beijing"
-                        else:
-                            price_data = self._fetch_with_retry(
-                                self._yfinance_service.get_historical_data,
-                                symbol,
-                                period=requirements.price_period,
-                            )
-                            if price_data is None or price_data.empty:
-                                fetch_errors["price_data"] = "No price data returned"
-                    except Exception as e:
-                        logger.error(f"Error fetching price data for {symbol}: {e}")
-                        fetch_errors["price_data"] = str(e)
-                        price_data = pd.DataFrame()
+                fetch_errors["price_data"] = (
+                    "No price data returned from batch-only price path"
+                    if batch_only_prices else "No price data returned"
+                )
+                price_data = pd.DataFrame()
 
             # Get fundamentals (from cache or fetch)
             fundamentals = cached_fundamentals.get(symbol)
