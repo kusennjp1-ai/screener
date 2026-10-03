@@ -115,7 +115,8 @@ with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as archive:
 }
 
 function fixture({ fresh = true, expired = false, sameCode = false, designPassed = false, unsafe = false,
-  legacy = false, degraded = false, scanDay = '2026-11-02', priceDay = scanDay } = {}) {
+  legacy = false, degraded = false, scanDay = '2026-11-02', priceDay = scanDay,
+  bootstrapPrices = priceObservations('2026-11-01') } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'publication-cli-'));
   temporaryDirectories.push(root);
   const runner = join(root, 'runner'), bin = join(root, 'bin');
@@ -190,9 +191,9 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   liveArtifact.expired = expired;
   if (expired) delete config.downloads[repoApi('/actions/artifacts/700/zip')];
   const artifacts = [liveArtifact];
-  let exportArtifact, metadataArtifact, metadata;
+  let exportArtifact, metadataArtifact, metadata, exportFiles;
   if (fresh) {
-    exportArtifact = artifact(800, 'static-site-data-600-3', 600, exportSha, '2026-11-03T00:05:00Z', {
+    exportFiles = {
       'index.html': Buffer.from('export UI must never replace approved UI'),
       'sw.js': Buffer.from('unapproved export service worker'),
       ...researchFiles(scanDay, priceDay),
@@ -201,7 +202,8 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
       }) }),
       'static-data/manifest.json': freshManifest,
       'static-data/markets/us/rows.json': jsonBytes([{ source: 'advancing-export' }]),
-    }, { unsafe });
+    };
+    exportArtifact = artifact(800, 'static-site-data-600-3', 600, exportSha, '2026-11-03T00:05:00Z', exportFiles, { unsafe });
     metadata = { run_id: 600, run_attempt: 3, source_sha: exportSha, artifact_name: exportArtifact.name,
       manifest_json: freshManifest.toString('utf8'), manifest_sha256: hash(freshManifest),
       price_observations: priceObservations(priceDay), price_observations_sha256: observationHash(priceDay) };
@@ -213,22 +215,20 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   api[repoApi('/actions/runs/500/artifacts?per_page=100')] = [{ artifacts: [liveArtifact] }];
   write(eventPath, jsonBytes({ workflow_run: { id: 600 }, inputs: { ui_only: false } }));
 
-  let commandPath = cli;
-  if (legacy) {
-    // Replace only a temporary bootstrap pin. The actual controller code and
-    // archive verification run unchanged against the tiny legacy snapshot.
-    const scripts = join(root, '.github/scripts');
-    cpSync(dirname(cli), scripts, { recursive: true });
-    write(join(scripts, 'approved-ui-bootstrap.json'), jsonBytes({
-      site_url: siteUrl, repository, ui_sha: uiSha, ui_files: approvedHashes,
-      approved_run_id: 500, approved_attempt: 2, artifact_id: 700,
-      artifact_zip_sha256: liveArtifact.digest.slice('sha256:'.length),
-      approved_data_manifest_sha256: hash(liveManifest), verification_universe: receipt.verification_universe,
-      approved_price_observations: priceObservations('2026-11-01'),
-      approved_price_observations_sha256: observationHash('2026-11-01'),
-    }));
-    commandPath = join(scripts, 'select-release-source.mjs');
-  }
+  // Replace only a temporary bootstrap pin. The actual controller code and
+  // archive verification run unchanged against the tiny publication history.
+  const scripts = join(root, '.github/scripts');
+  cpSync(dirname(cli), scripts, { recursive: true });
+  const pinPath = join(scripts, 'approved-ui-bootstrap.json');
+  write(pinPath, jsonBytes({
+    site_url: siteUrl, repository, ui_sha: uiSha, ui_files: approvedHashes,
+    approved_run_id: 500, approved_attempt: 2, artifact_id: 700,
+    artifact_zip_sha256: liveArtifact.digest.slice('sha256:'.length),
+    approved_data_manifest_sha256: hash(liveManifest), verification_universe: receipt.verification_universe,
+    approved_price_observations: bootstrapPrices,
+    approved_price_observations_sha256: digest(bootstrapPrices),
+  }));
+  const commandPath = join(scripts, 'select-release-source.mjs');
 
   // No real GitHub executable or network transport is used, even for failures.
   write(join(bin, 'gh'), `#!${process.execPath}\n` + `
@@ -289,11 +289,26 @@ globalThis.fetch = async (input, options) => {
     for (const path of mutableFiles) write(join(dist, path), jsonBytes({ source: 'validated-build', file: path }));
   };
   return { root, runner, env, config, currentGates, receipt, liveFiles, liveManifest, freshManifest, liveArtifact,
-    exportArtifact, metadataArtifact, metadata, invoke, success, dist, simulateBuild, installTransport,
+    exportArtifact, metadataArtifact, metadata, exportFiles, pinPath, invoke, success, dist, simulateBuild, installTransport,
     state: () => JSON.parse(readFileSync(join(runner, 'verified-publication/state.json'), 'utf8')),
     requests: () => readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line)),
     finalReceipt: () => JSON.parse(readFileSync(join(dist, 'publication.json'), 'utf8')),
   };
+}
+
+function addExportCharts(f, dates) {
+  const index = JSON.parse(f.exportFiles['static-data/charts/index.json']);
+  for (const [symbol, date] of Object.entries(dates)) {
+    index.symbols.push({ symbol, path: `charts/${symbol}.json` });
+    f.exportFiles[`static-data/charts/${symbol}.json`] = jsonBytes({ market: 'US', symbol,
+      bars: [{ date, open: 20, high: 21, low: 19, close: 20, volume: 1_500_000 }] });
+    f.metadata.price_observations[JSON.stringify(['US', 'chart', symbol])] = date;
+  }
+  f.exportFiles['static-data/charts/index.json'] = jsonBytes(index);
+  f.exportArtifact.digest = makeArchive(f.config.downloads[repoApi('/actions/artifacts/800/zip')], f.exportFiles);
+  f.metadata.price_observations_sha256 = digest(f.metadata.price_observations);
+  f.metadataArtifact.digest = makeArchive(f.config.downloads[repoApi('/actions/artifacts/801/zip')],
+    { 'source.json': jsonBytes(f.metadata) }, { tar: false });
 }
 
 describe('split Pages publication CLI', () => {
@@ -439,6 +454,76 @@ describe('split Pages publication CLI', () => {
     expect(endpoints).not.toContain(repoApi('/actions/artifacts/800/zip'));
     expect(endpoints).not.toContain(repoApi('/actions/artifacts/801/zip'));
     expect(endpoints).not.toContain(repoApi('/actions/runs/600/attempts/3'));
+  });
+
+  it('retains an absent bootstrap series through migration without rewriting any live data or UI byte', () => {
+    const absent = '["US","chart","ABSENT"]';
+    const f = fixture({ legacy: true, bootstrapPrices: { ...priceObservations('2026-10-31'), [absent]: '2026-10-30' } });
+    f.success('plan'); f.success('restore'); f.installTransport(); f.success('compose'); f.success('recheck');
+    const receipt = f.finalReceipt();
+    expect(receipt.price_observations).toEqual(priceObservations('2026-11-01'));
+    expect(receipt.known_price_dates).toEqual({ ...priceObservations('2026-11-01'), [absent]: '2026-10-30' });
+    const published = readTree(f.dist);
+    delete published['publication.json'];
+    expect(published).toEqual(f.liveFiles);
+  });
+
+  it('rejects a stale returning series omitted by an already-issued receipt even when other prices advance', () => {
+    const absent = '["US","chart","ABSENT"]';
+    const f = fixture({ bootstrapPrices: { ...priceObservations('2026-10-31'), [absent]: '2026-10-30' } });
+    expect(f.receipt.known_price_dates).not.toHaveProperty(absent);
+    addExportCharts(f, { ABSENT: '2026-10-29' });
+    expect(f.success('plan').output).toBe('publish=false\n');
+    expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
+    expect(existsSync(f.dist)).toBe(false);
+    expect(f.requests().some(item => item.kind === 'gh' && item.args.at(-1) === repoApi('/actions/artifacts/800/zip'))).toBe(false);
+  });
+
+  it.each(['2026-10-30', '2026-11-02'])('accepts a returning series dated %s and preserves the maximum dates from all proven sources', date => {
+    const absent = '["US","chart","ABSENT"]', receiptOnly = '["US","chart","RECEIPT_ONLY"]';
+    const f = fixture({ bootstrapPrices: { ...priceObservations('2026-10-31'), [absent]: '2026-10-30' } });
+    f.receipt.known_price_dates[receiptOnly] = '2026-10-31';
+    f.config.live['publication.json'] = jsonBytes(f.receipt).toString('base64');
+    addExportCharts(f, { ABSENT: date, NEW: '2026-10-01' });
+    f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
+    const observed = { ...priceObservations('2026-11-02'), [absent]: date, '["US","chart","NEW"]': '2026-10-01' };
+    expect(f.finalReceipt().price_observations).toEqual(observed);
+    expect(f.finalReceipt().known_price_dates).toEqual({ ...observed, [receiptOnly]: '2026-10-31' });
+    expect(uiTree(f.dist)).toEqual(approvedBytes);
+  });
+
+  it('does not manufacture a data advance from a missing bootstrap date or a previously unknown series', () => {
+    const f = fixture({ scanDay: '2026-11-01', bootstrapPrices: {
+      ...priceObservations('2026-10-31'), '["US","chart","ABSENT"]': '2026-10-30',
+    } });
+    addExportCharts(f, { NEW: '2026-11-02' });
+    expect(f.success('plan').output).toBe('publish=false\n');
+    expect(f.success('plan').output).toBe('publish=false\n');
+    expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
+    expect(existsSync(f.dist)).toBe(false);
+  });
+
+  it.each([false, true])('rejects corrupt bootstrap evidence before publication with legacy=%s', legacy => {
+    const f = fixture({ legacy });
+    const pin = JSON.parse(readFileSync(f.pinPath, 'utf8'));
+    pin.approved_price_observations['["US","chart","ABSENT"]'] = '2026-10-30';
+    write(f.pinPath, jsonBytes(pin));
+    const result = f.invoke('plan');
+    expect(result.status).not.toBe(0);
+    expect(result.text).toContain('Pinned price observation evidence is corrupt');
+    expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
+  });
+
+  it.each([
+    ['["US","chart","ABSENT"]', '9999-01-01', 'Price observation exceeds capture date'],
+    ['["US","chart","ABSENT"]', '2026-02-30', 'Invalid price observation date'],
+    ['["us","chart","ABSENT"]', '2026-10-30', 'Invalid price observation identity'],
+  ])('rejects self-consistent invalid bootstrap evidence %s %s', (key, date, message) => {
+    const f = fixture({ bootstrapPrices: { ...priceObservations('2026-11-01'), [key]: date } });
+    const result = f.invoke('plan');
+    expect(result.status).not.toBe(0);
+    expect(result.text).toContain(message);
+    expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
   });
 
   it.each(['expired', 'missing'])('refreshes the exact pinned receiptless snapshot when its original artifact is %s', availability => {
