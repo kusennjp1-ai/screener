@@ -76,7 +76,7 @@ export function entryReadiness(row, date, market, now = Date.now(), method = 'mi
   // Missing or malformed evidence must not become a measured failure or a pass.
   const check = (id, label, value, detail) => ({id,label,state:typeof value !== 'boolean' ? 'unknown' : value ? 'pass' : 'fail',detail});
   const rules = [
-    check('selection','選定条件', selection, `${row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外。' : row.price_activity?.lowRange ? '60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。' : ''}共通の購入モデル：ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未達 ${minervini.failed + ibd.failed}・未確認 ${minervini.unknown + ibd.unknown}）`),
+    check('selection','共通購入モデルへの適合', selection, `${row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外。' : row.price_activity?.lowRange ? '60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。' : ''}選択中の手法とは別に、ミネルヴィニとIBD型の両方を確認するアプリの共通購入モデル。ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未達 ${minervini.failed + ibd.failed}・未確認 ${minervini.unknown + ibd.unknown}）`),
     check('market','市場環境', marketKnown ? market.cap > 0 : null, market?.label || '市場データ未取得'),
     check('date','最新の取引日', calendar && nowKnown ? fresh : null, calendarDetail),
     check('price','買い位置', finite(row.current_price) && finite(pivot) && pivot > 0 ? row.current_price >= pivot && row.current_price <= pivot * (1 + zone / 100) : null, `日次価格 ${finite(row.current_price) ? row.current_price.toFixed(2) : '未確認'} / ピボット ${finite(pivot) ? pivot.toFixed(2) : '未確認'}。0〜${zone}%はこの方式のモデル設定。${sourceContext.label ? `${sourceContext.label}。` : ''}${sourceContext.detail}`),

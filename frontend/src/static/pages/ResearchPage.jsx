@@ -5,6 +5,8 @@ import ConnectionStatus from '../components/ConnectionStatus';
 import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
+import ResearchFeedContext, { ResearchFeedNavigation } from '../components/ResearchFeedContext';
+import '../researchEventFeed.css';
 import ResearchFreshnessNotice from '../components/ResearchFreshnessNotice';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
@@ -12,7 +14,7 @@ import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
-import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography, useMediaQuery } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import StaticChartViewerModal from '../StaticChartViewerModal';
@@ -28,6 +30,7 @@ import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
 import { prepareResearchBundle, researchBundleCurrent } from '../researchPreprocess';
 import { isFeedSizeOnlyNavigation, normalizeFeedSize } from '../researchFeedPaging';
+import { orderCandidates } from '../candidateOrdering';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
@@ -36,7 +39,6 @@ export default function ResearchPage({compareOnly=false}) {
   const location = useLocation();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
-  const smallScreen = useMediaQuery('(max-width:1279px)');
   const listReturn = useRef(null);
   const restoreListPosition = useCallback(() => requestAnimationFrame(() => {
     const saved = listReturn.current;
@@ -59,7 +61,8 @@ export default function ResearchPage({compareOnly=false}) {
     navigate({pathname:location.pathname,search:`?${next}`,hash:location.hash}, {replace:true,state:location.state});
   }, [location, navigate]);
   const [method, setMethod] = useState(()=>Object.hasOwn(METHODS,params.get('method'))?params.get('method'):'minervini');
-  const [view,setView]=useState(()=>params.get('view')==='charts'?'charts':'list');
+  const [view,setView]=useState(()=>['charts','table'].includes(params.get('view'))?params.get('view'):'list');
+  const [candidateSort,setCandidateSort]=useState('rank');
   const [sector,setSector]=useState(()=>params.get('sector') || '');
   const workbench=useWorkbench(entry);
   const [personalKey, setPersonalKey] = useState('');
@@ -129,7 +132,7 @@ export default function ResearchPage({compareOnly=false}) {
     // supported URL field on navigation, including fields removed by Back.
     const ticker = params.get('symbol') || null;
     setMethod(Object.hasOwn(METHODS, params.get('method')) ? params.get('method') : 'minervini');
-    setView(params.get('view') === 'charts' ? 'charts' : 'list');
+    setView(['charts','table'].includes(params.get('view')) ? params.get('view') : 'list');
     setSector(params.get('sector') || '');
     setSearch(ticker || '');
     setSymbol(ticker);
@@ -234,7 +237,7 @@ export default function ResearchPage({compareOnly=false}) {
     detailRef.current?.focus?.({ preventScroll: true });
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
   }); }
-  const selectSymbol = useCallback(ticker => {setSymbol(ticker);if(window.matchMedia?.('(max-width:1279px)')?.matches){listReturn.current={symbol:ticker,scrollY:window.scrollY,listTop:document.querySelector('.candidate-scroll')?.scrollTop||0};setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});}},[]);
+  const selectSymbol = useCallback(ticker => {setSymbol(ticker);listReturn.current={symbol:ticker,scrollY:window.scrollY,listTop:document.querySelector('.candidate-scroll')?.scrollTop||0};setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});},[]);
   const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
   const disconnect = useCallback(()=>setPersonalKey(''),[]);
   const openFilters = useCallback(()=>setFiltersOpen(true),[]);
@@ -242,7 +245,7 @@ export default function ResearchPage({compareOnly=false}) {
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
   const browse = () => {setMobileView('list'); if(listReturn.current){restoreListPosition();return;} requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
   function download() {
-    const csv = researchCsv(ranked, method, bundle.data?.date, now);
+    const csv = researchCsv(orderCandidates(ranked,{sort:candidateSort,method,date:bundle.data?.date}), method, bundle.data?.date, now);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
@@ -259,9 +262,8 @@ export default function ResearchPage({compareOnly=false}) {
   ].filter(Boolean);
   const resetFilters=()=>{setLiquid(true);setStrict(false);setNearOnly(false);setOnlyWatch(false);setSector('');setCoverage('all');setSearch('');};
   const filterChips=<div className="research-active-filters" aria-label="現在の絞り込み">{activeFilters.map(filter=><button key={filter.id} onClick={filter.clear} aria-label={`${filter.label}の絞り込みを解除`}>{filter.label} ×</button>)}<button className="filter-reset" onClick={resetFilters}>初期条件に戻す</button></div>;
-  return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
+  return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':' research-event-workbench'}`} data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
-    {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div><Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     <ResearchFreshnessNotice stale={stale} freshness={bundle.data ? freshness : null} date={bundle.data?.date || entry.as_of_date} generatedAt={manifest.data?.generated_at}/>
     <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
@@ -279,18 +281,21 @@ export default function ResearchPage({compareOnly=false}) {
       <Button onClick={download} disabled={!ranked.length}>全検索結果をCSV保存 ↓</Button>
       <Button component="a" href={`${import.meta.env.BASE_URL}qualification-audit.json`} download>全銘柄の検証記録 ↓</Button>
       <Button onClick={()=>{manifest.refetch?.();if(bundle.isError)bundle.refetch();}}>データを再確認 ↻</Button>
-      <Button variant="contained" onClick={()=>{setFiltersOpen(false);browse();}}>候補を確認する →</Button>
+      <Button variant="contained" onClick={()=>{setFiltersOpen(false);listReturn.current=null;browse();}}>候補を確認する →</Button>
     </Drawer>
     {(manifest.isError || bundle.isError) && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>再試行</Button>}>データを取得できません。以前の表示値がある場合は最新とは限りません。</Alert>}
     {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} /> 銘柄と分析根拠を読み込んでいます…</Box>}
     {storageError && <Alert severity="warning">ウォッチはこの画面のみ保持されます。端末への保存が制限されています。</Alert>}
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
+    <div className={compareOnly ? undefined : 'research-event-layout'}>
+      {!compareOnly&&<ResearchFeedNavigation detailOpen={mobileView==='detail'} onBrowse={browse} onlyWatch={onlyWatch} onWatchFilter={()=>{setOnlyWatch(value=>!value);listReturn.current=null;browse();}}/>}
+      <div className={compareOnly ? undefined : 'research-feed-main'}>
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} onHighlight={setSymbol} view={actualView} onView={setView} feedSize={feedSize} onFeedSizeChange={changeFeedSize} toolbar={methodControls} filterChips={filterChips} watch={watch} onWatch={toggleWatch} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} financialEpoch={researchBundleCurrent(bundle.data,now,version ?? null)?bundle.data.evaluated_at:now} onCompare={setChart} paused={Boolean(chart)} />
-      {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
+      <div hidden={!compareOnly&&mobileView==='detail'}><CandidateBoard onSortChange={setCandidateSort} ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} onHighlight={setSymbol} view={actualView} onView={setView} feedSize={feedSize} onFeedSizeChange={changeFeedSize} toolbar={<>{methodControls}{!compareOnly&&<div className="research-view-controls" role="group" aria-label="候補の表示形式"><button aria-pressed={view==='list'} onClick={()=>setView('list')}>フィード</button><button aria-pressed={view==='table'} onClick={()=>setView('table')}>表</button></div>}</>} filterChips={filterChips} watch={watch} onWatch={toggleWatch} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} financialEpoch={researchBundleCurrent(bundle.data,now,version ?? null)?bundle.data.evaluated_at:now} onCompare={setChart} paused={Boolean(chart)} /></div>
+      {actualView!=='charts'&&mobileView==='detail' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
-    {!compareOnly&&<footer className="research-method-note">
+    {!compareOnly&&mobileView!=='detail'&&<footer className="research-method-note">
       <CandidatePerformance entry={entry}/>
       {bundle.data&&<WatchNotifications rows={rows} watch={watch} asOf={bundle.data.date} method={method} personalConnected={Boolean(personalKey)&&personal.status==='接続済み'} personalQuote={usableQuote} onSelect={inspectChanged}/>}
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
@@ -302,6 +307,11 @@ export default function ResearchPage({compareOnly=false}) {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>}
+      </div>
+      {!compareOnly&&<ResearchFeedContext ranked={ranked} methodName={METHODS[method]} date={bundle.data?.date||entry.as_of_date} loading={!bundle.data} onSector={key=>{setSector(key);listReturn.current=null;browse();}}>
+        <ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>
+      </ResearchFeedContext>}
+    </div>
     {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
   </Box>;
 }

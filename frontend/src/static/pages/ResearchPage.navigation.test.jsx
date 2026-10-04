@@ -33,6 +33,8 @@ function mount(hash = '#/') {
     <Route path="/compare" element={<ResearchPage compareOnly />} />
   </Routes></HashRouter></QueryClientProvider>);
 }
+const candidates = () => screen.getByRole('list', { name: '投資手法別の銘柄候補' });
+const backToFeed = () => fireEvent.click(screen.getByRole('button', { name: '← 候補一覧に戻る' }));
 const openFilters = () => {
   fireEvent.click(screen.getByRole('button', { name: '候補を絞り込む' }));
   return screen.getByRole('dialog', { name: '候補を絞り込む' });
@@ -75,6 +77,7 @@ it('restores a symbol-free list and liquidity on Back, and the linked mobile det
   act(() => window.history.forward());
   await screen.findByRole('heading', { name: 'SMALL' });
   expect(container.querySelector('main')).toHaveAttribute('data-mobile-view', 'detail');
+  backToFeed();
   expect(screen.getByRole('button', { name: 'IBD型', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -89,6 +92,7 @@ it('clears stale local filters and an open drawer when navigating to a symbol li
   act(() => navigate('/?symbol=TECH'));
   await screen.findByRole('heading', { name: 'TECH' });
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  backToFeed();
   const restored = openFilters();
   expect(within(restored).getByLabelText('ウォッチのみ')).not.toBeChecked();
   expect(within(restored).getByLabelText('あと1条件')).not.toBeChecked();
@@ -162,7 +166,7 @@ function useLargeUniverse() {
 it.each([['',20],['20',20],['50',50],['100',20],['050',20],['50.0',20],['invalid',20]])('cold-loads feedSize=%s with %s cards and the complete count',(query,size)=>{
  useLargeUniverse();
  mount(`#/?feedSize=${query}`);
- expect(screen.getAllByRole('listitem')).toHaveLength(size);
+ expect(within(candidates()).getAllByRole('listitem')).toHaveLength(size);
  expect(screen.getByRole('combobox',{name:'1ページの銘柄数'})).toHaveValue(String(size));
  expect(screen.getByRole('status')).toHaveTextContent(`全103銘柄中1–${size}`);
  expect(screen.getByRole('heading',{name:'ミネルヴィニ 候補 103件'})).toBeInTheDocument();
@@ -176,6 +180,7 @@ it('changes the URL size without resetting search, filters, method, order or an 
  fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'rs'}});
  fireEvent.change(screen.getByRole('combobox',{name:'候補のページ'}),{target:{value:'1'}});
  fireEvent.click(screen.getByRole('button',{name:/^SIZE077 の分析/}));
+ backToFeed();
  fireEvent.change(screen.getByRole('combobox',{name:'候補のページ'}),{target:{value:'0'}});
  expect(screen.queryByRole('button',{name:/^SIZE077 の分析/})).not.toBeInTheDocument();
  fireEvent.change(screen.getByRole('combobox',{name:'1ページの銘柄数'}),{target:{value:'20'}});
@@ -195,17 +200,18 @@ it('restores page size through browser Back and Forward without clearing local r
  useLargeUniverse();
  mount('#/?feedSize=20');
  act(()=>navigate('/?feedSize=50'));
- await waitFor(()=>expect(screen.getAllByRole('listitem')).toHaveLength(50));
+ await waitFor(()=>expect(within(candidates()).getAllByRole('listitem')).toHaveLength(50));
  act(()=>window.dispatchEvent(new CustomEvent('research:search',{detail:'Synthetic'})));
  fireEvent.click(screen.getByRole('button',{name:'IBD型',exact:true}));
  fireEvent.click(screen.getByRole('button',{name:/^SIZE010 の分析/}));
+ backToFeed();
  act(()=>window.history.back());
- await waitFor(()=>expect(screen.getAllByRole('listitem')).toHaveLength(20));
+ await waitFor(()=>expect(within(candidates()).getAllByRole('listitem')).toHaveLength(20));
  expect(screen.getByRole('button',{name:'IBD型',exact:true})).toHaveAttribute('aria-pressed','true');
  expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('検索：Synthetic');
  expect(screen.getByRole('button',{name:/^SIZE010 の分析/})).toHaveAttribute('aria-current','true');
  act(()=>window.history.forward());
- await waitFor(()=>expect(screen.getAllByRole('listitem')).toHaveLength(50));
+ await waitFor(()=>expect(within(candidates()).getAllByRole('listitem')).toHaveLength(50));
  expect(screen.getByRole('button',{name:'IBD型',exact:true})).toHaveAttribute('aria-pressed','true');
  expect(screen.getByRole('button',{name:/^SIZE010 の分析/})).toHaveAttribute('aria-current','true');
 });
@@ -232,4 +238,143 @@ it('keeps the mobile evidence return position when changing size around a select
  expect(screen.getByRole('combobox',{name:'候補のページ'})).toHaveValue('3');
  expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('業種');
  expect(selected).toHaveAttribute('aria-current','true');
+});
+
+it('keeps desktop home on the complete candidate feed without constructing a detail', () => {
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ const {container}=mount();
+ expect(container.querySelector('main')).toHaveAttribute('data-mobile-view','list');
+ expect(candidates()).toBeVisible();
+ expect(within(candidates()).getAllByRole('listitem')).toHaveLength(2);
+ expect(screen.queryByRole('region',{name:'銘柄詳細',hidden:true})).not.toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'← 候補一覧に戻る'})).not.toBeInTheDocument();
+});
+
+it.each(['candidate','evidence'])('opens desktop detail with one %s action and restores the retained feed, page, filters and scroll',async action=>{
+ useLargeUniverse();
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ const scrollTo=vi.spyOn(window,'scrollTo').mockImplementation(()=>{});
+ vi.spyOn(window,'scrollY','get').mockReturnValue(1464);
+ const {container}=mount('#/?sector=Technology&feedSize=50');
+ act(()=>window.dispatchEvent(new CustomEvent('research:search',{detail:'Synthetic'})));
+ fireEvent.click(screen.getByRole('button',{name:'オニール',exact:true}));
+ fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'rs'}});
+ fireEvent.change(screen.getByRole('combobox',{name:'候補のページ'}),{target:{value:'1'}});
+ const board=screen.getByRole('region',{name:'候補リスト',exact:true});
+ const list=candidates();
+ const scroll=board.querySelector('.candidate-scroll');
+ scroll.scrollTop=318;
+ const selected=screen.getByRole('button',{name:/^SIZE077 の分析/});
+ fireEvent.click(action==='candidate'?selected:screen.getByRole('button',{name:'SIZE077 の財務・日次根拠を見る'}));
+ expect(await screen.findByRole('heading',{name:'SIZE077'})).toBeInTheDocument();
+ await waitFor(()=>expect(screen.getByRole('region',{name:'銘柄詳細'})).toHaveFocus());
+ expect(screen.queryByRole('list',{name:'投資手法別の銘柄候補'})).not.toBeInTheDocument();
+ expect(list).toBeInTheDocument();
+ expect(list).not.toBeVisible();
+ expect(container.querySelector('#candidate-board')).toBe(board);
+ backToFeed();
+ await waitFor(()=>expect(selected).toHaveFocus());
+ expect(candidates()).toBe(list);
+ expect(list).toBeVisible();
+ expect(screen.queryByRole('region',{name:'銘柄詳細',hidden:true})).not.toBeInTheDocument();
+ expect(board).toHaveAttribute('data-feed-selected-symbol','SIZE077');
+ expect(selected).toHaveAttribute('aria-current','true');
+ expect(screen.getByRole('combobox',{name:'候補のページ'})).toHaveValue('1');
+ expect(screen.getByRole('combobox',{name:'1ページの銘柄数'})).toHaveValue('50');
+ expect(screen.getByRole('combobox',{name:'候補の並び順'})).toHaveValue('rs');
+ expect(screen.getByRole('button',{name:'オニール',exact:true})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('検索：Synthetic');
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('業種');
+ expect(scroll.scrollTop).toBe(318);
+ expect(scrollTo).toHaveBeenLastCalledWith({top:1464,behavior:'instant'});
+});
+
+it('opens a desktop symbol route directly and returns to its symbol-filtered feed',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ mount('#/?symbol=SMALL&method=ibd');
+ expect(await screen.findByRole('heading',{name:'SMALL'})).toBeInTheDocument();
+ await waitFor(()=>expect(screen.getByRole('region',{name:'銘柄詳細'})).toHaveFocus());
+ expect(screen.queryByRole('list',{name:'投資手法別の銘柄候補'})).not.toBeInTheDocument();
+ backToFeed();
+ expect(within(candidates()).getAllByRole('listitem')).toHaveLength(1);
+ expect(screen.getByRole('button',{name:/^SMALL の分析/})).toHaveAttribute('aria-current','true');
+ expect(screen.getByRole('button',{name:'IBD型',exact:true})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('検索：SMALL');
+});
+
+it.each([20,50])('cold-loads the table view with %s canonical candidates and the full count',size=>{
+ useLargeUniverse();
+ const {container}=mount(`#/?view=table&feedSize=${size}`);
+ const table=screen.getByRole('table',{name:/ミネルヴィニの候補/});
+ expect(container.querySelector('.research-grid')).toHaveAttribute('data-view','table');
+ expect(within(table).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(size);
+ expect(screen.getByRole('combobox',{name:'1ページの銘柄数'})).toHaveValue(String(size));
+ expect(screen.getByRole('status')).toHaveTextContent(`全103銘柄中1–${size}`);
+ expect(screen.getByRole('heading',{name:'ミネルヴィニ 候補 103件'})).toBeInTheDocument();
+ expect(screen.queryByRole('region',{name:'銘柄詳細',hidden:true})).not.toBeInTheDocument();
+});
+
+it('shares the selected method, ordering, filters, page and size when switching between feed and table',()=>{
+ useLargeUniverse();
+ mount('#/?sector=Technology&feedSize=50');
+ act(()=>window.dispatchEvent(new CustomEvent('research:search',{detail:'Synthetic'})));
+ fireEvent.click(screen.getByRole('button',{name:'オニール',exact:true}));
+ fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'rs'}});
+ fireEvent.change(screen.getByRole('combobox',{name:'候補のページ'}),{target:{value:'1'}});
+ const symbols=within(candidates()).getAllByRole('button',{name:/ の分析を表示/}).map(button=>button.getAttribute('aria-label').split(' ')[0]);
+ fireEvent.click(screen.getByRole('button',{name:'表',exact:true}));
+ const table=screen.getByRole('table',{name:/オニールの候補/});
+ expect(within(table).getAllByRole('button',{name:/ の分析を表示/}).map(button=>button.getAttribute('aria-label').split(' ')[0])).toEqual(symbols);
+ expect(screen.getByRole('button',{name:'表',exact:true})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('combobox',{name:'候補のページ'})).toHaveValue('1');
+ expect(screen.getByRole('combobox',{name:'1ページの銘柄数'})).toHaveValue('50');
+ expect(screen.getByRole('combobox',{name:'候補の並び順'})).toHaveValue('rs');
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('検索：Synthetic');
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('業種');
+ fireEvent.click(screen.getByRole('button',{name:'フィード',exact:true}));
+ expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/}).map(button=>button.getAttribute('aria-label').split(' ')[0])).toEqual(symbols);
+ expect(screen.getByRole('combobox',{name:'候補のページ'})).toHaveValue('1');
+});
+
+it('retains a table row’s expanded evidence and horizontal position across detail and size changes',async()=>{
+ useLargeUniverse();
+ vi.spyOn(window,'scrollTo').mockImplementation(()=>{});
+ const {container}=mount('#/?view=table&feedSize=50');
+ fireEvent.change(screen.getByRole('combobox',{name:'候補のページ'}),{target:{value:'1'}});
+ const table=screen.getByRole('table',{name:/ミネルヴィニの候補/});
+ const overflow=screen.getByRole('region',{name:'銘柄候補の比較表'});
+ overflow.scrollLeft=384;
+ fireEvent.click(screen.getByRole('button',{name:'SIZE077 の対象期・提供元と判定根拠を見る'}));
+ const evidence=screen.getByRole('region',{name:'SIZE077 の対象期・提供元と判定根拠'});
+ fireEvent.click(screen.getByRole('button',{name:'SIZE077 の詳しい分析を開く'}));
+ expect(await screen.findByRole('heading',{name:'SIZE077'})).toBeInTheDocument();
+ await waitFor(()=>expect(screen.getByRole('region',{name:'銘柄詳細'})).toHaveFocus());
+ expect(table).toBeInTheDocument();
+ expect(table).not.toBeVisible();
+ backToFeed();
+ await waitFor(()=>expect(screen.getByRole('button',{name:/^SIZE077 の分析/})).toHaveFocus());
+ expect(screen.getByRole('table',{name:/ミネルヴィニの候補/})).toBe(table);
+ expect(screen.getByRole('region',{name:'SIZE077 の対象期・提供元と判定根拠'})).toBe(evidence);
+ expect(evidence).toBeVisible();
+ expect(overflow.scrollLeft).toBe(384);
+ expect(screen.getByRole('combobox',{name:'候補のページ'})).toHaveValue('1');
+ fireEvent.change(screen.getByRole('combobox',{name:'1ページの銘柄数'}),{target:{value:'20'}});
+ await waitFor(()=>expect(window.location.hash).toContain('feedSize=20'));
+ expect(container.querySelector('.research-grid')).toHaveAttribute('data-view','table');
+ expect(within(table).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(20);
+ expect(screen.getByRole('combobox',{name:'候補のページ'})).toHaveValue('3');
+ expect(screen.getByRole('button',{name:/^SIZE077 の分析/})).toHaveAttribute('aria-current','true');
+ expect(screen.getByRole('status')).toHaveTextContent('全103銘柄中61–80');
+});
+
+it.each(['industry','watch'])('focuses the updated candidate region when a %s action leaves detail and excludes its selected symbol',async action=>{
+ mount();
+ if(action==='watch')fireEvent.click(screen.getByRole('button',{name:'BANK ウォッチに保存'}));
+ fireEvent.click(screen.getByRole('button',{name:/^TECH の分析/}));
+ await waitFor(()=>expect(screen.getByRole('region',{name:'銘柄詳細'})).toHaveFocus());
+ fireEvent.click(screen.getByRole('button',{name:action==='industry'?/^金融：通過 .*業種で絞り込む$/: 'ウォッチ'}));
+ expect(screen.getByRole('button',{name:/^BANK の分析/})).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:/^TECH の分析/})).not.toBeInTheDocument();
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent(action==='industry'?'業種':'ウォッチのみ');
+ await waitFor(()=>expect(screen.getByRole('region',{name:'候補リスト',exact:true})).toHaveFocus());
 });

@@ -12,6 +12,7 @@ import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../src/static/financialEvidencePresentation.js';
 import { assess } from '../src/static/researchEngine.js';
 import { PERFORMANCE_SCENARIOS, performanceDomWitness, performanceDomFailures, performanceResult, performanceSummary, performancePublicationUniverse, performanceUniverseFailures, coldNavigationFailures, designReviewProvenance } from './design-performance.mjs';
+import { collectResearchFeedPages } from './feed-pagination-review.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
 import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, checkFeedDecisionEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
@@ -387,19 +388,14 @@ for (const viewport of FEED_REVIEW_VIEWPORTS) for (const theme of ['dark', 'ligh
     await liquidity.check();
     await drawer.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
     await visible(page.getByRole('button', { name: '流動性の絞り込みを解除', exact: true }));
-    const filteredSymbols = await page.locator('.candidate-feed-card .candidate-name strong').allTextContents();
-    const nextPage = page.getByRole('button', { name: '次の50件', exact: true });
-    while (await nextPage.count() && await nextPage.isEnabled()) {
-      const previous = await page.locator('.candidate-pagination > span').textContent();
-      await nextPage.click();
-      await page.waitForFunction(previous => document.querySelector('.candidate-pagination > span')?.textContent !== previous, previous);
-      filteredSymbols.push(...await page.locator('.candidate-feed-card .candidate-name strong').allTextContents());
-    }
+    const traversal = await collectResearchFeedPages(page), filteredSymbols = traversal.symbols;
+    record.filtered_pages = traversal.pages;
     check(filteredSymbols.includes(initial.feed.symbol), `${key}: search lost the selected symbol`);
     await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
     const downloadPromise = page.waitForEvent('download');
     await drawer.getByRole('button', { name: '全検索結果をCSV保存 ↓', exact: true }).click();
     const download = await downloadPromise, csv = await readFile(await download.path()), csvRows = parseResearchCsv(csv.toString('utf8'));
+    check(csvRows.length === traversal.total && new Set(csvRows.map(row => row.symbol)).size === csvRows.length, `${key}: CSV has missing or duplicate search-result symbols`);
     check(JSON.stringify(csvRows.map(row => row.symbol).sort()) === JSON.stringify([...filteredSymbols].sort()), `${key}: CSV symbols differ from active search/filter results`);
     check(csvRows.length > 0 && csvRows.every(row => row.method === method && row.as_of_date === report.data.as_of_date && row.financial_semantics === 'current_at_evaluation_not_historical_publication'), `${key}: CSV method/date/current-evaluation identity differs from the feed`);
     record.csv = { sha256: sha256(csv), filename: download.suggestedFilename(), symbols: csvRows.map(row => row.symbol), evaluated_at: [...new Set(csvRows.map(row => row.financial_evaluated_at))] };

@@ -1,6 +1,7 @@
 import { withFinancialProof } from './testFinancialFixture';
 import {it,expect} from 'vitest';
 import {entryReadiness,prepareReadinessTimeline} from './entryReadiness';
+import {assess} from './researchEngine';
 import {buildPortfolioPlan} from './portfolioPlan';
 import {withAuditFixture} from './testAuditFixture';
 const now=Date.parse('2026-09-26T10:00:00Z'),date='2026-09-25';
@@ -8,6 +9,12 @@ const row=()=>withAuditFixture({symbol:'LEAD',market:'US',currency:'USD',gics_se
 entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:'2026-09-26T09:00:00Z',valid_until:'2026-09-28T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:'2026-09-26T09:00:00Z'},shape:{candidate:true,summary:'自動推定'},volumeRatio:1.5}},date);
 it('keeps allocation empty while required financial ratings remain unverified',()=>{
  const r=row(), result=entryReadiness(r,date,{cap:.5,label:'上昇'},now);
+ expect(assess(r,'minervini',now)).toMatchObject({qualified:true,passed:9,total:9});
+ expect(result.rules.find(rule=>rule.id==='selection')).toMatchObject({
+  label:'共通購入モデルへの適合',state:'unknown',
+  detail:expect.stringContaining('選択中の手法とは別に、ミネルヴィニとIBD型の両方'),
+ });
+ expect(result.status).toBe('共通購入モデルへの適合を確認');
  expect(result.ready).toBe(false); expect(result.rules.find(rule=>rule.id==='selection').state).toBe('unknown');
  const plan=buildPortfolioPlan([r],date,100000,now);
  expect(plan.decision).toBe('購入条件を満たす銘柄なし'); expect(plan.dailyPositions).toHaveLength(0);
@@ -68,6 +75,9 @@ it('keeps missing selection evidence unknown instead of calling it a measured fa
  r.eps_growth_yy=10;
  expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules[0].state).toBe('unknown');
  expect(entryReadiness(withFinancialProof(r,now,date),date,{cap:.5,label:'上昇'},now).rules[0].state).toBe('fail');
+ const measured=entryReadiness(withFinancialProof(r,now,date),date,{cap:.5,label:'上昇'},now).rules[0];
+ expect(measured.id).toBe('selection');expect(measured.label).toBe('共通購入モデルへの適合');
+ expect(measured.detail).toContain('ミネルヴィニ 9/9');
 });
 it('distinguishes unknown market context from a known restrictive market',()=>{
  for(const market of [undefined,{cap:0,state:'unknown',label:'市場未確認'}]) {

@@ -1,0 +1,50 @@
+name: Research Feed Preview
+
+on:
+  push:
+    branches: [preview/research-event-feed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-feed-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshot-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Build the actual static application
+        working-directory: frontend
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: '/screener/'
+        run: |
+          if [ -d public/static-data ]; then
+            mv public/static-data "$RUNNER_TEMP/preview-unused-static-data"
+          fi
+          npx vite build
+      - name: Capture draft feed, table and evidence views
+        working-directory: frontend
+        run: node tools/event-feed-preview.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: research-feed-preview-${{ github.sha }}-${{ github.run_attempt }}
+          path: frontend/test-results/event-feed-preview/
+          retention-days: 14
+
+# Preview evidence only. No Pages upload/deploy, release, merge or acceptance
+# status is produced. CI and Design Acceptance retain their normal gates.

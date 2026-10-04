@@ -28,7 +28,7 @@ function StaticLayoutContent({children}) {
  const market=resolveStaticMarketEntry(manifest.data,['/','/compare'].includes(location.pathname)?'US':selectedMarket);
  const [search,setSearch]=useResearchSearch();
  const current=location.pathname==='/compare'?'/compare':['/breadth','/groups','/scan'].includes(location.pathname)?'/breadth':'/';
- return <ThemeProvider theme={deskTheme}><style>{themeCss}</style><Box className="leader-shell" data-theme={dark?'dark':'light'}>
+ return <ThemeProvider theme={deskTheme}><style>{themeCss}</style><Box className={`leader-shell${location.pathname==='/'?' has-research-feed':''}`} data-theme={dark?'dark':'light'}>
   <header className="leader-header">
    <RouterLink to="/" className="leader-logo"><ShowChartIcon/><span>LEADER <em>RESEARCH</em></span></RouterLink>
    <button className="mobile-header-back" onClick={()=>window.dispatchEvent(new CustomEvent('research:back'))}>← 候補一覧</button>

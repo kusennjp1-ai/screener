@@ -28,8 +28,8 @@ async function mockFeed(page) {
  });
 }
 
-// The approved table → feed layout has variable-height cards and four actions
-// per card. Preserve keyboard reachability and materialized geometry, not the
+// The approved feed has variable-height cards, a named blocker disclosure,
+// and four buttons per card. Preserve keyboard reachability and geometry, not the
 // former 51/70px table-row estimate or an unmaterialized total scrollHeight.
 for(const [width,height,pageSize] of [[1440,900,50],[1024,900,50],[390,844,50],[360,568,50],[1440,900,20],[360,568,20]])test(`${pageSize===50?'explicit 50-card stress':'default 20-card browsing'} keeps geometry, focus and full pagination at ${width}x${height}`,async({page},info)=>{
   await page.setViewportSize({width,height});
@@ -61,7 +61,7 @@ for(const [width,height,pageSize] of [[1440,900,50],[1024,900,50],[390,844,50],[
       const card=item.querySelector('.candidate-feed-card');
       return {symbol:card.querySelector('.candidate-name strong').textContent,item:box(item),card:box(card),
         next:item.nextElementSibling?box(item.nextElementSibling.querySelector('.candidate-row')):null,
-        actions:[...card.querySelectorAll('button')].map(node=>({label:node.getAttribute('aria-label'),...box(node)}))};
+        actions:[...card.querySelectorAll('button, summary')].map(node=>({label:node.getAttribute('aria-label')||node.textContent,...box(node)}))};
     }));
     await info.attach(`whole-page-geometry-${label}`,{body:JSON.stringify(bounds),contentType:'application/json'});
     // Inspect the unvisited cards too. Focusing first would remove skipped-size
@@ -163,15 +163,23 @@ for(const [width,height,pageSize] of [[1440,900,50],[1024,900,50],[390,844,50],[
   // is reached through Tab/Shift+Tab or the existing arrow navigation.
   await penultimate.focus();
   await expectFocused(penultimate);
-  const actions=items.nth(pageSize-2).getByRole('button');
-  await expect(actions).toHaveCount(4);
+  const actions=items.nth(pageSize-2).locator('button, summary');
+  await expect(actions).toHaveCount(5);
   await expect(actions.nth(0)).toHaveAccessibleName(new RegExp(`^PERF${String(pageSize-2).padStart(3,'0')} の分析`));
-  await expect(actions.nth(1)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} の財務・日次根拠を見る`);
-  await expect(actions.nth(2)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} のチャートを開く`);
-  await expect(actions.nth(3)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} ウォッチに保存`);
+  await expect(actions.nth(1)).toHaveText(/未達・未確認の内訳/);
+  await expect(actions.nth(2)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} の財務・日次根拠を見る`);
+  await expect(actions.nth(3)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} のチャートを開く`);
+  await expect(actions.nth(4)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} ウォッチに保存`);
   for(let index=1;index<await actions.count();index++){
     await page.keyboard.press('Tab');await expectFocused(actions.nth(index));
     await expect(actions.nth(index)).toHaveCSS('outline-style','solid');
+    if(index===1){
+      const disclosure=items.nth(pageSize-2).locator('.feed-other-checks');
+      await actions.nth(index).press('Enter');await expect(disclosure).toHaveAttribute('open','');
+      await expect(disclosure.locator('.feed-blocker-group').first()).toBeVisible();
+      await actions.nth(index).press('Enter');await expect(disclosure).not.toHaveAttribute('open');
+      await expectFocused(actions.nth(index));
+    }
   }
   await page.keyboard.press('Tab');
   const last=page.getByRole('button',{name:new RegExp(`^PERF${String(pageSize-1).padStart(3,'0')} の分析`)});
@@ -180,7 +188,7 @@ for(const [width,height,pageSize] of [[1440,900,50],[1024,900,50],[390,844,50],[
   await expect(last).toHaveCSS('outline-style','solid');
   const materialized=await expectStableCard(last,'last-page-one');
   // Reverse traversal must visit those same controls without a focus shortcut.
-  for(let index=3;index>=0;index--){await page.keyboard.press('Shift+Tab');await expectFocused(actions.nth(index));}
+  for(let index=await actions.count()-1;index>=0;index--){await page.keyboard.press('Shift+Tab');await expectFocused(actions.nth(index));}
   for(let index=1;index<await actions.count();index++){await page.keyboard.press('Tab');await expectFocused(actions.nth(index));}
   await page.keyboard.press('Tab');await expectFocused(last);
   const revisited=await expectStableCard(last,'revisited-page-one');
@@ -215,14 +223,16 @@ for(const [width,height,pageSize] of [[1440,900,50],[1024,900,50],[390,844,50],[
   }
   await expect(page.getByRole('button',{name:`次の${pageSize}件`,exact:true})).toBeDisabled();
   if(width<=700){
-    const finalActions=items.first().getByRole('button');
+    const finalActions=items.first().locator('button, summary');
     const evidence=page.getByRole('button',{name:'PERF100 の財務・日次根拠を見る',exact:true});
+    const evidenceIndex=await finalActions.evaluateAll(nodes=>nodes.findIndex(node=>node.classList.contains('feed-open-evidence')));
+    expect(evidenceIndex).toBeGreaterThan(0);
     // The final card has no following card to supply extra scrolling room.
     // Reach every action through the keyboard, including the short viewport.
     for(let index=1;index<await finalActions.count();index++){
       await page.keyboard.press('Tab');await expectFocused(finalActions.nth(index));
     }
-    for(let index=await finalActions.count()-2;index>=1;index--){
+    for(let index=await finalActions.count()-2;index>=evidenceIndex;index--){
       await page.keyboard.press('Shift+Tab');await expectFocused(finalActions.nth(index));
     }
     const positioned=await expectFocused(evidence);

@@ -43,6 +43,7 @@ const tree = () => <QueryClientProvider client={client}><HashRouter><ResearchPag
 const continuity = () => screen.getByRole('button', { name: /^業績の連続性/ });
 const load = () => fireEvent.click(screen.getByRole('button', { name: 'Load financial detail' }));
 const select = symbol => fireEvent.click(screen.getByRole('button', { name: `Select ${symbol}` }));
+const backToFeed = () => fireEvent.click(screen.getByRole('button', { name: '← 候補一覧に戻る' }));
 beforeEach(() => {
   window.history.replaceState(null, '', '#/');
   localStorage.clear();
@@ -59,7 +60,7 @@ it('withholds same-symbol/same-date financial detail during a publication replac
   const newer = pending();
   data.fetch.mockImplementation(request => request === path('A', 'old') ? Promise.resolve(response('A', 'old source')) : newer.promise);
   const view = render(tree());
-  load();
+  select('A');load();
   await waitFor(() => expect(continuity()).toHaveAttribute('data-state', 'reference'));
   expect(continuity()).toHaveAttribute('title', expect.stringContaining('old source'));
 
@@ -76,9 +77,9 @@ it('ignores delayed A and B responses after A → B → A moves to a new generat
   const oldA = pending(), oldB = pending(), newA = pending();
   data.fetch.mockImplementation(request => ({ [path('A', 'old')]: oldA.promise, [path('B', 'old')]: oldB.promise, [path('A', 'new')]: newA.promise })[request]);
   const view = render(tree());
-  load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'old')));
-  select('B');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('B', 'old')));
-  publish('new');select('A');load();view.rerender(tree());
+  select('A');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'old')));
+  backToFeed();select('B');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('B', 'old')));
+  publish('new');backToFeed();select('A');load();view.rerender(tree());
   await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'new')));
   await act(async () => { oldA.resolve(response('A', 'late old A')); oldB.resolve(response('B', 'late old B')); });
   expect(screen.getByRole('heading', { name: 'A' })).toBeInTheDocument();
@@ -93,7 +94,7 @@ it('rejects a cached detail whose returned generation differs from its lookup ke
   client.setQueryData(['researchDetail', 'A', path('A', 'new'), date, 'new'], {
     value: response('A', 'mismatched source'), symbol: 'A', date, generation: 'old', path: path('A', 'old'),
   });
-  render(tree());load();
+  render(tree());select('A');load();
   expect(continuity()).toHaveAttribute('data-state', 'unknown');
   expect(continuity()).not.toHaveAttribute('title', expect.stringContaining('mismatched source'));
 });

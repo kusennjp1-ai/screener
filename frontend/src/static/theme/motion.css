@@ -2,6 +2,7 @@
 @keyframes research-rise { from { opacity:0;transform:translateY(4px) } to { opacity:1;transform:translateY(0) } }
 @keyframes research-zone { from { opacity:.35 } to { opacity:1 } }
 .research-hero .hero-copy { animation:research-rise 180ms ease-out both; }
-.research-hero .radar-plot { animation:research-rise 220ms ease-out both; }
+/* Data marks must be visible as soon as the radar is drawn, including on expand. */
+.research-hero .radar-plot { animation:none; }
 .entry-gauge .gauge-zone { animation:research-zone 300ms ease-out both; }
 @media(prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important} }

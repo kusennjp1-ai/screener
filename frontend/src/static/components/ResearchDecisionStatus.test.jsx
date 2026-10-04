@@ -14,7 +14,7 @@ const market={cap:.5,label:'市場確認'};
 const row=withSyntheticFinancialProof({symbol:'STATUS',current_price:102,se_pivot_price:100});
 const generation='decision-fixture';
 
-it.each(['minervini','minervini2','oneil','ibd'])('keeps canonical %s selection, daily and required annual states identical before the card/detail green metrics',method=>{
+it.each(['minervini','minervini2','oneil','ibd'])('keeps canonical %s counts, annual state and price meaning aligned across card and detail',method=>{
  const assessment=assess(row,method,now);
  const readiness=entryReadiness(row,date,market,now,method);
  const plan=entryPlan(row,null,method);
@@ -25,11 +25,19 @@ it.each(['minervini','minervini2','oneil','ibd'])('keeps canonical %s selection,
  const detail=screen.getByTestId('selected');
  const cardDecision=card.querySelector('.research-decision-status');
  const detailDecision=detail.querySelector('.research-decision-status');
- for(const check of ['selection','daily','price']){
+ for(const [check,label,source] of [['selection','選定条件',assessment],['daily','日次確認',readiness]]){
   const selector=`[data-check="${check}"]`;
-  expect(cardDecision.querySelector(selector).textContent).toBe(detailDecision.querySelector(selector).textContent);
-  expect(cardDecision.querySelector(selector).dataset.state).toBe(detailDecision.querySelector(selector).dataset.state);
+  const compact=cardDecision.querySelector(selector),full=detailDecision.querySelector(selector);
+  expect(compact.dataset.state).toBe(full.dataset.state);
+  for(const node of [compact,full]){
+   expect(node).toHaveTextContent(`${label} ${source.passed}/${source.total}`);
+   expect(node).toHaveTextContent(`未達 ${source.failed} · 未確認 ${source.unknown}`);
+  }
  }
+ const compactPrice=cardDecision.querySelector('[data-check="price"]'),fullPrice=detailDecision.querySelector('[data-check="price"]');
+ expect(compactPrice).toHaveTextContent('価格位置');
+ expect(compactPrice.querySelector('strong').textContent).toBe(fullPrice.querySelector('strong').textContent);
+ expect(cardDecision.querySelector('.feed-price-model')).toHaveTextContent(`価格位置 · アプリ 0〜+${plan.zone}%`);
  expect(cardDecision.querySelector('[data-check="selection"]')).toHaveTextContent(`選定条件 ${assessment.passed}/${assessment.total}`);
  expect(cardDecision.querySelector('[data-check="selection"]')).toHaveTextContent(`未達 ${assessment.failed} · 未確認 ${assessment.unknown}`);
  expect(cardDecision.querySelector('[data-check="daily"]')).toHaveTextContent(`日次確認 ${readiness.passed}/${readiness.total}`);
@@ -76,7 +84,8 @@ it('keeps the existing book/app warning beside a conditional app zone without in
  render(<CandidateBoard ranked={[{row:current,assessment:assess(current,method,now)}]} {...{method,date,generation,now,market}} onSelect={()=>{}}/>);
  const card=screen.getByRole('article');
  const decision=card.querySelector('.research-decision-status');
- expect(decision.querySelector('[data-check="price"]')).toHaveTextContent('価格位置 · アプリ● 買いゾーン内');
+ expect(decision.querySelector('[data-check="price"]')).toHaveTextContent('現在の状態 · 価格位置● 買いゾーン内ピボット比 +4.0%');
+ expect(decision.querySelector('.feed-price-model')).toHaveTextContent('価格位置 · アプリ 0〜+5%');
  expect(screen.getByRole('note',{name:/書籍の追随目安外/})).toHaveTextContent('△ 書籍目安2〜3%超');
  expect(decision.querySelector('.decision-annual')).toBeNull();
  expect(decision.compareDocumentPosition(card.querySelector('.feed-growth'))&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

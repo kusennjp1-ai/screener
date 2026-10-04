@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createRadarContext, RADAR_HARNESS_VERSION, radarContextFailures, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 import { fonts } from '../src/static/theme/tokens.js';
+import { RADAR_VISIBILITY_VERSION } from './radar-visibility.mjs';
 
 afterEach(() => { document.body.innerHTML = ''; delete document.documentElement.dataset.theme; });
 
@@ -47,7 +48,9 @@ function context() {
     shell: { ...box }, radar: { ...box }, header: { ...box }, canvas: { ...box } };
 }
 function measurement() {
-  return { context: context(), first_frame_ms: 50, point_count: 207, final_point_count: 207, pixel_alignment: { matches: true } };
+  return { context: context(), first_frame_ms: 50, point_count: 207, final_point_count: 207, pixel_alignment: { matches: true },
+    visibility: { version: RADAR_VISIBILITY_VERSION, captured_in_endpoint_task: true, styles_visible: true, effective_opacity: 1,
+      expected_points: 207, painted_point_centers: 207, unobscured_point_centers: 207, readback_error: null } };
 }
 describe('D9 context and unchanged first-frame gating', () => {
   it('requires production font inheritance instead of allowing a bare serif div', () => {
@@ -77,5 +80,15 @@ describe('D9 context and unchanged first-frame gating', () => {
     expect(radarMeasurementFailures(alignment, { timing: false })).toEqual([]);
     expect(alignment.first_frame_ms).toBe(75);
     expect(radarMeasurementFailures(alignment)).toContain('first frame 75ms (limit 50ms)');
+  });
+  it('rejects hidden, empty, obscured, late or missing visibility evidence independently of a fast draw', () => {
+    const valid = measurement(), message = 'all 207 point centers require actual canvas pixels, full CSS opacity and unobscured visibility in the first-frame endpoint task';
+    for (const delta of [{ effective_opacity: 0 }, { effective_opacity: .99 }, { styles_visible: false },
+      { painted_point_centers: 206 }, { unobscured_point_centers: 206 }, { expected_points: 206 },
+      { captured_in_endpoint_task: false }, { version: 'later-screenshot' }, { readback_error: 'tainted' }]) {
+      expect(radarMeasurementFailures({ ...valid, first_frame_ms: 10, visibility: { ...valid.visibility, ...delta } })).toContain(message);
+    }
+    expect(radarMeasurementFailures({ ...valid, visibility: undefined })).toContain(message);
+    expect(radarMeasurementFailures({ ...valid, visibility: undefined }, { timing: false })).toContain(message);
   });
 });

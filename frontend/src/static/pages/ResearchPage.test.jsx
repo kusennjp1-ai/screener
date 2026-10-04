@@ -45,6 +45,8 @@ const tasks = ['手法比較', '銘柄検索', '厳格判定', 'ウォッチ', '
 const methods = ['ミネルヴィニ', 'オニール', 'IBD型'];
 const candidates = () => screen.getByRole('list', {name:'投資手法別の銘柄候補'});
 const openFilters = () => { fireEvent.click(screen.getByRole('button', {name:'候補を絞り込む'})); return screen.getByRole('dialog', {name:'候補を絞り込む'}); };
+const openDetail = symbol => fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${symbol} の分析を表示`) }));
+const backToFeed = () => fireEvent.click(screen.getByRole('button', { name: '← 候補一覧に戻る' }));
 const closeFilters = () => fireEvent.click(screen.getByRole('button', {name:'絞り込みを閉じる'}));
 it('opens an initial symbol link at the selected detail once its data arrives', async () => {
   const previousHash = window.location.hash;
@@ -54,7 +56,7 @@ it('opens an initial symbol link at the selected detail once its data arrives', 
   window.history.replaceState(null, '', '#/?symbol=FAIL');
   try {
     mount();
-    await screen.findByRole('button', { name: /^FAIL の分析/ });
+    await screen.findByRole('heading', { name: 'FAIL' });
     await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'auto' }));
     expect(document.activeElement).toHaveClass('research-detail');
     expect(document.activeElement).toHaveTextContent('FAIL');
@@ -85,10 +87,12 @@ it('does not construct a closed expanded chart during method changes and opens t
   mount();await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   fireEvent.click(screen.getByRole('button',{name:'オニール',exact:true}));
   expect(data.modalRenders).toBe(0);
+  openDetail('LEAD');
   fireEvent.click(screen.getByRole('button',{name:'日次チャートを分析'}));
   expect(screen.getByRole('dialog',{name:'日次分析'})).toHaveTextContent('LEAD');
   fireEvent.click(screen.getByRole('button',{name:'閉じる'}));
   const previous=data.modalRenders;
+  backToFeed();
   fireEvent.click(screen.getByRole('button',{name:'ミネルヴィニ',exact:true}));
   expect(data.modalRenders).toBe(previous);
   fireEvent.click(screen.getByRole('button',{name:/^FAIL の分析を表示/}));
@@ -104,15 +108,16 @@ describe('100 virtual expert task profiles', () => {
       const table = candidates();
       if (t === 0) {
         const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '5/8' : '5/10';
-        expect(screen.getByRole('tab', {name:'判定根拠'})).toHaveAttribute('aria-selected','true');
         expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定条件 ${expected}`));
+        openDetail('LEAD');
+        expect(screen.getByRole('tab', {name:'判定根拠'})).toHaveAttribute('aria-selected','true');
         expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定条件 ${expected} · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
       } else if (t === 1) {
         openFilters();
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
         closeFilters();
         await waitFor(()=>expect(within(table).queryByText('FAIL')).not.toBeInTheDocument());
-        expect(within(table).getByText('LEAD')).toBeInTheDocument();
+        expect(within(table).getByRole('button',{name:/^LEAD の分析を表示/})).toBeInTheDocument();
       } else if (t === 2) {
         openFilters();
         fireEvent.click(screen.getByLabelText('全条件通過のみ'));
@@ -120,13 +125,16 @@ describe('100 virtual expert task profiles', () => {
         expect(within(table).queryByText('FAIL')).not.toBeInTheDocument();
         expect(within(table).queryByText('NONE')).not.toBeInTheDocument();
       } else if (t === 3) {
+        openDetail('LEAD');
         fireEvent.click(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button', { name: 'LEAD ウォッチに保存' }));
+        backToFeed();
         openFilters();
         fireEvent.click(screen.getByLabelText('ウォッチのみ'));
         closeFilters();
         expect(within(table).queryByText('FAIL')).not.toBeInTheDocument();
         expect(JSON.parse(localStorage.getItem('research-watch'))).toEqual(['LEAD']);
       } else if (t === 4) {
+        openDetail('LEAD');
         fireEvent.click(screen.getByRole('button', { name: '日次チャートを分析' }));
         expect(within(screen.getByRole('dialog')).getByText('LEAD')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '閉じる' }));
@@ -143,10 +151,12 @@ describe('100 virtual expert task profiles', () => {
         closeFilters();
         await screen.findByText(/該当銘柄がありません/);
       } else if (t === 7) {
+        openDetail('LEAD');
         fireEvent.click(screen.getByRole('tab', {name:'日次確認'}));
         expect(screen.getByRole('tabpanel')).toHaveTextContent('未接続');
-        expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
+        backToFeed();
+        expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         const candidate=screen.getByRole('button',{name:/^LEAD の分析を表示/});
         expect(candidate).toHaveAccessibleName(/買いゾーン内/);
         expect(within(candidate.closest('.candidate-feed-card')).getByText(/買いゾーン内/)).toBeInTheDocument();
@@ -156,6 +166,7 @@ describe('100 virtual expert task profiles', () => {
       } else {
         fireEvent.click(screen.getByRole('button', { name: methods[(s + 1) % 3], exact: true }));
         expect(screen.getByRole('button', {name:methods[(s+1)%3],exact:true})).toHaveAttribute('aria-pressed','true');
+        openDetail('LEAD');
         expect(screen.getByRole('tabpanel')).toHaveTextContent('選定');
         expect(screen.getByRole('link', { name: 'TradingViewで確認 ↗', exact: true })).toHaveAttribute('rel', 'noopener noreferrer');
       }
@@ -192,10 +203,13 @@ it('keeps search focus while narrowing results in the filter drawer', async () =
 it('opens detailed verification from its tab and returns filter focus to the candidate region', async () => {
   mount();
   await screen.findByRole('button', {name:/^LEAD の分析を表示/});
+  openDetail('LEAD');
   expect(screen.getByRole('tab',{name:'書籍検証'})).toHaveAttribute('aria-selected','false');
   fireEvent.click(screen.getByRole('tab',{name:'書籍検証'}));
   expect(screen.getByRole('tab',{name:'書籍検証'})).toHaveAttribute('aria-selected','true');
   expect(screen.getByRole('tabpanel')).toHaveAccessibleName('書籍検証');
+  backToFeed();
+  await waitFor(()=>expect(screen.getByRole('button',{name:/^LEAD の分析/})).toHaveFocus());
   openFilters();
   fireEvent.click(screen.getByRole('button',{name:'候補を確認する →'}));
   await waitFor(()=>expect(screen.getByRole('region',{name:'候補リスト',exact:true})).toHaveFocus());
@@ -205,6 +219,7 @@ it('opens detailed verification from its tab and returns filter focus to the can
 it('preserves canonical entry prices and unknown conditions while switching detail tabs by keyboard', async () => {
   mount();
   await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+  openDetail('LEAD');
   const gauge=screen.getByRole('img',{name:/現在価格.*共通ピボット/});
   expect(gauge).toHaveAccessibleName(/現在価格 \$102.00、共通ピボット \$100.00、アプリ買い上限 \$105.00/);
   const evidence=screen.getByRole('tab',{name:'判定根拠'});
@@ -259,10 +274,12 @@ it.each([20,50])('keeps all rows available to CSV and search beyond the first %s
 it('retains the watch for this screen and reports denied persistence', async () => {
   mount();
   await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+  openDetail('LEAD');
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
   fireEvent.click(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button',{name:'LEAD ウォッチに保存'}));
   expect(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button',{name:'LEAD ウォッチ解除'})).toHaveAttribute('aria-pressed','true');
   expect(screen.getByText(/ウォッチはこの画面のみ保持されます/)).toBeInTheDocument();
+  backToFeed();
   openFilters();
   fireEvent.click(screen.getByLabelText('ウォッチのみ'));
   closeFilters();

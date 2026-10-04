@@ -1,5 +1,6 @@
 // Version 1 mounted SetupRadar in a bare div. Version 2 reproduces the
 // production StaticLayout -> ResearchPage -> expanded ResearchHero CSS scope.
+import { RADAR_VISIBILITY_VERSION } from './radar-visibility.mjs';
 export const RADAR_HARNESS_VERSION = 'production-overview-context-v2';
 export const RADAR_CONTEXT_CLASSES = ['leader-shell', 'leader-content', 'research-workbench', 'research-hero research-overview', 'market-overview-expanded'];
 
@@ -55,8 +56,13 @@ export function radarContextFailures(context) {
 }
 
 export function radarMeasurementFailures(run, { timing = true } = {}) {
+  const visibility = run?.visibility;
+  const visible = visibility?.version === RADAR_VISIBILITY_VERSION && visibility.captured_in_endpoint_task === true &&
+    visibility.styles_visible === true && visibility.effective_opacity === 1 && visibility.expected_points === 207 &&
+    visibility.painted_point_centers === 207 && visibility.unobscured_point_centers === 207 && visibility.readback_error === null;
   return [...radarContextFailures(run?.context),
     ...(run?.point_count !== 207 || run?.final_point_count !== 207 ? ['requires all 207 actual points at the first-frame boundary'] : []),
     ...(run?.pixel_alignment?.matches !== true ? ['CSS/DPR pixel alignment is unfinished at the first-frame boundary'] : []),
+    ...(!visible ? ['all 207 point centers require actual canvas pixels, full CSS opacity and unobscured visibility in the first-frame endpoint task'] : []),
     ...(timing && (!Number.isFinite(run?.first_frame_ms) || run.first_frame_ms < 0 || run.first_frame_ms > 50) ? [`first frame ${run?.first_frame_ms ?? 'unmeasured'}ms (limit 50ms)`] : [])];
 }

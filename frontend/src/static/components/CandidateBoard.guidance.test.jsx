@@ -10,7 +10,7 @@ afterEach(()=>{cleanup();vi.resetAllMocks();});
 const ranked=Array.from({length:103},(_,index)=>({row:{symbol:`S${index}`,company_name:`Company ${index}`,current_price:102,se_pivot_price:100,rs_rating:90,se_volume_vs_50d:1.5},assessment:{qualified:true,passed:9,total:9}}));
 const market={cap:.5,label:'上昇'};
 const props={ranked,method:'minervini',date:'2026-09-29',market,now:Date.parse('2026-09-30T10:00:00Z'),onSelect:vi.fn()};
-const waiting={ready:false,passed:5,total:7,rules:[{id:'selection',state:'pass',label:'共通選定条件'},{id:'volume',state:'fail',label:'出来高',detail:'50日平均比が基準未満'},{id:'earnings',state:'unknown',label:'決算予定',detail:'予定日が未取得'}]};
+const waiting={ready:false,passed:5,total:7,rules:[{id:'selection',state:'pass',label:'共通購入モデルへの適合'},{id:'volume',state:'fail',label:'出来高',detail:'50日平均比が基準未満'},{id:'earnings',state:'unknown',label:'決算予定',detail:'予定日が未取得'}]};
 it.each([20,50])('adds daily readiness only for the visible %s and reuses it when selection changes',pageSize=>{
  entryReadiness.mockReturnValue(waiting);
  const {rerender}=render(<CandidateBoard {...props} feedSize={pageSize}/>);
@@ -40,16 +40,16 @@ it('shows price location and daily purchase status separately, with the next fai
 });
 it('keeps the trading-day blocker accessible when financial selection is also unknown',()=>{
  entryReadiness.mockReturnValue({ready:false,passed:3,total:7,rules:[
-  {id:'selection',label:'選定条件',state:'unknown',detail:'財務根拠が未確認'},
+  {id:'selection',label:'共通購入モデルへの適合',state:'unknown',detail:'財務根拠が未確認'},
   {id:'latest',label:'最新の取引日',state:'unknown',detail:'最新取引日を確認できません'},
   {id:'earnings',label:'決算予定',state:'unknown',detail:'決算日が未確認'},
  ]});
  render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
  const row=screen.getByRole('button',{name:/S0 の分析を表示/});
- expect(row).toHaveAccessibleName(/選定条件：未確認/);
+ expect(row).toHaveAccessibleName(/共通購入モデルへの適合：未確認/);
  expect(row).toHaveAccessibleName(/最新の取引日：未確認/);
  expect(row).toHaveAccessibleName(/決算予定：未確認/);
- expect(row.closest('article').querySelector('.feed-next-check')).toHaveTextContent('選定条件：未確認');
+ expect(row.closest('article').querySelector('.feed-next-check')).toHaveTextContent('共通購入モデルへの適合：未確認');
  expect(row.closest('article').querySelector('.feed-other-checks')).toHaveTextContent('最新の取引日：未確認');
  expect(row.closest('article').querySelector('.feed-other-checks')).toHaveTextContent('決算予定：未確認');
  expect(row.closest('article')).not.toHaveTextContent('財務根拠が未確認');
