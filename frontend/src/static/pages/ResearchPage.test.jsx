@@ -196,7 +196,7 @@ it('opens detailed verification from its tab and returns filter focus to the can
   expect(screen.getByRole('tabpanel')).toHaveAccessibleName('書籍検証');
   openFilters();
   fireEvent.click(screen.getByRole('button',{name:'候補を確認する →'}));
-  await waitFor(()=>expect(screen.getByRole('region',{name:'候補リスト',exact:true})).toHaveFocus());
+  await waitFor(()=>expect(screen.getByRole('region',{name:'対象銘柄',exact:true})).toHaveFocus());
   expect(screen.queryByLabelText('銘柄・企業名を検索')).not.toHaveFocus();
 });
 

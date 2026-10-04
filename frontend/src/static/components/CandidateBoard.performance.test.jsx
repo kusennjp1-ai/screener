@@ -11,7 +11,7 @@ it('calculates only visible rank plans, keeps the full sort universe and reuses 
  const {rerender}=render(<CandidateBoard {...props}/>);
  expect(entryPlan).toHaveBeenCalledTimes(50);
  expect(screen.getAllByRole('listitem')).toHaveLength(50);
- expect(screen.getByRole('heading',{name:'候補リスト 103件'})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'対象銘柄 103件'})).toBeInTheDocument();
  rerender(<CandidateBoard {...props} selectedSymbol="S1"/>);
  expect(entryPlan).toHaveBeenCalledTimes(50);
  fireEvent.click(screen.getByRole('button',{name:'RSで並べ替え'}));
@@ -35,7 +35,7 @@ it('keeps keyboard focus when crossing both directions at a 50-row boundary in a
  fireEvent.keyDown(first,{key:'ArrowUp'});
  expect(onSelect).toHaveBeenLastCalledWith('S49');
  nextFrame();expect(screen.getByRole('button',{name:/^S49 の分析/})).toHaveFocus();
- expect(screen.getByRole('heading',{name:'候補リスト 501件'})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'対象銘柄 501件'})).toBeInTheDocument();
 });
 
 it.each([[true,0],[true,.578125],[false,0]])('explicit pagination focuses the first row without selecting it, with mobile=%s and fractional offset=%s',(mobile,fraction)=>{

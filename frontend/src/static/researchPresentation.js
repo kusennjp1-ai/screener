@@ -30,7 +30,13 @@ export function sessionCurrent(rows, date, now) {
 // clock ticks and method changes only need the original inclusive/exclusive
 // time comparison, without parsing thousands of identical ISO timestamps.
 export function prepareSessionCurrent(rows, date) {
-  if (!validEvidenceDay(date)) return () => false;
+  return sessionCurrentFromIntervals(prepareSessionIntervals(rows, date), date);
+}
+
+// Plain arrays cross the research Worker boundary without rebuilding the
+// publication-wide calendar index during the first synchronous React render.
+export function prepareSessionIntervals(rows, date) {
+  if (!validEvidenceDay(date)) return [];
   const intervals = new Map(), timestamps = new Map();
   const stamp = value => {
     if (!timestamps.has(value)) timestamps.set(value, evidenceTimestamp(value));
@@ -42,7 +48,11 @@ export function prepareSessionCurrent(rows, date) {
     const from = stamp(calendar.evaluated_at), until = stamp(calendar.valid_until);
     if (Number.isFinite(from) && Number.isFinite(until)) intervals.set(`${from}/${until}`, [from, until]);
   }
-  const ranges = [...intervals.values()];
+  return [...intervals.values()];
+}
+
+export function sessionCurrentFromIntervals(ranges, date) {
+  if (!validEvidenceDay(date)) return () => false;
   return now => {
     const today = newYorkDate(now);
     return Boolean(today && date <= today && ranges.some(([from, until]) => now >= from && now < until));

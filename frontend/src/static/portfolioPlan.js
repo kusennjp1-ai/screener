@@ -38,7 +38,7 @@ export function preparePortfolioRows(input, now = Date.now()) {
   return {evaluated_at:now,next_expiry_at:financialNextExpiry(rows,now),market:modelMarket(rows), candidates, primary:primary.length, strict:primary.filter(r=>assess(r,'ibd',now).qualified).length};
 }
 
-export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(), prepared = preparePortfolioRows(rows, now)) {
+export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(), prepared = preparePortfolioRows(rows, now), currentSession = time => sessionCurrent(rows, date, time)) {
   if (!finite(capital) || capital <= 0 || capital > 100000000) throw Error('Invalid model capital');
   if (!prepared || prepared.evaluated_at > now || prepared.evaluated_at == null || (prepared.next_expiry_at !== null && now >= prepared.next_expiry_at)) prepared = preparePortfolioRows(rows, now);
   const market = prepared.market;
@@ -48,7 +48,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   const freshness = snapshotFreshness(date, now);
   // Static scans cannot establish current execution conditions, even with a fresh date.
   const blockers = [];
-  if ((freshness.state !== 'recent' || freshness.days > 1) && !sessionCurrent(rows, date, now)) blockers.unshift('分析基準日を最新の取引日と照合してください');
+  if ((freshness.state !== 'recent' || freshness.days > 1) && !currentSession(now)) blockers.unshift('分析基準日を最新の取引日と照合してください');
   if (!market.cap) blockers.unshift(market.label);
   const candidates = prepared.candidates.map(row=>projectFinancialRow(row,{now})).filter(row=>assess(row,'minervini',now).qualified && assess(row,'ibd',now).qualified);
   const readiness = candidates.map(row => entryReadiness(row,date,market,now));

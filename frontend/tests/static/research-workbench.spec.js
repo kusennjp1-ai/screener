@@ -64,7 +64,7 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   await page.getByRole('button',{name:'表',exact:true}).click();
   await expect(page.getByRole('table',{name:'業種の相対強度一覧'})).toContainText('3 / 3');
   await page.getByRole('link',{name:'情報技術 / XLK',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'候補リスト 4件'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'対象銘柄 4件'})).toBeVisible();
   await page.getByRole('button',{name:'候補を絞り込む'}).click();
   await expect(page.getByRole('combobox',{name:'業種',exact:true})).toHaveValue('Technology');
   await page.getByRole('button',{name:'候補を確認する →'}).click();

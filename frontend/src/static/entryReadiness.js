@@ -10,6 +10,12 @@ const day = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Numbe
 // evidence once per publication so a clock tick cannot leave another row's 7/7
 // badge stale. Ticks use a binary search, not full-universe rule evaluation.
 export function prepareReadinessTimeline(rows) {
+  return readinessTimelineFromBoundaries(prepareReadinessBoundaries(rows));
+}
+
+// The Worker finishes this index alongside the full financial evaluation.
+// Only its numeric boundaries need to be cloned back to the browser.
+export function prepareReadinessBoundaries(rows) {
   const boundaries = new Set(), parsed = new Map();
   const stamp = value => {
     if (!parsed.has(value)) parsed.set(value, timestamp(value));
@@ -26,7 +32,10 @@ export function prepareReadinessTimeline(rows) {
     for (const deadline of financialHistoryDeadlines(row.financial_history)) boundaries.add(deadline + 1);
     if (row.financial_history?.annual_source) add(row.financial_history.annual_source.observed_at, -5000);
   }
-  const sorted = [...boundaries].sort((a, b) => a - b);
+  return [...boundaries].sort((a, b) => a - b);
+}
+
+export function readinessTimelineFromBoundaries(sorted) {
   return now => {
     let low = 0, high = sorted.length;
     while (low < high) { const middle = (low + high) >>> 1; if (sorted[middle] <= now) low = middle + 1; else high = middle; }

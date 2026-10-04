@@ -9,6 +9,8 @@ import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
+import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
+import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -140,17 +142,18 @@ function objectiveMetrics() {
     runningAnimations: animations.length };
 }
 
-async function capture(page, viewport, theme, screen) {
+async function capture(page, viewport, theme, screen, { target, scope = 'viewport' } = {}) {
   if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(800);
   const metrics = await page.evaluate(objectiveMetrics);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
-  await page.screenshot({ path: resolve(output, screenshot) });
+  if (target) await page.locator(target).screenshot({ path: resolve(output, screenshot) });
+  else await page.screenshot({ path: resolve(output, screenshot) });
   const key = `${screen}/${viewport.width}/${theme}`;
   const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
-  report.screens.push({ key, screenshot, metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
+  report.screens.push({ key, screenshot, ...(target ? { screenshot_scope: scope, screenshot_target: target, metrics_scope: 'original-viewport' } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
@@ -268,11 +271,12 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     }
   }
   await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
+  await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await context.close();
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens];
+  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme)];
   for (const screen of screens) {
     const key = `${screen}/${viewport.width}/${theme}`;
     check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
@@ -367,8 +371,9 @@ if (radar) for (const viewport of viewportSizes) {
     check(runs.every(run => run.point_count === 207), `${viewport.width}: D9 needs exactly 207 actual historical points`);
     check(runs.every(run => run.final_point_count === 207 && run.pixel_alignment?.matches === true), `${viewport.width}: D9 must finish all 207 points at actual CSS size and DPR by the first-frame boundary`);
     check(runs.length === 3 && runs.every(run => run.first_frame_ms <= 50), `${viewport.width}: D9 first paint opportunity ${Math.max(...runs.map(run => run.first_frame_ms)).toFixed(1)}ms > 50ms`);
+    for (const [index, run] of runs.entries()) for (const failure of radarMeasurementFailures(run)) check(false, `${viewport.width}: D9 run ${index + 1}: ${failure}`);
   } catch (error) { report.failures.push(`${viewport.width}: D9 benchmark interrupted: ${error.message}`); }
-  report.radar.push({ viewport, cpu_rate: 4, method: 'actual SetupRadar, 207 canonical real 2026-09-29 observations; production initial mount, synchronous layout and next animation frame; no network/data preparation in render interval', runs });
+  report.radar.push({ viewport, cpu_rate: 4, harness_version: RADAR_HARNESS_VERSION, method: 'actual SetupRadar in production CSS ancestry and original fixed component slot; 207 canonical real 2026-09-29 observations; cold initial mount, synchronous layout and next animation frame with same-task pixel/CSS/transform visibility evidence; no prerender or glyph warmup; not comparable to former bare-div harness', runs });
   await context.close();
 }
 await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();

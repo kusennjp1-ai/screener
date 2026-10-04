@@ -7,7 +7,7 @@ import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
-import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
+import { filterRanked, prepareSessionCurrent, sessionCurrentFromIntervals } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
@@ -19,12 +19,12 @@ import { compareReference, finite, quoteStatus, researchCsv, snapshotFreshness }
 import ResearchDetail from '../components/ResearchDetail';
 import CandidateBoard from '../components/CandidateBoard';
 import ResearchSearch from '../components/ResearchSearch';
-import { entryReadiness, prepareReadinessTimeline } from '../entryReadiness';
+import { entryReadiness, prepareReadinessTimeline, readinessTimelineFromBoundaries } from '../entryReadiness';
 import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 import { usePersonalQuote } from '../usePersonalQuote';
 import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
-import { prepareResearchBundle, researchBundleCurrent } from '../researchPreprocess';
+import { prepareResearchBundle, researchBundleCurrent, researchBundleTemporal } from '../researchPreprocess';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
@@ -80,8 +80,9 @@ export default function ResearchPage({compareOnly=false}) {
   // Coverage is independent of method; all exported rankings share one universe.
   const coverageRows = radarRanked;
   const verifiedCount = useMemo(() => coverageRows.filter(r => r.row.technical_audit?.valid === true).length, [coverageRows]);
-  const sessionCurrentAt = useMemo(() => prepareSessionCurrent(rows, bundle.data?.date), [rows, bundle.data?.date]);
-  const readinessBoundaryAt = useMemo(() => prepareReadinessTimeline(rows), [rows]);
+  const temporal = researchBundleTemporal(bundle.data);
+  const sessionCurrentAt = useMemo(() => temporal ? sessionCurrentFromIntervals(temporal.session_intervals, bundle.data?.date) : prepareSessionCurrent(rows, bundle.data?.date), [temporal, rows, bundle.data?.date]);
+  const readinessBoundaryAt = useMemo(() => temporal ? readinessTimelineFromBoundaries(temporal.readiness_boundaries) : prepareReadinessTimeline(rows), [temporal, rows]);
   const availableSymbols = useMemo(() => new Set(rows.map(r => r.symbol)), [rows]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
   const detail = useQuery({queryKey:['researchDetail', selectedSummary?.symbol, selectedSummary?.research_detail_path, bundle.data?.date, version],
@@ -160,7 +161,7 @@ export default function ResearchPage({compareOnly=false}) {
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
   const financialEvidence = useMemo(()=>selected ? buildFinancialEvidencePresentation(selected,{method,date:bundle.data?.date,generation:version,now}) : undefined,[selected,method,bundle.data?.date,version,now]);
-  const portfolioPlan = useMemo(() => buildPortfolioPlan(rows, bundle.data?.date, 100000, now, portfolioPrepared), [rows, bundle.data?.date, now, portfolioPrepared]);
+  const portfolioPlan = useMemo(() => buildPortfolioPlan(rows, bundle.data?.date, 100000, now, portfolioPrepared, sessionCurrentAt), [rows, bundle.data?.date, now, portfolioPrepared, sessionCurrentAt]);
   const activeQuote = personalKey ? personal.quote : quote.data;
   const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, now);
   const usableQuote = ['リアルタイム', '遅延データ'].includes(liveStatus) ? activeQuote : null;
