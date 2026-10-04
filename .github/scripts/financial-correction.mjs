@@ -25,7 +25,45 @@ const positive = value => Number.isSafeInteger(value) && value > 0;
 const exact = (value, keys, name) => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join('\0') !== [...keys].sort().join('\0')) throw Error(`Invalid closed ${name} contract`);
 };
-const equal = (a, b, label) => { if (canonical(a) !== canonical(b)) throw Error(`Correction changed ${label}`); };
+// Failure-only diagnostics never decide equality or serialize row values. Bound
+// recursion and rendered keys so large arrays, strings and nested data stay safe
+// to report; successful comparisons retain the original canonical gate/digests.
+function mismatchDetail(before, after, prefix=[]) {
+  const find=(a,b,path)=>{
+    if(a===b)return null;
+    if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return {path};
+    if(path.length>=32)return {path,searchLimited:true};
+    if(Array.isArray(a)) {
+      for(let index=0;index<Math.min(a.length,b.length);index++) {
+        const result=find(a[index],b[index],[...path,index]);if(result)return result;
+      }
+      return a.length===b.length?null:{path:[...path,Math.min(a.length,b.length)]};
+    }
+    const left=Object.keys(a).sort(),right=Object.keys(b).sort();
+    for(let index=0;index<Math.max(left.length,right.length);index++) {
+      const key=left[index],other=right[index];
+      if(key!==other)return {path:[...path,key===undefined?other:other===undefined?key:key<other?key:other]};
+      const result=find(a[key],b[key],[...path,key]);if(result)return result;
+    }
+    return null;
+  };
+  const result=find(before,after,prefix);
+  if(!result)return ''; // The canonical gate remains authoritative.
+  return mismatchLocation(result);
+}
+function mismatchLocation({path:parts,searchLimited=false}) {
+  let path='$',truncated=false;
+  for(const key of parts) {
+    const part=typeof key==='number'?`[${key}]`:`[${JSON.stringify(key.slice(0,80))}]`;
+    if(path.length+part.length>384){path+='[…]';truncated=true;break;}
+    path+=part;
+    if(typeof key==='string'&&key.length>80){truncated=true;break;}
+  }
+  // A depth bound may stop inside an equal branch before a later mismatch.
+  if(searchLimited)return ` (diagnostic search limit reached at ${path}; mismatch unresolved)`;
+  return truncated?` (mismatch diagnostic truncated at ${path})`:` at ${path}`;
+}
+const equal = (a, b, label) => { if (canonical(a) !== canonical(b)) throw Error(`Correction changed ${label}${mismatchDetail(a,b)}`); };
 export function parseCorrectionIntent(input) {
   if (input == null || input === '') return null;
   if (typeof input !== 'string' || Buffer.byteLength(input) > 8192) throw Error('Expected bounded typed financial correction intent');
@@ -234,10 +272,15 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
       const priorRows=new Map();
       const beforeMetadata=visitRows(beforeRoot,bs,handledBefore,row=>priorRows.set(row.symbol,canonical(sanitize(row,true))));
       const afterMetadata=visitRows(afterRoot,as,handledAfter,row=>{
-        if(!priorRows.has(row.symbol)||priorRows.get(row.symbol)!==canonical(sanitize(row,true)))throw Error(`Correction changed ${market} scan ${key} rows and metadata`);
+        if(!priorRows.has(row.symbol))throw Error(`Correction changed ${market} scan ${key} rows and metadata${mismatchLocation({path:['rows',row.symbol]})}`);
+        const next=sanitize(row,true),prior=priorRows.get(row.symbol);
+        if(prior!==canonical(next)) {
+          // Parse only the failing saved row, never another full scan graph.
+          throw Error(`Correction changed ${market} scan ${key} rows and metadata${mismatchDetail(JSON.parse(prior),next,['rows',row.symbol])}`);
+        }
         priorRows.delete(row.symbol);
       });
-      if(priorRows.size)throw Error(`Correction changed ${market} scan ${key} rows and metadata`);
+      if(priorRows.size)throw Error(`Correction changed ${market} scan ${key} rows and metadata${mismatchLocation({path:['rows',priorRows.keys().next().value]})}`);
       equal(beforeMetadata,afterMetadata,`${market} scan ${key} rows and metadata`);
       pair(bp,ap,`${market} scan ${key} metadata`,value=>{const out=sanitize(value);delete out.initial_rows;delete out.chunks;delete out.preview_rows;delete out.default_filtered_rows_total;if(out.preset_screens)out.preset_screens=out.preset_screens.map(({match_count,...screen})=>{void match_count;return screen;});return out;});
     }

@@ -49,7 +49,7 @@ for(const [path,change]of [
 ])test(`same-price correction rejects unauthorized mutation ${path}`,async()=>{const f=bundleFixture();try{f.change(path,change);await assert.rejects(f.check);}finally{f.cleanup();}});
 test('correction fails closed when approved UI lacks executed hook',async()=>{const f=bundleFixture();try{await assert.rejects(()=>verifyConsumerCapability(f.frontend),/lacks/);f.put(f.frontend,'tools/financial-correction-overlay.mjs',`export const FINANCIAL_CORRECTION_SCHEMA='financial-statement-projection-v1';export const verifyCorrectionCompatibility=()=>({});`);f.put(f.frontend,'tools/export-research.mjs','console.log("unapproved dependency injection is not compatibility");');await assert.rejects(()=>verifyConsumerCapability(f.frontend),/does not execute/);}finally{f.cleanup();}});
 
-test('out-of-cohort source financial values remain immutable',async()=>{const f=bundleFixture();try{f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].eps_growth_yy=25);await assert.rejects(()=>compareCorrectionData(f.before,f.after,f.frontend,{financial_generation:H,symbols:{}}),/research rows/);}finally{f.cleanup();}});
+test('out-of-cohort source financial values remain immutable',async()=>{const f=bundleFixture();try{f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].eps_growth_yy=25);await assert.rejects(()=>compareCorrectionData(f.before,f.after,f.frontend,{financial_generation:H,symbols:{}}),{message:'Correction changed US research rows at $["rows"]["AAA"]["eps_growth_yy"]'});}finally{f.cleanup();}});
 test('out-of-cohort EPS chart series remain immutable',async()=>{const f=bundleFixture();try{for(const base of [f.before,f.after]){const p='static-data/charts/AAA.json',v=JSON.parse(readFileSync(join(base,p)));v.eps_line=[{time:'2026-10-02',value:1}];f.put(base,p,v);}f.change('static-data/charts/AAA.json',v=>v.eps_line=[]);await assert.rejects(()=>compareCorrectionData(f.before,f.after,f.frontend,{financial_generation:H,symbols:{}}),/full chart/);}finally{f.cleanup();}});
 test('a US cohort ticker does not authorize another market financials',async()=>{const f=bundleFixture();try{for(const base of [f.before,f.after]){const p='static-data/research-index-aaaaaaaaaaaaaaaa.json',v=JSON.parse(readFileSync(join(base,p)));v.rows[0].market='JP';f.put(base,p,v);}f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].eps_growth_yy=25);await assert.rejects(f.check,/research rows/);}finally{f.cleanup();}});
 test('retained historical financial audit cannot be rewritten as a current field',async()=>{const f=bundleFixture();try{for(const base of [f.before,f.after]){const p='static-data/research-details/AAA-aaaaaaaaaaaaaaaa.json',v=JSON.parse(readFileSync(join(base,p)));v.financial_historical={values:{eps_rating:77}};f.put(base,p,v);}f.change('static-data/research-details/AAA-aaaaaaaaaaaaaaaa.json',v=>v.financial_historical.values.eps_rating=99);await assert.rejects(f.check,/retained financial audit/);}finally{f.cleanup();}});
@@ -88,3 +88,76 @@ function validReceipt(){
 test('computed receipt is closed and binds exact required controller/consumer jobs',()=>{assert.deepEqual(validateCorrectionReceipt(validReceipt()),validReceipt());for(const mutate of [v=>v.success=true,v=>v.validation.success=true,v=>v.financial.policy.success=true,v=>v.validation.required_checks[0].head_sha='c'.repeat(40),v=>v.validation.consumer_checks.pop(),v=>v.financial.source_timestamp_bounds.latest='2026-10-05T00:00:00Z',v=>v.financial.scope.fields=['anything'],v=>v.previous_publication.financial_generation=null]){const value=validReceipt();mutate(value);assert.throws(()=>validateCorrectionReceipt(value));}});
 
 test('chart-root financial aliases share bounded row ownership while bars stay protected',async()=>{const f=bundleFixture();try{for(const base of [f.before,f.after]){const p='static-data/charts/AAA.json',v=JSON.parse(readFileSync(join(base,p)));v.eps_growth_yy=null;f.put(base,p,v);}f.change('static-data/charts/AAA.json',v=>v.eps_growth_yy=25);await f.check();f.change('static-data/charts/AAA.json',v=>v.bars[0].close=101);await assert.rejects(f.check,/full chart/);}finally{f.cleanup();}});
+
+// Lock the existing canonical proof while testing only failure diagnostics.
+test('mismatch diagnostics preserve semantic and universe digests',async()=>{const f=bundleFixture();try{
+ const result=await f.check();
+ assert.equal(result.semantic_sha256,'ef4d74921140f0755c11e3147b62366c4d19893b5e6c1a7fa7d2741d9914f2dd');
+ assert.equal(result.universe_sha256,'7589348579c8aa6cc02f8922477cafb4ab35ea9b765abaf397faae6ec610b966');
+ // Canonical object order and allowed fields do not change the proof.
+ for(const base of [f.before,f.after]){
+   const path='static-data/research-index-aaaaaaaaaaaaaaaa.json',value=JSON.parse(readFileSync(join(base,path)));
+   if(base===f.after){value.rows[0].eps_growth_yy=25;value.rows[0]=Object.fromEntries(Object.entries(value.rows[0]).reverse());}
+   f.put(base,path,value);
+ }
+ assert.equal((await f.check()).semantic_sha256,result.semantic_sha256);
+ }finally{f.cleanup();}});
+test('protected price failure reports the first canonical symbol and key',async()=>{const f=bundleFixture();try{
+ f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>{v.rows[0].z_later_change=true;v.rows[0].current_price=101;});
+ await assert.rejects(f.check,{message:'Correction changed US research rows at $["rows"]["AAA"]["current_price"]'});
+ }finally{f.cleanup();}});
+test('unowned financial field reports its exact symbol and key',async()=>{const f=bundleFixture();try{
+ f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].financial_forecast=25);
+ await assert.rejects(f.check,{message:'Correction changed US research rows at $["rows"]["AAA"]["financial_forecast"]'});
+ }finally{f.cleanup();}});
+for(const [label,mutate,suffix]of[
+ ['protected price',v=>v.rows[0].current_price=101,'["CCC"]["current_price"]'],
+ ['out-of-cohort financial',v=>v.rows[0].eps_growth_yy=25,'["CCC"]["eps_growth_yy"]'],
+ ['missing symbol',v=>v.rows=[],'["CCC"]'],
+ ['extra symbol',v=>v.rows.push({...v.rows[0],symbol:'DDD'}),'["DDD"]'],
+])test(`streamed scan reports ${label} location`,async()=>{const f=chunkedFixture();try{
+ f.change('static-data/chunk-b.json',mutate);
+ await assert.rejects(f.check,{message:`Correction changed US scan path rows and metadata at $["rows"]${suffix}`});
+ }finally{f.cleanup();}});
+function protectedDiagnosticFixture(beforeValue,afterValue,key='financial_unowned'){
+ const f=bundleFixture(),path='static-data/research-index-aaaaaaaaaaaaaaaa.json';
+ for(const [base,value]of[[f.before,beforeValue],[f.after,afterValue]]){
+   const data=JSON.parse(readFileSync(join(base,path)));data.rows[0][key]=value;f.put(base,path,data);
+ }
+ return f;
+}
+test('array diagnostics report the first differing index without dumping rows',async()=>{
+ const before=Array.from({length:4096},(_,index)=>({eps:index})),after=structuredClone(before);after[4095].eps=-1;
+ const f=protectedDiagnosticFixture(before,after);try{
+ await assert.rejects(f.check,{message:'Correction changed US research rows at $["rows"]["AAA"]["financial_unowned"][4095]["eps"]'});
+ }finally{f.cleanup();}});
+test('array length diagnostics report the first missing index',async()=>{const f=protectedDiagnosticFixture([1,2],[1]);try{
+ await assert.rejects(f.check,{message:'Correction changed US research rows at $["rows"]["AAA"]["financial_unowned"][1]'});
+ }finally{f.cleanup();}});
+test('large scalar diagnostics include only the path',async()=>{const f=protectedDiagnosticFixture('PRIVATE_BEFORE'.repeat(100000),'PRIVATE_AFTER'.repeat(100000));try{
+ await assert.rejects(f.check,{message:'Correction changed US research rows at $["rows"]["AAA"]["financial_unowned"]'});
+ }finally{f.cleanup();}});
+test('diagnostic keys are escaped',async()=>{const f=protectedDiagnosticFixture(1,2,'financial_unowned["x"]\n');try{
+ await assert.rejects(f.check,{message:String.raw`Correction changed US research rows at $["rows"]["AAA"]["financial_unowned[\"x\"]\n"]`});
+ }finally{f.cleanup();}});
+for(const kind of ['depth','long key','escaped long key'])test(`diagnostics bound ${kind}`,async()=>{
+ const nested=value=>Array.from({length:80}).reduce(result=>({child:result}),value);
+ const f=kind==='depth'?protectedDiagnosticFixture(nested(1),nested(2)):protectedDiagnosticFixture(1,2,(kind==='long key'?'x':'\n').repeat(100000));
+ try{await assert.rejects(f.check,error=>{
+   if(kind==='depth'){assert.match(error.message,/diagnostic search limit reached at \$\["rows"\]\["AAA"\]/);assert.match(error.message,/mismatch unresolved/);}
+   else assert.match(error.message,/mismatch diagnostic truncated at \$\["rows"\]\["AAA"\]/);
+   assert.ok(error.message.length<512);return true;
+ });}finally{f.cleanup();}
+});
+
+test('equal deep branch before a changed price reports an unresolved diagnostic location',async()=>{
+ const nested=Array.from({length:80}).reduce(result=>({child:result}),1);
+ const f=protectedDiagnosticFixture(nested,nested,'aaa_deep');try{
+   f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].current_price=101);
+   await assert.rejects(f.check,error=>{
+     assert.match(error.message,/^Correction changed US research rows \(diagnostic search limit reached at \$\["rows"\]\["AAA"\]\["aaa_deep"\]/);
+     assert.match(error.message,/; mismatch unresolved\)$/);
+     assert.doesNotMatch(error.message,/mismatch diagnostic truncated|current_price/);
+     assert.ok(error.message.length<512);return true;
+   });
+ }finally{f.cleanup();}});

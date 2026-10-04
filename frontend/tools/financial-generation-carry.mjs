@@ -39,6 +39,14 @@ const day = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val
 const fail = message => { throw Error(`Financial carry ${message}`); };
 const equal = (actual, expected, label) => { if (!isDeepStrictEqual(actual, expected)) fail(`${label} mismatch`); };
 const MAX_BYTES = 256 * 1024 * 1024;
+const validatedCarryScopes = new WeakMap();
+// This capability exists only after bound source/target validation. A serialized
+// schema label cannot authorize a containing-date change in the overlay.
+export function observedFinancialCarryScope(carry, row, priorScope) {
+  const binding = validatedCarryScopes.get(carry)?.get(row.symbol), scope = binding?.scope;
+  if (!scope || row.market !== scope.market || row.as_of_date !== scope.as_of_date || priorScope.symbol !== scope.symbol || priorScope.market !== scope.market || !binding.priorDates.has(priorScope.as_of_date)) return null;
+  return { ...scope };
+}
 
 function boundJson(input, expected, label) {
   if (!(typeof input === 'string' || Buffer.isBuffer(input)) || !sha256(expected)) fail(`${label} requires exact JSON bytes and SHA256`);
@@ -169,7 +177,14 @@ export function createFinancialGenerationCarry({ sourceProjection, sourceProject
     receipt_inventory: structuredClone(source.value.receipt_inventory), receipt_inventory_sha256: source.value.receipt_inventory_sha256,
     ownership: ownershipBySymbol, symbols,
   };
-  return { ...carry, financial_generation: digest(carry) };
+  const result = { ...carry, financial_generation: digest(carry) };
+  validatedCarryScopes.set(result, new Map([...targetRows].filter(([symbol]) => ownershipBySymbol[symbol] === 'retained').map(([symbol, row]) => {
+    const priorDates = new Set(original.value.as_of_date < target.value.as_of_date ? [original.value.as_of_date] : []);
+    const observed = row.financial_identity?.observed_scope;
+    if (observed?.symbol === symbol && observed.market === row.market && day(observed.as_of_date) && observed.as_of_date >= original.value.as_of_date && observed.as_of_date < target.value.as_of_date) priorDates.add(observed.as_of_date);
+    return [symbol, {scope:Object.freeze({symbol, market:row.market, as_of_date:target.value.as_of_date}), priorDates}];
+  })));
+  return result;
 }
 
 export function validateFinancialGenerationCarry(carry, { evaluatedAt, sourceLineage, previousPublicationIdentity, targetBaseSha256 } = {}) {
@@ -182,6 +197,7 @@ export function validateFinancialGenerationCarry(carry, { evaluatedAt, sourceLin
   });
   equal(carry, expected, 'immutable derivation');
   for (const [value, expectedValue, label] of [[clock(carry.financial_evaluated_at), evaluatedAt === undefined ? undefined : clock(evaluatedAt), 'evaluation instant'], [carry.bindings.source_lineage_sha256, sourceLineage, 'source lineage'], [carry.bindings.previous_publication_identity, previousPublicationIdentity, 'previous publication'], [carry.bindings.target_base_sha256, targetBaseSha256, 'target base']]) if (expectedValue !== undefined) equal(value, expectedValue, label);
+  validatedCarryScopes.set(carry, validatedCarryScopes.get(expected));
   return carry;
 }
 

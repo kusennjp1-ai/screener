@@ -265,7 +265,8 @@ it('materializes reviewed fund chart roots once with observed identity and prese
         expect(nested.instrument_applicability).toMatchObject({status:'not_applicable',identity_binding:'ticker_name_only',matched_identifiers:[]});
         expect(FINANCIAL_FIELDS.every(field=>nested[field]===null)).toBe(true);
         expect(nested.financial_identity).toMatchObject({observed_identifiers:{},identifiers_bound_to_price:false,identifiers_bound_to_financial_receipts:false});
-        expect(nested.instrument_identity.observed_contexts.every(context=>!context.cik && !context.cusip && !context.isin && !context.registry_identifiers)).toBe(true);
+        expect(nested).not.toHaveProperty('instrument_identity');
+        expect(nested.financial_identity.observed_contexts.every(context=>!context.cik && !context.cusip && !context.isin && !context.registry_identifiers)).toBe(true);
       }
     }
     if(row.symbol==='NVDA') for(const field of ['financial_current','financial_current_state','instrument_applicability',...FINANCIAL_FIELDS]) expect(changed).not.toHaveProperty(field);
@@ -402,5 +403,88 @@ it('preserves the original root audit through overlay, canonical projection and 
     }
     expect(overlayFinancialChart(JSON.parse(JSON.stringify(changed)),value)).toEqual(changed);
     expect(priceBytes(changed)).toBe(priceBytes(original));expect(JSON.stringify(original)).toBe(before);
+  }
+});
+
+const originalIdentity = row => Object.fromEntries(['symbol','market','as_of_date','company_name','name','product_name','cusip','isin','cik','issuer_cik','quoteType','quote_type','instrument_identity'].filter(key=>Object.hasOwn(row,key)).map(key=>[key,row[key]]));
+it('preserves every alias instrument-property absence, null and value through correction and runtime replay',()=>{
+  const value=fundProjection();
+  for(const row of fundRows()) for(const record of [undefined,null,{}, {observed_contexts:[{symbol:row.symbol,market:'US',company_name:row.company_name}]}]) {
+    const input=rawFundChart(row);
+    for(const context of [input,input.stock_data,input.fundamentals]) if(record!==undefined) context.instrument_identity=structuredClone(record);
+    const before=JSON.stringify(input),changed=overlayFinancialChart(input,value),runtime=projectFinancialPayload(JSON.parse(JSON.stringify(changed)),{now,asOfDate:date,market:'US'});
+    for(const key of [null,'stock_data','fundamentals']) {
+      const original=key?input[key]:input,corrected=key?changed[key]:changed,replayed=key?runtime[key]:runtime;
+      expect(originalIdentity(corrected)).toEqual(originalIdentity(original));
+      expect(Object.hasOwn(replayed,'instrument_identity')).toBe(Object.hasOwn(original,'instrument_identity'));
+      expect(replayed.instrument_identity).toEqual(original.instrument_identity);
+      if(row.symbol!=='NVDA'||key) {
+        expect(instrumentApplicability(corrected).status).toBe(row.symbol==='NVDA'?'unverified':'not_applicable');
+        expect(replayed.financial_current_state).toEqual(corrected.financial_current_state);
+      }
+    }
+    expect(changed.eps_line).toEqual([]);expect(priceBytes(changed)).toBe(priceBytes(input));
+    expect(overlayFinancialChart(JSON.parse(JSON.stringify(changed)),value)).toEqual(changed);
+    expect(JSON.stringify(input)).toBe(before);
+  }
+});
+
+it('retains old and new financial identity conflicts separately from immutable instrument records',()=>{
+  for(const row of fundRows().filter(row=>row.symbol!=='NVDA')) for(const record of [null,{}, {observed_contexts:[{symbol:row.symbol,market:'US',company_name:row.company_name}]}]) {
+    for(const conflict of [{observed_name:'Former issuer'},{observed_identifiers:{cusip:'WRONG'}},{observed_scope:{symbol:'OTHER',market:'JP'}}]) {
+      const input={...row,instrument_identity:structuredClone(record),financial_identity:conflict};
+      const corrected=projectFinancialRow(overlayFinancialCorrection(input,fundProjection()),{now});
+      expect(corrected.instrument_identity).toEqual(record);
+      expect(corrected.instrument_applicability.status).toBe('quarantined');
+      expect(projectFinancialRow(JSON.parse(JSON.stringify(corrected)),{now}).instrument_applicability.status).toBe('quarantined');
+      expect(projectFinancialRow(overlayFinancialCorrection(JSON.parse(JSON.stringify(corrected)),fundProjection()),{now})).toEqual(corrected);
+    }
+    const value=fundProjection();value.symbols[row.symbol].financial_identity.observed_name='New conflicting issuer';
+    const corrected=projectFinancialRow(overlayFinancialCorrection({...row,instrument_identity:record},value),{now});
+    expect(corrected.instrument_identity).toEqual(record);expect(corrected.instrument_applicability.status).toBe('quarantined');
+  }
+});
+
+it('inherits only observed containing scope and rejects explicit alias scope conflicts',()=>{
+  const value=fundProjection(),row=fundRows()[0],chart=rawFundChart(row),changed=overlayFinancialChart(chart,value);
+  expect(changed).not.toHaveProperty('market');
+  for(const field of ['symbol','market','as_of_date']) expect(changed.fundamentals).not.toHaveProperty(field);
+  expect(changed.fundamentals.financial_identity.observed_scope).toEqual({symbol:'BITU',market:'US',as_of_date:date});
+  expect(instrumentApplicability(changed.fundamentals).status).toBe('not_applicable');
+  for(const location of [null,'stock_data','fundamentals']) for(const field of ['symbol','market','as_of_date']) for(const invalid of [null,'',field==='symbol'?'OTHER':field==='market'?'JP':'2026-10-01']) {
+    const input=rawFundChart(row);(location?input[location]:input)[field]=invalid;
+    expect(()=>overlayFinancialChart(input,value,'BITU')).toThrow('identity mismatch');
+  }
+  const missing=rawFundChart(row);delete missing.stock_data.market;
+  const unresolved=overlayFinancialChart(missing,value);
+  expect(instrumentApplicability(unresolved).status).toBe('quarantined');
+  expect(unresolved.instrument_applicability.status).toBe('quarantined');
+  expect(instrumentApplicability({symbol:'BITU',financial_identity:{market:'US',observed_name:row.company_name},financial_current:{m:'US'}}).status).toBe('quarantined');
+  const stock=overlayFinancialChart(rawFundChart(fundRows()[3]),value).fundamentals;
+  expect(Object.values(projectFinancialRow(stock,{now}).financial_current_state.fields).filter(field=>field.source_validated)).toHaveLength(6);
+  for(const patch of [{symbol:null},{symbol:''},{market:null},{market:''},{market:'JP'},{as_of_date:null},{as_of_date:''},{as_of_date:'2026-10-01'}]) {
+    const altered=JSON.parse(JSON.stringify(stock));Object.assign(altered,patch);
+    expect(Object.values(projectFinancialRow(altered,{now}).financial_current_state.fields).some(field=>field.source_validated)).toBe(false);
+  }
+  for(const patch of [{symbol:'OTHER'},{market:'JP'},{as_of_date:'2026-10-01'},{symbol:null},{market:null},{as_of_date:null}]) {
+    const altered={...fundRows()[3],financial_identity:{observed_scope:{symbol:'NVDA',market:'US',as_of_date:date,...patch}}};
+    const result=projectFinancialRow(overlayFinancialCorrection(altered,value),{now});
+    expect(result.financial_identity.observed_scope).toEqual(altered.financial_identity.observed_scope);
+    expect(Object.values(result.financial_current_state.fields).some(field=>field.source_validated)).toBe(false);
+  }
+});
+
+it('never certifies stock aliases from a projection-supplied missing market or date',()=>{
+  const value=fundProjection();
+  for(const missing of ['market','as_of_date']) {
+    const chart={symbol:'NVDA',market:'US',as_of_date:date,bars:[],stock_data:{symbol:'NVDA',eps_growth_qq:99},fundamentals:{eps_growth_qq:99}};
+    delete chart[missing];
+    const corrected=overlayFinancialChart(chart,value);
+    for(const key of ['stock_data','fundamentals']) {
+      expect(Object.values(corrected[key].financial_current_state.fields).some(field=>field.source_validated)).toBe(false);
+      const replay=projectFinancialRow(JSON.parse(JSON.stringify(corrected[key])),{now});
+      expect(replay.financial_current_state).toEqual(corrected[key].financial_current_state);
+    }
+    expect(overlayFinancialChart(JSON.parse(JSON.stringify(corrected)),value)).toEqual(corrected);
   }
 });

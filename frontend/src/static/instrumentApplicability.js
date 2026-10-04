@@ -10,7 +10,7 @@ const identifier = (value, kind) => {
   const normalized = String(value).trim().toUpperCase();
   return kind === 'cik' && /^\d{1,10}$/.test(normalized) ? normalized.padStart(10, '0') : normalized;
 };
-const identityContexts = row => [row, row.financial_identity, row.instrument_identity, ...(Array.isArray(row.instrument_identity?.observed_contexts) ? row.instrument_identity.observed_contexts : []), row.financial_source_evidence?.identity, row.financial_history, row.book_financials, row.financial_historical?.financial_history, row.financial_historical?.book_financials, row.financial_historical?.source_evidence?.identity, row.financial_historical?.detail_identity, row.institutional_evidence].filter(value => value && typeof value === 'object');
+const identityContexts = row => [row, row.financial_identity, row.financial_identity?.observed_scope, ...(Array.isArray(row.financial_identity?.prior_observed_scopes) ? row.financial_identity.prior_observed_scopes : []), ...(Array.isArray(row.financial_identity?.observed_contexts) ? row.financial_identity.observed_contexts : []), row.instrument_identity, ...(Array.isArray(row.instrument_identity?.observed_contexts) ? row.instrument_identity.observed_contexts : []), row.financial_source_evidence?.identity, row.financial_history, row.book_financials, row.financial_historical?.financial_history, row.financial_historical?.book_financials, row.financial_historical?.source_evidence?.identity, row.financial_historical?.detail_identity, row.institutional_evidence].filter(value => value && typeof value === 'object');
 const observedFields = ['symbol', 'market', 'company_name', 'name', 'product_name', 'observed_name', 'cusip', 'isin', 'cik', 'issuer_cik', 'quoteType', 'quote_type', 'observed_identifiers'];
 export function instrumentIdentityEvidence(row) {
   // Preserve conflicting observed identity through compact transport when full
@@ -26,13 +26,18 @@ const records = new Map(registry.records.map(record => [record.symbol, record]))
 // status flags and registry identifiers are not observed identity evidence.
 export function instrumentApplicability(row = {}) {
   if (!row || typeof row !== 'object') row = {};
-  const record = records.get(row.symbol);
+  // An alias may inherit observed scope from its containing chart without
+  // acquiring new price-identity properties. Explicit values, including null,
+  // never fall through to inherited scope; proofs and registry IDs supply none.
+  const symbol = Object.hasOwn(row, 'symbol') ? row.symbol : row.financial_identity?.observed_scope?.symbol;
+  const market = Object.hasOwn(row, 'market') ? row.market : row.stock_data && row.stock_data.symbol === symbol && Object.hasOwn(row.stock_data, 'market') ? row.stock_data.market : row.financial_identity?.observed_scope?.market;
+  const record = records.get(symbol);
   const base = { version: INSTRUMENT_APPLICABILITY_VERSION, status: 'unverified', instrument_class: 'unknown', reason: 'instrument_type_unverified', identity_binding: 'unverified' };
   if (!record) return base;
   const contexts = identityContexts(row);
   const names = contexts.flatMap(value => [value.company_name, value.product_name, value.observed_name, value.name]).filter(text);
   const conflicts = [];
-  if (row.market !== record.market || contexts.some(value => value.market != null && value.market !== record.market)) conflicts.push('market_conflict');
+  if (market !== record.market || contexts.some(value => value.market != null && value.market !== record.market)) conflicts.push('market_conflict');
   if (contexts.some(value => value.symbol != null && value.symbol !== record.symbol)) conflicts.push('symbol_conflict');
   if (!names.length) conflicts.push('missing_product_name');
   else if (names.some(value => name(value) !== name(record.name))) conflicts.push('product_name_conflict');

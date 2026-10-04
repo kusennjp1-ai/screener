@@ -66,7 +66,6 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     const dialog = page.getByRole('dialog', { name: '候補の日次変化' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(fullRequests).toBe(1);
     if (mode === 'missing') {
       await expect(dialog.getByRole('alert')).toContainText('過去の件数を現在の候補変化として表示しません');
       await expect(dialog.getByText('変化の内訳を開く', { exact: true })).toHaveCount(0);
@@ -81,6 +80,9 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
         await expect(dialog.getByText('ルール版・対象範囲の定義が異なるため比較できません。', { exact: true }).first()).toBeVisible();
       }
     }
+    // Opening the dialog can paint its shell before the lazy details request.
+    // The branch above waits for the loaded content, then checks one request.
+    expect(fullRequests).toBe(1);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(trigger).toBeFocused();

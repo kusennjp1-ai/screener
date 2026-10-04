@@ -148,3 +148,27 @@ describe('one guard across corporate financial and technical consumers', () => {
     expect(all).toHaveLength(5901);
   });
 });
+
+it.each(rows)('keeps $symbol price identity immutable while transporting conflicting financial observations', row => {
+  const original={observed_contexts:[{symbol:row.symbol,market:'US',company_name:row.company_name}]};
+  for(const identity of [null,{},original]) {
+    const input={...row,instrument_identity:structuredClone(identity),financial_historical:{values:{}},
+      financial_identity:{observed_scope:{symbol:row.symbol,market:'US',as_of_date:date}},
+      financial_history:{symbol:row.symbol,company_name:'A conflicting issuer'}};
+    const projected=projectFinancialRow(input,{now});
+    expect(projected.instrument_identity).toEqual(identity);
+    expect(projected.instrument_applicability.status).toBe('quarantined');
+    const transported=decodeResearchIndex(encodeResearchIndex({as_of_date:date,rows:[projected]})).rows[0];
+    expect(transported.instrument_identity).toEqual(identity);
+    expect(transported.financial_identity.observed_contexts.some(value=>value.company_name==='A conflicting issuer')).toBe(true);
+    expect(instrumentApplicability(transported).status).toBe('quarantined');
+    expect(projectFinancialRow(JSON.parse(JSON.stringify(transported)),{now}).instrument_applicability.status).toBe('quarantined');
+    expect(assess(projected,'minervini',now).method_status).toBe(assess(transported,'minervini',now).method_status);
+    expect(researchCsv(rankCandidates([transported],'minervini',{now,qualifiedOnly:false}),'minervini',date,now)).toContain('"quarantined"');
+  }
+  const fresh={...row,financial_identity:{observed_scope:{symbol:row.symbol,market:'US',as_of_date:date}}};
+  expect(projectFinancialRow(fresh,{now})).not.toHaveProperty('instrument_identity');
+  const baseline=projectFinancialRow(row,{now});
+  expect(baseline.instrument_identity).toEqual(original);
+  expect(projectFinancialRow(JSON.parse(JSON.stringify(baseline)),{now}).instrument_identity).toEqual(original);
+});

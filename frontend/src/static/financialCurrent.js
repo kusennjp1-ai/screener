@@ -35,13 +35,15 @@ const minTime = times => times.length ? Math.min(...times) : null;
 function envelopeReason(row, proof, now, date, market) {
   if (!validClock(now) || !validEvidenceDay(date) || date > iso(now).slice(0, 10)) return 'invalid_evaluation_context';
   if (typeof row.symbol !== 'string' || !row.symbol.trim() || typeof market !== 'string' || !market.trim()) return 'identity_mismatch';
+  const scope = row.financial_identity?.observed_scope;
+  if (object(scope) && [['symbol', row.symbol], ['market', market], ['as_of_date', date]].some(([key, value]) => Object.hasOwn(scope, key) && scope[key] !== value)) return 'identity_mismatch';
   if (!object(proof)) return 'missing_evidence';
   if (proof.v !== contract.version || !validClock(proof.t) || typeof proof.r !== 'string' || proof.r.length !== FINANCIAL_FIELDS.length ||
       [...proof.r].some(code => !Object.hasOwn(contract.reason_codes, code)) || !object(proof.p) ||
       Object.keys(proof).some(key => !contract.summary_keys.includes(key)) ||
       Object.keys(proof.p).some(key => !/^(?:[0-9]|1[0-5])$/.test(key) || !contract.proof_reason_codes.includes(proof.r[Number(key)])) ||
       [...proof.r].some((code, index) => contract.proof_reason_codes.includes(code) !== Object.hasOwn(proof.p, String(index)))) return 'invalid_envelope';
-  if ((row.as_of_date != null && row.as_of_date !== date) || (row.technical_audit?.as_of_date != null && row.technical_audit.as_of_date !== date) || proof.s !== row.symbol || proof.m !== market || row.market !== market || proof.a !== date || !validEvidenceDay(proof.a)) return 'identity_mismatch';
+  if ((Object.hasOwn(row, 'as_of_date') && row.as_of_date !== date) || (row.technical_audit?.as_of_date != null && row.technical_audit.as_of_date !== date) || proof.s !== row.symbol || proof.m !== market || row.market !== market || proof.a !== date || !validEvidenceDay(proof.a)) return 'identity_mismatch';
   if (now < proof.t) return 'invalid_evaluation_context';
   return null;
 }
@@ -109,29 +111,36 @@ function validateField(row, field, index, proof, now, date) {
 // Re-projecting a withheld scalar cannot restore it from a raw alias or proof.
 export function projectFinancialRow(input, { now = Date.now(), asOfDate, market } = {}) {
   if (!object(input)) return input;
+  const scope = input.financial_identity?.observed_scope;
   const cached = ownedProjections.get(input);
   if (cached) {
     // An owned row already carries its supplied context. Check the full cache
     // boundary before allocating a copy on each ranking/expiry/portfolio pass.
-    const date = asOfDate ?? input.as_of_date ?? input.technical_audit?.as_of_date;
-    const contextMarket = market ?? input.market;
+    const date = asOfDate ?? input.as_of_date ?? input.technical_audit?.as_of_date ?? scope?.as_of_date;
+    const contextMarket = market ?? input.market ?? scope?.market;
     const applicability = instrumentApplicability(input);
     if (cached.identity === JSON.stringify(INSTRUMENT_IDENTITY_FIELDS.map(field=>input[field])) && cached.applicability === JSON.stringify(applicability) && !Object.hasOwn(input, 'method_summary') && cached.now === now && cached.date === date && cached.market === contextMarket && cached.rowMarket === input.market && cached.symbol === input.symbol && cached.rowDate === input.as_of_date && cached.auditDate === input.technical_audit?.as_of_date && input.financial_current === cached.proof && input.financial_current_state === cached.state && protectedFields.every(field => input[field] === cached.values[field]) && ['screener_results','screener_details','screeners'].every(key=>input[key]===cached.nested[key])) return input;
   }
   const row = { ...input };
-  const date = asOfDate ?? row.as_of_date ?? row.technical_audit?.as_of_date;
-  const contextMarket = market ?? row.market;
+  const date = asOfDate ?? row.as_of_date ?? row.technical_audit?.as_of_date ?? scope?.as_of_date;
+  const contextMarket = market ?? row.market ?? scope?.market;
   // Missing row context may be supplied by its verified containing asset, never
   // by the proof's own claim. Explicit conflicting values remain invalid.
   if (!Object.hasOwn(row,'as_of_date') && validEvidenceDay(date)) row.as_of_date=date;
-  if (!Object.hasOwn(row,'market') && market!==undefined) row.market=market;
+  if (!Object.hasOwn(row,'market') && contextMarket!==undefined) row.market=contextMarket;
+  if (!Object.hasOwn(row,'symbol') && scope?.symbol!==undefined) row.symbol=scope.symbol;
   const applicability = instrumentApplicability(row);
   const blocked = applicability.status !== 'unverified';
   const proof = row.financial_current;
   const invalid = blocked ? applicability.reason : envelopeReason(row, proof, now, date, contextMarket);
   delete row.financial_applicability;
   row.instrument_applicability = immutable(applicability);
-  if (blocked) row.instrument_identity = immutable({ ...row.instrument_identity, observed_contexts: instrumentIdentityEvidence(row) });
+  // Baseline projection may capture its original instrument context once.
+  // Correction aliases retain their observed containing scope separately and
+  // must not acquire a price-identity record from new financial observations.
+  if (blocked && !Object.hasOwn(row, 'instrument_identity') && !object(scope)) row.instrument_identity = immutable({ observed_contexts: instrumentIdentityEvidence(row) });
+  // Current observations remain separate, including conflicts removed below.
+  if (blocked) row.financial_identity = immutable({ ...row.financial_identity, observed_contexts: instrumentIdentityEvidence(row) });
   delete row.method_summary;
   const fields = {}, expiries = [], rejectedReferences = [];
   for (const [index, field] of FINANCIAL_FIELDS.entries()) {

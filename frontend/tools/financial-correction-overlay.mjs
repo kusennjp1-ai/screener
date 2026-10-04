@@ -18,6 +18,7 @@ import { filterStaticScanRows, sortStaticScanRows } from '../src/static/scanClie
 import { scanListRow } from './scan-list-payload.mjs';
 import { validatePublishedSummaries, validateResearchListSummaries, validateResearchParity } from './research-quality.mjs';
 import { verifyWorkbenchComparison } from './workbench-comparison.mjs';
+import { observedFinancialCarryScope } from './financial-generation-carry.mjs';
 
 export const FINANCIAL_CORRECTION_SCHEMA = 'financial-statement-projection-v1';
 export const CORRECTION_FIELDS = Object.freeze([...FINANCIAL_FIELDS, 'eps_growth_quarterly', 'eps_growth_annual', 'recent_quarter_date', 'previous_quarter_date', 'growth_comparable_period_date', 'growth_reporting_cadence', 'growth_metric_basis', 'growth_reference_gap_days']);
@@ -42,6 +43,23 @@ const historicalSnapshot = row => row.financial_historical || {
   financial_history: row.financial_history || null, book_financials: row.book_financials || null,
   legacy_scanners: Object.fromEntries(['screener_results', 'screener_details', 'screeners'].filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]])),
 };
+// Only financial-correction-v1 fields written by this projector may cross the
+// alias boundary. All nonfinancial properties retain their original ownership.
+const financialOutputFields = [...CORRECTION_FIELDS, ...CORRECTION_DEPENDENT_FIELDS, ...CORRECTION_METADATA_FIELDS,
+  'financial_source_evidence', 'financial_current', 'financial_history', 'book_financials', 'bookFinancialCurrent',
+  'financial_source_diagnostics', 'financial_history_source_diagnostics', 'financial_identity', 'instrument_applicability',
+  'financial_current_state', 'financial_historical', 'method_summary', 'passes_template', 'eps_line'];
+function financialAlias(original, projected) {
+  const result = { ...original };
+  for (const field of financialOutputFields) {
+    if (Object.hasOwn(projected, field)) result[field] = projected[field];
+    else delete result[field];
+  }
+  for (const key of ['screener_results', 'screener_details', 'screeners']) if (object(original[key])) result[key] = Object.fromEntries(Object.entries(original[key]).map(([name, value]) =>
+    /^(minervini|canslim|ipo|custom)$/i.test(name) ? [name, projected[key][name]] : [name, value]));
+  for (const key of ['stock_data', 'fundamentals']) if (object(original[key])) result[key] = financialAlias(original[key], projected[key]);
+  return result;
+}
 
 export function correctionMetadata(projection) {
   return projection ? { financial_generation: projection.financial_generation, financial_evaluated_at: clock(projection.financial_evaluated_at), financial_knowledge_basis: basis, financial_point_in_time: false, financial_source_publication_date: null, financial_policy_version: projection.policy.id } : {};
@@ -140,7 +158,7 @@ export async function loadFinancialCorrection({ env = process.env, rows, asOfDat
   return projection;
 }
 
-export function overlayFinancialCorrection(row, projection) {
+export function overlayFinancialCorrection(row, projection, inheritedScope = {}) {
   const item = projection?.symbols?.[row?.symbol];
   if (!item) return row;
   if ((row.market !== undefined && row.market !== item.market) || (row.as_of_date !== undefined && row.as_of_date !== item.as_of_date)) fail(`row identity mismatch ${row.symbol}`);
@@ -149,10 +167,23 @@ export function overlayFinancialCorrection(row, projection) {
     financial_current: structuredClone(item.financial_current), financial_history: structuredClone(item.financial_history), book_financials: null,
     financial_historical: historicalSnapshot(row),
     financial_source_diagnostics: structuredClone(item.source_diagnostics), financial_history_source_diagnostics: structuredClone(item.history_source_diagnostics)};
-  // Correction-owned reports may replace identity-bearing legacy contexts.
-  // Retain their observed evidence so a matching new name cannot erase a conflict.
-  if (!corporateFinancialsAllowed(row)) out.instrument_identity = { ...row.instrument_identity, observed_contexts: instrumentIdentityEvidence(row) };
+  const observedContexts = !corporateFinancialsAllowed(row) ? instrumentIdentityEvidence(row) : null;
+  const priorScope = row.financial_identity?.observed_scope;
+  const observedScope = object(priorScope) ? structuredClone(priorScope) : Object.fromEntries(['symbol', 'market', 'as_of_date'].filter(key => Object.hasOwn(row, key) || Object.hasOwn(inheritedScope, key)).map(key => [key, Object.hasOwn(row, key) ? row[key] : inheritedScope[key]]));
+  const priorScopes = [...(Array.isArray(row.financial_identity?.prior_observed_scopes) ? row.financial_identity.prior_observed_scopes : [])];
+  // Only an admitted daily carry may advance the containing price date. Keep
+  // the old observed scope and every original source/proof clock separately.
+  const carriedScope = observedFinancialCarryScope(projection, row, observedScope);
+  if (carriedScope) {
+    priorScopes.push(structuredClone(observedScope));
+    observedScope.as_of_date = carriedScope.as_of_date;
+  }
   for (const field of ['instrument_applicability','financial_identity']) { if(Object.hasOwn(item,field)) out[field]=structuredClone(item[field]); else delete out[field]; }
+  if (observedContexts || object(row.financial_identity?.observed_scope) || ['symbol', 'market', 'as_of_date'].some(key => !Object.hasOwn(row, key) && Object.hasOwn(inheritedScope, key))) out.financial_identity = { ...out.financial_identity,
+    observed_scope: observedScope,
+    ...(priorScopes.length ? { prior_observed_scopes: priorScopes } : {}),
+    ...(observedContexts ? { observed_contexts: observedContexts } : {}) };
+  for (const key of ['market', 'as_of_date']) if (!Object.hasOwn(row, key) && !Object.hasOwn(inheritedScope, key)) out[key] = undefined;
   delete out.financial_current_state; delete out.bookFinancialCurrent; delete out.method_summary;
   for (const field of CORRECTION_DEPENDENT_FIELDS) if (Object.hasOwn(out, field)) out[field] = null;
   return out;
@@ -163,18 +194,23 @@ export function overlayFinancialChart(chart, projection, symbol = chart?.symbol 
   const item = projection.symbols[symbol];
   if ((chart.symbol !== undefined && chart.symbol !== symbol) || (chart.as_of_date !== undefined && chart.as_of_date !== item.as_of_date)) fail(`chart identity mismatch ${symbol}`);
   let result = {...chart, ...correctionMetadata(projection)};
+  const inheritedScope = { symbol };
+  for (const key of ['market', 'as_of_date']) {
+    if (Object.hasOwn(chart, key)) inheritedScope[key] = chart[key];
+    else if (chart.stock_data?.symbol === symbol && Object.hasOwn(chart.stock_data, key)) inheritedScope[key] = chart.stock_data[key];
+  }
   // Match payload projection ownership, including reviewed-fund wrappers that
   // have no financial fields yet. Supply observed identity before materializing
   // those roots, keeping ordinary stock wrappers free of financial row fields.
-  if (CORRECTION_FIELDS.some(key => Object.hasOwn(chart, key)) || hasFinancialCurrentFields(chart) || (typeof chart.symbol === 'string' && !corporateFinancialsAllowed(chart))) result = overlayFinancialCorrection({...result, symbol}, projection);
+  if (CORRECTION_FIELDS.some(key => Object.hasOwn(chart, key)) || hasFinancialCurrentFields(chart) || (typeof chart.symbol === 'string' && !corporateFinancialsAllowed(chart))) result = overlayFinancialCorrection({...result, symbol}, projection, inheritedScope);
   for (const key of ['stock_data', 'fundamentals']) if (object(chart[key])) {
     if (chart[key].symbol !== undefined && chart[key].symbol !== symbol) fail(`chart ${key} identity mismatch ${symbol}`);
-    result[key] = overlayFinancialCorrection({...chart[key], symbol}, projection);
+    result[key] = overlayFinancialCorrection({...chart[key], symbol}, projection, inheritedScope);
   }
   // The predecessor retains the unaudited chart series. Current views cannot
   // plot that old series as if it belonged to the selected statement receipts.
   if (Object.hasOwn(result, 'eps_line')) result.eps_line = [];
-  return projectFinancialPayload(result, {now: clock(projection.financial_evaluated_at), asOfDate: item.as_of_date, market: item.market});
+  return financialAlias(chart, projectFinancialPayload(result, {now: clock(projection.financial_evaluated_at), asOfDate: inheritedScope.as_of_date, market: inheritedScope.market}));
 }
 
 const immutableDirectories = new Set(['candidate-history', 'candidate-performance-history', 'financial-corrections', 'financial-lineage']);

@@ -320,3 +320,33 @@ it('records a new carried daily observation against immutable prior saved decisi
     expect(await verify()).toEqual(report);
   } finally {if(process.env.FINANCIAL_CARRY_KEEP_FIXTURE)console.log(`Prior carry fixture: ${directory}`);else await rm(directory,{recursive:true,force:true});}
 });
+
+it('advances an admitted containing date while preserving prior scope and original proof clocks',()=>{
+  const options=inputs(),carry=createFinancialGenerationCarry(options),target=targetRows(options).find(row=>row.symbol==='OWNED');
+  const oldScope={symbol:'OWNED',market:'US',as_of_date:originalDate};
+  target.financial_identity={observed_scope:oldScope};
+  const result=projected(carry,target),source=JSON.parse(options.sourceProjection).symbols.OWNED;
+  expect(result.financial_identity.observed_scope).toEqual({...oldScope,as_of_date:targetDate});
+  expect(result.financial_identity.prior_observed_scopes).toEqual([oldScope]);
+  expect(result.financial_current_state.fields.eps_growth_qq.source_validated).toBe(true);
+  expect(result.financial_current.p['0'].slice(4,6)).toEqual(source.financial_current.p['0'].slice(4,6));
+  expect(Object.values(projectFinancialRow(result,{now:originalTime+8*day}).financial_current_state.fields).some(field=>field.source_validated)).toBe(false);
+  expect(result.financial_historical).toEqual(projectFinancialRow(target,{now:buildTime}).financial_historical);
+  expect(projected(carry,JSON.parse(JSON.stringify(result)))).toEqual(result);
+  const serialized=JSON.parse(JSON.stringify(carry));
+  expect(projected(serialized,target).financial_current_state.fields.eps_growth_qq.source_validated).not.toBe(true);
+  expect(projected(Object.create(carry),target).financial_current_state.fields.eps_growth_qq.source_validated).not.toBe(true);
+  validateFinancialGenerationCarry(serialized);
+  expect(projected(serialized,target).financial_current_state.fields.eps_growth_qq.source_validated).toBe(true);
+  for(const patch of [{symbol:'OTHER'},{market:'JP'},{as_of_date:null},{as_of_date:'2000-01-01'},{as_of_date:'2026-10-03'}]) {
+    const bad={...target,financial_identity:{observed_scope:{...oldScope,...patch}}};
+    expect(Object.values(projected(carry,bad).financial_current_state.fields).some(field=>field.source_validated)).toBe(false);
+  }
+  expect(()=>projected(carry,{...target,as_of_date:null})).toThrow('identity mismatch');
+  const nextOptions=inputs(),targetBase=JSON.parse(nextOptions.targetBase),boundRow=targetBase.rows.find(row=>row.symbol==='OWNED');
+  boundRow.financial_identity={observed_scope:{...oldScope,as_of_date:'2026-10-03'}};
+  nextOptions.targetBase=JSON.stringify(targetBase);nextOptions.targetBaseSha256=hash(nextOptions.targetBase);
+  const next=createFinancialGenerationCarry(nextOptions),advanced=projected(next,boundRow);
+  expect(advanced.financial_identity.prior_observed_scopes).toEqual([boundRow.financial_identity.observed_scope]);
+  expect(advanced.financial_current_state.fields.eps_growth_qq.source_validated).toBe(true);
+});
