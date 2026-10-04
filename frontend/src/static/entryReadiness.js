@@ -1,5 +1,6 @@
+import { financialHistoryDeadlines } from './financialHistory.js';
 import { canonicalPivot } from './researchPresentation.js';
-import { assess, entryZonePercent, finite, snapshotFreshness } from './researchEngine.js';
+import { assess, entryZonePercent, finite, snapshotFreshness, threeStateAnd } from './researchEngine.js';
 import { auditValues, verifiedVolumeRatio } from './qualificationAudit.js';
 import { entrySourceContext } from './bookSourceContext.js';
 import { evidenceTimestamp as timestamp, newYorkDate, validClock } from './evidenceTime.js';
@@ -22,7 +23,8 @@ export function prepareReadinessTimeline(rows) {
     // Earnings and financial age checks include the exact 72-hour boundary.
     add(row.entry_evidence?.earnings?.checked_at, 72 * 3600000 + 1);
     add(row.financial_history?.retrieved_at, -5000);
-    add(row.financial_history?.retrieved_at, 72 * 3600000 + 1);
+    for (const deadline of financialHistoryDeadlines(row.financial_history)) boundaries.add(deadline + 1);
+    if (row.financial_history?.annual_source) add(row.financial_history.annual_source.observed_at, -5000);
   }
   const sorted = [...boundaries].sort((a, b) => a - b);
   return now => {
@@ -76,11 +78,11 @@ export function entryReadiness(row, date, market, now = Date.now(), method = 'mi
   // Missing or malformed evidence must not become a measured failure or a pass.
   const check = (id, label, value, detail) => ({id,label,state:typeof value !== 'boolean' ? 'unknown' : value ? 'pass' : 'fail',detail});
   const rules = [
-    check('selection','選定条件', selection, `${row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外。' : row.price_activity?.lowRange ? '60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。' : ''}共通の購入モデル：ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未達 ${minervini.failed + ibd.failed}・未確認 ${minervini.unknown + ibd.unknown}）`),
+    check('selection','共通購入モデルへの適合', selection, `${row.corporate_action?.cash_acquisition ? '現金買収合意・購入対象外。' : row.price_activity?.lowRange ? '60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。' : ''}選択中の手法とは別に、ミネルヴィニとIBD型の両方を確認するアプリの共通購入モデル。ミネルヴィニ ${minervini.passed}/${minervini.total}・IBD型 ${ibd.passed}/${ibd.total}（未達 ${minervini.failed + ibd.failed}・未確認 ${minervini.unknown + ibd.unknown}）`),
     check('market','市場環境', marketKnown ? market.cap > 0 : null, market?.label || '市場データ未取得'),
     check('date','最新の取引日', calendar && nowKnown ? fresh : null, calendarDetail),
     check('price','買い位置', finite(row.current_price) && finite(pivot) && pivot > 0 ? row.current_price >= pivot && row.current_price <= pivot * (1 + zone / 100) : null, `日次価格 ${finite(row.current_price) ? row.current_price.toFixed(2) : '未確認'} / ピボット ${finite(pivot) ? pivot.toFixed(2) : '未確認'}。0〜${zone}%はこの方式のモデル設定。${sourceContext.label ? `${sourceContext.label}。` : ''}${sourceContext.detail}`),
-    check('volume','出来高', volumeKnown ? volume >= 1.4 && audit.change > 0 : null, volumeKnown ? `検証済み直前50日平均比 ${volume.toFixed(2)}倍・検証済み前日比 ${audit.change.toFixed(2).replace('-', '−')}%（上放れ時の確認に使う、上昇日かつ1.4倍以上というアプリの代理条件。形成中の最終収縮の出来高減少とは別）` : '同じ分析日の検証済み前日比または直前50日比較の実測値が未取得'),
+    check('volume','出来高', threeStateAnd([finite(volume) ? volume >= 1.4 : null, finite(audit.change) ? audit.change > 0 : null]), volumeKnown ? `検証済み直前50日平均比 ${volume.toFixed(2)}倍・検証済み前日比 ${audit.change.toFixed(2).replace('-', '−')}%（上放れ時の確認に使う、上昇日かつ1.4倍以上というアプリの代理条件。形成中の最終収縮の出来高減少とは別）` : `同じ分析日の検証済み前日比または直前50日比較の実測値が未取得。直前50日平均比 ${finite(volume) ? `${volume.toFixed(2)}倍` : '未確認'}・前日比 ${finite(audit.change) ? `${audit.change.toFixed(2).replace('-', '−')}%` : '未確認'}（上昇日かつ1.4倍以上というアプリの代理条件）`),
     check('shape','ベース形状', shape ? shape.candidate : null, shape?.summary || (shape?.candidate === true ? '日足の自動検出による形状候補。詳細は銘柄の根拠を確認' : shape?.candidate === false ? '現在の形状条件は未達。詳細は銘柄の根拠を確認' : '日足による形状検証が未取得')),
     check('earnings','決算までの余裕', recentEarnings && earningsDays != null ? earningsDays > 7 && earningsDays <= 180 : null, recentEarnings && earningsDays != null ? `予定 ${earnings.date}・あと${earningsDays}日（予想日。7日以内は新規購入を見送るモデル設定）` : '決算予定日が未取得または取得から72時間超。自動取得の対象・結果を確認'),
   ];

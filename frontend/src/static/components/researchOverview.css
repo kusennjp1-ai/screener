@@ -20,7 +20,8 @@
 /* Scope metadata shares the market link's existing row. It remains readable
    on mobile instead of inheriting the subtitle's visually hidden treatment. */
 .overview-universe { margin:0; font-size:11px; line-height:1.4; }
-.overview-market a { display:flex; align-items:center; min-height:44px; scroll-margin-top:64px; color:var(--text-2); text-decoration:none; }
+/* Outrank the foundation's generic non-paragraph link target rule. */
+.research-overview .overview-market a { display:flex; align-items:center; min-height:44px; scroll-margin-top:64px; color:var(--text-2); text-decoration:none; }
 /* The desktop market link is a full touch target too. Trade empty space above
    the summary for its larger hit area, keeping the bottom clearance and first-screen budget. */
 @media (min-width:701px) {

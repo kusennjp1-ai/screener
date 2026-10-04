@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
-import { researchEvaluation, validatePublishedSummaries } from './research-quality.mjs';
+import { researchEvaluation, validatePublishedSummaries, validateResearchListSummaries } from './research-quality.mjs';
 import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as now } from '../src/static/testFinancialFixture.js';
 
 it('exports one coherent current generation while retaining raw values and historical files',async()=>{
@@ -27,12 +27,14 @@ it('exports one coherent current generation while retaining raw values and histo
     expect(index.orders).toBeUndefined();
     const decoded=decodeResearchIndex(index);
     expect(researchEvaluation(decoded,manifest.markets.US.assets.research)).toBe(now);
-    expect(()=>validatePublishedSummaries(decoded.rows,now)).not.toThrow();
+    expect(index.summary_storage).toBe('canonical-detail-v1');
+    expect(()=>validateResearchListSummaries(index,decoded.rows,now)).not.toThrow();
     const current=decoded.rows[0];
     expect(current).toMatchObject({eps_growth_yy:0,eps_rating:null,composite_rating:null});
     const detail=JSON.parse(await readFile(join(root,current.research_detail_path),'utf8'));
     expect(()=>validatePublishedSummaries([detail],now)).not.toThrow();
-    expect(current.method_summary.evaluated_at).toBe(now);
+    expect(current.method_summary).toBeUndefined();
+    expect(detail.method_summary.evaluated_at).toBe(now);
     expect(detail.financial_historical.values).toMatchObject({eps_growth_yy:0,eps_rating:99,composite_rating:99,code33:false});
     const emitted=JSON.parse(await readFile(join(root,'scan.json'),'utf8'));
     expect(emitted.initial_rows[0].code33).toBeNull();expect(emitted.preview_rows[0].eps_rating).toBeNull();

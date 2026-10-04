@@ -5,6 +5,7 @@ import { summarizeWorkbench } from './workbenchSummary';
 
 const counts = extra => ({ ...Object.fromEntries(Object.keys(CHANGE_LABELS).map(key => [key, 0])), ...extra });
 const query = (values, history = { previous_as_of: '2026-09-28' }) => ({ data: {
+  comparison_basis:{schema_version:'current-policy-comparison-v1',mode:history.previous_as_of?'saved_first_same_policy':'no_previous'},
   history, changes: { minervini: { counts: counts(values) } },
 } });
 
@@ -49,10 +50,18 @@ it.each(['rule-version', 'unknown-evidence'])('describes %s coverage from the li
   const old = snapshot('2026-09-28', 'r1', 'fail'), current = snapshot('2026-09-29', cause === 'rule-version' ? 'r2' : 'r1', cause === 'unknown-evidence' ? 'unknown' : 'pass');
   const changes = compareSnapshots(current, old);
   const data = summarizeWorkbench({ history: { previous_as_of: old.as_of }, changes });
+  data.comparison_basis={schema_version:'current-policy-comparison-v1',mode:cause==='rule-version'?'incompatible_policy':'saved_first_same_policy'};
   expect(data.changes.minervini).not.toHaveProperty('items');
   expect(data.changes.minervini.counts).toEqual(changes.minervini.counts);
   const presentation = dailyChangePresentation({ data }, 'minervini');
   expect(presentation).toMatchObject({ ready: true, label: '変化：全1銘柄が比較不能', fullyIncomparable: true });
   expect(presentation.explanation).toContain('通過・脱落の変化は判定できません');
   expect(presentation.explanation).not.toMatch(/ルール版|定義変更|未確認/);
+});
+
+it('withholds legacy cached events without an explicit current comparison basis',()=>{
+  const old=query({new:19,dropped:4});delete old.data.comparison_basis;
+  expect(dailyChangePresentation(old,'minervini')).toMatchObject({label:'変化：比較基準未確認',blocked:true});
+  const conflicting=query({new:19});conflicting.data.comparison_basis.mode='incompatible_policy';
+  expect(dailyChangePresentation(conflicting,'minervini').blocked).toBe(true);
 });

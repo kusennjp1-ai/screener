@@ -1,8 +1,15 @@
+import { NATIVE_ANNUAL_SCHEMA, nativeAnnualHistoryContract } from './financialHistory.js';
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
-export const RESEARCH_TRANSPORT_VERSION = 'research-table-v1';
+import { encodeResearchFloat64, decodeResearchFloat64 } from './researchFloat64.js';
+import { encodeResearchHex, decodeResearchHex } from './researchHex.js';
+export const RESEARCH_TRANSPORT_VERSION = 'research-table-v2';
+const legacyVersion = 'research-table-v1';
+const sparseEncoding = 'present-values-and-missing-runs-v1';
+const floatEncoding = 'sparse-float64-and-signed-zero-v1';
+const binaryEncoding = 'sparse-binary-and-signed-zero-v1';
 export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
-const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version'];
+const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version', 'summary_storage', 'financial_generation', 'financial_knowledge_basis', 'financial_point_in_time', 'financial_source_publication_date', 'financial_policy_version', 'instrument_applicability_universe'];
 
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
 export function researchListRow(row) {
@@ -27,8 +34,10 @@ export function researchListRow(row) {
     values: pick(row.technical_audit.values, ['close', 'sma50', 'sma150', 'sma200', 'sma200_21ago', 'aboveLow', 'belowHigh', 'volumeRatio', 'change', 'momentum']),
   };
   if (row.financial_history) out.financial_history = {
-    ...pick(row.financial_history, ['symbol', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source']),
-    annual: Array.isArray(row.financial_history.annual) ? row.financial_history.annual.map(item => pick(item, ['end', 'eps'])) : row.financial_history.annual,
+    ...pick(row.financial_history, ['symbol', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source', 'schema_version', 'annual_currency', 'quarterly_currency', 'quarterly_retrieved_at', 'annual_source']),
+    // Do not strip contradictory per-cell currency/unit metadata into valid proof.
+    annual: row.financial_history.schema_version === NATIVE_ANNUAL_SCHEMA && !nativeAnnualHistoryContract(row.financial_history, row.symbol) ? []
+      : Array.isArray(row.financial_history.annual) ? row.financial_history.annual.map(item => pick(item, ['end', 'eps'])) : row.financial_history.annual,
   };
   return out;
 }
@@ -42,9 +51,49 @@ const leaves = (value, path = [], result = []) => {
   return result;
 };
 
+const missingRuns = refs => {
+  const missing = [];
+  for (let row = 0; row < refs.length; row++) if (refs[row] === -1) {
+    const start = row;
+    while (row + 1 < refs.length && refs[row + 1] === -1) row++;
+    missing.push([start, row + 1]);
+  }
+  return missing;
+};
+const cellKey = value => {
+  const text = JSON.stringify(value), signs = negativeZeroPaths(value);
+  return signs.length ? `${text}|negative-zero:${JSON.stringify(signs)}` : text;
+};
+const binaryColumn = (column, encode, prefix) => {
+  const key = ['present', 'pool', 'values'].find(key => Array.isArray(column[key]));
+  if (!key) return null;
+  const vector = encode(column[key]);
+  if (!vector) return null;
+  const { [key]: values, ...rest } = column;
+  void values;
+  return { ...rest, [`${prefix}_${key}`]: vector };
+};
+const negativeZeroPaths = (value, path = [], result = []) => {
+  if (Object.is(value, -0)) result.push(path);
+  else if (Array.isArray(value)) value.forEach((child, index) => negativeZeroPaths(child, [...path, index], result));
+  else if (value && typeof value === 'object') for (const [key, child] of Object.entries(value)) negativeZeroPaths(child, [...path, key], result);
+  return result;
+};
+const restoreNegativeZero = (value, path) => {
+  if (!path.length) { if (value !== 0) throw Error('Invalid signed-zero value'); return -0; }
+  const [key, ...rest] = path;
+  if (!value || typeof value !== 'object' || (Array.isArray(value) ? !Number.isSafeInteger(key) || key < 0 || key >= value.length
+    : typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].includes(key)) || !Object.hasOwn(value, key)) throw Error('Invalid signed-zero path');
+  // Dictionary cells can be shared between rows. Clone the changed path so a
+  // sign correction cannot modify another row's equal-looking zero.
+  const copy = Array.isArray(value) ? [...value] : { ...value };
+  copy[key] = restoreNegativeZero(value[key], rest);
+  return copy;
+};
+
 // Column dictionaries remove repeated metadata without rounding decision
 // inputs. High-cardinality columns stay direct to avoid a second ID array.
-export function encodeResearchIndex(index, orders) {
+export function encodeResearchIndex(index, orders, { columnBytes } = {}) {
   const rows = index.rows.map(researchListRow);
   // Expand only compact proof tuples into transport columns. Repeated source,
   // cadence, periods and clocks then share dictionaries; exact values can copy
@@ -71,14 +120,21 @@ export function encodeResearchIndex(index, orders) {
     const pool = [], lookup = new Map();
     const refs = flattened.map(row => {
       if (!row.has(field)) return -1;
-      const value = row.get(field), key = JSON.stringify(value);
+      const value = row.get(field), key = cellKey(value);
       let id = lookup.get(key);
       if (id === undefined) { id = pool.length; pool.push(value); lookup.set(key, id); }
       return id;
     });
     const direct = refs.map(id => id === -1 ? null : pool[id]);
-    // Direct columns are used only when there are no absent values.
-    return !refs.includes(-1) && pool.length > rows.length / 4 ? { values: direct } : { pool, refs };
+    if (!refs.includes(-1)) return pool.length > rows.length / 4 ? { values: direct } : { pool, refs };
+    const present = refs.filter(id => id !== -1);
+    // Sparse high-cardinality columns otherwise repeat almost one dictionary
+    // index per value. Retain the exact values and explicit absent-row runs.
+    if (pool.length > present.length / 4) {
+      const sparse = { present: present.map(id => pool[id]), missing: missingRuns(refs) };
+      if (JSON.stringify(sparse).length < JSON.stringify({ pool, refs }).length) return sparse;
+    }
+    return { pool, refs };
   });
   // A few canonical inputs appear in multiple surfaces (close, symbol, volume
   // ratio, pivot). Reuse their exact column, with lossless sparse exceptions.
@@ -90,7 +146,7 @@ export function encodeResearchIndex(index, orders) {
       for (let row = 0; row < rows.length; row++) {
         const original = values[previous][row];
         const derived = factor === -1 && typeof original === 'number' ? -original : original;
-        if (values[column][row] !== derived) patch.push(values[column][row] === undefined ? [row] : [row, values[column][row]]);
+        if (!Object.is(values[column][row], derived)) patch.push(values[column][row] === undefined ? [row] : [row, values[column][row]]);
         if (patch.length > rows.length * .4) break;
       }
       if (patch.length > rows.length * .4) continue;
@@ -99,19 +155,86 @@ export function encodeResearchIndex(index, orders) {
       if (length < size) { columns[column] = candidate; size = length; }
     }
   }
-  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, ...pick(index, evaluationFields), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
+  // Publication budgets measure compressed bytes. The Node exporter can price
+  // the existing representations with gzip without adding a browser dependency
+  // or changing any scalar, presence bit, proof, or column-reference target.
+  if (columnBytes) for (let column = 0; column < columns.length; column++) {
+    const cells = values[column], pool = [], lookup = new Map();
+    const refs = cells.map(value => {
+      if (value === undefined) return -1;
+      const key = cellKey(value);
+      if (!lookup.has(key)) { lookup.set(key, pool.length); pool.push(value); }
+      return lookup.get(key);
+    });
+    const forms = [columns[column], { pool, refs }, refs.includes(-1)
+      ? { present: cells.filter(value => value !== undefined), missing: missingRuns(refs) }
+      : { values: cells }];
+    const alternatives = forms.flatMap(form => [form, binaryColumn(form, encodeResearchFloat64, 'f64'), binaryColumn(form, encodeResearchHex, 'hex')].filter(Boolean));
+    let size = columnBytes(columns[column]);
+    for (const candidate of alternatives) {
+      const candidateSize = columnBytes(candidate);
+      if (candidateSize < size) { columns[column] = candidate; size = candidateSize; }
+    }
+  }
+  // Ordinary JSON erases -0, including inside mixed-type and array cells.
+  // Preserve those sign bits explicitly; no value is rounded or inferred.
+  const negativeZeros = [];
+  values.forEach((cells, column) => cells.forEach((value, row) => negativeZeroPaths(value).forEach(path => negativeZeros.push([row, column, path]))));
+  return { schema: RESEARCH_TRANSPORT_VERSION, column_encoding: binaryEncoding, as_of_date: index.as_of_date, ...pick(index, evaluationFields), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders,
+    ...(negativeZeros.length ? { negative_zeros: negativeZeros } : {}), ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
 }
 
 export function decodeResearchIndex(value) {
   if (!value?.schema) return value;
-  if (value.schema !== RESEARCH_TRANSPORT_VERSION || !Array.isArray(value.fields) || !Array.isArray(value.columns) || value.fields.length !== value.columns.length || !Number.isInteger(value.count) || value.count < 0) throw Error('Unsupported research data format');
+  if (![legacyVersion, RESEARCH_TRANSPORT_VERSION].includes(value.schema) || !Array.isArray(value.fields) || !Array.isArray(value.columns) || value.fields.length !== value.columns.length || !Number.isSafeInteger(value.count) || value.count < 0) throw Error('Unsupported research data format');
+  const sparseEnabled = value.schema === RESEARCH_TRANSPORT_VERSION && [sparseEncoding, floatEncoding, binaryEncoding].includes(value.column_encoding);
+  const floatEnabled = [floatEncoding, binaryEncoding].includes(value.column_encoding);
+  if (value.schema === RESEARCH_TRANSPORT_VERSION ? !sparseEnabled : value.column_encoding !== undefined) throw Error('Unsupported research column encoding');
   const rows = Array.from({ length: value.count }, () => ({}));
   const decoded = [];
+  const seenFields = new Set();
+  const negativeZeros = new Map();
+  if (value.negative_zeros !== undefined) {
+    if (!floatEnabled || !Array.isArray(value.negative_zeros)) throw Error('Invalid signed-zero encoding');
+    const seen = new Set();
+    for (const entry of value.negative_zeros) {
+      if (!Array.isArray(entry) || entry.length !== 3 || !Number.isSafeInteger(entry[0]) || entry[0] < 0 || entry[0] >= value.count ||
+          !Number.isSafeInteger(entry[1]) || entry[1] < 0 || entry[1] >= value.fields.length || !Array.isArray(entry[2]) || seen.has(JSON.stringify(entry))) throw Error('Invalid signed-zero entry');
+      seen.add(JSON.stringify(entry));
+      if (!negativeZeros.has(entry[1])) negativeZeros.set(entry[1], []);
+      negativeZeros.get(entry[1]).push([entry[0], entry[2]]);
+    }
+  }
   value.fields.forEach((path, column) => {
     if (!Array.isArray(path) || !path.length || path.some(key => typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].includes(key))) throw Error('Invalid research field');
-    const source = value.columns[column];
+    const field = JSON.stringify(path);
+    if (seenFields.has(field)) throw Error('Duplicate research field');
+    seenFields.add(field);
+    let source = value.columns[column];
+    const binaryKeys = ['f64', 'hex'].flatMap(prefix => ['present', 'pool', 'values'].filter(key => Object.hasOwn(source, `${prefix}_${key}`)).map(key => ({ prefix, key })));
+    if (binaryKeys.length) {
+      const { prefix, key } = binaryKeys[0], binaryKey = `${prefix}_${key}`;
+      const expected = [binaryKey, ...(key === 'present' ? ['missing'] : key === 'pool' ? ['refs'] : [])];
+      if (!(prefix === 'hex' ? value.column_encoding === binaryEncoding : floatEnabled) || binaryKeys.length !== 1 || Object.keys(source).length !== expected.length || expected.some(key => !Object.hasOwn(source, key))) throw Error('Invalid binary research column');
+      const { [binaryKey]: vector, ...rest } = source;
+      source = { ...rest, [key]: (prefix === 'hex' ? decodeResearchHex : decodeResearchFloat64)(vector, value.count) };
+    }
     let cells;
-    if (Object.hasOwn(source, 'copy')) {
+    if (source && (Object.hasOwn(source, 'present') || Object.hasOwn(source, 'missing'))) {
+      if (!sparseEnabled || Object.keys(source).length !== 2 || !Array.isArray(source.present) || !Array.isArray(source.missing)) throw Error('Invalid sparse research column');
+      let end = -1, absent = 0;
+      for (const run of source.missing) {
+        if (!Array.isArray(run) || run.length !== 2 || !run.every(Number.isSafeInteger) || run[0] < 0 || run[0] <= end || run[1] <= run[0] || run[1] > value.count) throw Error('Invalid sparse research interval');
+        absent += run[1] - run[0]; end = run[1];
+      }
+      if (source.present.length + absent !== value.count) throw Error('Incomplete sparse research column');
+      cells = Array(value.count).fill(undefined);
+      let row = 0, item = 0;
+      for (const [start, finish] of [...source.missing, [value.count, value.count]]) {
+        while (row < start) cells[row++] = source.present[item++];
+        row = finish;
+      }
+    } else if (Object.hasOwn(source, 'copy')) {
       if (!Number.isInteger(source.copy) || source.copy < 0 || source.copy >= column || (source.factor !== undefined && source.factor !== -1) || !Array.isArray(source.patch)) throw Error('Invalid research column reference');
       cells = decoded[source.copy].map(item => source.factor === -1 && typeof item === 'number' ? -item : item);
       for (const [row, item] of source.patch) {
@@ -126,6 +249,8 @@ export function decodeResearchIndex(value) {
         return source.pool[id];
       });
     }
+    // Restore signs before dependent copy/factor columns consume this vector.
+    for (const [row, path] of negativeZeros.get(column) || []) cells[row] = restoreNegativeZero(cells[row], path);
     decoded.push(cells);
     rows.forEach((row, i) => {
       if (cells[i] === undefined) return;

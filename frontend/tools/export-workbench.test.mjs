@@ -9,6 +9,7 @@ import { exportWorkbench } from './export-workbench.mjs';
 import { summarizeWorkbench, validateWorkbenchDetails } from '../src/static/workbenchSummary.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
+import { verifyWorkbenchComparison } from './workbench-comparison.mjs';
 
 it('exports a separate overview while keeping the complete F3 workbench and immutable observation contract',async()=>{
   const root=await mkdtemp(join(tmpdir(),'workbench-summary-test-'));
@@ -31,6 +32,8 @@ it('exports a separate overview while keeping the complete F3 workbench and immu
     const saved=await readFile(join(root,summary.current_snapshot.path));
     expect(createHash('sha256').update(saved).digest('hex')).toBe(result.current_snapshot.sha256);
     expect(JSON.parse(gunzipSync(saved).toString('utf8')).records[0].symbol).toBe('TEST');
+    await verifyWorkbenchComparison({root,workbench:result,canonicalRows:rows});
+    await expect(verifyWorkbenchComparison({root,workbench:result,canonicalRows:[{...rows[0],symbol:'OTHER'}]})).rejects.toThrow(/canonical inputs/);
     const firstRef={...ref},firstSnapshot={...result.current_snapshot};
     const again=await exportWorkbench({root,rows,manifest,entry,researchContent:JSON.stringify(rows)});
     expect(entry.assets.workbench).toEqual(firstRef);
@@ -74,6 +77,8 @@ it.each([
     expect(correction.snapshot.records[0].methods.oneil.state).toBe(current);
     expect(correction.result.changes).toEqual(first.result.changes);
     expect(correction.result.daily_changes_snapshot).toEqual(first.result.current_snapshot);
+    expect(correction.result.comparison_basis.mode).toBe('saved_first_same_policy');
+    await verifyWorkbenchComparison({root,workbench:correction.result});
     expect(correction.result.sectors.groups.find(group=>group.key==='Technology').rates.oneil.pass).toBe(current==='pass'?1:0);
     expect(correction.result.current_snapshot.path).not.toBe(first.result.current_snapshot.path);
     expect(JSON.parse(await readFile(join(root,'candidate-history/index.json'),'utf8')).snapshots).toEqual(refs);
@@ -81,6 +86,10 @@ it.each([
     const next=await publish('2026-10-05',Date.parse('2026-10-05T22:00:00Z'),corrected);
     expect(next.result.changes.oneil.items[0].state).toBe(current==='pass'?'new':'dropped');
     expect(next.result.daily_changes_snapshot).toEqual(next.result.current_snapshot);
+    expect(next.result.comparison_basis).toMatchObject({mode:'saved_first_same_policy',current_source:'saved_first'});
+    await verifyWorkbenchComparison({root,workbench:next.result});
+    const tampered={...next.result,comparison_basis:{...next.result.comparison_basis,mode:'incompatible_policy'}};
+    await expect(verifyWorkbenchComparison({root,workbench:tampered})).rejects.toThrow(/does not reproduce/);
   } finally {
     if(!root.startsWith(join(tmpdir(),'workbench-correction-test-')))throw Error('Unexpected temporary workspace');
     await rm(root,{recursive:true,force:true});

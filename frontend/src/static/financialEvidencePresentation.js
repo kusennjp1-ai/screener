@@ -1,7 +1,7 @@
 import { instrumentApplicability, instrumentApplicabilityLabel, INSTRUMENT_IDENTITY_FIELDS } from './instrumentApplicability.js';
-import { assess } from './researchEngine.js';
+import { assess, annualGrowthRule } from './researchEngine.js';
 import { projectFinancialRow } from './financialCurrent.js';
-import { financialHistory } from './financialHistory.js';
+import { financialHistory, financialHistoryDeadlines, ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
 import { validClock, validEvidenceDay } from './evidenceTime.js';
 
 // Presentation of the shared current-use projection and existing assessment.
@@ -65,7 +65,7 @@ export const financialUnknownReason = reason => ({
   missing_condition: 'この値に対応する選定条件の判定が未確認です。',
   value_mismatch: '実数値と選定条件の判定値が一致しません。',
   missing_value: '実数値が未取得です。',
-  invalid_history: '有効なUSD報告希薄化EPS履歴がありません（取得後72時間・銘柄・日付などを確認）。',
+  invalid_history: '有効な報告希薄化EPS履歴がありません（取得後72時間・銘柄・日付などを確認）。',
   incomplete_annual_history: '3年の成長履歴に必要な連続4期の年次EPSが揃っていません。',
   incomparable_annual_growth: '年次成長率を比較できません（欠損・ゼロ／赤字基準年・期間不整合など）。',
 }[reason] || '現在の判定に使える根拠を確認できません。');
@@ -141,20 +141,24 @@ const metadata = data => ({
 function annualRow(history, context, required, condition) {
   const { symbol, date, now, method } = context;
   const report = financialHistory(history, symbol, date, now);
-  let reason = !report.valid ? 'invalid_history' : !sourceLabel(history.source) ? 'missing_source' : !finite(timestamp(history.retrieved_at)) ? 'missing_observed_at' : null;
-  if (!reason && !report.annualComplete) reason = 'incomplete_annual_history';
-  if (!reason && method !== 'ibd' && !report.annualGrowth) reason = 'incomparable_annual_growth';
+  const reason = !report.valid ? 'invalid_history' : !sourceLabel(history.source) ? 'missing_source' : !finite(timestamp(history.retrieved_at)) ? 'missing_observed_at' : null;
+  const unavailable = !report.annualComplete ? 'incomplete_annual_history' : method !== 'ibd' && !report.annualGrowth ? 'incomparable_annual_growth' : null;
   const value = method === 'ibd' ? report.annualComplete : report.annualGrowth ? Math.min(...report.annualGrowth) : null;
-  const decision = !reason && required ? conditionState(condition, value) : { state: reason ? 'unknown' : 'reference', reason };
+  const knownFailure = method === 'oneil' && annualGrowthRule(report).state === 'fail';
+  let decision = !reason && required && (!unavailable || knownFailure) ? conditionState(condition, value) : { state: reason || unavailable ? 'unknown' : 'reference', reason: reason || unavailable };
+  if (!reason && required && knownFailure && !report.annualGrowth && decision.state !== 'fail') decision = { state: 'unknown', reason: 'value_mismatch' };
+  // A failed conjunction and incomplete inputs are independent facts. Keep the
+  // missing/noncomparable year visible even when a different year proves fail.
+  const partial = !reason && method !== 'ibd' && !report.annualGrowth && report.annualComparisons.length === 3;
   return {
-    ...decision,
-    actual: reason ? '未確認' : report.annualGrowth ? report.annualGrowth.map(n => `${number(n)}%`).join(' → ') : '連続4期の年次EPSあり（成長率は比較不可）',
+    ...decision, availability: report.annualComplete ? 'complete' : 'incomplete', availabilityReason: unavailable,
+    actual: reason ? '未確認' : partial ? `${annualAvailabilityText(report)}。${report.annualComparisons.map(annualComparisonText).join(' / ')}` : unavailable ? '未確認' : report.annualGrowth ? report.annualGrowth.map(n => `${number(n)}%`).join(' → ') : '連続4期の年次EPSあり（成長率は比較不可）',
     period: report.annual.length ? `${report.annual.slice(-4)[0].end} ～ ${report.annual.at(-1).end}` : '決算期 未確認',
     source: sourceLabel(history?.source) ? history.source : '提供元 未確認',
-    observedAt: finite(timestamp(history?.retrieved_at)) ? history.retrieved_at : '取得時刻 未確認',
+    observedAt: finite(timestamp(history?.annual_source?.observed_at || history?.retrieved_at)) ? history.annual_source?.observed_at || history.retrieved_at : '取得時刻 未確認',
     metric: '希薄化EPS（報告値・年次）',
-    basis: '報告希薄化EPS・USD / 独立した年次履歴',
-    unit: report.annualGrowth ? 'percent_points（USD報告希薄化EPSから算出した年次成長率）' : 'USD / 株（報告希薄化EPSの履歴・成長率は比較不可）',
+    basis: `報告希薄化EPS・${history?.annual_currency || history?.currency || '通貨未確認'} / 独立した年次履歴。${ANNUAL_REPORTED_LIMITATION}`,
+    unit: report.annualGrowth || partial ? `percent_points（${history.annual_currency || history.currency}報告希薄化EPSから算出した年次成長率）` : `${history?.annual_currency || history?.currency || '通貨未確認'} / 提供元の株式単位（報告希薄化EPSの履歴・成長率は比較不可）`,
   };
 }
 
@@ -224,8 +228,7 @@ export function buildFinancialEvidencePresentation(row, { method, date, generati
   }]));
   const deadlines = Object.values(metrics).filter(metric => metric.availability === 'current' || metric.source_validated).map(metric => timestamp(metric.valid_until)).filter(finite);
   const history = financialHistory(current.financial_history, current.symbol, date, now);
-  const historyObserved = timestamp(current.financial_history?.retrieved_at);
-  if (history.valid && finite(historyObserved)) deadlines.push(historyObserved + 72 * 3600000);
+  if (history.valid) deadlines.push(...financialHistoryDeadlines(current.financial_history).filter(deadline => deadline >= now));
   const saved = current.financial_historical;
   const historical = METRICS.flatMap(({ id }) => {
     const value = saved?.values?.[id];

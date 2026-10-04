@@ -41,10 +41,16 @@ it('builds the static app and hashes its financial contract using only the front
     // source hash here as well, inside the same frontend-only context.
     const workbench = spawnSync(process.execPath, ['--input-type=module', '-e', `
       import { exportWorkbench } from './tools/export-workbench.mjs';
+      import { workbenchRuleFingerprint } from './tools/workbench-comparison.mjs';
+      import { readFile, writeFile } from 'node:fs/promises';
       const result = await exportWorkbench({ root: './test-results/context-workbench',
         rows: [], manifest: { generated_at: '2026-10-02T20:00:00Z' },
         entry: { as_of_date: '2026-10-02', assets: {} }, researchContent: '[]' });
       if (!/^[a-f0-9]{64}$/.test(result.rule_version)) throw Error('Missing runtime source hash');
+      const nativeContract = './contracts/native_annual_history_v1.json';
+      const original = await readFile(nativeContract, 'utf8');
+      await writeFile(nativeContract, original + ' ');
+      if (await workbenchRuleFingerprint() === result.rule_version) throw Error('Native annual contract missing from policy fingerprint');
     `], { cwd: context, encoding: 'utf8', timeout: 20000 });
     expect(workbench.error).toBeUndefined();
     expect(workbench.status, workbench.stderr || workbench.stdout).toBe(0);

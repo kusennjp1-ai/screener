@@ -4,7 +4,7 @@ import DailyChanges from './DailyChanges';
 import { CHANGE_LABELS } from '../candidateHistory';
 afterEach(cleanup);
 const counts=extra=>({...Object.fromEntries(Object.keys(CHANGE_LABELS).map(key=>[key,0])),...extra});
-const detailQuery=(items,values)=>({data:{as_of:'2026-09-30',history:{previous_as_of:'2026-09-29'},changes:{minervini:{counts:counts(values),items}}}});
+const detailQuery=(items,values)=>({data:{as_of:'2026-09-30',comparison_basis:{schema_version:'current-policy-comparison-v1',mode:'saved_first_same_policy'},history:{previous_as_of:'2026-09-29'},changes:{minervini:{counts:counts(values),items}}}});
 
 it('shows loading rather than zero changes when only a summary or no data has arrived',()=>{
   const {rerender}=render(<DailyChanges query={{}} method="minervini"/>);
@@ -67,9 +67,32 @@ it('explains partial coverage while preserving comparable counts and default tra
 it('does not call first recording a failed comparison and keeps missing methods uncounted',()=>{
   const query=detailQuery([{symbol:'A',state:'incomparable',reason:'前回判定なし',changes:[]}],{incomparable:1});
   query.data.history.previous_as_of=null;
+  query.data.comparison_basis.mode='no_previous';
   const {rerender}=render(<DailyChanges query={query} method="minervini"/>);
   expect(screen.getByText('前回比較は、次の営業日の公開後から表示します。')).toBeVisible();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   rerender(<DailyChanges query={query} method="oneil"/>);
   expect(screen.getByRole('status')).toHaveTextContent('未取得を0件とは扱いません');
+});
+
+it('does not surface an older cached workbench as current candidate events',()=>{
+  const query=detailQuery([{symbol:'A',state:'new',changes:[]}],{new:1});delete query.data.comparison_basis;
+  render(<DailyChanges query={query} method="minervini"/>);
+  expect(screen.getByRole('alert')).toHaveTextContent('過去の件数を現在の候補変化として表示しません');
+  expect(screen.queryByText('A · 今回通過')).not.toBeInTheDocument();
+});
+
+it('visibly distinguishes current-policy incompatibility from old recorded events',()=>{
+  const query=detailQuery([{symbol:'A',state:'incomparable',reason:'ルール版が異なります。',changes:[]}],{incomparable:1});
+  query.data.comparison_basis={schema_version:'current-policy-comparison-v1',mode:'incompatible_policy'};
+  render(<DailyChanges query={query} method="minervini"/>);
+  expect(screen.getByRole('note')).toHaveTextContent('保存済みの旧ルールの通過・脱落を、現在の候補変化として表示しません');
+});
+
+it('labels preserved first-record comparisons under the same policy',()=>{
+  const query=detailQuery([{symbol:'A',state:'unchanged',changes:[]}],{unchanged:1});
+  query.data.comparison_basis={schema_version:'current-policy-comparison-v1',mode:'saved_first_same_policy'};
+  render(<DailyChanges query={query} method="minervini"/>);
+  expect(screen.getByRole('note')).toHaveTextContent('同じルールで保存した初回判定を比較');
+  expect(screen.getByRole('note')).toHaveTextContent('後からの財務更新で、過去の通過・脱落を変更しません');
 });

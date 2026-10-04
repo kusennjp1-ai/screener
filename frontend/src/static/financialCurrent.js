@@ -1,7 +1,7 @@
 import { instrumentApplicability, instrumentIdentityEvidence, corporateFinancialsAllowed, INSTRUMENT_IDENTITY_FIELDS } from './instrumentApplicability.js';
 import contract from '../../contracts/static_financial_current_v1.json' with { type: 'json' };
-import { validClock, validEvidenceDay, evidenceTimestamp } from './evidenceTime.js';
-import { financialHistory } from './financialHistory.js';
+import { validClock, validEvidenceDay } from './evidenceTime.js';
+import { financialHistory, financialHistoryDeadlines } from './financialHistory.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 
 export const FINANCIAL_FIELDS = Object.freeze(contract.field_order);
@@ -178,8 +178,10 @@ export function financialNextExpiry(rows, now = Date.now()) {
     const projected = projectFinancialRow(row, { now });
     if (projected.financial_current_state.next_expiry_at !== null) times.push(projected.financial_current_state.next_expiry_at + 1);
     if (currentFinancialHistory(row.financial_history, row.symbol, row.technical_audit?.as_of_date || row.as_of_date, now, row).valid) {
-      const end = evidenceTimestamp(row.financial_history.retrieved_at) + 72 * 3600000 + 1;
-      if (validClock(end) && end > now) times.push(end);
+      for (const deadline of financialHistoryDeadlines(row.financial_history)) {
+        const end = deadline + 1;
+        if (validClock(end) && end > now) times.push(end);
+      }
     }
     const book=bookFinancialCurrent(row.book_financials,row.symbol,row.technical_audit?.as_of_date || row.as_of_date,now,row);
     if (book.current && validClock(book.validUntil)) times.push(book.validUntil+1);

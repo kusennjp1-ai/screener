@@ -18,8 +18,14 @@ const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }
 const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
 const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
 const radarRoot = process.env.RADAR_BUILD && resolve(process.env.RADAR_BUILD);
+const inputBasis = process.env.DESIGN_INPUT_BASIS || 'same_verified_input';
+if (!['same_verified_input', 'same_prices_repaired_financials'].includes(inputBasis)) throw Error('Unknown Design input comparison basis');
+const comparisonMethod = inputBasis === 'same_verified_input'
+  ? 'same-data baseline/current'
+  : 'published-financial baseline versus certified-financial candidate; identical verified prices, different financial inputs; not a UI-only speed comparison';
 const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
-  method: 'Production Chromium. CDP CPU 4x, same-data baseline/current, HTTP responses cached in memory after warm-up. No human satisfaction inference.', screens: [], performance: [], failures: [] };
+  input_basis: inputBasis,
+  method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 async function serve(root) {

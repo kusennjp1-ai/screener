@@ -45,6 +45,7 @@ export function validateWorkbenchDetails(value, summary) {
   validateWorkbenchIdentity(value, summary.details, summary.as_of);
   if (IDENTITY_FIELDS.some(key => value[key] !== summary[key])) throw Error('Workbench details generation mismatch');
   if (JSON.stringify(value.history) !== JSON.stringify(summary.history)) throw Error('Workbench details history mismatch');
+  if (JSON.stringify(value.comparison_basis) !== JSON.stringify(summary.comparison_basis)) throw Error('Workbench details comparison basis mismatch');
   const methods = Object.keys(summary.changes || {});
   if (!methods.length || Object.keys(value.changes || {}).length !== methods.length) throw Error('Workbench details missing methods');
   for (const method of methods) {

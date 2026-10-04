@@ -11,6 +11,7 @@ vi.mock('./SetupRadar',()=>({default:()=> <section aria-label="セットアッ�
 vi.mock('../useWorkbench',()=>({useWorkbenchDetails:vi.fn(()=>({isLoading:true}))}));
 const props={rows:[],ranked:[],date:'2026-09-29',plan:{dailyPositions:[],allocationCap:0,market:{label:'市場未確認'}},workbench:{},availableSymbols:new Set()};
 const counts=extra=>({...Object.fromEntries(Object.keys(CHANGE_LABELS).map(key=>[key,0])),...extra});
+const comparisonBasis={schema_version:'current-policy-comparison-v1',mode:'saved_first_same_policy'};
 beforeEach(()=>{localStorage.clear();vi.clearAllMocks();});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('persists the compact hero choice across mounts and restores its content',()=>{
@@ -51,15 +52,18 @@ it('does not report a real candidate count while the publication is loading',()=
  expect(screen.getByText('日足検証 —')).toBeInTheDocument();
 });
 it('groups daily changes with the portfolio action while retaining the full desktop counts',()=>{
- const workbench={data:{history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({new:7,returned:2,dropped:3})}}}};
- render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
+ const workbench={data:{comparison_basis:comparisonBasis,history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({new:7,returned:2,dropped:3})}}}};
+ const {rerender}=render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
  const trigger=screen.getByRole('button',{name:'候補の日次変化'});
  expect(trigger.closest('.hero-actions')).not.toBeNull();
  expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('新たに通過 7 · 再通過 2 · 脱落 3');
  expect(screen.getByRole('link',{name:'業種の追い風を見る →'}).closest('.overview-market')).not.toBeNull();
+ rerender(<ResearchHero {...props} workbench={{data:{...workbench.data,comparison_basis:undefined}}} method="minervini"/>);
+ expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('変化：比較基準未確認');
+ expect(trigger).not.toHaveTextContent('新たに通過 7');
 });
 it('shows comparison coverage from summary counts and loads explanations only when opened',()=>{
- const workbench={data:{history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({incomparable:2430}),item_count:2430}}}};
+ const workbench={data:{comparison_basis:comparisonBasis,history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({incomparable:2430}),item_count:2430}}}};
  const {rerender}=render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
  const trigger=screen.getByRole('button',{name:'候補の日次変化'});
  expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('変化：全2430銘柄が比較不能');

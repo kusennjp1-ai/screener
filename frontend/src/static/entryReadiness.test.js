@@ -11,10 +11,10 @@ it('keeps allocation empty while required financial ratings remain unverified',(
  const r=row(), result=entryReadiness(r,date,{cap:.5,label:'上昇'},now);
  expect(assess(r,'minervini',now)).toMatchObject({qualified:true,passed:9,total:9});
  expect(result.rules.find(rule=>rule.id==='selection')).toMatchObject({
-  label:'選定条件',state:'unknown',
-  detail:expect.stringContaining('共通の購入モデル：ミネルヴィニ'),
+  label:'共通購入モデルへの適合',state:'unknown',
+  detail:expect.stringContaining('ミネルヴィニとIBD型の両方を確認するアプリの共通購入モデル'),
  });
- expect(result.status).toBe('選定条件を確認');
+ expect(result.status).toBe('共通購入モデルへの適合を確認');
  expect(result.ready).toBe(false); expect(result.rules.find(rule=>rule.id==='selection').state).toBe('unknown');
  const plan=buildPortfolioPlan([r],date,100000,now);
  expect(plan.decision).toBe('購入条件を満たす銘柄なし'); expect(plan.dailyPositions).toHaveLength(0);
@@ -76,7 +76,7 @@ it('keeps missing selection evidence unknown instead of calling it a measured fa
  expect(entryReadiness(r,date,{cap:.5,label:'上昇'},now).rules[0].state).toBe('unknown');
  expect(entryReadiness(withFinancialProof(r,now,date),date,{cap:.5,label:'上昇'},now).rules[0].state).toBe('fail');
  const measured=entryReadiness(withFinancialProof(r,now,date),date,{cap:.5,label:'上昇'},now).rules[0];
- expect(measured.id).toBe('selection');expect(measured.label).toBe('選定条件');
+ expect(measured.id).toBe('selection');expect(measured.label).toBe('共通購入モデルへの適合');expect(measured.detail).toContain('ミネルヴィニとIBD型の両方');
  expect(measured.detail).toContain('ミネルヴィニ 9/9');
 });
 it('distinguishes unknown market context from a known restrictive market',()=>{

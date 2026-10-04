@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +12,7 @@ import { encodeResearchIndex, decodeResearchIndex, RESEARCH_METHODS } from '../s
 import { prepareResearchBundle } from '../src/static/researchPreprocess.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as now } from '../src/static/testFinancialFixture.js';
-import { researchEvaluation, validatePublishedSummaries, validateResearchParity } from './research-quality.mjs';
+import { researchEvaluation, validatePublishedSummaries, validateResearchListSummaries, validateResearchParity } from './research-quality.mjs';
 
 const metadata = { financial_evaluated_at: now, financial_semantics: 'current_at_evaluation_not_historical_publication', assessment_version: RULE_SUMMARY_VERSION };
 const sample = (extra = {}) => withFinancialProof(withAuditFixture({ symbol: 'TEST', market: 'US', currency: 'USD', current_price: 100,
@@ -22,6 +23,34 @@ const pack = rows => encodeResearchIndex({ as_of_date: date, ...metadata, rows: 
   method_summary: { ...row.method_summary, ...Object.fromEntries(RESEARCH_METHODS.map(method => [method, encodeAssessment(row.method_summary[method])])) } })) });
 
 describe('publication summaries and current canonical decisions', () => {
+  it('selects the smaller compressed lossless column form without changing decoded inputs', () => {
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ symbol: `T${i}`, value: i < 200 ? i / 100 + 1e-12 : null }));
+    const index = { as_of_date: date, rows };
+    const rawChoice = encodeResearchIndex(index);
+    const compact = encodeResearchIndex(index, undefined, { columnBytes: column => gzipSync(JSON.stringify(column)).length });
+    expect(decodeResearchIndex(compact)).toEqual(decodeResearchIndex(rawChoice));
+    expect(gzipSync(JSON.stringify(compact)).length).toBeLessThan(gzipSync(JSON.stringify(rawChoice)).length);
+  });
+  it('omits only explicitly signaled list summaries and independently checks canonical decisions', () => {
+    const details = [stamped(sample({ symbol: 'A' })), stamped(sample({ symbol: 'B', eps_growth_yy: -10 }))];
+    const rows = details.map(({ method_summary, ...row }) => { void method_summary; return row; });
+    const wire = encodeResearchIndex({ ...metadata, as_of_date: date, summary_storage: 'canonical-detail-v1', rows });
+    const index = decodeResearchIndex(wire);
+    expect(() => validateResearchListSummaries(wire, index.rows, now)).not.toThrow();
+    expect(() => validatePublishedSummaries(details, now)).not.toThrow();
+    expect(() => validateResearchParity(wire, details, now)).not.toThrow();
+    const expired = details[0].financial_current.p['1'][5] + 1;
+    expect(() => validateResearchParity(wire, details, expired)).not.toThrow();
+    expect(() => validateResearchListSummaries({ ...wire, summary_storage: undefined }, index.rows, now)).toThrow('summary evaluation mismatch');
+    expect(() => validateResearchListSummaries({ ...wire, schema: 'research-table-v1' }, index.rows, now)).toThrow('summary storage');
+    expect(() => validateResearchListSummaries({ ...wire, summary_storage: 'ignore-everything' }, index.rows, now)).toThrow('summary storage');
+    expect(() => validateResearchListSummaries(wire, details, now)).toThrow('summary storage');
+    const corrupted = structuredClone(details);
+    corrupted[0].method_summary.minervini.passed = 0;
+    expect(() => validatePublishedSummaries(corrupted, now)).toThrow('Rule summary mismatch');
+    corrupted[0].technical_audit.values.sma50 = 200;
+    expect(() => validateResearchParity(wire, corrupted, now)).toThrow('Canonical detail rule mismatch');
+  });
   it('runs the complete export and quality gate against one coherent static bundle', async () => {
     const root = await mkdtemp(join(tmpdir(), 'quality-export-replay-'));
     try {

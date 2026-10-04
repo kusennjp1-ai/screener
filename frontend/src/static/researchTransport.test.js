@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeResearchIndex, decodeResearchIndex, researchListRow, RESEARCH_METHODS } from './researchTransport';
+import { encodeResearchIndex, decodeResearchIndex, researchListRow, RESEARCH_METHODS, RESEARCH_TRANSPORT_VERSION } from './researchTransport';
 import { prepareResearchBundle } from './researchPreprocess';
 import { assess, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from './researchEngine';
 import { withAuditFixture } from './testAuditFixture';
@@ -12,6 +12,49 @@ const ordersFor = rows => Object.fromEntries(RESEARCH_METHODS.map(method => [met
 const encode = rows => encodeResearchIndex({ as_of_date: date, rows }, ordersFor(rows));
 
 describe('lossless compact research transport', () => {
+  it('decodes retained v1 dictionaries without changing absence, null, false or exact numbers', () => {
+    const legacy = { schema: 'research-table-v1', as_of_date: date, count: 5, fields: [['symbol'], ['value']],
+      columns: [{ values: ['A', 'B', 'C', 'D', 'E'] }, { pool: [null, false, 0, 24.999999999999996], refs: [-1, 0, 1, 2, 3] }] };
+    expect(decodeResearchIndex(legacy).rows).toEqual([{ symbol: 'A' }, { symbol: 'B', value: null }, { symbol: 'C', value: false }, { symbol: 'D', value: 0 }, { symbol: 'E', value: 24.999999999999996 }]);
+  });
+  it('uses explicitly versioned sparse columns without losing exact values or absence', () => {
+    const rows = Array.from({ length: 80 }, (_, i) => ({ symbol: `S${i}`,
+      ...(i === 0 || i > 60 ? {} : { value: [null, false, 0, 24.999999999999996][i - 1] ?? (i === 1 ? null : i + 1e-12) }) }));
+    const wire = encodeResearchIndex({ as_of_date: date, rows });
+    expect(wire.schema).toBe(RESEARCH_TRANSPORT_VERSION);
+    expect(wire.schema).not.toBe('research-table-v1');
+    expect(wire.column_encoding).toBe('sparse-binary-and-signed-zero-v1');
+    expect(wire.columns.some(column => column.present)).toBe(true);
+    expect(decodeResearchIndex(JSON.parse(JSON.stringify(wire))).rows).toEqual(rows);
+    expect(() => decodeResearchIndex({ ...wire, schema: 'research-table-v1' })).toThrow();
+    expect(() => decodeResearchIndex({ ...wire, column_encoding: 'future' })).toThrow();
+    expect(() => decodeResearchIndex({ ...wire, column_encoding: undefined })).toThrow();
+  });
+  it.each([
+    { present: [1, 2], missing: [[1, 2], [1, 2]] },
+    { present: [1], missing: [[0, 2], [1, 3]] },
+    { present: [1, 2], missing: [[0, 1], [1, 2]] },
+    { present: [1, 2, 3], missing: [[-1, 0]] },
+    { present: [1, 2, 3], missing: [[0, 0]] },
+    { present: [1, 2], missing: [[2, 4]] },
+    { present: [1, 2], missing: [[1.5, 2.5]] },
+    { present: [1, 2], missing: [[1]] },
+    { present: [1, 2], missing: [[1, 2, 3]] },
+    { present: [1, 2], missing: [] },
+    { present: [1, 2, 3, 4], missing: [] },
+    { present: [1, 2], missing: null },
+    { present: null, missing: [[0, 3]] },
+    { present: [1, 2], missing: [[1, 2]], values: [1, null, 2] },
+  ])('rejects malformed sparse intervals, counts and mixed representations: %j', column => {
+    const wire = { schema: RESEARCH_TRANSPORT_VERSION, column_encoding: 'present-values-and-missing-runs-v1', as_of_date: date, count: 3, fields: [['value']], columns: [column] };
+    expect(() => decodeResearchIndex(wire)).toThrow();
+  });
+  it('rejects duplicate fields and applies ordinary copy columns after sparse reconstruction', () => {
+    const wire = { schema: RESEARCH_TRANSPORT_VERSION, column_encoding: 'present-values-and-missing-runs-v1', as_of_date: date, count: 3,
+      fields: [['value'], ['alias']], columns: [{ present: [0, 1.125], missing: [[1, 2]] }, { copy: 0, patch: [] }] };
+    expect(decodeResearchIndex(wire).rows).toEqual([{ value: 0, alias: 0 }, {}, { value: 1.125, alias: 1.125 }]);
+    expect(() => decodeResearchIndex({ ...wire, fields: [['value'], ['value']] })).toThrow('Duplicate research field');
+  });
   it.each([undefined,null])('keeps the valid payload date when expected date is %s',expectedDate=>{
     expect(prepareResearchBundle([{as_of_date:date,rows:[]}],expectedDate).date).toBe(date);
   });

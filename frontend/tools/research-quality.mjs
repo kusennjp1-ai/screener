@@ -3,7 +3,7 @@ import { decodeAssessment } from '../src/static/assessmentEncoding.js';
 import { validClock } from '../src/static/evidenceTime.js';
 import { assess, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
 import { prepareResearchBundle } from '../src/static/researchPreprocess.js';
-import { decodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
+import { decodeResearchIndex, RESEARCH_METHODS, RESEARCH_TRANSPORT_VERSION } from '../src/static/researchTransport.js';
 import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 
 // A publication is an observation at its declared instant. Never infer that
@@ -31,6 +31,15 @@ export function validatePublishedSummaries(rows, evaluatedAt) {
       if (!serialized || !isDeepStrictEqual(serialized, expected)) throw Error(`Rule summary mismatch: ${row.symbol}/${method}`);
     }
   }
+}
+
+// v2 can explicitly keep cached summaries only in canonical detail. The
+// checker still validates those summaries and every current list/detail rule.
+// Legacy bundles and bundles carrying list summaries retain the strict check.
+export function validateResearchListSummaries(wire, rows, evaluatedAt) {
+  if (wire.summary_storage === undefined) return validatePublishedSummaries(rows, evaluatedAt);
+  if (wire.schema !== RESEARCH_TRANSPORT_VERSION || wire.summary_storage !== 'canonical-detail-v1' ||
+      !validClock(evaluatedAt) || rows.some(row => Object.hasOwn(row, 'method_summary'))) throw Error('Invalid research summary storage');
 }
 
 // The caller supplies one clock for every surface in this comparison. A later
