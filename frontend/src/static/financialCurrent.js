@@ -109,6 +109,15 @@ function validateField(row, field, index, proof, now, date) {
 // Re-projecting a withheld scalar cannot restore it from a raw alias or proof.
 export function projectFinancialRow(input, { now = Date.now(), asOfDate, market } = {}) {
   if (!object(input)) return input;
+  const cached = ownedProjections.get(input);
+  if (cached) {
+    // An owned row already carries its supplied context. Check the full cache
+    // boundary before allocating a copy on each ranking/expiry/portfolio pass.
+    const date = asOfDate ?? input.as_of_date ?? input.technical_audit?.as_of_date;
+    const contextMarket = market ?? input.market;
+    const applicability = instrumentApplicability(input);
+    if (cached.identity === JSON.stringify(INSTRUMENT_IDENTITY_FIELDS.map(field=>input[field])) && cached.applicability === JSON.stringify(applicability) && !Object.hasOwn(input, 'method_summary') && cached.now === now && cached.date === date && cached.market === contextMarket && cached.rowMarket === input.market && cached.symbol === input.symbol && cached.rowDate === input.as_of_date && cached.auditDate === input.technical_audit?.as_of_date && input.financial_current === cached.proof && input.financial_current_state === cached.state && protectedFields.every(field => input[field] === cached.values[field]) && ['screener_results','screener_details','screeners'].every(key=>input[key]===cached.nested[key])) return input;
+  }
   const row = { ...input };
   const date = asOfDate ?? row.as_of_date ?? row.technical_audit?.as_of_date;
   const contextMarket = market ?? row.market;
@@ -118,8 +127,6 @@ export function projectFinancialRow(input, { now = Date.now(), asOfDate, market 
   if (!Object.hasOwn(row,'market') && market!==undefined) row.market=market;
   const applicability = instrumentApplicability(row);
   const blocked = applicability.status !== 'unverified';
-  const cached = ownedProjections.get(input);
-  if (cached && cached.identity === JSON.stringify(INSTRUMENT_IDENTITY_FIELDS.map(field=>input[field])) && cached.applicability === JSON.stringify(applicability) && !Object.hasOwn(input, 'method_summary') && cached.now === now && cached.date === date && cached.market === contextMarket && cached.rowMarket === input.market && cached.symbol === input.symbol && cached.rowDate === input.as_of_date && cached.auditDate === input.technical_audit?.as_of_date && input.financial_current === cached.proof && input.financial_current_state === cached.state && protectedFields.every(field => input[field] === cached.values[field]) && ['screener_results','screener_details','screeners'].every(key=>input[key]===cached.nested[key])) return input;
   const proof = row.financial_current;
   const invalid = blocked ? applicability.reason : envelopeReason(row, proof, now, date, contextMarket);
   delete row.financial_applicability;

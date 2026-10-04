@@ -17,7 +17,7 @@ function RelativeBar({value}) {
   </span>;
 }
 function Rate({rate,small}) {
-  if(!rate)return <span>未確認</span>;
+  if(!rate)return <span className="sector-rate" role="img" aria-label="現在の条件通過率は未確認">未確認</span>;
   return <span className="sector-rate" role="img" aria-label={`条件通過率 ${sectorNumber(rate.percent)}${rate.percent==null?'':'%'}。通過${rate.pass}、全対象${rate.total}、未確認${rate.unknown}銘柄${small?'。10銘柄未満の少数標本':''}`}>
     <span className="sector-rate-top"><i aria-hidden="true"><b style={{width:`${Number.isFinite(rate.percent)?Math.max(0,Math.min(100,rate.percent)):0}%`}}/></i><strong>{sectorNumber(rate.percent)}{rate.percent==null?'':'%'}</strong></span>
     <small><span>{rate.pass} / {rate.total}</span><span className="sector-rate-missing"> · 未確認{rate.unknown}{small?' *':''}</span></small>
@@ -41,13 +41,14 @@ export default function SectorStrength({entry}) {
   if(query.isError)return <Alert severity="error">業種データの基準日または取得状態を確認できません。</Alert>;
   if(!sectors)return <p>業種の相対強度を読み込み中…</p>;
   return <section className="sector-strength" aria-label="業種の相対強度と通過率">
-    <header className="sector-heading"><div className="research-kicker">市場 · 業種の強さ · {entry.as_of_date || sectors.as_of || '未確認'}</div><h1>{readings.heading}</h1><p className="sector-subheading">{readings.subheading}</p></header>
+    <header className="sector-heading"><div className="research-kicker">市場 · 業種の強さ · {entry.as_of_date || sectors.as_of || '未確認'}</div><h1>{readings.heading}</h1><p className="sector-subheading">{readings.subheading}</p>
+      {!bundle.data&&<p role="status">{bundle.isError||!entry?.assets?.research?.path?'現在の財務根拠を確認できません。':'現在の財務根拠を再確認しています。'}条件通過率は未確認です。</p>}
+    </header>
     <div className="sector-controls">
       <label>期間<select value={period} onChange={e=>setPeriod(e.target.value)} aria-label="相対強度の期間"><option value="63">63営業日</option><option value="126">126営業日</option></select></label>
       <label>選定方式<select value={method} onChange={e=>setMethod(e.target.value)}><option value="minervini">ミネルヴィニ</option><option value="minervini2">基本と原則</option><option value="oneil">オニール / CAN SLIM</option><option value="ibd">IBD型リーダー</option></select></label>
       <div className="sector-view" role="group" aria-label="業種の表示形式"><button aria-pressed={view==='bars'} onClick={()=>setView('bars')}>順位と棒</button><button aria-pressed={view==='table'} onClick={()=>setView('table')}>表</button></div>
     </div>
-    {!bundle.data&&<p role="status">現在の財務根拠を再確認しています。条件通過率は未確認です。</p>}
     <div className="sector-dashboard">
       <div className="sector-list-panel">
         {view==='table' ? <div className="sector-table-scroll"><table aria-label="業種の相対強度一覧"><thead><tr><th>業種 / 代理ETF</th><th>相対指数</th><th>21日変化</th><th>通過 / 全対象</th></tr></thead><tbody>{groups.map(g=><tr key={g.key} data-highlight={highlight===g.key} onMouseEnter={()=>setHighlight(g.key)} onMouseLeave={()=>setHighlight(null)}><th><a href={sectorHref(g,method)} onFocus={()=>setHighlight(g.key)} onBlur={()=>setHighlight(null)}>{g.label} / {g.etf||'—'}</a></th><td>{sectorNumber(sectorValue(g,period))}</td><td>{sectorChange(g.momentum21?.value==null?null:g.momentum21.value-100)}</td><td><Rate rate={g.rates[method]} small={g.small}/></td></tr>)}</tbody></table></div> : <>

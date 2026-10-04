@@ -205,6 +205,42 @@ describe('financial projection ownership and expiry', () => {
     expect(project(projected, { asOfDate: '2026-10-01', market: 'US' }).eps_growth_qq).toBeNull();
   });
 
+  it.each([
+    ['proof replacement', row => { row.financial_current = { ...row.financial_current, m: 'HK' }; }],
+    ['source contract', row => { const proof = structuredClone(row.financial_current); proof.p[0][1] = 'unknown'; row.financial_current = proof; }],
+    ['state replacement', row => { row.financial_current_state = { ...row.financial_current_state }; }],
+    ['identity evidence', row => { row.financial_identity = { symbol: 'OTHER' }; }],
+    ['observed instrument identity', row => { row.instrument_identity = { observed_contexts: [{ company_name: 'Changed issuer' }] }; }],
+    ['nested scanner replacement', row => { row.screeners = { canslim: { score: 100, passes: true } }; }],
+  ])('retains the owned-row invalidation boundary for %s', (_label, mutate) => {
+    const projected = project(provenRow(25));
+    expect(project(projected)).toBe(projected);
+    mutate(projected);
+    const result = project(projected);
+    expect(result).not.toBe(projected);
+    expect(result).toEqual(project(structuredClone(projected)));
+  });
+
+  it('revalidates on forward and backward clock changes within the source lifetime', () => {
+    const projected = project(provenRow(25));
+    for (const clock of [now + 1, now - 1]) {
+      const result = project(projected, { now: clock });
+      expect(result).not.toBe(projected);
+      expect(result).toEqual(project(structuredClone(projected), { now: clock }));
+      expect(result.financial_current_state.evaluated_at).toBe(clock);
+    }
+  });
+
+  it('preserves supplied context and same-clock reuse with deeply immutable input', () => {
+    const input = provenRow(25);
+    delete input.market;
+    delete input.as_of_date;
+    const projected = project(freezeDeep(input), { market: 'US', asOfDate: '2026-10-01' });
+    expect(projected.eps_growth_qq).toBe(25);
+    expect(project(freezeDeep(projected), { market: 'US', asOfDate: '2026-10-01' })).toBe(projected);
+    expect(project(projected, { market: 'HK', asOfDate: '2026-10-01' }).eps_growth_qq).toBeNull();
+  });
+
   it('does not trust public projection state on an unowned raw row', () => {
     const input = provenRow(42);
     delete input.financial_current;

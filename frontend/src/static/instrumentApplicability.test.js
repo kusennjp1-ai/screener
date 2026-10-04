@@ -81,6 +81,17 @@ describe('one guard across corporate financial and technical consumers', () => {
     expect(projectFinancialRow(transported,{now}).instrument_applicability.status).toBe('quarantined');
     expect(mergeFinancialDetail(rows[0],{...rows[0],company_name:'Former Issuer',financial_history:history('BITU')},{now,asOfDate:date}).instrument_applicability.status).toBe('quarantined');
   });
+  it.each(['financial_source_evidence', 'institutional_evidence'])('revalidates changed %s identity inside the same owned row', key => {
+    const identity = { company_name: rows[0].company_name };
+    const input = { ...rows[0], [key]: key === 'financial_source_evidence' ? { identity } : identity };
+    const projected = projectFinancialRow(input, { now });
+    expect(projectFinancialRow(projected, { now })).toBe(projected);
+    identity.company_name = 'An unrelated issuer';
+    const changed = projectFinancialRow(projected, { now });
+    expect(changed).not.toBe(projected);
+    expect(changed.instrument_applicability.status).toBe('quarantined');
+    expect(changed).toEqual(projectFinancialRow(structuredClone(projected), { now }));
+  });
   it('keeps list/chart/payload, filters, counts, snapshots and CSV in agreement', () => {
     const input={...rows[0],quoteType:'ETF',quote_type:'ETF'}, bundle=prepareResearchBundle([{as_of_date:date,rows}],date,{now,generation:'test'});
     expect(bundle.rows).toHaveLength(3);

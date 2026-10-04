@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import ResearchHero from './ResearchHero';
 import { readFileSync } from 'node:fs';
+import registry from '../../../contracts/financial_instrument_applicability_v1.json';
 import { CHANGE_LABELS } from '../candidateHistory';
 import { useWorkbenchDetails } from '../useWorkbench';
 vi.mock('./PortfolioDecision',()=>({default:()=>null}));
@@ -112,4 +113,16 @@ it('opens daily changes from the keyboard and restores the trigger after Escape 
  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'候補の日次変化'})).not.toBeInTheDocument());
  expect(trigger).toHaveAttribute('aria-expanded','false');
  expect(trigger).toHaveFocus();
+});
+
+it('keeps the price and financial universes with all verified exclusions in the market summary',()=>{
+ const rows=[{symbol:'COMPANY',market:'US',current_price:100,adv_usd:3e7},...registry.records.map(record=>({symbol:record.symbol,company_name:record.name,market:record.market,current_price:100,adv_usd:3e7}))];
+ render(<ResearchHero {...props} rows={rows}/>);
+ const scope=screen.getByText(/価格・流動性対象 4件/);
+ expect(scope).toHaveTextContent('企業財務判定の対象 1件');
+ expect(scope).toHaveTextContent('確認済みファンド BITU・SBIT・ETHE は対象外');
+ expect(scope).toHaveClass('overview-universe');
+ expect(scope).not.toHaveClass('hero-subtitle');
+ expect(scope.closest('.overview-market')).not.toBeNull();
+ expect(screen.getByRole('link',{name:'業種の追い風を見る →'})).toBeInTheDocument();
 });
