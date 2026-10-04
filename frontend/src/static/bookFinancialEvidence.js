@@ -1,3 +1,5 @@
+export const BOOK_QUARTER_MAX_AGE_DAYS = 180;
+
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const stamp = s => {
   const t = typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) ? Date.parse(s) : NaN;
@@ -38,7 +40,7 @@ export function bookFinancialEvidence(data, symbol, date) {
     return { end, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin, epsYoY: yoy(q.eps, end), salesYoY: yoy(q.revenue, end), filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
   });
   result.valid = result.rows.length > 0;
-  result.stale = !result.rows.length || days(date, result.rows.at(-1).end) > 180;
+  result.stale = !result.rows.length || days(date, result.rows.at(-1).end) > BOOK_QUARTER_MAX_AGE_DAYS;
   const last = result.rows.slice(-4);
   const consecutive = last.length === 4 && last.slice(1).every((p, i) => days(p.end, last[i].end) >= 70 && days(p.end, last[i].end) <= 110);
   const comparable = consecutive && !result.stale;

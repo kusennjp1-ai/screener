@@ -66,8 +66,8 @@ export function entryReadiness(row, date, market, now = Date.now(), method = 'mi
   const checkedAt = timestamp(earnings?.checked_at);
   const recentEarnings = nowKnown && Number.isFinite(checkedAt) && now >= checkedAt && now - checkedAt <= 72*3600000;
   const shape = dated ? evidence.shape : null;
-  const minervini = assess(row, 'minervini'), ibd = assess(row, 'ibd');
-  const excluded = Boolean(row.corporate_action?.cash_acquisition || row.price_activity?.lowRange);
+  const minervini = assess(row, 'minervini', now), ibd = assess(row, 'ibd', now);
+  const excluded = Boolean(minervini.method_status || ibd.method_status || row.corporate_action?.cash_acquisition || row.price_activity?.lowRange);
   const selection = excluded || minervini.failed > 0 || ibd.failed > 0 ? false : minervini.unknown + ibd.unknown > 0 ? null : true;
   const audit = row.technical_audit?.as_of_date === date ? auditValues(row) : {};
   const volume = verifiedVolumeRatio(row, date);
@@ -84,8 +84,9 @@ export function entryReadiness(row, date, market, now = Date.now(), method = 'mi
     check('shape','ベース形状', shape ? shape.candidate : null, shape?.summary || (shape?.candidate === true ? '日足の自動検出による形状候補。詳細は銘柄の根拠を確認' : shape?.candidate === false ? '現在の形状条件は未達。詳細は銘柄の根拠を確認' : '日足による形状検証が未取得')),
     check('earnings','決算までの余裕', recentEarnings && earningsDays != null ? earningsDays > 7 && earningsDays <= 180 : null, recentEarnings && earningsDays != null ? `予定 ${earnings.date}・あと${earningsDays}日（予想日。7日以内は新規購入を見送るモデル設定）` : '決算予定日が未取得または取得から72時間超。自動取得の対象・結果を確認'),
   ];
+  if (minervini.method_status) rules[0] = { ...rules[0], state: minervini.method_status === 'not_applicable' ? 'not_applicable' : 'unknown', detail: minervini.applicability_label };
   const passed = rules.filter(r => r.state === 'pass').length;
   const failed = rules.filter(r => r.state === 'fail').length;
-  return { symbol:row.symbol, rules, passed, failed, unknown:rules.length - passed - failed, total:rules.length, ready:passed === rules.length,
+  return { symbol:row.symbol, rules, passed, failed, unknown:rules.filter(r=>r.state==='unknown').length, notApplicable:rules.filter(r=>r.state==='not_applicable').length, total:rules.length, ready:passed === rules.length,
     freshness, status:passed === rules.length ? '日次の買い条件通過' : rules.find(r=>r.state!=='pass')?.label + 'を確認' };
 }

@@ -1,3 +1,4 @@
+import { applicabilityUniverse } from '../instrumentApplicability';
 import { useMemo, useState } from 'react';
 import { useMediaQuery, Drawer, IconButton } from '@mui/material';
 import SetupRadar from './SetupRadar';
@@ -16,6 +17,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const small=useMediaQuery('(max-width:700px)');
  const [collapsed,setCollapsed]=useState(()=>{try{return localStorage.getItem('research-hero-collapsed')==='true';}catch{return false;}});
  const [changesOpen,setChangesOpen]=useState(false);
+ const universe=useMemo(()=>applicabilityUniverse(rows || ranked.map(item=>item.row)),[rows,ranked]);
  const counts=useMemo(()=>({qualified:ranked.filter(x=>x.assessment.qualified).length,zone:ranked.filter(x=>x.assessment.qualified&&entryPosition(x.row,null,'minervini').state==='買いゾーン内').length,verified:ranked.filter(x=>x.row.technical_audit?.valid===true).length}),[ranked]);
  const toggle=()=>{setCollapsed(!collapsed);try{localStorage.setItem('research-hero-collapsed',String(!collapsed));}catch{/* Default remains usable when storage is disabled. */}};
  const changes=dailyChangePresentation(workbench,method);
@@ -29,6 +31,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
     <div><small><span className="overview-step-number">3</span> 日次の購入条件</small><strong className="overview-next-check">個別に確認 <span aria-hidden="true">→</span></strong><span className="overview-step-note">市場・出来高・決算など</span></div>
    </div>
    <p className="overview-market"><span>{plan.market.label.replace('（独自判定）','')} · 新規上限 {loading?'—':Math.round(plan.allocationCap*100)}%</span><span>日足検証 {loading||!ranked.length?'—':`${(counts.verified/ranked.length*100).toFixed(small?0:1)}%`}</span><a href="#/breadth?tab=sectors">業種の追い風を見る →</a></p>
+   {!loading && universe.verified_fund_exclusions.length > 0 && <p className="hero-subtitle" data-universe-version={universe.version}>価格・流動性対象 {universe.price_liquidity_count.toLocaleString()}件 · 企業財務判定の対象 {universe.financial_applicable_count.toLocaleString()}件（確認済みファンド {universe.verified_fund_exclusions.map(item=>item.symbol).join("・")} は対象外）</p>}
    <div className="hero-actions"><PortfolioDecision compact rows={rows} date={date} plan={plan} onInspect={onInspect} onBrowse={onBrowse} renderTrigger={({openPlan,label})=><button onClick={openPlan} aria-haspopup="dialog" aria-label={label}><span className="desktop-plan-label">{label}</span><span className="mobile-plan-label">配分</span></button>}/>
    <button className="changes-trigger" aria-label="候補の日次変化" aria-haspopup="dialog" aria-expanded={changesOpen} onClick={()=>setChangesOpen(true)}><span className="changes-desktop">{changes.label}</span><span className="changes-mobile">変化</span></button></div>
   </div>

@@ -144,6 +144,8 @@ def fixture_cases():
 
 def test_contract_registry_matches_runtime():
     contract = json.loads((ROOT / "contracts/static_financial_current_v1.json").read_text())
+    frontend_contract = json.loads((ROOT / "frontend/contracts/static_financial_current_v1.json").read_text())
+    assert frontend_contract == contract
     assert contract["field_order"] == list(FINANCIAL_FIELDS)
     assert contract["reason_codes"] == REASON_CODES
     assert contract["contracts"] == CONTRACTS

@@ -1,3 +1,6 @@
+import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
+import { useFinancialClock } from '../useFinancialClock';
+import { mergeFinancialDetail } from '../financialCurrent';
 import ConnectionStatus from '../components/ConnectionStatus';
 import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
@@ -21,7 +24,7 @@ import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 import { usePersonalQuote } from '../usePersonalQuote';
 import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
-import { prepareResearchBundle } from '../researchPreprocess';
+import { prepareResearchBundle, researchBundleCurrent } from '../researchPreprocess';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
@@ -81,14 +84,19 @@ export default function ResearchPage({compareOnly=false}) {
   const readinessBoundaryAt = useMemo(() => prepareReadinessTimeline(rows), [rows]);
   const availableSymbols = useMemo(() => new Set(rows.map(r => r.symbol)), [rows]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
-  const detail = useQuery({queryKey:['researchDetail', selectedSummary?.research_detail_path, version],
-    enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity,
-    queryFn:async () => {
-      const value = await fetchStaticJson(selectedSummary.research_detail_path);
-      if (value.symbol !== selectedSummary.symbol || value.as_of_date !== bundle.data?.date) throw Error('Detail identity mismatch');
-      return value;
+  const detail = useQuery({queryKey:['researchDetail', selectedSummary?.symbol, selectedSummary?.research_detail_path, bundle.data?.date, version],
+    enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity, placeholderData:()=>undefined,
+    queryFn:async ({queryKey}) => {
+      const [,symbol,path,date,generation] = queryKey;
+      const value = await fetchStaticJson(path);
+      if (value.symbol !== symbol || value.as_of_date !== date) throw Error('Detail identity mismatch');
+      return {value,symbol,date,generation,path};
     }});
-  const selected = useMemo(() => selectedSummary && detail.data?.symbol === selectedSummary.symbol && detail.data?.as_of_date === bundle.data?.date ? {...detail.data, ...selectedSummary, price_quality:{...detail.data.price_quality,...selectedSummary.price_quality}, setup_recalculation:{...detail.data.setup_recalculation,...selectedSummary.setup_recalculation}} : selectedSummary, [selectedSummary, detail.data, bundle.data?.date]);
+  const detailResponse = detail.data;
+  const selectedClockRows=useMemo(()=>[selectedSummary,detailResponse?.value].filter(Boolean),[selectedSummary,detailResponse]);
+  const selectedFinancialNow=useFinancialClock(selectedClockRows);
+  const financialNow = Math.max(bundle.evaluatedNow ?? Date.now(),selectedFinancialNow);
+  const selected = useMemo(() => mergeFinancialDetail(selectedSummary,detailResponse?.value,{now:financialNow,asOfDate:bundle.data?.date,generation:version,detailGeneration:detailResponse?.generation,expectedDetailPath:selectedSummary?.research_detail_path,detailPath:detailResponse?.path}), [selectedSummary,detailResponse,bundle.data?.date,version,financialNow]);
   const initialSymbol = useRef(params.get('symbol'));
   useEffect(() => {
     // RouterLink uses pushState, which does not emit hashchange. Restore every
@@ -151,6 +159,7 @@ export default function ResearchPage({compareOnly=false}) {
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
+  const financialEvidence = useMemo(()=>selected ? buildFinancialEvidencePresentation(selected,{method,date:bundle.data?.date,generation:version,now}) : undefined,[selected,method,bundle.data?.date,version,now]);
   const portfolioPlan = useMemo(() => buildPortfolioPlan(rows, bundle.data?.date, 100000, now, portfolioPrepared), [rows, bundle.data?.date, now, portfolioPrepared]);
   const activeQuote = personalKey ? personal.quote : quote.data;
   const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, now);
@@ -181,18 +190,19 @@ export default function ResearchPage({compareOnly=false}) {
     verificationQueue.current = verificationQueue.current.then(async () => {
       const key = ['researchRows', researchPath, version];
       const previous = client.getQueryData(key);
-      if (previous?.date !== date) return;
+      if (previous?.date !== date || !researchBundleCurrent(previous,Date.now(),version ?? null)) return;
+      const evaluation={now:Date.now(),generation:version ?? null,evaluationEpoch:previous.evaluation_epoch+1};
       const updated = previous.rows.map(r => r.symbol === ticker ? { ...r, method_summary:undefined, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r);
       let next;
-      try { next = await refreshResearchBundle(updated, date); }
-      catch { next = prepareResearchBundle([{ rows: updated, as_of_date: date }], date); }
+      try { next = await refreshResearchBundle(updated, date,evaluation); }
+      catch { next = prepareResearchBundle([{ rows: updated, as_of_date: date }], date,evaluation); }
       // A refetch or a new publication may have replaced this snapshot while
       // the worker was running. Never resurrect the prior publication.
-      if (client.getQueryData(key) !== previous) return;
+      if (client.getQueryData(key) !== previous || !researchBundleCurrent(next,Date.now(),version ?? null)) return;
       client.setQueryData(key, next);
-      setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${result.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
+      setVerificationNotice(`${ticker}：日足再検証を候補一覧・判定根拠・配分に反映しました。${next.rankings?.[method]?.find(item=>item.row.symbol===ticker)?.assessment.qualified ? '選定条件を確認。' : '未充足または未確認の条件があります。全条件通過のみでは除外します。'}`);
     }).catch(() => setVerificationNotice(`${ticker}：再検証の反映に失敗しました。データを再取得してください。`));
-  }, [bundle.data?.date, version, client, researchPath]);
+  }, [bundle.data?.date, version, client, researchPath, method]);
   function focusDetail() { requestAnimationFrame(() => {
     detailRef.current?.focus?.({ preventScroll: true });
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
@@ -205,7 +215,7 @@ export default function ResearchPage({compareOnly=false}) {
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
   const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
   function download() {
-    const csv = researchCsv(ranked, method, bundle.data?.date);
+    const csv = researchCsv(ranked, method, bundle.data?.date, now);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
@@ -241,7 +251,7 @@ export default function ResearchPage({compareOnly=false}) {
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
       <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
-      {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
+      {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">
       <CandidatePerformance entry={entry}/>

@@ -305,15 +305,16 @@ it('keeps canonical summary price and pivot when the expanded detail arrives',as
 it('applies the selected 3% buy limit to the mobile expanded-chart checklist',async()=>{
  const {withAuditFixture}=await import('./testAuditFixture');
  const date='2026-09-29',now=Date.parse(`${date}T22:00:00Z`);
+ const clock=vi.spyOn(Date,'now').mockReturnValue(now);
  const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
   entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({symbol:'LIMIT',as_of_date:date,bars:[{date,close:104}],stock_data:row})})));
  const {unmount}=renderModal({open:true,onClose:vi.fn(),initialSymbol:'LIMIT',date,now,method:'minervini2',market:{cap:.5,label:'上昇'},researchRows:[row],chartIndex:{symbols:[{symbol:'LIMIT',path:'LIMIT.json'}]}});
- expect(await screen.findByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件 6/7');
+ expect(await screen.findByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件 5/7（未確認 1）');
  expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('買い位置');
  await screen.findByTestId('static-candlestick-chart');
- unmount();vi.unstubAllGlobals();
+ unmount();clock.mockRestore();vi.unstubAllGlobals();
 });
 it.each([[103.2,'minervini',true],[112.7,'minervini',true],[103,'minervini',false],[104,'minervini2',false]])('keeps the mobile first-book warning with readiness at %s for %s',async(price,method,warns)=>{
  const row={symbol:'SOURCE',company_name:'Source Test',current_price:price,se_pivot_price:100};
@@ -380,4 +381,58 @@ it('fits cached portal opens/reopens, refits chrome and keeps scrolling independ
   unmount();
   expect(reopenedObserver.disconnect).toHaveBeenCalledOnce();
   vi.restoreAllMocks(); vi.unstubAllGlobals();
+});
+
+
+it.each(['symbol', 'same-date-generation'])('ignores a late financial detail after %s changes', async change => {
+ const {withAuditFixture}=await import('./testAuditFixture');
+ const date='2026-10-02', now=Date.parse('2026-10-03T12:00:00Z');
+ let finishOld, finishNew;
+ const oldDetail=new Promise(resolve=>{finishOld=resolve;}),newDetail=new Promise(resolve=>{finishNew=resolve;});
+ const oldRow={symbol:'FIRST',market:'US',current_price:100,research_detail_path:'old-detail.json'};
+ const nextRow={...oldRow,symbol:change==='symbol'?'SECOND':'FIRST',research_detail_path:'new-detail.json'};
+ vi.stubGlobal('fetch',vi.fn(async url=>({ok:true,status:200,json:async()=>String(url).includes('old-detail')?oldDetail:String(url).includes('new-detail')?newDetail:{symbol:nextRow.symbol,as_of_date:date,bars:[{date,close:100}],stock_data:nextRow}})));
+ const first={open:true,onClose:vi.fn(),initialSymbol:'FIRST',date,now,generation:'g1',method:'minervini',researchRows:[oldRow],chartIndex:{symbols:[{symbol:'FIRST',path:'first-chart.json'}]}};
+ const view=renderModal(first);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringContaining('old-detail'),expect.any(Object)));
+ const next={...first,initialSymbol:nextRow.symbol,generation:'g2',researchRows:[nextRow],chartIndex:{symbols:[{symbol:nextRow.symbol,path:'second-chart.json'}]}};
+ view.rerenderModal(next);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringContaining('new-detail'),expect.any(Object)));
+ await act(async()=>finishOld({...withAuditFixture(oldRow,date),as_of_date:date,eps_growth_yy:999,eps_rating:99}));
+ expect(screen.getByText('詳細根拠を読み込み中…')).toBeInTheDocument();
+ expect(screen.queryByText('999')).not.toBeInTheDocument();
+ await act(async()=>finishNew({...nextRow,as_of_date:date,eps_growth_yy:888}));
+ await waitFor(()=>expect(screen.getByText('選定条件の詳細（0/9）')).toBeInTheDocument());
+ expect(screen.queryByText('888')).not.toBeInTheDocument();
+ view.unmount();vi.unstubAllGlobals();
+});
+
+it('projects the expanded raw-chart fallback and fundamentals before sidebar rendering',async()=>{
+ sidebarSpy.mockClear();
+ const date='2026-10-02',now=Date.parse('2026-10-03T12:00:00Z');
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,status:200,json:async()=>({symbol:'RAW',as_of_date:date,bars:[{date,close:100}],stock_data:{symbol:'RAW',eps_growth_yy:999,eps_rating:99,composite_score:98},fundamentals:{symbol:'RAW',eps_growth_yy:777,roe:55}})})));
+ const view=renderModal({open:true,onClose:vi.fn(),initialSymbol:'RAW',date,now,chartIndex:{symbols:[{symbol:'RAW',path:'raw-chart.json'}]}});
+ await screen.findByTestId('static-stock-sidebar');
+ await waitFor(()=>expect(sidebarSpy.mock.calls.at(-1)[0].stockData?.symbol).toBe('RAW'));
+ const sidebar=sidebarSpy.mock.calls.at(-1)[0];
+ expect(sidebar).toMatchObject({currentFinancialOnly:true,stockData:{eps_growth_yy:null,eps_rating:null,composite_score:null},fundamentals:{eps_growth_yy:null,roe:null}});
+ view.unmount();vi.unstubAllGlobals();
+});
+
+
+it.each([false,true])('expires cached fundamentals-only evidence in an open modal (fixed supplied clock: %s)', async supplied => {
+ const {withFinancialProof,FINANCIAL_TEST_DATE:date,FINANCIAL_TEST_NOW:now}=await import('./testFinancialFixture');
+ vi.useFakeTimers();vi.setSystemTime(now);sidebarSpy.mockClear();
+ const fundamentals=withFinancialProof({symbol:'FUND',eps_growth_qq:30},now,date);
+ fundamentals.financial_current.p[0][5]=now+150;
+ const payload={symbol:'FUND',market:'US',as_of_date:date,bars:[{date,close:100}],fundamentals};
+ const view=renderModal({open:true,onClose:vi.fn(),initialSymbol:'FUND',date,...(supplied?{now}:{}),chartIndex:{symbols:[{symbol:'FUND',path:'fund-only.json'}]}},payload);
+ try {
+  expect(sidebarSpy.mock.calls.at(-1)[0].fundamentals.eps_growth_qq).toBe(30);
+  await act(async()=>vi.advanceTimersByTimeAsync(150));
+  expect(sidebarSpy.mock.calls.at(-1)[0].fundamentals.eps_growth_qq).toBe(30);
+  await act(async()=>vi.advanceTimersByTimeAsync(1));
+  expect(sidebarSpy.mock.calls.at(-1)[0].fundamentals.eps_growth_qq).toBeNull();
+  expect(sidebarSpy.mock.calls.at(-1)[0].now).toBe(now+151);
+ } finally {view.unmount();vi.useRealTimers();}
 });

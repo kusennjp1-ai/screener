@@ -10,6 +10,7 @@ export function usePresetScreens({
   screens,
   allRows,
   hydrationComplete,
+  now = Date.now(),
 }) {
   const [activeScreenId, setActiveScreenId] = useState(null);
 
@@ -17,14 +18,14 @@ export function usePresetScreens({
     if (!hydrationComplete || !screens?.length) return {};
     return Object.fromEntries(
       screens.map((s) => {
-        const matched = filterStaticScanRows(allRows, buildFiltersFromPreset(s)).length;
+        const matched = filterStaticScanRows(allRows, buildFiltersFromPreset(s),{now}).length;
         // Capped screens (e.g. "IBD 50") report the capped count so the chip
         // reads like the editorial leaderboard rather than the raw match total.
         const count = s.limit ? Math.min(matched, s.limit) : matched;
         return [s.id, count];
       }),
     );
-  }, [allRows, hydrationComplete, screens]);
+  }, [allRows, hydrationComplete, screens, now]);
 
   return { activeScreenId, setActiveScreenId, matchCounts };
 }

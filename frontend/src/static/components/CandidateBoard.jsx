@@ -11,13 +11,13 @@ import { verifiedVolumeRatio } from '../qualificationAudit';
 import { signed, times, stateKey, STATES } from '../positionGeometry';
 const SORTS={rank:'選定・買い位置',distance:'ピボットに近い順',rs:'RSが高い順',volume:'出来高比が高い順',state:'状態'};
 const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(state));
-const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onSelect,onCompare,onMove}) {
+const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onSelect,onCompare,onMove,now}) {
  const {row:r,assessment:a,plan:p,readiness,volume}=item,key=stateKey(p.state),[label,glyph,tone]=STATES[key];
  const dailyLabel=readiness?`日次 ${readiness.passed}/${readiness.total}`:'日次 未確認';
  const nextCheck=readiness?.rules.find(rule=>rule.state!=='pass');
- const dailyDetail=readiness?.ready?'日次の購入条件をすべて通過。発注前に最新価格とリスクを確認':nextCheck?`${nextCheck.label}：${nextCheck.state==='unknown'?'未確認':'未達'}。${nextCheck.detail}`:'分析日または市場環境が未確認';
- const missing=useMemo(()=>nearOnly?singleMissingCondition(assess(r,method)):null,[nearOnly,r,method]);
- return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。選定 ${a.passed}/${a.total}。${dailyLabel}。${dailyDetail}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
+ const dailyDetail=readiness?.ready?'日次の購入条件をすべて通過。発注前に最新価格とリスクを確認':nextCheck?`${nextCheck.label}：${nextCheck.state==='not_applicable'?'対象外':nextCheck.state==='unknown'?'未確認':'未達'}。${nextCheck.detail}`:'分析日または市場環境が未確認';
+ const missing=useMemo(()=>nearOnly?singleMissingCondition(assess(r,method,now)):null,[nearOnly,r,method,now]);
+ return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。${a.applicability_label || `選定 ${a.passed}/${a.total}`}。${dailyLabel}。${dailyDetail}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
   if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
  }}>
@@ -27,7 +27,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
   <span className="candidate-rs mono"><span className="mobile-caption">RS </span>{Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'—'}</span>
   <span className="candidate-volume mono">{times(volume)}</span>
   {nearOnly&&<span className="candidate-missing" data-state={missing?.state||'unknown'} title={missing?`${missing.csv}${missing.evidence?` · ${missing.evidence}`:''}`:'公開サマリーと現在の根拠を再照合してください'}>{missing?.text||'判定資料を再確認'}</span>}
-  {!a.qualified&&!nearOnly&&<span className="candidate-incomplete">選定 {a.passed}/{a.total}{a.unknown?` · ?${a.unknown}`:''}</span>}
+  {!a.qualified&&!nearOnly&&<span className="candidate-incomplete">{a.applicability_label || `選定 ${a.passed}/${a.total}${a.unknown ? ` · ?${a.unknown}` : ''}`}</span>}
  </button>;
 });
 export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false}) {
@@ -69,7 +69,7 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
   {view==='charts'&&!loading&&<CandidateCharts ordered={ordered} {...{method,nearOnly,date,generation,market,now,paused}} onSelect={onCompare||onSelect}/>}
   <div className="candidate-scroll" ref={scrollRef} hidden={view!=='list'}>
    <div className="candidate-columns" role="group" aria-label="列の並べ替え">{[['rank','銘柄'],['state','買い位置'],['distance','ピボット比'],['rs','RS'],['volume','出来高']].map(([key,label])=><button key={key} aria-label={`${label}で並べ替え`} aria-pressed={sort===key} onClick={()=>sortBy(key)}>{label}{sort===key?' ↓':''}</button>)}</div>
-   <div role="list" aria-label="投資手法別の銘柄候補">{visible.map(item=><div role="listitem" key={item.row.symbol}><CandidateRow item={item} method={method} nearOnly={nearOnly} selected={item.row.symbol===selectedSymbol} onSelect={onSelect} onCompare={onCompare} onMove={move}/></div>)}</div>
+   <div role="list" aria-label="投資手法別の銘柄候補">{visible.map(item=><div role="listitem" key={item.row.symbol}><CandidateRow now={now} item={item} method={method} nearOnly={nearOnly} selected={item.row.symbol===selectedSymbol} onSelect={onSelect} onCompare={onCompare} onMove={move}/></div>)}</div>
   </div>
   {!ranked.length&&!loading&&<p className="candidate-help">該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</p>}
   {view==='list'&&maxPage>0&&<div className="candidate-pagination"><Button disabled={!current} onClick={()=>showPage(current-1)}>前の50件</Button><span>{current+1} / {maxPage+1}</span><Button disabled={current===maxPage} onClick={()=>showPage(current+1)}>次の50件</Button></div>}

@@ -3,7 +3,7 @@ import { financialHistory } from './financialHistory';
 import { assess } from './researchEngine';
 import { withAuditFixture } from './testAuditFixture';
 const now = Date.parse('2026-09-26T08:00:00Z');
-const fixture = () => ({symbol:'TEST',as_of_date:'2026-09-25',retrieved_at:'2026-09-26T07:00:00Z',status:'available',basis:'reported_diluted_eps',currency:'USD',
+const fixture = () => ({symbol:'TEST',as_of_date:'2026-09-25',retrieved_at:'2026-09-26T07:00:00Z',status:'available',source:'yfinance',basis:'reported_diluted_eps',currency:'USD',
   annual:[2022,2023,2024,2025].map((y,i)=>({end:`${y}-12-31`,eps:2**i})),
   quarterly:[{end:'2025-06-30',eps:1,revenue:100},{end:'2026-06-30',eps:2,revenue:130}]});
 it('calculates actual three annual rates and same-quarter YoY',()=>{

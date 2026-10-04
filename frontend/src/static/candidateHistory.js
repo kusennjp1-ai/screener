@@ -1,3 +1,4 @@
+import { INSTRUMENT_APPLICABILITY_VERSION } from './instrumentApplicability.js';
 import { assess } from './researchEngine.js';
 
 export const HISTORY_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
@@ -8,23 +9,23 @@ const knownSelectionState = result => result?.state === 'pass' || result?.state 
 const validRule = tuple => Array.isArray(tuple) && ['pass', 'fail', 'unknown'].includes(tuple[0]);
 export function selectionState(assessment) {
   // Missing evidence takes precedence over failure for change attribution.
-  return assessment.unknown ? 'unknown' : assessment.qualified ? 'pass' : 'fail';
+  return assessment.method_status === 'not_applicable' ? 'not_applicable' : assessment.method_status === 'quarantined' ? 'unknown' : assessment.unknown ? 'unknown' : assessment.qualified ? 'pass' : 'fail';
 }
-export function selectionSnapshot(rows, meta) {
+export function selectionSnapshot(rows, meta, now = Date.now()) {
   const definitions = {};
   const records = [...rows].sort((a,b)=>a.symbol.localeCompare(b.symbol)).map(row => {
     const methods = {};
     for (const method of HISTORY_METHODS) {
-      const a = assess(row, method);
+      const a = assess(row, method, now);
       definitions[method] ||= a.rules.map((r,i)=>({id:`${method}:${i+1}`,label:r.label,unit:r.unit || ''}));
       methods[method] = {state:selectionState(a), rules:a.rules.map(r=>[r.state,r.value ?? null,r.evidence ?? null])};
     }
     return {symbol:row.symbol, market:row.market || 'US', liquid:liquidState(row), methods};
   });
-  return {schema_version:1, ...meta, universe_version:UNIVERSE_VERSION, definitions, records};
+  return {schema_version:1, ...meta, universe_version:UNIVERSE_VERSION, instrument_applicability_version:INSTRUMENT_APPLICABILITY_VERSION, definitions, records};
 }
 export function compareSnapshots(current, previous, history = []) {
-  const compatible = previous && previous.as_of < current.as_of && previous.rule_version === current.rule_version && previous.universe_version === current.universe_version;
+  const compatible = previous && previous.as_of < current.as_of && previous.rule_version === current.rule_version && previous.universe_version === current.universe_version && previous.instrument_applicability_version === current.instrument_applicability_version;
   const before = new Map((previous?.records || []).map(r=>[`${r.market}:${r.symbol}`,r]));
   const after = new Map(current.records.map(r=>[`${r.market}:${r.symbol}`,r]));
   const keys = [...new Set([...before.keys(),...after.keys()])].sort();
@@ -45,6 +46,7 @@ export function compareSnapshots(current, previous, history = []) {
       else if (a.liquid !== true || b.liquid !== true) reason='流動性の対象範囲が変わった、または未確認です。';
       // Only explicit pass/fail observations support a transition. A present
       // object with a missing or unrecognized state is still missing evidence.
+      else if (old?.state === 'not_applicable' || next?.state === 'not_applicable') reason='株式手法の対象範囲が異なるため、価格変化による通過・脱落として比較しません。';
       else if (!knownSelectionState(old) || !knownSelectionState(next)) reason='条件に未確認があるため、通過・脱落を断定しません。';
       else if (old.state==='pass' && next.state==='pass') state='continued';
       else if (old.state==='pass') state='dropped';

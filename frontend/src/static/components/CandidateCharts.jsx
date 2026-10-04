@@ -1,3 +1,4 @@
+import { instrumentApplicability, instrumentApplicabilityLabel } from '../instrumentApplicability';
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Paper, useMediaQuery } from '@mui/material';
@@ -25,8 +26,9 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
   const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
+  const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
   const volume = verifiedVolumeRatio(row, date);
-  const missing = nearOnly ? singleMissingCondition(assess(row, method)) : null;
+  const missing = nearOnly ? singleMissingCondition(assess(row, method, now)) : null;
   return <Paper ref={ref} component="article" variant="outlined" className="comparison-card" data-method={method} aria-label={`${row.symbol} 比較チャート`}>
     <button className="comparison-card-click" onClick={() => onSelect(row.symbol)} aria-label={`${row.symbol} を分析`} aria-describedby={descriptionId}><span className="sr-only">{row.symbol} を分析</span></button>
     <div className="comparison-heading"><h3>{row.symbol}</h3><span className="comparison-state-chip" style={{ color: `var(--${tone})` }} title={plan.state}>{mark} {stateLabel}</span><span className="comparison-distance">ピボット比 <b style={{ color: `var(--${tone})` }}>{signed(plan.distance)}</b></span></div>
@@ -40,8 +42,9 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
                 : <div className="comparison-skeleton" role="status" aria-label={`${row.symbol} チャートを読み込み中`}><span /><span /><span /></div>}
     </div>
     <dl className="comparison-metrics"><div><dt>アプリ上限</dt><dd className="comparison-upper">{money(plan.upper)}</dd></div><div><dt>損切り例</dt><dd className="comparison-stop">{money(plan.stopExample)}</dd></div><div><dt>RS / 出来高</dt><dd>{Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '—'} · {times(volume)}</dd></div><div><dt>購入条件</dt><dd>{ready.passed}/{ready.total}</dd></div></dl>
+    {applicabilityLabel && <p>{applicabilityLabel}。価格・テクニカルは参考表示です。</p>}
     <EntrySourceNote plan={plan} compact/>
-    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? '書籍の追随目安外：第1冊の約2〜3%目安を超えています。' : ''}損切り例 {money(plan.stopExample)}。選定 {item.assessment.passed}/{item.assessment.total}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
+    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? '書籍の追随目安外：第1冊の約2〜3%目安を超えています。' : ''}損切り例 {money(plan.stopExample)}。{applicabilityLabel || `選定 ${item.assessment.passed}/${item.assessment.total}`}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
   </Paper>;
 });
 

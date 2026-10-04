@@ -316,7 +316,7 @@ describe('StaticHomePage', () => {
     }));
   });
 
-  it('keeps top candidate price sparklines within the compact table width', async () => {
+  it('keeps technical-reference sparklines readable when financial candidates are unknown', async () => {
     scanChunkPayload.rows[0].price_sparkline_data = [20, 22, 24];
     scanChunkPayload.rows[0].price_trend = 1;
     scanChunkPayload.rows[0].price_change_1d = 12.3;
@@ -325,22 +325,22 @@ describe('StaticHomePage', () => {
 
     // 0700.HK now also appears in the backtest-aligned list (C97), so scope the
     // assertion to the top-candidates section it is testing.
-    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    const topSection = await screen.findByTestId('backtest-aligned-section');
     expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
     expect(priceSparklineSpy).toHaveBeenCalledWith(expect.objectContaining({
       data: [20, 22, 24],
-      width: 137,
-      sparklineWidth: 86,
+      width: 195,
+      sparklineWidth: 150,
       change1d: 12.3,
     }));
   });
 
-  it('loads top candidates from the static scan bundle, filters by market cap, and keeps chart navigation aligned', async () => {
+  it('keeps the independent technical-reference market-cap filter and chart navigation aligned', async () => {
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     // Symbols can appear in both the top-candidates and backtest-aligned lists
     // (C97), so scope every symbol assertion to the top-candidates section.
-    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    const topSection = await screen.findByTestId('backtest-aligned-section');
     expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
     expect(screen.getAllByText('時価総額').length).toBeGreaterThan(0);
     expect(within(topSection).getByText('$500.0M')).toBeInTheDocument();
@@ -371,7 +371,7 @@ describe('StaticHomePage', () => {
     });
   });
 
-  it('uses the static scan manifest default volume for Daily top candidates', async () => {
+  it('keeps the manifest volume floor and explains unknown financial prerequisites', async () => {
     scanManifestPayload.default_filters = { minVolume: 1_300_000 };
     scanManifestPayload.preset_screens = [makeLeadersPresetScreen(1_300_000)];
     scanManifestPayload.initial_rows = [
@@ -416,9 +416,13 @@ describe('StaticHomePage', () => {
 
     // LOCALPASS passes RS>=70 so it also lists in the backtest-aligned section
     // (C97); scope to the top-candidates section under test.
-    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    const topSection = await screen.findByTestId('backtest-aligned-section');
     expect(await within(topSection).findByText('LOCALPASS')).toBeInTheDocument();
     expect(within(topSection).queryByText('TOOTHIN')).not.toBeInTheDocument();
+    const financialSection=screen.getByTestId('top-scan-candidates-section');
+    expect(financialSection).toHaveTextContent('財務・Code33の根拠が未確認の銘柄 2件');
+    expect(financialSection).toHaveTextContent('売買代金 1,300,000 以上');
+    expect(financialSection).not.toHaveTextContent('現在の条件に一致する銘柄はありません');
   });
 
   it('uses market liquidity defaults and composite ranking for leaders in leading groups', async () => {
