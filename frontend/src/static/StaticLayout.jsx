@@ -27,15 +27,17 @@ function StaticLayoutContent({children}) {
  const {selectedMarket,setSelectedMarket}=useStaticMarket(),markets=getStaticSupportedMarkets(manifest.data);
  const market=resolveStaticMarketEntry(manifest.data,['/','/compare'].includes(location.pathname)?'US':selectedMarket);
  const [search,setSearch]=useResearchSearch();
+ const preview=import.meta.env.VITE_RESEARCH_PREVIEW==='true';
  const current=location.pathname==='/compare'?'/compare':['/breadth','/groups','/scan'].includes(location.pathname)?'/breadth':'/';
  return <ThemeProvider theme={deskTheme}><style>{themeCss}</style><Box className={`leader-shell${location.pathname==='/'?' has-research-feed':''}`} data-theme={dark?'dark':'light'}>
   <header className="leader-header">
    <RouterLink to="/" className="leader-logo"><ShowChartIcon/><span>LEADER <em>RESEARCH</em></span></RouterLink>
+   {preview&&<span className="research-preview-badge" role="note" title="UIの検証版です。公開サイトには反映していません。">検証版</span>}
    <button className="mobile-header-back" onClick={()=>window.dispatchEvent(new CustomEvent('research:back'))}>← 候補一覧</button>
    <nav className="leader-desktop-nav" aria-label="メインナビゲーション">{NAV_ITEMS.map(({path,label})=><RouterLink key={path} to={path} aria-current={current===path?'page':undefined}>{label}</RouterLink>)}</nav>
    <div className="header-search">{['/','/compare'].includes(location.pathname)&&<ResearchSearch value={search} onChange={setSearch}/>}</div>
    {!['/','/compare'].includes(location.pathname)&&markets.length>1&&<select className="header-market" aria-label="市場切替" value={market.market} onChange={e=>setSelectedMarket(e.target.value)}>{markets.map(key=><option value={key} key={key}>{manifest.data?.markets?.[key]?.display_name||key}</option>)}</select>}
-   <div className="header-dates"><span>分析 {market.as_of_date||'取得中'}</span><span>公開 {formatPublished(manifest.data?.generated_at)}</span></div>
+   <div className="header-dates"><span>分析 {market.as_of_date||'取得中'}</span><span>データ生成 {formatPublished(manifest.data?.generated_at)}</span></div>
    <IconButton onClick={colorMode.toggleColorMode} aria-label={dark?'ライトモードに切り替え':'ダークモードに切り替え'}>{dark?<Brightness7Icon fontSize="small"/>:<Brightness4Icon fontSize="small"/>}</IconButton>
   </header>
   <div className="leader-content">{children}</div>

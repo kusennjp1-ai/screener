@@ -31,6 +31,7 @@ jobs:
         env:
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: '/screener/'
+          VITE_RESEARCH_PREVIEW: 'true'
         run: |
           if [ -d public/static-data ]; then
             mv public/static-data "$RUNNER_TEMP/preview-unused-static-data"

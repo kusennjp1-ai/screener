@@ -157,7 +157,7 @@ describe('StaticChartViewerModal', () => {
     const compactReadiness = screen.getByTestId('mobile-chart-readiness');
     // No selection/market observations are a lack of evidence, not two failures.
     expect(compactReadiness).toHaveTextContent('購入条件 0/7（未確認 7）');
-    expect(compactReadiness).toHaveTextContent('未達・未確認：選定条件 ／ 市場環境 ／ 最新の取引日');
+    expect(compactReadiness).toHaveTextContent('未達・未確認：共通購入モデルへの適合 ／ 市場環境 ／ 最新の取引日');
     expect(compactReadiness).not.toHaveTextContent('日次条件を確認済み');
     expect(screen.getByText('価格未確認 · 2026-04-02 日次終値')).toBeInTheDocument();
     const legend = screen.getByTestId('mobile-chart-legend');

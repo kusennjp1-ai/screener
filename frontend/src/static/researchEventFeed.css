@@ -48,6 +48,13 @@
 .research-view-controls { display:flex; gap:4px; padding:0 12px 8px; border-bottom:1px solid var(--line); }
 .research-view-controls button { flex:1; min-height:44px; min-width:44px; padding:6px 12px; border:0; border-radius:8px; background:none; color:var(--text-3); font:inherit; font-size:13px; cursor:pointer; }
 .research-view-controls button[aria-pressed=true] { color:var(--text); background:var(--surface-2); font-weight:700; }
+.research-filter-and-view { display:flex; align-items:center; flex-wrap:wrap; min-width:0; }
+.research-filter-and-view .research-active-filters { flex:1; min-width:0; }
+.research-filter-and-view .research-view-controls { flex:0 0 auto; padding:0; border:0; gap:0; }
+.research-filter-and-view .research-view-controls button { flex:none; padding:6px 8px; font-size:12px; }
+.research-preview-badge { flex-shrink:0; padding:2px 5px; border:1px dashed var(--ext); border-radius:4px; color:var(--ext); font-size:12px; line-height:1.5; }
+.research-event-workbench:has(.research-grid[data-view=table]) .research-event-layout { grid-template-columns:164px minmax(0,1fr); }
+.research-event-workbench:has(.research-grid[data-view=table]) .research-feed-context { display:none; }
 .research-event-workbench :is(.research-feed-navigation,.research-feed-context,.research-view-controls) :is(button,a,summary):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .research-event-workbench .decision-status-rail [data-state=pass] strong,.research-event-workbench .decision-annual[data-state=pass] > strong,.research-event-workbench .financial-evidence-status-pass { color:var(--wait); }
 .research-event-workbench .decision-status-rail [data-state=fail] strong,.research-event-workbench .decision-annual[data-state=fail] > strong,.research-event-workbench .financial-evidence-status-fail { color:var(--ext); }
@@ -60,6 +67,7 @@
  .research-event-workbench .research-feed-main { grid-column:2; grid-row:1; }
  .research-feed-navigation { grid-column:1; grid-row:1 / span 2; }
  .feed-context-contents { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .research-event-workbench:has(.research-grid[data-view=table]) .research-event-layout { grid-template-columns:148px minmax(0,1fr); }
 }
 @media(max-width:700px) {
  .research-event-workbench .research-event-layout { display:flex; flex-direction:column; gap:0; padding:0; }

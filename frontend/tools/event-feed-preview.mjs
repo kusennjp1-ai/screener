@@ -5,6 +5,8 @@ import { resolve, extname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { eventFeedPreviewFixture } from './event-feed-preview-fixture.mjs';
+import { researchFeedMetrics } from './research-feed-acceptance.mjs';
+import { derivePublicPreviewTrace } from './event-feed-preview-public-trace.mjs';
 
 if (!process.env.CI) throw Error('Run this screenshot preview only in GitHub Actions.');
 const root = resolve('dist'), output = resolve('test-results/event-feed-preview');
@@ -41,20 +43,26 @@ async function published(path) {
 }
 // Pin one manifest response for all real-data views. Referenced immutable
 // payloads are then fetched once and recorded, rather than mixing manifest ages.
+let derivedTrace;
 try {
   const manifest = JSON.parse((await published('manifest.json')).body.toString('utf8'));
   report.public_snapshot = { as_of_date: manifest.markets?.US?.as_of_date || manifest.as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation };
+  try {
+    derivedTrace = await derivePublicPreviewTrace({ manifest, readResource: published, preferredSymbol: 'DELL' });
+    report.derived_trace = derivedTrace.provenance;
+  } catch (error) { report.failures.push(error.message); }
 } catch (error) { report.failures.push(`Public snapshot unavailable: ${error.message}`); }
 
-for (const source of ['synthetic', 'public']) for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 360, height: 568 }]) {
+for (const source of ['synthetic', 'public', 'public-derived-trace']) for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 360, height: 568 }]) {
   if (source === 'public' && !report.public_snapshot) continue;
+  if (source === 'public-derived-trace' && !derivedTrace) continue;
   const context = await browser.newContext({ viewport, serviceWorkers: 'block' }), page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   if (source === 'synthetic') await page.clock.setFixedTime(new Date(fixture.now));
   await context.route('**/static-data/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/static-data/')[1];
     try {
-      const data = source === 'synthetic' ? fixture.resources.get(path) : await published(path);
+      const data = source === 'synthetic' ? fixture.resources.get(path) : (source === 'public-derived-trace' && derivedTrace.resources.get(path)) || await published(path);
       if (!data) return route.fulfill({ status: 404, body: 'Not part of the synthetic fixture' });
       return route.fulfill({ contentType: data.type, body: data.body });
     } catch (error) { errors.push(error.message);return route.fulfill({ status: 503, body: 'Preview source unavailable' }); }
@@ -63,17 +71,49 @@ for (const source of ['synthetic', 'public']) for (const viewport of [{ width: 1
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const filename = `${source}-${name}-${viewport.width}x${viewport.height}-dark.png`, path = resolve(output, filename);
     await page.screenshot({ path });
-    const observation = await page.evaluate(() => ({ route: location.hash, theme: document.querySelector('.leader-shell')?.dataset.theme, symbol: document.querySelector('.research-detail .symbol-title h2')?.textContent || document.querySelector('.candidate-feed-card .candidate-name strong')?.textContent || null,
+    const observation = await page.evaluate(() => ({ route: location.hash, theme: document.querySelector('.leader-shell')?.dataset.theme, preview_badge: document.querySelector('.research-preview-badge')?.textContent || null, symbol: document.querySelector('.research-detail .symbol-title h2')?.textContent || document.querySelector('.candidate-feed-card .candidate-name strong')?.textContent || null,
       page_size: document.querySelector('#candidate-board')?.dataset.feedPageSize, total: document.querySelector('#candidate-board')?.dataset.feedTotal, horizontal_body_overflow: document.documentElement.scrollWidth > innerWidth,
       text: document.querySelector('.research-feed-main')?.innerText.slice(0, 14000) || null }));
     report.screens.push({ screenshot: filename, screenshot_sha256: sha256(await readFile(path)), source, fixture: source === 'synthetic' ? { name: 'event-feed-preview-v1', symbols: fixture.symbols, fixed_clock: new Date(fixture.now).toISOString(), limitation: 'Synthetic price and financial evidence, not actual stocks or vendor observations.' } : { ...report.public_snapshot, clock: 'Actual browser clock; public financial evidence may be unavailable or expired.' }, viewport, observation });
+    if (source === 'public-derived-trace') report.screens.at(-1).derived_trace_provenance = derivedTrace.provenance;
+    if (observation.preview_badge !== '検証版') errors.push(`${name}: the unpublished preview is not labelled`);
     if (observation.horizontal_body_overflow) errors.push(`${name}: horizontal body overflow`);
+    if (name === 'feed') {
+      const essential = await page.evaluate(researchFeedMetrics);
+      report.screens.at(-1).essential_evidence = essential.feed;
+      for (const metric of essential.feed.metrics) for (const field of ['actual', 'status', 'role', 'condition']) {
+        if (!metric[field]?.firstViewport) errors.push(`feed: ${metric.id} ${field} is outside the unobscured first viewport`);
+      }
+      for (const field of ['selection', 'daily']) if (!essential.feed.decisions?.[field]?.firstViewport) errors.push(`feed: ${field} state is outside the unobscured first viewport`);
+      if (essential.feed.decisions?.annual?.required && !essential.feed.decisions.annual.firstViewport) errors.push('feed: required annual EPS status is outside the unobscured first viewport');
+    }
+    if (name === 'table') {
+      const rows = await page.locator('tr[data-feed-symbol]').evaluateAll(rows => rows.map(row => {
+        const button = row.querySelector('.candidate-row'), annual = row.querySelector('.research-table-annual');
+        return { symbol: row.dataset.feedSymbol, button_clips: button.scrollHeight > button.clientHeight + 1,
+          annual_overlaps_identity: annual && annual.getBoundingClientRect().top < button.getBoundingClientRect().bottom - 1 };
+      }));
+      report.screens.at(-1).table_identity_geometry = rows;
+      for (const row of rows) if (row.button_clips || row.annual_overlaps_identity) errors.push(`table: ${row.symbol} identity or annual state is clipped/overlapped`);
+    }
   };
   try {
     await page.goto(`${base}#/?method=oneil`);
     await page.locator('.candidate-feed-card').first().waitFor({ state: 'visible', timeout: 60000 });
+    if (source === 'public-derived-trace') {
+      await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+      const drawer = page.getByRole('dialog', { name: '候補を絞り込む', exact: true });
+      await drawer.getByLabel('銘柄・企業名を検索', { exact: true }).fill(derivedTrace.symbol);
+      await drawer.getByRole('button', { name: '候補を確認する →', exact: true }).click();
+      await page.waitForFunction(symbol => [...document.querySelectorAll('.candidate-feed-card .candidate-name strong')].some(node => node.textContent === symbol), derivedTrace.symbol);
+    }
     await page.locator('.feed-price-trace img').first().evaluate(image => image.complete ? undefined : new Promise(resolve => { image.addEventListener('load', resolve, { once: true });image.addEventListener('error', resolve, { once: true }); })).catch(() => {});
     await capture('feed');
+    if (source === 'public-derived-trace') {
+      const traceImage = page.locator('.feed-price-trace img').first();
+      if (!await traceImage.evaluate(image => image.complete && image.naturalWidth > 0)) throw Error('Derived canonical price trace did not load');
+      await traceImage.scrollIntoViewIfNeeded();await capture('trace');
+    }
     await page.getByRole('button', { name: '表', exact: true }).click();
     await page.getByRole('region', { name: '銘柄候補の比較表' }).waitFor({ state: 'visible' });
     await capture('table');
