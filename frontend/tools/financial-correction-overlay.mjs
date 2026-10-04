@@ -34,6 +34,14 @@ const clock = value => typeof value === 'number' ? value : Date.parse(value);
 const fail = message => { throw Error(`Financial correction ${message}`); };
 const exactKeys = (value, keys, label) => { if (!object(value) || Object.keys(value).sort().join('|') !== [...keys].sort().join('|')) fail(`invalid ${label} keys`); };
 const publicationIdentity = value => typeof value === 'string' && /^[1-9][0-9]*\/[1-9][0-9]*\/[a-f0-9]{64}\/[a-f0-9]{64}$/.test(value);
+// Capture legacy inputs once, before introducing correction-owned fields.
+// Reuse existing snapshots so null/absent slots and original evidence stay exact.
+const historicalSnapshot = row => row.financial_historical || {
+  values: Object.fromEntries([...FINANCIAL_FIELDS, ...Object.keys(currentContract.aliases), ...FINANCIAL_DEPENDENT_FIELDS].filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]])),
+  source_evidence: row.financial_source_evidence || null, current_proof: row.financial_current || null,
+  financial_history: row.financial_history || null, book_financials: row.book_financials || null,
+  legacy_scanners: Object.fromEntries(['screener_results', 'screener_details', 'screeners'].filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]])),
+};
 
 export function correctionMetadata(projection) {
   return projection ? { financial_generation: projection.financial_generation, financial_evaluated_at: clock(projection.financial_evaluated_at), financial_knowledge_basis: basis, financial_point_in_time: false, financial_source_publication_date: null, financial_policy_version: projection.policy.id } : {};
@@ -139,6 +147,7 @@ export function overlayFinancialCorrection(row, projection) {
   const out = {...row, ...structuredClone(item.financial_values), ...correctionMetadata(projection),
     market: item.market, as_of_date: item.as_of_date, financial_source_evidence: structuredClone(item.financial_source_evidence),
     financial_current: structuredClone(item.financial_current), financial_history: structuredClone(item.financial_history), book_financials: null,
+    financial_historical: historicalSnapshot(row),
     financial_source_diagnostics: structuredClone(item.source_diagnostics), financial_history_source_diagnostics: structuredClone(item.history_source_diagnostics)};
   // Correction-owned reports may replace identity-bearing legacy contexts.
   // Retain their observed evidence so a matching new name cannot erase a conflict.

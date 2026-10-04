@@ -2,13 +2,15 @@
 // parsed source projection cannot consume the strict comparator's heap.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compareCorrectionData, dataInventory, digest } from './financial-correction.mjs';
 import { inventoryDigest, sha256 } from './publication-state.mjs';
 const schema = 'financial-preview-comparison-phase-v1';
 const worker = fileURLToPath(import.meta.url);
-const comparator = fileURLToPath(new URL('./financial-correction.mjs', import.meta.url));
+// Resolve a filesystem sibling from the Node module path. Browser-oriented
+// test transforms may rewrite static new URL(..., import.meta.url) as an asset.
+const comparator = join(dirname(worker), 'financial-correction.mjs');
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const exact = (value, keys) => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join('\0') !== [...keys].sort().join('\0')) throw Error('Invalid closed preview comparison phase');

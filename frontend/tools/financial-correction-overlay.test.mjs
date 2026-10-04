@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
-import { FINANCIAL_FIELDS, projectFinancialRow } from '../src/static/financialCurrent.js';
+import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload } from '../src/static/financialCurrent.js';
 import { instrumentApplicability } from '../src/static/instrumentApplicability.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { FINANCIAL_CORRECTION_SCHEMA, CORRECTION_FIELDS, loadFinancialCorrection, validateCorrectionProjection, overlayFinancialCorrection, overlayFinancialChart, verifyCorrectionCompatibility } from './financial-correction-overlay.mjs';
@@ -254,6 +254,8 @@ it('materializes reviewed fund chart roots once with observed identity and prese
   expect(()=>validateCorrectionProjection(value)).not.toThrow();
   for(const row of fundRows()) {
     const original=rawFundChart(row),before=JSON.stringify(original),changed=overlayFinancialChart(original,value);
+    const previous=projectFinancialPayload(original,{now,asOfDate:date,market:'US'});
+    for(const key of ['stock_data','fundamentals']) expect(changed[key].financial_historical).toEqual(previous[key].financial_historical);
     expect(changed.financial_identity?.observed_name).toBe(row.symbol==='NVDA'?undefined:row.company_name);
     expect(priceBytes(changed)).toBe(priceBytes(original));expect(JSON.stringify(original)).toBe(before);
     for(const nested of [changed.stock_data,changed.fundamentals,...(row.symbol==='NVDA'?[]:[changed])]) {
@@ -274,7 +276,9 @@ it('materializes reviewed fund chart roots once with observed identity and prese
 it('exports raw, canonical and nested fund aliases consistently in one run and detects later root corruption',async()=>{
   // This short chart cannot establish an audited RS percentile. Keep that
   // unrelated export recalculation out of the alias byte-preservation check.
-  const sourceRows=fundRows().map(row=>({...row,rs_rating:null})),value=fundProjection();
+  const sourceRows=fundRows().map(row=>({...row,rs_rating:null,
+    financial_historical:{values:{eps_rating:99},source_evidence:{legacy:'source'},current_proof:null,financial_history:null,book_financials:null,legacy_scanners:{canslim:{score:99}}},
+  })),value=fundProjection();
   const {directory,root}=await fixture({sourceRows,value,chartForRow:rawFundChart});
   try {
     const report=await verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+1000});
@@ -284,12 +288,15 @@ it('exports raw, canonical and nested fund aliases consistently in one run and d
       const row=index.rows.find(row=>row.symbol===input.symbol),detail=await read(join(root,row.research_detail_path));
       expect(row.instrument_applicability).toEqual(value.symbols[input.symbol].instrument_applicability);
       expect(detail.instrument_applicability).toEqual(row.instrument_applicability);
+      expect(detail.financial_historical).toEqual(input.financial_historical);
       const once=overlayFinancialChart(rawFundChart(input),value);
       for(const path of [`raw/${input.symbol}.json`,`charts/${input.symbol}.json`,row.chart_path]) {
         const chart=await read(join(root,path));
         expect(financialView(chart)).toEqual(financialView(once));
         expect(chart.stock_data.instrument_applicability).toEqual(row.instrument_applicability);
+        if(path!==row.chart_path) expect(chart.stock_data.financial_historical).toEqual(input.financial_historical);
         expect(financialView(chart.fundamentals)).toEqual(financialView(once.fundamentals));
+        expect(chart.financial_historical).toEqual(once.financial_historical);
         expect(priceBytes(chart)).toBe(priceBytes(rawFundChart(input)));
         const repeated=overlayFinancialChart(chart,value);
         if(path!==row.chart_path) expect(repeated).toEqual(chart);
@@ -357,5 +364,43 @@ it('distinguishes inherited container symbols from correction-owned financial ro
     expect(Object.values(projected.financial_current_state.fields).filter(field=>field.source_validated)).toHaveLength(6);
     expect(priceBytes(projected)).toBe(priceBytes(chart));
     expect(overlayFinancialChart(JSON.parse(JSON.stringify(projected)),value)).toEqual(projected);
+  }
+});
+
+it('preserves the original root audit through overlay, canonical projection and repeated serialization',()=>{
+  const value=fundProjection(),options={now,asOfDate:date,market:'US'};
+  const empty={values:{},source_evidence:null,current_proof:null,financial_history:null,book_financials:null,legacy_scanners:{}};
+  const legacy={eps_growth_yy:99,eps_growth_annual:99,code33:false,
+    financial_source_evidence:{legacy:'source'},financial_current:{legacy:'proof'},
+    financial_history:{symbol:'BITU',annual:[]},book_financials:{legacy:'book'},
+    screener_results:{canslim:{score:99,passes:true},volume:{score:77}}};
+  for(const row of fundRows()) for(const patch of [
+    {},
+    {financial_historical:null},
+    {financial_historical:{}},
+    {financial_historical:{values:{eps_growth_yy:17}}},
+    {financial_historical:{...empty,values:{eps_growth_yy:17},legacy_scanners:{canslim:{score:17}}}},
+    {financial_current:{legacy:'proof-only root'}},
+    {...legacy,financial_history:{symbol:row.symbol,annual:[]}},
+    {...legacy,financial_history:{symbol:row.symbol,annual:[]},financial_historical:structuredClone(empty)},
+  ]) {
+    const original={...rawFundChart(row),...structuredClone(patch)},before=JSON.stringify(original);
+    // This is the prior ordinary exporter projection, before the correction.
+    const previous=projectFinancialPayload(original,options);
+    const changed=overlayFinancialChart(original,value);
+    if(Object.hasOwn(previous,'financial_current_state')) {
+      const expected=patch.financial_historical || previous.financial_historical;
+      expect(changed.financial_historical).toEqual(expected);
+      expect(projectFinancialPayload(changed,options).financial_historical).toEqual(expected);
+      expect(projectFinancialPayload(JSON.parse(JSON.stringify(changed)),options).financial_historical).toEqual(expected);
+      if(!patch.financial_historical) expect(changed.financial_historical.current_proof).toEqual(patch.financial_current || null);
+      expect(changed.financial_historical.current_proof).not.toEqual(value.symbols[row.symbol].financial_current);
+      if(!Object.keys(patch).length) expect(changed.financial_historical).toEqual(empty);
+    } else if(!Object.keys(patch).length) {
+      expect(changed).not.toHaveProperty('financial_historical');
+      expect(changed).not.toHaveProperty('financial_current');
+    }
+    expect(overlayFinancialChart(JSON.parse(JSON.stringify(changed)),value)).toEqual(changed);
+    expect(priceBytes(changed)).toBe(priceBytes(original));expect(JSON.stringify(original)).toBe(before);
   }
 });

@@ -446,8 +446,22 @@ export async function restorePublishedFinancialSource(live,root,fetcher=fetch) {
   return root;
 }
 
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
-  if(process.argv[2]==='design-prepare')await prepareDesignCandidate();
-  else if(process.argv[2]==='design-seal')await sealDesignCandidate();
+async function runCommand(command) {
+  if(command==='design-prepare')await prepareDesignCandidate();
+  else if(command==='design-seal')await sealDesignCandidate();
   else throw Error('Expected design-prepare or design-seal');
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+  // Finish evaluating this module before lazy preview/publication imports can
+  // re-enter it through select-release-source or live receipt validation.
+  // A pending promise alone cannot keep Node alive. Do not report success if
+  // the event loop drains before the command has actually finished.
+  let completed=false;
+  process.once('beforeExit',()=>{
+    if(!completed){console.error('Financial release command did not complete');process.exitCode=1;}
+  });
+  runCommand(process.argv[2]).then(
+    ()=>{completed=true;},
+    error=>{completed=true;console.error(error.stack||error);process.exitCode=1;},
+  );
 }

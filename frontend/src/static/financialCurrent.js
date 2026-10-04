@@ -149,7 +149,8 @@ export function projectFinancialRow(input, { now = Date.now(), asOfDate, market 
     /^(minervini|canslim|ipo|custom)$/i.test(name) ? [name, { score: null, passes: null, rating: null, status: blocked ? applicability.status : 'unknown', reason: blocked ? applicability.reason : 'unverified_financial_dependencies' }] : [name, result]));
   row.financial_historical = input.financial_historical || { values: Object.fromEntries(protectedFields.filter(field => Object.hasOwn(input, field)).map(field => [field, input[field]])), source_evidence: input.financial_source_evidence || null, current_proof: input.financial_current || null, financial_history: input.financial_history || null, book_financials: input.book_financials || null, legacy_scanners:Object.fromEntries(['screener_results','screener_details','screeners'].filter(key=>Object.hasOwn(input,key)).map(key=>[key,input[key]])) };
   if (blocked) {
-    row.financial_historical = { ...row.financial_historical, current_proof: row.financial_historical.current_proof || input.financial_current || null, financial_history: row.financial_historical.financial_history || input.financial_history || null, book_financials: row.financial_historical.book_financials || input.book_financials || null };
+    // An existing audit snapshot owns its null and absent slots. New current
+    // evidence cannot be backfilled into the predecessor's historical record.
     row.financial_history = null; row.book_financials = null; row.passes_template = null;
   }
   row.financial_current_state = immutable({ version: FINANCIAL_CURRENT_VERSION, evaluated_at: now, next_expiry_at: minTime(expiries), fields, dependent_reason: blocked ? applicability.reason : 'unverified_financial_dependencies' });

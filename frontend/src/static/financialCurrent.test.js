@@ -426,3 +426,32 @@ it('drops a packed summary added to an owned current projection', () => {
   row.method_summary = {version:'forged',oneil:[8,8]};
   expect(projectFinancialRow(row,{now:row.financial_current_state.evaluated_at}).method_summary).toBeUndefined();
 });
+
+it.each([
+  ['BITU', 'ProShares Ultra Bitcoin ETF'],
+  ['SBIT', 'ProShares UltraShort Bitcoin ETF'],
+  ['ETHE', 'Grayscale Ethereum Staking ETF'],
+])('keeps %s historical nulls, absent slots and original values exact through browser re-projection', (symbol, company_name) => {
+  for (const conflicted of [false, true]) for (const snapshot of [
+    {},
+    { values: { eps_growth_yy: 17 }, current_proof: null, financial_history: null, book_financials: null },
+    { values: { eps_growth_yy: 17 }, source_evidence: { legacy: 'source' }, current_proof: { legacy: 'proof' }, financial_history: { symbol, legacy: 'history' }, book_financials: { legacy: 'book' }, legacy_scanners: { canslim: { score: 17 } } },
+  ]) {
+    const current = { ...provenRow(), symbol, company_name: conflicted ? 'Another issuer' : company_name,
+      financial_history: { symbol, current: 'history' }, book_financials: { current: 'book' } };
+    const input = { ...current, financial_historical: structuredClone(snapshot) }, before = JSON.stringify(input);
+    freezeDeep(input);
+    const first = project(input);
+    expect(first.instrument_applicability.status).toBe(conflicted ? 'quarantined' : 'not_applicable');
+    expect(first.financial_historical).toEqual(snapshot);
+    expect(project(JSON.parse(JSON.stringify(first)), { now: now + 1000 }).financial_historical).toEqual(snapshot);
+    const payload = projectFinancialPayload({ symbol, market: 'US', as_of_date: input.as_of_date, stock_data: JSON.parse(JSON.stringify(first)) }, { now });
+    expect(payload.stock_data.financial_historical).toEqual(snapshot);
+    expect(JSON.stringify(input)).toBe(before);
+    // With no saved snapshot, the original evidence is captured once.
+    const original = project(current);
+    expect(original.financial_historical.current_proof).toEqual(current.financial_current);
+    expect(original.financial_historical.financial_history).toEqual(current.financial_history);
+    expect(original.financial_historical.book_financials).toEqual(current.book_financials);
+  }
+});

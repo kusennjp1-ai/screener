@@ -1,17 +1,108 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
+import {chmodSync,existsSync,mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {financialReleasePolicy as policy,readFinancialReleaseRequest,parseFinancialReleaseRequest,parseFinancialActivationCandidate,readFinancialActivationCandidate,verifyPinnedCandidateAttempt,verifyPinnedCandidateBindings,restorePinnedCandidateArchive,selectActivationCandidate,protectedCodeInventory,validateCandidateRecord,verifyCandidateAttempt,extractCandidateTar,completeInventory,sourceLineage,writeFinancialReleaseReceipt,verifyFinancialReleaseAssets,assertFinancialLineageContinuity,validateFinancialReleaseReceipt,restorePublishedFinancialSource} from './financial-release-activation.mjs';
 import {digest,contract} from './financial-correction.mjs';
-import {sha256,inventoryDigest} from './publication-state.mjs';
+import {bootstrap,sha256,inventoryDigest} from './publication-state.mjs';
 import {certifiedSourceFixture} from './fixtures/certified-source-preview.mjs';
 
 const H='a'.repeat(64),S='b'.repeat(40),T='c'.repeat(40),P=`8/2/${H}/${H}`;
 const request=fixture=>({schema_version:'financial-release-request-v1',correction:{schema_version:contract.schema_version,kind:contract.kind,reason:contract.reason,previous_publication_identity:P,source:fixture.source},source_validation:{guard:'certified_source_artifact_v1',certificate:fixture.reference},destination_projection:{projector:'native_annual_destination_v1',policy:'financial-correction-native-annual-v1'}});
 const temporary=()=>mkdtempSync(join(tmpdir(),'financial-release-test-'));
+// Spawn the real entrypoint: importing its exports in this test process would
+// finish module evaluation before dispatch and hide the CLI's lazy-import cycle.
+const activationCli=fileURLToPath(new URL('./financial-release-activation.mjs',import.meta.url));
+function invokeActivation(root,command,extraEnv={}) {
+  return spawnSync(process.execPath,[activationCli,command],{cwd:root,encoding:'utf8',timeout:10000,
+    env:{PATH:process.env.PATH,RUNNER_TEMP:root,...extraEnv}});
+}
+test('design prepare CLI handles absent and invalid requests before any remote read',()=>{
+  const root=temporary(),output=join(root,'output');
+  try{
+    let result=invokeActivation(root,'design-prepare',{GITHUB_OUTPUT:output});
+    assert.ifError(result.error);assert.equal(result.status,0,result.stderr);
+    assert.equal(readFileSync(output,'utf8'),'candidate=false\n');
+    mkdirSync(join(root,'.github'));writeFileSync(join(root,policy.request_path),'{}');
+    result=invokeActivation(root,'design-prepare');
+    assert.ifError(result.error);assert.equal(result.status,1,result.stderr);
+    assert.match(result.stderr,/Invalid closed financial release request/);
+    assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+test('design prepare CLI validates a live financial receipt through its lazy self import',()=>{
+  const root=temporary(),f=certifiedSourceFixture();
+  try{
+    mkdirSync(join(root,'.github'));writeFileSync(join(root,policy.request_path),JSON.stringify(request(f)));
+    const bin=join(root,'bin'),preload=join(root,'fetch.mjs'),config=join(root,'remote.json');mkdirSync(bin);
+    const manifest=JSON.stringify({as_of_date:'2026-10-02',default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:'2026-10-02'}}});
+    const financialBytes='{}',financialPath=`static-data/financial-corrections/release-${sha256(financialBytes)}.json`;
+    const publication={schema:1,run_id:1,run_attempt:1,artifact_name:'github-pages-1-1',ui_sha:bootstrap.ui_sha,
+      ui_files:bootstrap.ui_files,ui_digest:inventoryDigest(bootstrap.ui_files),approval:{type:'bootstrap',sha:bootstrap.ui_sha},
+      data_manifest_sha256:sha256(manifest),verification_universe:{as_of_date:'2026-10-02',required_symbols:['AAA'],minimum_target:0.9,total:1,verified:1},
+      price_observations:{},known_price_dates:{},financial_generation:H,financial_lineage_sha256:H,data_inventory_sha256:H,
+      financial_release:{schema_version:'financial-release-receipt-v1',path:financialPath,sha256:sha256(financialBytes)}};
+    const prefix=`repos/${bootstrap.repository}/actions`,api={
+      [`${prefix}/runs/1/attempts/1`]:{id:1,run_attempt:1,head_branch:'main',head_sha:bootstrap.ui_sha,path:'.github/workflows/research-ui-release.yml',
+        repository:{full_name:bootstrap.repository},head_repository:{full_name:bootstrap.repository}},
+      [`${prefix}/runs/1/attempts/1/jobs?per_page=100`]:[{jobs:[{run_attempt:1,started_at:'2026-10-03T01:00:00Z',steps:[
+        {name:'Deploy to GitHub Pages',conclusion:'success',started_at:'2026-10-03T01:01:00Z',completed_at:'2026-10-03T01:02:00Z'}]}]}],
+      [`${prefix}/workflows/research-ui-release.yml/runs?branch=main&per_page=100`]:[{workflow_runs:[]}],
+      [`${prefix}/workflows/static-site.yml/runs?branch=main&per_page=100`]:[{workflow_runs:[]}],
+    };
+    writeFileSync(config,JSON.stringify({api,live:{'publication.json':JSON.stringify(publication),'static-data/manifest.json':manifest,[financialPath]:financialBytes}}));
+    // Only the transport is faked. The real publication parser, deployment and
+    // approval checks, lazy receipt import and CLI dispatch all execute offline.
+    writeFileSync(join(bin,'gh'),`#!${process.execPath}\n`+`
+const fs=require('node:fs'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RELEASE_CLI_FIXTURE));
+if(args[0]!=='api'||args.slice(1,-1).some(arg=>!['--paginate','--slurp'].includes(arg)))throw Error('Unexpected fixture command');
+const endpoint=args.at(-1);if(!Object.hasOwn(config.api,endpoint))throw Error('Unexpected fixture API read '+endpoint);
+process.stdout.write(JSON.stringify(config.api[endpoint]));
+`);chmodSync(join(bin,'gh'),0o755);
+    writeFileSync(preload,`
+import {readFileSync} from 'node:fs';
+const config=JSON.parse(readFileSync(process.env.RELEASE_CLI_FIXTURE)),base=new URL(${JSON.stringify(bootstrap.site_url)});
+globalThis.fetch=async(input,options)=>{
+ const url=new URL(input),path=url.pathname.slice(base.pathname.length);
+ if(url.origin!==base.origin||!url.pathname.startsWith(base.pathname)||!Object.hasOwn(config.live,path)||options.redirect!=='error')throw Error('Unexpected fixture fetch');
+ return {ok:true,status:200,arrayBuffer:async()=>Buffer.from(config.live[path])};
+};
+`);
+    const result=spawnSync(process.execPath,['--import',preload,activationCli,'design-prepare'],{cwd:root,encoding:'utf8',timeout:10000,
+      env:{PATH:bin,RUNNER_TEMP:root,RELEASE_CLI_FIXTURE:config}});
+    assert.ifError(result.error);assert.equal(result.status,1,result.stderr);
+    assert.match(result.stderr,/Invalid closed financial release receipt/);
+    assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+  }finally{f.cleanup();rmSync(root,{recursive:true,force:true});}
+});
+test('design prepare CLI fails closed when its async work cannot complete',()=>{
+  const root=temporary(),f=certifiedSourceFixture();
+  try{
+    mkdirSync(join(root,'.github'));writeFileSync(join(root,policy.request_path),JSON.stringify(request(f)));
+    const preload=join(root,'pending-fetch.mjs'),output=join(root,'output'),environment=join(root,'environment');
+    writeFileSync(preload,'globalThis.fetch=()=>new Promise(()=>{});');
+    const result=spawnSync(process.execPath,['--import',preload,activationCli,'design-prepare'],{cwd:root,encoding:'utf8',timeout:10000,
+      env:{PATH:root,RUNNER_TEMP:root,GITHUB_OUTPUT:output,GITHUB_ENV:environment}});
+    assert.ifError(result.error);assert.equal(result.status,1,result.stderr);
+    assert.match(result.stderr,/Financial release command did not complete/);
+    assert.equal(existsSync(output),false);assert.equal(existsSync(environment),false);
+  }finally{f.cleanup();rmSync(root,{recursive:true,force:true});}
+});
+test('design seal CLI finishes the preview import cycle and reaches receipt validation',()=>{
+  const root=temporary();
+  try{
+    const git=(...args)=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();
+    git('init','-q');git('config','user.name','fixture');git('config','user.email','fixture@example.test');
+    writeFileSync(join(root,'README'),'offline CLI fixture');git('add','.');git('commit','-qm','fixture');
+    const result=invokeActivation(root,'design-seal',{GITHUB_SHA:git('rev-parse','HEAD'),FINANCIAL_CANDIDATE_DIR:root});
+    assert.ifError(result.error);assert.equal(result.status,1,result.stderr);
+    assert.match(result.stderr,/ENOENT.*preview-receipt\.json/);
+    assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
 test('retesting the captured consumer authorizes only the new producer current-main gates',()=>{const value=pinnedCandidate(),newSha='d'.repeat(40);value.record.producer={...value.record.producer,head_sha:newSha,run_id:15,run_attempt:1};value.run={...value.run,id:15,run_attempt:1,head_sha:newSha};value.jobs=value.jobs.map(job=>({...job,run_id:15,run_attempt:1,head_sha:newSha}));value.artifact={...value.artifact,id:19,name:'financial-release-candidate-15-1',workflow_run:{id:15,head_sha:newSha}};value.mainSha=newSha;value.approval={type:'gates',sha:newSha,runs:[{id:14,attempt:1,path:'.github/workflows/ci.yml'},{id:15,attempt:1,path:policy.candidate_workflow}]};assert.equal(verifyCandidateAttempt(value).head_sha,newSha);assert.equal(value.record.captured_ui.sha,S);assert.deepEqual(verifyPinnedCandidateBindings(value).captured_ui,value.record.captured_ui);assert.throws(()=>verifyCandidateAttempt({...value,approval:candidate().approval}),/current-main/);});
 test('workflow triggers on the control pin and fetches original captured history for release',()=>{const design=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8'),release=readFileSync(new URL('../workflows/research-ui-release.yml',import.meta.url),'utf8');assert.ok(design.includes("'.github/financial-activation-candidate.json'"));assert.match(release,/ref: \$\{\{ steps.main.outputs.sha \}\}\n\s+fetch-depth: 0/);assert.equal(policy.protected_prefixes.some(prefix=>policy.activation_candidate_path.startsWith(prefix)),false);for(const prefix of ['frontend/','backend/','contracts/','data/ibd_reference/','.github/scripts/','.github/workflows/'])assert.ok(policy.protected_prefixes.includes(prefix));});
 function pinnedCandidate(){
