@@ -18,19 +18,23 @@ const rows=Array.from({length:101},(_,index)=>{
  return sourced;
 });
 
+async function mockFeed(page) {
+ await page.clock.setFixedTime(new Date(now));
+ await page.route('**/static-data/**',route=>{
+  const file=new URL(route.request().url()).pathname.split('/').pop();
+  const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'scroll-fixture',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'}}}}}
+   :file==='research.json'?{as_of_date:date,rows}:{};
+  return route.fulfill({json:payload});
+ });
+}
+
 // The approved table → feed layout has variable-height cards and four actions
 // per card. Preserve keyboard reachability and materialized geometry, not the
 // former 51/70px table-row estimate or an unmaterialized total scrollHeight.
-for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`offscreen feed cards keep geometry, focus and full pagination at ${width}x${height}`,async({page},info)=>{
+for(const [width,height,pageSize] of [[1440,900,50],[1024,900,50],[390,844,50],[360,568,50],[1440,900,20],[360,568,20]])test(`${pageSize===50?'explicit 50-card stress':'default 20-card browsing'} keeps geometry, focus and full pagination at ${width}x${height}`,async({page},info)=>{
   await page.setViewportSize({width,height});
-  await page.clock.setFixedTime(new Date(now));
-  await page.route('**/static-data/**',route=>{
-    const file=new URL(route.request().url()).pathname.split('/').pop();
-    const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'scroll-fixture',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'}}}}}
-      :file==='research.json'?{as_of_date:date,rows}:{};
-    return route.fulfill({json:payload});
-  });
-  await page.goto('/');
+  await mockFeed(page);
+  await page.goto(pageSize===50?'/#/?feedSize=50':'/');
   const heading=page.getByRole('region',{name:'候補リスト',exact:true}).locator('.candidate-board-heading h2');
   const expectCandidateHeading=async()=>{
     await expect(heading).toBeVisible();
@@ -38,8 +42,18 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
   };
   await expectCandidateHeading();
   const items=page.getByRole('list',{name:'投資手法別の銘柄候補'}).getByRole('listitem');
-  await expect(items).toHaveCount(50);
-  await expect(page.getByRole('button',{name:'前の50件',exact:true})).toBeDisabled();
+  await expect(items).toHaveCount(pageSize);
+  await expect(page.getByRole('combobox',{name:'1ページの銘柄数',exact:true})).toHaveValue(String(pageSize));
+  await expect(page.locator('#candidate-board')).toHaveAttribute('data-feed-total','101');
+  await expect(page.getByRole('status').filter({hasText:/全101銘柄中/})).toHaveText(`全101銘柄中1–${pageSize}`);
+  await expect(page.getByRole('button',{name:`前の${pageSize}件`,exact:true})).toBeDisabled();
+  const footerControls=await page.getByRole('navigation',{name:'候補のページ切り替え'}).locator('button,select').evaluateAll(nodes=>nodes.map(node=>{
+    const bounds=node.getBoundingClientRect();return {label:node.getAttribute('aria-label')||node.textContent,width:bounds.width,height:bounds.height};
+  }));
+  for(const control of footerControls){
+    expect(control.width,`${control.label} footer target width`).toBeGreaterThanOrEqual(44);
+    expect(control.height,`${control.label} footer target height`).toBeGreaterThanOrEqual(44);
+  }
   await page.evaluate(()=>document.fonts.ready);
   const expectPageGeometry=async label=>{
     const bounds=await items.evaluateAll(nodes=>nodes.map(item=>{
@@ -144,23 +158,23 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
     if(after.next)expect(after.item.bottom).toBeLessThanOrEqual(after.next.top+.1);
     return after;
   };
-  const penultimate=page.getByRole('button',{name:/^PERF048 の分析/});
+  const penultimate=page.getByRole('button',{name:new RegExp(`^PERF${String(pageSize-2).padStart(3,'0')} の分析`)});
   // Initial setup chooses the offscreen starting card. Every subsequent action
   // is reached through Tab/Shift+Tab or the existing arrow navigation.
   await penultimate.focus();
   await expectFocused(penultimate);
-  const actions=items.nth(48).getByRole('button');
+  const actions=items.nth(pageSize-2).getByRole('button');
   await expect(actions).toHaveCount(4);
-  await expect(actions.nth(0)).toHaveAccessibleName(/^PERF048 の分析/);
-  await expect(actions.nth(1)).toHaveAccessibleName('PERF048 の財務・日次根拠を見る');
-  await expect(actions.nth(2)).toHaveAccessibleName('PERF048 のチャートを開く');
-  await expect(actions.nth(3)).toHaveAccessibleName('PERF048 ウォッチに保存');
+  await expect(actions.nth(0)).toHaveAccessibleName(new RegExp(`^PERF${String(pageSize-2).padStart(3,'0')} の分析`));
+  await expect(actions.nth(1)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} の財務・日次根拠を見る`);
+  await expect(actions.nth(2)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} のチャートを開く`);
+  await expect(actions.nth(3)).toHaveAccessibleName(`PERF${String(pageSize-2).padStart(3,'0')} ウォッチに保存`);
   for(let index=1;index<await actions.count();index++){
     await page.keyboard.press('Tab');await expectFocused(actions.nth(index));
     await expect(actions.nth(index)).toHaveCSS('outline-style','solid');
   }
   await page.keyboard.press('Tab');
-  const last=page.getByRole('button',{name:/^PERF049 の分析/});
+  const last=page.getByRole('button',{name:new RegExp(`^PERF${String(pageSize-1).padStart(3,'0')} の分析`)});
   await expectFocused(last);
   await expect(last).toHaveCSS('outline-offset','-3px');
   await expect(last).toHaveCSS('outline-style','solid');
@@ -173,10 +187,10 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
   expect(Math.abs(revisited.card.height-materialized.card.height)).toBeLessThanOrEqual(1);
   // Arrow navigation crosses the page boundary at every supported layout.
   await last.press('ArrowDown');
-  const next=page.getByRole('button',{name:/^PERF050 の分析/});
-  await expect(items).toHaveCount(50);await expectFocused(next);
+  const next=page.getByRole('button',{name:new RegExp(`^PERF${String(pageSize).padStart(3,'0')} の分析`)});
+  await expect(items).toHaveCount(pageSize);await expectFocused(next);
   await next.press('ArrowUp');
-  await expect(items).toHaveCount(50);await expectFocused(last);
+  await expect(items).toHaveCount(pageSize);await expectFocused(last);
   const returned=await expectStableCard(last,'arrow-return-page-one');
   expect(Math.abs(returned.card.height-materialized.card.height)).toBeLessThanOrEqual(1);
   await expectPageGeometry('after-offscreen-and-arrow-traversal');
@@ -184,7 +198,7 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
     const first=items.first().locator('.candidate-row');
     await expect(first).toContainText(symbol);
     const start=rows.findIndex(row=>row.symbol===symbol);
-    expect(await items.locator('.candidate-name strong').allTextContents()).toEqual(rows.slice(start,start+50).map(row=>row.symbol));
+    expect(await items.locator('.candidate-name strong').allTextContents()).toEqual(rows.slice(start,start+pageSize).map(row=>row.symbol));
     const bounds=await expectFocused(first);
     expect(bounds.heading.height).toBeGreaterThan(0);expect(bounds.controls).toHaveLength(3);
     for(const control of bounds.controls){expect(control.height).toBeGreaterThanOrEqual(44);expect(control.width).toBeGreaterThan(0);}
@@ -193,13 +207,13 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
     await expectStableCard(first,`page-start-${symbol}`);
     await expectPageGeometry(`page-start-${symbol}`);
   };
-  await page.getByRole('button',{name:'次の50件',exact:true}).click();
-  await expect(items).toHaveCount(50);
-  await expectPageStart('PERF050');
-  await page.getByRole('button',{name:'次の50件',exact:true}).click();
-  await expect(items).toHaveCount(1);
-  await expectPageStart('PERF100');
-  await expect(page.getByRole('button',{name:'次の50件',exact:true})).toBeDisabled();
+  for(let start=pageSize;start<rows.length;start+=pageSize){
+    await page.getByRole('button',{name:`次の${pageSize}件`,exact:true}).click();
+    await expect(items).toHaveCount(Math.min(pageSize,rows.length-start));
+    await expectPageStart(`PERF${String(start).padStart(3,'0')}`);
+    await expect(page.getByRole('status').filter({hasText:/全101銘柄中/})).toHaveText(`全101銘柄中${start+1}–${Math.min(start+pageSize,rows.length)}`);
+  }
+  await expect(page.getByRole('button',{name:`次の${pageSize}件`,exact:true})).toBeDisabled();
   if(width<=700){
     const finalActions=items.first().getByRole('button');
     const evidence=page.getByRole('button',{name:'PERF100 の財務・日次根拠を見る',exact:true});
@@ -235,8 +249,8 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
     await expect(items.locator('.candidate-name strong')).toHaveText('PERF100');
     await expect(finalActions.first()).toBeFocused();
     await expect(finalActions.first()).toHaveAttribute('aria-current','true');
-    await expect(page.locator('.candidate-pagination')).toContainText('3 / 3');
-    await expect(page.getByRole('button',{name:'次の50件',exact:true})).toBeDisabled();
+    await expect(page.getByRole('combobox',{name:'候補のページ',exact:true})).toHaveValue(String(Math.ceil(rows.length/pageSize)-1));
+    await expect(page.getByRole('button',{name:`次の${pageSize}件`,exact:true})).toBeDisabled();
     await expect(page.getByRole('button',{name:'ミネルヴィニ',exact:true})).toHaveAttribute('aria-pressed','true');
     await expect(page.getByLabel('現在の絞り込み')).toHaveText(before.filters);
     expect(page.url()).toBe(before.url);
@@ -246,12 +260,59 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
     expect(returned.hit,JSON.stringify(returned.hitPoints.filter(point=>!point.hit))).toBe(true);
     await expectPageGeometry('final-evidence-after-back');
   }
-  await page.getByRole('button',{name:'前の50件',exact:true}).click();
-  await expect(items).toHaveCount(50);
-  await expectPageStart('PERF050');
-  await page.getByRole('button',{name:'前の50件',exact:true}).click();
-  await expect(items).toHaveCount(50);
-  await expectPageStart('PERF000');
-  await expect(page.getByRole('button',{name:'前の50件',exact:true})).toBeDisabled();
+  for(let start=Math.floor((rows.length-1)/pageSize)*pageSize-pageSize;start>=0;start-=pageSize){
+    await page.getByRole('button',{name:`前の${pageSize}件`,exact:true}).click();
+    await expect(items).toHaveCount(pageSize);
+    await expectPageStart(`PERF${String(start).padStart(3,'0')}`);
+  }
+  await expect(page.getByRole('button',{name:`前の${pageSize}件`,exact:true})).toBeDisabled();
   await expectCandidateHeading();
+});
+
+test('default 20-card mobile browsing retains the selected symbol, filters and Back position across size and page jumps',async({page})=>{
+ await page.setViewportSize({width:360,height:568});
+ await mockFeed(page);
+ await page.goto('/');
+ const board=page.getByRole('region',{name:'候補リスト',exact:true});
+ const items=board.getByRole('listitem');
+ const pageSize=page.getByRole('combobox',{name:'1ページの銘柄数',exact:true});
+ const jump=page.getByRole('combobox',{name:'候補のページ',exact:true});
+ await expect(items).toHaveCount(20);
+ await jump.selectOption('3');
+ const selected=page.getByRole('button',{name:/^PERF077 の分析/});
+ await selected.click();
+ await expect(page.getByRole('region',{name:'銘柄詳細',exact:true}).getByRole('heading',{name:'PERF077',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'← 候補一覧',exact:true}).click();
+ await expect(selected).toBeFocused();
+ const filters=await page.getByLabel('現在の絞り込み').textContent();
+ // Browse away from the selected symbol before changing the display unit.
+ await jump.selectOption('0');
+ await expect(selected).toHaveCount(0);
+ await pageSize.focus();await pageSize.selectOption('50');
+ await expect(page).toHaveURL(/feedSize=50/);
+ await expect(items).toHaveCount(50);
+ await expect(jump).toHaveValue('1');
+ await expect(selected).toBeFocused();
+ await expect(selected).toHaveAttribute('aria-current','true');
+ await pageSize.focus();await pageSize.selectOption('20');
+ await expect(page).toHaveURL(/feedSize=20/);
+ await expect(items).toHaveCount(20);
+ await expect(jump).toHaveValue('3');
+ await expect(selected).toBeFocused();
+ await expect(page.getByLabel('現在の絞り込み')).toHaveText(filters);
+ await expect(page.getByRole('button',{name:'ミネルヴィニ',exact:true})).toHaveAttribute('aria-pressed','true');
+ const scrollBefore=await page.evaluate(()=>scrollY);
+ await selected.click();
+ await expect(page.locator('.research-workbench')).toHaveAttribute('data-mobile-view','detail');
+ await page.getByRole('button',{name:'← 候補一覧',exact:true}).click();
+ await expect(selected).toBeFocused();
+ await expect(jump).toHaveValue('3');
+ await expect.poll(async()=>Math.abs(await page.evaluate(()=>scrollY)-scrollBefore)).toBeLessThanOrEqual(1);
+ await expect(page.getByLabel('現在の絞り込み')).toHaveText(filters);
+ await jump.selectOption('5');
+ await expect(items).toHaveCount(1);
+ await expect(items).toHaveAttribute('aria-posinset','101');
+ await expect(items).toHaveAttribute('aria-setsize','101');
+ await expect(board.getByRole('status')).toHaveText('全101銘柄中101–101');
+ await expect(page.getByRole('button',{name:'次の20件',exact:true})).toBeDisabled();
 });

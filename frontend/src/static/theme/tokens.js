@@ -21,7 +21,7 @@ export const radii = [4,8,12,16];
 // geometry of an already readable evidence feed. Share the same stacks with
 // the CSS shell, portalled controls and canvas labels.
 export const fonts = {
-  body:'-apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", Meiryo, IPAGothic, sans-serif',
+  body:'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", Meiryo, IPAGothic, sans-serif',
   mono:'ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace',
 };
 export const themeCss = Object.entries(palettes).map(([mode,palette]) =>

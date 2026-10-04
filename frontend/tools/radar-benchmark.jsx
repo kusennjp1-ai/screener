@@ -3,24 +3,28 @@ import { flushSync } from 'react-dom';
 import SetupRadar from '../src/static/components/SetupRadar';
 import { themeCss } from '../src/static/theme/tokens';
 import fixture from './fixtures/radar-207-2026-09-29.json';
+import { createRadarContext, radarContextWitness, RADAR_HARNESS_VERSION } from './radar-benchmark-context.mjs';
+import '../src/index.css';
+import '../src/static/research.css';
 import '../src/static/theme/foundation.css';
+import '../src/static/theme/motion.css';
 import '../src/static/workbench.css';
+import '../src/static/components/researchOverview.css';
+import './radar-benchmark-context.css';
 
 document.documentElement.dataset.theme = 'dark';
 const tokens = document.createElement('style');
 tokens.textContent = themeCss;
 document.head.append(tokens);
-window.measureRadar = async ({ width } = {}) => {
+window.measureRadar = async ({ width, theme = 'dark' } = {}) => {
   await document.fonts.ready;
-  const container = document.createElement('div');
-  container.style.width = Number.isFinite(width) && width > 0 ? `${width}px` : innerWidth < 768 ? '358px' : '628px';
-  document.body.append(container);
+  const { shell, container, widthOverride } = createRadarContext(document, { width, theme });
   const root = createRoot(container);
   // Start at a frame boundary; next-frame time includes the first paint
   // opportunity, whereas render/layout records only synchronous actual work.
   await new Promise(resolve => requestAnimationFrame(resolve));
   const start = performance.now();
-  flushSync(() => root.render(<SetupRadar ranked={fixture.ranked} small={innerWidth < 768} onSelect={() => {}} />));
+  flushSync(() => root.render(<><div className="overview-explanation" aria-hidden="true"/><SetupRadar ranked={fixture.ranked} small={matchMedia('(max-width:700px)').matches} onSelect={() => {}} /></>));
   container.getBoundingClientRect();
   const renderLayout = performance.now() - start;
   // Set by the real canvas draw loop only after every circle has been painted.
@@ -36,8 +40,8 @@ window.measureRadar = async ({ width } = {}) => {
   const targetWidth = Math.max(1, Math.round(box.width * ratio)), targetHeight = Math.max(1, Math.round(box.height * ratio));
   const pixelAlignment = { width: canvas.width, height: canvas.height, css_width: box.width, css_height: box.height, dpr: ratio,
     target_width: targetWidth, target_height: targetHeight, matches: canvas.width === targetWidth && canvas.height === targetHeight };
-  const result = { render_layout_ms: renderLayout, first_frame_ms: nextFrame, point_count: count, final_point_count: Number(canvas.dataset.radarPointCount), pixel_alignment: pixelAlignment, as_of_date: fixture.as_of_date, source_sha256: fixture.source_sha256 };
+  const result = { harness_version: RADAR_HARNESS_VERSION, context: radarContextWitness(shell, widthOverride), render_layout_ms: renderLayout, first_frame_ms: nextFrame, point_count: count, final_point_count: Number(canvas.dataset.radarPointCount), pixel_alignment: pixelAlignment, as_of_date: fixture.as_of_date, source_sha256: fixture.source_sha256 };
   flushSync(() => root.unmount());
-  container.remove();
+  shell.remove();
   return result;
 };

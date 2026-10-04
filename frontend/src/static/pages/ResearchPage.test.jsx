@@ -231,14 +231,15 @@ it('moves candidate focus with arrow keys and opens the focused stock with Enter
   expect(within(screen.getByRole('dialog',{name:'日次分析'})).getByText('FAIL')).toBeInTheDocument();
 });
 
-it('keeps all rows available to CSV and search beyond the first 50 rendered candidates', async () => {
+it.each([20,50])('keeps all rows available to CSV and search beyond the first %s rendered candidates', async pageSize => {
   data.rows=Array.from({length:58},(_,i)=>withAuditFixture({...leader,symbol:`TEST${String(i).padStart(2,'0')}`,company_name:`Fixture ${i}`},data.date));
   const createObjectURL=vi.fn(()=> 'blob:fixture-csv');
   vi.stubGlobal('URL',Object.assign(class extends URL {},{createObjectURL,revokeObjectURL:vi.fn()}));
   vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+  if(pageSize===50)window.history.replaceState(null,'','#/?feedSize=50');
   mount();
   await screen.findByRole('button',{name:/^TEST00 の分析/});
-  expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(50);
+  expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(pageSize);
   expect(within(candidates()).queryByText('TEST57')).not.toBeInTheDocument();
   openFilters();
   fireEvent.click(screen.getByRole('button',{name:/全検索結果をCSV保存/}));

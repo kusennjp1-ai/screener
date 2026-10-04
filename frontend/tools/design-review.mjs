@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../src/static/financialEvidencePresentation.js';
 import { assess } from '../src/static/researchEngine.js';
+import { PERFORMANCE_SCENARIOS, performanceDomWitness, performanceDomFailures, performanceResult, performanceSummary, performancePublicationUniverse, performanceUniverseFailures, coldNavigationFailures, designReviewProvenance } from './design-performance.mjs';
+import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
 import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, checkFeedDecisionEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
 
@@ -22,8 +24,9 @@ const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }
 const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
 const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
 const radarRoot = process.env.RADAR_BUILD && resolve(process.env.RADAR_BUILD);
-const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || (process.env.GITHUB_RUN_ID ? `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` : null), clock: 'actual browser Date.now; no historical date override', data: null,
-  method: 'Production Chromium. CDP CPU 4x, same-data baseline/current, HTTP responses cached in memory after warm-up. No human satisfaction inference.', screens: [], performance: [], failures: [] };
+const report = { commit, measured_at: new Date().toISOString(), ...designReviewProvenance(process.env), clock: 'actual browser Date.now; no historical date override', data: null,
+  observation_cost: 'Each initial_dom/switched_dom collection_ms records synchronous DOM reads. Collection, serialization and transport remain included in the measured endpoint; no observation cost is subtracted.',
+  method: 'Production Chromium. CDP CPU 4x; identical full-data baseline/current inputs. HTTP responses cached in memory after an untimed data/network preparation load; every measured run reloads its requested route into a fresh document and retains cold application mount. Legacy dense50 is a different product default, not an equal-DOM comparison. Approved current20 is the release criterion; optional current50 stress uses the same limits and the same-run legacy50 reference. No human satisfaction inference.', screens: [], performance: [], performance_stress: [], failures: [] };
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 async function serve(root) {
@@ -53,16 +56,30 @@ const currentResearchBytes = await readFile(resolve(currentRoot, 'static-data', 
 const publishedResearch = decodeResearchIndex(JSON.parse(currentResearchBytes.toString('utf8')));
 report.data = { as_of_date: currentEntry.as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation,
   manifest_sha256: sha256(manifestBytes), research_path: currentEntry.assets.research.path,
-  research_sha256: sha256(currentResearchBytes) };
+  research_sha256: sha256(currentResearchBytes), full_index_row_count: publishedResearch.rows.length };
+const performanceUniverses = {};
+async function publicationUniverse(root, entry, label, indexBytes) {
+  const raw = indexBytes || await readFile(resolve(root, 'static-data', entry.assets.research.path));
+  const index = JSON.parse(raw.toString('utf8'));
+  const chunks = await Promise.all((index.chunks || []).map(async chunk => JSON.parse(await readFile(resolve(root, 'static-data', chunk.path), 'utf8'))));
+  const universe = performancePublicationUniverse([index, ...chunks], entry.as_of_date);
+  (report.transport ||= []).push({ label, as_of_date: entry.as_of_date, raw_bytes: raw.length, gzip_bytes: gzipSync(raw).length });
+  (report.data.performance_universes ||= {})[label] = { source_row_count: universe.source_symbols.length,
+    source_symbols_sha256: sha256(JSON.stringify(universe.source_symbols)), full_candidate_total: universe.symbols.length,
+    candidate_symbols_sha256: sha256(JSON.stringify(universe.symbols)), chunk_count: chunks.length,
+    method: 'complete index+chunks, canonical merged rows, US/missing market and default liquidity filter; independent of page size' };
+  return universe;
+}
+performanceUniverses.current = await publicationUniverse(currentRoot, currentEntry, 'current', currentResearchBytes);
 if (baselineRoot) {
   const previousManifest = JSON.parse(await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
-  const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
-  const ids = async (root, entry, label) => {
-    const raw = await readFile(resolve(root, 'static-data', entry.assets.research.path));
-    (report.transport ||= []).push({ label, as_of_date: entry.as_of_date, raw_bytes: raw.length, gzip_bytes: gzipSync(raw).length });
-    return decodeResearchIndex(JSON.parse(raw.toString('utf8'))).rows.map(row => row.symbol).sort().join(',');
-  };
-  check(currentEntry.as_of_date === previousEntry.as_of_date && await ids(currentRoot, currentEntry, 'current') === await ids(baselineRoot, previousEntry, 'baseline'), 'Baseline/current snapshots have different dates or symbols; performance comparison is invalid');
+  const previousEntry = previousManifest.markets?.US || previousManifest;
+  performanceUniverses.baseline = await publicationUniverse(baselineRoot, previousEntry, 'baseline');
+  check(currentEntry.as_of_date === previousEntry.as_of_date && JSON.stringify(performanceUniverses.current.source_symbols) === JSON.stringify(performanceUniverses.baseline.source_symbols), 'Baseline/current full snapshots have different dates or symbols; performance comparison is invalid');
+  report.data.legacy_cohort_comparison = { same_source_symbols: JSON.stringify(performanceUniverses.current.source_symbols) === JSON.stringify(performanceUniverses.baseline.source_symbols),
+    same_filtered_cohort: JSON.stringify(performanceUniverses.current.symbols) === JSON.stringify(performanceUniverses.baseline.symbols),
+    current_total: performanceUniverses.current.symbols.length, legacy_total: performanceUniverses.baseline.symbols.length,
+    note: 'Filtered cohort differences between versions are diagnostic; each version must match its own complete publication, and current50 must match current20.' };
 }
 const readySelector = '.candidate-row, .research-list tbody tr';
 const visible = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
@@ -157,7 +174,7 @@ async function capture(page, viewport, theme, screen, taskSurface = null) {
   const key = `${screen}/${viewport.width}/${theme}`;
   const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
   report.screens.push({ key, screenshot, screenshot_sha256: sha256(screenshotBytes), viewport, theme,
-    provenance: { commit, source_run: report.source_run, data: report.data, browser_evaluated_at: await page.evaluate(() => new Date().toISOString()), route: new URL(page.url()).hash || '#/', method: feedMetrics?.method || null, feed_symbol: feedMetrics?.feed.symbol || null, selected_symbol: feedMetrics?.detail.symbol || null },
+    provenance: { commit, source_run: report.source_run, input_source_run: report.input_source_run, data: report.data, browser_evaluated_at: await page.evaluate(() => new Date().toISOString()), route: new URL(page.url()).hash || '#/', method: feedMetrics?.method || null, feed_symbol: feedMetrics?.feed.symbol || null, selected_symbol: feedMetrics?.detail.symbol || null },
     metrics, feed: feedMetrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
@@ -404,9 +421,10 @@ for (const viewport of FEED_REVIEW_VIEWPORTS) for (const theme of ['dark', 'ligh
   }
 }
 
-const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
-for (const [label, server] of [['baseline', baseline], ['current', current]]) {
-  if (!server) continue;
+for (const scenario of PERFORMANCE_SCENARIOS) {
+  const { label } = scenario, server = label === 'baseline' ? baseline : current;
+  if (!server) { check(false, `${label}: production build required for same-run performance reference`); continue; }
+  const url = `${server.url}${scenario.route}`;
   for (const viewport of viewportSizes) {
     const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
     const cache = new Map();
@@ -422,34 +440,44 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
       window.__reviewTasks = [];
       new PerformanceObserver(list => window.__reviewTasks.push(...list.getEntries().map(item => ({ start: item.startTime, duration: item.duration })))).observe({ type: 'longtask', buffered: true });
     });
-    const runs = [];
+    await page.addInitScript({ content: `window.__performanceDomWitness = ${performanceDomWitness.toString()};` });
+    const runs = [], observationFailures = [];
     try {
-      await page.goto(server.url); await visible(page.locator(readySelector)); await page.waitForLoadState('networkidle');
+      await page.goto(url); await visible(page.locator(readySelector)); await page.waitForLoadState('networkidle');
+      let previousTimeOrigin = await page.evaluate(() => performance.timeOrigin);
       const cdp = await context.newCDPSession(page);
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
       for (let repetition = 0; repetition < 3; repetition++) {
         const start = Date.now();
-        await page.goto(server.url); await visible(page.locator(readySelector));
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        // Explicit reload prevents a repeated hash URL from becoming a
+        // same-document navigation. All workloads use this identical cold
+        // navigation operation and retain the navigation-to-two-rAF endpoint.
+        await page.reload(); await visible(page.locator(readySelector));
+        const initialWitness = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(window.__performanceDomWitness())))));
         const candidateMs = Date.now() - start;
+        observationFailures.push(...coldNavigationFailures(previousTimeOrigin, initialWitness).map(failure => `run ${repetition + 1}: ${failure}`));
+        previousTimeOrigin = initialWitness.time_origin;
         const initialTasks = await page.evaluate(() => ({ longest: Math.max(0, ...window.__reviewTasks.map(item => item.duration)), tasks: window.__reviewTasks }));
         const method = page.getByRole('button', { name: /^オニール/, exact: false });
         const switchStart = Date.now(); await method.click();
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const switchWitness = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(window.__performanceDomWitness())))));
         const switchMs = Date.now() - switchStart;
-        runs.push({ candidate_ms: candidateMs, method_switch_ms: switchMs, longest_initial_task_ms: initialTasks.longest, initial_tasks: initialTasks.tasks,
+        for (const [phase, witness, expectedMethod] of [['initial', initialWitness, 'minervini'], ['switch', switchWitness, 'oneil']]) {
+          observationFailures.push(...performanceDomFailures(witness, { ...scenario, method: expectedMethod }).map(failure => `run ${repetition + 1} ${phase}: ${failure}`));
+        }
+        runs.push({ initial_dom: initialWitness, switched_dom: switchWitness, candidate_ms: candidateMs, method_switch_ms: switchMs, longest_initial_task_ms: initialTasks.longest, initial_tasks: initialTasks.tasks,
           memory: await page.evaluate(() => performance.memory ? { usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize } : null) });
         console.log(`CPU4 ${label}/${viewport.width} run ${repetition + 1}: ready ${candidateMs}ms, switch ${switchMs}ms, long task ${initialTasks.longest}ms.`);
       }
-      if (label === 'current' && runs.some(run => run.candidate_ms > 3500 || run.method_switch_ms > 400 || run.longest_initial_task_ms > 200)) {
+      if (label !== 'baseline' && runs.some(run => run.candidate_ms > 3500 || run.method_switch_ms > 400 || run.longest_initial_task_ms > 200)) {
         // Diagnostic recording is a separate fourth run and cannot influence
         // any of the three budget measurements above.
         try {
           await cdp.send('Profiler.enable'); await cdp.send('Profiler.start');
-          await page.goto(server.url); await visible(page.locator(readySelector));
+          await page.reload(); await visible(page.locator(readySelector));
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           const initial = await cdp.send('Profiler.stop');
-          await writeFile(resolve(output, `diagnostic-initial-${viewport.width}.cpuprofile`), JSON.stringify(initial.profile));
+          await writeFile(resolve(output, `diagnostic-initial-${label}-${viewport.width}.cpuprofile`), JSON.stringify(initial.profile));
           // Keep method switching isolated from initial Worker delivery. These
           // diagnostic phases never replace any of the three measured runs.
           await cdp.send('Profiler.start');
@@ -457,24 +485,28 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           await page.waitForTimeout(500);
           const { profile } = await cdp.send('Profiler.stop');
-          await writeFile(resolve(output, `diagnostic-method-${viewport.width}.cpuprofile`), JSON.stringify(profile));
+          await writeFile(resolve(output, `diagnostic-method-${label}-${viewport.width}.cpuprofile`), JSON.stringify(profile));
           await cdp.send('Profiler.disable');
         } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
       }
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-    } catch (error) { report.failures.push(`${label}/${viewport.width}: performance interrupted: ${error.message}`); }
-    const metrics = { label, viewport, runs, candidate_median_ms: runs.length === 3 ? median(runs.map(run => run.candidate_ms)) : null,
-      maximum_switch_ms: runs.length ? Math.max(...runs.map(run => run.method_switch_ms)) : null,
-      longest_initial_task_ms: runs.length ? Math.max(...runs.map(run => run.longest_initial_task_ms)) : null, cached_response_count: cache.size };
-    report.performance.push(metrics);
-    if (label === 'current') {
-      check(runs.length === 3, `${viewport.width}: performance requires all 3 runs`);
-      check(metrics.candidate_median_ms !== null && metrics.candidate_median_ms <= 4200, `${viewport.width}: Q1 candidate median ${metrics.candidate_median_ms}ms > 4200ms`);
-      check(metrics.maximum_switch_ms !== null && metrics.maximum_switch_ms <= 480, `${viewport.width}: Q1 method switch ${metrics.maximum_switch_ms}ms > 480ms`);
-      // Report P1 exact acceptance separately; Q1's 20% CI allowance never
-      // converts a miss of P1's original limits into a P1 pass.
-      metrics.p1_pass = runs.length === 3 && metrics.candidate_median_ms <= 3500 && metrics.maximum_switch_ms <= 400 && metrics.longest_initial_task_ms <= 200;
-      check(metrics.p1_pass, `${viewport.width}: P1 exact limits not met (3500ms / 400ms / 200ms)`);
+    } catch (error) { observationFailures.push(`performance interrupted: ${error.message}`); }
+    const universe = performanceUniverses[label === 'baseline' ? 'baseline' : 'current'];
+    const currentDefault = report.performance.find(item => item.label === 'current' && item.viewport.width === viewport.width);
+    observationFailures.push(...performanceUniverseFailures(runs, universe, label === 'current-50-stress' ? { referenceTotal: currentDefault?.full_candidate_total ?? null } : {}));
+    const metrics = performanceResult(scenario, viewport, runs, { cachedResponseCount: cache.size, observationFailures });
+    metrics.full_candidate_total = runs[0]?.initial_dom?.total ?? null;
+    metrics.expected_full_candidate_total = universe?.symbols.length ?? null;
+    metrics.universe_reference = label === 'baseline' ? 'own baseline complete publication' : 'own current complete publication';
+    metrics.baseline_reference = label === 'baseline' ? null : { section: 'performance', label: 'baseline', viewport, same_run: true, equal_dom: false };
+    report[scenario.section].push(metrics);
+    // Baseline completion still gates the validity of the control. Optional50
+    // budget misses stay explicit in their own section; they do not override
+    // the approved20 release criterion or disappear behind a Q1 allowance.
+    for (const failure of metrics.measurement_failures) check(false, `${label}/${viewport.width}: ${failure}`);
+    if (scenario.release_criterion) {
+      for (const failure of [...metrics.p1_limit_failures, ...metrics.q1_limit_failures]) check(false, `${label}/${viewport.width}: ${failure}`);
+      check(metrics.p1_pass, `${label}/${viewport.width}: P1 exact limits not met (3500ms / 400ms / 200ms)`);
     }
     await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
     await context.close();
@@ -489,11 +521,12 @@ if (radar) for (const viewport of viewportSizes) {
     await page.goto(radar.url); await page.waitForFunction(() => typeof window.measureRadar === 'function');
     const cdp = await context.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     for (let index = 0; index < 3; index++) runs.push(await page.evaluate(() => window.measureRadar()));
+    for (const [index, run] of runs.entries()) for (const failure of radarMeasurementFailures(run)) check(false, `${viewport.width}: D9 run ${index + 1}: ${failure}`);
     check(runs.every(run => run.point_count === 207), `${viewport.width}: D9 needs exactly 207 actual historical points`);
     check(runs.every(run => run.final_point_count === 207 && run.pixel_alignment?.matches === true), `${viewport.width}: D9 must finish all 207 points at actual CSS size and DPR by the first-frame boundary`);
     check(runs.length === 3 && runs.every(run => run.first_frame_ms <= 50), `${viewport.width}: D9 first paint opportunity ${Math.max(...runs.map(run => run.first_frame_ms)).toFixed(1)}ms > 50ms`);
   } catch (error) { report.failures.push(`${viewport.width}: D9 benchmark interrupted: ${error.message}`); }
-  report.radar.push({ viewport, cpu_rate: 4, method: 'actual SetupRadar, 207 canonical real 2026-09-29 observations; production initial mount, synchronous layout and next animation frame; no network/data preparation in render interval', runs });
+  report.radar.push({ viewport, cpu_rate: 4, harness_version: RADAR_HARNESS_VERSION, comparison: 'current-only; historical bare-div v1 results are different harness conditions, not a paired legacy comparison', method: 'actual SetupRadar in production shell/expanded-overview style and width context, 207 canonical real 2026-09-29 observations; cold first React mount retained, all 3 runs; synchronous layout and next animation frame; no warmup or component work before timer; no network/data preparation in render interval', runs });
   await context.close();
 }
 await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();
@@ -510,6 +543,6 @@ if (radar && report.failures.some(failure => failure.includes('D9'))) {
   }
 }
 await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
-console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
+await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} release/measurement failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Default release criterion and same-run legacy reference\n\nLegacy cd3a6a2 is the dense50 product default; current20 is the approved research-feed default. These are different DOM workloads with identical full data, not an equal-DOM performance claim. One legacy50 measurement set is reused as context for both current sizes.\n\n${performanceSummary(report.performance)}\n\n## Optional50 cold-load stress (same limits, reported separately)\n\nBudget misses here remain failures of this optional workload; they do not change the approved20 release criterion. Every run loads #/?feedSize=50 directly.\n\n${performanceSummary(report.performance_stress)}\n\n## D9 context\n\n${RADAR_HARNESS_VERSION}: current-only production ancestry/CSS/width. All three runs, including cold first React mount, retain 207 actual points, real CSS/DPR alignment and the 50ms limit. Earlier bare-div measurements remain historical conditions.\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
+console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), performance_stress: report.performance_stress.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
 if (report.failures.length) process.exitCode = 1;

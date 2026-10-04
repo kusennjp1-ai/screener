@@ -61,3 +61,10 @@ or estimated-height placeholder is added.
 The revised typography requires new real desktop/mobile screenshots and exact-code
 browser/performance checks. Font changes can affect wrapping and chart axes; no
 speedup or visual acceptance is claimed before those checks complete.
+
+The first installed-font browser run passed all 27 static browser tests. Its Linux
+screenshots nevertheless showed excessively spaced Latin labels and dates wrapping
+within a Japanese fallback family. The body stack therefore prioritizes `system-ui`
+before the named Japanese fallbacks; numeric fields retain their separate monospace
+and tabular-number treatment. This correction requires another exact-code visual
+check and does not restore external font downloads.

@@ -11,7 +11,7 @@ import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography, useMediaQuery } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
@@ -27,12 +27,15 @@ import { usePersonalQuote } from '../usePersonalQuote';
 import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
 import { prepareResearchBundle, researchBundleCurrent } from '../researchPreprocess';
+import { isFeedSizeOnlyNavigation, normalizeFeedSize } from '../researchFeedPaging';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
 export default function ResearchPage({compareOnly=false}) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const smallScreen = useMediaQuery('(max-width:1279px)');
   const listReturn = useRef(null);
   const restoreListPosition = useCallback(() => requestAnimationFrame(() => {
@@ -49,6 +52,12 @@ export default function ResearchPage({compareOnly=false}) {
   const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
   const version = manifest.data?.research_generation || manifest.data?.generated_at;
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const feedSize = normalizeFeedSize(params.get('feedSize'));
+  const changeFeedSize = useCallback(size => {
+    const next = new URLSearchParams(location.search);
+    next.set('feedSize', String(normalizeFeedSize(size)));
+    navigate({pathname:location.pathname,search:`?${next}`,hash:location.hash}, {replace:true,state:location.state});
+  }, [location, navigate]);
   const [method, setMethod] = useState(()=>Object.hasOwn(METHODS,params.get('method'))?params.get('method'):'minervini');
   const [view,setView]=useState(()=>params.get('view')==='charts'?'charts':'list');
   const [sector,setSector]=useState(()=>params.get('sector') || '');
@@ -109,7 +118,13 @@ export default function ResearchPage({compareOnly=false}) {
   const financialNow = Math.max(bundle.evaluatedNow ?? Date.now(),selectedFinancialNow);
   const selected = useMemo(() => mergeFinancialDetail(selectedSummary,detailResponse?.value,{now:financialNow,asOfDate:bundle.data?.date,generation:version,detailGeneration:detailResponse?.generation,expectedDetailPath:selectedSummary?.research_detail_path,detailPath:detailResponse?.path}), [selectedSummary,detailResponse,bundle.data?.date,version,financialNow]);
   const initialSymbol = useRef(params.get('symbol'));
+  const previousLocation = useRef(location);
   useEffect(() => {
+    const sizeOnly = isFeedSizeOnlyNavigation(previousLocation.current, location);
+    previousLocation.current = location;
+    // Preference changes replace the current URL, and Back/Forward restores
+    // its size. A regular home link is still a navigation to a fresh list.
+    if (sizeOnly && navigationType !== 'PUSH') return;
     // RouterLink uses pushState, which does not emit hashchange. Restore every
     // supported URL field on navigation, including fields removed by Back.
     const ticker = params.get('symbol') || null;
@@ -129,7 +144,7 @@ export default function ResearchPage({compareOnly=false}) {
     setVerificationSymbol(null);
     listReturn.current = null;
     initialSymbol.current = ticker;
-  }, [location.key, location.pathname, params, setSearch]);
+  }, [location, navigationType, params, setSearch]);
   useEffect(() => {
     if (!initialSymbol.current || selected?.symbol !== initialSymbol.current) return;
     const frame = requestAnimationFrame(() => {
@@ -272,7 +287,7 @@ export default function ResearchPage({compareOnly=false}) {
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} onHighlight={setSymbol} view={actualView} onView={setView} toolbar={methodControls} filterChips={filterChips} watch={watch} onWatch={toggleWatch} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} financialEpoch={researchBundleCurrent(bundle.data,now,version ?? null)?bundle.data.evaluated_at:now} onCompare={setChart} paused={Boolean(chart)} />
+      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} onHighlight={setSymbol} view={actualView} onView={setView} feedSize={feedSize} onFeedSizeChange={changeFeedSize} toolbar={methodControls} filterChips={filterChips} watch={watch} onWatch={toggleWatch} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} financialEpoch={researchBundleCurrent(bundle.data,now,version ?? null)?bundle.data.evaluated_at:now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">

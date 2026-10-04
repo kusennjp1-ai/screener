@@ -5,27 +5,27 @@ import { entryPlan } from '../researchEngine';
 vi.mock('../researchEngine',async()=>{const actual=await vi.importActual('../researchEngine');return {...actual,entryPlan:vi.fn(actual.entryPlan)};});
 afterEach(()=>{cleanup();vi.clearAllMocks();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
-it('calculates only visible rank plans, keeps the full sort universe and reuses unchanged row plans',()=>{
+it.each([20,50])('calculates only the visible %s rank plans, keeps the full sort universe and reuses unchanged row plans',pageSize=>{
  const ranked=Array.from({length:103},(_,index)=>({row:{symbol:`S${index}`,current_price:102,se_pivot_price:100,rs_rating:index,se_volume_vs_50d:1.5},assessment:{qualified:true,passed:9,total:9}}));
- const props={ranked,method:'minervini',onSelect:vi.fn(),onMove:vi.fn()};
+ const props={ranked,method:'minervini',feedSize:pageSize,onSelect:vi.fn(),onMove:vi.fn()};
  const {rerender}=render(<CandidateBoard {...props}/>);
- expect(entryPlan).toHaveBeenCalledTimes(50);
- expect(screen.getAllByRole('listitem')).toHaveLength(50);
+ expect(entryPlan).toHaveBeenCalledTimes(pageSize);
+ expect(screen.getAllByRole('listitem')).toHaveLength(pageSize);
  expect(screen.getByRole('heading',{name:'ミネルヴィニ 候補 103件'})).toBeInTheDocument();
  rerender(<CandidateBoard {...props} selectedSymbol="S1"/>);
- expect(entryPlan).toHaveBeenCalledTimes(50);
+ expect(entryPlan).toHaveBeenCalledTimes(pageSize);
  fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'rs'}});
- expect(entryPlan).toHaveBeenCalledTimes(153);
+ expect(entryPlan).toHaveBeenCalledTimes(pageSize+103);
  expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('S102');
- fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
- expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('S52');
- expect(entryPlan).toHaveBeenCalledTimes(153);
+ fireEvent.click(screen.getByRole('button',{name:`次の${pageSize}件`}));
+ expect(screen.getAllByRole('listitem')[0]).toHaveTextContent(`S${102-pageSize}`);
+ expect(entryPlan).toHaveBeenCalledTimes(pageSize+103);
 });
 it('keeps keyboard focus when crossing both directions at a 50-row boundary in a 501-row universe',()=>{
  const ranked=Array.from({length:501},(_,index)=>({row:{symbol:`S${index}`,current_price:102,se_pivot_price:100,rs_rating:90},assessment:{qualified:true,passed:9,total:9}}));
  const onSelect=vi.fn();let nextFrame;
  vi.stubGlobal('requestAnimationFrame',vi.fn(callback=>{nextFrame=callback;return 1;}));
- render(<CandidateBoard ranked={ranked} method="minervini" onSelect={onSelect}/>);
+ render(<CandidateBoard ranked={ranked} method="minervini" feedSize={50} onSelect={onSelect}/>);
  const last=screen.getByRole('button',{name:/^S49 の分析/});last.focus();
  fireEvent.keyDown(last,{key:'ArrowDown'});
  expect(onSelect).toHaveBeenLastCalledWith('S50');
@@ -50,7 +50,7 @@ it.each([[390,0],[390,.578125],[701,0],[1024,0],[1279,.578125],[1280,0],[1440,0]
   if(this.classList.contains('candidate-board-heading'))return {top:mobile?-136+fraction:464,bottom:mobile?-100:500,height:36};
   return {top:0,bottom:0,height:0};
  });
- const {container}=render(<><header className="leader-header"/><CandidateBoard ranked={ranked} method="minervini" onSelect={onSelect}/></>);
+ const {container}=render(<><header className="leader-header"/><CandidateBoard ranked={ranked} method="minervini" feedSize={50} onSelect={onSelect}/></>);
  const scroll=container.querySelector('.candidate-scroll');scroll.scrollTop=1500;
  fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
  expect(screen.getByRole('button',{name:/^S50 の分析/})).toHaveFocus();

@@ -11,17 +11,17 @@ const ranked=Array.from({length:103},(_,index)=>({row:{symbol:`S${index}`,compan
 const market={cap:.5,label:'上昇'};
 const props={ranked,method:'minervini',date:'2026-09-29',market,now:Date.parse('2026-09-30T10:00:00Z'),onSelect:vi.fn()};
 const waiting={ready:false,passed:5,total:7,rules:[{id:'selection',state:'pass',label:'共通選定条件'},{id:'volume',state:'fail',label:'出来高',detail:'50日平均比が基準未満'},{id:'earnings',state:'unknown',label:'決算予定',detail:'予定日が未取得'}]};
-it('adds daily readiness only for the visible 50 and reuses it when selection changes',()=>{
+it.each([20,50])('adds daily readiness only for the visible %s and reuses it when selection changes',pageSize=>{
  entryReadiness.mockReturnValue(waiting);
- const {rerender}=render(<CandidateBoard {...props}/>);
- expect(entryReadiness).toHaveBeenCalledTimes(50);
- expect(entryReadiness).toHaveBeenLastCalledWith(ranked[49].row,props.date,market,props.now,'minervini');
- rerender(<CandidateBoard {...props} selectedSymbol="S1"/>);
- expect(entryReadiness).toHaveBeenCalledTimes(50);
- fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
- expect(entryReadiness).toHaveBeenCalledTimes(100);
- fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
- expect(entryReadiness).toHaveBeenCalledTimes(103);
+ const {rerender}=render(<CandidateBoard {...props} feedSize={pageSize}/>);
+ expect(entryReadiness).toHaveBeenCalledTimes(pageSize);
+ expect(entryReadiness).toHaveBeenLastCalledWith(ranked[pageSize-1].row,props.date,market,props.now,'minervini');
+ rerender(<CandidateBoard {...props} feedSize={pageSize} selectedSymbol="S1"/>);
+ expect(entryReadiness).toHaveBeenCalledTimes(pageSize);
+ for(let start=pageSize;start<ranked.length;start+=pageSize){
+  fireEvent.click(screen.getByRole('button',{name:`次の${pageSize}件`}));
+  expect(entryReadiness).toHaveBeenCalledTimes(Math.min(start+pageSize,ranked.length));
+ }
 });
 it('shows price location and daily purchase status separately, with the next failed check in the accessible name',()=>{
  entryReadiness.mockReturnValue(waiting);

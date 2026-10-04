@@ -4,7 +4,12 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, extname, relative, isAbsolute } from 'node:path';
 import { chromium } from '@playwright/test';
-const root=resolve('test-results/radar-build'), output=resolve(process.env.RADAR_DIAGNOSTIC_OUTPUT || 'test-results/radar-diagnostic');
+import { execFileSync } from 'node:child_process';
+import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
+import { designReviewProvenance } from './design-performance.mjs';
+if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
+const provenance = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), ...designReviewProvenance(process.env) };
+const root=resolve(process.env.RADAR_BUILD || 'test-results/radar-build'), output=resolve(process.env.RADAR_DIAGNOSTIC_OUTPUT || 'test-results/radar-diagnostic');
 await mkdir(output,{recursive:true});
 const server=createServer(async(req,res)=>{
  try {
@@ -41,9 +46,14 @@ try {
   const alignmentContext=await browser.newContext({viewport,deviceScaleFactor:2,serviceWorkers:'block'}),alignmentPage=await alignmentContext.newPage();
   await alignmentPage.goto(url);await alignmentPage.waitForFunction(()=>typeof window.measureRadar==='function');
   const alignmentSession=await alignmentContext.newCDPSession(alignmentPage);await alignmentSession.send('Emulation.setCPUThrottlingRate',{rate:4});
-  const alignment=await alignmentPage.evaluate(()=>window.measureRadar({width:innerWidth<768?358:828}));
+  const alignment=await alignmentPage.evaluate(()=>window.measureRadar({width:innerWidth<=700?358:828}));
   await alignmentContext.close();
-  report.push({viewport,cpu_rate:4,runs,instrumented,alignment,pass:runs.length===3&&runs.every(run=>run.point_count===207&&run.final_point_count===207&&run.pixel_alignment.matches&&run.first_frame_ms<=50)&&alignment.pixel_alignment.matches&&alignment.final_point_count===207});
+  const failures = runs.flatMap((run,index)=>radarMeasurementFailures(run).map(failure=>`run ${index+1}: ${failure}`));
+  if(runs.length!==3)failures.push('requires all 3 runs including the cold first mount');
+  // Extra DPR2 stress has alignment/context checks; it never replaces a cold
+  // acceptance run or changes the existing 50ms gate on the three main runs.
+  const alignmentFailures=radarMeasurementFailures(alignment,{timing:false}).map(failure=>`DPR2 context/alignment: ${failure}`);
+  report.push({...provenance,viewport,cpu_rate:4,harness_version:RADAR_HARNESS_VERSION,comparison:'current-only; production CSS context v2 differs from historical bare-div v1',runs,instrumented,alignment,failures:[...failures,...alignmentFailures],pass:!failures.length&&!alignmentFailures.length});
  }
  await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2));
  await writeFile(resolve(output,'benchmark.js.map'),await readFile(resolve(root,'benchmark.js.map')));

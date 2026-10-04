@@ -86,6 +86,9 @@ it('shares drawer edits with the header, preserves other filters, and resets eve
  expect(headerSearch()).toHaveValue('TECH');
  closeFilters();
  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'候補を絞り込む'})).not.toBeInTheDocument());
+ fireEvent.change(screen.getByRole('combobox',{name:'1ページの銘柄数'}),{target:{value:'50'}});
+ await waitFor(()=>expect(window.location.hash).toContain('feedSize=50'));
+ expect(headerSearch()).toHaveValue('TECH');
  expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('検索：TECH');
  expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('業種');
  expect(screen.getByRole('button',{name:'オニール',exact:true})).toHaveAttribute('aria-pressed','true');
@@ -107,6 +110,27 @@ it('keeps header and drawer input IDs distinct and label targets exact',()=>{
  expect(header.id).not.toBe(input.id);
  expect(document.querySelectorAll('input[id^="candidate-search-"]')).toHaveLength(2);
  for(const element of [header,input])expect(document.getElementById(element.labels[0].htmlFor)).toBe(element);
+});
+
+it.each(['mobile navigation','logo'])('opens the list on the first normal %s home click after changing feed size',async link=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*1279px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ const {container}=mount();
+ fireEvent.change(screen.getByRole('combobox',{name:'1ページの銘柄数'}),{target:{value:'50'}});
+ await waitFor(()=>expect(window.location.hash).toContain('feedSize=50'));
+ fireEvent.change(headerSearch(),{target:{value:'Synthetic'} });
+ fireEvent.blur(headerSearch());
+ await waitFor(()=>expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('検索：Synthetic'));
+ fireEvent.click(screen.getByRole('button',{name:'IBD型',exact:true}));
+ fireEvent.click(screen.getByRole('button',{name:/^TECH の分析/}));
+ expect(container.querySelector('main')).toHaveAttribute('data-mobile-view','detail');
+ const home=link==='logo'?container.querySelector('.leader-logo'):within(screen.getByRole('navigation',{name:'モバイルナビゲーション'})).getByRole('link',{name:'本日の判断'});
+ fireEvent.click(home);
+ await waitFor(()=>expect(container.querySelector('main')).toHaveAttribute('data-mobile-view','list'));
+ expect(window.location.hash).toBe('#/');
+ expect(headerSearch()).toHaveValue('');
+ expect(screen.getByRole('button',{name:'ミネルヴィニ',exact:true})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('combobox',{name:'1ページの銘柄数'})).toHaveValue('20');
+ expect(screen.getByLabelText('現在の絞り込み')).not.toHaveTextContent('検索：');
 });
 
 it('restores the same shared search on route Back, Forward, and direct symbol navigation',async()=>{

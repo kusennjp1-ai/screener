@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { P1_LIMITS } from './design-performance.mjs';
 import { checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, checkFeedDecisionEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
 
 const observed = text => ({ text, shown: true, firstViewport: true, rect: { top: 100, bottom: 200 } });
@@ -54,7 +55,9 @@ describe('research feed task acceptance', () => {
     const harness = readFileSync('tools/design-review.mjs', 'utf8');
     expect(harness).toContain("if (!process.env.CI) throw Error");
     expect(harness).toContain('const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }]');
-    expect(harness).toContain('metrics.candidate_median_ms <= 3500 && metrics.maximum_switch_ms <= 400 && metrics.longest_initial_task_ms <= 200');
+    expect(P1_LIMITS).toEqual({ candidate_median_ms: 3500, maximum_switch_ms: 400, longest_initial_task_ms: 200 });
+    expect(harness).toContain('const metrics = performanceResult(scenario, viewport, runs');
+    expect(harness).toContain('check(metrics.p1_pass');
     expect(harness).toContain('run.point_count === 207');
     expect(harness).toContain('run.first_frame_ms <= 50');
   });

@@ -71,6 +71,18 @@ For each candidate UI commit, retain these results together:
    updates preserve the approved UI bytes. Verify the resulting live receipt and
    assets before claiming a release.
 
+The approved research-feed default is 20 cards per page, with an optional
+50-card page; full validation, rankings, filters, counts and CSV retain the
+entire universe. The default must meet the original P1/Q1 limits. Retain the
+optional50 cold-load results separately with those same limits and explicit
+failures; its budget misses are not labeled passing or used to override the
+approved20 release criterion. The legacy dense50 control is measured once per
+viewport in the same run and reused for both current workloads. It is a
+different product default, not an equal-DOM comparison. D9 uses the versioned
+production style context with its existing 207-point, 50 ms, three-run gate.
+See [the measurement protocol](research-feed-20-performance-protocol.md) for
+committed-DOM witnesses, historical conditions and capture/input provenance.
+
 A material mismatch at any surface blocks promotion until diagnosed and fixed.
 Use incomplete/unknown wording for missing evidence; these checks establish
 software and source consistency, not superior stock-picking performance.
