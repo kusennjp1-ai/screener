@@ -47,7 +47,7 @@ it('renders six cards, preserves canonical three-percent levels and changes the 
   expect(screen.getAllByRole('article')).toHaveLength(6);
   expect(screen.queryByRole('article',{name:'CASE6 比較チャート'})).toBeNull();
   expect(fetchStaticChartPayload).toHaveBeenCalledTimes(6);
-  for(const [props] of CandlestickChart.mock.calls){expect(props.buyCeiling).toBe(103);expect(props.stopPrice).toBe(93);expect(props.pivotPrice).toBe(100);expect(props.height).toBe(220);}
+  for(const [props] of CandlestickChart.mock.calls){expect(props.buyCeiling).toBe(103);expect(props.stopPrice).toBe(93);expect(props.pivotPrice).toBe(100);expect(props.height).toBe(200);}
   const card=screen.getByRole('article',{name:'CASE0 比較チャート'});
   expect(within(card).getByText('$103.00')).toBeVisible();
   fireEvent.click(within(card).getByRole('button',{name:'CASE0 を分析'}));

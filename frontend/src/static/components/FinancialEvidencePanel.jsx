@@ -23,6 +23,9 @@ export default function FinancialEvidencePanel(props) {
     <ul className="financial-evidence-rows">{view.rows.map(row => <li key={row.id} id={`financial-evidence-${row.id}`} tabIndex={-1} data-state={row.state}>
       <div className="financial-evidence-heading"><div><span className="financial-evidence-role">{row.required ? '必須' : '参考'}</span><h4>{row.label}</h4></div><span className={`financial-evidence-status financial-evidence-status-${row.state}`}>{status[row.state]}</span></div>
       <div className="financial-evidence-value"><strong>{row.actual}</strong><span>{row.condition}</span></div>
+      {row.actual !== '未確認' && row.comparisonLabel && row.comparisonLabel !== row.actual && <p className="financial-comparison-note">{row.comparisonLabel}</p>}
+      {row.referenceActual && <p className="financial-comparison-note">参考計算：{row.referenceActual}</p>}
+      {row.actual !== '未確認' && row.calculationNote && <p className="financial-comparison-note">{row.calculationNote}</p>}
       {row.explanation && <p className="financial-evidence-reason">{row.explanation}</p>}
       <EvidenceMetadata row={row}/>
     </li>)}</ul>

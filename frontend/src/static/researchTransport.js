@@ -1,5 +1,6 @@
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
+import { validatePriceTraceDescriptor } from './priceTrace.js';
 export const RESEARCH_TRANSPORT_VERSION = 'research-table-v1';
 export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version'];
@@ -7,6 +8,8 @@ const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'asse
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
 export function researchListRow(row) {
   const out = { ...row };
+  // Runtime presentation is rebuilt from the validated publication descriptor.
+  delete out.priceTrace;
   // Evidence envelopes and raw history belong to immutable on-demand detail.
   delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
   if (row.institutional_evidence) {
@@ -45,6 +48,7 @@ const leaves = (value, path = [], result = []) => {
 // Column dictionaries remove repeated metadata without rounding decision
 // inputs. High-cardinality columns stay direct to avoid a second ID array.
 export function encodeResearchIndex(index, orders) {
+  const priceTraces = validatePriceTraceDescriptor(index.price_traces, index.as_of_date);
   const rows = index.rows.map(researchListRow);
   // Expand only compact proof tuples into transport columns. Repeated source,
   // cadence, periods and clocks then share dictionaries; exact values can copy
@@ -99,10 +103,11 @@ export function encodeResearchIndex(index, orders) {
       if (length < size) { columns[column] = candidate; size = length; }
     }
   }
-  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, ...pick(index, evaluationFields), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
+  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, ...pick(index, evaluationFields), ...(priceTraces ? {price_traces:priceTraces} : {}), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
 }
 
 export function decodeResearchIndex(value) {
+  const priceTraces = validatePriceTraceDescriptor(value?.price_traces, value?.as_of_date);
   if (!value?.schema) return value;
   if (value.schema !== RESEARCH_TRANSPORT_VERSION || !Array.isArray(value.fields) || !Array.isArray(value.columns) || value.fields.length !== value.columns.length || !Number.isInteger(value.count) || value.count < 0) throw Error('Unsupported research data format');
   const rows = Array.from({ length: value.count }, () => ({}));
@@ -152,5 +157,5 @@ export function decodeResearchIndex(value) {
       row.financial_current.p[field]=keys.map(key=>tuple[key]);
     }
   }
-  return { as_of_date: value.as_of_date, ...pick(value, evaluationFields), rows, orders: value.orders };
+  return { as_of_date: value.as_of_date, ...pick(value, evaluationFields), ...(priceTraces ? {price_traces:priceTraces} : {}), rows, orders: value.orders };
 }

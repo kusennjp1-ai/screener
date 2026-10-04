@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { expandedChartGeometry, checkExpandedChartGeometry } from '../../tools/expanded-chart-geometry.mjs';
+import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency } from '../../tools/research-feed-acceptance.mjs';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { withSyntheticFinancialProof, financialFixtureDate as date, financialFixtureNow as now } from '../../src/test/fixtures/financialCurrent.js';
 
@@ -23,28 +24,53 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
    :file==='research.json'?{as_of_date:date,rows:[row]}:file==='chart.json'?{symbol:'TEST',as_of_date:date,bars,stock_data:row}:{};
   return route.fulfill({json:payload});
  });
- await page.goto('/#/?symbol=TEST&method=oneil');
+ await page.goto('/#/?method=oneil');
+ await expect(page.locator('.candidate-feed-card')).toHaveCount(1);
+ const check=(condition,message)=>expect(condition,message).toBe(true);
+ let feed;
+ for(const theme of ['dark','light']){
+  if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
+  await page.evaluate(()=>window.scrollTo(0,0));
+  // Measure first-viewport evidence before any scroll or selection.
+  const measurements=await page.evaluate(researchFeedMetrics);
+  checkResearchFeedMetrics(measurements,check,`synthetic-feed-${width}x${height}-${theme}`);
+  feed=measurements.feed;
+  for(const metric of feed.metrics){
+   expect(metric.actual.text).toBe('30%');expect(metric.state).toBe('pass');expect(metric.role.text).toBe('必須');
+  }
+  await info.attach(`synthetic-feed-evidence-${theme}`,{body:JSON.stringify(measurements),contentType:'application/json'});
+  await page.screenshot({path:info.outputPath(`synthetic-feed-${width}x${height}-${theme}.png`)});
+ }
+ await page.getByRole('button',{name:'ダークモードに切り替え'}).click();
+ await page.locator('.candidate-feed-card .candidate-row').click();
  const summary=page.getByRole('region',{name:'財務の確認状況'});
- await expect(summary.getByRole('button',{name:/^EPS前年比 30%・通過/})).toBeVisible();
+ await expect(summary.getByRole('button',{name:/^EPS前年比 30%・✓ 通過/})).toBeVisible();
  const plot=page.locator('.research-detail [data-chart-symbol="TEST"]');
  await expect(plot).toBeVisible();
  const summaryBox=await summary.boundingBox(),plotBox=await plot.boundingBox();
- expect(summaryBox.height).toBeLessThanOrEqual(width===360?112:64);
+ // The new summary includes actual, role, condition, period and source plus
+ // annual EPS. The former 64/112px chip-summary cap and whole-summary first
+ // viewport requirement no longer describe the requested product.
+ const selected=await page.evaluate(researchFeedMetrics);
+ checkResearchFeedMetrics(selected,check,`synthetic-detail-${width}x${height}`,{surface:'detail'});
+ checkFeedDetailConsistency(feed,selected.detail,check,`synthetic-detail-${width}x${height}`);
  expect(plotBox.height).toBeGreaterThanOrEqual(width===360?320:400);
  expect(summaryBox.y+summaryBox.height).toBeLessThan(plotBox.y);
- await expect(summary).toBeInViewport({ratio:1});
  const targets=await summary.getByRole('button').evaluateAll(buttons=>buttons.map(button=>{
   const style=getComputedStyle(button),rect=button.getBoundingClientRect();
   return {label:button.getAttribute('aria-label'),width:rect.width,height:rect.height,minHeight:style.minHeight,display:style.display};
  }));
  await info.attach('synthetic-financial-targets',{body:JSON.stringify(targets),contentType:'application/json'});
  await page.screenshot({path:info.outputPath(`synthetic-financial-initial-${width}x${height}.png`)});
- for(const target of await summary.getByRole('button').all())expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ for(const target of await summary.getByRole('button').all()){
+  const box=await target.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.width).toBeGreaterThanOrEqual(44);
+ }
  for(const target of await page.locator('.research-detail .research-chart-controls button').all())expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await info.attach('synthetic-inline-geometry',{body:JSON.stringify({width,height,summary:summaryBox,plot:plotBox,visiblePlotPixels:Math.max(0,Math.min(height,plotBox.y+plotBox.height)-Math.max(0,plotBox.y))}),contentType:'application/json'});
  for(const theme of ['dark','light']){
   if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
   await page.screenshot({path:info.outputPath(`synthetic-financial-${width}x${height}-${theme}.png`)});
+  checkResearchFeedMetrics(await page.evaluate(researchFeedMetrics),check,`synthetic-financial-${width}x${height}-${theme}`,{surface:'detail'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await summary.getByRole('button',{name:/^EPS前年比/}).click();
   const current=page.locator('#financial-evidence-eps_growth_yy');
@@ -66,7 +92,17 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  await page.getByRole('button',{name:'チャートを閉じる'}).click();
  await page.clock.setFixedTime(new Date(now+8*86400000));
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await expect(summary.getByRole('button',{name:/^EPS前年比/})).toContainText('未確認');
- await expect(summary.getByRole('button',{name:/^EPS前年比/})).not.toContainText('30%');
+ await expect(summary.locator('[data-metric="eps_growth_yy"] .financial-summary-result strong')).toHaveText('未確認');
+ await expect(summary.locator('[data-metric="eps_growth_yy"]')).toHaveAttribute('data-state','unknown');
+ await expect(summary.getByRole('button',{name:/^EPS前年比/})).toHaveAccessibleName(/未確認/);
+ await page.goto('/#/?method=oneil');await page.reload();
+ await expect(page.locator('.candidate-feed-card [data-metric="eps_growth_yy"] .financial-summary-result strong')).toHaveText('未確認');
+ await expect(page.locator('.candidate-feed-card [data-metric="sales_growth_yy"]')).toHaveAttribute('data-state','unknown');
+ for(const theme of ['dark','light']){
+  if(await page.locator('.leader-shell').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:theme==='light'?'ライトモードに切り替え':'ダークモードに切り替え'}).click();
+  await page.evaluate(()=>window.scrollTo(0,0));
+  checkResearchFeedMetrics(await page.evaluate(researchFeedMetrics),check,`synthetic-expired-feed-${width}x${height}-${theme}`);
+  await page.screenshot({path:info.outputPath(`synthetic-expired-feed-${width}x${height}-${theme}.png`)});
+ }
  expect(errors).toEqual([]);
 });

@@ -1,7 +1,7 @@
 .setup-evidence-panel { border: 1px solid var(--line); border-radius: 12px; margin: 16px 0; padding: 16px; color: var(--text); }
 .setup-evidence-panel header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
 .setup-evidence-panel h3, .setup-evidence-panel h4, .setup-evidence-panel p, .setup-evidence-panel dl { margin: 0; }
-.setup-evidence-panel h3 { font-size: 15px; }
+.setup-evidence-panel h3 { font-size: 16px; }
 .setup-evidence-panel header > span, .setup-evidence-scope { color: var(--text-3); font-size: 11px; }
 .setup-evidence-panel .setup-evidence-scope { margin-top: 6px; }
 .setup-state-rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -10,13 +10,13 @@
 .setup-state-rail dd { font-weight: 650; }
 .setup-price-evidence { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .setup-price-evidence dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.setup-price-evidence dd { font-size: 19px; font-variant-numeric: tabular-nums; }
+.setup-price-evidence dd { font-size: 20px; font-variant-numeric: tabular-nums; }
 .setup-evidence-panel small { display: block; color: var(--text-3); font-size: 11px; font-weight: 400; }
 .setup-price-evidence p, .setup-volume-evidence p { color: var(--text-2); font-size: 11px; line-height: 1.65; margin-top: 6px; }
 .setup-volume-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 12px 0; }
 .setup-volume-evidence section { min-width: 0; }
 .setup-volume-evidence h4 { font-size: 12px; margin-bottom: 4px; }
-.setup-volume-evidence strong { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.setup-volume-evidence strong { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
 .setup-measurement-details { font-size: 11px; color: var(--text-2); border-top: 1px solid var(--line); padding-top: 10px; }
 .setup-measurement-details summary { cursor: pointer; min-height: 24px; }
 .setup-measurement-details dl { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 4fr); gap: 8px 12px; margin-top: 8px; }
@@ -29,4 +29,5 @@
   .setup-volume-evidence section + section { border-top: 1px solid var(--line); padding-top: 12px; }
   .setup-measurement-details dl { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .setup-measurement-details dd { margin-bottom: 6px; }
+  .setup-measurement-details summary { display: flex; align-items: center; min-height: 44px; }
 }

@@ -276,7 +276,7 @@ globalThis.fetch = async (input, options) => {
   };
   const dist = join(root, 'release/frontend/dist');
   const installTransport = (frontend = 'release/frontend') => {
-    write(join(root, frontend, 'src/static/researchTransport.js'), readFileSync(join(project, 'frontend/src/static/researchTransport.js')));
+    for (const file of ['researchTransport.js', 'priceTrace.js', 'qualificationAudit.js']) write(join(root, frontend, `src/static/${file}`), readFileSync(join(project, `frontend/src/static/${file}`)));
     write(join(root, frontend, 'package.json'), '{"type":"module"}');
   };
   const simulateBuild = () => {

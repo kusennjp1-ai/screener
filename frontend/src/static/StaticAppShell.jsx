@@ -1,14 +1,16 @@
 import { HashRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
-import { useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import StaticLayout from './StaticLayout';
-import StaticHomePage from './pages/StaticHomePage';
 import ResearchPage from './pages/ResearchPage';
-import StaticScanPage from './pages/StaticScanPage';
-import StaticBreadthPage from './pages/StaticBreadthPage';
-import StaticGroupsPage from './pages/StaticGroupsPage';
 import { StaticMarketProvider } from './StaticMarketContext';
 import { getStaticSupportedMarkets, useStaticManifest } from './dataClient';
+import RoutePageLoadBoundary from '../components/App/RoutePageLoadBoundary';
+
+const StaticHomePage = lazy(() => import('./pages/StaticHomePage'));
+const StaticScanPage = lazy(() => import('./pages/StaticScanPage'));
+const StaticBreadthPage = lazy(() => import('./pages/StaticBreadthPage'));
+const StaticGroupsPage = lazy(() => import('./pages/StaticGroupsPage'));
 
 function StaticAppContent() {
   const manifestQuery = useStaticManifest();
@@ -29,15 +31,17 @@ function StaticAppContent() {
       defaultMarket={defaultMarket}
     >
       <StaticLayout>
-        <Routes>
-          <Route path="/" element={<ResearchPage />} />
-          <Route path="/compare" element={<ResearchPage compareOnly />} />
-          <Route path="/daily" element={<StaticHomePage />} />
-          <Route path="/scan" element={<StaticScanPage />} />
-          <Route path="/breadth" element={<StaticBreadthPage />} />
-          <Route path="/groups" element={<StaticGroupsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <RoutePageLoadBoundary>
+          <Routes>
+            <Route path="/" element={<ResearchPage />} />
+            <Route path="/compare" element={<ResearchPage compareOnly />} />
+            <Route path="/daily" element={<StaticHomePage />} />
+            <Route path="/scan" element={<StaticScanPage />} />
+            <Route path="/breadth" element={<StaticBreadthPage />} />
+            <Route path="/groups" element={<StaticGroupsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </RoutePageLoadBoundary>
       </StaticLayout>
     </StaticMarketProvider>
   );

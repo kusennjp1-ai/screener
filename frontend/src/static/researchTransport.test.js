@@ -12,6 +12,15 @@ const ordersFor = rows => Object.fromEntries(RESEARCH_METHODS.map(method => [met
 const encode = rows => encodeResearchIndex({ as_of_date: date, rows }, ordersFor(rows));
 
 describe('lossless compact research transport', () => {
+  it.each([undefined,null])('keeps the valid payload date when expected date is %s',expectedDate=>{
+    expect(prepareResearchBundle([{as_of_date:date,rows:[]}],expectedDate).date).toBe(date);
+  });
+  it.each([undefined,null,'2026-02-30','invalid',42])('rejects malformed payload date %s without an expected date',actualDate=>{
+    expect(()=>prepareResearchBundle([{as_of_date:actualDate,rows:[]}])).toThrow('Snapshot date mismatch');
+  });
+  it.each(['','invalid','2026-02-30','2026-09-28'])('does not discard an explicit unmatched expected date %s',expectedDate=>{
+    expect(()=>prepareResearchBundle([{as_of_date:date,rows:[]}],expectedDate)).toThrow('Snapshot date mismatch');
+  });
   it('preserves absent, null, false, zero and exact floating point values', () => {
     const rows = [sample({ price_activity: { lowRange: false, range60pct: 0 }, eps_growth_yy: 24.999999999999996 }),
       { symbol: 'UNKNOWN', current_price: null, technical_audit: null, se_setup_ready: false },

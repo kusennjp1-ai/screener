@@ -1,6 +1,6 @@
 .financial-scope-note { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; padding:10px 12px; margin:0 0 16px; background:var(--panel); border-left:2px solid var(--accent); font-size:12px; line-height:1.6; }
 .financial-scope-note p { margin:0; flex:1 1 280px; }
-.financial-scope-note button { color:var(--accent); background:none; border:0; padding:6px 0; min-height:36px; font:inherit; cursor:pointer; }
+.financial-scope-note button { color:var(--accent); background:none; border:0; padding:6px 0; min-height:44px; font:inherit; cursor:pointer; }
 .financial-evidence-panel { min-width:0; }
 .financial-evidence-panel header h3 { margin-bottom:6px; }
 .financial-evidence-panel header p,.financial-evidence-intro { color:var(--text-3); margin:6px 0 14px; font-size:12px; line-height:1.7; }
@@ -12,10 +12,10 @@
 .financial-evidence-role { color:var(--text-3); font-size:11px; border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
 .financial-evidence-status { font-size:12px; white-space:nowrap; }
 .financial-evidence-status-pass { color:var(--zone); }
-.financial-evidence-status-fail { color:var(--neg); }
+.financial-evidence-status-fail { color:var(--wait); }
 .financial-evidence-status-unknown,.financial-evidence-status-reference { color:var(--text-3); }
 .financial-evidence-value { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 16px; margin:9px 0; }
-.financial-evidence-value strong { font-size:17px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.financial-evidence-value strong { font-size:20px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .financial-evidence-value span,.financial-evidence-reason { font-size:12px; line-height:1.6; }
 .financial-evidence-reason { margin:7px 0; color:var(--text-3); }
 .financial-evidence-metadata { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 16px; margin:8px 0 0; font-size:11px; color:var(--text-3); line-height:1.6; }
@@ -30,14 +30,35 @@
 .financial-history-table caption { text-align:left; font-weight:600; margin-bottom:8px; }
 .financial-history-table th,.financial-history-table td { padding:9px 14px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
 .financial-history-table th:first-child,.financial-history-table td:first-child { text-align:left; padding-left:0; }
-.financial-history-unavailable { padding:12px; border:1px solid var(--line); border-radius:6px; line-height:1.7; }
+.financial-history-unavailable { padding:12px; border:1px solid var(--line); border-radius:8px; line-height:1.7; }
 @media (max-width:600px) { .financial-evidence-metadata { grid-template-columns:minmax(0,1fr); } .financial-evidence-heading { align-items:flex-start; } }
 
-.financial-evidence-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; margin:6px 0 8px; min-width:0; }
-.financial-evidence-summary > .financial-summary-item { min-width:0; min-height:48px; padding:5px 8px; text-align:left; color:var(--text-2); background:var(--panel); border:1px solid var(--line); border-radius:4px; cursor:pointer; font:inherit; }
-.financial-summary-item:hover { border-color:var(--accent); }
-.financial-summary-item:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-.financial-summary-title { display:block; font-size:11px; line-height:1.35; }
-.financial-summary-result { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 5px; font-size:11px; line-height:1.4; }
-.financial-summary-result strong { font-size:12px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
-@media (max-width:600px) { .financial-evidence-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.financial-evidence-summary { margin:12px 0; min-width:0; border:1px solid var(--line); border-radius:12px; background:var(--surface); overflow:hidden; }
+.financial-evidence-summary > header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; padding:12px 16px; border-bottom:1px solid var(--line); }
+.financial-evidence-summary h3 { margin:0; font-size:16px; }
+.financial-evidence-summary > header > span { font-size:12px; color:var(--text-3); }
+.financial-growth-primary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.financial-growth-metric { min-width:0; padding:12px 16px; border-bottom:1px solid var(--line); }
+.financial-growth-primary > .financial-growth-metric:first-child { border-right:1px solid var(--line); }
+.financial-growth-primary > .financial-growth-metric:last-child { grid-column:1/-1; }
+.financial-growth-heading { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; color:var(--text-2); font-size:13px; }
+.financial-summary-result { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; margin:5px 0; font-size:12px; }
+.financial-summary-result strong { font-size:26px; color:var(--text); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.financial-growth-metric[data-state=unknown] .financial-summary-result strong { color:var(--text-2); }
+.financial-growth-condition,.financial-growth-period,.financial-growth-source { margin:3px 0; font-size:12px; line-height:1.55; overflow-wrap:anywhere; }
+.financial-growth-period,.financial-growth-source { color:var(--text-3); }
+.financial-metric-action { display:flex; align-items:center; min-height:44px; padding:4px 0; font:inherit; font-size:12px; color:var(--accent); background:none; border:0; cursor:pointer; }
+.financial-growth-secondary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:8px 16px; }
+.financial-growth-secondary button { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; min-width:0; min-height:44px; padding:4px 0; text-align:left; background:none; border:0; font:inherit; font-size:12px; color:var(--text-2); cursor:pointer; }
+.financial-growth-secondary button > small { flex-basis:100%; color:var(--text-3); font-size:12px; }
+.financial-growth-secondary button strong { color:var(--accent); font-size:12px; }
+.financial-evidence-summary button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.financial-evidence-metadata { font-size:12px; }
+@media (max-width:600px) {
+ .financial-evidence-summary > header { padding:10px 12px; }
+ .financial-growth-metric { padding:10px 12px; }
+ .financial-summary-result strong { font-size:20px; }
+ .financial-growth-secondary { padding:8px 12px; grid-template-columns:minmax(0,1fr); }
+}
+.financial-comparison-note { margin:4px 0; color:var(--text-3); font-size:12px; line-height:1.6; }
+.financial-growth-secondary button span small { font-size:11px; }

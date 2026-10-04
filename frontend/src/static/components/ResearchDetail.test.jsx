@@ -16,9 +16,9 @@ it.each([103.2,112.7])('shows the first-book caution beside the company before t
  expect(warning).toHaveTextContent('△ 書籍目安2〜3%超');
  expect(warning.closest('.symbol-context')).not.toBeNull();
  expect(within(header).getByText(row.company_name)).toHaveAttribute('title',row.company_name);
- expect(header.nextElementSibling).toBe(screen.getByRole('region',{name:'財務の確認状況'}));
- expect(header.nextElementSibling.nextElementSibling).toBe(screen.getByTestId('research-chart'));
- // The full disclosure remains in the entry card after the chart.
+ expect(header.compareDocumentPosition(screen.getByRole('region',{name:'財務の確認状況'})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(screen.getByRole('region',{name:'財務の確認状況'}).compareDocumentPosition(screen.getByTestId('research-chart')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ // Price-level/source disclosure is visible before the selected chart.
  expect(screen.getByText('アプリ設定と書籍の確認範囲')).toBeInTheDocument();
  if(price>105)expect(warning).not.toHaveAttribute('aria-label',expect.stringContaining('アプリの範囲内'));
 });
@@ -44,7 +44,8 @@ it.each(['minervini','minervini2'])('makes the scope of all nine technical check
  expect(note).toHaveTextContent('トレンド8条件と日足品質1条件');
  expect(note).toHaveTextContent('9/9でもSEPAの総合確認は未完了');
  expect(note.closest('details')).toBeNull();
- expect(container.querySelector('.financial-evidence-summary').nextElementSibling).toBe(screen.getByTestId('research-chart'));
+ expect(container.querySelector('.financial-evidence-summary').compareDocumentPosition(screen.getByTestId('research-chart')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(screen.getByText('直近3年の年次 EPS').closest('details')).toBeNull();
 });
 
 it('opens financial history directly from the scope link, without reading raw scalars into the new panel', () => {

@@ -7,8 +7,10 @@ import { createServer } from 'node:http';
 import { resolve, extname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
+import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -18,7 +20,7 @@ const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }
 const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
 const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
 const radarRoot = process.env.RADAR_BUILD && resolve(process.env.RADAR_BUILD);
-const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
+const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || (process.env.GITHUB_RUN_ID ? `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` : null), clock: 'actual browser Date.now; no historical date override', data: null,
   method: 'Production Chromium. CDP CPU 4x, same-data baseline/current, HTTP responses cached in memory after warm-up. No human satisfaction inference.', screens: [], performance: [], failures: [] };
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
@@ -41,8 +43,13 @@ const current = await serve(currentRoot);
 const baseline = baselineRoot && await serve(baselineRoot);
 const radar = radarRoot && await serve(radarRoot);
 const browser = await chromium.launch();
-const manifest = JSON.parse(await readFile(resolve(currentRoot, 'static-data/manifest.json'), 'utf8'));
-report.data = { as_of_date: (manifest.markets?.US || manifest).as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation };
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+const manifestBytes = await readFile(resolve(currentRoot, 'static-data/manifest.json'));
+const manifest = JSON.parse(manifestBytes.toString('utf8'));
+const currentEntry = manifest.markets?.US || manifest;
+report.data = { as_of_date: currentEntry.as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation,
+  manifest_sha256: sha256(manifestBytes), research_path: currentEntry.assets.research.path,
+  research_sha256: sha256(await readFile(resolve(currentRoot, 'static-data', currentEntry.assets.research.path))) };
 if (baselineRoot) {
   const previousManifest = JSON.parse(await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
   const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
@@ -134,35 +141,37 @@ function objectiveMetrics() {
     runningAnimations: animations.length };
 }
 
-async function capture(page, viewport, theme, screen) {
+async function capture(page, viewport, theme, screen, taskSurface = null) {
   if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(800);
   const metrics = await page.evaluate(objectiveMetrics);
+  const feedMetrics = taskSurface || ['home', 'near-pass', 'compact', 'detail'].includes(screen) ? await page.evaluate(researchFeedMetrics) : null;
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
-  await page.screenshot({ path: resolve(output, screenshot) });
+  const screenshotBytes = await page.screenshot({ path: resolve(output, screenshot) });
   const key = `${screen}/${viewport.width}/${theme}`;
   const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
-  report.screens.push({ key, screenshot, metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
+  report.screens.push({ key, screenshot, screenshot_sha256: sha256(screenshotBytes), viewport, theme,
+    provenance: { commit, source_run: report.source_run, data: report.data, browser_evaluated_at: await page.evaluate(() => new Date().toISOString()), route: new URL(page.url()).hash || '#/', method: feedMetrics?.method || null, feed_symbol: feedMetrics?.feed.symbol || null, selected_symbol: feedMetrics?.detail.symbol || null },
+    metrics, feed: feedMetrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
   check(metrics.radiusIssues.length === 0, `${key}: ${metrics.radiusIssues.length} radius-step violations`);
   check(metrics.asciiNegativeValues.length === 0, `${key}: ${metrics.asciiNegativeValues.length} financial values use ASCII minus`);
   check(!metrics.horizontalOverflow, `${key}: horizontal page overflow`);
-  if (viewport.width === 390) check(metrics.chromeHeight <= 110, `${key}: fixed chrome ${metrics.chromeHeight}px > 110px`);
+  if (viewport.width <= 390) check(metrics.chromeHeight <= 110, `${key}: fixed chrome ${metrics.chromeHeight}px > 110px`);
   if (['home', 'near-pass'].includes(screen) && viewport.width === 1440) {
     check(metrics.hero && metrics.hero.height <= 320, `${key}: hero height ${metrics.hero?.height} > 320px or missing`);
-    check(metrics.chart && metrics.chart.top <= 540, `${key}: chart top ${metrics.chart?.top} > 540px or missing`);
   }
-  if (screen === 'compact') {
-    check(metrics.firstRow && metrics.firstRow.top <= 260, `${key}: first row top ${metrics.firstRow?.top} > 260px or missing`);
-    check(metrics.chart && metrics.chart.top <= 420, `${key}: chart top ${metrics.chart?.top} > 420px or missing`);
-    check(metrics.visibleCandidates >= 12, `${key}: ${metrics.visibleCandidates} visible rows < 12`);
+  // Replaces only obsolete table-density/chart-first requirements. The prior
+  // observations remain in review history; objective/CPU/payload gates below
+  // retain their limits. See docs/research-feed-adoptions.md for the mapping.
+  if (feedMetrics) {
+    const surface = taskSurface || (screen === 'detail' ? 'detail' : 'feed');
+    checkResearchFeedMetrics(feedMetrics, check, key, { surface });
   }
-  if (['home', 'near-pass'].includes(screen) && viewport.width === 390) check(metrics.visibleCandidates >= 3, `${key}: ${metrics.visibleCandidates} visible rows < 3`);
-  if (screen === 'detail' && viewport.width === 390) check(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, `${key}: detail-to-chart ${metrics.chartCard && metrics.detail ? metrics.chartCard.top - metrics.detail.top : 'missing'}px > 160px`);
   if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 1440) {
     check(metrics.pageHeight <= 900, `${key}: page height ${metrics.pageHeight}px > 900px`);
     check(metrics.visibleCompareCards >= 6, `${key}: ${metrics.visibleCompareCards} visible comparison cards < 6`);
@@ -199,6 +208,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     await page.goto(current.url);
     await visible(page.locator(readySelector));
     if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+    check(await page.getByRole('button', { name: '概況を展開', exact: true }).getAttribute('aria-expanded') === 'false' && await page.locator('#research-market-overview').count() === 0, `${key}: overview must start closed`);
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, viewport, theme, 'home');
     await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
@@ -208,11 +218,16 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
     await page.getByLabel('あと1条件', { exact: true }).uncheck();
     await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
+    await page.getByRole('button', { name: '概況を展開', exact: true }).click();
+    await visible(page.locator('#research-market-overview'));
+    check(await page.getByRole('button', { name: '概況をたたむ', exact: true }).getAttribute('aria-expanded') === 'true', `${key}: overview did not expand`);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await capture(page, viewport, theme, 'overview-expanded');
+    await page.getByRole('button', { name: '概況をたたむ', exact: true }).click();
+    check(await page.locator('#research-market-overview').count() === 0, `${key}: overview did not collapse`);
+    await page.evaluate(() => window.scrollTo(0, 0));
     if (viewport.width === 1440) {
-      await page.getByRole('button', { name: '概況をたたむ', exact: true }).click();
-      await page.evaluate(() => window.scrollTo(0, 0));
       await capture(page, viewport, theme, 'compact');
-      await page.getByRole('button', { name: '概況を展開', exact: true }).click();
     }
     await page.locator('.candidate-row').first().click();
     await capture(page, viewport, theme, 'detail');
@@ -265,11 +280,92 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   await context.close();
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
-  const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens];
+  const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations', 'expanded-short'].map(view => `case-${symbol}-${view}`));
+  const screens = ['home', 'near-pass', 'overview-expanded', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens];
   for (const screen of screens) {
     const key = `${screen}/${viewport.width}/${theme}`;
     check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
+  }
+}
+
+// Real publication, real clock, all four methods. These extra captures and
+// interactions never change the baseline/current timed workloads below.
+report.feed_tasks = [];
+for (const viewport of FEED_REVIEW_VIEWPORTS) for (const theme of ['dark', 'light']) for (const method of FEED_REVIEW_METHODS) {
+  const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  const suffix = `${method}-${viewport.height === 844 ? 'narrow' : 'short'}`;
+  const key = `${suffix}/${viewport.width}/${theme}`, record = { key, viewport, theme, method, completed: false };
+  page.on('pageerror', error => report.failures.push(`${key}: ${error.message}`));
+  try {
+    await page.goto(`${current.url}#/?method=${method}`);
+    await visible(page.locator('.candidate-feed-card'));
+    if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // No scrollIntoView before this capture or its first-viewport observations.
+    await capture(page, viewport, theme, `feed-${suffix}`, 'feed');
+    const initial = await page.evaluate(researchFeedMetrics);
+    record.feed = initial.feed;
+    await page.locator('.candidate-feed-card .candidate-row').first().click();
+    await visible(page.locator('.research-detail .financial-evidence-summary'));
+    await capture(page, viewport, theme, `detail-${suffix}`, 'detail');
+    const selected = await page.evaluate(researchFeedMetrics);
+    record.detail = selected.detail;
+    checkFeedDetailConsistency(initial.feed, selected.detail, check, key);
+    if (viewport.width < 1280) {
+      await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
+      await visible(page.locator('.candidate-feed-card'));
+      check(await page.locator('.research-workbench').getAttribute('data-mobile-view') === 'list', `${key}: Back did not restore the feed`);
+      const returned = await page.evaluate(researchFeedMetrics);
+      checkFeedDetailConsistency(returned.feed, selected.detail, check, `${key}/Back`);
+      check(Math.abs(returned.scrollY - initial.scrollY) <= 1, `${key}: Back did not restore the original feed position`);
+    }
+    const chosen = page.locator('.candidate-feed-card').filter({ has: page.locator('.candidate-name strong', { hasText: new RegExp(`^${initial.feed.symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) });
+    check(await chosen.getAttribute('data-selected') === 'true', `${key}: Back changed the selected feed symbol`);
+    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: '候補を絞り込む', exact: true });
+    await drawer.getByLabel('銘柄・企業名を検索', { exact: true }).fill(initial.feed.symbol);
+    const liquidity = drawer.getByLabel('流動性：株価 $10以上・平均売買代金 $2,000万以上', { exact: true });
+    await liquidity.uncheck();
+    await drawer.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
+    await visible(page.getByRole('button', { name: `検索：${initial.feed.symbol}の絞り込みを解除`, exact: true }));
+    check(await page.getByRole('button', { name: '流動性の絞り込みを解除', exact: true }).count() === 0, `${key}: removed liquidity filter chip is stale`);
+    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+    check(await drawer.getByLabel('銘柄・企業名を検索', { exact: true }).inputValue() === initial.feed.symbol && !await liquidity.isChecked(), `${key}: search/filter values changed after closing the drawer`);
+    await liquidity.check();
+    await drawer.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
+    await visible(page.getByRole('button', { name: '流動性の絞り込みを解除', exact: true }));
+    const filteredSymbols = await page.locator('.candidate-feed-card .candidate-name strong').allTextContents();
+    const nextPage = page.getByRole('button', { name: '次の50件', exact: true });
+    while (await nextPage.count() && await nextPage.isEnabled()) {
+      const previous = await page.locator('.candidate-pagination > span').textContent();
+      await nextPage.click();
+      await page.waitForFunction(previous => document.querySelector('.candidate-pagination > span')?.textContent !== previous, previous);
+      filteredSymbols.push(...await page.locator('.candidate-feed-card .candidate-name strong').allTextContents());
+    }
+    check(filteredSymbols.includes(initial.feed.symbol), `${key}: search lost the selected symbol`);
+    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+    const downloadPromise = page.waitForEvent('download');
+    await drawer.getByRole('button', { name: '全検索結果をCSV保存 ↓', exact: true }).click();
+    const download = await downloadPromise, csv = await readFile(await download.path()), csvRows = parseResearchCsv(csv.toString('utf8'));
+    check(JSON.stringify(csvRows.map(row => row.symbol).sort()) === JSON.stringify([...filteredSymbols].sort()), `${key}: CSV symbols differ from active search/filter results`);
+    check(csvRows.length > 0 && csvRows.every(row => row.method === method && row.as_of_date === report.data.as_of_date && row.financial_semantics === 'current_at_evaluation_not_historical_publication'), `${key}: CSV method/date/current-evaluation identity differs from the feed`);
+    record.csv = { sha256: sha256(csv), filename: download.suggestedFilename(), symbols: csvRows.map(row => row.symbol), evaluated_at: [...new Set(csvRows.map(row => row.financial_evaluated_at))] };
+    await drawer.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
+    await page.getByRole('button', { name: `検索：${initial.feed.symbol}の絞り込みを解除`, exact: true }).click();
+    check(await page.getByRole('button', { name: `検索：${initial.feed.symbol}の絞り込みを解除`, exact: true }).count() === 0, `${key}: search chip did not clear`);
+    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
+    check(await drawer.getByLabel('銘柄・企業名を検索', { exact: true }).inputValue() === '' && await liquidity.isChecked(), `${key}: clearing search also changed another filter`);
+    record.completed = true;
+  } catch (error) {
+    report.failures.push(`${key}: feed task verification interrupted: ${error.message}`);
+    await page.screenshot({ path: resolve(output, `interrupted-feed-${suffix}-${viewport.width}-${theme}.png`) }).catch(() => {});
+  } finally {
+    for (const screen of [`feed-${suffix}`, `detail-${suffix}`]) check(report.screens.some(result => result.key === `${screen}/${viewport.width}/${theme}`), `${key}: required ${screen} capture was not completed`);
+    check(record.completed, `${key}: selection/Back/search/filter/CSV task did not complete`);
+    report.feed_tasks.push(record);
+    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+    await context.close();
   }
 }
 

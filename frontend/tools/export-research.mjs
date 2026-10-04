@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { encodeAssessment } from '../src/static/assessmentEncoding.js';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
+import { createPriceTrace, exportPriceTraces } from './export-price-traces.mjs';
 import { scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
@@ -56,8 +57,11 @@ if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.pa
 try { financials = await read('book-financials.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const marketCharts = [];
 const availableCharts = new Set();
+const priceTraces = new Map();
 let rows = new Map();
 for (const row of merged) {
+  delete row.price_trace_start;
+  delete row.priceTrace;
   row.se_explain=row.setup_engine?.explain || null;
   row.se_candidates=row.setup_engine?.candidates || null;
   // Scores from other scanners cannot be carried across a price replacement.
@@ -135,6 +139,11 @@ for (const [symbol, row] of rows) {
   if (availableCharts.has(symbol)) {
     canonicalChart=projectFinancialPayload(await read(paths.get(symbol)),{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
     Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
+    const trace = createPriceTrace(row, canonicalChart, scan.as_of_date);
+    if (trace) {
+      row.price_trace_start = trace.points[0][0];
+      priceTraces.set(symbol, trace);
+    }
     const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
     const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
     row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;
@@ -162,8 +171,9 @@ const chartIndexPath=`charts-index-${chartIndexHash}.json`;
 await writeFile(resolve(root,chartIndexPath),chartIndexContent);
 entry.assets.charts={...entry.assets.charts,path:chartIndexPath};
 scan.charts={...scan.charts,path:chartIndexPath};
-const listFields = (FINANCIAL_FIELDS.join(' ')+' financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
-const researchIndex = {...currentEvaluation,as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
+const priceTraceDescriptor = await exportPriceTraces({root, rows:[...compactRows.values()], traces:priceTraces, date:scan.as_of_date});
+const listFields = (FINANCIAL_FIELDS.join(' ')+' financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path price_trace_start method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
+const researchIndex = {...currentEvaluation,as_of_date:scan.as_of_date, price_traces:priceTraceDescriptor, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
   // Full provenance and detector reasons remain in the content-addressed detail.
   if(row.price_quality) summary.price_quality={status:row.price_quality.status,as_of_date:row.price_quality.as_of_date};

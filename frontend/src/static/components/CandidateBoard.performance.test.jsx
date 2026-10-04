@@ -14,7 +14,7 @@ it('calculates only visible rank plans, keeps the full sort universe and reuses 
  expect(screen.getByRole('heading',{name:'候補リスト 103件'})).toBeInTheDocument();
  rerender(<CandidateBoard {...props} selectedSymbol="S1"/>);
  expect(entryPlan).toHaveBeenCalledTimes(50);
- fireEvent.click(screen.getByRole('button',{name:'RSで並べ替え'}));
+ fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'rs'}});
  expect(entryPlan).toHaveBeenCalledTimes(153);
  expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('S102');
  fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
@@ -38,11 +38,12 @@ it('keeps keyboard focus when crossing both directions at a 50-row boundary in a
  expect(screen.getByRole('heading',{name:'候補リスト 501件'})).toBeInTheDocument();
 });
 
-it.each([[true,0],[true,.578125],[false,0]])('explicit pagination focuses the first row without selecting it, with mobile=%s and fractional offset=%s',(mobile,fraction)=>{
+it.each([[390,0],[390,.578125],[701,0],[1024,0],[1279,.578125],[1280,0],[1440,0]])('explicit pagination focuses the first row without selecting it at width %s and fractional offset %s',(width,fraction)=>{
+ const mobile=width<=1279;
  const ranked=Array.from({length:101},(_,index)=>({row:{symbol:`S${index}`,current_price:102,se_pivot_price:100,rs_rating:90},assessment:{qualified:true,passed:9,total:9}}));
  const onSelect=vi.fn(),scrollTo=vi.fn();
  vi.stubGlobal('scrollTo',scrollTo);vi.stubGlobal('scrollY',1000);vi.stubGlobal('innerHeight',900);
- vi.stubGlobal('innerWidth',mobile?390:1440);
+ vi.stubGlobal('innerWidth',width);
  vi.spyOn(Element.prototype,'getBoundingClientRect').mockImplementation(function(){
   if(this.classList.contains('leader-header'))return {top:0,bottom:mobile?48:56,height:mobile?48:56};
   if(this.classList.contains('candidate-row'))return {top:mobile?-100:500,bottom:mobile?-30:551,height:mobile?70:51};

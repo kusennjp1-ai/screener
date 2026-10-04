@@ -67,7 +67,7 @@ it('opens an initial symbol link at the selected detail once its data arrives', 
   }
 });
 it('renders the mobile chart only in detail, preserving row selection and focus on entry',async()=>{
-  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*(?:700|1279)px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
   mount();
   const leaderRow=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   expect(screen.queryByRole('button',{name:'日次チャートを分析'})).not.toBeInTheDocument();
@@ -120,7 +120,7 @@ describe('100 virtual expert task profiles', () => {
         expect(within(table).queryByText('FAIL')).not.toBeInTheDocument();
         expect(within(table).queryByText('NONE')).not.toBeInTheDocument();
       } else if (t === 3) {
-        fireEvent.click(screen.getByRole('button', { name: 'LEAD ウォッチに保存' }));
+        fireEvent.click(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button', { name: 'LEAD ウォッチに保存' }));
         openFilters();
         fireEvent.click(screen.getByLabelText('ウォッチのみ'));
         closeFilters();
@@ -183,7 +183,7 @@ it('keeps search focus while narrowing results in the filter drawer', async () =
   fireEvent.change(input,{target:{value:'NONE'}});
   expect(input).toHaveFocus();
   closeFilters();
-  await waitFor(()=>expect(within(candidates()).getAllByRole('button')).toHaveLength(1));
+  await waitFor(()=>expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(1));
   expect(within(candidates()).getByRole('button',{name:/^NONE の分析/})).toBeInTheDocument();
 });
 
@@ -236,7 +236,7 @@ it('keeps all rows available to CSV and search beyond the first 50 rendered cand
   vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
   mount();
   await screen.findByRole('button',{name:/^TEST00 の分析/});
-  expect(within(candidates()).getAllByRole('button')).toHaveLength(50);
+  expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(50);
   expect(within(candidates()).queryByText('TEST57')).not.toBeInTheDocument();
   openFilters();
   fireEvent.click(screen.getByRole('button',{name:/全検索結果をCSV保存/}));
@@ -245,9 +245,11 @@ it('keeps all rows available to CSV and search beyond the first 50 rendered cand
   await act(async()=>{csv=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsText(blob);});});
   expect(csv.trim().split(/\r?\n/)).toHaveLength(59);
   for(let i=0;i<58;i++)expect(csv).toContain(`TEST${String(i).padStart(2,'0')}`);
-  fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'),{target:{value:'TEST57'}});
+  const searchInput=screen.getByLabelText('銘柄・企業名を検索');
+  fireEvent.change(searchInput,{target:{value:'TEST57'}});
+  fireEvent.blur(searchInput);
   closeFilters();
-  await waitFor(()=>expect(within(candidates()).getAllByRole('button')).toHaveLength(1));
+  await waitFor(()=>expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(1));
   expect(within(candidates()).getByRole('button',{name:/^TEST57 の分析/})).toBeInTheDocument();
 });
 
@@ -255,11 +257,11 @@ it('retains the watch for this screen and reports denied persistence', async () 
   mount();
   await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
-  fireEvent.click(screen.getByRole('button',{name:'LEAD ウォッチに保存'}));
-  expect(screen.getByRole('button',{name:'LEAD ウォッチ解除'})).toHaveAttribute('aria-pressed','true');
+  fireEvent.click(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button',{name:'LEAD ウォッチに保存'}));
+  expect(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button',{name:'LEAD ウォッチ解除'})).toHaveAttribute('aria-pressed','true');
   expect(screen.getByText(/ウォッチはこの画面のみ保持されます/)).toBeInTheDocument();
   openFilters();
   fireEvent.click(screen.getByLabelText('ウォッチのみ'));
   closeFilters();
-  expect(within(candidates()).getAllByRole('button')).toHaveLength(1);
+  expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(1);
 });

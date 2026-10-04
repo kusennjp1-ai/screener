@@ -77,7 +77,7 @@ it('offers focusable progressive explanations without hiding sorting controls',a
  await user.click(disclosure);
  expect(details).not.toHaveAttribute('open');
  expect(container.querySelectorAll('.candidate-row')).toHaveLength(1);
- expect(screen.getByRole('button',{name:'買い位置で並べ替え'})).toBeInTheDocument();
+ expect(screen.getByRole('combobox',{name:'候補の並び順'})).toBeInTheDocument();
 });
 it('displays and sorts the audited daily volume without falling back to a conflicting legacy copy',()=>{
  entryReadiness.mockReturnValue(waiting);
@@ -89,6 +89,6 @@ it('displays and sorts the audited daily volume without falling back to a confli
  const {container}=render(<CandidateBoard {...props} ranked={items}/>);
  expect(screen.getByRole('button',{name:/^A の分析/})).toHaveAccessibleName(/出来高 1.39×/);
  expect(screen.getByRole('button',{name:/^UNKNOWN の分析/})).toHaveAccessibleName(/出来高 —/);
- fireEvent.click(screen.getByRole('button',{name:'出来高で並べ替え'}));
+ fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'volume'}});
  expect([...container.querySelectorAll('.candidate-row')].map(row=>row.querySelector('.candidate-name strong').textContent)).toEqual(['B','A','UNKNOWN']);
 });

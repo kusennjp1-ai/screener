@@ -1,6 +1,12 @@
 import { render, screen, waitFor, cleanup, act, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const onlineModuleLoaded = vi.hoisted(() => vi.fn());
+vi.mock('./OnlineAppShell', () => {
+  onlineModuleLoaded();
+  return { default: () => <div>Online app</div> };
+});
+
 vi.mock('./pages/ScanPage', () => ({ default: () => <div>Live Scan Page</div> }));
 vi.mock('./pages/MarketScanPage', () => ({ default: () => <div>Live Market Scan Page</div> }));
 vi.mock('./pages/BreadthPage', () => ({ default: () => <div>Live Breadth Page</div> }));
@@ -354,6 +360,7 @@ describe('App static mode', () => {
     // or the retired historical performance asset.
     const isStaticSource = (url) => url.includes('/static-data/') || url.includes('ibd-reference.json');
     expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
+    expect(onlineModuleLoaded).not.toHaveBeenCalled();
   }, 30000);
 
   it('keeps scan controls read-only in the static route', async () => {

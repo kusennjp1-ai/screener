@@ -60,7 +60,7 @@ it('applies sector, method and view from a same-route RouterLink without remount
 });
 
 it('restores a symbol-free list and liquidity on Back, and the linked mobile detail on Forward', async () => {
-  vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: /max-width:\s*700px/.test(query), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: /max-width:\s*(?:700|1279)px/.test(query), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
   const { container } = mount();
   act(() => navigate('/?symbol=SMALL&method=ibd'));
   await screen.findByRole('heading', { name: 'SMALL' });
@@ -109,7 +109,7 @@ it('dismisses a previous chart when a newer location is opened and restores defa
 });
 
 it('reopens the same mobile symbol link after returning to the list and follows the latest navigation', async () => {
-  vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: /max-width:\s*700px/.test(query), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: /max-width:\s*(?:700|1279)px/.test(query), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
   const { container } = mount('#/?symbol=TECH');
   await waitFor(() => expect(screen.getByRole('region', { name: '銘柄詳細' })).toHaveFocus());
   act(() => window.dispatchEvent(new Event('research:back')));
@@ -122,4 +122,34 @@ it('reopens the same mobile symbol link after returning to the list and follows 
   await screen.findByRole('heading', { name: 'BANK' });
   await waitFor(() => expect(screen.getByRole('region', { name: '銘柄詳細' })).toHaveFocus());
   expect(screen.queryByRole('heading', { name: 'SMALL' })).not.toBeInTheDocument();
+});
+
+it('keeps removable filters visible and restores known initial filters without hiding the method',async()=>{
+ mount('#/?sector=Financial');
+ const chips=screen.getByLabelText('現在の絞り込み');
+ expect(chips).toHaveTextContent('流動性');
+ expect(chips).toHaveTextContent('業種');
+ fireEvent.click(within(chips).getByRole('button',{name:/業種.*の絞り込みを解除/}));
+ expect(await screen.findByRole('button',{name:/^TECH の分析/})).toBeInTheDocument();
+ fireEvent.click(within(chips).getByRole('button',{name:'流動性の絞り込みを解除'}));
+ expect(await screen.findByRole('button',{name:/^SMALL の分析/})).toBeInTheDocument();
+ fireEvent.click(within(chips).getByRole('button',{name:'初期条件に戻す'}));
+ expect(screen.queryByRole('button',{name:/^SMALL の分析/})).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'ミネルヴィニ',exact:true})).toHaveAttribute('aria-pressed','true');
+});
+
+it('restores the tablet feed scroll, focus and active filters after returning from detail',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*1279px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ const scrollTo=vi.spyOn(window,'scrollTo').mockImplementation(()=>{});
+ vi.spyOn(window,'scrollY','get').mockReturnValue(624);
+ const {container}=mount('#/?sector=Technology');
+ const choice=screen.getByRole('button',{name:/^TECH の分析/});
+ fireEvent.click(choice);
+ expect(container.querySelector('main')).toHaveAttribute('data-mobile-view','detail');
+ await waitFor(()=>expect(screen.getByRole('region',{name:'銘柄詳細'})).toHaveFocus());
+ fireEvent.click(screen.getByRole('button',{name:'← 候補一覧に戻る'}));
+ await waitFor(()=>expect(choice).toHaveFocus());
+ expect(scrollTo).toHaveBeenCalledWith({top:624,behavior:'instant'});
+ expect(screen.getByLabelText('現在の絞り込み')).toHaveTextContent('業種');
+ expect(screen.queryByRole('button',{name:/^BANK の分析/})).not.toBeInTheDocument();
 });

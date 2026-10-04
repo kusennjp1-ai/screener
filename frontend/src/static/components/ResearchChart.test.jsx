@@ -94,3 +94,16 @@ it('does not treat a missing expected analysis date as verified',async()=>{
  await screen.findByText('チャートを取得できません。');
  expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
 });
+
+it('keeps the same source-proximity warning beside a verified inline chart',async()=>{
+ fetchPayload.mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:104}]});
+ const props={entry:{path:'a.json'},symbol:'AAA',date:'2026-09-21',method:'minervini',row:{current_price:104,se_pivot_price:100}};
+ const view=setup(props);await screen.findByTestId('chart');
+ expect(screen.getByRole('note',{name:/書籍の追随目安外/}).closest('.research-chart')).toBeInTheDocument();
+ view.update({...props,row:{current_price:102,se_pivot_price:100}});
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+ view.update({...props,method:'oneil'});
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+ view.update({...props,symbol:'BBB',entry:undefined});
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+});

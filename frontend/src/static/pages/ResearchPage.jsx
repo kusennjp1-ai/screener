@@ -19,6 +19,7 @@ import { compareReference, finite, quoteStatus, researchCsv, snapshotFreshness }
 import ResearchDetail from '../components/ResearchDetail';
 import CandidateBoard from '../components/CandidateBoard';
 import ResearchSearch from '../components/ResearchSearch';
+import { useResearchSearch } from '../researchSearchContext';
 import { entryReadiness, prepareReadinessTimeline } from '../entryReadiness';
 import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 import { usePersonalQuote } from '../usePersonalQuote';
@@ -31,7 +32,16 @@ const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則'
 
 export default function ResearchPage({compareOnly=false}) {
   const location = useLocation();
-  const smallScreen = useMediaQuery('(max-width:700px)');
+  const smallScreen = useMediaQuery('(max-width:1279px)');
+  const listReturn = useRef(null);
+  const restoreListPosition = useCallback(() => requestAnimationFrame(() => {
+    const saved = listReturn.current;
+    if (!saved) return;
+    const list = document.querySelector('.candidate-scroll');
+    if (list) list.scrollTop = saved.listTop;
+    [...document.querySelectorAll('.candidate-row')].find(node => node.getAttribute('aria-label')?.startsWith(`${saved.symbol} の分析`))?.focus({preventScroll:true});
+    window.scrollTo({top:saved.scrollY,behavior:'instant'});
+  }), []);
   const client = useQueryClient();
   const manifest = useStaticManifest();
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
@@ -43,7 +53,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [sector,setSector]=useState(()=>params.get('sector') || '');
   const workbench=useWorkbench(entry);
   const [personalKey, setPersonalKey] = useState('');
-  const [search, setSearch] = useState(() => params.get('symbol') || '');
+  const [search, setSearch] = useResearchSearch(() => params.get('symbol') || '');
   const [strict, setStrict] = useState(false);
   const [nearOnly, setNearOnly] = useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
@@ -51,10 +61,10 @@ export default function ResearchPage({compareOnly=false}) {
   const deferredSearch = useDeferredValue(search);
   useEffect(()=>{
     const searchEvent=e=>setSearch(e.detail||'');
-    const backEvent=()=>setMobileView('list');
+    const backEvent=()=>{setMobileView('list');restoreListPosition();};
     window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);
     return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};
-  },[]);
+  },[restoreListPosition,setSearch]);
   const [mobileView, setMobileView] = useState(() => params.get('symbol') ? 'detail' : 'list');
   const [liquid, setLiquid] = useState(() => !params.get('symbol'));
   const detailRef = useRef(null);
@@ -116,8 +126,9 @@ export default function ResearchPage({compareOnly=false}) {
     setFiltersOpen(false);
     setChart(null);
     setVerificationSymbol(null);
+    listReturn.current = null;
     initialSymbol.current = ticker;
-  }, [location.key, location.pathname, params]);
+  }, [location.key, location.pathname, params, setSearch]);
   useEffect(() => {
     if (!initialSymbol.current || selected?.symbol !== initialSymbol.current) return;
     const frame = requestAnimationFrame(() => {
@@ -191,11 +202,11 @@ export default function ResearchPage({compareOnly=false}) {
       const key = ['researchRows', researchPath, version];
       const previous = client.getQueryData(key);
       if (previous?.date !== date || !researchBundleCurrent(previous,Date.now(),version ?? null)) return;
-      const evaluation={now:Date.now(),generation:version ?? null,evaluationEpoch:previous.evaluation_epoch+1};
+      const evaluation={now:Date.now(),generation:version ?? null,evaluationEpoch:previous.evaluation_epoch+1,priceTraces:previous.price_traces};
       const updated = previous.rows.map(r => r.symbol === ticker ? { ...r, method_summary:undefined, technical_audit: result.audit, book_diagnostics: result.bookDiagnostics, book_technical_evidence: result.bookTechnical } : r);
       let next;
       try { next = await refreshResearchBundle(updated, date,evaluation); }
-      catch { next = prepareResearchBundle([{ rows: updated, as_of_date: date }], date,evaluation); }
+      catch { next = prepareResearchBundle([{ rows: updated, as_of_date: date, price_traces:previous.price_traces }], date,evaluation); }
       // A refetch or a new publication may have replaced this snapshot while
       // the worker was running. Never resurrect the prior publication.
       if (client.getQueryData(key) !== previous || !researchBundleCurrent(next,Date.now(),version ?? null)) return;
@@ -207,13 +218,13 @@ export default function ResearchPage({compareOnly=false}) {
     detailRef.current?.focus?.({ preventScroll: true });
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
   }); }
-  const selectSymbol = useCallback(ticker => {setSymbol(ticker);if(window.matchMedia?.('(max-width:700px)')?.matches){setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});}},[]);
+  const selectSymbol = useCallback(ticker => {setSymbol(ticker);if(window.matchMedia?.('(max-width:1279px)')?.matches){listReturn.current={symbol:ticker,scrollY:window.scrollY,listTop:document.querySelector('.candidate-scroll')?.scrollTop||0};setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});}},[]);
   const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
   const disconnect = useCallback(()=>setPersonalKey(''),[]);
   const openFilters = useCallback(()=>setFiltersOpen(true),[]);
   const toggleNear = useCallback(()=>{setNearOnly(value=>!value);setStrict(false);},[]);
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
-  const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
+  const browse = () => {setMobileView('list'); if(listReturn.current){restoreListPosition();return;} requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
   function download() {
     const csv = researchCsv(ranked, method, bundle.data?.date, now);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
@@ -221,6 +232,17 @@ export default function ResearchPage({compareOnly=false}) {
   }
   const actualView=compareOnly?'charts':view;
   const methodControls=useMemo(()=><div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>,[method]);
+  const activeFilters = [
+    liquid && { id:'liquid', label:'流動性', clear:()=>setLiquid(false) },
+    strict && { id:'strict', label:'全条件通過のみ', clear:()=>setStrict(false) },
+    nearOnly && { id:'near', label:'あと1条件', clear:()=>setNearOnly(false) },
+    onlyWatch && { id:'watch', label:'ウォッチのみ', clear:()=>setOnlyWatch(false) },
+    sector && { id:'sector', label:`業種：${SECTORS.find(([key])=>key===sector)?.[1]||sector}`, clear:()=>setSector('') },
+    coverage!=='all' && { id:'coverage', label:coverage==='verified'?'日足検証済み':'判定資料不足', clear:()=>setCoverage('all') },
+    search && { id:'search', label:`検索：${search}`, clear:()=>setSearch('') },
+  ].filter(Boolean);
+  const resetFilters=()=>{setLiquid(true);setStrict(false);setNearOnly(false);setOnlyWatch(false);setSector('');setCoverage('all');setSearch('');};
+  const filterChips=<div className="research-active-filters" aria-label="現在の絞り込み">{activeFilters.map(filter=><button key={filter.id} onClick={filter.clear} aria-label={`${filter.label}の絞り込みを解除`}>{filter.label} ×</button>)}<button className="filter-reset" onClick={resetFilters}>初期条件に戻す</button></div>;
   return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
     {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
@@ -250,7 +272,7 @@ export default function ResearchPage({compareOnly=false}) {
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
+      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} onHighlight={setSymbol} view={actualView} onView={setView} toolbar={methodControls} filterChips={filterChips} watch={watch} onWatch={toggleWatch} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} financialEpoch={researchBundleCurrent(bundle.data,now,version ?? null)?bundle.data.evaluated_at:now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as now } from './testFinancialFixture.js';
 import { withAuditFixture } from './testAuditFixture.js';
 import { assess, researchCsv, RULE_SUMMARY_VERSION } from './researchEngine.js';
-import { prepareResearchBundle, researchBundleCurrent } from './researchPreprocess.js';
+import { prepareResearchBundle, researchBundleCurrent, validResearchEvaluation } from './researchPreprocess.js';
 import { encodeResearchIndex, decodeResearchIndex } from './researchTransport.js';
 import { buildPortfolioPlan } from './portfolioPlan.js';
 import { financialHistory } from './financialHistory.js';
@@ -15,6 +15,18 @@ const annualHistory = () => ({symbol:'TEST',as_of_date:date,status:'available',b
 const row = () => withFinancialProof(withAuditFixture({symbol:'TEST',market:'US',currency:'USD',current_price:100,rs_rating:95,eps_growth_yy:30,sales_growth_yy:30,eps_rating:99,composite_rating:99,ibd_group_rank:1,financial_history:annualHistory()},date),now,date);
 
 describe('one current evaluation across consumers',()=>{
+  it('derives expiry from source evidence rather than trusting a published deadline claim',()=>{
+    const input=row();input.financial_current.p['1'][5]=now+100;
+    const result=prepareResearchBundle([{as_of_date:date,rows:[input],next_expiry_at:null,evaluated_at:now+999999}],date,{now,generation:'one',evaluationEpoch:1});
+    expect(result.next_expiry_at).toBe(now+101);
+    expect(validResearchEvaluation(result)).toBe(true);
+    expect(researchBundleCurrent(result,now+100,'one')).toBe(true);
+    expect(researchBundleCurrent(result,now+101,'one')).toBe(false);
+    for(const malformed of [undefined,NaN,Infinity,'never',now,now-1]) {
+      expect(validResearchEvaluation({...result,next_expiry_at:malformed})).toBe(false);
+      expect(researchBundleCurrent({...result,next_expiry_at:malformed},now,'one')).toBe(false);
+    }
+  });
   it('keeps 9 technical rules independent and required financial ratings unknown',()=>{
     const input=row(), result=prepareResearchBundle([{as_of_date:date,rows:[input]}],date,{now,generation:'one',evaluationEpoch:1});
     expect(result.rankings.minervini[0].assessment).toMatchObject({qualified:true,total:9,unknown:0});

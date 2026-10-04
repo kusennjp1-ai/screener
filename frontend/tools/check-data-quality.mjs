@@ -7,6 +7,7 @@ import { summarizeWorkbench, validateWorkbenchSummary, validateWorkbenchDetails 
 import { researchEvaluation, validatePublishedSummaries, validateResearchParity } from './research-quality.mjs';
 import {canonicalPivot} from '../src/static/researchPresentation.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
+import { verifyPriceTraces } from './export-price-traces.mjs';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
 const manifest=await read('manifest.json');
 const indexPath=(manifest.markets?.US||manifest).assets.research.path;
@@ -45,6 +46,8 @@ for(const row of index.rows) {
   canonicalRows.push(detail);
 }
 validatePublishedSummaries(canonicalRows,evaluatedAt);
+const traces = await verifyPriceTraces({root:'public/static-data', rows:index.rows, descriptor:index.price_traces, date:index.as_of_date});
+if (!traces.legacy) console.log(`Price trace gate passed: ${traces.available} assets reproduce their canonical chart closes and set hash.`);
 for(const now of new Set([evaluatedAt,checkedAt])) validateResearchParity(wire,canonicalRows,now);
 console.log(`Research transport gate passed: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes; full canonical rules, CSV, rankings and order plan agree.`);
 // Open real normal, repaired, split and incomplete symbols. All surfaces use

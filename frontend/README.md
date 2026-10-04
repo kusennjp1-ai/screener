@@ -52,7 +52,8 @@ Requires backend API running on port 8000. See [Backend README](../backend/READM
 ```
 src/
 ├── main.jsx                     # App entry point
-├── App.jsx                      # Router, theme, providers
+├── App.jsx                      # Theme, query providers, runtime-mode boundary
+├── OnlineAppShell.jsx           # Backend login/bootstrap, providers, browser routes
 ├── index.css                    # Global styles
 ├── api/                         # API client modules (one per backend group)
 │   ├── client.js                #   Axios instance with baseURL
@@ -137,7 +138,9 @@ Dark mode by default. Dense 24px table rows. Compact 11-14px typography. Light m
 
 ### Code Splitting
 
-`ScanPage`, `MarketScanPage`, and `StockDetails` are eagerly loaded (most frequently accessed). `BreadthPage`, `GroupRankingsPage`, `ThemesPage`, and `ChatbotPage` are lazy-loaded with `React.lazy()` and wrapped in `<Suspense>`.
+`App` loads the backend-connected `OnlineAppShell` only in online mode. Within that shell, `ScanPage`, `MarketScanPage`, and `StockDetails` are eager; secondary pages use `React.lazy()`.
+
+The static app keeps the Research routes (`/` and `/compare`) eager and loads `/daily`, `/scan`, `/breadth`, and `/groups` on navigation. A shared loading/error boundary keeps navigation available while a route loads or fails, and offers a page reload to recover unavailable deployment chunks. Recharts and lightweight-charts have separate vendor chunks so Research does not initialize the secondary routes' Recharts dependency. The service worker still precaches every emitted asset for offline navigation.
 
 ### State Management
 
@@ -148,7 +151,7 @@ No global store. TanStack Query handles all server state. `useState` for local U
 ### Adding a Page
 
 1. Create component in `pages/`
-2. Add route in `App.jsx` (eager import or `React.lazy()`)
+2. Add the online route in `OnlineAppShell.jsx`, or the static route in `static/StaticAppShell.jsx` (eager import or `React.lazy()`)
 3. Add navigation item in `components/Layout/`
 4. Create API module in `api/` if new endpoints are needed
 

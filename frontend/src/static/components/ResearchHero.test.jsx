@@ -12,24 +12,23 @@ const props={rows:[],ranked:[],date:'2026-09-29',plan:{dailyPositions:[],allocat
 const counts=extra=>({...Object.fromEntries(Object.keys(CHANGE_LABELS).map(key=>[key,0])),...extra});
 beforeEach(()=>{localStorage.clear();vi.clearAllMocks();});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
-it('persists the compact hero choice across mounts and restores its content',()=>{
+it('starts with an unmounted optional radar and opens it only through the overview control',()=>{
+ localStorage.setItem('research-hero-collapsed','false');
  const first=render(<ResearchHero {...props}/>);
+ expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
+ const trigger=screen.getByRole('button',{name:'概況を展開'});
+ expect(trigger).toHaveAttribute('aria-expanded','false');
+ fireEvent.click(trigger);
+ expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:'概況をたたむ'}));
- expect(localStorage.getItem('research-hero-collapsed')).toBe('true');
  expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
  first.unmount();render(<ResearchHero {...props}/>);
  expect(screen.getByRole('button',{name:'概況を展開'})).toHaveAttribute('aria-expanded','false');
- fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
- expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
- expect(localStorage.getItem('research-hero-collapsed')).toBe('false');
 });
-it('keeps collapse usable when storage reads and writes are denied',()=>{
+it('keeps the optional overview usable when storage is denied',()=>{
  vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
  vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
  render(<ResearchHero {...props}/>);
- expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
- fireEvent.click(screen.getByRole('button',{name:'概況をたたむ'}));
- expect(screen.getByRole('button',{name:'概況を展開'})).toHaveAttribute('aria-expanded','false');
  fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
  expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
 });
@@ -38,15 +37,16 @@ it('labels the fixed Minervini overview and never mistakes capped portfolio posi
  const plan={...props.plan,dailyPositions:[{symbol:'S0'},{symbol:'S1'}]};
  render(<ResearchHero {...props} ranked={ranked} plan={plan} method="oneil"/>);
  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('選定候補は 6 銘柄。');
+ expect(screen.getByLabelText('ミネルヴィニの選定と価格位置')).toHaveTextContent('トレンド通過 6');
+ fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
  expect(screen.getByText(/終値 · ミネルヴィニ概況/)).toBeInTheDocument();
- expect(screen.getByLabelText('選定から購入検討までの3段階')).toHaveTextContent('銘柄選定');
- expect(screen.getByLabelText('選定から購入検討までの3段階')).toHaveTextContent('買い位置');
- expect(screen.getByText('個別に確認')).toBeInTheDocument();
+ expect(screen.getByText(/財務の成長根拠と日次の購入条件は個別に確認/)).toBeInTheDocument();
  expect(screen.queryByText('2銘柄が条件通過。')).not.toBeInTheDocument();
 });
 it('does not report a real candidate count while the publication is loading',()=>{
  render(<ResearchHero {...props} loading/>);
  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('データを読み込み中。');
+ fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
  expect(screen.getByText('日足検証 —')).toBeInTheDocument();
 });
 it('groups daily changes with the portfolio action while retaining the full desktop counts',()=>{
@@ -55,6 +55,7 @@ it('groups daily changes with the portfolio action while retaining the full desk
  const trigger=screen.getByRole('button',{name:'候補の日次変化'});
  expect(trigger.closest('.hero-actions')).not.toBeNull();
  expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('新たに通過 7 · 再通過 2 · 脱落 3');
+ fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
  expect(screen.getByRole('link',{name:'業種の追い風を見る →'}).closest('.overview-market')).not.toBeNull();
 });
 it('shows comparison coverage from summary counts and loads explanations only when opened',()=>{
@@ -75,12 +76,6 @@ it('does not display zero counts for a missing per-method summary',()=>{
  render(<ResearchHero {...props} workbench={{data:{history:{previous_as_of:'2026-09-28'},changes:{}}}} method="minervini"/>);
  expect(screen.getByRole('button',{name:'候補の日次変化'})).toHaveTextContent('変化：集計未取得');
 });
-it('separates compact desktop stages while retaining the mobile three-column spacing',()=>{
- const overviewStyles=readFileSync('src/static/components/researchOverview.css','utf8');
- const [desktop,mobile]=overviewStyles.split('@media (max-width:700px)');
- expect(desktop).toMatch(/\.research-overview\.hero-collapsed \.overview-steps \{[^}]*gap:20px/);
- expect(mobile).toMatch(/\.research-overview\.hero-collapsed \.overview-steps \{[^}]*gap:0/);
-});
 it('keeps both overview actions at 44px without inherited margins and clears the sticky header on focus scroll',()=>{
  const overviewStyles=readFileSync('src/static/components/researchOverview.css','utf8');
  const [desktop]=overviewStyles.split('@media (max-width:700px)');
@@ -90,7 +85,7 @@ it('keeps both overview actions at 44px without inherited margins and clears the
 it('gives the market link a full touch target and sticky-header focus clearance',()=>{
  const styles=readFileSync('src/static/components/researchOverview.css','utf8');
  expect(styles).toMatch(/\.overview-market a \{[^}]*min-height:44px;[^}]*scroll-margin-top:64px;/);
- expect(styles).toMatch(/@media \(min-width:701px\) \{\s*\.research-hero\.research-overview:not\(\.hero-collapsed\) \{ padding-block:8px 20px;/);
+
 });
 it('opens daily changes from the keyboard and restores the trigger after Escape and Close',async()=>{
  const user=userEvent.setup();

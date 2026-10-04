@@ -58,7 +58,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await chart.scrollIntoViewIfNeeded();
       record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
       if (record.source_warning.expected) {
-        record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
+        record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-chart .entry-source-badge'));
         check(record.source_warning.inline_visible, `${key}: first-book proximity warning is missing from the initial inline viewport`);
       }
       await capture(page, viewport, theme, `case-${symbol}-inline`);

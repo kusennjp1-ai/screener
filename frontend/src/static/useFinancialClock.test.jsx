@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { useFinancialClock } from './useFinancialClock';
+import { useFinancialClock, useFinancialDeadlineClock } from './useFinancialClock';
 import { withFinancialProof, FINANCIAL_TEST_NOW as start } from './testFinancialFixture';
 import { projectFinancialRow } from './financialCurrent';
 import { bookFinancialCurrent } from './bookFinancialCurrent';
@@ -34,4 +34,43 @@ it('wakes for a selected detail-only book reference at its separate 180-day boun
   expect(hook.result.current).toBe(true);
   act(()=>vi.advanceTimersByTime(1));expect(hook.result.current).toBe(true);
   act(()=>vi.advanceTimersByTime(1));expect(hook.result.current).toBe(false);
+});
+
+it('wakes at the worker deadline without adding a second millisecond to its inclusive source boundary',()=>{
+  vi.useFakeTimers();vi.setSystemTime(start);
+  const deadline=start+1001;
+  const hook=renderHook(()=>useFinancialDeadlineClock(deadline)>=deadline);
+  expect(hook.result.current).toBe(false);
+  act(()=>vi.advanceTimersByTime(1000));expect(hook.result.current).toBe(false);
+  act(()=>vi.advanceTimersByTime(1));expect(hook.result.current).toBe(true);
+});
+
+it.each(['focus','visibilitychange'])('rechecks a worker deadline on %s after suspended time',event=>{
+  let clock=start;vi.spyOn(Date,'now').mockImplementation(()=>clock);
+  const deadline=start+1001;
+  const hook=renderHook(()=>useFinancialDeadlineClock(deadline)>=deadline);
+  expect(hook.result.current).toBe(false);
+  clock=deadline;
+  act(()=>{(event==='focus'?window:document).dispatchEvent(new Event(event));});
+  expect(hook.result.current).toBe(true);
+});
+
+it('detects clock rollback during the existing periodic check even with no pending expiry',()=>{
+  vi.useFakeTimers();vi.setSystemTime(start);
+  const hook=renderHook(()=>useFinancialDeadlineClock(null));
+  expect(hook.result.current).toBe(start);
+  vi.setSystemTime(start-20000);
+  act(()=>vi.advanceTimersByTime(15000));
+  expect(hook.result.current).toBe(start-5000);
+});
+
+it('does not repeatedly wake an expired deadline while its replacement is pending',()=>{
+  vi.useFakeTimers();vi.setSystemTime(start);
+  let renders=0;
+  const hook=renderHook(()=>{renders++;return useFinancialDeadlineClock(start+1001);});
+  act(()=>vi.advanceTimersByTime(1001));
+  expect(hook.result.current).toBe(start+1001);
+  const expiredRenders=renders;
+  act(()=>vi.advanceTimersByTime(10000));
+  expect(renders).toBe(expiredRenders);
 });

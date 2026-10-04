@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Button, CircularProgress, Typography, useMediaQuery } from '@mui/material';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
+import { EntrySourceBadge } from './EntrySourceNote';
 
 const EMPTY_BARS = Object.freeze([]);
 
@@ -29,6 +30,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
       : query.isError ? <Alert severity="error" action={<Button onClick={() => query.refetch()}>再試行</Button>}>チャートを取得できません。</Alert>
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography> : null}
     {(ready || initialized) && <div hidden={!ready} aria-hidden={!ready}>
+      {ready && plan.sourceContext?.warning && <div className="research-chart-source-context" style={{padding:'4px 12px 8px'}}><EntrySourceBadge plan={plan}/></div>}
       <CandlestickChart smallScreen={small} researchActions={<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>} researchView bookAnnotations symbol={symbol} height={small ? 360 : 440}
         chartIdentity={JSON.stringify([symbol, date, generation, entry?.path])}
         priceData={ready ? data.bars : EMPTY_BARS} rsLineData={ready ? data.rs_line || null : null} rsRatingValue={ready ? rsRating ?? null : null}

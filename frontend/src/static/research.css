@@ -94,7 +94,7 @@
 .research-disclosure[open] > summary { color:var(--accent); }
 .research-options { border-top:1px solid var(--line); margin-top:8px; }
 .decision-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
-#candidate-search { scroll-margin-top:160px; }
+.candidate-search-input { scroll-margin-top:160px; }
 .decision-panel .research-disclosure > summary { margin-top:4px; }
 @media(max-width:600px) { .decision-actions { flex-direction:column; } .decision-actions > button { width:100%; } .decision-account strong { font-size:26px; } }
 
