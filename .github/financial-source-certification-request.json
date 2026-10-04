@@ -5,12 +5,12 @@
     "workflow": ".github/workflows/financial-statement-recovery.yml",
     "head_sha": "4b27798b9b04528737938bb5844a8d86a704c58d",
     "run_id": 37203329163,
-    "run_attempt": 3,
-    "artifact_id": 11304558864,
-    "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-3",
-    "artifact_sha256": "a9831aa5ee6da63eed203f4db240d689204839d82f01bbb639e3c892b0ce0925",
-    "archive_manifest_sha256": "549b6133d431d72f1d35999238261db382aa8fee1fb10a5771e8ba41b60ef85b",
-    "acquisition_base_sha256": "bbf846484deda7f78cdd0a384dd1521362b68a6a5d653f7417628dd5c2c8d395",
-    "cohort_sha256": "775d2ed6b6781a70940c62d3be584b16b1502deb16ca77c51ba8516c3c53d775"
+    "run_attempt": 8,
+    "artifact_id": 11307162746,
+    "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-8",
+    "artifact_sha256": "c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb",
+    "archive_manifest_sha256": "f49657581a65a88a7cdbb920e6650295e5406f3d9da162f4636614951f2fefaa",
+    "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+    "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
   }
 }
