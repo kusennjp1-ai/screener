@@ -1,0 +1,217 @@
+{
+  "attributes": {
+    "income_stmt": {
+      "capture_id": "c2727512-af97-4a75-9d77-61c58302904d",
+      "observed_at": "2026-10-04T11:45:00.953Z",
+      "required_validity": {
+        "required_valid_through": "2026-10-04T11:45:00.981Z",
+        "source_max_age_seconds": 259200,
+        "state": "current"
+      },
+      "source_state": "current",
+      "status": "captured"
+    },
+    "quarterly_income_stmt": {
+      "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+      "observed_at": "2026-10-04T11:44:59.282Z",
+      "required_validity": {
+        "required_valid_through": "2026-10-04T11:44:59.312Z",
+        "source_max_age_seconds": 259200,
+        "state": "current"
+      },
+      "source_state": "current",
+      "status": "captured"
+    }
+  },
+  "envelope_file": "envelopes/AVAV.json",
+  "envelope_sha256": "f8730e5170fa686aec6e068fe9f85e630725c3d2e57e3b94862ed479f98742fe",
+  "evaluation_time": "2026-10-04T11:45:02.486Z",
+  "financial_current": {
+    "a": "2026-10-02",
+    "m": "US",
+    "p": {
+      "0": [
+        -108.0,
+        "0",
+        "Diluted EPS",
+        [
+          "2026-07-31",
+          "2026-04-30"
+        ],
+        1791114299282,
+        1791719099282,
+        "n",
+        "r"
+      ],
+      "2": [
+        -25.11,
+        "0",
+        "Total Revenue",
+        [
+          "2026-07-31",
+          "2026-04-30"
+        ],
+        1791114299282,
+        1791719099282,
+        "D",
+        "r"
+      ],
+      "3": [
+        5.68,
+        "1",
+        "Total Revenue",
+        [
+          "2026-07-31",
+          "2026-04-30",
+          "2026-01-31",
+          "2025-10-31",
+          "2025-07-31"
+        ],
+        1791114299282,
+        1791719099282,
+        "G",
+        "r"
+      ]
+    },
+    "r": "01001811b111bbbb",
+    "s": "AVAV",
+    "t": 1791114302486,
+    "v": 2
+  },
+  "financial_history": {
+    "annual": [
+      {
+        "end": "2022-04-30",
+        "eps": null,
+        "netIncome": null,
+        "revenue": null
+      },
+      {
+        "end": "2023-04-30",
+        "eps": -7.04,
+        "netIncome": null,
+        "revenue": 540536000.0
+      },
+      {
+        "end": "2024-04-30",
+        "eps": 2.18,
+        "netIncome": null,
+        "revenue": 716720000.0
+      },
+      {
+        "end": "2025-04-30",
+        "eps": 1.55,
+        "netIncome": null,
+        "revenue": 820627000.0
+      },
+      {
+        "end": "2026-04-30",
+        "eps": -5.4,
+        "netIncome": null,
+        "revenue": 1976845000.0
+      }
+    ],
+    "as_of_date": "2026-10-02",
+    "basis": "reported_diluted_eps",
+    "currency": "USD",
+    "point_in_time": false,
+    "quarterly": [
+      {
+        "end": "2025-01-31",
+        "eps": -0.06,
+        "netIncome": null,
+        "revenue": null
+      },
+      {
+        "end": "2025-04-30",
+        "eps": null,
+        "netIncome": null,
+        "revenue": null
+      },
+      {
+        "end": "2025-07-31",
+        "eps": null,
+        "netIncome": null,
+        "revenue": 454676000.0
+      },
+      {
+        "end": "2025-10-31",
+        "eps": -0.34,
+        "netIncome": null,
+        "revenue": 472508000.0
+      },
+      {
+        "end": "2026-01-31",
+        "eps": -4.9,
+        "netIncome": null,
+        "revenue": 408045000.0
+      },
+      {
+        "end": "2026-04-30",
+        "eps": 1.25,
+        "netIncome": null,
+        "revenue": 641616000.0
+      },
+      {
+        "end": "2026-07-31",
+        "eps": -0.1,
+        "netIncome": null,
+        "revenue": 480490000.0
+      }
+    ],
+    "retrieved_at": "2026-10-04T11:44:59.282Z",
+    "source": "Yahoo Finance via yfinance 0.2.66 transport capture",
+    "source_publication_date": null,
+    "source_publication_date_status": "unknown",
+    "source_url": "https://finance.yahoo.com/quote/AVAV/financials/",
+    "status": "available",
+    "symbol": "AVAV"
+  },
+  "history_source_diagnostics": {
+    "original_receipts": [
+      {
+        "attribute": "income_stmt",
+        "capture_id": "c2727512-af97-4a75-9d77-61c58302904d",
+        "observed_at": "2026-10-04T11:45:00.953Z",
+        "raw_payload_sha256": "9f754fab59cc015c054d8acdeb8d94e74b8862707411fa5f81cdadad4112f7bc"
+      },
+      {
+        "attribute": "quarterly_income_stmt",
+        "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+        "observed_at": "2026-10-04T11:44:59.282Z",
+        "raw_payload_sha256": "c233fdb8ce39e39cc81687bbf05de22b4863687e358cd09c2b8568e8942dd75b"
+      }
+    ],
+    "reasons": {
+      "annual": "nonpositive_comparison_base",
+      "quarterly": "available"
+    }
+  },
+  "market": "US",
+  "point_in_time": false,
+  "source_data_as_of": "2026-10-02",
+  "source_diagnostics": {
+    "annual_history": "nonpositive_comparison_base",
+    "fields": {
+      "annual_eps_growth_3y": "missing_or_invalid_value",
+      "composite_rating": "unverified_derivation_and_cohort",
+      "composite_rating_score": "unverified_derivation_and_cohort",
+      "eps_5yr_cagr": "unsupported_contract",
+      "eps_growth_qq": "available",
+      "eps_growth_yy": "missing_or_invalid_value",
+      "eps_q1_yoy": "missing_or_invalid_value",
+      "eps_q2_yoy": "missing_or_invalid_value",
+      "eps_rating": "unverified_derivation_and_cohort",
+      "eps_raw_score": "unverified_derivation_and_cohort",
+      "profit_margin": "missing_or_invalid_value",
+      "revenue_growth": "missing_or_invalid_value",
+      "roe": "missing_or_invalid_value",
+      "sales_growth_qq": "available",
+      "sales_growth_yy": "available",
+      "smr_rating": "unverified_derivation_and_cohort"
+    }
+  },
+  "source_publication_date": null,
+  "status": "captured",
+  "symbol": "AVAV"
+}

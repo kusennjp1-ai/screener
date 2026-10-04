@@ -1,0 +1,737 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Exact financial source artifact certification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "result",
+    "evaluated_at",
+    "validation",
+    "source",
+    "bindings",
+    "projection",
+    "source_execution",
+    "published"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "financial-source-certification-v1"
+    },
+    "kind": {
+      "const": "source_artifact_validation"
+    },
+    "result": {
+      "const": "certified"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code_sha",
+        "contract_version",
+        "contract_sha256",
+        "projection_policy",
+        "policy_sha256",
+        "reviewed_projector_migrations"
+      ],
+      "properties": {
+        "code_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "contract_version": {
+          "const": "financial-source-certification-v1"
+        },
+        "contract_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "projection_policy": {
+          "const": "original-receipts-current-availability-v1"
+        },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "reviewed_projector_migrations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "migration_id",
+              "original_batch_summary_sha256",
+              "symbol",
+              "original_envelope_sha256",
+              "scalar_changes",
+              "original_source_clocks_preserved",
+              "derived_ratings_remain_quarantined"
+            ],
+            "properties": {
+              "migration_id": {
+                "const": "uniform-complete-same-metric-eps-pair-v1"
+              },
+              "original_batch_summary_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "symbol": {
+                "enum": [
+                  "APLD",
+                  "AUB",
+                  "AVAV"
+                ]
+              },
+              "original_envelope_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "scalar_changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "symbol",
+                    "field",
+                    "before",
+                    "after"
+                  ],
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "string"
+                    },
+                    "before": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "after": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "original_source_clocks_preserved": {
+                "const": true
+              },
+              "derived_ratings_remain_quarantined": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "workflow",
+        "head_sha",
+        "run_id",
+        "run_attempt",
+        "artifact_id",
+        "artifact_name",
+        "artifact_sha256",
+        "archive_manifest_sha256",
+        "acquisition_base_sha256",
+        "cohort_sha256"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "workflow": {
+          "type": "string"
+        },
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "run_attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "artifact_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "artifact_name": {
+          "type": "string"
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "archive_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "acquisition_base_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "cohort_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cycle_sha256",
+        "archive_manifest_sha256",
+        "acquisition_base_sha256",
+        "cohort_sha256",
+        "source_api_evidence_sha256",
+        "request_sha256"
+      ],
+      "properties": {
+        "cycle_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "archive_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "acquisition_base_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "cohort_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_api_evidence_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "path",
+        "sha256",
+        "receipt_inventory_sha256",
+        "source_timestamp_bounds",
+        "counts",
+        "cohort_count",
+        "retained_receipts",
+        "retained_symbols",
+        "attempted_symbols",
+        "source_data_as_of",
+        "knowledge_basis",
+        "point_in_time",
+        "source_publication_date",
+        "qualification_authority",
+        "complete_availability_required"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "financial-source-certified-projection-v1"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^projections/[a-f0-9]{64}\\.json$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "receipt_inventory_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_timestamp_bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "earliest",
+            "latest"
+          ],
+          "properties": {
+            "earliest": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "latest": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eps_growth_yy",
+            "sales_growth_yy",
+            "annual_history"
+          ],
+          "properties": {
+            "eps_growth_yy": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ordinary",
+                "nonpositive",
+                "source_limited",
+                "unknown"
+              ],
+              "properties": {
+                "ordinary": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonpositive": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_limited": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "sales_growth_yy": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ordinary",
+                "nonpositive",
+                "source_limited",
+                "unknown"
+              ],
+              "properties": {
+                "ordinary": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonpositive": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_limited": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "annual_history": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ordinary",
+                "nonpositive",
+                "source_limited",
+                "unknown"
+              ],
+              "properties": {
+                "ordinary": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonpositive": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_limited": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        "cohort_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retained_receipts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retained_symbols": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attempted_symbols": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_data_as_of": {
+          "type": "string",
+          "format": "date"
+        },
+        "knowledge_basis": {
+          "const": "current_observation_at_source_capture"
+        },
+        "point_in_time": {
+          "const": false
+        },
+        "source_publication_date": {
+          "const": null
+        },
+        "qualification_authority": {
+          "const": false
+        },
+        "complete_availability_required": {
+          "const": false
+        }
+      }
+    },
+    "source_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producer_run_conclusion",
+        "producer_job_conclusion",
+        "producer_job_id",
+        "producer_exit_code",
+        "provider_state",
+        "provider_failures",
+        "failures",
+        "empty_getter_count",
+        "unknown_failure_count",
+        "attempt_outcome_counts",
+        "further_provider_work_allowed",
+        "original_outcomes_retained",
+        "certification_is_complete_availability",
+        "failure_inventory_scope",
+        "producer_batch"
+      ],
+      "properties": {
+        "producer_run_conclusion": {
+          "enum": [
+            "success",
+            "failure"
+          ]
+        },
+        "producer_job_conclusion": {
+          "enum": [
+            "success",
+            "failure"
+          ]
+        },
+        "producer_job_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "producer_exit_code": {
+          "enum": [
+            0,
+            2,
+            3,
+            4
+          ]
+        },
+        "provider_state": {
+          "enum": [
+            "blocked",
+            "no_block_observed"
+          ]
+        },
+        "provider_failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "attempt_id",
+              "symbol",
+              "attribute",
+              "outcome",
+              "failure_kind",
+              "category",
+              "http_statuses",
+              "attempted_at",
+              "completed_at",
+              "source_object_sha256"
+            ],
+            "properties": {
+              "attempt_id": {
+                "type": "string"
+              },
+              "symbol": {
+                "type": "string"
+              },
+              "attribute": {
+                "enum": [
+                  "quarterly_income_stmt",
+                  "income_stmt"
+                ]
+              },
+              "outcome": {
+                "enum": [
+                  "failed",
+                  "provider_blocked",
+                  "budget_stopped"
+                ]
+              },
+              "failure_kind": {
+                "type": "string"
+              },
+              "category": {
+                "enum": [
+                  "provider_blocked",
+                  "ordinary_empty_statement",
+                  "budget_stopped",
+                  "unknown_failure"
+                ]
+              },
+              "http_statuses": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                }
+              },
+              "attempted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "completed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "source_object_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "attempt_id",
+              "symbol",
+              "attribute",
+              "outcome",
+              "failure_kind",
+              "category",
+              "http_statuses",
+              "attempted_at",
+              "completed_at",
+              "source_object_sha256"
+            ],
+            "properties": {
+              "attempt_id": {
+                "type": "string"
+              },
+              "symbol": {
+                "type": "string"
+              },
+              "attribute": {
+                "enum": [
+                  "quarterly_income_stmt",
+                  "income_stmt"
+                ]
+              },
+              "outcome": {
+                "enum": [
+                  "failed",
+                  "provider_blocked",
+                  "budget_stopped"
+                ]
+              },
+              "failure_kind": {
+                "type": "string"
+              },
+              "category": {
+                "enum": [
+                  "provider_blocked",
+                  "ordinary_empty_statement",
+                  "budget_stopped",
+                  "unknown_failure"
+                ]
+              },
+              "http_statuses": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                }
+              },
+              "attempted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "completed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "source_object_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        },
+        "empty_getter_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_failure_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attempt_outcome_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "succeeded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "provider_blocked": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "budget_stopped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "further_provider_work_allowed": {
+          "const": false
+        },
+        "original_outcomes_retained": {
+          "const": true
+        },
+        "certification_is_complete_availability": {
+          "const": false
+        },
+        "failure_inventory_scope": {
+          "const": "cumulative_archive"
+        },
+        "producer_batch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "summary_sha256",
+            "plan_sha256",
+            "attempts_sha256",
+            "statement_getter_calls",
+            "empty_getter_count",
+            "unknown_failure_count",
+            "attempt_outcome_counts"
+          ],
+          "properties": {
+            "summary_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "plan_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "attempts_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "statement_getter_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "empty_getter_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown_failure_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "attempt_outcome_counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "succeeded": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "provider_blocked": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "budget_stopped": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "published": {
+      "const": false
+    }
+  }
+}

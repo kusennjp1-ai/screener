@@ -1,0 +1,929 @@
+{
+  "attribute": "income_stmt",
+  "failure": null,
+  "full_http_bodies_archived": false,
+  "getter_completed_at": "2026-10-04T11:45:00.974Z",
+  "original_frame_cells": {
+    "columns": [
+      "2026-04-30 00:00:00",
+      "2025-04-30 00:00:00",
+      "2024-04-30 00:00:00",
+      "2023-04-30 00:00:00",
+      "2022-04-30 00:00:00"
+    ],
+    "format": "original-yfinance-frame-cells-v1",
+    "rows": [
+      {
+        "metric": "Tax Effect Of Unusual Items",
+        "values": [
+          -18053100.0,
+          -403898.0,
+          0.0,
+          -12144143.239355,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Tax Rate For Calcs",
+        "values": [
+          0.075,
+          0.022,
+          0.029906,
+          0.077839,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Normalized EBITDA",
+        "values": [
+          205736000.0,
+          101209000.0,
+          103200000.0,
+          77007000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Total Unusual Items",
+        "values": [
+          -240708000.0,
+          -18359000.0,
+          0.0,
+          -156017000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Total Unusual Items Excluding Goodwill",
+        "values": [
+          -240708000.0,
+          -18359000.0,
+          0.0,
+          -156017000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Income From Continuing Operation Net Minority Interest",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176212000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Reconciled Depreciation",
+        "values": [
+          265037000.0,
+          40998000.0,
+          35749000.0,
+          99999000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Reconciled Cost Of Revenue",
+        "values": [
+          1476203000.0,
+          501991000.0,
+          432789000.0,
+          367022000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "EBITDA",
+        "values": [
+          -34972000.0,
+          82850000.0,
+          103200000.0,
+          -79010000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "EBIT",
+        "values": [
+          -300009000.0,
+          41852000.0,
+          67451000.0,
+          -179009000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Interest Income",
+        "values": [
+          -5613000.0,
+          -2188000.0,
+          -4220000.0,
+          -9368000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Interest Expense",
+        "values": [
+          5613000.0,
+          2188000.0,
+          4220000.0,
+          9368000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Normalized Income",
+        "values": [
+          -42467100.0,
+          61574102.0,
+          59666000.0,
+          -32339143.239355,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Income From Continuing And Discontinued Operation",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176212000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Total Expenses",
+        "values": [
+          2047132000.0,
+          761473000.0,
+          644896000.0,
+          563182000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Total Operating Income As Reported",
+        "values": [
+          -310995000.0,
+          40795000.0,
+          71824000.0,
+          -178663000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Diluted Average Shares",
+        "values": [
+          49087346.0,
+          28173488.0,
+          27327993.0,
+          25044881.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Basic Average Shares",
+        "values": [
+          49087346.0,
+          28018656.0,
+          27203417.0,
+          25044881.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Diluted EPS",
+        "values": [
+          -5.4,
+          1.55,
+          2.18,
+          -7.04,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Basic EPS",
+        "values": [
+          -5.4,
+          1.56,
+          2.19,
+          -7.04,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Diluted NI Availto Com Stockholders",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176212000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Income Common Stockholders",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176212000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Income",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176212000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Minority Interests",
+        "values": [
+          {
+            "non_finite_number": "NaN"
+          },
+          0.0,
+          0.0,
+          -45000.0,
+          -3000.0
+        ]
+      },
+      {
+        "metric": "Net Income Including Noncontrolling Interests",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176167000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Income Discontinuous Operations",
+        "values": [
+          {
+            "non_finite_number": "NaN"
+          },
+          {
+            "non_finite_number": "NaN"
+          },
+          {
+            "non_finite_number": "NaN"
+          },
+          {
+            "non_finite_number": "NaN"
+          },
+          0.0
+        ]
+      },
+      {
+        "metric": "Net Income Continuous Operations",
+        "values": [
+          -265122000.0,
+          43619000.0,
+          59666000.0,
+          -176167000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Earnings From Equity Interest Net Of Tax",
+        "values": [
+          17441000.0,
+          4837000.0,
+          -1674000.0,
+          -2453000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Tax Provision",
+        "values": [
+          -23059000.0,
+          882000.0,
+          1891000.0,
+          -14663000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Pretax Income",
+        "values": [
+          -305622000.0,
+          39664000.0,
+          63231000.0,
+          -188377000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Other Income Expense",
+        "values": [
+          -229722000.0,
+          -17302000.0,
+          -4373000.0,
+          -156363000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Other Non Operating Income Expenses",
+        "values": [
+          10986000.0,
+          1057000.0,
+          -4373000.0,
+          -346000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Special Income Charges",
+        "values": [
+          -240708000.0,
+          -18359000.0,
+          0.0,
+          -156017000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Gain On Sale Of Business",
+        "values": [
+          {
+            "non_finite_number": "NaN"
+          },
+          {
+            "non_finite_number": "NaN"
+          },
+          0.0,
+          0.0,
+          6497000.0
+        ]
+      },
+      {
+        "metric": "Impairment Of Capital Assets",
+        "values": [
+          240708000.0,
+          18359000.0,
+          0.0,
+          156017000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Net Non Operating Interest Income Expense",
+        "values": [
+          -5613000.0,
+          -2188000.0,
+          -4220000.0,
+          -9368000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Interest Expense Non Operating",
+        "values": [
+          5613000.0,
+          2188000.0,
+          4220000.0,
+          9368000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Operating Income",
+        "values": [
+          -70287000.0,
+          59154000.0,
+          71824000.0,
+          -22646000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Operating Expense",
+        "values": [
+          570929000.0,
+          259482000.0,
+          212107000.0,
+          196160000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Research And Development",
+        "values": [
+          127678000.0,
+          100729000.0,
+          97687000.0,
+          64255000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Selling General And Administration",
+        "values": [
+          443251000.0,
+          158753000.0,
+          114420000.0,
+          131905000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Gross Profit",
+        "values": [
+          500642000.0,
+          318636000.0,
+          283931000.0,
+          173514000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Cost Of Revenue",
+        "values": [
+          1476203000.0,
+          501991000.0,
+          432789000.0,
+          367022000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Total Revenue",
+        "values": [
+          1976845000.0,
+          820627000.0,
+          716720000.0,
+          540536000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      },
+      {
+        "metric": "Operating Revenue",
+        "values": [
+          1976845000.0,
+          820627000.0,
+          716720000.0,
+          540536000.0,
+          {
+            "non_finite_number": "NaN"
+          }
+        ]
+      }
+    ]
+  },
+  "point_in_time": false,
+  "source_acquisition_contexts": {
+    "income_stmt": {
+      "capture_id": "c2727512-af97-4a75-9d77-61c58302904d",
+      "market": "US",
+      "observed_at": "2026-10-04T11:45:00.953Z",
+      "producer": "yfinance.income_stmt/transport-capture-v1",
+      "provider_symbol": "AVAV",
+      "raw_payload_availability": "retained_normalized_subset",
+      "raw_payload_sha256": "9f754fab59cc015c054d8acdeb8d94e74b8862707411fa5f81cdadad4112f7bc",
+      "source": "yfinance",
+      "source_payload": {
+        "columns": [
+          "2026-04-30 00:00:00",
+          "2025-04-30 00:00:00",
+          "2024-04-30 00:00:00",
+          "2023-04-30 00:00:00",
+          "2022-04-30 00:00:00"
+        ],
+        "format": "yfinance-income-selected-rows-v1",
+        "rows": [
+          {
+            "metric": "Reconciled Cost Of Revenue",
+            "values": [
+              1476203000.0,
+              501991000.0,
+              432789000.0,
+              367022000.0,
+              null
+            ]
+          },
+          {
+            "metric": "Diluted EPS",
+            "values": [
+              -5.4,
+              1.55,
+              2.18,
+              -7.04,
+              null
+            ]
+          },
+          {
+            "metric": "Basic EPS",
+            "values": [
+              -5.4,
+              1.56,
+              2.19,
+              -7.04,
+              null
+            ]
+          },
+          {
+            "metric": "Cost Of Revenue",
+            "values": [
+              1476203000.0,
+              501991000.0,
+              432789000.0,
+              367022000.0,
+              null
+            ]
+          },
+          {
+            "metric": "Total Revenue",
+            "values": [
+              1976845000.0,
+              820627000.0,
+              716720000.0,
+              540536000.0,
+              null
+            ]
+          },
+          {
+            "metric": "Operating Revenue",
+            "values": [
+              1976845000.0,
+              820627000.0,
+              716720000.0,
+              540536000.0,
+              null
+            ]
+          }
+        ],
+        "source_rows": {
+          "basiceps": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualBasicEPS",
+            "values": {
+              "2023-04-30": -7.04,
+              "2024-04-30": 2.19,
+              "2025-04-30": 1.56,
+              "2026-04-30": -5.4
+            }
+          },
+          "basicepsothergainslosses": {
+            "currencies": [],
+            "provider_metric": "annualBasicEPSOtherGainsLosses",
+            "values": {}
+          },
+          "continuinganddiscontinuedbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualContinuingAndDiscontinuedBasicEPS",
+            "values": {}
+          },
+          "continuinganddiscontinueddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualContinuingAndDiscontinuedDilutedEPS",
+            "values": {}
+          },
+          "costofrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualCostOfRevenue",
+            "values": {
+              "2023-04-30": 367022000.0,
+              "2024-04-30": 432789000.0,
+              "2025-04-30": 501991000.0,
+              "2026-04-30": 1476203000.0
+            }
+          },
+          "dilutedeps": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualDilutedEPS",
+            "values": {
+              "2023-04-30": -7.04,
+              "2024-04-30": 2.18,
+              "2025-04-30": 1.55,
+              "2026-04-30": -5.4
+            }
+          },
+          "dilutedepsothergainslosses": {
+            "currencies": [],
+            "provider_metric": "annualDilutedEPSOtherGainsLosses",
+            "values": {}
+          },
+          "normalizedbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualNormalizedBasicEPS",
+            "values": {}
+          },
+          "normalizeddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualNormalizedDilutedEPS",
+            "values": {}
+          },
+          "operatingrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualOperatingRevenue",
+            "values": {
+              "2023-04-30": 540536000.0,
+              "2024-04-30": 716720000.0,
+              "2025-04-30": 820627000.0,
+              "2026-04-30": 1976845000.0
+            }
+          },
+          "reconciledcostofrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualReconciledCostOfRevenue",
+            "values": {
+              "2023-04-30": 367022000.0,
+              "2024-04-30": 432789000.0,
+              "2025-04-30": 501991000.0,
+              "2026-04-30": 1476203000.0
+            }
+          },
+          "reportednormalizedbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualReportedNormalizedBasicEPS",
+            "values": {}
+          },
+          "reportednormalizeddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualReportedNormalizedDilutedEPS",
+            "values": {}
+          },
+          "taxlosscarryforwardbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualTaxLossCarryforwardBasicEPS",
+            "values": {}
+          },
+          "taxlosscarryforwarddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualTaxLossCarryforwardDilutedEPS",
+            "values": {}
+          },
+          "totalrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualTotalRevenue",
+            "values": {
+              "2023-04-30": 540536000.0,
+              "2024-04-30": 716720000.0,
+              "2025-04-30": 820627000.0,
+              "2026-04-30": 1976845000.0
+            }
+          }
+        }
+      },
+      "source_revision": null,
+      "symbol": "AVAV",
+      "transport_payload_sha256": "ec7ee00fc95084d21fb63b15e8789ac2e3447a8d08bf4cf39e09c983770e4db0"
+    }
+  },
+  "source_publication_date": null,
+  "source_publication_date_status": "unknown",
+  "symbol": "AVAV",
+  "transport_events": [
+    {
+      "attribute": "income_stmt",
+      "completed_at": "2026-10-04T11:45:00.951Z",
+      "endpoint": "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/AVAV",
+      "http_status": 200,
+      "method": "GET",
+      "retained_source_subset": {
+        "columns": [
+          "2026-04-30 00:00:00",
+          "2025-04-30 00:00:00",
+          "2024-04-30 00:00:00",
+          "2023-04-30 00:00:00",
+          "2022-04-30 00:00:00"
+        ],
+        "rows": {
+          "basiceps": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualBasicEPS",
+            "values": {
+              "2023-04-30": -7.04,
+              "2024-04-30": 2.19,
+              "2025-04-30": 1.56,
+              "2026-04-30": -5.4
+            }
+          },
+          "basicepsothergainslosses": {
+            "currencies": [],
+            "provider_metric": "annualBasicEPSOtherGainsLosses",
+            "values": {}
+          },
+          "continuinganddiscontinuedbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualContinuingAndDiscontinuedBasicEPS",
+            "values": {}
+          },
+          "continuinganddiscontinueddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualContinuingAndDiscontinuedDilutedEPS",
+            "values": {}
+          },
+          "costofrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualCostOfRevenue",
+            "values": {
+              "2023-04-30": 367022000.0,
+              "2024-04-30": 432789000.0,
+              "2025-04-30": 501991000.0,
+              "2026-04-30": 1476203000.0
+            }
+          },
+          "dilutedeps": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualDilutedEPS",
+            "values": {
+              "2023-04-30": -7.04,
+              "2024-04-30": 2.18,
+              "2025-04-30": 1.55,
+              "2026-04-30": -5.4
+            }
+          },
+          "dilutedepsothergainslosses": {
+            "currencies": [],
+            "provider_metric": "annualDilutedEPSOtherGainsLosses",
+            "values": {}
+          },
+          "normalizedbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualNormalizedBasicEPS",
+            "values": {}
+          },
+          "normalizeddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualNormalizedDilutedEPS",
+            "values": {}
+          },
+          "operatingrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualOperatingRevenue",
+            "values": {
+              "2023-04-30": 540536000.0,
+              "2024-04-30": 716720000.0,
+              "2025-04-30": 820627000.0,
+              "2026-04-30": 1976845000.0
+            }
+          },
+          "reconciledcostofrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualReconciledCostOfRevenue",
+            "values": {
+              "2023-04-30": 367022000.0,
+              "2024-04-30": 432789000.0,
+              "2025-04-30": 501991000.0,
+              "2026-04-30": 1476203000.0
+            }
+          },
+          "reportednormalizedbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualReportedNormalizedBasicEPS",
+            "values": {}
+          },
+          "reportednormalizeddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualReportedNormalizedDilutedEPS",
+            "values": {}
+          },
+          "taxlosscarryforwardbasiceps": {
+            "currencies": [],
+            "provider_metric": "annualTaxLossCarryforwardBasicEPS",
+            "values": {}
+          },
+          "taxlosscarryforwarddilutedeps": {
+            "currencies": [],
+            "provider_metric": "annualTaxLossCarryforwardDilutedEPS",
+            "values": {}
+          },
+          "totalrevenue": {
+            "currencies": [
+              "USD"
+            ],
+            "provider_metric": "annualTotalRevenue",
+            "values": {
+              "2023-04-30": 540536000.0,
+              "2024-04-30": 716720000.0,
+              "2025-04-30": 820627000.0,
+              "2026-04-30": 1976845000.0
+            }
+          }
+        }
+      },
+      "sequence": 342,
+      "source_subset_status": "retained",
+      "started_at": "2026-10-04T11:45:00.822Z",
+      "symbol": "AVAV",
+      "transport_payload_bytes": 39397,
+      "transport_payload_sha256": "ec7ee00fc95084d21fb63b15e8789ac2e3447a8d08bf4cf39e09c983770e4db0"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "summary_sha256": "856918a6ccea581b85bf2fdba601457c1da1631737717e4dc700f8d8e7dcc2ce",
+  "summary_evaluation_time": "2026-10-04T11:46:39.802Z",
+  "as_of": "2026-10-02",
+  "symbols": {
+    "APLD": {
+      "result_sha256": "b3b0e37c518e2a1a3d98823f0a3d8975aa8f72933c1df8f64e3f04c3927913f9",
+      "envelope_sha256": "22ad4a986dc43ad3b65d3a809136c4d1329b089ebd628f295d9e7c5185bcfad7",
+      "acquisitions": {
+        "income_stmt": {
+          "attribute": "income_stmt",
+          "capture_id": "02a7be19-92a8-4b2f-93a6-77f81c76a739",
+          "file": "acquisitions/APLD-income_stmt.json",
+          "observed_at": "2026-10-04T11:42:23.124Z",
+          "origin_binding": {
+            "base_artifact_sha256": "5c878d722f9ea4e4b2e367ccfb0d51b08703e84e7617ccdab9928ef99ef0fab3",
+            "source_data_as_of": "2026-10-02"
+          },
+          "sha256": "004479d92570606dec2bb6fa83be8728bee8f6b600ae573b6b319bcc52709db0",
+          "symbol": "APLD"
+        },
+        "quarterly_income_stmt": {
+          "attribute": "quarterly_income_stmt",
+          "capture_id": "2c7c363c-9c49-4f83-bbe3-b623bd11fd69",
+          "file": "acquisitions/APLD-quarterly_income_stmt.json",
+          "observed_at": "2026-10-04T11:42:21.433Z",
+          "origin_binding": {
+            "base_artifact_sha256": "5c878d722f9ea4e4b2e367ccfb0d51b08703e84e7617ccdab9928ef99ef0fab3",
+            "source_data_as_of": "2026-10-02"
+          },
+          "sha256": "72f79500b1b84f2bab1eeb1c6e97e560501be23780353f8c72c7cb7b4bed9975",
+          "symbol": "APLD"
+        }
+      }
+    },
+    "AUB": {
+      "result_sha256": "69ed7159d2f279cacd94bce7a25af4b00d340d8f9d90ab3828854ef71a2c70d4",
+      "envelope_sha256": "525e8cc47831ae5eef45a47b728779dca22eaa1121dc1c6179f6381924963857",
+      "acquisitions": {
+        "income_stmt": {
+          "attribute": "income_stmt",
+          "capture_id": "e4353d4c-01d2-4977-bf06-a004bec783f9",
+          "file": "acquisitions/AUB-income_stmt.json",
+          "observed_at": "2026-10-04T11:44:47.388Z",
+          "origin_binding": {
+            "base_artifact_sha256": "5c878d722f9ea4e4b2e367ccfb0d51b08703e84e7617ccdab9928ef99ef0fab3",
+            "source_data_as_of": "2026-10-02"
+          },
+          "sha256": "a7dc2b8ca6c2c96d3b29d6f9c2402dc8bbb83194b7baf4913d3f6ba68ab4f914",
+          "symbol": "AUB"
+        },
+        "quarterly_income_stmt": {
+          "attribute": "quarterly_income_stmt",
+          "capture_id": "ddefaf2d-971f-4473-89df-c64dca61bbd2",
+          "file": "acquisitions/AUB-quarterly_income_stmt.json",
+          "observed_at": "2026-10-04T11:44:45.691Z",
+          "origin_binding": {
+            "base_artifact_sha256": "5c878d722f9ea4e4b2e367ccfb0d51b08703e84e7617ccdab9928ef99ef0fab3",
+            "source_data_as_of": "2026-10-02"
+          },
+          "sha256": "a58f4ad7f1a5c8c43573a1298633fcd7b97767b079659d36fe742bc5a7555c7a",
+          "symbol": "AUB"
+        }
+      }
+    },
+    "AVAV": {
+      "result_sha256": "bb49ca45da7bb2e46ab536d434d6abbc756d82d7c82b6e1100acfd6255e956fd",
+      "envelope_sha256": "f8730e5170fa686aec6e068fe9f85e630725c3d2e57e3b94862ed479f98742fe",
+      "acquisitions": {
+        "income_stmt": {
+          "attribute": "income_stmt",
+          "capture_id": "c2727512-af97-4a75-9d77-61c58302904d",
+          "file": "acquisitions/AVAV-income_stmt.json",
+          "observed_at": "2026-10-04T11:45:00.953Z",
+          "origin_binding": {
+            "base_artifact_sha256": "5c878d722f9ea4e4b2e367ccfb0d51b08703e84e7617ccdab9928ef99ef0fab3",
+            "source_data_as_of": "2026-10-02"
+          },
+          "sha256": "03c207ff389fce9f1c7172613c3755b2b3f8016ea6fd9b0b13d4f97ef61f3f81",
+          "symbol": "AVAV"
+        },
+        "quarterly_income_stmt": {
+          "attribute": "quarterly_income_stmt",
+          "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+          "file": "acquisitions/AVAV-quarterly_income_stmt.json",
+          "observed_at": "2026-10-04T11:44:59.282Z",
+          "origin_binding": {
+            "base_artifact_sha256": "5c878d722f9ea4e4b2e367ccfb0d51b08703e84e7617ccdab9928ef99ef0fab3",
+            "source_data_as_of": "2026-10-02"
+          },
+          "sha256": "c6abe3774a3b8402b22e2ff5075f808e7e3ed3564bcf10cdae09b905b64baba8",
+          "symbol": "AVAV"
+        }
+      }
+    }
+  }
+}

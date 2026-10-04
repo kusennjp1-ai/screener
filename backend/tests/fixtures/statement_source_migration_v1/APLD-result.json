@@ -1,0 +1,243 @@
+{
+  "attributes": {
+    "income_stmt": {
+      "capture_id": "02a7be19-92a8-4b2f-93a6-77f81c76a739",
+      "observed_at": "2026-10-04T11:42:23.124Z",
+      "required_validity": {
+        "required_valid_through": "2026-10-04T11:42:23.155Z",
+        "source_max_age_seconds": 259200,
+        "state": "current"
+      },
+      "source_state": "current",
+      "status": "captured"
+    },
+    "quarterly_income_stmt": {
+      "capture_id": "2c7c363c-9c49-4f83-bbe3-b623bd11fd69",
+      "observed_at": "2026-10-04T11:42:21.433Z",
+      "required_validity": {
+        "required_valid_through": "2026-10-04T11:42:21.463Z",
+        "source_max_age_seconds": 259200,
+        "state": "current"
+      },
+      "source_state": "current",
+      "status": "captured"
+    }
+  },
+  "envelope_file": "envelopes/APLD.json",
+  "envelope_sha256": "22ad4a986dc43ad3b65d3a809136c4d1329b089ebd628f295d9e7c5185bcfad7",
+  "evaluation_time": "2026-10-04T11:42:24.659Z",
+  "financial_current": {
+    "a": "2026-10-02",
+    "m": "US",
+    "p": {
+      "0": [
+        -8.33,
+        "0",
+        "Diluted EPS",
+        [
+          "2026-05-31",
+          "2026-02-28"
+        ],
+        1791114141433,
+        1791718941433,
+        "w",
+        "r"
+      ],
+      "1": [
+        -62.5,
+        "1",
+        "Diluted EPS",
+        [
+          "2026-05-31",
+          "2026-02-28",
+          "2025-11-30",
+          "2025-08-31",
+          "2025-05-31"
+        ],
+        1791114141433,
+        1791718941433,
+        "w",
+        "r"
+      ],
+      "2": [
+        104.32,
+        "0",
+        "Total Revenue",
+        [
+          "2026-05-31",
+          "2026-02-28"
+        ],
+        1791114141433,
+        1791718941433,
+        "G",
+        "r"
+      ],
+      "3": [
+        877.02,
+        "1",
+        "Total Revenue",
+        [
+          "2026-05-31",
+          "2026-02-28",
+          "2025-11-30",
+          "2025-08-31",
+          "2025-05-31"
+        ],
+        1791114141433,
+        1791718941433,
+        "X",
+        "r"
+      ],
+      "6": [
+        -62.5,
+        "2",
+        "Diluted EPS",
+        [
+          "2026-05-31",
+          "2026-02-28",
+          "2025-11-30",
+          "2025-08-31",
+          "2025-05-31"
+        ],
+        1791114141433,
+        1791718941433,
+        "w",
+        "r"
+      ]
+    },
+    "r": "ff0f19f1b111bbbb",
+    "s": "APLD",
+    "t": 1791114144659,
+    "v": 2
+  },
+  "financial_history": {
+    "annual": [
+      {
+        "end": "2022-05-31",
+        "eps": -0.41,
+        "netIncome": null,
+        "revenue": null
+      },
+      {
+        "end": "2023-05-31",
+        "eps": -0.49,
+        "netIncome": null,
+        "revenue": 55392000.0
+      },
+      {
+        "end": "2024-05-31",
+        "eps": -1.31,
+        "netIncome": null,
+        "revenue": 165575000.0
+      },
+      {
+        "end": "2025-05-31",
+        "eps": null,
+        "netIncome": null,
+        "revenue": 228569000.0
+      },
+      {
+        "end": "2026-05-31",
+        "eps": -0.91,
+        "netIncome": null,
+        "revenue": 611311000.0
+      }
+    ],
+    "as_of_date": "2026-10-02",
+    "basis": "reported_diluted_eps",
+    "currency": "USD",
+    "point_in_time": false,
+    "quarterly": [
+      {
+        "end": "2025-02-28",
+        "eps": null,
+        "netIncome": null,
+        "revenue": null
+      },
+      {
+        "end": "2025-05-31",
+        "eps": -0.24,
+        "netIncome": null,
+        "revenue": -33300000.0
+      },
+      {
+        "end": "2025-08-31",
+        "eps": -0.07,
+        "netIncome": null,
+        "revenue": 64216000.0
+      },
+      {
+        "end": "2025-11-30",
+        "eps": -0.07,
+        "netIncome": null,
+        "revenue": 126589000.0
+      },
+      {
+        "end": "2026-02-28",
+        "eps": -0.36,
+        "netIncome": null,
+        "revenue": 126637000.0
+      },
+      {
+        "end": "2026-05-31",
+        "eps": -0.39,
+        "netIncome": null,
+        "revenue": 258749000.0
+      }
+    ],
+    "retrieved_at": "2026-10-04T11:42:21.433Z",
+    "source": "Yahoo Finance via yfinance 0.2.66 transport capture",
+    "source_publication_date": null,
+    "source_publication_date_status": "unknown",
+    "source_url": "https://finance.yahoo.com/quote/APLD/financials/",
+    "status": "available",
+    "symbol": "APLD"
+  },
+  "history_source_diagnostics": {
+    "original_receipts": [
+      {
+        "attribute": "income_stmt",
+        "capture_id": "02a7be19-92a8-4b2f-93a6-77f81c76a739",
+        "observed_at": "2026-10-04T11:42:23.124Z",
+        "raw_payload_sha256": "2f41b4d7f2687506895cd5d2db3b84d19710e7f99dec2d38e361acce5cd9ef66"
+      },
+      {
+        "attribute": "quarterly_income_stmt",
+        "capture_id": "2c7c363c-9c49-4f83-bbe3-b623bd11fd69",
+        "observed_at": "2026-10-04T11:42:21.433Z",
+        "raw_payload_sha256": "1d37704d6a9718c2371cd0cc87fbb7cf176f192bb1fb0810c981fa8ca7c41b07"
+      }
+    ],
+    "reasons": {
+      "annual": "insufficient_annual_eps_points",
+      "quarterly": "available"
+    }
+  },
+  "market": "US",
+  "point_in_time": false,
+  "source_data_as_of": "2026-10-02",
+  "source_diagnostics": {
+    "annual_history": "insufficient_annual_eps_points",
+    "fields": {
+      "annual_eps_growth_3y": "missing_or_invalid_value",
+      "composite_rating": "unverified_derivation_and_cohort",
+      "composite_rating_score": "unverified_derivation_and_cohort",
+      "eps_5yr_cagr": "invalid_reporting_period",
+      "eps_growth_qq": "nonpositive_comparison_base",
+      "eps_growth_yy": "nonpositive_comparison_base",
+      "eps_q1_yoy": "nonpositive_comparison_base",
+      "eps_q2_yoy": "missing_or_invalid_value",
+      "eps_rating": "unverified_derivation_and_cohort",
+      "eps_raw_score": "unverified_derivation_and_cohort",
+      "profit_margin": "missing_or_invalid_value",
+      "revenue_growth": "missing_or_invalid_value",
+      "roe": "missing_or_invalid_value",
+      "sales_growth_qq": "available",
+      "sales_growth_yy": "nonpositive_comparison_base",
+      "smr_rating": "unverified_derivation_and_cohort"
+    }
+  },
+  "source_publication_date": null,
+  "status": "captured",
+  "symbol": "APLD"
+}

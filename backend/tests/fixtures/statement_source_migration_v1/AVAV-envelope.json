@@ -1,0 +1,654 @@
+{
+  "eps_5yr_cagr": 11.65,
+  "eps_growth_qq": -108.0,
+  "eps_growth_yy": null,
+  "eps_q1_yoy": null,
+  "eps_q2_yoy": null,
+  "eps_raw_score": null,
+  "eps_years_available": 4,
+  "financial_source_evidence": {
+    "captures": {
+      "a39f3c27-9cc1-4849-90a0-b07a68eb27d5": {
+        "raw_payload_sha256": "c233fdb8ce39e39cc81687bbf05de22b4863687e358cd09c2b8568e8942dd75b",
+        "source_payload": {
+          "columns": [
+            "2026-07-31 00:00:00",
+            "2026-04-30 00:00:00",
+            "2026-01-31 00:00:00",
+            "2025-10-31 00:00:00",
+            "2025-07-31 00:00:00",
+            "2025-04-30 00:00:00",
+            "2025-01-31 00:00:00"
+          ],
+          "format": "yfinance-income-selected-rows-v1",
+          "rows": [
+            {
+              "metric": "Reconciled Cost Of Revenue",
+              "values": [
+                355891000.0,
+                438991000.0,
+                309251000.0,
+                368403000.0,
+                359558000.0,
+                null,
+                null
+              ]
+            },
+            {
+              "metric": "Diluted EPS",
+              "values": [
+                -0.1,
+                1.25,
+                -4.9,
+                -0.34,
+                null,
+                null,
+                -0.06
+              ]
+            },
+            {
+              "metric": "Basic EPS",
+              "values": [
+                -0.1,
+                1.26,
+                -4.9,
+                -0.34,
+                null,
+                0.59,
+                null
+              ]
+            },
+            {
+              "metric": "Cost Of Revenue",
+              "values": [
+                355891000.0,
+                438991000.0,
+                309251000.0,
+                368403000.0,
+                359558000.0,
+                null,
+                null
+              ]
+            },
+            {
+              "metric": "Total Revenue",
+              "values": [
+                480490000.0,
+                641616000.0,
+                408045000.0,
+                472508000.0,
+                454676000.0,
+                null,
+                null
+              ]
+            },
+            {
+              "metric": "Operating Revenue",
+              "values": [
+                480490000.0,
+                641616000.0,
+                408045000.0,
+                472508000.0,
+                454676000.0,
+                null,
+                null
+              ]
+            }
+          ],
+          "source_rows": {
+            "basiceps": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "quarterlyBasicEPS",
+              "values": {
+                "2025-04-30": 0.59,
+                "2025-10-31": -0.34,
+                "2026-01-31": -4.9,
+                "2026-04-30": 1.26,
+                "2026-07-31": -0.1
+              }
+            },
+            "basicepsothergainslosses": {
+              "currencies": [],
+              "provider_metric": "quarterlyBasicEPSOtherGainsLosses",
+              "values": {}
+            },
+            "continuinganddiscontinuedbasiceps": {
+              "currencies": [],
+              "provider_metric": "quarterlyContinuingAndDiscontinuedBasicEPS",
+              "values": {}
+            },
+            "continuinganddiscontinueddilutedeps": {
+              "currencies": [],
+              "provider_metric": "quarterlyContinuingAndDiscontinuedDilutedEPS",
+              "values": {}
+            },
+            "costofrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "quarterlyCostOfRevenue",
+              "values": {
+                "2025-07-31": 359558000.0,
+                "2025-10-31": 368403000.0,
+                "2026-01-31": 309251000.0,
+                "2026-04-30": 438991000.0,
+                "2026-07-31": 355891000.0
+              }
+            },
+            "dilutedeps": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "quarterlyDilutedEPS",
+              "values": {
+                "2025-01-31": -0.06,
+                "2025-10-31": -0.34,
+                "2026-01-31": -4.9,
+                "2026-04-30": 1.25,
+                "2026-07-31": -0.1
+              }
+            },
+            "dilutedepsothergainslosses": {
+              "currencies": [],
+              "provider_metric": "quarterlyDilutedEPSOtherGainsLosses",
+              "values": {}
+            },
+            "normalizedbasiceps": {
+              "currencies": [],
+              "provider_metric": "quarterlyNormalizedBasicEPS",
+              "values": {}
+            },
+            "normalizeddilutedeps": {
+              "currencies": [],
+              "provider_metric": "quarterlyNormalizedDilutedEPS",
+              "values": {}
+            },
+            "operatingrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "quarterlyOperatingRevenue",
+              "values": {
+                "2025-07-31": 454676000.0,
+                "2025-10-31": 472508000.0,
+                "2026-01-31": 408045000.0,
+                "2026-04-30": 641616000.0,
+                "2026-07-31": 480490000.0
+              }
+            },
+            "reconciledcostofrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "quarterlyReconciledCostOfRevenue",
+              "values": {
+                "2025-07-31": 359558000.0,
+                "2025-10-31": 368403000.0,
+                "2026-01-31": 309251000.0,
+                "2026-04-30": 438991000.0,
+                "2026-07-31": 355891000.0
+              }
+            },
+            "reportednormalizedbasiceps": {
+              "currencies": [],
+              "provider_metric": "quarterlyReportedNormalizedBasicEPS",
+              "values": {}
+            },
+            "reportednormalizeddilutedeps": {
+              "currencies": [],
+              "provider_metric": "quarterlyReportedNormalizedDilutedEPS",
+              "values": {}
+            },
+            "taxlosscarryforwardbasiceps": {
+              "currencies": [],
+              "provider_metric": "quarterlyTaxLossCarryforwardBasicEPS",
+              "values": {}
+            },
+            "taxlosscarryforwarddilutedeps": {
+              "currencies": [],
+              "provider_metric": "quarterlyTaxLossCarryforwardDilutedEPS",
+              "values": {}
+            },
+            "totalrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "quarterlyTotalRevenue",
+              "values": {
+                "2025-07-31": 454676000.0,
+                "2025-10-31": 472508000.0,
+                "2026-01-31": 408045000.0,
+                "2026-04-30": 641616000.0,
+                "2026-07-31": 480490000.0
+              }
+            }
+          }
+        }
+      },
+      "c2727512-af97-4a75-9d77-61c58302904d": {
+        "raw_payload_sha256": "9f754fab59cc015c054d8acdeb8d94e74b8862707411fa5f81cdadad4112f7bc",
+        "source_payload": {
+          "columns": [
+            "2026-04-30 00:00:00",
+            "2025-04-30 00:00:00",
+            "2024-04-30 00:00:00",
+            "2023-04-30 00:00:00",
+            "2022-04-30 00:00:00"
+          ],
+          "format": "yfinance-income-selected-rows-v1",
+          "rows": [
+            {
+              "metric": "Reconciled Cost Of Revenue",
+              "values": [
+                1476203000.0,
+                501991000.0,
+                432789000.0,
+                367022000.0,
+                null
+              ]
+            },
+            {
+              "metric": "Diluted EPS",
+              "values": [
+                -5.4,
+                1.55,
+                2.18,
+                -7.04,
+                null
+              ]
+            },
+            {
+              "metric": "Basic EPS",
+              "values": [
+                -5.4,
+                1.56,
+                2.19,
+                -7.04,
+                null
+              ]
+            },
+            {
+              "metric": "Cost Of Revenue",
+              "values": [
+                1476203000.0,
+                501991000.0,
+                432789000.0,
+                367022000.0,
+                null
+              ]
+            },
+            {
+              "metric": "Total Revenue",
+              "values": [
+                1976845000.0,
+                820627000.0,
+                716720000.0,
+                540536000.0,
+                null
+              ]
+            },
+            {
+              "metric": "Operating Revenue",
+              "values": [
+                1976845000.0,
+                820627000.0,
+                716720000.0,
+                540536000.0,
+                null
+              ]
+            }
+          ],
+          "source_rows": {
+            "basiceps": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "annualBasicEPS",
+              "values": {
+                "2023-04-30": -7.04,
+                "2024-04-30": 2.19,
+                "2025-04-30": 1.56,
+                "2026-04-30": -5.4
+              }
+            },
+            "basicepsothergainslosses": {
+              "currencies": [],
+              "provider_metric": "annualBasicEPSOtherGainsLosses",
+              "values": {}
+            },
+            "continuinganddiscontinuedbasiceps": {
+              "currencies": [],
+              "provider_metric": "annualContinuingAndDiscontinuedBasicEPS",
+              "values": {}
+            },
+            "continuinganddiscontinueddilutedeps": {
+              "currencies": [],
+              "provider_metric": "annualContinuingAndDiscontinuedDilutedEPS",
+              "values": {}
+            },
+            "costofrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "annualCostOfRevenue",
+              "values": {
+                "2023-04-30": 367022000.0,
+                "2024-04-30": 432789000.0,
+                "2025-04-30": 501991000.0,
+                "2026-04-30": 1476203000.0
+              }
+            },
+            "dilutedeps": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "annualDilutedEPS",
+              "values": {
+                "2023-04-30": -7.04,
+                "2024-04-30": 2.18,
+                "2025-04-30": 1.55,
+                "2026-04-30": -5.4
+              }
+            },
+            "dilutedepsothergainslosses": {
+              "currencies": [],
+              "provider_metric": "annualDilutedEPSOtherGainsLosses",
+              "values": {}
+            },
+            "normalizedbasiceps": {
+              "currencies": [],
+              "provider_metric": "annualNormalizedBasicEPS",
+              "values": {}
+            },
+            "normalizeddilutedeps": {
+              "currencies": [],
+              "provider_metric": "annualNormalizedDilutedEPS",
+              "values": {}
+            },
+            "operatingrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "annualOperatingRevenue",
+              "values": {
+                "2023-04-30": 540536000.0,
+                "2024-04-30": 716720000.0,
+                "2025-04-30": 820627000.0,
+                "2026-04-30": 1976845000.0
+              }
+            },
+            "reconciledcostofrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "annualReconciledCostOfRevenue",
+              "values": {
+                "2023-04-30": 367022000.0,
+                "2024-04-30": 432789000.0,
+                "2025-04-30": 501991000.0,
+                "2026-04-30": 1476203000.0
+              }
+            },
+            "reportednormalizedbasiceps": {
+              "currencies": [],
+              "provider_metric": "annualReportedNormalizedBasicEPS",
+              "values": {}
+            },
+            "reportednormalizeddilutedeps": {
+              "currencies": [],
+              "provider_metric": "annualReportedNormalizedDilutedEPS",
+              "values": {}
+            },
+            "taxlosscarryforwardbasiceps": {
+              "currencies": [],
+              "provider_metric": "annualTaxLossCarryforwardBasicEPS",
+              "values": {}
+            },
+            "taxlosscarryforwarddilutedeps": {
+              "currencies": [],
+              "provider_metric": "annualTaxLossCarryforwardDilutedEPS",
+              "values": {}
+            },
+            "totalrevenue": {
+              "currencies": [
+                "USD"
+              ],
+              "provider_metric": "annualTotalRevenue",
+              "values": {
+                "2023-04-30": 540536000.0,
+                "2024-04-30": 716720000.0,
+                "2025-04-30": 820627000.0,
+                "2026-04-30": 1976845000.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "fields": {
+      "eps_5yr_cagr": {
+        "algorithm": "eps-rating-cagr-v1",
+        "basis": "annual_eps_cagr/v1",
+        "cadence": "annual",
+        "calculation_method": "loss_shrinking_improvement_times_50",
+        "capture_id": "c2727512-af97-4a75-9d77-61c58302904d",
+        "clipping": {
+          "maximum": 500.0,
+          "minimum": -100.0
+        },
+        "comparable_period_end": "2023-04-30",
+        "elapsed_year_rule": "latest_fiscal_year_minus_earliest_selected_fiscal_year",
+        "elapsed_years": 3,
+        "field": "eps_5yr_cagr",
+        "market": "US",
+        "metric": "Diluted EPS",
+        "observation_id": "sha256:edaac031d56b4d6b78edc30b45cf3f8f961e2e599e918bfeb22a022f7f4b304f",
+        "observed_at": "2026-10-04T11:45:00.953Z",
+        "period_end": "2026-04-30",
+        "period_status": "supplied",
+        "periods_used": [
+          "2026-04-30",
+          "2025-04-30",
+          "2024-04-30",
+          "2023-04-30"
+        ],
+        "producer": "yfinance.income_stmt/transport-capture-v1",
+        "provenance_kind": "observed",
+        "provider_symbol": "AVAV",
+        "raw_payload_availability": "retained_normalized_subset",
+        "raw_payload_sha256": "9f754fab59cc015c054d8acdeb8d94e74b8862707411fa5f81cdadad4112f7bc",
+        "requires_strictly_descending_years": true,
+        "rounding": {
+          "decimal_places": 2
+        },
+        "selection_rule": "stable_fiscal_year_descending_first_up_to_5",
+        "source": "yfinance",
+        "source_inputs": [
+          {
+            "column": "2026-04-30 00:00:00",
+            "period_end": "2026-04-30",
+            "value": -5.4,
+            "year": 2026
+          },
+          {
+            "column": "2025-04-30 00:00:00",
+            "period_end": "2025-04-30",
+            "value": 1.55,
+            "year": 2025
+          },
+          {
+            "column": "2024-04-30 00:00:00",
+            "period_end": "2024-04-30",
+            "value": 2.18,
+            "year": 2024
+          },
+          {
+            "column": "2023-04-30 00:00:00",
+            "period_end": "2023-04-30",
+            "value": -7.04,
+            "year": 2023
+          }
+        ],
+        "source_revision": null,
+        "symbol": "AVAV",
+        "transport_payload_sha256": "ec7ee00fc95084d21fb63b15e8789ac2e3447a8d08bf4cf39e09c983770e4db0",
+        "unit": "percent_points",
+        "value": 11.65
+      },
+      "eps_growth_qq": {
+        "algorithm": "growth-cadence-v1",
+        "basis": "quarterly_qoq/v1",
+        "cadence": "quarterly",
+        "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+        "comparable_period_end": "2026-04-30",
+        "field": "eps_growth_qq",
+        "market": "US",
+        "metric": "Diluted EPS",
+        "minimum_absolute_baseline": 0.05,
+        "observation_id": "sha256:127fac042fc15b8c981c2df437f42283a509d6a8c76efd059515b45a0fa47606",
+        "observed_at": "2026-10-04T11:44:59.282Z",
+        "period_end": "2026-07-31",
+        "period_status": "supplied",
+        "periods_used": [
+          "2026-07-31",
+          "2026-04-30"
+        ],
+        "producer": "yfinance.quarterly_income_stmt/transport-capture-v1",
+        "provenance_kind": "observed",
+        "provider_symbol": "AVAV",
+        "raw_payload_availability": "retained_normalized_subset",
+        "raw_payload_sha256": "c233fdb8ce39e39cc81687bbf05de22b4863687e358cd09c2b8568e8942dd75b",
+        "remapped_to_qq": false,
+        "rounding": {
+          "decimal_places": 2
+        },
+        "source": "yfinance",
+        "source_inputs": [
+          {
+            "column": "2026-07-31 00:00:00",
+            "period_end": "2026-07-31",
+            "value": -0.1
+          },
+          {
+            "column": "2026-04-30 00:00:00",
+            "period_end": "2026-04-30",
+            "value": 1.25
+          }
+        ],
+        "source_revision": null,
+        "symbol": "AVAV",
+        "transport_payload_sha256": "1f96f5d0157d162bf290d48b4806902fbae99c87dfc653caa67c081a53b4b19c",
+        "unit": "percent_points",
+        "value": -108.0
+      },
+      "sales_growth_qq": {
+        "algorithm": "growth-cadence-v1",
+        "basis": "quarterly_qoq/v1",
+        "cadence": "quarterly",
+        "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+        "comparable_period_end": "2026-04-30",
+        "field": "sales_growth_qq",
+        "market": "US",
+        "metric": "Total Revenue",
+        "minimum_absolute_baseline": 0.0,
+        "observation_id": "sha256:1da76a77dace4bd4bbf6146e7b5abc6affc41b8bfc33ef40d5af98e86656ceb7",
+        "observed_at": "2026-10-04T11:44:59.282Z",
+        "period_end": "2026-07-31",
+        "period_status": "supplied",
+        "periods_used": [
+          "2026-07-31",
+          "2026-04-30"
+        ],
+        "producer": "yfinance.quarterly_income_stmt/transport-capture-v1",
+        "provenance_kind": "observed",
+        "provider_symbol": "AVAV",
+        "raw_payload_availability": "retained_normalized_subset",
+        "raw_payload_sha256": "c233fdb8ce39e39cc81687bbf05de22b4863687e358cd09c2b8568e8942dd75b",
+        "remapped_to_qq": false,
+        "rounding": {
+          "decimal_places": 2
+        },
+        "source": "yfinance",
+        "source_inputs": [
+          {
+            "column": "2026-07-31 00:00:00",
+            "period_end": "2026-07-31",
+            "value": 480490000.0
+          },
+          {
+            "column": "2026-04-30 00:00:00",
+            "period_end": "2026-04-30",
+            "value": 641616000.0
+          }
+        ],
+        "source_revision": null,
+        "symbol": "AVAV",
+        "transport_payload_sha256": "1f96f5d0157d162bf290d48b4806902fbae99c87dfc653caa67c081a53b4b19c",
+        "unit": "percent_points",
+        "value": -25.11
+      },
+      "sales_growth_yy": {
+        "algorithm": "growth-cadence-v1",
+        "basis": "comparable_period_yoy/v1",
+        "cadence": "quarterly",
+        "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+        "comparable_period_end": "2025-07-31",
+        "field": "sales_growth_yy",
+        "market": "US",
+        "metric": "Total Revenue",
+        "minimum_absolute_baseline": 0.0,
+        "observation_id": "sha256:829daadf2aafacae5694630ddea1dba923dce9b7c8d49df8ff6fa5c27793a803",
+        "observed_at": "2026-10-04T11:44:59.282Z",
+        "period_end": "2026-07-31",
+        "period_status": "supplied",
+        "periods_used": [
+          "2026-07-31",
+          "2025-07-31"
+        ],
+        "producer": "yfinance.quarterly_income_stmt/transport-capture-v1",
+        "provenance_kind": "observed",
+        "provider_symbol": "AVAV",
+        "raw_payload_availability": "retained_normalized_subset",
+        "raw_payload_sha256": "c233fdb8ce39e39cc81687bbf05de22b4863687e358cd09c2b8568e8942dd75b",
+        "remapped_to_qq": false,
+        "rounding": {
+          "decimal_places": 2
+        },
+        "source": "yfinance",
+        "source_inputs": [
+          {
+            "column": "2026-07-31 00:00:00",
+            "period_end": "2026-07-31",
+            "value": 480490000.0
+          },
+          {
+            "column": "2025-07-31 00:00:00",
+            "period_end": "2025-07-31",
+            "value": 454676000.0
+          }
+        ],
+        "source_revision": null,
+        "symbol": "AVAV",
+        "transport_payload_sha256": "1f96f5d0157d162bf290d48b4806902fbae99c87dfc653caa67c081a53b4b19c",
+        "unit": "percent_points",
+        "value": 5.68
+      }
+    },
+    "market": "US",
+    "retained_candidates": {},
+    "schema": "financial-source-evidence-v1",
+    "symbol": "AVAV"
+  },
+  "growth_comparable_period_date": "2025-07-31 00:00:00",
+  "growth_metric_basis": "quarterly_qoq",
+  "growth_reference_gap_days": 92,
+  "growth_reporting_cadence": "quarterly",
+  "market": "US",
+  "previous_quarter_date": "2026-04-30 00:00:00",
+  "recent_quarter_date": "2026-07-31 00:00:00",
+  "sales_growth_qq": -25.11,
+  "sales_growth_yy": 5.68,
+  "symbol": "AVAV"
+}
