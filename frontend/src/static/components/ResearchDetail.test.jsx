@@ -3,6 +3,7 @@ import { afterEach,expect,it,vi } from 'vitest';
 import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
 import { withSyntheticFinancialProof, financialFixtureDate, financialFixtureNow } from '../../test/fixtures/financialCurrent';
 import { assess } from '../researchEngine';
+import { entryReadiness } from '../entryReadiness';
 import ResearchDetail from './ResearchDetail';
 vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>}));
 afterEach(cleanup);
@@ -85,10 +86,28 @@ it('re-evaluates the existing selection count when current financial evidence ex
  const input={...props,selected:current,method:'oneil',date:financialFixtureDate,now:financialFixtureNow};
  const first=assess(current,'oneil',financialFixtureNow);
  const {rerender}=render(<ResearchDetail {...input}/>);
- expect(screen.getByRole('heading',{name:`選定 ${first.passed}/${first.total} · 未確認 ${first.unknown}`})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:`選定 ${first.passed}/${first.total} · 未達 ${first.failed} · 未確認 ${first.unknown}`})).toBeInTheDocument();
  const later=financialFixtureNow+8*86400000;
  const expired=assess(current,'oneil',later);
  expect(expired.passed).toBeLessThan(first.passed);
  rerender(<ResearchDetail {...input} now={later}/>);
- expect(screen.getByRole('heading',{name:`選定 ${expired.passed}/${expired.total} · 未確認 ${expired.unknown}`})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:`選定 ${expired.passed}/${expired.total} · 未達 ${expired.failed} · 未確認 ${expired.unknown}`})).toBeInTheDocument();
+});
+
+
+it('shows both failed and unknown counts while keeping purchase readiness separate from selection', () => {
+ const current=withSyntheticFinancialProof({...row,sales_growth_yy:-4});
+ const input={...props,selected:current,method:'oneil',date:financialFixtureDate,now:financialFixtureNow,liveStatus:'未接続'};
+ const checks=assess(current,input.method,input.now);
+ const readiness=entryReadiness(current,input.date,input.market,input.now,input.method);
+ expect(checks).toMatchObject({passed:1,total:8,failed:1,unknown:6,qualified:false});
+ expect(readiness).toMatchObject({passed:2,total:7,failed:1,unknown:4,ready:false});
+ render(<ResearchDetail {...input}/>);
+ expect(screen.getByRole('heading',{name:'選定 1/8 · 未達 1 · 未確認 6'})).toBeInTheDocument();
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('売上高 前年同期比 ≥ 25%');
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('× 未達 · -4%');
+ fireEvent.click(screen.getByRole('tab',{name:'購入条件'}));
+ expect(screen.getByRole('heading',{name:'購入条件 2/7 · 未達 1 · 未確認 4 · 未接続'})).toBeInTheDocument();
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('選択中の手法とは別に、ミネルヴィニとIBD型の両方を確認');
+ expect(within(screen.getByRole('tabpanel')).getAllByRole('listitem')).toHaveLength(7);
 });

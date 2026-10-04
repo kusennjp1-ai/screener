@@ -3,6 +3,9 @@ import { encodeResearchIndex, decodeResearchIndex, researchListRow, RESEARCH_MET
 import { prepareResearchBundle } from './researchPreprocess';
 import { assess, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from './researchEngine';
 import { withAuditFixture } from './testAuditFixture';
+import { projectFinancialRow } from './financialCurrent.js';
+import { encodeResearchFloat64 } from './researchFloat64.js';
+import { encodeResearchHex } from './researchHex.js';
 
 const date = '2026-09-29';
 const sample = extra => withAuditFixture({ symbol: 'TEST', market: 'US', currency: 'USD', current_price: 102, adv_usd: 25000000,
@@ -54,6 +57,20 @@ describe('lossless compact research transport', () => {
       fields: [['value'], ['alias']], columns: [{ present: [0, 1.125], missing: [[1, 2]] }, { copy: 0, patch: [] }] };
     expect(decodeResearchIndex(wire).rows).toEqual([{ value: 0, alias: 0 }, {}, { value: 1.125, alias: 1.125 }]);
     expect(() => decodeResearchIndex({ ...wire, fields: [['value'], ['value']] })).toThrow('Duplicate research field');
+  });
+  it('rejects a dense JSON field that would turn one financial period into a sparse proof', () => {
+    const now = Date.parse(`${date}T12:00:00Z`);
+    const row = { symbol: 'TEST', market: 'US', as_of_date: date, eps_growth_qq: 0,
+      financial_current: { v: 2, t: now, s: 'TEST', m: 'US', a: date, r: '0222222222222222',
+        p: { 0: [0, '0', 'Diluted EPS', ['2026-06-30'], now - 1, now + 1, 'u', 'r'] } } };
+    expect(projectFinancialRow(row, { now }).financial_current_state.fields.eps_growth_qq.reason).toBe('invalid_reporting_period');
+    const wire = encodeResearchIndex({ as_of_date: date, rows: [row] });
+    wire.fields.push(['financial_current', 'p', '0', '3', 'length']);
+    wire.columns.push({ values: [2] });
+    const jsonWire = JSON.parse(JSON.stringify(wire)), original = structuredClone(jsonWire);
+    expect(() => decodeResearchIndex(jsonWire)).toThrow('Conflicting research fields');
+    expect(jsonWire).toEqual(original);
+    expect(row.financial_current.p[0][3]).toEqual(['2026-06-30']);
   });
   it.each([undefined,null])('keeps the valid payload date when expected date is %s',expectedDate=>{
     expect(prepareResearchBundle([{as_of_date:date,rows:[]}],expectedDate).date).toBe(date);
@@ -117,6 +134,93 @@ describe('lossless compact research transport', () => {
     expect(next.prepared.candidates).toEqual([]);
     expect(next.rankings.minervini[0].row).toBe(next.rows[0]);
   });
+});
+
+describe.each([
+  { schema: 'research-table-v1' },
+  ...['present-values-and-missing-runs-v1', 'sparse-float64-and-signed-zero-v1', 'sparse-binary-and-signed-zero-v1']
+    .map(column_encoding => ({ schema: RESEARCH_TRANSPORT_VERSION, column_encoding })),
+])('research field ownership in $schema / $column_encoding', contract => {
+  const wire = (fields, columns, count = 1) => JSON.parse(JSON.stringify({ ...contract, count, fields, columns }));
+  it.each([
+    [['2026-06-30'], ['length']],
+    [['2026-06-30'], ['0']],
+    [['2026-06-30'], ['1']],
+    [[{ period: '2026-06-30' }], ['0', 'period']],
+    [{}, ['child']],
+    [{ child: 1 }, ['child']],
+    [null, ['child']], [false, ['child']], [0, ['child']], ['', ['child']], [1, ['child']], ['text', ['child']],
+  ])('rejects overlapping atomic cell %j and descendant %j in both orders', (parent, suffix) => {
+    const assignments = [[['branch'], { values: [parent] }], [['branch', ...suffix], { values: [2] }]];
+    for (const entries of [assignments, [...assignments].reverse()]) {
+      const input = wire(entries.map(([path]) => path), entries.map(([, column]) => column)), original = structuredClone(input);
+      expect(() => decodeResearchIndex(input)).toThrow('Conflicting research fields');
+      expect(input).toEqual(original);
+    }
+  });
+  it('preserves sibling fields and mixed shapes on disjoint rows, including null and missing ownership', () => {
+    const rows = [null, false, 0, '', [], {}, { left: 24.999999999999996, right: [1, null] }, { deep: { value: Number.MIN_VALUE } }]
+      .map(branch => ({ branch }));
+    rows.push({ other: true });
+    const encoded = encodeResearchIndex({ rows });
+    expect(decodeResearchIndex(JSON.parse(JSON.stringify(encoded))).rows).toEqual(rows);
+    // Dictionaries are supported by every retained schema and preserve
+    // per-row absence when parent/child shapes share the same field table.
+    const columns = encoded.fields.map(path => {
+      const pool = [], refs = rows.map(row => {
+        const cell = path.reduce((target, key) => target != null && Object.hasOwn(target, key) ? target[key] : undefined, row);
+        if (cell === undefined) return -1;
+        pool.push(cell); return pool.length - 1;
+      });
+      return { pool, refs };
+    });
+    // A branch object is flattened into its descendants, never also a cell.
+    for (const column of columns) column.refs = column.refs.map(id => id !== -1 && column.pool[id] &&
+      typeof column.pool[id] === 'object' && !Array.isArray(column.pool[id]) && Object.keys(column.pool[id]).length ? -1 : id);
+    for (const reverse of [false, true]) {
+      const fields = reverse ? [...encoded.fields].reverse() : encoded.fields;
+      const source = reverse ? [...columns].reverse() : columns;
+      const decoded = decodeResearchIndex(wire(fields, source, rows.length)).rows;
+      expect(decoded).toEqual(rows);
+      expect(Object.hasOwn(decoded.at(-1), 'branch')).toBe(false);
+      expect(Object.hasOwn(decoded[0], 'branch')).toBe(true);
+    }
+  });
+  it('rejects duplicate field names even when their rows are disjoint', () => {
+    const input = wire([['branch'], ['branch']], [{ pool: [null], refs: [0, -1] }, { pool: [0], refs: [-1, 0] }], 2);
+    expect(() => decodeResearchIndex(input)).toThrow('Duplicate research field');
+  });
+  it.each(['__proto__', 'prototype', 'constructor'])('rejects forbidden prototype key %s at every path position', key => {
+    for (const path of [[key], ['branch', key], ['branch', key, 'child']]) {
+      expect(() => decodeResearchIndex(wire([path], [{ values: [2] }]))).toThrow('Invalid research field');
+    }
+  });
+  it('creates own branches for harmless inherited names without traversing prototypes', () => {
+    const input = wire([['toString', 'value'], ['toString', 'sibling'], ['hasOwnProperty', 'value'], ['a.b'], ['a', 'b']],
+      [1, null, false, 24.999999999999996, 0].map(value => ({ values: [value] })));
+    expect(decodeResearchIndex(input).rows).toEqual([{ toString: { value: 1, sibling: null }, hasOwnProperty: { value: false }, 'a.b': 24.999999999999996, a: { b: 0 } }]);
+    expect(Object.hasOwn(Object.prototype.toString, 'value')).toBe(false);
+    expect(Object.hasOwn(Object.prototype.hasOwnProperty, 'value')).toBe(false);
+  });
+});
+
+it.each([
+  ['dictionary', { pool: [2], refs: [0] }],
+  ['copy', { copy: 0, patch: [] }],
+  ['sparse', { present: [2], missing: [] }],
+  ['float values', { f64_values: encodeResearchFloat64([2]) }],
+  ['float dictionary', { f64_pool: encodeResearchFloat64([2]), refs: [0] }],
+  ['float sparse', { f64_present: encodeResearchFloat64([2]), missing: [] }],
+  ['hex values', { hex_values: encodeResearchHex(['0000000000000002']) }],
+  ['hex dictionary', { hex_pool: encodeResearchHex(['0000000000000002']), refs: [0] }],
+  ['hex sparse', { hex_present: encodeResearchHex(['0000000000000002']), missing: [] }],
+])('rejects an array-index collision from a %s column in both orders', (_, column) => {
+  const assignments = [[['branch'], { values: [[1]] }], [['branch', '0'], column]];
+  for (const entries of [assignments, [...assignments].reverse()]) {
+    const input = JSON.parse(JSON.stringify({ schema: RESEARCH_TRANSPORT_VERSION, column_encoding: 'sparse-binary-and-signed-zero-v1', count: 1,
+      fields: [['source'], ...entries.map(([path]) => path)], columns: [{ values: [2] }, ...entries.map(([, column]) => column)] }));
+    expect(() => decodeResearchIndex(input)).toThrow('Conflicting research fields');
+  }
 });
 
 

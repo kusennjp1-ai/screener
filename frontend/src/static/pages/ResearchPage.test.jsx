@@ -106,7 +106,7 @@ describe('100 virtual expert task profiles', () => {
         const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '5/8' : '5/10';
         expect(screen.getByRole('tab', {name:'判定根拠'})).toHaveAttribute('aria-selected','true');
         expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定 ${expected}`));
-        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
+        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未達 0 · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
       } else if (t === 1) {
         openFilters();
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });

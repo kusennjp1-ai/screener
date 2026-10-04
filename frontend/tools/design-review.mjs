@@ -9,7 +9,10 @@ import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
+import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
+import { retainProfileSources } from './retain-profile-sources.mjs';
 import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
+import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
@@ -142,18 +145,20 @@ function objectiveMetrics() {
     runningAnimations: animations.length };
 }
 
-async function capture(page, viewport, theme, screen, { target, scope = 'viewport' } = {}) {
+async function capture(page, viewport, theme, screen, { target, scope = 'viewport', viewportTargets } = {}) {
   if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(800);
   const metrics = await page.evaluate(objectiveMetrics);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
+  const key = `${screen}/${viewport.width}/${theme}`;
+  const geometry = viewportTargets ? await page.evaluate(financialViewportGeometry, viewportTargets) : null;
+  if (geometry) checkFinancialViewportGeometry(geometry, check, key, viewport);
   if (target) await page.locator(target).screenshot({ path: resolve(output, screenshot) });
   else await page.screenshot({ path: resolve(output, screenshot) });
-  const key = `${screen}/${viewport.width}/${theme}`;
   const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
-  report.screens.push({ key, screenshot, ...(target ? { screenshot_scope: scope, screenshot_target: target, metrics_scope: 'original-viewport' } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
+  report.screens.push({ key, screenshot, ...(target || viewportTargets ? { screenshot_scope: scope, screenshot_target: target || null, metrics_scope: 'original-viewport', ...(geometry ? { viewport_geometry: geometry } : {}) } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
@@ -324,20 +329,18 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
         // Diagnostic recording is a separate fourth run and cannot influence
         // any of the three budget measurements above.
         try {
-          await cdp.send('Profiler.enable'); await cdp.send('Profiler.start');
-          await page.goto(server.url); await visible(page.locator(readySelector));
-          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-          const initial = await cdp.send('Profiler.stop');
-          await writeFile(resolve(output, `diagnostic-initial-${viewport.width}.cpuprofile`), JSON.stringify(initial.profile));
+          report.profile_diagnostics_attempted = true;
+          report.profile_diagnostics ||= [];
+          report.profile_diagnostics.push(await recordProfileDiagnostic({ cdp, page, output, name:`diagnostic-initial-${viewport.width}`, action:async () => {
+            await page.goto(server.url); await visible(page.locator(readySelector));
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          } }));
           // Keep method switching isolated from initial Worker delivery. These
           // diagnostic phases never replace any of the three measured runs.
-          await cdp.send('Profiler.start');
-          await page.getByRole('button', { name: /^オニール/ }).click();
-          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-          await page.waitForTimeout(500);
-          const { profile } = await cdp.send('Profiler.stop');
-          await writeFile(resolve(output, `diagnostic-method-${viewport.width}.cpuprofile`), JSON.stringify(profile));
-          await cdp.send('Profiler.disable');
+          report.profile_diagnostics.push(await recordProfileDiagnostic({ cdp, page, output, name:`diagnostic-method-${viewport.width}`, settleMs:500, action:async () => {
+            await page.getByRole('button', { name: /^オニール/ }).click();
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          } }));
         } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
       }
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
@@ -377,6 +380,12 @@ if (radar) for (const viewport of viewportSizes) {
   await context.close();
 }
 await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();
+if (report.profile_diagnostics_attempted) {
+  try {
+    report.profile_sources = await retainProfileSources({ root:currentRoot, output,
+      quoteUrl:process.env.FINANCIAL_CANDIDATE_DIR ? process.env.DESIGN_RESEARCH_QUOTE_URL || '' : undefined });
+  } catch (error) { report.failures.push(`Diagnostic source maps unavailable: ${error.message}`); }
+}
 if (radar && report.failures.some(failure => failure.includes('D9'))) {
   // The existing focused harness records a separate cold CPU/timeline trace.
   // It runs after all acceptance measurements and cannot turn their failures

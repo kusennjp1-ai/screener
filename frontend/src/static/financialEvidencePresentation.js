@@ -150,6 +150,8 @@ function annualRow(history, context, required, condition) {
   // A failed conjunction and incomplete inputs are independent facts. Keep the
   // missing/noncomparable year visible even when a different year proves fail.
   const partial = !reason && method !== 'ibd' && !report.annualGrowth && report.annualComparisons.length === 3;
+  const currency = history?.annual_currency || history?.currency || '通貨未確認';
+  const measuredComparisons = report.annualComparisons.filter(comparison => finite(comparison.growth)).length;
   return {
     ...decision, availability: report.annualComplete ? 'complete' : 'incomplete', availabilityReason: unavailable,
     actual: reason ? '未確認' : partial ? `${annualAvailabilityText(report)}。${report.annualComparisons.map(annualComparisonText).join(' / ')}` : unavailable ? '未確認' : report.annualGrowth ? report.annualGrowth.map(n => `${number(n)}%`).join(' → ') : '連続4期の年次EPSあり（成長率は比較不可）',
@@ -158,7 +160,7 @@ function annualRow(history, context, required, condition) {
     observedAt: finite(timestamp(history?.annual_source?.observed_at || history?.retrieved_at)) ? history.annual_source?.observed_at || history.retrieved_at : '取得時刻 未確認',
     metric: '希薄化EPS（報告値・年次）',
     basis: `報告希薄化EPS・${history?.annual_currency || history?.currency || '通貨未確認'} / 独立した年次履歴。${ANNUAL_REPORTED_LIMITATION}`,
-    unit: report.annualGrowth || partial ? `percent_points（${history.annual_currency || history.currency}報告希薄化EPSから算出した年次成長率）` : `${history?.annual_currency || history?.currency || '通貨未確認'} / 提供元の株式単位（報告希薄化EPSの履歴・成長率は比較不可）`,
+    unit: report.annualGrowth ? `percent_points（${currency}報告希薄化EPSから算出した年次成長率）` : measuredComparisons ? `percent_points（${currency}報告希薄化EPSから確認できた年次比較のみ・未比較期あり）` : `年次成長率は算出不可（必要履歴不足・基準年が非正など）。報告希薄化EPS：${currency} / 提供元の株式単位`,
   };
 }
 

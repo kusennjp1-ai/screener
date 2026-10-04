@@ -58,6 +58,39 @@ describe('financial current shared producer/browser contract', () => {
 });
 
 describe('financial current compact proof tampering', () => {
+  it.each([
+    ['eps_growth_qq', 0, '0', ['2026-06-30', '2026-03-31']],
+    ['eps_growth_yy', 1, '1', ['2026-06-30', '2026-03-31', '2025-12-31', '2025-09-30', '2025-06-30']],
+  ])('rejects every missing required period in %s', (field, index, source, periods) => {
+    const input = provenRow();
+    input[field] = 0;
+    input.financial_current.r = '2'.repeat(index) + '0' + '2'.repeat(15 - index);
+    input.financial_current.p = { [index]: [0, source, 'Diluted EPS', periods, observedAt, expiresAt, 'u', 'r'] };
+    expect(state(project(input), field).availability).toBe('current');
+    for (let missing = 0; missing < periods.length; missing++) {
+      const malformed = structuredClone(input);
+      delete malformed.financial_current.p[index][3][missing];
+      const before = structuredClone(malformed);
+      const result = project(malformed);
+      expect(result[field]).toBeNull();
+      expect(state(result, field)).toMatchObject({ availability: 'unknown', reason: 'invalid_reporting_period' });
+      expect(state(result, field).source_validated).not.toBe(true);
+      expect(malformed).toEqual(before);
+      expect(state(project(result), field).availability).toBe('unknown');
+      expect(state(project(JSON.parse(JSON.stringify(malformed))), field).availability).toBe('unknown');
+    }
+  });
+
+  it('does not accept reporting periods inherited through an array prototype', () => {
+    const input = provenRow();
+    const periods = input.financial_current.p[0][3];
+    const inherited = Object.create(Array.prototype);
+    Object.defineProperty(inherited, '0', { get() { throw Error('An inherited period must not be read'); } });
+    delete periods[0];
+    Object.setPrototypeOf(periods, inherited);
+    expect(state(project(input))).toMatchObject({ availability: 'unknown', reason: 'invalid_reporting_period' });
+  });
+
   it.each([0, -5, 125.5])('preserves supported finite growth and matching aliases: %s', (value) => {
     const input = { ...provenRow(value), eps_growth_quarterly: value };
     const result = project(input);

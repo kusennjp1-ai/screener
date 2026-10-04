@@ -21,6 +21,17 @@ const immutable = value => { if (object(value) || Array.isArray(value)) { Object
 const protectedFields = [...FINANCIAL_FIELDS, ...Object.keys(contract.aliases), ...FINANCIAL_DEPENDENT_FIELDS];
 export const hasFinancialCurrentFields = row => object(row) && (Object.hasOwn(row, 'financial_current') || protectedFields.some(field => Object.hasOwn(row, field)));
 const iso = value => validClock(value) ? new Date(value).toISOString() : null;
+// Cache only a pure, strict calendar parse. Row/source validity and every clock
+// comparison remain live; no proof, array, or financial decision is retained.
+const reportingDays = new Map();
+const reportingDayEpoch = value => {
+  if (typeof value !== 'string' || value.length !== 10) return NaN;
+  if (reportingDays.has(value)) return reportingDays.get(value);
+  const epoch = validEvidenceDay(value) ? Date.parse(value) : NaN;
+  if (reportingDays.size === 256) reportingDays.delete(reportingDays.keys().next().value);
+  reportingDays.set(value, epoch);
+  return epoch;
+};
 const sourceTimestamp = value => {
   const parts=typeof value==='string' && /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
   return parts && validEvidenceDay(parts[1]) && Number(parts[2])<=23 && Number(parts[3])<=59 && Number(parts[4])<=59 && Number(parts[5]||0)<=23 && Number(parts[6]||0)<=59 ? Date.parse(value) : NaN;
@@ -32,8 +43,8 @@ export function currentFinancialHistory(data,symbol,date,now=Date.now(),identity
 }
 const minTime = times => times.length ? Math.min(...times) : null;
 
-function envelopeReason(row, proof, now, date, market) {
-  if (!validClock(now) || !validEvidenceDay(date) || date > iso(now).slice(0, 10)) return 'invalid_evaluation_context';
+function envelopeReason(row, proof, now, date, market, evaluationDay) {
+  if (!validClock(now) || !Number.isFinite(reportingDayEpoch(date)) || date > evaluationDay) return 'invalid_evaluation_context';
   if (typeof row.symbol !== 'string' || !row.symbol.trim() || typeof market !== 'string' || !market.trim()) return 'identity_mismatch';
   const scope = row.financial_identity?.observed_scope;
   if (object(scope) && [['symbol', row.symbol], ['market', market], ['as_of_date', date]].some(([key, value]) => Object.hasOwn(scope, key) && scope[key] !== value)) return 'identity_mismatch';
@@ -43,7 +54,7 @@ function envelopeReason(row, proof, now, date, market) {
       Object.keys(proof).some(key => !contract.summary_keys.includes(key)) ||
       Object.keys(proof.p).some(key => !/^(?:[0-9]|1[0-5])$/.test(key) || !contract.proof_reason_codes.includes(proof.r[Number(key)])) ||
       [...proof.r].some((code, index) => contract.proof_reason_codes.includes(code) !== Object.hasOwn(proof.p, String(index)))) return 'invalid_envelope';
-  if ((Object.hasOwn(row, 'as_of_date') && row.as_of_date !== date) || (row.technical_audit?.as_of_date != null && row.technical_audit.as_of_date !== date) || proof.s !== row.symbol || proof.m !== market || row.market !== market || proof.a !== date || !validEvidenceDay(proof.a)) return 'identity_mismatch';
+  if ((Object.hasOwn(row, 'as_of_date') && row.as_of_date !== date) || (row.technical_audit?.as_of_date != null && row.technical_audit.as_of_date !== date) || proof.s !== row.symbol || proof.m !== market || row.market !== market || proof.a !== date || !Number.isFinite(reportingDayEpoch(proof.a))) return 'identity_mismatch';
   if (now < proof.t) return 'invalid_evaluation_context';
   return null;
 }
@@ -69,7 +80,7 @@ function comparisonValid(value, id, comparison, calculation, sales, reason) {
   return true;
 }
 
-function validateField(row, field, index, proof, now, date) {
+function validateField(row, field, index, proof, now, date, evaluationDay) {
   const entry = proof.p[String(index)];
   if (!contract.proof_reason_codes.includes(proof.r[index])) return { reason: contract.reason_codes[proof.r[index]] };
   if (!Array.isArray(entry) || entry.length !== contract.proof_tuple.length) return { reason: 'invalid_envelope' };
@@ -87,14 +98,21 @@ function validateField(row, field, index, proof, now, date) {
   for (const [alias, canonical] of Object.entries(contract.aliases)) if (canonical === field && Object.hasOwn(row, alias) && row[alias] != null && row[alias] !== value) return { reason: 'alias_conflict' };
   if (!validClock(observed) || !validClock(expiry) || expiry < observed || expiry > observed + contract.source_max_age_ms || expiry < proof.t) return { reason: 'invalid_envelope' };
   if (observed > now || observed > proof.t) return { reason: 'future_source_timestamp' };
-  if (!Array.isArray(periods) || periods.length < rule.period_count[0] || periods.length > rule.period_count[1] ||
-      periods.some((period, position) => !validEvidenceDay(period) || period > date || period > iso(now).slice(0, 10) || (position && period >= periods[position - 1]))) return { reason: 'invalid_reporting_period' };
-  const gaps = periods.slice(1).map((period, position) => (Date.parse(periods[position]) - Date.parse(period)) / day);
+  if (!Array.isArray(periods) || periods.length < rule.period_count[0] || periods.length > rule.period_count[1]) return { reason: 'invalid_reporting_period' };
+  // Every required period must be an own value. Array.some skips holes, and
+  // gaps involving a missing date become NaN rather than a measured interval.
+  for (let position = 0; position < periods.length; position++) {
+    if (!Object.hasOwn(periods, position)) return { reason: 'invalid_reporting_period' };
+    const period = periods[position];
+    if (!Number.isFinite(reportingDayEpoch(period)) || period > date || period > evaluationDay ||
+        (position && period >= periods[position - 1])) return { reason: 'invalid_reporting_period' };
+  }
+  const gaps = periods.slice(1).map((period, position) => (reportingDayEpoch(periods[position]) - reportingDayEpoch(period)) / day);
   const [gapMin, gapMax] = rule.quarter_gap_days || contract.year_gap_days;
   if (gaps.some(gap => gap < gapMin || gap > gapMax) || (rule.comparison === 'quarter_year_over_year' &&
-      ((Date.parse(periods[0]) - Date.parse(periods.at(-1))) / day < contract.year_gap_days[0] ||
-       (Date.parse(periods[0]) - Date.parse(periods.at(-1))) / day > contract.year_gap_days[1]))) return { reason: 'invalid_reporting_period' };
-  const periodExpiry = Date.parse(periods[0]) + ((rule.cadence === 'annual' ? contract.annual_max_age_days : contract.quarter_max_age_days) + 1) * day - 1;
+      ((reportingDayEpoch(periods[0]) - reportingDayEpoch(periods.at(-1))) / day < contract.year_gap_days[0] ||
+       (reportingDayEpoch(periods[0]) - reportingDayEpoch(periods.at(-1))) / day > contract.year_gap_days[1]))) return { reason: 'invalid_reporting_period' };
+  const periodExpiry = reportingDayEpoch(periods[0]) + ((rule.cadence === 'annual' ? contract.annual_max_age_days : contract.quarter_max_age_days) + 1) * day - 1;
   if (expiry > periodExpiry) return { reason: 'invalid_envelope' };
   if (now > periodExpiry) return { reason: 'stale_reporting_period' };
   if (now > expiry) return { reason: 'stale_source' };
@@ -132,7 +150,8 @@ export function projectFinancialRow(input, { now = Date.now(), asOfDate, market 
   const applicability = instrumentApplicability(row);
   const blocked = applicability.status !== 'unverified';
   const proof = row.financial_current;
-  const invalid = blocked ? applicability.reason : envelopeReason(row, proof, now, date, contextMarket);
+  const evaluationDay = blocked ? null : iso(now)?.slice(0, 10);
+  const invalid = blocked ? applicability.reason : envelopeReason(row, proof, now, date, contextMarket, evaluationDay);
   delete row.financial_applicability;
   row.instrument_applicability = immutable(applicability);
   // Baseline projection may capture its original instrument context once.
@@ -144,7 +163,7 @@ export function projectFinancialRow(input, { now = Date.now(), asOfDate, market 
   delete row.method_summary;
   const fields = {}, expiries = [], rejectedReferences = [];
   for (const [index, field] of FINANCIAL_FIELDS.entries()) {
-    const state = blocked ? { reason: applicability.reason, availability: applicability.status === 'not_applicable' ? 'not_applicable' : 'unknown' } : quarantined.has(field) ? { reason: 'unverified_derivation_and_cohort' } : invalid ? { reason: invalid } : validateField(row, field, index, proof, now, date);
+    const state = blocked ? { reason: applicability.reason, availability: applicability.status === 'not_applicable' ? 'not_applicable' : 'unknown' } : quarantined.has(field) ? { reason: 'unverified_derivation_and_cohort' } : invalid ? { reason: invalid } : validateField(row, field, index, proof, now, date, evaluationDay);
     fields[field] = { value: null, availability: 'unknown', ...state };
     if (proof?.r?.[index] === 'f' && !state.source_validated) rejectedReferences.push([index, state.reason]);
     row[field] = fields[field].value;

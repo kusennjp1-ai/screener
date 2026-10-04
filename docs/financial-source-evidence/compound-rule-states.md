@@ -72,3 +72,51 @@ remain unknown; its January 2023–2024 comparison proves failure. IBD completen
 is unchanged. Of the 99 native annual histories, 81 have fully comparable rates;
 18 retain nonpositive baselines, of which 10 also contain a proven failure.
 Their canonical annual states are 5 pass / 86 fail / 8 unknown.
+
+
+## Current CSV selection outcome and visible counts
+
+CSV `method_status` is the current selected-method outcome at
+`financial_evaluated_at`. The appended `method_status_version` value
+`research-method-status-v2-logical-and` identifies its fail-priority meaning:
+
+- Preserve `not_applicable` and `quarantined` applicability overrides.
+- Otherwise emit `fail` when at least one top-level rule has a known failure,
+  even if other rules remain unknown.
+- Emit `unknown` when there are no failed rules and at least one unknown rule.
+- Emit `pass` when all rules pass.
+
+The appended `failed_count` and `unknown_count` columns count top-level rules.
+The existing `unknown` column remains an alias of `unknown_count`. All previous
+column names and positions remain unchanged, including `qualified`, numeric
+values, `failed_rules`, `unknown_rules`, and the annual rule's detailed evidence.
+A failed annual rule may still contain missing-year comparisons: those unresolved
+pairs stay visible in its evidence, but do not become additional top-level rules
+or fabricated numeric values.
+
+Selection details show passed/total, failed and unknown counts from the selected
+method. The financial panel counts only its required current rows. Purchase
+conditions show their own passed/total, failed and unknown counts, followed by
+the current quote status; these use the existing common purchase model and are
+separate from selected-method qualification. Applicability labels and reference
+rows keep their existing treatment.
+
+This change does not change thresholds, rule states, qualification, ranking,
+`RULE_SUMMARY_VERSION`, membership, or historical snapshot bytes. Candidate
+history retains its existing unknown-first representation. Do not silently equate
+that legacy representation with the versioned current CSV outcome, reinterpret
+old snapshots, or generate a historical market event from this display/export
+correction.
+
+The workbench fingerprint still hashes the whole `researchEngine.js` file, so a
+subsequent normal export receives a different workbench `rule_version` even
+though assessment rules are unchanged. The existing comparison guard marks
+observations across that fingerprint boundary incomparable; it does not emit a
+new pass/drop market event. Existing archived snapshots remain untouched. This
+patch does not rebuild the data or change the fingerprint/comparison mechanism.
+
+Focused regression checks cover real assessments with mixed failures and unknowns,
+unknown-only and all-pass results, applicability overrides, partial annual
+failures, unchanged values/order/qualification, and separate UI count totals in
+`researchEngine.test.js`, `ResearchDetail.test.jsx`, `FinancialEvidencePanel.test.jsx`
+and the existing `ResearchPage.test.jsx` synthetic task profiles.

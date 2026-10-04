@@ -1,7 +1,9 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import FinancialEvidencePanel from './FinancialEvidencePanel';
-import { FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
+import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
+import { nativeAnnualFixture } from '../../test/fixtures/nativeAnnual';
+import { withFinancialProof } from '../testFinancialFixture';
 
 afterEach(cleanup);
 const props = { symbol: 'TEST', date: '2026-10-02', generation: 'fixture', method: 'oneil', now: Date.parse('2026-10-03T12:00:00Z') };
@@ -87,4 +89,35 @@ it.each([['loss_narrowing','赤字縮小',50],['turnaround','黒字転換',150]]
   expect(current).toHaveTextContent('比較期の絶対値を分母とした参考値');
   expect(current).toHaveTextContent('? 未確認');
   expect(current).not.toHaveTextContent('✓ 通過');
+});
+
+
+it('counts current required failures and unknowns separately and refreshes them on expiry', () => {
+  const currentEvidence = { ...evidence, metrics: { ...evidence.metrics,
+    sales_growth_yy: { ...observation, value: -4, condition: { label: '売上高 前年同期比 ≥ 25%', state: 'fail', value: -4 } },
+    roe: { ...observation, value: 20, condition: { label: '参考のみ', state: 'fail', value: 20 } },
+  } };
+  const { rerender } = render(<FinancialEvidencePanel {...props} evidence={currentEvidence}/>);
+  expect(screen.getByText('財務の必須条件 3件 · 未達 1件 · 未確認 1件')).toBeInTheDocument();
+  const sales = screen.getByRole('heading', { name: '売上高 前年同期比', exact: true }).closest('li');
+  expect(sales).toHaveAttribute('data-state', 'fail');
+  expect(sales).toHaveTextContent('−4%');
+  const reference = screen.getByRole('heading', { name: 'ROE', exact: true }).closest('li');
+  expect(reference).toHaveAttribute('data-state', 'reference');
+  rerender(<FinancialEvidencePanel {...props} now={props.now + 8 * 86400000} evidence={currentEvidence}/>);
+  expect(screen.getByText('財務の必須条件 3件 · 未達 0件 · 未確認 3件')).toBeInTheDocument();
+});
+
+it('counts an annual rule with a proven failure once and retains its missing-year explanation', () => {
+  const now = Date.parse('2026-10-04T12:00:00Z');
+  const current = withFinancialProof({ eps_growth_yy: 30, sales_growth_yy: 30, technical_audit: { as_of_date: props.date },
+    financial_history: nativeAnnualFixture('CAD', [8, 4, 2, null]) }, now, props.date);
+  const currentEvidence = buildFinancialEvidencePresentation(current, { ...props, now });
+  render(<FinancialEvidencePanel {...props} now={now} history={current.financial_history} evidence={currentEvidence}/>);
+  expect(screen.getByText('財務の必須条件 3件 · 未達 1件 · 未確認 0件')).toBeInTheDocument();
+  const annual = screen.getByRole('heading', { name: '直近3年の年次 EPS', exact: true }).closest('li');
+  expect(annual).toHaveAttribute('data-state', 'fail');
+  expect(annual).toHaveTextContent('−50.00%');
+  expect(annual).toHaveTextContent('2025-12-31: EPS欠損');
+  expect(annual).toHaveTextContent('× 未達');
 });

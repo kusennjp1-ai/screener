@@ -3,7 +3,7 @@ import { financialHistory, ANNUAL_REPORTED_LIMITATION, annualComparisonText, ann
 import { Typography } from '@mui/material';
 import { currentFinancialHistory } from '../financialCurrent';
 import './financialEvidence.css';
-const value = n => typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString('en-US',{maximumFractionDigits:3}) : '未取得';
+const value = n => typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString('en-US',{maximumFractionDigits:3}).replace(/^-/, '−') : '未取得';
 export default function FinancialHistory({row, date, now = Date.now(), expanded = false}) {
   const applicability=instrumentApplicability(row), blocked=applicability.status!=='unverified';
   const data=blocked ? row.financial_historical?.financial_history || row.financial_history : row.financial_history;

@@ -25,7 +25,7 @@ it('retains a disclosure where requested and readable zero/negative quarterly EP
   ] } }} date="2026-10-02" now={now}/>);
   const table = screen.getByRole('table', { name: /四半期の報告業績/ });
   expect(table.closest('details')).not.toHaveAttribute('open');
-  expect(within(table).getByRole('cell', { name: '-1.5' })).toBeInTheDocument();
+  expect(within(table).getByRole('cell', { name: '−1.5' })).toBeInTheDocument();
   expect(within(table).getAllByRole('cell', { name: '0' })).toHaveLength(2);
 });
 

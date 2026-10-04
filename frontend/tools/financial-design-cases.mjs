@@ -5,21 +5,25 @@ import { buildFinancialEvidencePresentation, financialEvidencePresentation } fro
 import { assess, researchCsv } from '../src/static/researchEngine.js';
 import { entryReadiness } from '../src/static/entryReadiness.js';
 import { modelMarket } from '../src/static/portfolioPlan.js';
+import { scrollFinancialViewport } from './financial-viewport-geometry.mjs';
 
 // Selected from the receipt-replayed 2026-10-04 native annual projection:
 // NVDA: ordinary USD; FUTU: HKD annualDilutedEPS receipt; AAOI: negative
-// comparison EPS; ALH: one numeric annual EPS and three missing years.
+// comparison EPS; ALH: one numeric annual EPS and three missing years;
+// AVT: two measured annual declines and a missing latest annual EPS.
 // These names are contracts, not a search that silently replaces a failed case.
 export const FINANCIAL_DESIGN_CASES = Object.freeze([
   { symbol: 'NVDA', category: 'ordinary-usd', decisions: true },
   { symbol: 'FUTU', category: 'native-hkd-annual', history: true },
   { symbol: 'AAOI', category: 'nonpositive-eps-baseline' },
   { symbol: 'ALH', category: 'short-annual-history', history: true },
+  { symbol: 'AVT', category: 'annual-declines-with-missing-year' },
 ]);
 export const financialDesignTheme = width => width === 1440 ? 'dark' : width === 390 ? 'light' : null;
 export function financialDesignScreens(viewport, theme) {
   return theme !== financialDesignTheme(viewport.width) ? [] : FINANCIAL_DESIGN_CASES.flatMap(item => [
     `financial-${item.symbol}-evidence`,
+    `financial-${item.symbol}-annual-viewport`,
     ...(item.history ? [`financial-${item.symbol}-history`] : []),
     ...(item.decisions ? [`financial-${item.symbol}-selection`, `financial-${item.symbol}-purchase`] : []),
   ]);
@@ -29,6 +33,7 @@ const requireValue = (value, message) => { if (!value) throw Error(message); };
 const stateText = { pass: '✓ 通過', fail: '× 未達', unknown: '? 未確認', reference: '参考・取得済み', not_applicable: '対象外' };
 const purchaseStateText = { pass: '通過', fail: '未達', unknown: '未確認', not_applicable: '対象外' };
 const normalize = text => text.replace(/\s+/g, ' ').trim();
+export const financialHistoryCell = value => Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 3 }).replace(/^-/, '−') : '未取得';
 
 export function financialCaseSource(row, item, date, now = Date.now()) {
   requireValue(row?.symbol === item.symbol && row.as_of_date === date, `${item.symbol}: published source identity/date mismatch`);
@@ -41,6 +46,7 @@ export function financialCaseSource(row, item, date, now = Date.now()) {
   const finiteAnnual = annual.filter(point => Number.isFinite(point.eps));
   const eps = current.financial_current_state.fields.eps_growth_yy;
   const sales = current.financial_current_state.fields.sales_growth_yy;
+  const annualRule = assess(current, 'oneil', now).rules.find(rule => rule.label.includes('3年'));
   if (item.category === 'ordinary-usd') {
     requireValue(currency === 'USD' && history.annualComplete && history.annualGrowth?.length === 3 &&
       eps.availability === 'current' && sales.availability === 'current', 'NVDA no longer proves ordinary current USD EPS, sales and annual growth');
@@ -55,9 +61,14 @@ export function financialCaseSource(row, item, date, now = Date.now()) {
     requireValue(finiteAnnual.length > 0 && finiteAnnual.length < 4 && history.annualComplete !== true && history.annualGrowth === null &&
       (Date.parse(date) - Date.parse(annual.at(-1).end)) / 86400000 <= 550,
       'ALH no longer proves genuinely insufficient numeric annual EPS history');
+  } else if (item.category === 'annual-declines-with-missing-year') {
+    requireValue(history.annualComplete !== true && history.annualGrowth === null && history.annualComparisons.length === 3 &&
+      history.annualComparisons.filter(value => Number.isFinite(value.growth) && value.growth < 0).length === 2 &&
+      history.annualComparisons.filter(value => value.reason === 'missing_annual_eps').length === 1 && annualRule?.state === 'fail',
+      'AVT no longer proves two measured annual declines plus one missing comparison with a failed annual rule');
   } else throw Error(`Unknown financial Design category: ${item.category}`);
   return { category: item.category, currency, annual, numeric_annual_periods: finiteAnnual.length,
-    annual_complete: history.annualComplete, annual_growth: history.annualGrowth, annual_comparisons: history.annualComparisons,
+    annual_complete: history.annualComplete, annual_growth: history.annualGrowth, annual_comparisons: history.annualComparisons, annual_rule_state: annualRule?.state,
     annual_observed_at: data.annual_source?.observed_at || data.retrieved_at,
     annual_source: data.annual_source || null, quarterly_eps: eps, quarterly_sales: sales };
 }
@@ -177,33 +188,49 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const evidence = buildFinancialEvidencePresentation(selected, { method: 'oneil', date, generation, now });
         const expected = financialEvidencePresentation({ evidence, history: selected.financial_history, symbol: item.symbol, date, generation, method: 'oneil', now });
         record.financial_rows = await inspectFinancialRows(panel, expected, check, key);
-        const take = async (view, target) => {
+        const requiredFailed = expected.rows.filter(row => row.required && row.state === 'fail').length;
+        record.financial_summary = { required: expected.requiredCount, failed: requiredFailed, unknown: expected.requiredUnknown, heading: await panel.locator('header p').textContent() };
+        check(record.financial_summary.heading === `財務の必須条件 ${expected.requiredCount}件 · 未達 ${requiredFailed}件 · 未確認 ${expected.requiredUnknown}件`, `${key}: financial totals must show failed and unknown conditions separately`);
+        const takeSupplement = async (view, target) => {
           const screen = `financial-${item.symbol}-${view}`;
           await capture(page, viewport, theme, screen, { target, scope: 'full-element-at-original-viewport' });
           record.views.push({ screen, target, scope: 'full-element-at-original-viewport',
-            limitation: 'Full element capture is not evidence of above-the-fold visibility; original viewport metrics and axe checks are retained.' });
+            limitation: 'Supplemental full-element capture can include fixed-chrome overlap. It is not viewport visibility proof; see the separately measured viewport captures.' });
         };
-        await take('evidence', '[aria-label="財務の判定根拠"]');
+        const takeViewport = async (view, viewportTargets) => {
+          const screen = `financial-${item.symbol}-${view}`;
+          await scrollFinancialViewport(page, viewportTargets);
+          await capture(page, viewport, theme, screen, { scope: 'scrolled-viewport', viewportTargets });
+          record.views.push({ screen, scope: 'scrolled-viewport', targets: viewportTargets,
+            limitation: 'Visibility proof covers the named targets at this scroll position; it does not imply the complete section fits above the fold.' });
+        };
+        await takeSupplement('evidence', '[aria-label="財務の判定根拠"]');
+        const annualSelector = '#financial-evidence-annual_eps_growth_3y';
+        await takeViewport('annual-viewport', ['.financial-evidence-heading h4', '.financial-evidence-status', '.financial-evidence-value strong',
+          '.financial-evidence-value span', '.financial-evidence-metadata > div:nth-child(1)', '.financial-evidence-metadata > div:nth-child(2)',
+          '.financial-evidence-metadata > div:nth-child(3)'].map(selector => `${annualSelector} ${selector}`));
         if (item.history) {
           const disclosure = page.locator('details').filter({ has: page.locator('summary', { hasText: '取得した財務履歴 — 年次EPS・四半期業績' }) });
           await disclosure.locator('summary').click();
           requireValue(await disclosure.evaluate(node => node.open), 'Annual history disclosure did not open');
           const table = disclosure.getByRole('table', { name: '年次の希薄化EPS', exact: true });
           const cells = await table.locator('tbody tr').evaluateAll(rows => rows.map(row => [...row.cells].map(cell => cell.textContent)));
-          const expectedCells = record.source.annual.map(({ end, eps }) => [end, Number.isFinite(eps) ? eps.toLocaleString('en-US', { maximumFractionDigits: 3 }) : '未取得']);
+          const expectedCells = record.source.annual.map(({ end, eps }) => [end, financialHistoryCell(eps)]);
           check(JSON.stringify(cells) === JSON.stringify(expectedCells), `${key}: annual history periods/EPS differ from source`);
           check((await table.locator('thead').innerText()).includes(`EPS（${record.source.currency} / 提供元の株式単位）`), `${key}: annual native-currency/share-unit heading missing`);
           check((await disclosure.innerText()).includes(record.source.annual_observed_at), `${key}: annual source observation time missing`);
           record.history_cells = cells;
-          await take('history', 'details:has(> summary:text-is("取得した財務履歴 — 年次EPS・四半期業績"))');
+          await takeViewport('history', ['#detail-panel-financial > details.research-disclosure > summary',
+            '#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table > caption',
+            '#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table']);
         }
         await page.getByRole('tab', { name: '判定根拠', exact: true }).click();
         const selection = page.locator('#detail-panel-evidence');
         await ready(selection);
         const assessment = assess(selected, 'oneil', now);
         const selectedRules = await selection.locator('.research-rules > li').allTextContents();
-        record.selection = { heading: await selection.locator('h3').textContent(), rules: selectedRules, passed: assessment.passed, total: assessment.total, unknown: assessment.unknown };
-        check(record.selection.heading === `選定 ${assessment.passed}/${assessment.total} · 未確認 ${assessment.unknown}`, `${key}: selected-method totals differ from current assessment`);
+        record.selection = { heading: await selection.locator('h3').textContent(), rules: selectedRules, passed: assessment.passed, total: assessment.total, failed: assessment.failed, unknown: assessment.unknown };
+        check(record.selection.heading === `選定 ${assessment.passed}/${assessment.total} · 未達 ${assessment.failed} · 未確認 ${assessment.unknown}`, `${key}: selected-method totals differ from current assessment`);
         check(selectedRules.length === assessment.rules.length, `${key}: selected-method rule count differs`);
         assessment.rules.forEach((rule, index) => check(normalize(selectedRules[index] || '').includes(normalize(rule.label)) &&
           (selectedRules[index] || '').includes(stateText[rule.state]), `${key}: selected-method rule ${index} label/state mismatch`));
@@ -211,19 +238,19 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           const rule = assessment.rules.find(rule => rule.label === financial.condition);
           check(rule?.state === financial.state, `${key}/${financial.id}: selection/financial state mismatch`);
         }
-        if (item.decisions) await take('selection', '#detail-panel-evidence');
+        if (item.decisions) await takeViewport('selection', ['#detail-panel-evidence > h3', ...[1, 2, 3].map(index => `#detail-panel-evidence .research-rules > li:nth-child(${index})`)]);
         await page.getByRole('tab', { name: '購入条件', exact: true }).click();
         const purchase = page.locator('#detail-panel-conditions');
         await ready(purchase);
         const readiness = entryReadiness(selected, date, modelMarket(data.rows), now, 'oneil');
         const purchaseRules = await purchase.locator('.condition-rules > li').allTextContents();
-        record.purchase = { heading: await purchase.locator('h3').textContent(), rules: purchaseRules, passed: readiness.passed, total: readiness.total };
-        check(record.purchase.heading.startsWith(`購入条件 ${readiness.passed}/${readiness.total} · `), `${key}: purchase totals differ from separate common purchase model`);
+        record.purchase = { heading: await purchase.locator('h3').textContent(), rules: purchaseRules, passed: readiness.passed, total: readiness.total, failed: readiness.failed, unknown: readiness.unknown };
+        check(record.purchase.heading.startsWith(`購入条件 ${readiness.passed}/${readiness.total} · 未達 ${readiness.failed} · 未確認 ${readiness.unknown} · `), `${key}: purchase totals differ from separate common purchase model`);
         check(purchaseRules.length === readiness.rules.length, `${key}: purchase rule count differs`);
         readiness.rules.forEach((rule, index) => check((purchaseRules[index] || '').includes(rule.label) &&
           (purchaseRules[index] || '').endsWith(purchaseStateText[rule.state]), `${key}: purchase rule ${rule.id} label/state mismatch`));
         check((await purchase.innerText()).includes('選択中の手法とは別に'), `${key}: purchase model/selected method distinction missing`);
-        if (item.decisions) await take('purchase', '#detail-panel-conditions');
+        if (item.decisions) await takeViewport('purchase', ['#detail-panel-conditions > h3', ...[1, 2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)]);
         if (viewport.width === 390) await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
         await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
         const filters = page.getByRole('dialog', { name: '候補を絞り込む', exact: true });

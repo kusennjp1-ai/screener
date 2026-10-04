@@ -131,6 +131,27 @@ it('shows a readable minus for annual declines without changing the engine decis
   expect(input).toEqual(before);
 });
 
+it.each([{ values: [null, null, null, 0.56] }, { values: [-2.38, -1.75, -4.5, -0.64] }])('does not describe unavailable annual comparisons as computed percentages: $values', ({ values }) => {
+  const data = history();
+  data.annual.forEach((point, index) => { point.eps = values[index]; });
+  const annual = field(fixture('oneil', 30, data), 'annual_eps_growth_3y');
+  expect(annual.state).toBe('unknown');
+  expect(annual.unit).toContain('年次成長率は算出不可');
+  expect(annual.unit).toContain('報告希薄化EPS：USD / 提供元の株式単位');
+  expect(annual.unit).not.toContain('percent_points');
+  expect(data.annual.map(point => point.eps)).toEqual(values);
+});
+
+it('labels only the available annual comparisons as percentages while preserving a known failure', () => {
+  const data = history();
+  data.annual.forEach((point, index) => { point.eps = [8.26, 5.43, 2.75, null][index]; });
+  const annual = field(fixture('oneil', 30, data), 'annual_eps_growth_3y');
+  expect(annual.state).toBe('fail');
+  expect(annual.unit).toContain('確認できた年次比較のみ・未比較期あり');
+  expect(annual.actual).toContain('EPS欠損');
+  expect(data.annual.at(-1).eps).toBeNull();
+});
+
 it.each([-0, -0.004, -10.125, -1234.567, 0, 1234.567])('preserves Japanese numeric rounding and grouping for %s', value => {
   const input = fixture('minervini', value);
   expect(field(input).actual).toBe(`${value.toLocaleString('ja-JP', { maximumFractionDigits: 2 }).replace(/^-/, '−')}%`);

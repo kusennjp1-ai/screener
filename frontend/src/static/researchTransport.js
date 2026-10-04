@@ -191,6 +191,7 @@ export function decodeResearchIndex(value) {
   const floatEnabled = [floatEncoding, binaryEncoding].includes(value.column_encoding);
   if (value.schema === RESEARCH_TRANSPORT_VERSION ? !sparseEnabled : value.column_encoding !== undefined) throw Error('Unsupported research column encoding');
   const rows = Array.from({ length: value.count }, () => ({}));
+  const branches = new WeakSet();
   const decoded = [];
   const seenFields = new Set();
   const negativeZeros = new Map();
@@ -255,8 +256,19 @@ export function decodeResearchIndex(value) {
     rows.forEach((row, i) => {
       if (cells[i] === undefined) return;
       let target = row;
-      for (const key of path.slice(0, -1)) target = target[key] ||= {};
-      target[path.at(-1)] = cells[i];
+      for (const key of path.slice(0, -1)) {
+        if (!Object.hasOwn(target, key)) {
+          target[key] = {};
+          branches.add(target[key]);
+        } else if (!branches.has(target[key])) throw Error('Conflicting research fields');
+        target = target[key];
+      }
+      // Only decoder-created branches may be traversed. A cell is atomic,
+      // including arrays and empty objects. Prefixes can occur on different
+      // rows, but cannot merge with or overwrite a cell in the same row.
+      const key = path.at(-1);
+      if (Object.hasOwn(target, key)) throw Error('Conflicting research fields');
+      target[key] = cells[i];
     });
   });
   for (const [field, directory] of Object.entries(value.paths || {})) {

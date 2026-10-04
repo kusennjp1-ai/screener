@@ -129,11 +129,31 @@ jobs:
           BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
           RADAR_BUILD: test-results/radar-build
           DESIGN_REVIEW_OUTPUT: test-results/design-review
+          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: node tools/design-review.mjs
       - name: Require reviewed screenshots and four design scores of at least 8.0
         if: always()
         working-directory: frontend
         run: node tools/check-design-review.mjs
+      - name: Package UNAPPROVED financial diagnostics after unsuccessful Design
+        id: financial_diagnostic
+        if: (failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true'
+        env:
+          FINANCIAL_PREPARATION_OUTCOME: ${{ steps.financial.outcome }}
+          FINANCIAL_CANDIDATE: ${{ steps.financial.outputs.candidate }}
+          DESIGN_JOB_STATUS: ${{ job.status }}
+        run: python3 .github/scripts/retain-financial-diagnostic.py
+      - name: Retain UNAPPROVED financial diagnostics for review only
+        if: (failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true' && steps.financial_diagnostic.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unapproved-financial-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/financial-release-candidate/unapproved-financial-diagnostic.tar.gz
+            ${{ runner.temp }}/financial-release-candidate/unapproved-financial-diagnostic-metadata.json
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
       - name: Seal the exact tested financial candidate
         if: success() && steps.financial.outputs.candidate == 'true'
         run: node .github/scripts/financial-release-activation.mjs design-seal
