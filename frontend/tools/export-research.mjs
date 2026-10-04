@@ -1,4 +1,5 @@
 import { loadFinancialGenerationCarry } from './financial-generation-carry.mjs';
+import { orderResearchExportRows } from './research-export-order.mjs';
 import { applicabilityUniverse } from '../src/static/instrumentApplicability.js';
 import { loadFinancialCorrection, correctionMetadata, CORRECTION_METADATA_FIELDS, overlayFinancialCorrection, overlayFinancialChart, rewriteCorrectionChartAliases, writeCorrectionHistory } from './financial-correction-overlay.mjs';
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, financialNextExpiry } from '../src/static/financialCurrent.js';
@@ -45,7 +46,9 @@ for (const chunk of scan.chunks || []) {
   chunks.push({ path: chunk.path, payload });
 }
 if (entry.as_of_date !== scan.as_of_date) throw Error('Manifest / scan date mismatch');
-const merged = mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_date);
+// initial_rows is rewritten in UI sort order below. Preserve canonical export
+// order across rebuilds while recalculating every value from the current scan.
+const merged = await orderResearchExportRows(mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_date), resolve('public/qualification-audit.json'), scan.as_of_date);
 const carry = await loadFinancialGenerationCarry({rows:merged,asOfDate:scan.as_of_date});
 const correction = carry || await loadFinancialCorrection({rows:merged,asOfDate:scan.as_of_date});
 const correctionMeta = correctionMetadata(correction);
