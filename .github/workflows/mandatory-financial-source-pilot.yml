@@ -1,0 +1,46 @@
+name: Mandatory Financial Source Pilot
+
+on:
+  push:
+    branches: [pilot/mandatory-financial-source]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mandatory-financial-source-pilot
+  cancel-in-progress: false
+
+jobs:
+  capture-public-statements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the reviewed statement transport
+        run: >-
+          python -m pip install
+          yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0
+      - name: Verify bounded acquisition offline
+        run: |
+          python -m unittest discover -s tools/financial-source-pilot -p 'test_*.py' -v
+          python tools/financial-source-pilot/pilot_actual_sources.py --repo . --output-dir "$RUNNER_TEMP/financial-source-pilot" --dry-run
+      - name: Observe three public statement sources once
+        run: python tools/financial-source-pilot/pilot_actual_sources.py --repo . --output-dir "$RUNNER_TEMP/financial-source-pilot"
+      - name: Preserve source evidence, including partial failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mandatory-financial-source-pilot-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-source-pilot/
+          if-no-files-found: warn
+          retention-days: 14
+
+# A fixed, read-only public-data experiment. No scheduled trigger, credentials,
+# database writes, release artifacts, Pages deployment or acceptance bypass.
