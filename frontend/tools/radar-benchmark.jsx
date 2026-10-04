@@ -19,7 +19,7 @@ document.documentElement.dataset.theme = 'dark';
 const tokens = document.createElement('style');
 tokens.textContent = themeCss;
 document.head.append(tokens);
-window.measureRadar = async ({ width, theme = 'dark' } = {}) => {
+window.measureRadar = async ({ width, theme = 'dark', diagnosticRetain = false } = {}) => {
   await document.fonts.ready;
   const small = matchMedia('(max-width:700px)').matches;
   const { shell, container } = createRadarContext(document, { width, theme, small });
@@ -55,7 +55,17 @@ window.measureRadar = async ({ width, theme = 'dark' } = {}) => {
   const pixelAlignment = { width: canvas.width, height: canvas.height, css_width: box.width, css_height: box.height, dpr: ratio,
     target_width: targetWidth, target_height: targetHeight, matches: canvas.width === targetWidth && canvas.height === targetHeight };
   const result = { harness_version: RADAR_HARNESS_VERSION, context: radarContextWitness(shell, container), render_layout_ms: renderLayout, first_frame_ms: nextFrame, visibility, point_count: count, final_point_count: Number(canvas.dataset.radarPointCount), pixel_alignment: pixelAlignment, as_of_date: fixture.as_of_date, source_sha256: fixture.source_sha256 };
-  flushSync(() => root.unmount());
-  shell.remove();
+  if (diagnosticRetain) {
+    // Diagnostic-only inspection happens after the unchanged endpoint. It may
+    // not replace the synchronous visibility witness or alter acceptance time.
+    result.diagnostic_clock = { start_ms: start, endpoint_ms: start + nextFrame, observation_complete_ms: performance.now() };
+    window.inspectRadarDiagnostic = () => ({ now_ms: performance.now(), context: radarContextWitness(shell, container),
+      font_faces: [...document.fonts].map(face => ({ family: face.family, style: face.style, weight: face.weight, status: face.status, unicode_range: face.unicodeRange })),
+      axes: [...container.querySelectorAll('.mono')].map(node => { const style = getComputedStyle(node); return { text: node.textContent, family: style.fontFamily, features: style.fontFeatureSettings, numeric: style.fontVariantNumeric }; }),
+      labels: [...container.querySelectorAll('header,footer,.radar-zone-label')].map(node => node.textContent) });
+  } else {
+    flushSync(() => root.unmount());
+    shell.remove();
+  }
   return result;
 };
