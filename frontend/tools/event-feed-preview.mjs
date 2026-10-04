@@ -7,6 +7,8 @@ import { createHash } from 'node:crypto';
 import { eventFeedPreviewFixture } from './event-feed-preview-fixture.mjs';
 import { researchFeedMetrics } from './research-feed-acceptance.mjs';
 import { derivePublicPreviewTrace } from './event-feed-preview-public-trace.mjs';
+import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { filterRanked } from '../src/static/researchPresentation.js';
 
 if (!process.env.CI) throw Error('Run this screenshot preview only in GitHub Actions.');
 const root = resolve('dist'), output = resolve('test-results/event-feed-preview');
@@ -101,11 +103,26 @@ for (const source of ['synthetic', 'public', 'public-derived-trace']) for (const
     await page.goto(`${base}#/?method=oneil`);
     await page.locator('.candidate-feed-card').first().waitFor({ state: 'visible', timeout: 60000 });
     if (source === 'public-derived-trace') {
+      const derivedManifest = JSON.parse(derivedTrace.resources.get('manifest.json').body.toString('utf8'));
+      const derivedIndex = JSON.parse(derivedTrace.resources.get(derivedManifest.markets.US.assets.research.path).body.toString('utf8'));
+      const expectedSearch = filterRanked(decodeResearchIndex(derivedIndex).rows.filter(row => row.market === 'US' || !row.market).map(row => ({ row, assessment: {} })), { search: derivedTrace.symbol, liquidOnly: true }).map(item => item.row.symbol);
+      report.search_expectation = { query: derivedTrace.symbol, count: expectedSearch.length, symbols: expectedSearch };
+      await page.evaluate(({ query, count }) => {
+        window.__previewSearchInconsistencies = [];
+        const board = document.getElementById('candidate-board');
+        const observer = new MutationObserver(() => {
+          const active = [...board.querySelectorAll('button')].some(button => button.getAttribute('aria-label') === `検索：${query}の絞り込みを解除`);
+          if (active && Number(board.dataset.feedTotal) !== count) window.__previewSearchInconsistencies.push({ query, displayed_total: Number(board.dataset.feedTotal), expected_total: count });
+        });
+        observer.observe(board, { subtree: true, childList: true, attributes: true, characterData: true });
+      }, { query: derivedTrace.symbol, count: expectedSearch.length });
       await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
       const drawer = page.getByRole('dialog', { name: '候補を絞り込む', exact: true });
       await drawer.getByLabel('銘柄・企業名を検索', { exact: true }).fill(derivedTrace.symbol);
       await drawer.getByRole('button', { name: '候補を確認する →', exact: true }).click();
-      await page.waitForFunction(symbol => [...document.querySelectorAll('.candidate-feed-card .candidate-name strong')].some(node => node.textContent === symbol), derivedTrace.symbol);
+      await page.waitForFunction(({ symbol, count }) => Number(document.getElementById('candidate-board')?.dataset.feedTotal) === count && [...document.querySelectorAll('.candidate-feed-card .candidate-name strong')].some(node => node.textContent === symbol), { symbol: derivedTrace.symbol, count: expectedSearch.length });
+      const mismatches = await page.evaluate(() => window.__previewSearchInconsistencies);
+      if (mismatches.length) errors.push(`Search chip and committed count disagreed: ${JSON.stringify(mismatches.slice(0, 5))}`);
     }
     await page.locator('.feed-price-trace img').first().evaluate(image => image.complete ? undefined : new Promise(resolve => { image.addEventListener('load', resolve, { once: true });image.addEventListener('error', resolve, { once: true }); })).catch(() => {});
     await capture('feed');

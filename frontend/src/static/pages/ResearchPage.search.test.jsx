@@ -78,6 +78,21 @@ it('clears the header query when its chip is removed and exports the restored ca
  expect(csv).toContain('BANK'); expect(csv).toContain('TECH'); expect(csv).not.toContain('SMALL');
 });
 
+it('commits a submitted search to chips, candidate counts and CSV together',async()=>{
+ mount();
+ const drawer=openFilters(), search=within(drawer).getByLabelText('銘柄・企業名を検索');
+ fireEvent.change(search,{target:{value:'TECH'}});
+ fireEvent.blur(search); // Submit the input's existing typing debounce now.
+ expect(within(drawer).getByLabelText('銘柄・企業名を検索')).toHaveValue('TECH');
+ expect(document.querySelector('#candidate-board')).toHaveAttribute('data-feed-total','1');
+ expect(document.querySelector('[aria-label="現在の絞り込み"]')).toHaveTextContent('検索：TECH');
+ const csv=await csvText();
+ expect(csv).toContain('TECH');expect(csv).not.toContain('BANK');expect(csv).not.toContain('SMALL');
+ closeFilters();
+ expect(shownSymbols()).toEqual(['TECH']);
+ expect(screen.getByRole('button',{name:'候補を絞り込む'})).toHaveTextContent('絞込 2');
+});
+
 it('shares drawer edits with the header, preserves other filters, and resets every search surface',async()=>{
  mount('#/?sector=Technology&method=oneil');
  const drawer=openFilters(),search=within(drawer).getByLabelText('銘柄・企業名を検索');

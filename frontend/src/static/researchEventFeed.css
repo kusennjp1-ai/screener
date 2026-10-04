@@ -49,7 +49,8 @@
 .research-view-controls button { flex:1; min-height:44px; min-width:44px; padding:6px 12px; border:0; border-radius:8px; background:none; color:var(--text-3); font:inherit; font-size:13px; cursor:pointer; }
 .research-view-controls button[aria-pressed=true] { color:var(--text); background:var(--surface-2); font-weight:700; }
 .research-filter-and-view { display:flex; align-items:center; flex-wrap:wrap; min-width:0; }
-.research-filter-and-view .research-active-filters { flex:1; min-width:0; }
+.research-filter-and-view .research-active-filters { flex:1 1 0; min-width:0; flex-wrap:nowrap; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; }
+.research-filter-and-view .research-active-filters > button { flex-shrink:0; white-space:nowrap; }
 .research-filter-and-view .research-view-controls { flex:0 0 auto; padding:0; border:0; gap:0; }
 .research-filter-and-view .research-view-controls button { flex:none; padding:6px 8px; font-size:12px; }
 .research-preview-badge { flex-shrink:0; padding:2px 5px; border:1px dashed var(--ext); border-radius:4px; color:var(--ext); font-size:12px; line-height:1.5; }
