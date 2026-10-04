@@ -147,7 +147,9 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByRole('tabpanel')).toHaveTextContent('未接続');
         expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
-        expect(within(screen.getByRole('button',{name:/^LEAD の分析を表示/})).getByText(/買いゾーン内/)).toBeInTheDocument();
+        const candidate=screen.getByRole('button',{name:/^LEAD の分析を表示/});
+        expect(candidate).toHaveAccessibleName(/買いゾーン内/);
+        expect(within(candidate.closest('.candidate-feed-card')).getByText(/買いゾーン内/)).toBeInTheDocument();
       } else if (t === 8) {
         expect(screen.getByText('公開ルールに基づく独自スクリーナー')).toBeInTheDocument();
         expect(screen.getByText(/IBD公式の選定銘柄・非公開の計算式を再現したものではありません/)).toBeInTheDocument();

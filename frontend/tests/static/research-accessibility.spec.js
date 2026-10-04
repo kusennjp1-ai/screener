@@ -24,7 +24,9 @@ for (const width of [1440,390]) test(`research navigation and contrast at ${widt
   await page.getByRole('button',{name:'候補を確認する →'}).click();
   await expect(page.getByRole('region',{name:'候補リスト',exact:true})).toBeFocused();
   await expect(page.getByRole('dialog',{name:'候補を絞り込む'})).toHaveCount(0);
-  if(width===1440) await expect(page.getByLabel('銘柄・企業名を検索')).not.toBeFocused();
+  // Header and drawer may briefly coexist with distinct input IDs. Neither
+  // search field may steal focus back from the candidate region.
+  await expect(page.locator('.candidate-search-input:focus')).toHaveCount(0);
   if(width===390) await page.getByRole('button',{name:/^LEAD の分析を表示/}).click();
   for(const mode of ['dark','light']) {
     if(mode==='light') await page.getByRole('button',{name:'ライトモードに切り替え'}).click();

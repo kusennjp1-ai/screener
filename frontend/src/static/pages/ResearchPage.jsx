@@ -5,6 +5,7 @@ import ConnectionStatus from '../components/ConnectionStatus';
 import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
+import ResearchFreshnessNotice from '../components/ResearchFreshnessNotice';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, prepareSessionCurrent } from '../researchPresentation';
@@ -247,8 +248,7 @@ export default function ResearchPage({compareOnly=false}) {
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
     {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div><Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
-    {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
-    {bundle.data&&freshness.state!=='recent'&&<Alert severity="warning">{freshness.state==='old'?`分析基準日は米国東部の日付から${freshness.days}暦日前です。更新日時と価格の基準日は別です。`:'分析基準日が未確認、または未来の日付です。'}</Alert>}
+    <ResearchFreshnessNotice stale={stale} freshness={bundle.data ? freshness : null} date={bundle.data?.date || entry.as_of_date} generatedAt={manifest.data?.generated_at}/>
     <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>
       <ResearchSearch value={search} onChange={setSearch}/>

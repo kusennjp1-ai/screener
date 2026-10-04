@@ -1,6 +1,7 @@
 // D9/D10: port of design-target/reference/geometry.js; presentation only.
 export const isNumber = Number.isFinite;
-export const money = v => isNumber(v) ? `$${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—';
+const moneyFormat = new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+export const money = v => isNumber(v) ? `$${moneyFormat.format(v)}` : '—';
 export const signed = (v,d=1) => isNumber(v) ? `${v>0?'+':v<0?'−':'±'}${Math.abs(v).toFixed(d)}%` : '—';
 export const times = v => isNumber(v) ? `${v.toFixed(2)}×` : '—';
 export const STATES={zone:['買いゾーン内','●','zone'],wait:['ピボット待ち','◔','wait'],ext:['買いゾーン超過','▲','ext'],low:['低変動・監視のみ','≈','neutral'],acq:['買収合意・対象外','⊘','neutral'],na:['判定不可','?','neutral']};

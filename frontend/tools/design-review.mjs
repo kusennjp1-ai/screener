@@ -9,8 +9,9 @@ import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../src/static/financialEvidencePresentation.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
-import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
+import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -47,9 +48,11 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const manifestBytes = await readFile(resolve(currentRoot, 'static-data/manifest.json'));
 const manifest = JSON.parse(manifestBytes.toString('utf8'));
 const currentEntry = manifest.markets?.US || manifest;
+const currentResearchBytes = await readFile(resolve(currentRoot, 'static-data', currentEntry.assets.research.path));
+const publishedResearch = decodeResearchIndex(JSON.parse(currentResearchBytes.toString('utf8')));
 report.data = { as_of_date: currentEntry.as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation,
   manifest_sha256: sha256(manifestBytes), research_path: currentEntry.assets.research.path,
-  research_sha256: sha256(await readFile(resolve(currentRoot, 'static-data', currentEntry.assets.research.path))) };
+  research_sha256: sha256(currentResearchBytes) };
 if (baselineRoot) {
   const previousManifest = JSON.parse(await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
   const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
@@ -306,19 +309,31 @@ for (const viewport of FEED_REVIEW_VIEWPORTS) for (const theme of ['dark', 'ligh
     await capture(page, viewport, theme, `feed-${suffix}`, 'feed');
     const initial = await page.evaluate(researchFeedMetrics);
     record.feed = initial.feed;
-    await page.locator('.candidate-feed-card .candidate-row').first().click();
+    const evidenceOpener = page.getByRole('button', { name: `${initial.feed.symbol} の財務・日次根拠を見る`, exact: true });
+    // The initial capture is already retained. Now reach the actual evidence
+    // action and remember the position the user leaves for Back restoration.
+    await evidenceOpener.scrollIntoViewIfNeeded();
+    const selectionScrollY = await page.evaluate(() => scrollY);
+    record.selection_scroll_y = selectionScrollY;
+    await evidenceOpener.click();
     await visible(page.locator('.research-detail .financial-evidence-summary'));
     await capture(page, viewport, theme, `detail-${suffix}`, 'detail');
     const selected = await page.evaluate(researchFeedMetrics);
     record.detail = selected.detail;
     checkFeedDetailConsistency(initial.feed, selected.detail, check, key);
+    const publishedRow = publishedResearch.rows.find(row => row.symbol === initial.feed.symbol);
+    if (!publishedRow) throw Error('The chosen feed symbol is absent from the published research index');
+    const evidenceContext = { symbol: publishedRow.symbol, date: report.data.as_of_date, generation: report.data.research_generation || report.data.generated_at, method, now: selected.evaluatedAt };
+    const canonical = financialEvidencePresentation({ ...evidenceContext, history: publishedRow.financial_history, evidence: buildFinancialEvidencePresentation(publishedRow, evidenceContext) });
+    checkDetailSourceEvidence(selected.detail, { symbol: publishedRow.symbol, rows: canonical.rows }, check, key);
+    record.source_evidence = { symbol: publishedRow.symbol, evaluated_at: new Date(selected.evaluatedAt).toISOString(), expected: canonical.rows.filter(row => ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y'].includes(row.id)) };
     if (viewport.width < 1280) {
       await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
       await visible(page.locator('.candidate-feed-card'));
       check(await page.locator('.research-workbench').getAttribute('data-mobile-view') === 'list', `${key}: Back did not restore the feed`);
       const returned = await page.evaluate(researchFeedMetrics);
       checkFeedDetailConsistency(returned.feed, selected.detail, check, `${key}/Back`);
-      check(Math.abs(returned.scrollY - initial.scrollY) <= 1, `${key}: Back did not restore the original feed position`);
+      check(Math.abs(returned.scrollY - selectionScrollY) <= 1, `${key}: Back did not restore the feed position at the evidence action`);
     }
     const chosen = page.locator('.candidate-feed-card').filter({ has: page.locator('.candidate-name strong', { hasText: new RegExp(`^${initial.feed.symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) });
     check(await chosen.getAttribute('data-selected') === 'true', `${key}: Back changed the selected feed symbol`);

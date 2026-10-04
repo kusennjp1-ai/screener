@@ -19,7 +19,9 @@ const timestamp = value => {
       Number(parts[4]) > 59 || Number(parts[5] || 0) > 23 || Number(parts[6] || 0) > 59) return NaN;
   return Date.parse(value);
 };
-const number = value => finite(value) ? value.toLocaleString('ja-JP', { maximumFractionDigits: 2 }) : '未確認';
+const numberFormat = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
+const displayMinus = value => value.replace(/^-/, '−');
+const number = value => finite(value) ? displayMinus(numberFormat.format(value)) : '未確認';
 const METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const METRICS = [
   { id: 'eps_growth_yy', label: '四半期 EPS 前年同期比', unit: 'percent_points', suffix: '%', required: ['oneil', 'ibd'], comparison: true },
@@ -189,7 +191,7 @@ export function financialEvidencePresentation({ evidence, history, symbol, date,
   const historical = bound && Array.isArray(evidence.historical) ? evidence.historical.flatMap((data, index) => {
     const metric = METRICS.find(m => m.id === data?.id);
     return metric && finite(data.value) ? [{ key: `${data.id}-${index}`, label: metric.label,
-      value: data.unit === metric.unit ? `${number(data.value)}${metric.suffix}` : `${data.value}（単位未確認・原値）`,
+      value: data.unit === metric.unit ? `${number(data.value)}${metric.suffix}` : `${displayMinus(String(data.value))}（単位未確認・原値）`,
       ...metadata(data), explanation: financialUnknownReason(data.reason) }] : [];
   }) : [];
   return { rows, historical, requiredCount: rows.filter(r => r.required).length,

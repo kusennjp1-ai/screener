@@ -10,7 +10,7 @@ it.each([30, 0, -10])('binds current %s and the exact existing rule to both summ
   const detail = financialEvidencePresentation(input).rows[0];
   const summary = financialEvidenceSummary(input)[0];
   expect(input.evidence.metrics.eps_growth_yy.condition).toEqual(assess(row, 'oneil', now).rules[0]);
-  expect(detail).toMatchObject({ actual: `${value}%`, state: value >= 25 ? 'pass' : 'fail', source: 'yfinance', basis: '比較可能な四半期の前年同期比（報告値）', period: '2026-06-30 / 比較 2025-06-30' });
+  expect(detail).toMatchObject({ actual: `${value}%`.replace(/^-/, '−'), state: value >= 25 ? 'pass' : 'fail', source: 'yfinance', basis: '比較可能な四半期の前年同期比（報告値）', period: '2026-06-30 / 比較 2025-06-30' });
   expect(summary.actual).toBe(detail.actual); expect(summary.state).toBe(detail.state);
 });
 it('does not construct proof from raw values or a forged availability state', () => {

@@ -39,14 +39,15 @@ export function researchFeedMetrics() {
     return node ? [{ id, state: node.dataset.state, actual: observe(node.querySelector('.financial-summary-result strong')),
       status: observe(node.querySelector('.financial-summary-result > span')), role: observe(node.querySelector('.financial-evidence-role')),
       condition: observe(node.querySelector('.financial-growth-condition')), period: observe(node.querySelector('.financial-growth-period')),
-      source: observe(node.querySelector('.financial-growth-source')) }] : [];
+      source: observe(node.querySelector('.financial-growth-source')), basis: observe(node.querySelector('.financial-growth-basis')),
+      notes: [...node.querySelectorAll('.financial-comparison-note')].map(observe) }] : [];
   });
   const card = document.querySelector('.candidate-feed-card'), summary = document.querySelector('.research-detail .financial-evidence-summary');
   const chart = document.querySelector('.research-detail .research-chart'), trace = card?.querySelector('.feed-price-trace img');
   const blockers = [...document.querySelectorAll('.research-detail [aria-label="日次の未達・未確認"] > span')].map(node => ({
     state: node.dataset.state, ...observe(node), label: node.textContent.replace(/^(?:× 未達|\? 未確認)\s*·\s*/, '').trim(),
   }));
-  return { viewport: { width: innerWidth, height: innerHeight }, scrollY, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+  return { viewport: { width: innerWidth, height: innerHeight }, evaluatedAt: Date.now(), scrollY, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
     method: document.querySelector('.research-list .method-tabs [aria-pressed="true"]')?.textContent.trim() || null,
     feed: { symbol: card?.querySelector('.candidate-name strong')?.textContent.trim() || null, metrics: metrics(card),
       next: observe(card?.querySelector('.feed-next-check > span')), other: observe(card?.querySelector('.feed-other-checks')),
@@ -94,11 +95,45 @@ export function checkFeedDetailConsistency(feed, detail, check, key) {
   for (const expected of feed.metrics) {
     const actual = detail.metrics.find(row => row.id === expected.id);
     check(Boolean(actual) && actual.state === expected.state, `${key}: ${expected.id} state changed between feed and detail`);
-    for (const field of ['actual', 'role', 'condition', 'period', 'source']) check(actual?.[field]?.text === expected[field]?.text, `${key}: ${expected.id} ${field} differs between feed and detail`);
+    for (const field of ['actual', 'role', 'condition', 'period']) check(actual?.[field]?.text === expected[field]?.text, `${key}: ${expected.id} ${field} differs between feed and detail`);
+    // The compact card exposes literal source presence/acquisition date. Derive
+    // its expected wording from the visible full source after the user action;
+    // hidden data attributes are not proof, and a source badge is not a rating.
+    const fullSource = actual?.source?.text || '', separator = fullSource.lastIndexOf(' · ');
+    const provider = separator < 0 ? null : fullSource.slice(0, separator), observed = fullSource.slice(separator + 3);
+    const date = /^取得 (\d{4}-\d{2}-\d{2})(?: |T)/.exec(observed)?.[1];
+    const badge = provider && `${provider === '提供元 未確認' ? '提供元 未確認' : '提供元あり'} · ${date ? `取得 ${date}` : '取得日 未確認'}`;
+    check(Boolean(actual?.source?.shown && badge && expected.source?.shown && expected.source.text === badge), `${key}: ${expected.id} compact source presence/date differs from visible full detail`);
   }
   const named = `${feed.next?.text || ''} ${feed.other?.text || ''}`;
   for (const blocker of detail.blockers) check(named.includes(`${blocker.label}：${blocker.state === 'unknown' ? '未確認' : '未達'}`), `${key}: feed omits daily blocker ${blocker.label} or its state`);
   if (detail.blockers.length > 1) check(Boolean(feed.other?.shown && feed.other.text), `${key}: parallel blockers must remain named on the feed`);
+}
+
+// The independent published-row presenter supplies expected source facts at the
+// observed browser epoch. This checks visible, one-action detail content, not
+// inaccessible proof attributes or a comparison between two shortened labels.
+export function checkDetailSourceEvidence(detail, expected, check, key) {
+  check(detail.symbol === expected.symbol, `${key}: source evidence belongs to another symbol`);
+  for (const id of ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y']) {
+    const row = expected.rows.find(row => row.id === id), rendered = detail.metrics.find(row => row.id === id);
+    check(Boolean(row && rendered), `${key}: ${id} canonical/detail source evidence is missing`);
+    if (!row || !rendered) continue;
+    check(rendered.state === row.state && rendered.actual?.text === row.actual, `${key}: ${id} differs from the canonical current evidence`);
+    const source = rendered.source?.text || '', separator = source.lastIndexOf(' · ');
+    check(Boolean(rendered.source?.shown && separator >= 0 && source.slice(0, separator) === row.source), `${key}: ${id} full provider differs from canonical source`);
+    const observed = source.slice(separator + 3);
+    if (/^\d{4}-\d{2}-\d{2}T/.test(row.observedAt || '')) {
+      const displayedTime = observed.replace(/^取得 /, '').replace(' ', 'T').replace(/ UTC$/, 'Z');
+      check(observed.startsWith('取得 ') && Date.parse(displayedTime) === Date.parse(row.observedAt), `${key}: ${id} full acquisition timestamp differs from canonical source`);
+    } else check(observed === row.observedAt, `${key}: ${id} missing acquisition timestamp is not explicit`);
+    check(Boolean(rendered.basis?.shown && rendered.basis.text.includes(row.metric) && rendered.basis.text.includes(row.basis)), `${key}: ${id} metric/basis is missing from the one-action detail`);
+    const notes = rendered.notes || [];
+    const expectedNotes = [row.referenceActual && `参考計算：${row.referenceActual}`,
+      row.actual !== '未確認' && row.calculationNote,
+      row.actual !== '未確認' && row.comparisonLabel !== row.actual && row.comparisonLabel].filter(Boolean);
+    for (const note of expectedNotes) check(notes.some(item => item.shown && item.text === note), `${key}: ${id} full comparison/rounding explanation is missing`);
+  }
 }
 
 // Handles the emitted CSV's quoted commas, escaped quotes and line breaks.

@@ -14,7 +14,9 @@ const props={ranked:[{row,assessment:{qualified:false,passed:5,total:8,unknown:1
 it('shows actual, condition, required role, source and period beside independent selection and daily lanes',()=>{
  render(<CandidateBoard {...props}/>);
  const card=screen.getByRole('article');
- for(const text of ['成長の裏付け','30%','40%','≥ 25%','2026-06-30','yfinance','必須','手法の選定','日次 未確認'])expect(card).toHaveTextContent(text);
+ for(const text of ['成長の裏付け','30%','40%','≥ 25%','2026-06-30','提供元あり','取得 2026-10-03','必須','手法の選定','日次 未確認'])expect(card).toHaveTextContent(text);
+ expect(card).not.toHaveTextContent('元の計算結果を小数第2位に丸めています');
+ expect(card).not.toHaveTextContent('yfinance');
  expect(card.querySelector('.feed-growth').closest('details')).toBeNull();
  expect(screen.getByRole('button',{name:/^FEED の分析/})).not.toHaveTextContent('成長率 未確認');
 });
@@ -36,7 +38,9 @@ it('shows a fresh loss comparison as neutral context while the ordinary growth c
  const eps=screen.getByRole('article').querySelector('.financial-growth-metric');
  expect(eps).toHaveAttribute('data-state','unknown');
  expect(eps).toHaveTextContent('赤字縮小');
- expect(eps).toHaveTextContent('50%（比較期の絶対値を分母とした参考値）');
+ expect(eps).toHaveTextContent('参考計算：50%');
+ expect(eps).not.toHaveTextContent('比較期の絶対値を分母');
+ expect(eps).toHaveTextContent('提供元あり · 取得 2026-10-03');
  expect(eps).not.toHaveTextContent('過去');
  expect(eps).not.toHaveTextContent('✓ 通過');
  rerender(<CandidateBoard {...props} now={now+8*86400000} ranked={[{...props.ranked[0],row:special}]}/>);
@@ -91,4 +95,17 @@ it('uses the guarded financial epoch for the one-missing-condition label despite
  rerender(<CandidateBoard {...props} nearOnly now={future} financialEpoch={future} ranked={[{row:candidate,assessment:assess(candidate,'oneil',future)}]}/>);
  expect(screen.getByRole('article').querySelector('.feed-missing')).toHaveTextContent('判定資料を再確認');
  expect(screen.getByRole('article').querySelector('[data-metric="eps_growth_yy"]')).not.toHaveTextContent('30%');
+});
+
+it('reads core growth evidence before technical status, the price trace and calculation notes',()=>{
+ render(<CandidateBoard {...props}/>);
+ const card=screen.getByRole('article');
+ const growth=card.querySelector('.feed-growth');
+ for(const supporting of [card.querySelector('.feed-status-lanes'),card.querySelector('.feed-price-trace')])expect(growth.compareDocumentPosition(supporting)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ for(const metric of card.querySelectorAll('[data-metric]')){
+  const condition=metric.querySelector('.financial-growth-condition');
+  for(const note of metric.querySelectorAll('.financial-comparison-note'))expect(condition.compareDocumentPosition(note)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(metric.querySelector('.financial-growth-period')).toBeVisible();
+  expect(metric.querySelector('.financial-growth-source')).toBeVisible();
+ }
 });

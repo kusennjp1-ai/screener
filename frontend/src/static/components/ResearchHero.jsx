@@ -22,7 +22,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}`} aria-label="今日の概況">
   <div className="market-context-strip">
    <div className="market-context-date"><strong>{date||'取得中'} 終値</strong><span>{plan.market.label.replace('（独自判定）','')}</span></div>
-   <h1 className="sr-only">{loading?'データを読み込み中。':counts.qualified?`選定候補は ${counts.qualified.toLocaleString()} 銘柄。`:'選定候補はありません。'}</h1>
+   <h1 className="sr-only">{loading?'ミネルヴィニのデータを読み込み中。':counts.qualified?`ミネルヴィニ選定候補は ${counts.qualified.toLocaleString()} 銘柄。`:'ミネルヴィニ選定候補はありません。'}</h1>
    <div className="market-context-counts" aria-label="ミネルヴィニの選定と価格位置"><span>ミネルヴィニ · トレンド通過 <strong>{loading?'—':counts.qualified.toLocaleString()}</strong></span><span>価格ゾーン内 <strong className="zone-text">{loading?'—':counts.zone.toLocaleString()} 銘柄</strong></span></div>
    <div className="hero-actions">
     <button className="overview-trigger" aria-expanded={!collapsed} aria-controls="research-market-overview" aria-label={collapsed?'概況を展開':'概況をたたむ'} onClick={toggle}>概況 {collapsed?'⌄':'⌃'}</button>

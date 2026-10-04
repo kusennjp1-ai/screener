@@ -1,7 +1,10 @@
 /* Feed cards have their own geometry, replacing the compact table-row rules. */
 .research-workbench .research-grid { grid-template-columns:minmax(440px,470px) minmax(0,1fr); max-width:1600px; margin:auto; }
 .research-workbench .research-grid[data-view=charts] { grid-template-columns:minmax(0,1fr); }
-.candidate-feed .candidate-scroll [role=listitem] { content-visibility:auto; contain-intrinsic-block-size:auto 520px; }
+/* A bounded page has up to 50 variable-height, keyboard-reachable cards. Their
+   real heights must position the next card, including before first focus or
+   after evidence changes. A skipped 520px placeholder can overlap its actions. */
+.candidate-feed .candidate-scroll [role=listitem] { content-visibility:visible; contain-intrinsic-block-size:none; }
 .candidate-feed .candidate-board-heading { height:auto; min-height:50px; padding:4px 16px; flex-wrap:wrap; }
 .candidate-feed .candidate-board-heading h2 { font-size:16px; font-weight:700; }
 .candidate-feed .candidate-board-heading select,.candidate-feed .candidate-board-heading > button { min-height:44px; font-size:12px; }
@@ -21,7 +24,7 @@
 .feed-price { display:flex; flex-direction:column; gap:2px; text-align:right; flex-shrink:0; }
 .feed-price strong { font-size:20px; }
 .feed-price small { font-size:12px; color:var(--text-3); }
-.feed-status-lanes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:12px 0; }
+.feed-status-lanes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:8px 0; }
 .feed-status-lanes > span { display:flex; flex-direction:column; gap:3px; min-width:0; padding:7px 8px; border:1px solid var(--line-2); border-radius:8px; }
 .feed-status-lanes small { font-size:12px; color:var(--text-3); }
 .feed-status-lanes strong { font-size:12px; font-weight:600; line-height:1.5; }
@@ -37,10 +40,15 @@
 .feed-growth .financial-summary-result { gap:3px 6px; }
 .feed-growth .financial-summary-result strong { font-size:20px; }
 .feed-growth .financial-growth-source { font-size:12px; }
+.feed-growth .financial-source-badge { display:inline-block; margin:3px 0 0; padding:2px 5px; border:1px solid var(--line); border-radius:4px; color:var(--text-3); }
 .feed-next-check { display:flex; align-items:baseline; gap:8px; margin:10px 0 4px; font-size:12px; line-height:1.6; }
 .feed-next-check > strong { flex-shrink:0; color:var(--text-2); }
 .feed-next-check > span { color:var(--text-3); }
-.feed-other-checks,.feed-missing { display:block; margin:4px 0; font-size:12px; line-height:1.6; color:var(--text-3); }
+.feed-other-checks,.feed-missing { margin:4px 0; font-size:12px; line-height:1.6; color:var(--text-3); }
+.feed-missing { display:block; }
+.feed-other-checks { display:flex; flex-wrap:wrap; gap:4px 6px; }
+.feed-other-checks > span { border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+.feed-other-checks > [data-state=fail] { color:var(--wait); }
 .feed-missing[data-state=fail] { color:var(--wait); }
 .feed-open-evidence { display:flex; align-items:center; min-height:44px; font-size:12px; color:var(--accent); }
 .feed-card-footer { display:flex; align-items:center; gap:8px; padding:0 18px 8px; color:var(--text-3); font-size:12px; line-height:1.5; }
@@ -82,6 +90,18 @@
 .feed-trace-unavailable { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:64px; gap:4px; border:1px dashed var(--line-2); border-radius:8px; color:var(--text-3); font-size:12px; }
 .feed-trace-unavailable small { font-size:12px; }
 .feed-card-evidence { padding:0 18px; }
-.feed-card-evidence .feed-open-evidence { border:0; background:none; padding:4px 0; font:inherit; font-size:12px; cursor:pointer; }
+.feed-card-evidence .feed-open-evidence { min-height:44px; min-width:44px; border:0; background:none; padding:4px 0; font:inherit; font-size:12px; cursor:pointer; }
 .feed-card-evidence .feed-open-evidence:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 @media(max-width:700px) { .feed-card-evidence { padding:0 16px; } }
+/* Filters and the optional reading guide share a toolbar row, keeping the
+   stock's core evidence ahead of supporting status and trace content. */
+.candidate-filter-context { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+.candidate-filter-context .research-active-filters { padding-top:0; padding-bottom:0; padding-right:4px; }
+.candidate-filter-context .candidate-guide { padding-left:4px; }
+.candidate-filter-context:has(.candidate-glossary[open]) { grid-template-columns:minmax(0,1fr); }
+.candidate-filter-context:has(.candidate-glossary[open]) .candidate-guide { padding-inline:16px; }
+.candidate-filter-context .candidate-glossary > p { color:var(--text-2); line-height:1.6; }
+.feed-card-evidence > .feed-growth-label { margin-top:4px; margin-bottom:4px; }
+.feed-card-evidence > .feed-growth { padding-block:4px; }
+
+.candidate-feed .method-tabs { margin-bottom:0; }

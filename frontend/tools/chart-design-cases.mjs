@@ -65,7 +65,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       const inlineToggle = page.locator('.research-chart').getByRole('button', { name: /^図解/ });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
       await capture(page, viewport, theme, `case-${symbol}-inline-annotations`);
-      const gauge = page.locator('.entry-gauge');
+      const gauge = page.locator('.research-detail').getByRole('img', { name: /現在価格.*共通ピボット/ });
       if (Number.isFinite(plan.pivot)) {
         const label = await gauge.getAttribute('aria-label');
         for (const price of [plan.price, plan.pivot, plan.upper, plan.stopExample]) check(label?.includes(money(price)), `${key}: entry card canonical level ${money(price)} missing`);

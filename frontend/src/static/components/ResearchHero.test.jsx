@@ -36,7 +36,7 @@ it('labels the fixed Minervini overview and never mistakes capped portfolio posi
  const ranked=Array.from({length:8},(_,i)=>({row:{symbol:`S${i}`,current_price:102,se_pivot_price:100,technical_audit:{valid:true}},assessment:{qualified:i<6}}));
  const plan={...props.plan,dailyPositions:[{symbol:'S0'},{symbol:'S1'}]};
  render(<ResearchHero {...props} ranked={ranked} plan={plan} method="oneil"/>);
- expect(screen.getByRole('heading',{level:1})).toHaveTextContent('選定候補は 6 銘柄。');
+ expect(screen.getByRole('heading',{level:1})).toHaveAccessibleName('ミネルヴィニ選定候補は 6 銘柄。');
  expect(screen.getByLabelText('ミネルヴィニの選定と価格位置')).toHaveTextContent('トレンド通過 6');
  fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
  expect(screen.getByText(/終値 · ミネルヴィニ概況/)).toBeInTheDocument();

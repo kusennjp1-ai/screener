@@ -5,4 +5,5 @@ describe('design-target geometry, without decision changes',()=>{
  it('uses actual method buy limit and stop example',()=>{const g=gaugeGeometry({pivot:100,upper:103,price:102,distance:2,stopExample:94.86});expect(g.upper).toBeCloseTo(65);expect(g.stop).toBeCloseTo(24.3);expect(gaugeGeometry({pivot:null})).toBeNull();});
  it('ports the broken radar axis and excludes unavailable coordinates',()=>{const g=radarGeometry([{distance:null,rs:90},{distance:0,rs:90,volume:1,state:'zone'}]);expect(g.points).toHaveLength(1);expect((g.x(10)-g.left)/g.pw).toBeCloseTo(.84);expect(g.x(25)).toBe(g.left+g.pw);expect(g.y(100)).toBe(g.top);});
  it('formats numeric meaning consistently',()=>{expect(signed(-2)).toBe('−2.0%');expect(signed(0)).toBe('±0.0%');expect(money(null)).toBe('—');expect(money(1200)).toBe('$1,200.00');});
+ it.each([-0,-0.004,-1234.565,0,0.005,1234.565,1e21])('retains the existing USD display for %s with a reused formatter',value=>{expect(money(value)).toBe(`$${value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`);});
 });

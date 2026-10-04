@@ -29,8 +29,12 @@ it('shows price location and daily purchase status separately, with the next fai
  const row=screen.getByRole('button',{name:/S0 の分析を表示/});
  expect(row).toHaveAccessibleName(/買いゾーン内/);
  expect(row).toHaveAccessibleName(/選定 9\/9。日次 5\/7。出来高：未達/);
- expect(row).toHaveTextContent('● 買いゾーン内');
- expect(row).toHaveTextContent('日次 5/7');
+ expect(row.closest('article')).toHaveTextContent('● 買いゾーン内');
+ expect(row.closest('article')).toHaveTextContent('日次 5/7');
+ expect(row.closest('article').querySelector('.feed-next-check')).toHaveTextContent('次に確認出来高：未達');
+ expect(row.closest('article').querySelector('.feed-other-checks')).toHaveTextContent('決算予定：未確認');
+ expect(row.closest('article')).not.toHaveTextContent('50日平均比が基準未満');
+ expect(row).not.toHaveAccessibleName(/50日平均比が基準未満/);
  expect(row).not.toHaveTextContent('✓');
  fireEvent.click(row);expect(props.onSelect).toHaveBeenLastCalledWith('S0');
 });
@@ -45,6 +49,10 @@ it('keeps the trading-day blocker accessible when financial selection is also un
  expect(row).toHaveAccessibleName(/選定条件：未確認/);
  expect(row).toHaveAccessibleName(/最新の取引日：未確認/);
  expect(row).toHaveAccessibleName(/決算予定：未確認/);
+ expect(row.closest('article').querySelector('.feed-next-check')).toHaveTextContent('選定条件：未確認');
+ expect(row.closest('article').querySelector('.feed-other-checks')).toHaveTextContent('最新の取引日：未確認');
+ expect(row.closest('article').querySelector('.feed-other-checks')).toHaveTextContent('決算予定：未確認');
+ expect(row.closest('article')).not.toHaveTextContent('財務根拠が未確認');
  expect(row).not.toHaveTextContent('✓');
 });
 it('marks daily readiness only when all common checks pass and updates when time changes',()=>{

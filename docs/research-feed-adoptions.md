@@ -61,3 +61,23 @@ not permission to lower those limits or claim empirical selection improvement.
 
 See [the cross-surface acceptance matrix](static-consistency-acceptance.md) for
 source/epoch/identity checks and the exact release evidence required.
+
+## Card hierarchy and one-action evidence
+
+The first feed capture repeated full provider, timestamp, calculation and daily
+check explanations in every card. The refinement keeps each card's exact EPS
+and sales value/state, required/reference role, condition and reporting period.
+A neutral badge records source presence and the literal acquisition date; it
+does not assert freshness or qualification. The card's evidence action opens
+the selected summary with the full provider, timestamp, metric, basis and
+comparison/rounding explanations. Browser acceptance compares these visible
+details with the canonical published-row presenter after that real action.
+
+The first feed run [37175649462](https://github.com/kusennjp1-ai/screener/actions/runs/37175649462)
+failed performance: desktop/mobile method changes were 1,108/768 ms (400 ms
+limit), and initial longest tasks were 284/297 ms (200 ms limit). Its controlled
+baseline also failed at 622/632 ms and 341/343 ms. Exact diagnostic profiles
+identified substantial accessible-role lookup and React rendering, as well as
+desktop chart redraw. These observations motivate reducing duplicate card DOM
+and reusing identical locale formatters; they do not establish a latency win for
+the revised layout. Absolute budgets remain unchanged and require a new run.

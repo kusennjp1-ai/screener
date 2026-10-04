@@ -34,7 +34,7 @@ const field = (input, id = 'eps_growth_yy') => financialEvidencePresentation(inp
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); });
 afterEach(() => vi.useRealTimers());
 
-it.each([[30, 'pass', '30%'], [0, 'fail', '0%'], [-10, 'fail', '-10%'], [25, 'pass', '25%'], [24.99, 'fail', '24.99%']])('retains the authoritative decision and exact sign for %s', (value, state, actual) => {
+it.each([[30, 'pass', '30%'], [0, 'fail', '0%'], [-10, 'fail', '−10%'], [25, 'pass', '25%'], [24.99, 'fail', '24.99%']])('retains the authoritative decision and exact sign for %s', (value, state, actual) => {
   expect(field(fixture('oneil', value))).toMatchObject({ state, actual, required: true, condition: 'C：四半期 EPS 前年同期比 ≥ 25%' });
 });
 
@@ -94,7 +94,7 @@ it.each(['minervini', 'minervini2'])('keeps every financial metric a reference f
   const result = financialEvidencePresentation(fixture(method, -10));
   expect(result.requiredCount).toBe(0);
   expect(result.rows.every(r => r.required === false && r.state !== 'pass' && r.state !== 'fail')).toBe(true);
-  expect(result.rows[0]).toMatchObject({ actual: '-10%', state: 'reference', condition: '選定の数値条件なし・参考' });
+  expect(result.rows[0]).toMatchObject({ actual: '−10%', state: 'reference', condition: '選定の数値条件なし・参考' });
 });
 
 it('requires three financial conditions for O’Neil and five for IBD while keeping ROE/margin references', () => {
@@ -122,6 +122,18 @@ it('preserves an annual growth failure while IBD only requires history completen
   const data = history(); data.annual[3].eps = 4;
   expect(field(fixture('oneil', 30, data), 'annual_eps_growth_3y')).toMatchObject({ state: 'fail', actual: '100% → 100% → 0%' });
   expect(field(fixture('ibd', 30, data), 'annual_eps_growth_3y').state).toBe('pass');
+});
+
+it('shows a readable minus for annual declines without changing the engine decision or source values', () => {
+  const data = history(); data.annual[3].eps = 2;
+  const input = fixture('oneil', -10, data), before = structuredClone(input);
+  expect(field(input, 'annual_eps_growth_3y')).toMatchObject({ state: 'fail', actual: '100% → 100% → −50%' });
+  expect(input).toEqual(before);
+});
+
+it.each([-0, -0.004, -10.125, -1234.567, 0, 1234.567])('preserves Japanese numeric rounding and grouping for %s', value => {
+  const input = fixture('minervini', value);
+  expect(field(input).actual).toBe(`${value.toLocaleString('ja-JP', { maximumFractionDigits: 2 }).replace(/^-/, '−')}%`);
 });
 
 it('keeps reported quarterly EPS separate from legacy growth scalars', () => {
@@ -170,6 +182,8 @@ it('does not append percent signs or infer units for historical raw values', () 
   expect(result[4].value).toBe('0.3%');
   input.evidence.historical = [{ id: 'profit_margin', value: 0.0003 }];
   expect(financialEvidencePresentation(input).historical[0].value).toBe('0.0003（単位未確認・原値）');
+  input.evidence.historical = [{ id: 'profit_margin', value: -0.0003 }];
+  expect(financialEvidencePresentation(input).historical[0].value).toBe('−0.0003（単位未確認・原値）');
 });
 
 it.each(['unknown', ' UNKNOWN ', '未確認'])('rejects placeholder source %j for current scalar and annual evidence', source => {

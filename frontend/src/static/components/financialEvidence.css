@@ -45,9 +45,9 @@
 .financial-summary-result { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; margin:5px 0; font-size:12px; }
 .financial-summary-result strong { font-size:26px; color:var(--text); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .financial-growth-metric[data-state=unknown] .financial-summary-result strong { color:var(--text-2); }
-.financial-growth-condition,.financial-growth-period,.financial-growth-source { margin:3px 0; font-size:12px; line-height:1.55; overflow-wrap:anywhere; }
-.financial-growth-period,.financial-growth-source { color:var(--text-3); }
-.financial-metric-action { display:flex; align-items:center; min-height:44px; padding:4px 0; font:inherit; font-size:12px; color:var(--accent); background:none; border:0; cursor:pointer; }
+.financial-growth-condition,.financial-growth-period,.financial-growth-source,.financial-growth-basis { margin:3px 0; font-size:12px; line-height:1.55; overflow-wrap:anywhere; }
+.financial-growth-period,.financial-growth-source,.financial-growth-basis { color:var(--text-3); }
+.financial-evidence-summary .financial-metric-action { display:flex; align-items:center; min-height:44px; min-width:44px; padding:4px 0; font:inherit; font-size:12px; color:var(--accent); background:none; border:0; cursor:pointer; }
 .financial-growth-secondary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:8px 16px; }
 .financial-growth-secondary button { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; min-width:0; min-height:44px; padding:4px 0; text-align:left; background:none; border:0; font:inherit; font-size:12px; color:var(--text-2); cursor:pointer; }
 .financial-growth-secondary button > small { flex-basis:100%; color:var(--text-3); font-size:12px; }

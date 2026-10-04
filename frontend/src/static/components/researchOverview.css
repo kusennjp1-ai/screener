@@ -1,5 +1,6 @@
 /* A compact current-state strip; the optional radar is mounted only when opened. */
 .research-hero.research-overview { display:block; height:auto; min-height:0; padding:0 24px; background:var(--panel); border-bottom:1px solid var(--line); }
+.research-hero.research-overview > h1.sr-only { font-size:26px; }
 .research-overview .market-context-strip { display:flex; align-items:center; gap:20px; min-height:64px; }
 .market-context-date { display:flex; flex-wrap:wrap; gap:6px 16px; color:var(--text-2); font-size:12px; }
 .market-context-date strong { color:var(--text); }
@@ -16,8 +17,8 @@
 .overview-market a { display:flex; align-items:center; min-height:44px; scroll-margin-top:64px; color:var(--accent); text-decoration:none; }
 @media (max-width:900px) { .market-context-counts { display:none; } }
 @media (max-width:700px) {
- .research-hero.research-overview { padding:4px 16px; }
- .research-overview .market-context-strip { min-height:56px; gap:4px; }
+ .research-hero.research-overview { padding:0 16px; }
+ .research-overview .market-context-strip { min-height:44px; gap:4px; }
  .market-context-date { display:flex; flex-direction:column; gap:2px; font-size:12px; }
  .research-overview .hero-actions { gap:0; }
  .research-overview .hero-actions button { padding:4px 7px; }

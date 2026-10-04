@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { expandedChartGeometry, checkExpandedChartGeometry } from '../../tools/expanded-chart-geometry.mjs';
-import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency } from '../../tools/research-feed-acceptance.mjs';
+import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence } from '../../tools/research-feed-acceptance.mjs';
+import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../../src/static/financialEvidencePresentation.js';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { withSyntheticFinancialProof, financialFixtureDate as date, financialFixtureNow as now } from '../../src/test/fixtures/financialCurrent.js';
 
@@ -14,6 +15,15 @@ for(let time=Date.parse(date),count=0;count<300;time-=86400000){
  const close=102-count*.05;
  bars.unshift({date:day.toISOString().slice(0,10),open:close-.2,high:close+.5,low:close-.5,close,volume:1000000});count++;
 }
+// Preserve unexpected wait/source failures too, in addition to the observations
+// explicitly retained before each geometry assertion below.
+test.afterEach(async({page},info)=>{
+ if(info.status===info.expectedStatus||page.isClosed())return;
+ const observations=await page.evaluate(researchFeedMetrics);
+ await info.attach('synthetic-financial-failure-measurements',{body:JSON.stringify(observations),contentType:'application/json'});
+ const path=info.outputPath('synthetic-financial-failure.png');
+ await page.screenshot({path});await info.attach('synthetic-financial-failure',{path,contentType:'image/png'});
+});
 for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`synthetic financial evidence and short-chart geometry ${width}x${height}`,async({page},info)=>{
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setViewportSize({width,height});
@@ -26,23 +36,30 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  });
  await page.goto('/#/?method=oneil');
  await expect(page.locator('.candidate-feed-card')).toHaveCount(1);
- const check=(condition,message)=>expect(condition,message).toBe(true);
+ // Soft geometry checks still fail the test, while retaining later themes and
+ // selected/expanded states for diagnosis of the same failing viewport.
+ const check=(condition,message)=>expect.soft(condition,message).toBe(true);
+ const retain=async(name,measurements,fullPage=false)=>{
+  await info.attach(`${name}-measurements`,{body:JSON.stringify(measurements),contentType:'application/json'});
+  const path=info.outputPath(`${name}.png`);
+  await page.screenshot({path,fullPage});
+  await info.attach(name,{path,contentType:'image/png'});
+ };
  let feed;
  for(const theme of ['dark','light']){
   if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
   await page.evaluate(()=>window.scrollTo(0,0));
   // Measure first-viewport evidence before any scroll or selection.
   const measurements=await page.evaluate(researchFeedMetrics);
+  await retain(`synthetic-feed-${width}x${height}-${theme}`,measurements);
   checkResearchFeedMetrics(measurements,check,`synthetic-feed-${width}x${height}-${theme}`);
   feed=measurements.feed;
   for(const metric of feed.metrics){
    expect(metric.actual.text).toBe('30%');expect(metric.state).toBe('pass');expect(metric.role.text).toBe('必須');
   }
-  await info.attach(`synthetic-feed-evidence-${theme}`,{body:JSON.stringify(measurements),contentType:'application/json'});
-  await page.screenshot({path:info.outputPath(`synthetic-feed-${width}x${height}-${theme}.png`)});
  }
  await page.getByRole('button',{name:'ダークモードに切り替え'}).click();
- await page.locator('.candidate-feed-card .candidate-row').click();
+ await page.getByRole('button',{name:'TEST の財務・日次根拠を見る',exact:true}).click();
  const summary=page.getByRole('region',{name:'財務の確認状況'});
  await expect(summary.getByRole('button',{name:/^EPS前年比 30%・✓ 通過/})).toBeVisible();
  const plot=page.locator('.research-detail [data-chart-symbol="TEST"]');
@@ -52,8 +69,12 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  // annual EPS. The former 64/112px chip-summary cap and whole-summary first
  // viewport requirement no longer describe the requested product.
  const selected=await page.evaluate(researchFeedMetrics);
+ await retain(`synthetic-financial-initial-${width}x${height}`,{...selected,summary:summaryBox,plot:plotBox});
  checkResearchFeedMetrics(selected,check,`synthetic-detail-${width}x${height}`,{surface:'detail'});
  checkFeedDetailConsistency(feed,selected.detail,check,`synthetic-detail-${width}x${height}`);
+ const context={symbol:row.symbol,date,generation:'synthetic-finance-g1',method:'oneil',now:selected.evaluatedAt};
+ const canonical=financialEvidencePresentation({...context,history:row.financial_history,evidence:buildFinancialEvidencePresentation(row,context)});
+ checkDetailSourceEvidence(selected.detail,{symbol:row.symbol,rows:canonical.rows},check,`synthetic-detail-${width}x${height}`);
  expect(plotBox.height).toBeGreaterThanOrEqual(width===360?320:400);
  expect(summaryBox.y+summaryBox.height).toBeLessThan(plotBox.y);
  const targets=await summary.getByRole('button').evaluateAll(buttons=>buttons.map(button=>{
@@ -61,7 +82,6 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
   return {label:button.getAttribute('aria-label'),width:rect.width,height:rect.height,minHeight:style.minHeight,display:style.display};
  }));
  await info.attach('synthetic-financial-targets',{body:JSON.stringify(targets),contentType:'application/json'});
- await page.screenshot({path:info.outputPath(`synthetic-financial-initial-${width}x${height}.png`)});
  for(const target of await summary.getByRole('button').all()){
   const box=await target.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.width).toBeGreaterThanOrEqual(44);
  }
@@ -69,8 +89,9 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  await info.attach('synthetic-inline-geometry',{body:JSON.stringify({width,height,summary:summaryBox,plot:plotBox,visiblePlotPixels:Math.max(0,Math.min(height,plotBox.y+plotBox.height)-Math.max(0,plotBox.y))}),contentType:'application/json'});
  for(const theme of ['dark','light']){
   if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
-  await page.screenshot({path:info.outputPath(`synthetic-financial-${width}x${height}-${theme}.png`)});
-  checkResearchFeedMetrics(await page.evaluate(researchFeedMetrics),check,`synthetic-financial-${width}x${height}-${theme}`,{surface:'detail'});
+  const measurements=await page.evaluate(researchFeedMetrics);
+  await retain(`synthetic-financial-${width}x${height}-${theme}`,measurements);
+  checkResearchFeedMetrics(measurements,check,`synthetic-financial-${width}x${height}-${theme}`,{surface:'detail'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await summary.getByRole('button',{name:/^EPS前年比/}).click();
   const current=page.locator('#financial-evidence-eps_growth_yy');
@@ -87,8 +108,8 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  const expanded=page.getByRole('dialog',{name:/TEST/});
  await expect(expanded.locator('[data-chart-symbol="TEST"]')).toBeVisible();
  const geometry=await expanded.evaluate(expandedChartGeometry);
- checkExpandedChartGeometry(geometry,(condition,message)=>expect(condition,message).toBe(true),`synthetic-${width}x${height}`);
- await page.screenshot({path:info.outputPath(`synthetic-expanded-${width}x${height}.png`)});
+ await retain(`synthetic-expanded-${width}x${height}`,geometry);
+ checkExpandedChartGeometry(geometry,check,`synthetic-${width}x${height}`);
  await page.getByRole('button',{name:'チャートを閉じる'}).click();
  await page.clock.setFixedTime(new Date(now+8*86400000));
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
@@ -101,8 +122,9 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  for(const theme of ['dark','light']){
   if(await page.locator('.leader-shell').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:theme==='light'?'ライトモードに切り替え':'ダークモードに切り替え'}).click();
   await page.evaluate(()=>window.scrollTo(0,0));
-  checkResearchFeedMetrics(await page.evaluate(researchFeedMetrics),check,`synthetic-expired-feed-${width}x${height}-${theme}`);
-  await page.screenshot({path:info.outputPath(`synthetic-expired-feed-${width}x${height}-${theme}.png`)});
+  const measurements=await page.evaluate(researchFeedMetrics);
+  await retain(`synthetic-expired-feed-${width}x${height}-${theme}`,measurements);
+  checkResearchFeedMetrics(measurements,check,`synthetic-expired-feed-${width}x${height}-${theme}`);
  }
  expect(errors).toEqual([]);
 });
