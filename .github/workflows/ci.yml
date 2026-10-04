@@ -17,6 +17,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://ci:ci@localhost/ci_unused
+    services:
+      financial-evidence-postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ci_unused
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci_unused"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
 
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +53,51 @@ jobs:
         env:
           LITELLM_LOCAL_MODEL_COST_MAP: 'true'
         run: python -m pytest tests/unit/test_authoritative_price_history.py tests/unit/test_benchmark_cache_service.py tests/unit/infra/test_stock_data_provider.py tests/unit/scanners/test_data_prep_cached_only.py tests/unit/test_market_regime_scan_wiring.py tests/unit/test_price_history_integrity.py tests/unit/test_cache_refresh_unification.py tests/unit/test_price_cache_warmup_store.py tests/unit/test_yahoo_batch_ingestion.py tests/unit/test_rate_budget_policy.py -q
+
+      - name: Financial-source evidence regression
+        working-directory: backend
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: >-
+          python -m pytest
+          tests/unit/test_financial_source_evidence.py
+          tests/unit/test_financial_adapter_boundaries.py
+          tests/unit/test_financial_evidence_cache.py
+          tests/unit/test_financial_evidence_export_roundtrip.py
+          tests/unit/test_financial_source_producers.py
+          tests/unit/test_financial_source_transport_capture.py
+          tests/unit/test_financial_source_yahoo_contract.py
+          tests/unit/test_provider_snapshot_financial_evidence.py
+          tests/unit/test_eps_selected_source_context.py
+          tests/unit/test_growth_selected_source_context.py
+          tests/unit/test_feature_run_bundle.py
+          tests/unit/test_provider_snapshot_service.py
+          tests/unit/test_fundamentals_cache_service_metadata_backfill.py
+          tests/unit/test_fundamentals_cache_service_stale_fallback.py
+          tests/unit/test_fundamentals_cache_service_preserve_missing.py
+          tests/unit/test_fundamentals_completeness_integration.py
+          tests/unit/test_fundamentals_provider_plan_executor.py
+          tests/unit/test_hybrid_fundamentals_service.py
+          tests/unit/test_hybrid_fundamentals_service_policy.py
+          tests/unit/test_yfinance_get_fundamentals_classification.py
+          tests/unit/test_market_cache_policy.py::test_cache_services_delegate_market_scoped_key_construction_to_policy
+          tests/unit/test_market_cache_policy.py::test_fundamentals_bulk_get_reads_market_scoped_keys
+          tests/unit/test_market_cache_policy.py::test_fundamentals_bulk_db_fallback_warms_market_scoped_keys
+          tests/unit/test_market_cache_policy.py::test_fundamentals_cache_invalidate_uses_market_scoped_key
+          tests/unit/test_growth_cadence_service.py
+          tests/unit/test_eps_rating_calendar_years.py
+          -q
+
+      - name: Financial evidence PostgreSQL migration and concurrency
+        working-directory: backend
+        env:
+          STOCKSCANNER_TEST_ALLOW_POSTGRES: '1'
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: >-
+          python -m pytest
+          tests/unit/test_financial_evidence_cache.py::test_postgres_migration_adds_nullable_jsonb_without_rewriting_values
+          tests/unit/test_financial_evidence_cache.py::test_postgres_advisory_lock_serializes_concurrent_source_pairs
+          -q
 
       - name: "Gate 0: Theme identity invariants"
         run: make gate-identity

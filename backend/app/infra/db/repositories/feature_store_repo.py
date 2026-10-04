@@ -744,6 +744,7 @@ def _map_feature_to_scan_result(
         "field_availability": joined.get("field_availability"),
         "growth_reporting_cadence": joined.get("growth_reporting_cadence"),
         "growth_metric_basis": joined.get("growth_metric_basis"),
+        "financial_source_evidence": d.get("financial_source_evidence"),
         "data_status": d.get("data_status"),
         "is_scannable": d.get("is_scannable"),
         "scan_mode": d.get("scan_mode"),

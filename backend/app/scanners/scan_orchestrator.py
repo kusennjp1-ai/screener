@@ -6,6 +6,7 @@ fetched once and shared across all screeners. Combines results and
 calculates composite scores.
 """
 import logging
+from copy import deepcopy
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1142,6 +1143,14 @@ class ScanOrchestrator:
                 result["sales_growth_yy"] = qg["sales_growth_yy"]
 
         if stock_data.fundamentals:
+            # Preserve the acquisition evidence with this scan generation.
+            # This is a shadow record: do not infer lineage for rounded or
+            # independently calculated scanner values from equal field names.
+            # Current-use consumers must validate the value/evidence binding.
+            if isinstance(stock_data.fundamentals.get("financial_source_evidence"), dict):
+                result["financial_source_evidence"] = deepcopy(
+                    stock_data.fundamentals["financial_source_evidence"]
+                )
             if stock_data.fundamentals.get("market_cap") is not None:
                 result["market_cap"] = stock_data.fundamentals["market_cap"]
             if stock_data.fundamentals.get("market_cap_usd") is not None:

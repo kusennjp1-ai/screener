@@ -15,6 +15,7 @@ from app.domain.providers.data_plan import (
     ProviderDataPlan,
     provider_data_plan_registry,
 )
+from app.services.financial_payload_boundary import overlay_financial_payload
 from app.services.security_master_service import SecurityIdentity, security_master_resolver
 
 from .fundamentals_provider_adapters import (
@@ -198,6 +199,8 @@ class FundamentalsProviderPlanExecutor:
                     merged,
                     result.payload,
                     missing_only=result.merge_missing_only,
+                    symbol=context.canonical_symbol,
+                    market=context.market,
                 )
                 if result.source_label:
                     sources.append(result.source_label)
@@ -316,13 +319,12 @@ class FundamentalsProviderPlanExecutor:
         payload: dict[str, Any],
         *,
         missing_only: bool,
+        symbol: str | None = None,
+        market: str | None = None,
     ) -> None:
-        for key, value in payload.items():
-            if value is None:
-                continue
-            if missing_only and key in target:
-                continue
-            target[key] = value
+        target.update(overlay_financial_payload(
+            target, payload, missing_only=missing_only, symbol=symbol, market=market,
+        ))
 
     @staticmethod
     def _finalize_payload(

@@ -10,7 +10,7 @@ import logging
 import math
 import shutil
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, Literal, Optional
 
@@ -27,6 +27,8 @@ from ..models.provider_snapshot import (
 )
 from ..models.stock_universe import UNIVERSE_STATUS_ACTIVE, StockUniverse
 from .bulk_data_fetcher import BulkDataFetcher
+from .financial_source_capture import acquire_yahoo_value
+from .financial_source_evidence import SCHEMA as FINANCIAL_EVIDENCE_SCHEMA, merge_financial_payloads, validate_envelope
 from .finviz_parser import FinvizParser
 from .github_release_sync_service import GitHubReleaseSyncService
 from .security_master_service import security_master_resolver
@@ -71,6 +73,14 @@ def _finite_or_none(value: Any) -> Any:
     if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
+
+
+def _normalized_payload_sha256(payload: Dict[str, Any]) -> str:
+    """Bind exported enrichment separately from the historical snapshot hash."""
+    # Mirror the existing bundle serializer for legacy scalar payloads. Evidence
+    # has its own strict finite-value validator; adding a digest must not change
+    # the legacy transport's numerical handling.
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
 
 
 class ProviderSnapshotService:
@@ -218,7 +228,17 @@ class ProviderSnapshotService:
         screener_cls = self._load_screener_class(category)
         screener = screener_cls()
         screener.set_filter(filters_dict={"Exchange": exchange})
+        started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         df = screener.screener_view(verbose=1 if show_progress else 0)
+        if df is not None and not df.empty:
+            # screener_view paginates internally. These are batch windows, not
+            # per-row observations, and may never qualify financial freshness.
+            df.attrs["financial_acquisition_window"] = {
+                "source": "finviz", "producer": f"finvizfinance.screener.{category}/batch-window-v1",
+                "started_at": started_at,
+                "completed_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                "observation_status": "unverified_per_page_acquisition",
+            }
         return df if df is not None else pd.DataFrame()
 
     def _normalize_row(self, raw_row: Dict[str, Any], exchange: str) -> Dict[str, Any]:
@@ -283,7 +303,13 @@ class ProviderSnapshotService:
                         )
                         merged["exchange"] = exchange
                         merged["raw_payload"][category] = raw_row
-                        merged["normalized_payload"].update(self._normalize_row(raw_row, exchange))
+                        incoming = self._normalize_row(raw_row, exchange)
+                        merged["normalized_payload"] = merge_financial_payloads(
+                            incoming, merged["normalized_payload"], symbol=symbol, market="US",
+                        )
+                        window = df.attrs.get("financial_acquisition_window")
+                        if window:
+                            merged["normalized_payload"].setdefault("financial_acquisition_windows", {})[category] = dict(window)
 
                 completed_fetches += 1
                 if progress_callback is not None:
@@ -486,6 +512,11 @@ class ProviderSnapshotService:
             # local_code is intentionally left to derive from the symbol: it feeds
             # canonicalization, and the symbol stem is the authoritative source.
             payload = row.get("normalized_payload", {})
+            supplied_digest = row.get("export_payload_sha256")
+            if supplied_digest is not None and supplied_digest != _normalized_payload_sha256(payload):
+                raise ValueError(f"Exported normalized payload digest mismatch for {row.get('symbol')}")
+            if payload.get("financial_source_evidence") is not None:
+                validate_envelope(payload["financial_source_evidence"])
             identity = security_master_resolver.resolve_identity(
                 symbol=str(row.get("symbol") or ""),
                 market=row.get("market") or payload.get("market") or bundle_market,
@@ -521,7 +552,7 @@ class ProviderSnapshotService:
                 normalized_payload_json=json.dumps(
                     normalized_payload, sort_keys=True, default=str
                 ),
-                raw_payload_json=None,
+                raw_payload_json=json.dumps(row["raw_payload"], sort_keys=True, default=str) if row.get("raw_payload") is not None else None,
             )
             deduped[canonical_symbol] = (snapshot_row, normalized_payload)
         return deduped
@@ -697,7 +728,6 @@ class ProviderSnapshotService:
         import yfinance as yf
 
         yahoo_payload: Dict[str, Any] = {}
-        now_iso = datetime.utcnow().isoformat()
 
         try:
             self.rate_limiter.wait("yfinance", min_interval_s=1.0 / settings.yfinance_rate_limit)
@@ -707,24 +737,29 @@ class ProviderSnapshotService:
             return yahoo_payload
 
         try:
-            quarterly_growth = self.bulk_fetcher._extract_quarterly_growth(ticker)
-            yahoo_payload.update(
+            quarterly_growth = self.bulk_fetcher._extract_quarterly_growth(ticker, symbol=symbol)
+            yahoo_payload = merge_financial_payloads(
                 {
                     key: value
                     for key, value in quarterly_growth.items()
                     if key != "_raw_data" and self._has_value(value)
-                }
+                }, yahoo_payload, symbol=symbol,
             )
-            eps_rating = self.bulk_fetcher._extract_eps_rating_data(ticker)
-            yahoo_payload.update(
-                {key: value for key, value in eps_rating.items() if self._has_value(value)}
+            eps_rating = self.bulk_fetcher._extract_eps_rating_data(ticker, symbol=symbol)
+            yahoo_payload = merge_financial_payloads(
+                {key: value for key, value in eps_rating.items() if self._has_value(value)}, yahoo_payload, symbol=symbol,
             )
-            yahoo_payload["yahoo_statements_refreshed_at"] = now_iso
+            observed = [record["observed_at"] for record in yahoo_payload.get("financial_source_evidence", {}).get("fields", {}).values()
+                        if record.get("provenance_kind") == "observed" and record.get("observed_at")]
+            if observed:
+                # Compatibility summary only; individual records own their clocks.
+                yahoo_payload["yahoo_statements_refreshed_at"] = min(observed)
         except Exception as exc:
             logger.warning("Failed Yahoo statement hydration for %s: %s", symbol, exc)
 
         try:
-            info = ticker.info or {}
+            info, _ = acquire_yahoo_value(ticker, "info", symbol=symbol)
+            info = info or {}
             first_trade_date_ms = info.get("firstTradeDateMilliseconds")
             if first_trade_date_ms:
                 yahoo_payload["first_trade_date_ms"] = first_trade_date_ms
@@ -756,7 +791,9 @@ class ProviderSnapshotService:
             if info_shares is not None:
                 yahoo_payload["shares_outstanding"] = info_shares
 
-            yahoo_payload["yahoo_profile_refreshed_at"] = now_iso
+            if info:
+                # Legacy operational metadata, never a financial observation.
+                yahoo_payload["yahoo_profile_fetch_completed_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         except Exception as exc:
             logger.warning("Failed Yahoo profile hydration for %s: %s", symbol, exc)
 
@@ -1222,12 +1259,15 @@ class ProviderSnapshotService:
                     "symbol": row.symbol,
                     "exchange": row.exchange,
                     "row_hash": row.row_hash,
+                    "export_payload_sha256": _normalized_payload_sha256(enriched_payload),
                     "normalized_payload": enriched_payload,
+                    "raw_payload": json.loads(row.raw_payload_json) if row.raw_payload_json else None,
                 }
             )
 
         bundle_payload = {
             "schema_version": self.WEEKLY_REFERENCE_BUNDLE_SCHEMA_VERSION,
+            "financial_evidence_schema": FINANCIAL_EVIDENCE_SCHEMA,
             "market": bundle_market,
             "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
             "as_of_date": (
@@ -1259,6 +1299,7 @@ class ProviderSnapshotService:
         sha256 = hashlib.sha256(output_path.read_bytes()).hexdigest()
         manifest = {
             "schema_version": self.WEEKLY_REFERENCE_MANIFEST_SCHEMA_VERSION,
+            "financial_evidence_schema": FINANCIAL_EVIDENCE_SCHEMA,
             "market": bundle_market,
             "generated_at": bundle_payload["generated_at"],
             "as_of_date": bundle_payload["as_of_date"],
@@ -1303,6 +1344,8 @@ class ProviderSnapshotService:
                 "Unsupported weekly reference bundle schema version: "
                 f"{payload.get('schema_version')}"
             )
+        if payload.get("financial_evidence_schema") not in (None, FINANCIAL_EVIDENCE_SCHEMA):
+            raise ValueError("Unsupported weekly reference financial evidence schema")
 
         snapshot = payload["snapshot"]
         snapshot_key = snapshot["snapshot_key"]

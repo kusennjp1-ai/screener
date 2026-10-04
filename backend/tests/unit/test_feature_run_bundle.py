@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from copy import deepcopy
+import gzip
+import json
+
+import pytest
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -83,3 +88,108 @@ def test_build_without_published_run_reports_cleanly(tmp_path: Path, monkeypatch
     empty = _session_factory()
     monkeypatch.setattr(build_mod, "SessionLocal", empty)
     assert build_mod.build_bundle("US", tmp_path)["status"] == "no_published_run"
+
+
+@pytest.mark.parametrize("change", ["source_evidence", "value", "symbol", "metadata"])
+def test_same_date_and_count_with_changed_content_preserves_prior_generation(
+    tmp_path: Path, monkeypatch, change,
+):
+    source = _session_factory()
+    _seed_published_run(source)
+    monkeypatch.setattr(build_mod, "SessionLocal", source)
+    built = build_mod.build_bundle("US", tmp_path)
+    path = Path(built["bundle_path"])
+    original = json.loads(gzip.decompress(path.read_bytes()))
+    target = _session_factory()
+    monkeypatch.setattr(import_mod, "SessionLocal", target)
+    first = import_mod.import_bundle(path)
+
+    revised = deepcopy(original)
+    if change == "source_evidence":
+        revised["rows"][0]["details_json"]["financial_source_evidence"] = {
+            "schema": "financial-source-evidence-v1", "symbol": "FTNT", "market": "US",
+            "fields": {},
+            "legacy_statement_context": {"recent_quarter_date": "2026-03-31"},
+        }
+    elif change == "value":
+        revised["rows"][0]["composite_score"] = 84.0
+    elif change == "symbol":
+        revised["rows"][0]["symbol"] = "SYNTHETIC"
+    else:
+        revised["run"]["config_json"] = {"source_contract": "synthetic-v1"}
+    path.write_bytes(gzip.compress(json.dumps(revised).encode()))
+    second = import_mod.import_bundle(path)
+    assert second["status"] == "imported"
+    assert second["run_id"] != first["run_id"]
+    with target() as db:
+        old_rows = db.query(StockFeatureDaily).filter_by(run_id=first["run_id"]).order_by(StockFeatureDaily.symbol).all()
+        assert [import_mod._stored_row_payload(row) for row in old_rows] == original["rows"]
+        pointer = db.query(FeatureRunPointer).filter_by(key="latest_published_market:US").one()
+        assert pointer.run_id == second["run_id"]
+        current = db.query(StockFeatureDaily).filter_by(run_id=second["run_id"]).order_by(StockFeatureDaily.symbol).all()
+        assert [import_mod._stored_row_payload(row) for row in current] == sorted(revised["rows"], key=lambda row: row["symbol"])
+    assert import_mod.import_bundle(path)["status"] == "up_to_date"
+
+
+def test_export_clock_and_row_order_do_not_create_a_new_observation(tmp_path: Path, monkeypatch):
+    source = _session_factory()
+    _seed_published_run(source)
+    monkeypatch.setattr(build_mod, "SessionLocal", source)
+    path = Path(build_mod.build_bundle("US", tmp_path)["bundle_path"])
+    target = _session_factory()
+    monkeypatch.setattr(import_mod, "SessionLocal", target)
+    first = import_mod.import_bundle(path)
+    payload = json.loads(gzip.decompress(path.read_bytes()))
+    payload["generated_at"] = "2030-01-01T00:00:00Z"
+    payload["run"]["published_at"] = "2030-01-01T00:00:00Z"
+    payload["rows"].reverse()
+    path.write_bytes(gzip.compress(json.dumps(payload).encode()))
+    again = import_mod.import_bundle(path)
+    assert again["status"] == "up_to_date"
+    assert again["run_id"] == first["run_id"]
+
+
+def test_failed_replacement_keeps_old_rows_and_pointer(tmp_path: Path, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+
+    source = _session_factory()
+    _seed_published_run(source)
+    monkeypatch.setattr(build_mod, "SessionLocal", source)
+    path = Path(build_mod.build_bundle("US", tmp_path)["bundle_path"])
+    target = _session_factory()
+    monkeypatch.setattr(import_mod, "SessionLocal", target)
+    first = import_mod.import_bundle(path)
+    payload = json.loads(gzip.decompress(path.read_bytes()))
+    payload["rows"] = [payload["rows"][0], deepcopy(payload["rows"][0])]
+    path.write_bytes(gzip.compress(json.dumps(payload).encode()))
+    with pytest.raises(IntegrityError):
+        import_mod.import_bundle(path)
+    with target() as db:
+        pointer = db.query(FeatureRunPointer).filter_by(key="latest_published_market:US").one()
+        assert pointer.run_id == first["run_id"]
+        assert db.query(FeatureRun).count() == 1
+        assert db.query(StockFeatureDaily).count() == 2
+
+
+@pytest.mark.parametrize("location", ["details", "config", "stats"])
+def test_json_boolean_and_number_are_different_generation_content(tmp_path, monkeypatch, location):
+    source = _session_factory()
+    _seed_published_run(source)
+    monkeypatch.setattr(build_mod, "SessionLocal", source)
+    path = Path(build_mod.build_bundle("US", tmp_path)["bundle_path"])
+    payload = json.loads(gzip.decompress(path.read_bytes()))
+    if location == "details":
+        container = payload["rows"][0]["details_json"]
+    else:
+        container = payload["run"][location + "_json"] = {}
+    container["financial_source_evidence"] = {"fields": {"eps_growth_yy": {"value": False}}}
+    path.write_bytes(gzip.compress(json.dumps(payload).encode()))
+    target = _session_factory()
+    monkeypatch.setattr(import_mod, "SessionLocal", target)
+    first = import_mod.import_bundle(path)
+    container["financial_source_evidence"]["fields"]["eps_growth_yy"]["value"] = 0
+    path.write_bytes(gzip.compress(json.dumps(payload).encode()))
+    second = import_mod.import_bundle(path)
+    assert second["status"] == "imported"
+    assert second["run_id"] != first["run_id"]
+    assert import_mod.import_bundle(path)["status"] == "up_to_date"

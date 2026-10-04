@@ -14,6 +14,7 @@ from app.domain.providers.data_plan import ProviderDataPlan
 
 from .finviz_validator import FinvizValidator
 from . import provider_routing_policy as routing_policy
+from .financial_payload_boundary import reconcile_financial_selection
 from .provider_adapters.fundamentals_plan_executor import FundamentalsProviderPlanExecutor
 
 if TYPE_CHECKING:
@@ -207,7 +208,11 @@ class DataSourceService:
             "eps_years_available",
         )
         eps_data = {key: yf_data.get(key) for key in keys if yf_data.get(key) is not None}
-        return eps_data or None
+        if not eps_data:
+            return None
+        return reconcile_financial_selection(
+            eps_data, [yf_data], {key: 0 for key in eps_data}, symbol=symbol,
+        )
 
     def _get_eps_rating_data(self, symbol: str) -> Optional[Dict]:
         return self.get_eps_rating_data(symbol)

@@ -14,6 +14,8 @@ import logging
 from threading import RLock
 
 from .growth_cadence_service import compute_cadence_aware_growth
+from .financial_source_capture import acquire_yahoo_value, attach_evidence, info_evidence, statement_evidence
+from .financial_payload_boundary import overlay_financial_payload
 
 if TYPE_CHECKING:
     from app.services.eps_rating_service import EPSRatingService
@@ -215,7 +217,7 @@ class YFinanceService:
             self._wait_for_yfinance_rate_limit()
 
             ticker = yf.Ticker(symbol)
-            info = ticker.info
+            info, info_contexts = acquire_yahoo_value(ticker, "info", symbol=symbol)
 
             result = {
                 "symbol": symbol,
@@ -245,9 +247,12 @@ class YFinanceService:
                 "next_earnings_date": self._next_earnings_iso(info),
             }
 
+            # Shadow capture preserves this route's existing fraction units.
+            attach_evidence(result, info_evidence(result, info_contexts, percent_points=False), symbol=symbol)
             # Calculate EPS Rating components from income statements
             eps_data = self._extract_eps_rating_data(ticker)
-            result.update(eps_data)
+            result = overlay_financial_payload(result, eps_data, skip_none=False, symbol=symbol)
+            result["symbol"] = symbol  # Keep the public caller spelling from the legacy result.
 
             return result
 
@@ -304,16 +309,20 @@ class YFinanceService:
 
         try:
             # Get income statements
-            annual_income = ticker.income_stmt
-            quarterly_income = ticker.quarterly_income_stmt
+            annual_income, annual_acquisition = acquire_yahoo_value(ticker, "income_stmt")
+            quarterly_income, quarterly_acquisition = acquire_yahoo_value(ticker, "quarterly_income_stmt")
 
             # Calculate EPS rating data using the service
             eps_data = self._eps_rating_service.calculate_eps_rating_data(
                 annual_income,
-                quarterly_income
+                quarterly_income,
+                include_source_context=True,
             )
-
+            source_contexts = eps_data.pop("_financial_source_context", {})
             result.update(eps_data)
+            identity_symbol = getattr(ticker, "ticker", None)
+            if identity_symbol:
+                attach_evidence(result, statement_evidence(result, source_contexts, {**annual_acquisition, **quarterly_acquisition}), symbol=identity_symbol)
             logger.debug(f"Extracted EPS rating data: CAGR={result['eps_5yr_cagr']}, Q1={result['eps_q1_yoy']}, Q2={result['eps_q2_yoy']}")
 
         except Exception as e:
@@ -416,8 +425,10 @@ class YFinanceService:
             self._wait_for_yfinance_rate_limit()
 
             ticker = yf.Ticker(symbol)
-            quarterly_income = ticker.quarterly_income_stmt
-            return compute_cadence_aware_growth(quarterly_income, market=market)
+            quarterly_income, acquisitions = acquire_yahoo_value(ticker, "quarterly_income_stmt", symbol=symbol, market=market)
+            result = compute_cadence_aware_growth(quarterly_income, market=market, include_source_context=True)
+            source_contexts = result.pop("_financial_source_context", {})
+            return attach_evidence(result, statement_evidence(result, source_contexts, acquisitions), symbol=symbol, market=market)
 
         except Exception as e:
             logger.warning(f"Error fetching quarterly growth for {symbol}: {e}")

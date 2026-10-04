@@ -1,8 +1,20 @@
 """Stock data schemas"""
-from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Dict, List, Literal, Optional
 
 from .scanning import ScanResultItem, ScreenerExplanationResponse
+
+
+class FinancialSourceEvidence(BaseModel):
+    """Versioned shadow evidence; extra audit/producer metadata survives transport."""
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    schema_version: Literal["financial-source-evidence-v1"] = Field(alias="schema")
+    symbol: Optional[str] = None
+    market: Optional[str] = None
+    fields: Dict[str, Dict[str, Any]]
+    retained_candidates: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
+    legacy_statement_context: Optional[Dict[str, Any]] = None
 
 
 class StockInfo(BaseModel):
@@ -33,6 +45,7 @@ class StockFundamentals(BaseModel):
     # {field: provider} provenance map. NULL when not yet computed.
     field_completeness_score: Optional[int] = None
     field_provenance: Optional[Dict[str, str]] = None
+    financial_source_evidence: Optional[FinancialSourceEvidence] = None
     # T6 graceful-degrade metadata for ownership/sentiment fields.
     # Shape: {field_name: {status, reason_code, support_state}}.
     field_availability: Optional[Dict[str, Dict[str, Any]]] = None
