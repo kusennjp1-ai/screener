@@ -1,3 +1,5 @@
+import { projectFinancialRow } from '../financialCurrent';
+import { useFinancialClock } from '../useFinancialClock';
 import { modelMarket } from '../portfolioPlan';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -54,19 +56,22 @@ const formatNumber = (value, digits = 0) => {
 
 function StaticHomePage() {
   const manifestQuery = useStaticManifest();
+  const generation = manifestQuery.data?.research_generation || manifestQuery.data?.generated_at;
   const { selectedMarket } = useStaticMarket();
   const marketEntry = useMemo(
     () => resolveStaticMarketEntry(manifestQuery.data, selectedMarket),
     [manifestQuery.data, selectedMarket],
   );
   const homeQuery = useQuery({
-    queryKey: ['staticHome', marketEntry.pages?.home?.path],
+    queryKey: ['staticHome', marketEntry.pages?.home?.path, generation],
+    placeholderData: () => undefined,
     queryFn: () => fetchStaticJson(marketEntry.pages.home.path),
     enabled: Boolean(marketEntry.pages?.home?.path),
     staleTime: Infinity,
   });
   const scanBundleQuery = useQuery({
-    queryKey: ['staticHomeScanRows', marketEntry.pages?.scan?.path],
+    queryKey: ['staticHomeScanRows', marketEntry.pages?.scan?.path, generation],
+    placeholderData: () => undefined,
     queryFn: async () => {
       const scanManifest = await fetchStaticJson(marketEntry.pages.scan.path);
       const rowsBySymbol = new Map(
@@ -82,6 +87,7 @@ function StaticHomePage() {
       });
       return {
         rows: Array.from(rowsBySymbol.values()),
+        as_of_date: scanManifest.as_of_date,
         defaultFilters: scanManifest.default_filters || {},
         presetScreens: scanManifest.preset_screens || [],
       };
@@ -139,21 +145,25 @@ function StaticHomePage() {
     }),
     [marketCapMin, scanDefaultFilters]
   );
-  const scanRows = scanBundleQuery.data?.rows ?? EMPTY_RESULTS;
+  const rawScanRows = scanBundleQuery.data?.rows ?? EMPTY_RESULTS;
+  const now = useFinancialClock(rawScanRows);
+  const scanRows = useMemo(() => rawScanRows.map(row => projectFinancialRow(row, { now, asOfDate: scanBundleQuery.data?.as_of_date, market: selectedMarket })), [rawScanRows, now, scanBundleQuery.data?.as_of_date, selectedMarket]);
+  const financialUnknownCount = scanRows.filter(row => row.financial_current_state?.dependent_reason).length;
+  const financialEmptyMessage = financialUnknownCount ? `財務・Code33の根拠が未確認の銘柄 ${financialUnknownCount}件。必要な条件を確認できず、現在の候補には数えていません。` : '現在の条件に一致する銘柄はありません。';
   const topResults = useMemo(() => {
     return sortStaticScanRows(
-      filterStaticScanRows(scanRows, topCandidateFilters),
+      filterStaticScanRows(scanRows, topCandidateFilters, { now }),
       'composite_score',
-      'desc'
+      'desc', { now }
     ).slice(0, DEFAULT_TOP_RESULTS);
-  }, [scanRows, topCandidateFilters]);
+  }, [scanRows, topCandidateFilters, now]);
   const backtestAlignedRows = useMemo(() => {
     return sortStaticScanRows(
-      filterStaticScanRows(scanRows, backtestAlignedFilters),
+      filterStaticScanRows(scanRows, backtestAlignedFilters, { now }),
       'rs_rating',
-      'desc'
+      'desc', { now }
     ).slice(0, DEFAULT_TOP_RESULTS);
-  }, [scanRows, backtestAlignedFilters]);
+  }, [scanRows, backtestAlignedFilters, now]);
   const leadingGroupScreen = useMemo(
     () => scanBundleQuery.data?.presetScreens?.find((screen) => screen.id === LEADERS_SCREEN_ID) ?? null,
     [scanBundleQuery.data?.presetScreens]
@@ -163,12 +173,12 @@ function StaticHomePage() {
       return EMPTY_RESULTS;
     }
     return sortStaticScanRows(
-      filterStaticScanRows(scanRows, buildFiltersFromPreset(leadingGroupScreen)),
+      filterStaticScanRows(scanRows, buildFiltersFromPreset(leadingGroupScreen), { now }),
       leadingGroupScreen.sort_by,
       leadingGroupScreen.sort_order,
-      { prioritizeCompositeScanMode: false }
+      { prioritizeCompositeScanMode: false, now }
     ).slice(0, DEFAULT_TOP_RESULTS);
-  }, [leadingGroupScreen, scanRows]);
+  }, [leadingGroupScreen, scanRows, now]);
 
   const chartEntries = useMemo(() => chartIndexQuery.data?.symbols || [], [chartIndexQuery.data]);
   const chartEnabledSymbols = useMemo(() => new Set(chartEntries.map((e) => e.symbol)), [chartEntries]);
@@ -367,7 +377,7 @@ function StaticHomePage() {
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={topNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="現在の条件に一致する銘柄はありません。"
+        emptyMessage={financialEmptyMessage}
         showRating
         action={(
           <TextField
@@ -453,12 +463,13 @@ function StaticHomePage() {
       </Paper>
 
       <StaticChartViewerModal
+        generation={generation}
+        now={now}
         date={marketEntry.as_of_date}
         open={chartModalOpen}
         onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
         researchRows={scanRows}
-        generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at}
         chartIndex={chartIndexQuery.data}
         navigationSymbols={modalNavigationSymbols}
       />

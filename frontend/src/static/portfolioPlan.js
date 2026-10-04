@@ -1,3 +1,4 @@
+import { projectFinancialRow, financialNextExpiry } from './financialCurrent.js';
 import { canonicalPivot, sessionCurrent } from './researchPresentation.js';
 import { assessmentSummary as assess, finite, snapshotFreshness } from './researchEngine.js';
 import { entryReadiness } from './entryReadiness.js';
@@ -20,24 +21,26 @@ export function modelMarket(rows) {
   return { label: '新規購入を抑制', cap: 0 };
 }
 
-export function preparePortfolioRows(rows) {
+export function preparePortfolioRows(input, now = Date.now()) {
+  const rows = input.map(row => projectFinancialRow(row, { now }));
   const counts = new Map();
   rows.forEach(r => counts.set(r.symbol, (counts.get(r.symbol) || 0) + 1));
   const candidates = rows.filter(r => {
     if (r.corporate_action?.cash_acquisition || r.price_activity?.lowRange || !r.symbol || counts.get(r.symbol) !== 1 || r.market !== 'US' || r.currency !== 'USD') return false;
     const pivot = canonicalPivot(r).price;
-    return assess(r, 'minervini').qualified && assess(r, 'ibd').qualified &&
+    return assess(r, 'minervini', now).qualified && assess(r, 'ibd', now).qualified &&
       finite(r.adv_usd) && r.adv_usd >= 20000000 && finite(r.current_price) && r.current_price >= 10 &&
       finite(pivot) && pivot > 0 && r.current_price >= pivot * .97 && r.current_price <= pivot * 1.05 &&
       finite(r.se_pattern_confidence) && r.se_pattern_confidence >= 70 &&
       typeof r.gics_sector === 'string' && r.gics_sector.trim().length > 0;
   }).sort((a, b) => b.rs_rating - a.rs_rating || a.symbol.localeCompare(b.symbol));
-  const primary = rows.filter(r => r.market === 'US' && r.currency === 'USD' && r.current_price >= 10 && r.adv_usd >= 20000000 && assess(r,'minervini').qualified);
-  return {market:modelMarket(rows), candidates, primary:primary.length, strict:primary.filter(r=>assess(r,'ibd').qualified).length};
+  const primary = rows.filter(r => r.market === 'US' && r.currency === 'USD' && r.current_price >= 10 && r.adv_usd >= 20000000 && assess(r,'minervini',now).qualified);
+  return {evaluated_at:now,next_expiry_at:financialNextExpiry(rows,now),market:modelMarket(rows), candidates, primary:primary.length, strict:primary.filter(r=>assess(r,'ibd',now).qualified).length};
 }
 
-export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(), prepared = preparePortfolioRows(rows)) {
+export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(), prepared = preparePortfolioRows(rows, now)) {
   if (!finite(capital) || capital <= 0 || capital > 100000000) throw Error('Invalid model capital');
+  if (!prepared || prepared.evaluated_at > now || prepared.evaluated_at == null || (prepared.next_expiry_at !== null && now >= prepared.next_expiry_at)) prepared = preparePortfolioRows(rows, now);
   const market = prepared.market;
   // This account starts in cash and has no demonstrated trading results.
   // Use a disclosed pilot allocation; market strength alone cannot scale it up.
@@ -47,7 +50,7 @@ export function buildPortfolioPlan(rows, date, capital = 100000, now = Date.now(
   const blockers = [];
   if ((freshness.state !== 'recent' || freshness.days > 1) && !sessionCurrent(rows, date, now)) blockers.unshift('分析基準日を最新の取引日と照合してください');
   if (!market.cap) blockers.unshift(market.label);
-  const candidates = [...prepared.candidates];
+  const candidates = prepared.candidates.map(row=>projectFinancialRow(row,{now})).filter(row=>assess(row,'minervini',now).qualified && assess(row,'ibd',now).qualified);
   const readiness = candidates.map(row => entryReadiness(row,date,market,now));
   const readySymbols = new Set(readiness.filter(r=>r.ready).map(r=>r.symbol));
   if (!candidates.length) {

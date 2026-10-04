@@ -1,11 +1,17 @@
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
+import { validatePriceTraceDescriptor } from './priceTrace.js';
 export const RESEARCH_TRANSPORT_VERSION = 'research-table-v1';
 export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
+const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version'];
 
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
 export function researchListRow(row) {
   const out = { ...row };
+  // Runtime presentation is rebuilt from the validated publication descriptor.
+  delete out.priceTrace;
+  // Evidence envelopes and raw history belong to immutable on-demand detail.
+  delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
   if (row.institutional_evidence) {
     // Preserve the validator's dates/unit, not just a precomputed pass flag.
     out.institutional_evidence = pick(row.institutional_evidence, ['symbol', 'status', 'unit', 'publication_cutoff']);
@@ -42,7 +48,20 @@ const leaves = (value, path = [], result = []) => {
 // Column dictionaries remove repeated metadata without rounding decision
 // inputs. High-cardinality columns stay direct to avoid a second ID array.
 export function encodeResearchIndex(index, orders) {
+  const priceTraces = validatePriceTraceDescriptor(index.price_traces, index.as_of_date);
   const rows = index.rows.map(researchListRow);
+  // Expand only compact proof tuples into transport columns. Repeated source,
+  // cadence, periods and clocks then share dictionaries; exact values can copy
+  // the canonical scalar column. Decode restores the original proof contract.
+  let financialProofEncoding;
+  for (const row of rows) if (row.financial_current?.p && typeof row.financial_current.p === 'object' && !Array.isArray(row.financial_current.p)) {
+    const proof = row.financial_current;
+    const tupleLength = proof.v === 2 ? 8 : proof.v === 1 ? 6 : null;
+    if (tupleLength && Object.values(proof.p).every(tuple=>Array.isArray(tuple) && tuple.length===tupleLength)) {
+      row.financial_current={...proof,p:Object.fromEntries(Object.entries(proof.p).map(([field,tuple])=>[field,Object.fromEntries(tuple.map((value,index)=>[String(index),value]))]))};
+      financialProofEncoding='tuple-columns-v1';
+    } else row.financial_current={...proof,invalid_transport_proof:true};
+  }
   const paths = {};
   for (const [field, directory] of [['chart_path', 'verified-charts'], ['research_detail_path', 'research-details']]) {
     if (!rows.every(row => row[field] == null || (typeof row[field] === 'string' && /-[a-f0-9]{16}\.json$/.test(row[field]) && row[field] === `${directory}/${encodeURIComponent(row.symbol)}-${row[field].slice(-21, -5)}.json`))) continue;
@@ -84,10 +103,11 @@ export function encodeResearchIndex(index, orders) {
       if (length < size) { columns[column] = candidate; size = length; }
     }
   }
-  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders };
+  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, ...pick(index, evaluationFields), ...(priceTraces ? {price_traces:priceTraces} : {}), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
 }
 
 export function decodeResearchIndex(value) {
+  const priceTraces = validatePriceTraceDescriptor(value?.price_traces, value?.as_of_date);
   if (!value?.schema) return value;
   if (value.schema !== RESEARCH_TRANSPORT_VERSION || !Array.isArray(value.fields) || !Array.isArray(value.columns) || value.fields.length !== value.columns.length || !Number.isInteger(value.count) || value.count < 0) throw Error('Unsupported research data format');
   const rows = Array.from({ length: value.count }, () => ({}));
@@ -127,5 +147,15 @@ export function decodeResearchIndex(value) {
       row[field] = `${directory}/${encodeURIComponent(row.symbol)}-${row[field]}.json`;
     });
   }
-  return { as_of_date: value.as_of_date, rows, orders: value.orders };
+  if (value.financial_proof_encoding !== undefined && value.financial_proof_encoding !== 'tuple-columns-v1') throw Error('Unsupported financial proof encoding');
+  if (value.financial_proof_encoding) for (const row of rows) if (row.financial_current?.p) {
+    const length = row.financial_current.v === 2 ? 8 : row.financial_current.v === 1 ? 6 : null;
+    const keys = length ? Array.from({ length }, (_, index) => String(index)) : [];
+    for (const [field,tuple] of Object.entries(row.financial_current.p)) {
+      if (Array.isArray(tuple)) continue;
+      if (!length || !tuple || Object.keys(tuple).length!==length || keys.some(key=>!Object.hasOwn(tuple,key))) {row.financial_current.invalid_transport_proof=true;continue;}
+      row.financial_current.p[field]=keys.map(key=>tuple[key]);
+    }
+  }
+  return { as_of_date: value.as_of_date, ...pick(value, evaluationFields), ...(priceTraces ? {price_traces:priceTraces} : {}), rows, orders: value.orders };
 }

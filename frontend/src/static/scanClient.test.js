@@ -78,6 +78,68 @@ const rows = [
   },
 ];
 
+const now = Date.parse('2026-10-01T12:00:00Z');
+const observedAt = Date.parse('2026-09-30T12:00:00Z');
+const expiresAt = observedAt + 7 * 86400000;
+const provenGrowthRow = (symbol, value) => ({
+  symbol,
+  market: 'US',
+  as_of_date: '2026-10-01',
+  eps_growth_qq: value,
+  financial_current: {
+    v: 2, t: now, s: symbol, m: 'US', a: '2026-10-01', r: '0222222222222222',
+    p: { 0: [value, '0', 'Diluted EPS', ['2026-06-30', '2026-03-31'], observedAt, expiresAt, value > 0 ? 'g' : value < 0 ? 'd' : 'u', 'r'] },
+  },
+});
+
+describe('static scan decision projection', () => {
+  it('keeps valid zero and negative growth while excluding missing and unsupported raw values', () => {
+    const sourceRows = [provenGrowthRow('ZERO', 0), provenGrowthRow('NEGATIVE', -5), { symbol: 'MISSING' }, { symbol: 'RAW', eps_growth_qq: -2 }];
+    const filtered = filterStaticScanRows(sourceRows, { epsGrowth: { max: 0 } }, { now });
+
+    expect(filtered.map((row) => row.symbol)).toEqual(['ZERO', 'NEGATIVE']);
+    expect(filtered.map((row) => row.eps_growth_qq)).toEqual([0, -5]);
+    expect(filtered.every((row) => row.financial_current_state.evaluated_at === now)).toBe(true);
+    expect(sourceRows[3].eps_growth_qq).toBe(-2);
+  });
+
+  it('sorts projected signed growth numerically and keeps unknowns last in either direction', () => {
+    const sourceRows = [{ symbol: 'RAW', eps_growth_qq: 100 }, provenGrowthRow('ZERO', 0), provenGrowthRow('NEGATIVE', -5), { symbol: 'MISSING' }];
+    const ascending = sortStaticScanRows(sourceRows, 'eps_growth_qq', 'asc', { now });
+    const descending = sortStaticScanRows(sourceRows, 'eps_growth_qq', 'desc', { now });
+
+    expect(ascending.map((row) => row.symbol)).toEqual(['NEGATIVE', 'ZERO', 'MISSING', 'RAW']);
+    expect(descending.map((row) => row.symbol)).toEqual(['ZERO', 'NEGATIVE', 'MISSING', 'RAW']);
+    expect(descending.every((row) => row.financial_current_state.evaluated_at === now)).toBe(true);
+  });
+
+  it('expires filtering and sorting at the same explicit clock without reviving a raw value', () => {
+    const raw = provenGrowthRow('PROVEN', 0);
+    const filters = { epsGrowth: { min: 0, max: 0 } };
+    expect(filterStaticScanRows([raw], filters, { now: expiresAt })).toHaveLength(1);
+    expect(filterStaticScanRows([raw], filters, { now: expiresAt + 1 })).toEqual([]);
+    const expired = sortStaticScanRows([raw], 'eps_growth_qq', 'desc', { now: expiresAt + 1 });
+    expect(expired[0].eps_growth_qq).toBeNull();
+    expect(filterStaticScanRows(expired, filters, { now })).toEqual([]);
+    expect(sortStaticScanRows(expired, 'eps_growth_qq', 'asc', { now })[0].eps_growth_qq).toBeNull();
+    expect(raw.eps_growth_qq).toBe(0);
+  });
+
+  it.each([true, false, '0', '-5', NaN, Infinity, null, undefined])('rejects nonnumeric range evidence without coercion: %s', (value) => {
+    const row = { symbol: 'INVALID', current_price: value, volume: value, market_cap: value, market_cap_usd: value };
+    for (const filters of [{ price: { min: -10 } }, { minVolume: -10 }, { minMarketCap: -10 }, { marketCapUsd: { min: -10 } }]) {
+      expect(filterStaticScanRows([row], filters, { now })).toEqual([]);
+    }
+    const sorted = sortStaticScanRows([row, { symbol: 'VALID', current_price: 0 }], 'current_price', 'desc', { now });
+    expect(sorted.map((entry) => entry.symbol)).toEqual(['VALID', 'INVALID']);
+  });
+
+  it('uses the provided clock for IPO presets as well as financial projection', () => {
+    const sourceRows = [{ symbol: 'WITHIN', ipo_date: '2026-07-01' }, { symbol: 'BEFORE', ipo_date: '2026-01-01' }];
+    expect(filterStaticScanRows(sourceRows, { ipoAfter: '6m' }, { now }).map((row) => row.symbol)).toEqual(['WITHIN']);
+  });
+});
+
 describe('static scan client', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -89,11 +151,10 @@ describe('static scan client', () => {
     vi.useRealTimers();
   });
 
-  it('filters rows with the exported read-only criteria set', () => {
+  it('preserves price and technical filters while projecting the returned rows', () => {
     const filters = buildDefaultScanFilters();
     filters.symbolSearch = 'nv';
     filters.stage = 2;
-    filters.ratings = ['Strong Buy'];
     filters.ibdIndustries = { values: ['Semiconductors'], mode: 'include' };
     filters.minVolume = 20_000_000;
     filters.price = { min: 100, max: 200 };
@@ -103,21 +164,28 @@ describe('static scan client', () => {
 
     const filtered = filterStaticScanRows(rows, filters);
 
-    expect(filtered).toEqual([rows[0]]);
+    expect(filtered.map((row) => row.symbol)).toEqual(['NVDA']);
+    expect(filtered[0]).toMatchObject({ current_price: 145.4, rs_rating: 95, eps_growth_qq: null });
+    expect(rows[0].eps_growth_qq).toBe(45);
   });
 
-  it('filters on the code33 boolean flag', () => {
+  it('does not treat unsupported Code33 true, false, or missing values as verified conditions', () => {
     const code33Rows = [
       { ...rows[0], symbol: 'ACCEL', code33: true },
       { ...rows[1], symbol: 'NO_ACCEL', code33: false },
-      { ...rows[2], symbol: 'MISSING' }, // code33 absent -> treated as false
+      { ...rows[2], symbol: 'MISSING' },
     ];
     const filters = buildDefaultScanFilters();
     filters.code33 = true;
 
     const filtered = filterStaticScanRows(code33Rows, filters);
 
-    expect(filtered.map((row) => row.symbol)).toEqual(['ACCEL']);
+    expect(filtered).toEqual([]);
+    filters.code33 = false;
+    expect(filterStaticScanRows(code33Rows, filters)).toEqual([]);
+    const projected = filterStaticScanRows(code33Rows, {});
+    expect(projected.every((row) => row.code33 == null)).toBe(true);
+    expect(projected[1].financial_historical.values.code33).toBe(false);
   });
 
   it('applies the static default dollar-volume filter contract', () => {
@@ -128,13 +196,12 @@ describe('static scan client', () => {
     expect(filtered.map((row) => row.symbol)).toEqual(['NVDA']);
   });
 
-  it('supports market-cap, categorical, date, range, and boolean filters together', () => {
+  it('supports market-cap, categorical, date, price range, and technical boolean filters together', () => {
     const filters = buildDefaultScanFilters();
     filters.minMarketCap = 100_000_000_000;
     filters.ibdIndustries = { values: ['Semiconductors', 'Software'], mode: 'include' };
     filters.gicsSectors = { values: ['Technology'], mode: 'include' };
     filters.ipoAfter = '1990-01-01';
-    filters.epsGrowth = { min: 20, max: null };
     filters.perfDay = { min: 0, max: null };
     filters.passesTemplate = true;
     filters.maAlignment = true;
@@ -188,7 +255,7 @@ describe('static scan client', () => {
     expect(filterStaticScanRows(testRows, filtersSixM).map((r) => r.symbol)).not.toContain('OLD');
   });
 
-  it('filters by EPS Rating, Market Cap, and RS 12M ranges', () => {
+  it('rejects unsupported EPS Rating but preserves Market Cap and RS 12M ranges', () => {
     const testRows = [
       { symbol: 'A', eps_rating: 85, market_cap: 5_000_000_000, market_cap_usd: 500_000_000, rs_rating_12m: 90 },
       { symbol: 'B', eps_rating: 45, market_cap: 500_000_000, market_cap_usd: 2_000_000_000, rs_rating_12m: 55 },
@@ -197,7 +264,7 @@ describe('static scan client', () => {
 
     const f1 = buildDefaultScanFilters();
     f1.epsRating = { min: 70, max: null };
-    expect(filterStaticScanRows(testRows, f1).map((r) => r.symbol)).toEqual(['A']);
+    expect(filterStaticScanRows(testRows, f1)).toEqual([]);
 
     const f2 = buildDefaultScanFilters();
     f2.minMarketCap = 1_000_000_000;
@@ -212,14 +279,26 @@ describe('static scan client', () => {
     expect(filterStaticScanRows(testRows, f3).map((r) => r.symbol)).toEqual(['A']);
   });
 
-  it('sorts and paginates rows in-browser without any backend assistance', () => {
-    const sortedByRating = sortStaticScanRows(rows, 'rating', 'desc');
-    const sortedByScore = sortStaticScanRows(rows, 'composite_score', 'asc');
-    const pageTwo = paginateStaticScanRows(sortedByRating, 2, 1);
+  it('sorts and paginates price-only rows in-browser without any backend assistance', () => {
+    const sortedByStrength = sortStaticScanRows(rows, 'rs_rating', 'desc');
+    const sortedByPrice = sortStaticScanRows(rows, 'current_price', 'asc');
+    const pageTwo = paginateStaticScanRows(sortedByStrength, 2, 1);
 
-    expect(sortedByRating.map((row) => row.symbol)).toEqual(['NVDA', 'MSFT', 'SNOW']);
-    expect(sortedByScore.map((row) => row.symbol)).toEqual(['SNOW', 'MSFT', 'NVDA']);
+    expect(sortedByStrength.map((row) => row.symbol)).toEqual(['NVDA', 'MSFT', 'SNOW']);
+    expect(sortedByPrice.map((row) => row.symbol)).toEqual(['NVDA', 'SNOW', 'MSFT']);
     expect(pageTwo.map((row) => row.symbol)).toEqual(['MSFT']);
+  });
+
+  it('does not filter or rank by unverified financial ratings or composite scores', () => {
+    expect(filterStaticScanRows(rows, { ratings: ['Strong Buy'] })).toEqual([]);
+    expect(filterStaticScanRows(rows, { compositeScore: { min: 0 } })).toEqual([]);
+    for (const sortBy of ['rating', 'composite_score']) {
+      for (const direction of ['asc', 'desc']) {
+        const sorted = sortStaticScanRows(rows, sortBy, direction);
+        expect(sorted.map((row) => row.symbol)).toEqual(['MSFT', 'NVDA', 'SNOW']);
+        expect(sorted.every((row) => row[sortBy] == null)).toBe(true);
+      }
+    }
   });
 
   it('keeps searched listing-only IPO rows visible despite the default min-volume filter', () => {
@@ -240,7 +319,7 @@ describe('static scan client', () => {
     expect(filtered.map((row) => row.symbol)).toEqual(['0100.HK']);
   });
 
-  it('sorts full rows ahead of ipo-weighted rows and listing-only rows for composite score', () => {
+  it('preserves scan-mode grouping without using unverified composite scores', () => {
     const sorted = sortStaticScanRows([
       { symbol: 'IPO95', scan_mode: 'ipo_weighted', composite_score: 95 },
       { symbol: 'FULL80', scan_mode: 'full', composite_score: 80 },
@@ -248,20 +327,21 @@ describe('static scan client', () => {
       { symbol: 'FULL70', scan_mode: 'full', composite_score: 70 },
     ], 'composite_score', 'desc');
 
-    expect(sorted.map((row) => row.symbol)).toEqual(['FULL80', 'FULL70', 'IPO95', 'NEW1']);
+    expect(sorted.map((row) => row.symbol)).toEqual(['FULL70', 'FULL80', 'IPO95', 'NEW1']);
+    expect(sorted.every((row) => row.composite_score == null)).toBe(true);
   });
 
-  it('can sort composite score exactly for preset-defined rankings', () => {
+  it('uses symbol order for unknown preset composite scores without scan-mode grouping', () => {
     const sorted = sortStaticScanRows([
       { symbol: 'IPO95', scan_mode: 'ipo_weighted', composite_score: 95 },
       { symbol: 'FULL80', scan_mode: 'full', composite_score: 80 },
       { symbol: 'FULL70', scan_mode: 'full', composite_score: 70 },
     ], 'composite_score', 'desc', { prioritizeCompositeScanMode: false });
 
-    expect(sorted.map((row) => row.symbol)).toEqual(['IPO95', 'FULL80', 'FULL70']);
+    expect(sorted.map((row) => row.symbol)).toEqual(['FULL70', 'FULL80', 'IPO95']);
   });
 
-  it('keeps null composite scores last within the same scan-mode bucket for desc sorting', () => {
+  it('does not revive raw composite values when sorting a bucket with explicit unknowns', () => {
     const sorted = sortStaticScanRows([
       { symbol: 'FULLNULL', scan_mode: 'full', composite_score: null },
       { symbol: 'FULL80', scan_mode: 'full', composite_score: 80 },
@@ -269,10 +349,11 @@ describe('static scan client', () => {
       { symbol: 'IPO95', scan_mode: 'ipo_weighted', composite_score: 95 },
     ], 'composite_score', 'desc');
 
-    expect(sorted.map((row) => row.symbol)).toEqual(['FULL80', 'FULL70', 'FULLNULL', 'IPO95']);
+    expect(sorted.map((row) => row.symbol)).toEqual(['FULL70', 'FULL80', 'FULLNULL', 'IPO95']);
+    expect(sorted.every((row) => row.composite_score == null)).toBe(true);
   });
 
-  it('keeps ascending composite sorts numeric instead of forcing scan-mode grouping', () => {
+  it('does not force scan-mode grouping for ascending unknown composite scores', () => {
     const sorted = sortStaticScanRows([
       { symbol: 'IPO95', scan_mode: 'ipo_weighted', composite_score: 95 },
       { symbol: 'FULL80', scan_mode: 'full', composite_score: 80 },
@@ -283,7 +364,7 @@ describe('static scan client', () => {
     expect(sorted.map((row) => row.symbol)).toEqual(['FULL70', 'FULL80', 'IPO95', 'NEW1']);
   });
 
-  it('uses symbol tiebreaks for equal ascending composite scores', () => {
+  it('uses symbol tiebreaks for unknown ascending composite scores', () => {
     const sorted = sortStaticScanRows([
       { symbol: 'ZFULL', scan_mode: 'full', composite_score: 80 },
       { symbol: 'AIPO', scan_mode: 'ipo_weighted', composite_score: 80 },

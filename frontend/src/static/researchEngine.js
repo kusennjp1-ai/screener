@@ -1,8 +1,7 @@
+import { projectFinancialRow, currentFinancialHistory } from './financialCurrent.js';
 import { canonicalPivot } from './researchPresentation.js';
 import { auditValues, RS_METHOD } from './qualificationAudit.js';
-import { financialHistory } from './financialHistory.js';
 import { institutionalGrowth } from './institutionalEvidence.js';
-import { decodeAssessment } from './assessmentEncoding.js';
 import { singleMissingCondition } from './missingCondition.js';
 import { entrySourceContext } from './bookSourceContext.js';
 import { evidenceTimestamp, newYorkDate, validClock, validEvidenceDay } from './evidenceTime.js';
@@ -21,16 +20,16 @@ export function snapshotFreshness(date, now = Date.now()) {
   return { state: days < 0 ? 'future' : days >= 4 ? 'old' : 'recent', days };
 }
 
-export function researchCsv(ranked, method, date) {
+export function researchCsv(ranked, method, date, now = Date.now()) {
   const cell = value => {
     let text = String(value ?? '');
     // Text that starts with spreadsheet formula syntax must remain literal.
     if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition'];
-  const lines = ranked.map(({row})=>({row,assessment:assess(row,method)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
-    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '']);
+  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics'];
+  const lines = ranked.map(({row})=>({row,assessment:assess(row,method,now)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
+    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication']);
   return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
 }
 // The feature store exports positive % BELOW the high; the legacy technical
@@ -39,7 +38,8 @@ export const highDistance = (row) => finite(auditValues(row).belowHigh) ? auditV
 const rule = (label, value, test, unit = '', boolean = false) => ({ label, value, unit, state: (boolean ? typeof value !== 'boolean' : !finite(value)) ? 'unknown' : test(value) ? 'pass' : 'fail' });
 const rating = value => finite(value) && value >= 1 && value <= 99 ? value : null;
 const comparison = (label, values, test, evidence) => ({ ...rule(label, values.every(v => finite(v) && v > 0) ? test(...values) : null, v => v, '', true), evidence });
-export function assess(row, method = 'minervini') {
+export function assess(input, method = 'minervini', now = Date.now()) {
+  const row = method.startsWith('minervini') ? input : projectFinancialRow(input, { now });
   if (!['minervini', 'minervini2', 'oneil', 'ibd'].includes(method)) throw Error('Unknown research method');
   const lowThreshold = method === 'minervini2' ? 25 : 30;
   const v = auditValues(row);
@@ -58,7 +58,7 @@ export function assess(row, method = 'minervini') {
     { ...rule('RS 推計 ≥ 70（公開日足の共通母集団）', rs, x => x >= 70), evidence: `${row.rs_universe_size || 0}銘柄・${row.rs_as_of_date || '基準日未確認'} / 独自推計` },
   ];
   // Three annual YoY rates, not an endpoint CAGR that can hide a down year.
-  const currentHistory = row.financial_history ? financialHistory(row.financial_history, row.symbol, row.technical_audit?.as_of_date) : null;
+  const currentHistory = !method.startsWith('minervini') && row.financial_history ? currentFinancialHistory(row.financial_history, row.symbol, row.technical_audit?.as_of_date, now) : null;
   const annual = currentHistory ? currentHistory.annualGrowth : row.annual_eps_growth_3y;
   const annualMinimum = Array.isArray(annual) && annual.length === 3 && annual.every(finite) ? Math.min(...annual) : null;
   const common = [rule('RS 推計 ≥ 80', rs, v => v >= 80)];
@@ -96,10 +96,13 @@ export function assess(row, method = 'minervini') {
 
 // Generated from the same rule function; unknowns stay unknown. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v3';
-export function assessmentSummary(row, method) {
-  const result = row.method_summary?.version === RULE_SUMMARY_VERSION && decodeAssessment(row.method_summary[method]);
-  return result || assess(row, method);
+export const RULE_SUMMARY_VERSION = 'research-summary-v4-financial-current';
+export function assessmentSummary(row, method, now = Date.now()) {
+  // Packed summaries and orders from legacy bundles are observations, not
+  // authority for current decisions. Preparation recomputes once per epoch.
+  const { rules, ...summary } = assess(row, method, now);
+  void rules;
+  return summary;
 }
 
 export function entryChecks(row, method = 'minervini') {
@@ -137,13 +140,13 @@ export function entryPlan(row, quote, method = 'minervini') {
   return plan;
 }
 
-export function rankCandidates(rows, method, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false } = {}) {
+export function rankCandidates(rows, method, { search = '', qualifiedOnly = false, watchlist = null, liquidOnly = false, now = Date.now() } = {}) {
   const query = search.trim().toUpperCase();
-  return rows.filter(r => r.market === 'US' || !r.market)
+  return rows.map(row => projectFinancialRow(row, { now })).filter(r => r.market === 'US' || !r.market)
     .filter(r => !liquidOnly || (finite(r.current_price) && r.current_price >= 10 && finite(r.adv_usd) && r.adv_usd >= 20000000))
     .filter(r => `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query))
     .filter(r => !watchlist || watchlist.includes(r.symbol))
-    .map(row => ({ row, assessment: assessmentSummary(row, method) }))
+    .map(row => ({ row, assessment: assessmentSummary(row, method, now) }))
     .filter(r => !qualifiedOnly || r.assessment.qualified)
     .sort((a, b) => Number(Boolean(a.row.corporate_action?.cash_acquisition || a.row.price_activity?.lowRange)) - Number(Boolean(b.row.corporate_action?.cash_acquisition || b.row.price_activity?.lowRange)) || b.assessment.score - a.assessment.score || (a.assessment.qualified && b.assessment.qualified ? entryPriority(a.row) - entryPriority(b.row) : 0) || (b.row.rs_rating ?? -1) - (a.row.rs_rating ?? -1) || a.row.symbol.localeCompare(b.row.symbol));
 }

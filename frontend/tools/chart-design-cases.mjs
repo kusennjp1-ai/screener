@@ -31,6 +31,9 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       check(payload.symbol === symbol && payload.as_of_date === asOf && payload.bars.at(-1)?.date === asOf, `${key}: chart identity/as-of mismatch`);
       await page.goto(`${currentUrl}#/?symbol=${encodeURIComponent(symbol)}`);
       await page.reload(); // the same home route must consume the new initial symbol
+      // The evidence/query is eager; request the below-fold visualization by
+      // approaching its persistent section before waiting for its canvas.
+      await page.locator('.research-chart').scrollIntoViewIfNeeded();
       const chart = page.locator(`.research-chart [data-chart-symbol="${symbol}"]`);
       await ready(chart.locator('canvas'));
       check((await page.locator('.symbol-title h2').textContent())?.trim() === symbol, `${key}: detail symbol mismatch`);
@@ -58,14 +61,14 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await chart.scrollIntoViewIfNeeded();
       record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
       if (record.source_warning.expected) {
-        record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
+        record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-chart .entry-source-badge'));
         check(record.source_warning.inline_visible, `${key}: first-book proximity warning is missing from the initial inline viewport`);
       }
       await capture(page, viewport, theme, `case-${symbol}-inline`);
       const inlineToggle = page.locator('.research-chart').getByRole('button', { name: /^図解/ });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
       await capture(page, viewport, theme, `case-${symbol}-inline-annotations`);
-      const gauge = page.locator('.entry-gauge');
+      const gauge = page.locator('.research-detail').getByRole('img', { name: /現在価格.*共通ピボット/ });
       if (Number.isFinite(plan.pivot)) {
         const label = await gauge.getAttribute('aria-label');
         for (const price of [plan.price, plan.pivot, plan.upper, plan.stopExample]) check(label?.includes(money(price)), `${key}: entry card canonical level ${money(price)} missing`);

@@ -26,7 +26,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
   const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
   const volume = verifiedVolumeRatio(row, date);
-  const missing = nearOnly ? singleMissingCondition(assess(row, method)) : null;
+  const missing = nearOnly ? singleMissingCondition(assess(row, method, now)) : null;
   return <Paper ref={ref} component="article" variant="outlined" className="comparison-card" data-method={method} aria-label={`${row.symbol} 比較チャート`}>
     <button className="comparison-card-click" onClick={() => onSelect(row.symbol)} aria-label={`${row.symbol} を分析`} aria-describedby={descriptionId}><span className="sr-only">{row.symbol} を分析</span></button>
     <div className="comparison-heading"><h3>{row.symbol}</h3><span className="comparison-state-chip" style={{ color: `var(--${tone})` }} title={plan.state}>{mark} {stateLabel}</span><span className="comparison-distance">ピボット比 <b style={{ color: `var(--${tone})` }}>{signed(plan.distance)}</b></span></div>
@@ -36,7 +36,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
         : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || '最終日足が分析日と不一致'}。現在の比較チャートには使用しません。</Alert>
           : !row.chart_path ? <Alert severity="info">チャート未配信。買い形状は確認できません。</Alert>
             : query.isSuccess && !bars?.length ? <Alert severity="info">日足データが不足しています。買い形状は確認できません。</Alert>
-              : visible && !paused && bars?.length ? <CandlestickChart key={row.symbol} symbol={row.symbol} priceData={bars} rsLineData={query.data.rs_line || []} rsRatingValue={row.rs_rating} compact researchView comparisonSessions={sessions} interactive={false} pivotPrice={plan.pivot} pivotLabel="共通ピボット" buyCeiling={plan.upper} stopPrice={plan.stopExample} height={smallScreen ? 240 : 220} />
+              : visible && !paused && bars?.length ? <CandlestickChart key={row.symbol} symbol={row.symbol} priceData={bars} rsLineData={query.data.rs_line || []} rsRatingValue={row.rs_rating} compact researchView comparisonSessions={sessions} interactive={false} pivotPrice={plan.pivot} pivotLabel="共通ピボット" buyCeiling={plan.upper} stopPrice={plan.stopExample} height={smallScreen ? 216 : 200} />
                 : <div className="comparison-skeleton" role="status" aria-label={`${row.symbol} チャートを読み込み中`}><span /><span /><span /></div>}
     </div>
     <dl className="comparison-metrics"><div><dt>アプリ上限</dt><dd className="comparison-upper">{money(plan.upper)}</dd></div><div><dt>損切り例</dt><dd className="comparison-stop">{money(plan.stopExample)}</dd></div><div><dt>RS / 出来高</dt><dd>{Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '—'} · {times(volume)}</dd></div><div><dt>購入条件</dt><dd>{ready.passed}/{ready.total}</dd></div></dl>

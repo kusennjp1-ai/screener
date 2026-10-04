@@ -1,0 +1,101 @@
+/* Feed cards have their own geometry, replacing the compact table-row rules. */
+.research-workbench .research-grid { grid-template-columns:minmax(440px,470px) minmax(0,1fr); max-width:1600px; margin:auto; }
+.research-workbench .research-grid[data-view=charts] { grid-template-columns:minmax(0,1fr); }
+/* A bounded page has up to 50 variable-height, keyboard-reachable cards. Their
+   real heights must position the next card, including before first focus or
+   after evidence changes. A skipped 520px placeholder can overlap its actions. */
+.candidate-feed .candidate-scroll [role=listitem] { content-visibility:visible; contain-intrinsic-block-size:none; }
+.candidate-feed .candidate-board-heading { height:auto; min-height:44px; padding:0 16px; flex-wrap:wrap; }
+.candidate-feed .candidate-board-heading h2 { font-size:16px; font-weight:700; line-height:1.3; }
+.candidate-feed .candidate-board-heading h2 > small { display:block; margin:1px 0 0; font-size:12px; font-weight:400; }
+.candidate-feed .candidate-board-heading select,.candidate-feed .candidate-board-heading > button { min-height:44px; font-size:12px; }
+.candidate-feed .method-tabs button { min-height:44px; }
+.candidate-feed .candidate-guide { min-height:44px; font-size:12px; }
+.candidate-feed .candidate-glossary > summary { min-height:44px; }
+.candidate-feed-card { border-top:1px solid var(--line); background:var(--panel); min-width:0; }
+.candidate-feed-card[data-selected=true] { background:var(--surface-2); box-shadow:inset 3px 0 var(--accent); }
+.candidate-feed .candidate-row { display:block; width:100%; height:auto; min-height:44px; padding:16px 18px 0; border:0; background:none; color:var(--text); text-align:left; font:inherit; cursor:pointer; }
+.candidate-feed .candidate-row:hover { background:color-mix(in srgb,var(--accent) 3%,transparent); }
+.candidate-feed .candidate-row:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+.feed-identity { display:flex; align-items:center; gap:10px; min-width:0; }
+.feed-monogram { display:grid; place-items:center; width:36px; height:36px; flex-shrink:0; border-radius:12px; color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,var(--surface)); font-size:12px; font-weight:700; }
+.candidate-feed .candidate-name { display:block; min-width:0; flex:1; }
+.candidate-feed .candidate-name strong { font-size:20px; }
+.candidate-feed .candidate-name small { display:block; margin-top:2px; font-size:12px; visibility:visible; }
+.feed-price { display:flex; flex-direction:column; gap:2px; text-align:right; flex-shrink:0; }
+.feed-price strong { font-size:20px; }
+.feed-price small { font-size:12px; color:var(--text-3); }
+.feed-growth { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:9px 0; border-block:1px solid var(--line); }
+.feed-growth .financial-growth-metric { padding:0; border:0; }
+.feed-growth .financial-growth-heading { font-size:12px; }
+.feed-growth .financial-summary-result { gap:3px 6px; margin:3px 0; }
+.feed-growth .financial-summary-result strong { font-size:20px; }
+.feed-growth .financial-growth-source { font-size:12px; }
+.feed-growth .financial-source-badge { display:inline-block; margin:3px 0 0; padding:2px 5px; border:1px solid var(--line); border-radius:4px; color:var(--text-3); }
+.feed-next-check { display:flex; align-items:baseline; gap:8px; margin:10px 0 4px; font-size:12px; line-height:1.6; }
+.feed-next-check > strong { flex-shrink:0; color:var(--text-2); }
+.feed-next-check > span { color:var(--text-3); }
+.feed-other-checks,.feed-missing { margin:4px 0; font-size:12px; line-height:1.6; color:var(--text-3); }
+.feed-missing { display:block; }
+.feed-other-checks { display:flex; flex-wrap:wrap; gap:4px 6px; }
+.feed-other-checks > span { border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+.feed-other-checks > [data-state=fail] { color:var(--wait); }
+.feed-missing[data-state=fail] { color:var(--wait); }
+.feed-open-evidence { display:flex; align-items:center; min-height:44px; font-size:12px; color:var(--accent); }
+.feed-card-footer { display:flex; align-items:center; gap:8px; padding:0 18px 8px; color:var(--text-3); font-size:12px; line-height:1.5; }
+.feed-card-footer > span { flex:1; min-width:0; }
+.feed-card-footer > div { display:flex; gap:4px; flex-shrink:0; }
+.feed-card-footer button { min-height:44px; min-width:44px; padding:4px 8px; color:var(--text-2); border:0; background:none; font:inherit; cursor:pointer; }
+.feed-card-footer .feed-watch { font-size:20px; }
+.feed-watch[aria-pressed=true] { color:var(--accent); }
+.feed-card-footer button:focus-visible,.research-active-filters button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.candidate-feed .candidate-pagination { min-height:48px; height:auto; }
+.candidate-feed .candidate-pagination button { min-height:44px; }
+.candidate-feed .feed-pagination { display:block; padding:0 12px 4px; flex-shrink:0; border-top:1px solid var(--line); }
+.feed-page-summary,.feed-page-navigation { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:44px; }
+.feed-page-summary { color:var(--text-2); }
+.feed-page-summary label { display:flex; align-items:center; gap:4px; }
+.feed-pagination select { min-width:64px; min-height:44px; padding:6px; color:var(--text); background:var(--panel); border:1px solid var(--line-2); border-radius:6px; font:inherit; }
+.feed-pagination select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.research-active-filters { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:4px 16px; }
+.research-active-filters button { min-height:44px; padding:6px 10px; font:inherit; font-size:12px; color:var(--text-2); border:1px solid var(--line-2); border-radius:999px; background:var(--surface); cursor:pointer; }
+.research-active-filters .filter-reset { color:var(--accent); border-color:transparent; background:none; }
+@media (max-width:1279px) {
+ .research-workbench .research-grid { display:block; max-width:780px; }
+ .research-workbench .candidate-feed { position:static; max-height:none; border-right:0; }
+ .candidate-feed .candidate-scroll { max-height:none; overflow:visible; }
+ .research-workbench[data-mobile-view=list] .research-detail { display:none; }
+ .research-workbench[data-mobile-view=detail] > .research-hero,.research-workbench[data-mobile-view=detail] .research-list,.research-workbench[data-mobile-view=detail] > .research-method-note { display:none; }
+ .research-workbench[data-mobile-view=detail] .research-detail { display:block; }
+ .research-workbench .mobile-back { display:flex; align-items:center; min-height:44px; padding:4px 20px; margin:8px auto 0; max-width:780px; width:100%; color:var(--accent); background:none; border:0; font:inherit; font-size:13px; cursor:pointer; }
+}
+@media (max-width:700px) {
+ .candidate-feed .candidate-row { padding:8px 16px 0; }
+ .candidate-feed .candidate-board-heading { padding:0 16px; }
+ .candidate-feed .candidate-board-heading select { min-width:100px; max-width:132px; }
+ .candidate-feed .candidate-board-heading .near-pass-toggle { max-width:none; }
+ .feed-growth { gap:10px; }
+ .feed-card-footer { padding:0 16px 8px; }
+ .feed-price strong { font-size:16px; }
+ .feed-monogram { width:32px; height:32px; }
+}
+.feed-price-trace { display:block; margin:0 0 10px; }
+.feed-price-trace img { display:block; width:100%; height:64px; object-fit:fill; color:var(--text-3); }
+.feed-price-trace > small { display:block; margin-top:3px; color:var(--text-3); font-size:12px; }
+.feed-trace-unavailable { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:64px; gap:4px; border:1px dashed var(--line-2); border-radius:8px; color:var(--text-3); font-size:12px; }
+.feed-trace-unavailable small { font-size:12px; }
+.feed-card-evidence { padding:0 18px; }
+.feed-card-evidence .feed-open-evidence { min-height:44px; min-width:44px; border:0; background:none; padding:4px 0; font:inherit; font-size:12px; cursor:pointer; }
+.feed-card-evidence .feed-open-evidence:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+@media(max-width:700px) { .feed-card-evidence { padding:0 16px; } }
+/* Filters and the optional reading guide share a toolbar row, keeping the
+   stock's core evidence ahead of supporting status and trace content. */
+.candidate-filter-context { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+.candidate-filter-context .research-active-filters { padding-top:0; padding-bottom:0; padding-right:4px; }
+.candidate-filter-context .candidate-guide { padding-left:4px; }
+.candidate-filter-context:has(.candidate-glossary[open]) { grid-template-columns:minmax(0,1fr); }
+.candidate-filter-context:has(.candidate-glossary[open]) .candidate-guide { padding-inline:16px; }
+.candidate-filter-context .candidate-glossary > p { color:var(--text-2); line-height:1.6; }
+.feed-card-evidence > .feed-growth { padding-block:4px; }
+
+.candidate-feed .method-tabs { margin-bottom:0; }

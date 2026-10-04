@@ -1,0 +1,5 @@
+.research-chart-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 12px; border-bottom:1px solid var(--line); }
+.research-chart-heading h3 { margin:0; font-size:14px; font-weight:600; }
+.research-chart-heading button { min-height:44px; min-width:44px; padding:8px 12px; border:0; border-radius:8px; background:transparent; color:var(--accent); font:inherit; font-size:13px; cursor:pointer; }
+.research-chart-heading button:disabled { color:var(--text-3); cursor:default; }
+.research-chart-heading button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }

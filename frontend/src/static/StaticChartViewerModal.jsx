@@ -1,3 +1,5 @@
+import { projectFinancialRow, mergeFinancialDetail } from './financialCurrent';
+import { useFinancialClock } from './useFinancialClock';
 import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
@@ -52,7 +54,7 @@ function StaticChartViewerModal({
   navigationSymbols = null,
   researchRows = null,
   generation,
-  method, date, market, now, quote,
+  method, date, market, now: suppliedNow, quote,
 }) {
   const queryClient = useQueryClient();
   const [visibleRange, setVisibleRange] = useState(null);
@@ -190,18 +192,25 @@ function StaticChartViewerModal({
   }, [goNext, goPrevious, onClose, open]);
 
   const researchRow = researchRows?.find(r=>r.symbol === currentSymbol) || chartPayload?.stock_data;
+  const clockRows = useMemo(() => researchRow ? [researchRow] : [], [researchRow]);
+  const clockNow = useFinancialClock(clockRows);
+  const now = Number.isFinite(suppliedNow) ? suppliedNow : clockNow;
   const rowDetail = useQuery({
-    queryKey:['researchDetail',researchRow?.research_detail_path,generation],
+    queryKey:['researchDetail',currentSymbol,researchRow?.research_detail_path,expectedDate,generation],
     enabled:Boolean(open && researchRow?.research_detail_path),
     staleTime:Infinity, placeholderData:()=>undefined,
     queryFn:async()=>{
       const detail=await fetchStaticJson(researchRow.research_detail_path);
       if(detail.symbol!==currentSymbol || (!expectedDate || detail.as_of_date!==expectedDate)) throw Error('Detail identity mismatch');
-      return detail;
+      return { value: detail, symbol: currentSymbol, date: expectedDate, generation, path: researchRow.research_detail_path };
     },
   });
-  const stockData = rowDetail.data?.symbol===currentSymbol && rowDetail.data?.as_of_date===expectedDate ? {...rowDetail.data,...researchRow,price_quality:{...rowDetail.data.price_quality,...researchRow.price_quality},setup_recalculation:{...rowDetail.data.setup_recalculation,...researchRow.setup_recalculation}} : researchRow || chartPayload?.stock_data || null;
-  const fundamentals = chartPayload?.fundamentals || null;
+  const detailResponse = rowDetail.data;
+  const stockData = researchRow ? mergeFinancialDetail(researchRow, detailResponse?.value, {
+    now, asOfDate: expectedDate, generation, detailGeneration: detailResponse?.generation,
+    expectedDetailPath: researchRow.research_detail_path, detailPath: detailResponse?.path,
+  }) : null;
+  const fundamentals = chartPayload?.fundamentals ? projectFinancialRow(chartPayload.fundamentals, { now, asOfDate: expectedDate }) : null;
   // VCP / setup pivot (buy-trigger) drawn as a horizontal line on the chart.
   const pivotPrice = canonicalPivot(stockData).price;
   const plan = entryPlan(stockData || {}, quote?.symbol === currentSymbol ? quote : null, method);
@@ -293,9 +302,9 @@ function StaticChartViewerModal({
                 height: 'auto',
               }}
             >
-              {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,'minervini').passed}/${assess(stockData,'minervini').total}）`}</summary>
-                {assess(stockData,'minervini').rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
-              </Box> : <><StockMetricsSidebar stockData={stockData} fundamentals={fundamentals} />
+              {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,method || 'minervini',now).passed}/${assess(stockData,method || 'minervini',now).total}）`}</summary>
+                {assess(stockData,method || 'minervini',now).rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':'?'} {r.label}</Typography>)}
+              </Box> : <><StockMetricsSidebar currentFinancialOnly date={expectedDate} now={now} stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
                 symbol={currentSymbol}

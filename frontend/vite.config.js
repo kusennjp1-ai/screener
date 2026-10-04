@@ -71,7 +71,8 @@ export default defineConfig(({ mode }) => {
             // MUI components (large library)
             'mui-vendor': ['@mui/material', '@mui/icons-material'],
             // Data visualization
-            'charts-vendor': ['recharts', 'lightweight-charts'],
+            'lightweight-charts-vendor': ['lightweight-charts'],
+            'recharts-vendor': ['recharts'],
             // React Query for data fetching
             'query-vendor': ['@tanstack/react-query', '@tanstack/react-virtual'],
           },

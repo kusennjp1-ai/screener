@@ -1,6 +1,12 @@
 import { render, screen, waitFor, cleanup, act, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const onlineModuleLoaded = vi.hoisted(() => vi.fn());
+vi.mock('./OnlineAppShell', () => {
+  onlineModuleLoaded();
+  return { default: () => <div>Online app</div> };
+});
+
 vi.mock('./pages/ScanPage', () => ({ default: () => <div>Live Scan Page</div> }));
 vi.mock('./pages/MarketScanPage', () => ({ default: () => <div>Live Market Scan Page</div> }));
 vi.mock('./pages/BreadthPage', () => ({ default: () => <div>Live Breadth Page</div> }));
@@ -337,7 +343,7 @@ describe('App static mode', () => {
       const hasText = (el) => el.textContent?.includes(heading);
       return hasText(element) && Array.from(element.children).every((child) => !hasText(child));
     };
-    if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'今日の概況'}, {timeout:10000})).toBeInTheDocument();
+    if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'全体概況（ミネルヴィニ）'}, {timeout:10000})).toBeInTheDocument();
     else expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
     const navigation=screen.getByRole('navigation',{name:'メインナビゲーション'});
     expect(navigation.closest('header')).toHaveTextContent('分析');
@@ -354,6 +360,7 @@ describe('App static mode', () => {
     // or the retired historical performance asset.
     const isStaticSource = (url) => url.includes('/static-data/') || url.includes('ibd-reference.json');
     expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
+    expect(onlineModuleLoaded).not.toHaveBeenCalled();
   }, 30000);
 
   it('keeps scan controls read-only in the static route', async () => {

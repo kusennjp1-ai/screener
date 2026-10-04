@@ -11,7 +11,7 @@ for (const name of reports) {
   if (!/^[a-f0-9]{40}$/.test(review.observed_commit || '') || !review.reviewer || !review.evidence_run || !Array.isArray(review.screens) || !review.screens.length) continue;
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', review.observed_commit, 'HEAD'], { cwd: root, stdio: 'ignore' });
-    execFileSync('git', ['diff', '--exit-code', review.observed_commit, 'HEAD', '--', 'frontend/src', 'frontend/index.html', 'frontend/vite.config.js'], { cwd: root, stdio: 'ignore' });
+    execFileSync('git', ['diff', '--exit-code', review.observed_commit, 'HEAD', '--', 'frontend/src', 'frontend/index.html', 'frontend/vite.config.js', 'frontend/contracts/static_financial_current_v1.json'], { cwd: root, stdio: 'ignore' });
   } catch { continue; }
   const required = ['design', 'usability', 'originality', 'content'];
   for (const screen of review.screens) for (const key of required) {

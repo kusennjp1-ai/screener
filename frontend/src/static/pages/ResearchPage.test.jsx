@@ -67,7 +67,7 @@ it('opens an initial symbol link at the selected detail once its data arrives', 
   }
 });
 it('renders the mobile chart only in detail, preserving row selection and focus on entry',async()=>{
-  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*(?:700|1279)px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
   mount();
   const leaderRow=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   expect(screen.queryByRole('button',{name:'日次チャートを分析'})).not.toBeInTheDocument();
@@ -103,10 +103,10 @@ describe('100 virtual expert task profiles', () => {
       fireEvent.click(screen.getByRole('button', { name: methods[s % 3], exact: true }));
       const table = candidates();
       if (t === 0) {
-        const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '8/8' : '10/10';
+        const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '5/8' : '5/10';
         expect(screen.getByRole('tab', {name:'判定根拠'})).toHaveAttribute('aria-selected','true');
-        expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定 ${expected}`));
-        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未確認 0`);
+        expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定条件 ${expected}`));
+        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定条件 ${expected} · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
       } else if (t === 1) {
         openFilters();
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
@@ -120,7 +120,7 @@ describe('100 virtual expert task profiles', () => {
         expect(within(table).queryByText('FAIL')).not.toBeInTheDocument();
         expect(within(table).queryByText('NONE')).not.toBeInTheDocument();
       } else if (t === 3) {
-        fireEvent.click(screen.getByRole('button', { name: 'LEAD ウォッチに保存' }));
+        fireEvent.click(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button', { name: 'LEAD ウォッチに保存' }));
         openFilters();
         fireEvent.click(screen.getByLabelText('ウォッチのみ'));
         closeFilters();
@@ -143,11 +143,13 @@ describe('100 virtual expert task profiles', () => {
         closeFilters();
         await screen.findByText(/該当銘柄がありません/);
       } else if (t === 7) {
-        fireEvent.click(screen.getByRole('tab', {name:'購入条件'}));
+        fireEvent.click(screen.getByRole('tab', {name:'日次確認'}));
         expect(screen.getByRole('tabpanel')).toHaveTextContent('未接続');
         expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
-        expect(within(screen.getByRole('button',{name:/^LEAD の分析を表示/})).getByText(/買いゾーン内/)).toBeInTheDocument();
+        const candidate=screen.getByRole('button',{name:/^LEAD の分析を表示/});
+        expect(candidate).toHaveAccessibleName(/買いゾーン内/);
+        expect(within(candidate.closest('.candidate-feed-card')).getByText(/買いゾーン内/)).toBeInTheDocument();
       } else if (t === 8) {
         expect(screen.getByText('公開ルールに基づく独自スクリーナー')).toBeInTheDocument();
         expect(screen.getByText(/IBD公式の選定銘柄・非公開の計算式を再現したものではありません/)).toBeInTheDocument();
@@ -183,7 +185,7 @@ it('keeps search focus while narrowing results in the filter drawer', async () =
   fireEvent.change(input,{target:{value:'NONE'}});
   expect(input).toHaveFocus();
   closeFilters();
-  await waitFor(()=>expect(within(candidates()).getAllByRole('button')).toHaveLength(1));
+  await waitFor(()=>expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(1));
   expect(within(candidates()).getByRole('button',{name:/^NONE の分析/})).toBeInTheDocument();
 });
 
@@ -208,9 +210,9 @@ it('preserves canonical entry prices and unknown conditions while switching deta
   const evidence=screen.getByRole('tab',{name:'判定根拠'});
   act(()=>evidence.focus());
   fireEvent.keyDown(evidence,{key:'ArrowRight'});
-  expect(screen.getByRole('tab',{name:'購入条件'})).toHaveFocus();
+  expect(screen.getByRole('tab',{name:'日次確認'})).toHaveFocus();
   expect(screen.getByRole('tabpanel')).toHaveTextContent('未確認');
-  fireEvent.keyDown(screen.getByRole('tab',{name:'購入条件'}),{key:'End'});
+  fireEvent.keyDown(screen.getByRole('tab',{name:'日次確認'}),{key:'End'});
   expect(screen.getByRole('tab',{name:'メモ'})).toHaveFocus();
   fireEvent.keyDown(screen.getByRole('tab',{name:'メモ'}),{key:'Home'});
   expect(evidence).toHaveFocus();
@@ -229,14 +231,15 @@ it('moves candidate focus with arrow keys and opens the focused stock with Enter
   expect(within(screen.getByRole('dialog',{name:'日次分析'})).getByText('FAIL')).toBeInTheDocument();
 });
 
-it('keeps all rows available to CSV and search beyond the first 50 rendered candidates', async () => {
+it.each([20,50])('keeps all rows available to CSV and search beyond the first %s rendered candidates', async pageSize => {
   data.rows=Array.from({length:58},(_,i)=>withAuditFixture({...leader,symbol:`TEST${String(i).padStart(2,'0')}`,company_name:`Fixture ${i}`},data.date));
   const createObjectURL=vi.fn(()=> 'blob:fixture-csv');
   vi.stubGlobal('URL',Object.assign(class extends URL {},{createObjectURL,revokeObjectURL:vi.fn()}));
   vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+  if(pageSize===50)window.history.replaceState(null,'','#/?feedSize=50');
   mount();
   await screen.findByRole('button',{name:/^TEST00 の分析/});
-  expect(within(candidates()).getAllByRole('button')).toHaveLength(50);
+  expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(pageSize);
   expect(within(candidates()).queryByText('TEST57')).not.toBeInTheDocument();
   openFilters();
   fireEvent.click(screen.getByRole('button',{name:/全検索結果をCSV保存/}));
@@ -245,9 +248,11 @@ it('keeps all rows available to CSV and search beyond the first 50 rendered cand
   await act(async()=>{csv=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsText(blob);});});
   expect(csv.trim().split(/\r?\n/)).toHaveLength(59);
   for(let i=0;i<58;i++)expect(csv).toContain(`TEST${String(i).padStart(2,'0')}`);
-  fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'),{target:{value:'TEST57'}});
+  const searchInput=screen.getByLabelText('銘柄・企業名を検索');
+  fireEvent.change(searchInput,{target:{value:'TEST57'}});
+  fireEvent.blur(searchInput);
   closeFilters();
-  await waitFor(()=>expect(within(candidates()).getAllByRole('button')).toHaveLength(1));
+  await waitFor(()=>expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(1));
   expect(within(candidates()).getByRole('button',{name:/^TEST57 の分析/})).toBeInTheDocument();
 });
 
@@ -255,11 +260,11 @@ it('retains the watch for this screen and reports denied persistence', async () 
   mount();
   await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
-  fireEvent.click(screen.getByRole('button',{name:'LEAD ウォッチに保存'}));
-  expect(screen.getByRole('button',{name:'LEAD ウォッチ解除'})).toHaveAttribute('aria-pressed','true');
+  fireEvent.click(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button',{name:'LEAD ウォッチに保存'}));
+  expect(within(screen.getByRole('region',{name:'銘柄詳細'})).getByRole('button',{name:'LEAD ウォッチ解除'})).toHaveAttribute('aria-pressed','true');
   expect(screen.getByText(/ウォッチはこの画面のみ保持されます/)).toBeInTheDocument();
   openFilters();
   fireEvent.click(screen.getByLabelText('ウォッチのみ'));
   closeFilters();
-  expect(within(candidates()).getAllByRole('button')).toHaveLength(1);
+  expect(within(candidates()).getAllByRole('button',{name:/ の分析を表示/})).toHaveLength(1);
 });

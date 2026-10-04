@@ -1,3 +1,5 @@
+import { projectFinancialRow } from '../financialCurrent';
+import { useFinancialClock } from '../useFinancialClock';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -38,13 +40,15 @@ const HYDRATION_BATCH_SIZE = 2;
 
 function StaticScanPage() {
   const manifestQuery = useStaticManifest();
+  const generation = manifestQuery.data?.research_generation || manifestQuery.data?.generated_at;
   const { selectedMarket } = useStaticMarket();
   const marketEntry = useMemo(
     () => resolveStaticMarketEntry(manifestQuery.data, selectedMarket),
     [manifestQuery.data, selectedMarket],
   );
   const scanManifestQuery = useQuery({
-    queryKey: ['staticScanManifest', marketEntry.pages?.scan?.list_path || marketEntry.pages?.scan?.path],
+    queryKey: ['staticScanManifest', marketEntry.pages?.scan?.list_path || marketEntry.pages?.scan?.path, generation],
+    placeholderData: () => undefined,
     queryFn: () => fetchStaticJson(marketEntry.pages.scan.list_path || marketEntry.pages.scan.path),
     enabled: Boolean(marketEntry.pages?.scan?.path),
     staleTime: Infinity,
@@ -134,7 +138,7 @@ function StaticScanPage() {
     const initialLoadedRows = Math.min(rowsBySymbol.size, totalRows);
 
     if (!chunks.length || initialLoadedRows >= totalRows) {
-      setHydrationState({
+      setHydrationState({ generation, manifest,
         status: 'complete',
         rows: initialRows,
         loadedRows: initialLoadedRows,
@@ -143,7 +147,7 @@ function StaticScanPage() {
       return undefined;
     }
 
-    setHydrationState({
+    setHydrationState({ generation, manifest,
       status: 'loading',
       rows: initialRows,
       loadedRows: initialLoadedRows,
@@ -169,7 +173,7 @@ function StaticScanPage() {
             });
           });
 
-          setHydrationState({
+          setHydrationState({ generation, manifest,
             status: rowsBySymbol.size >= totalRows ? 'complete' : 'loading',
             rows: Array.from(rowsBySymbol.values()),
             loadedRows: Math.min(rowsBySymbol.size, totalRows),
@@ -179,7 +183,7 @@ function StaticScanPage() {
 
         if (!cancelled) {
           if (rowsBySymbol.size !== totalRows) throw new Error(`一覧データが不足しています（${rowsBySymbol.size} / ${totalRows}）。全体の件数・CSVは未確定です。`);
-          setHydrationState({
+          setHydrationState({ generation, manifest,
             status: 'complete',
             rows: Array.from(rowsBySymbol.values()),
             loadedRows: Math.min(rowsBySymbol.size, totalRows),
@@ -189,7 +193,7 @@ function StaticScanPage() {
       } catch (error) {
         if (!cancelled) {
           const accumulatedRows = Array.from(rowsBySymbol.values());
-          setHydrationState({
+          setHydrationState({ generation, manifest,
             status: 'error',
             rows: accumulatedRows,
             loadedRows: Math.min(accumulatedRows.length, totalRows),
@@ -204,14 +208,15 @@ function StaticScanPage() {
     return () => {
       cancelled = true;
     };
-  }, [scanManifestQuery.data]);
-
-  const hydrationComplete = hydrationState.status === 'complete';
-  const hydratedRows = hydrationState.rows;
+  }, [scanManifestQuery.data, generation]);
+  const now = useFinancialClock(hydrationState.rows);
+  const hydrationMatches = hydrationState.generation === generation && hydrationState.manifest === scanManifestQuery.data;
+  const hydrationComplete = hydrationMatches && hydrationState.status === 'complete';
+  const hydratedRows = useMemo(() => (hydrationMatches ? hydrationState.rows : []).map(row => projectFinancialRow(row, { now, asOfDate: scanManifestQuery.data?.as_of_date, market: selectedMarket })), [hydrationMatches, hydrationState.rows, now, scanManifestQuery.data?.as_of_date, selectedMarket]);
   const { activeScreenId, setActiveScreenId, matchCounts } = usePresetScreens({
     screens: presetScreens,
     allRows: hydratedRows,
-    hydrationComplete,
+    hydrationComplete, now,
   });
 
   const applyScreen = useCallback((screenId) => {
@@ -270,18 +275,18 @@ function StaticScanPage() {
     [chartEntries]
   );
   const filteredRows = useMemo(
-    () => (hydrationComplete ? filterStaticScanRows(hydratedRows, filters) : hydratedRows),
-    [filters, hydratedRows, hydrationComplete]
+    () => (hydrationComplete ? filterStaticScanRows(hydratedRows, filters, { now }) : hydratedRows),
+    [filters, hydratedRows, hydrationComplete, now]
   );
   const sortedRows = useMemo(
     () => (
       hydrationComplete
         ? sortStaticScanRows(filteredRows, sortBy, sortOrder, {
-          prioritizeCompositeScanMode: !activeScreenId,
+          prioritizeCompositeScanMode: !activeScreenId, now,
         })
         : filteredRows
     ),
-    [activeScreenId, filteredRows, hydrationComplete, sortBy, sortOrder]
+    [activeScreenId, filteredRows, hydrationComplete, sortBy, sortOrder, now]
   );
   const activeScreenLimit = useMemo(() => {
     if (!activeScreenId) return null;
@@ -391,6 +396,8 @@ function StaticScanPage() {
         </Alert>
       ) : null}
 
+      <Alert severity="info" sx={{mb:2}}>現在の財務は提供元・対象期・取得時刻を確認できる値だけを使用します。財務に依存する旧スコア・推計評価は未確認です。</Alert>
+
       {/* Minervini rule 1 — the same market-regime banner the PC scan page
           shows; regime fields ride on every static scan row. Fed from the
           unfiltered set so the market context stays visible even when the
@@ -450,7 +457,8 @@ function StaticScanPage() {
         onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
         researchRows={hydratedRows}
-        generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at}
+        generation={generation}
+        now={now}
         chartIndex={effectiveChartIndex}
         date={scanManifestQuery.data.as_of_date}
         navigationSymbols={navigationSymbols}

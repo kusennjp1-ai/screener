@@ -16,9 +16,9 @@ function setup(props) {
 describe('inline chart integration', () => {
   it('loads static bars, then replaces the symbol without reusing previous data', async () => {
     fetchPayload.mockImplementation(async path=>({ symbol:path==='a.json'?'AAA':'BBB',as_of_date:'2026-09-21',bars: [{ date: '2026-09-21', close: 100 }], signal: { trigger_price: 120 }, stock_data: {vcp_pivot:110} }));
-    const view = setup({ entry: { path: 'a.json' }, symbol: 'AAA', generation: '1', row:{current_price:100,se_pivot_price:99} });
+    const view = setup({ entry: { path: 'a.json' }, symbol: 'AAA', generation: '1', row:{symbol:'AAA',current_price:100,se_pivot_price:99} });
     expect(await screen.findByTestId('chart')).toHaveTextContent('AAA:1:99');
-    view.update({ entry: { path: 'b.json' }, symbol: 'BBB', generation: '1', row:{current_price:100,se_pivot_price:99} });
+    view.update({ entry: { path: 'b.json' }, symbol: 'BBB', generation: '1', row:{symbol:'BBB',current_price:100,se_pivot_price:99} });
     await waitFor(() => expect(screen.getByTestId('chart')).toHaveTextContent('BBB:1:99'));
     expect(fetchPayload).toHaveBeenCalledWith('b.json');
   });
@@ -48,11 +48,11 @@ describe('inline chart integration', () => {
   });
   it.each(['missing', 'error', 'wrong identity'])('clears a previously valid chart when its replacement is %s', async reason => {
     fetchPayload.mockResolvedValueOnce({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});
-    const view=setup({entry:{path:'a.json'},symbol:'AAA',row:{current_price:100,se_pivot_price:99}});
+    const view=setup({entry:{path:'a.json'},symbol:'AAA',row:{symbol:'AAA',current_price:100,se_pivot_price:99}});
     expect(await screen.findByTestId('chart')).toBeVisible();
     if(reason==='error') fetchPayload.mockRejectedValueOnce(Error('offline'));
     else if(reason==='wrong identity') fetchPayload.mockResolvedValueOnce({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});
-    view.update({entry:reason==='missing'?undefined:{path:'b.json'},symbol:'BBB',row:{current_price:200,se_pivot_price:199}});
+    view.update({entry:reason==='missing'?undefined:{path:'b.json'},symbol:'BBB',row:{symbol:'BBB',current_price:200,se_pivot_price:199}});
     await screen.findByText(reason==='missing'?'この銘柄のチャートは未配信です。':'チャートを取得できません。');
     const chart=screen.getByTestId('chart');
     expect(chart).not.toBeVisible();
@@ -93,4 +93,45 @@ it('does not treat a missing expected analysis date as verified',async()=>{
  setup({entry:{path:'a.json'},symbol:'AAA',date:undefined});
  await screen.findByText('チャートを取得できません。');
  expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
+});
+
+it('keeps the same source-proximity warning beside a verified inline chart',async()=>{
+ fetchPayload.mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:104}]});
+ const props={entry:{path:'a.json'},symbol:'AAA',date:'2026-09-21',method:'minervini',row:{symbol:'AAA',current_price:104,se_pivot_price:100}};
+ const view=setup(props);await screen.findByTestId('chart');
+ expect(screen.getByRole('note',{name:/書籍の追随目安外/}).closest('.research-chart')).toBeInTheDocument();
+ view.update({...props,row:{symbol:'AAA',current_price:102,se_pivot_price:100}});
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+ view.update({...props,method:'oneil'});
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+ view.update({...props,symbol:'BBB',entry:undefined});
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+});
+
+it.each([
+ ['symbol',{symbol:'OTHER'}], ['row date',{as_of_date:'2026-09-18'}],
+ ['audit date',{technical_audit:{as_of_date:'2026-09-18'}}],
+ ['entry date',{entry_evidence:{as_of_date:'2026-09-18'}}], ['malformed date',{as_of_date:false}],
+])('withholds mismatched %s overlays even after matching candles have arrived',async(_label,identity)=>{
+ fetchPayload.mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:104}],stock_data:{symbol:'AAA',current_price:104,se_pivot_price:100}});
+ const props={entry:{path:'a.json'},symbol:'AAA',date:'2026-09-21',method:'minervini'};
+ const view=setup({...props,row:{symbol:'AAA',current_price:104,se_pivot_price:100,...identity}});
+ expect(await screen.findByTestId('chart')).toHaveTextContent('AAA:1:');
+ expect(screen.getByTestId('chart')).toHaveAttribute('data-levels','[null,null,null]');
+ expect(screen.queryByRole('note',{name:/書籍の追随目安外/})).not.toBeInTheDocument();
+ view.update({...props,row:{symbol:'AAA',as_of_date:'2026-09-21',current_price:104,se_pivot_price:100}});
+ expect(JSON.parse(screen.getByTestId('chart').dataset.levels)[0]).toBe(100);
+ expect(screen.getByRole('note',{name:/書籍の追随目安外/})).toBeInTheDocument();
+ expect(fetchPayload).toHaveBeenCalledOnce();
+});
+
+it.each([
+ [{current_price:104,se_pivot_price:100},100],
+ [{symbol:'OTHER',current_price:104,se_pivot_price:100},null],
+ [{current_price:104,se_pivot_price:100,as_of_date:'2026-09-18'},null],
+])('binds optional payload context to its verified envelope without accepting conflicting identity',async(stock_data,pivot)=>{
+ fetchPayload.mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:104}],stock_data});
+ setup({entry:{path:'a.json'},symbol:'AAA',date:'2026-09-21',method:'minervini'});
+ const chart=await screen.findByTestId('chart');
+ expect(JSON.parse(chart.dataset.levels)[0]).toBe(pivot);
 });

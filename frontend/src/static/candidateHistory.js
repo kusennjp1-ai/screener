@@ -10,12 +10,12 @@ export function selectionState(assessment) {
   // Missing evidence takes precedence over failure for change attribution.
   return assessment.unknown ? 'unknown' : assessment.qualified ? 'pass' : 'fail';
 }
-export function selectionSnapshot(rows, meta) {
+export function selectionSnapshot(rows, meta, now = Date.now()) {
   const definitions = {};
   const records = [...rows].sort((a,b)=>a.symbol.localeCompare(b.symbol)).map(row => {
     const methods = {};
     for (const method of HISTORY_METHODS) {
-      const a = assess(row, method);
+      const a = assess(row, method, now);
       definitions[method] ||= a.rules.map((r,i)=>({id:`${method}:${i+1}`,label:r.label,unit:r.unit || ''}));
       methods[method] = {state:selectionState(a), rules:a.rules.map(r=>[r.state,r.value ?? null,r.evidence ?? null])};
     }

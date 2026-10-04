@@ -1,0 +1,7 @@
+.research-workbench .research-freshness-notice { padding:4px 16px; }
+.research-freshness-notice .MuiAlert-message { min-width:0; width:100%; padding:0; }
+.research-workbench .research-freshness-notice summary { display:flex; flex-direction:column; justify-content:center; min-height:44px; min-width:44px; cursor:pointer; font-size:12px; line-height:1.5; }
+.research-freshness-notice summary > span { display:block; overflow-wrap:anywhere; }
+.research-freshness-notice summary b { font-weight:600; }
+.research-freshness-notice p { margin:8px 0; font-size:12px; line-height:1.6; }
+.research-freshness-notice summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }

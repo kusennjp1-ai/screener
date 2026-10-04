@@ -276,7 +276,7 @@ globalThis.fetch = async (input, options) => {
   };
   const dist = join(root, 'release/frontend/dist');
   const installTransport = (frontend = 'release/frontend') => {
-    write(join(root, frontend, 'src/static/researchTransport.js'), readFileSync(join(project, 'frontend/src/static/researchTransport.js')));
+    for (const file of ['researchTransport.js', 'priceTrace.js', 'qualificationAudit.js']) write(join(root, frontend, `src/static/${file}`), readFileSync(join(project, `frontend/src/static/${file}`)));
     write(join(root, frontend, 'package.json'), '{"type":"module"}');
   };
   const simulateBuild = () => {
@@ -349,6 +349,50 @@ describe('split Pages publication CLI', () => {
     expect(uiTree(f.dist)).toEqual(builtUi);
     expect(f.finalReceipt()).toMatchObject({ ui_sha: mainSha, approval: { type: 'gates', sha: mainSha,
       runs: f.currentGates.map(run => ({ id: run.id, attempt: run.run_attempt, path: run.path })) } });
+  });
+
+  it('publishes a newly verified UI correction from the exact live input without inventing a newer market date', () => {
+    const f = fixture({ fresh: false, designPassed: true });
+    expect(f.success('plan').output).toBe(`publish=true\nsha=${mainSha}\nmode=ui\nmigration=false\n`);
+    expect(f.state().source).toMatchObject({ runId: 500, attempt: 2, artifact: { id: 700 } });
+    f.success('restore'); f.simulateBuild();
+    const builtUi = uiTree(f.dist);
+    // A gated exporter may correct its current-use interpretation on the same
+    // observation date. Keep the raw historical value and all price dates.
+    const researchPath = 'static-data/research-index.json';
+    const corrected = { as_of_date: '2026-11-01', rows: [{ ...verifiedRow('2026-11-01'),
+      eps_growth_qq: 80, financial_current: { v: 1, s: 'KEEP', m: 'US', a: '2026-11-01',
+        t: Date.parse('2026-11-02T00:00:00Z'), r: '2222222222222222', p: {} } }] };
+    const correctedBytes = jsonBytes(corrected);
+    write(join(f.dist, researchPath), correctedBytes);
+    const finalManifest = manifest('2026-11-01');
+    finalManifest.markets.US.assets.research.sha256 = hash(correctedBytes);
+    const finalManifestBytes = jsonBytes(finalManifest);
+    write(join(f.dist, 'static-data/manifest.json'), finalManifestBytes);
+    f.success('compose'); f.success('recheck');
+    expect(uiTree(f.dist)).toEqual(builtUi);
+    expect(JSON.parse(readFileSync(join(f.dist, researchPath), 'utf8'))).toEqual(corrected);
+    expect(f.finalReceipt()).toMatchObject({ ui_sha: mainSha,
+      approval: { type: 'gates', sha: mainSha }, data_source: { artifact_id: 700, run_id: 500, attempt: 2 },
+      data_manifest_sha256: hash(finalManifestBytes), price_observations: priceObservations('2026-11-01'),
+      known_price_dates: priceObservations('2026-11-01') });
+    expect(hash(finalManifestBytes)).not.toBe(hash(f.liveManifest));
+  });
+
+  it('keeps an automatic same-date correction blocked while the new UI lacks a passing Design gate', () => {
+    const f = fixture({ fresh: false, designPassed: false });
+    expect(f.success('plan').output).toBe('publish=false\n');
+    expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
+    expect(existsSync(f.dist)).toBe(false);
+  });
+
+  it('rechecks the new UI gates before publishing a same-date correction', () => {
+    const f = fixture({ fresh: false, designPassed: true });
+    f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose');
+    f.currentGates.find(run => run.path === workflow('design-acceptance.yml')).conclusion = 'failure';
+    const result = f.invoke('recheck');
+    expect(result.status).not.toBe(0);
+    expect(result.text).toContain('Current-main publication gates changed');
   });
 
   it('skips a duplicate automatic event but keeps manual same-code recovery actionable', () => {

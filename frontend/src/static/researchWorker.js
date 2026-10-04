@@ -32,12 +32,12 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.operation === 'next-packet') { sendNextPacket(); return; }
     if (data.operation === 'prepare') {
-      sendPackets(researchPackets(prepareResearchBundle(data.payloads,data.date)));
+      sendPackets(researchPackets(prepareResearchBundle(data.payloads,data.date,data.evaluation)));
       return;
     }
     const index = await read(data.url, data.sha256);
     const result = data.operation === 'research'
-      ? prepareResearchBundle([index, ...await Promise.all((index.chunks || []).map(chunk => read(new URL(chunk.path, data.baseUrl).href)))], data.date)
+      ? prepareResearchBundle([index, ...await Promise.all((index.chunks || []).map(chunk => read(new URL(chunk.path, data.baseUrl).href)))], data.date, data.evaluation)
       : index;
     if(data.operation==='research') sendPackets(researchPackets(result));
     else if(data.operation==='workbench') sendPackets(workbenchPackets(result));

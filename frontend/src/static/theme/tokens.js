@@ -17,17 +17,27 @@ export const palettes = {
 };
 export const fontSizes = [42,34,26,20,16,14,13,12,11];
 export const radii = [4,8,12,16];
-export const fonts = { body:'"Zen Kaku Gothic New", sans-serif', mono:'"Geist Mono", monospace' };
+// Use installed Japanese UI fonts to avoid late subset downloads changing the
+// geometry of an already readable evidence feed. Share the same stacks with
+// the CSS shell, portalled controls and canvas labels.
+export const fonts = {
+  body:'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", Meiryo, IPAGothic, sans-serif',
+  mono:'ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+};
 export const themeCss = Object.entries(palettes).map(([mode,palette]) =>
-  `:root[data-theme="${mode}"],.leader-shell[data-theme="${mode}"]{${Object.entries(palette).map(([key,value])=>`--${key}:${value}`).join(';')};color-scheme:${mode}}`
+  `:root[data-theme="${mode}"],.leader-shell[data-theme="${mode}"]{${Object.entries(palette).map(([key,value])=>`--${key}:${value}`).join(';')};--font-body:${fonts.body};--font-mono:${fonts.mono};color-scheme:${mode}}`
 ).join('\n');
 export function researchTheme(mode) {
   const p=palettes[mode] || palettes.dark;
+  const variants={h1:{fontSize:42,fontWeight:700},h2:{fontSize:34,fontWeight:700},h3:{fontSize:26},h4:{fontSize:20},h5:{fontSize:16},h6:{fontSize:14},subtitle1:{},subtitle2:{},body1:{fontSize:14},body2:{fontSize:13},caption:{fontSize:12},overline:{fontSize:11},button:{fontSize:13,textTransform:'none'}};
+  // StaticLayout merges into an already expanded outer MUI theme. A top-level
+  // fontFamily alone cannot replace that theme's per-variant Inter families.
+  const typography={fontFamily:fonts.body,fontSize:14,...Object.fromEntries(Object.entries(variants).map(([name,variant])=>[name,{...variant,fontFamily:fonts.body}]))};
   return {
     palette:{mode,primary:{main:p.accent,contrastText:p['accent-ink']},secondary:{main:p.wait},
       background:{default:p.ground,paper:p.surface},text:{primary:p.text,secondary:p['text-2'],disabled:p['text-3']},
       success:{main:p.zone},error:{main:p.neg},warning:{main:p.ext},info:{main:p.wait},divider:p.line},
-    typography:{fontFamily:fonts.body,fontSize:14,h1:{fontSize:42,fontWeight:700},h2:{fontSize:34,fontWeight:700},h3:{fontSize:26},h4:{fontSize:20},h5:{fontSize:16},h6:{fontSize:14},body1:{fontSize:14},body2:{fontSize:13},caption:{fontSize:12},overline:{fontSize:11},button:{fontSize:13,textTransform:'none'}},
+    typography,
     shape:{borderRadius:8},
     components:{MuiPaper:{styleOverrides:{root:{backgroundImage:'none',boxShadow:'none'}}},MuiButton:{styleOverrides:{root:{minHeight:24,minWidth:24}}},MuiIconButton:{styleOverrides:{root:{minHeight:24,minWidth:24}}},MuiChip:{styleOverrides:{root:{fontSize:11},label:{fontSize:11}}},MuiInputBase:{styleOverrides:{input:{minHeight:24}}},MuiTooltip:{styleOverrides:{tooltip:{fontSize:12}}}},
   };
