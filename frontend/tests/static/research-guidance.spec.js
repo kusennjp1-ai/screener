@@ -25,12 +25,12 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
   await page.goto('/');
   const candidate = page.getByRole('button', { name: /^EDGE の分析を表示/ });
   await expect(candidate).toBeVisible();
-  await expect(candidate).toHaveAccessibleName(/日次 .*最新の取引日：未確認/);
+  await expect(candidate).toHaveAccessibleName(/日次確認 [0-9]+\/7。.*最新の取引日：未確認/);
   const glossary = page.locator('.candidate-glossary');
   await glossary.locator('summary').focus();
   await page.keyboard.press('Enter');
   await expect(glossary).toHaveAttribute('open', '');
-  await expect(glossary.getByText('選定と購入条件', { exact: true })).toBeVisible();
+  await expect(glossary.getByText('選定条件と日次確認', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`guidance-${width}-expanded.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await glossary.locator('summary').press('Enter');

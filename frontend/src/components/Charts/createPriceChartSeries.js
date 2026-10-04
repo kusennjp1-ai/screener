@@ -1,4 +1,4 @@
-import { palettes } from '../../static/theme/tokens';
+import { palettes, fonts } from '../../static/theme/tokens';
 import {
   createChart,
   CrosshairMode,
@@ -21,7 +21,7 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
       background: { type: 'solid', color: palette.panel },
       textColor: palette['text-2'],
       fontSize: 11,
-      fontFamily: '"Geist Mono", monospace',
+      fontFamily: fonts.mono,
     },
     grid: {
       vertLines: { color: palette.grid },

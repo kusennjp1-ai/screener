@@ -1,9 +1,19 @@
 # Inline chart viewport diagnostic
 
+The viewport-gated detail-chart experiment was reverted after
+[run 37182933265](https://github.com/kusennjp1-ai/screener/actions/runs/37182933265)
+showed no overall improvement and added first-encounter delay in the separate
+instrumented chart sample. See the
+[recorded evidence and limits](../../docs/research-feed-performance-2026-10-04.md#restore-eager-detail-chart-creation).
+The current chart mounts on verified data again, retains its instance during
+matching updates, and clears it during replacement. The gate, display placeholder
+and hidden height reservation are removed. This is a reversion decision, not an
+overall performance claim.
+
 Run this separate CI-only pass **after** the three official production budget
 runs. It never changes/replaces those runs or their thresholds. There is no diagnostic
 latency threshold; completeness or provenance failures exit nonzero and block
-the experiment in CI. Do not set CI=1
+the diagnostic in CI. Do not set CI=1
 to run production browser measurements locally. Pure tests can run locally:
 
 ```sh
@@ -37,7 +47,7 @@ CPU, then a separate current-build 1440px timeline. Each chart case has a fresh
 context and 60-second deadline; individual waits are bounded at 15 seconds.
 Completed screenshots, JSON and errors are preserved. An incomplete shared
 scroll comparison, invalid provenance or incomplete timeline exits nonzero and
-blocks the CI experiment. This checks diagnostic completeness and identity;
+blocks the CI diagnostic. This checks diagnostic completeness and identity;
 it adds no latency threshold. One instrumented sample is not a
 statistical acceptance result.
 
@@ -65,8 +75,13 @@ captureContext})` is independently callable outside acceptance timing loops.
 - Scroll is the shared eager/current action. Invocation and actual captured
   scroll-event timestamps are separate. If no scrolling occurs, missing event
   timing remains missing, never a zero-latency pass.
-- Display-button request is separate and never baseline-comparable. The helper
-  waits for either its button or a chart after the eager query. A normal
+- Display-button request is separate and never baseline-comparable. Both the
+  current reverted eager chart and the frozen eager source have no display
+  button, so this path is explicitly `not_applicable`, with no request timing
+  and `complete: false`. It is not a failed or zero-latency measurement; shared
+  scroll completeness still controls comparison validity. The helper waits for
+  either a display button or a chart after the query, so it can also inspect
+  historical deferred builds. A normal
   Playwright click may automatically activate the chart while scrolling toward
   the button. That path is explicitly `auto_activated_before_request`, without
   inventing request latency or bypassing viewport behavior with a scripted click.
@@ -79,7 +94,7 @@ captureContext})` is independently callable outside acceptance timing loops.
   not shorten it. The hit tests remain required.
 - Each phase also records section top/bottom/width/height, document-relative
   top, scrollY and document height before/after, independently of layout-shift
-  support, so reserved-widget reflow and scroll movement can be inspected.
+  support, so chart reflow and scroll movement can be inspected.
 - The first 1-month interaction must change range and raster. Warm return must
   keep that selected range and the same chart node.
 - Phase-local overlapping longtasks and layout shifts are reported. Input-

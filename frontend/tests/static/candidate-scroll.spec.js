@@ -108,16 +108,20 @@ for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`of
   });
   let focusCheck=0;
   const expectFocused=async target=>{
-    await expect(target).toBeFocused();await expect(target).toBeInViewport({ratio:1});
+    await expect(target).toBeFocused();
+    // Observe the application's keyboard reveal after the browser's default
+    // focus step; do not reposition the target from the test.
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
     const bounds=await geometry(target);
     const name=`focused-target-${width}-${++focusCheck}`;
     // Retain actual hit elements and their stacking order before any assertion
     // can end the test; a boolean alone cannot distinguish clipping/overlays.
     await info.attach(name,{body:JSON.stringify(bounds),contentType:'application/json'});
-    if(!bounds.hit){
+    if(!bounds.hit||bounds.row.top<bounds.visibleTop||bounds.row.bottom>bounds.visibleBottom){
       const path=info.outputPath(`${name}.png`);
       await page.screenshot({path});await info.attach(`${name}-screen`,{path,contentType:'image/png'});
     }
+    await expect(target).toBeInViewport({ratio:1});
     expect(bounds.row.top).toBeGreaterThanOrEqual(bounds.visibleTop-.1);
     expect(bounds.row.bottom).toBeLessThanOrEqual(bounds.visibleBottom+.1);
     expect(bounds.row.left).toBeGreaterThanOrEqual(0);expect(bounds.row.right).toBeLessThanOrEqual(width);

@@ -368,7 +368,11 @@ export async function runChartViewportDiagnostics({ browser, baselineUrl, curren
           const root = document.querySelector(section);
           return Boolean(root?.querySelector('[data-chart-symbol] canvas') || [...(root?.querySelectorAll('button') || [])].some(button => button.textContent.trim() === '日次チャートを表示'));
         }, SECTION, { timeout: timeoutMs });
-        if (action === 'request' && !await request.count()) { run.unsupported = 'No display button at the measurement boundary (eager baseline or viewport already activated).'; continue; }
+        if (action === 'request' && !await request.count()) {
+          run.status = 'not_applicable';
+          run.unsupported = 'No display button at the measurement boundary: the chart is eager or already mounted. No display-request latency was measured.';
+          continue;
+        }
         const common = { page, expected, context: captureInfo, output, capture, timeoutMs };
         run.phases.initial = await measureAction({ ...common, phase: 'initial', trigger: action === 'scroll' ? 'scroll' : 'click', buttonName: '日次チャートを表示', perform: () => action === 'scroll' ? section.scrollIntoViewIfNeeded() : request.click() });
         if (action === 'request' && run.phases.initial.event_ms == null && await section.locator('[data-chart-symbol] canvas').count()) {
@@ -405,7 +409,7 @@ export async function runChartViewportDiagnostics({ browser, baselineUrl, curren
     }
     report.comparison_valid = report.consumed_data.length > 0 && ['baseline', 'current'].every(label => report.runs.find(run => run.label === label && run.action === 'scroll')?.complete);
     report.scroll_comparison = report.comparison_valid ? Object.fromEntries(['baseline', 'current'].map(label => [label, report.runs.find(run => run.label === label && run.action === 'scroll').phases.initial.event_to_confirmed_ms])) : null;
-    report.request_comparison = null; // New control has no eager-baseline equivalent.
+    report.request_comparison = null; // Eager charts have no display-request action.
   } catch (error) { report.errors.push(error.message); }
   finally {
     await preflight.close();

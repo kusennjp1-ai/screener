@@ -16,6 +16,28 @@ import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 const SORTS={rank:'選定・買い位置',distance:'ピボットに近い順',rs:'RSが高い順',volume:'出来高比が高い順',state:'状態'};
 const METHOD_NAMES={minervini:'ミネルヴィニ',minervini2:'基本と原則',oneil:'オニール',ibd:'IBD型'};
 const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(state));
+function revealKeyboardTarget(target) {
+ if(!target?.isConnected)return;
+ const header=document.querySelector('.leader-header')?.getBoundingClientRect();
+ const nav=document.querySelector('.leader-mobile-nav')?.getBoundingClientRect();
+ const top=Math.max(0,header?.bottom||0),bottom=nav?.height?Math.min(window.innerHeight,nav.top):window.innerHeight;
+ const offset=(visibleTop,visibleBottom)=>{
+  const bounds=target.getBoundingClientRect();
+  if(!bounds.height||visibleBottom-visibleTop<bounds.height)return 0;
+  // Native focus scrolling can round a fractional edge out of view, and it
+  // cannot see the fixed mobile nav. Leave room for the focus ring as well.
+  if(bounds.top<visibleTop)return Math.floor(bounds.top-visibleTop-8);
+  if(bounds.bottom>visibleBottom)return Math.ceil(bounds.bottom-visibleBottom+8);
+  return 0;
+ };
+ const scroll=target.closest('.candidate-scroll');
+ if(scroll&&/auto|scroll/.test(getComputedStyle(scroll).overflowY)&&scroll.scrollHeight>scroll.clientHeight){
+  const bounds=scroll.getBoundingClientRect();
+  scroll.scrollTop+=offset(Math.max(top,bounds.top),Math.min(bottom,bounds.bottom));
+ }
+ const delta=offset(top,bottom);
+ if(delta)window.scrollBy({top:delta,behavior:'instant'});
+}
 function CandidatePriceTrace({trace,date,symbol}) {
  const [failed,setFailed]=useState(false);
  const available=!failed&&trace?.status==='available'&&trace.asOfDate===date&&typeof trace.src==='string';
@@ -89,8 +111,16 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
  },[current]);
  const showPage=useCallback(next=>{pageStartRef.current=next;setPage(next);},[]);
  const sortBy=useCallback(key=>{setSort(key);setPage(0);},[]);
- const move=useCallback((symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){const scroll=element.closest('.candidate-scroll');(onHighlight||onSelect)(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{scroll?.querySelectorAll('.candidate-row')[(index+direction)%50]?.focus({preventScroll:false});});}},[ordered,onSelect,onHighlight]);
- return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="候補リスト" className={`research-panel research-list candidate-guidance candidate-feed${compareOnly?' compare-only':''}`}>
+ const revealAfterTab=useCallback(event=>{
+  if(event.key!=='Tab')return;
+  const board=event.currentTarget;
+  // Let the browser choose the next/previous action first. Deliberately keep
+  // this on keyboard navigation: Back restores focus with preventScroll and
+  // must retain the reader's saved evidence position.
+  requestAnimationFrame(()=>{if(board.contains(document.activeElement))revealKeyboardTarget(document.activeElement);});
+ },[]);
+ const move=useCallback((symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){const scroll=element.closest('.candidate-scroll');(onHighlight||onSelect)(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{const target=scroll?.querySelectorAll('.candidate-row')[(index+direction)%50];target?.focus({preventScroll:false});revealKeyboardTarget(target);});}},[ordered,onSelect,onHighlight]);
+ return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="候補リスト" onKeyDownCapture={revealAfterTab} className={`research-panel research-list candidate-guidance candidate-feed${compareOnly?' compare-only':''}`}>
   {!compareOnly&&<>{toolbar}<div className="candidate-board-heading"><h2>{METHOD_NAMES[method]} <small>候補 {loading?'—':ranked.length.toLocaleString()}件</small></h2><label><span className="sr-only">並び順</span><select aria-label="候補の並び順" value={sort} onChange={e=>sortBy(e.target.value)}>{Object.entries(SORTS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{onNearToggle&&<button className="near-pass-toggle" aria-pressed={nearOnly} onClick={onNearToggle}>あと1条件</button>}{onFilters&&<button onClick={onFilters} aria-label="候補を絞り込む">絞込</button>}</div>
   <div className="candidate-filter-context">{filterChips}<div className="candidate-guide"><details className="candidate-glossary"><summary>一覧の見方</summary><p>成長の裏付けと、<strong>日次確認</strong>を確認。</p><dl><div><dt>選定条件と日次確認</dt><dd>手法の条件通過は候補入り。「日次確認 n/7」は共通の購入条件の通過数です。買いゾーン内でも、未達・未確認があれば購入条件は通過しません。</dd></div><div><dt>ピボット・買い位置</dt><dd>ピボットは値動きから求める買い位置の基準。帯が買いゾーン、線がピボット、点が日次価格です。許容幅は手法ごとのアプリ設定です。</dd></div><div><dt>RS・出来高</dt><dd>RSは株価の相対的な強さの推計値。出来高は検証済み日足の直前50日平均に対する倍率です。未検証は「—」で表示します。RSはRSIとは異なります。</dd></div><div><dt>日次確認</dt><dd>選定、市場、最新取引日、買い位置、出来高、ベース形状、決算予定を別途検証。アプリ独自の組み合わせ・閾値であり、書籍の原文や発注指示ではありません。</dd></div></dl></details></div></div></>}
   {!onFilters&&!compareOnly&&<div className="candidate-view-switch" role="group" aria-label="候補の表示形式"><Button aria-pressed={view==='list'} onClick={()=>onView?.('list')}>一覧</Button><Button aria-pressed={view==='charts'} onClick={()=>onView?.('charts')}>チャート比較</Button></div>}
