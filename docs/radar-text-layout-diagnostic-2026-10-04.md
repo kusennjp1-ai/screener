@@ -53,3 +53,24 @@ failures, expected context differences, missing-font rejection, trace interval
 accounting and workflow permissions/triggers. Local validation does not establish
 browser execution, screenshots, performance, or acceptance. The parent coordinates
 the one branch push and reviews resulting artifacts before further action.
+
+## Execution repair after the first artifact
+
+Run `37242914677`, commit `436f4c4bc19cbc96885adf1ecd2bf8cd689bd79b`, produced
+32 retained failed samples. Its original ZIP SHA-256 is
+`bcc13f8110e2020bb5847b222e242e5193e111539090984c1573c67048f0b409`.
+No original artifact is rewritten or discarded. All controls failed because
+Playwright rejects empty style content. All candidates measured, then resource
+bookkeeping threw when completion events lacked request URLs. The twelve
+uninstrumented candidate endpoints were 92.7–110.2ms, all above 50ms. Without
+measured controls, this failed protocol establishes no paired improvement.
+
+Protocol `radar-inherited-text-features-ab-v2` repairs only those execution defects.
+The control inserts an explicit CSS comment with no rules. Completion metadata
+is correlated with request or response events by request ID, keeping raw records
+and reporting recovered, invalid and unresolved URLs. Font failures remain
+failures; unresolved records that could be fonts invalidate font completeness.
+The two uncorrelated completions in each original candidate have matching local
+HTML/CSS response records. The original 24+8 design, timing boundary, cold state,
+font loading, candidate CSS and 50ms budget are unchanged. Any corrected execution
+is a separately identified protocol repair, never a discarded unfavorable trial.

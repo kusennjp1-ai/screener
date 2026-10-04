@@ -1,7 +1,7 @@
 import { radarMeasurementFailures } from './radar-benchmark-context.mjs';
 
-export const EXPERIMENT_VERSION = 'radar-inherited-text-features-ab-v1';
-export const VARIANTS = { control: '', normal: '.setup-radar { font-feature-settings:normal; font-variant-numeric:normal; }' };
+export const EXPERIMENT_VERSION = 'radar-inherited-text-features-ab-v2';
+export const VARIANTS = { control: '/* Control: retain production styles unchanged. */', normal: '.setup-radar { font-feature-settings:normal; font-variant-numeric:normal; }' };
 export const EXPECTED_CONTEXT_DIFFERENCE = 'radar lost production text inheritance';
 export const CASES = [1440, 390].flatMap(width => ['dark', 'light'].map(theme => ({ width, height: width === 1440 ? 900 : 844, theme })));
 export function trialPlan() {

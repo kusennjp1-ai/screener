@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import yaml from 'js-yaml';
 import { VARIANTS, CASES, trialPlan, tracePlan, measurementEvidence, summarizeTrials, traceCosts, EXPECTED_CONTEXT_DIFFERENCE } from './radar-text-layout-contract.mjs';
 import { RADAR_CONTEXT_CLASSES, RADAR_HARNESS_VERSION } from './radar-benchmark-context.mjs';
@@ -30,7 +32,7 @@ describe('bounded Radar text-layout experiment', () => {
     }
   });
   it('changes only inherited palt/tnum and keeps the 50ms and production-context differences visible', () => {
-    expect(VARIANTS).toEqual({ control: '', normal: '.setup-radar { font-feature-settings:normal; font-variant-numeric:normal; }' });
+    expect(VARIANTS).toEqual({ control: '/* Control: retain production styles unchanged. */', normal: '.setup-radar { font-feature-settings:normal; font-variant-numeric:normal; }' });
     const evidence = measurementEvidence(measurement('normal'), 'normal');
     expect(evidence.under_original_50ms).toBe(false);
     expect(evidence.expected_context_differences).toEqual([EXPECTED_CONTEXT_DIFFERENCE]);
@@ -38,6 +40,22 @@ describe('bounded Radar text-layout experiment', () => {
     expect(evidence.production_acceptance).toBe('not_evaluated_by_this_experiment');
     expect(evidence.unexpected_failures).toEqual([]);
     expect(measurementEvidence(measurement('control'), 'normal').unexpected_failures).toContain('candidate text feature override was not applied');
+  });
+  it('passes the installed Playwright content guard with a CSS no-op control', async () => {
+    // Exercise the real argument guard without starting a browser. The old empty
+    // string fails before Playwright asks for an execution context.
+    const require = createRequire(import.meta.url);
+    const { Frame } = require(join(dirname(require.resolve('playwright-core/package.json')), 'lib/server/frames.js'));
+    const passedContent = [];
+    const frame = { _mainContext: async () => ({ evaluateHandle: async (_fn, content) => {
+      passedContent.push(content); return { asElement: () => ({ content }) };
+    } }), _raceWithCSPError: fn => fn() };
+    await expect(Frame.prototype.addStyleTag.call(frame, { content: '' })).rejects.toThrow('Provide an object');
+    expect(passedContent).toEqual([]);
+    await expect(Frame.prototype.addStyleTag.call(frame, { content: VARIANTS.control })).resolves.toEqual({ content: VARIANTS.control });
+    expect(passedContent).toEqual([VARIANTS.control]);
+    const style = document.createElement('style'); style.textContent = VARIANTS.control; document.head.appendChild(style);
+    expect(style.sheet.cssRules).toHaveLength(0); style.remove();
   });
   it('does not excuse missing points, opacity, geometry or any unrelated context defect', () => {
     const run = measurement('normal'); run.final_point_count = 206; run.visibility.effective_opacity = 0; run.context.canvas.box_sizing = 'content-box';

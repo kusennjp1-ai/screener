@@ -20,7 +20,7 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - run: npm run test:run -- tools/radar-text-layout-contract.test.mjs tools/radar-trace-stop.test.mjs tools/radar-benchmark-context.test.mjs tools/radar-visibility.test.mjs tools/radar-fixture.test.mjs src/static/components/SetupRadar.test.jsx
+      - run: npm run test:run -- tools/radar-text-layout-contract.test.mjs tools/radar-font-resources.test.mjs tools/radar-trace-stop.test.mjs tools/radar-benchmark-context.test.mjs tools/radar-visibility.test.mjs tools/radar-fixture.test.mjs src/static/components/SetupRadar.test.jsx
         working-directory: frontend
       - run: node tools/build-radar-benchmark.mjs
         working-directory: frontend

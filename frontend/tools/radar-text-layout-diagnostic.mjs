@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { EXPERIMENT_VERSION, VARIANTS, trialPlan, tracePlan, measurementEvidence, summarizeTrials, traceCosts } from './radar-text-layout-contract.mjs';
 import { stoppedTraceArtifact } from './radar-trace-stop.mjs';
+import { fontResourceEvidence } from './radar-font-resources.mjs';
 
 if (!process.env.CI) throw Error('This bounded browser experiment runs only in CI.');
 const root = resolve('test-results/radar-build'), output = resolve('test-results/radar-text-layout');
@@ -17,7 +18,7 @@ const sourcePaths = ['src/static/components/SetupRadar.jsx', 'src/static/radarMa
   'src/static/researchEngine.js', 'src/static/research.css', 'src/static/workbench.css', 'src/static/theme/foundation.css',
   'src/static/theme/motion.css', 'src/static/theme/tokens.js', 'src/static/components/researchOverview.css', 'src/index.css',
   'tools/radar-benchmark.jsx', 'tools/radar-benchmark-context.mjs', 'tools/radar-benchmark-context.css', 'tools/radar-visibility.mjs',
-  'tools/fixtures/radar-207-2026-09-29.json', 'tools/radar-text-layout-contract.mjs', 'tools/radar-text-layout-diagnostic.mjs', 'tools/radar-trace-stop.mjs'];
+  'tools/fixtures/radar-207-2026-09-29.json', 'tools/radar-text-layout-contract.mjs', 'tools/radar-text-layout-diagnostic.mjs', 'tools/radar-trace-stop.mjs', 'tools/radar-font-resources.mjs'];
 const manifest = { experiment_version: EXPERIMENT_VERSION, commit: git(['rev-parse', 'HEAD']), tree: git(['rev-parse', 'HEAD^{tree}']),
   source_sha256: {}, built_sha256: {}, variants: Object.fromEntries(Object.entries(VARIANTS).map(([key, css]) => [key, { css, sha256: sha(css) }])) };
 for (const path of sourcePaths) manifest.source_sha256[path] = sha(await readFile(path));
@@ -66,7 +67,7 @@ async function sampleCase(spec, ordinal) {
     session.on('Network.responseReceived', event => sample.resources.push({ event: 'response', id: event.requestId, type: event.type,
       url: event.response.url, status: event.response.status, mime_type: event.response.mimeType, from_disk_cache: event.response.fromDiskCache, timestamp: event.timestamp }));
     session.on('Network.loadingFinished', event => sample.resources.push({ event: 'finished', id: event.requestId, ...requests.get(event.requestId), encoded_bytes: event.encodedDataLength, timestamp: event.timestamp }));
-    session.on('Network.loadingFailed', event => sample.resources.push({ event: 'failed', id: event.requestId, ...requests.get(event.requestId), error: event.errorText, timestamp: event.timestamp }));
+    session.on('Network.loadingFailed', event => sample.resources.push({ event: 'failed', id: event.requestId, ...requests.get(event.requestId), type: event.type, error: event.errorText, timestamp: event.timestamp }));
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
     await page.waitForFunction(() => typeof window.measureRadar === 'function', null, { timeout: 10000 });
     // Both arms get one style insertion. No glyphs, React tree or geometry exist.
@@ -105,14 +106,16 @@ async function sampleCase(spec, ordinal) {
     }
     const faces = sample.settled_fonts.after.font_faces;
     const loadedFamily = name => faces.some(face => face.status === 'loaded' && face.family.replace(/["']/g, '').includes(name));
-    const fontFailures = sample.resources.filter(resource => resource.type === 'Font' && (resource.event === 'failed' || resource.event === 'response' && resource.status >= 400));
+    sample.font_resource_evidence = fontResourceEvidence(sample.resources);
+    const fontFailures = sample.font_resource_evidence.font_failures;
     const renderedFamily = (selector, name) => sample.platform_fonts[selector].some(font => font.isCustomFont && font.glyphCount > 0 && `${font.familyName} ${font.postScriptName}`.replace(/[^a-z]/gi, '').toLowerCase().includes(name));
     sample.complete_fonts = sample.font_settlement.completed && sample.font_settlement.status === 'loaded' && loadedFamily('Zen Kaku Gothic New') && loadedFamily('Geist Mono') &&
       renderedFamily('.setup-radar header strong', 'zenkakugothicnew') && renderedFamily('.radar-x', 'geistmono') &&
-      !fontFailures.length && !faces.some(face => face.status === 'error') && !sample.unexpected_requests.length;
+      !fontFailures.length && !sample.font_resource_evidence.unresolved_resources.length &&
+      !faces.some(face => face.status === 'error') && !sample.unexpected_requests.length;
     sample.font_failures = fontFailures;
     sample.font_resource_hashes = [];
-    for (const resource of sample.resources.filter(resource => resource.event === 'finished' && ['fonts.googleapis.com', 'fonts.gstatic.com'].includes(new URL(resource.url).hostname))) {
+    for (const resource of sample.font_resource_evidence.hash_resources) {
       try {
         const body = await session.send('Network.getResponseBody', { requestId: resource.id });
         const bytes = Buffer.from(body.body, body.base64Encoded ? 'base64' : 'utf8');
