@@ -83,4 +83,13 @@ describe('split workflow wiring', () => {
     expect(design).toContain('select-release-source.mjs design');
     expect(design).not.toContain('--name github-pages');
   });
+  it('bounds the separate eager-source fetch to the verified commit without replacing the official baseline', () => {
+    const design = workflow('design-acceptance.yml');
+    expect(design).toContain("BASELINE_REF: ${{ inputs.baseline_ref || 'cd3a6a2' }}");
+    expect(design).toContain("CHART_EAGER_REVISION: '80e7d5e5050a2880cc64378ca45dcdc1e2405d53'");
+    expect(design).toContain('cat-file -e "$CHART_EAGER_REVISION^{commit}"');
+    expect(design).toContain('timeout 60s git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$CHART_EAGER_REVISION"');
+    expect(design).toContain('test "$(git -C "$RUNNER_TEMP/chart-eager" rev-parse \'HEAD^{tree}\')" = "$CHART_EAGER_TREE"');
+    expect(design.indexOf('run: node tools/design-review.mjs')).toBeLessThan(design.indexOf('id: chart_eager_build'));
+  });
 });

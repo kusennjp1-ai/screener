@@ -34,8 +34,9 @@ it.each(['minervini','minervini2'])('explains the checked source and implementat
  expect(disclosure).toHaveTextContent(method==='minervini'?'近似判定8件と独自の日足品質確認1件':'第2冊の25%指定は未確認');
 });
 it.each(['oneil','ibd'])('keeps source disclosure scoped away from %s',method=>{
- render(<ResearchDetail {...props} method={method} selected={row}/>);
+ const {container}=render(<ResearchDetail {...props} method={method} selected={row}/>);
  expect(screen.queryByText('トレンド条件の出典とアプリの近似')).not.toBeInTheDocument();
+ expect(container.querySelector('.research-symbol-head .detail-method')).toHaveTextContent(method==='oneil'?'オニール':'IBD型');
 });
 
 it.each(['minervini','minervini2'])('makes the scope of all nine technical checks visible for %s with the compact financial summary above the chart', method => {

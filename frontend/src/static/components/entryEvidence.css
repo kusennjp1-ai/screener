@@ -16,6 +16,8 @@
 .entry-price-levels dt { font-size:12px; color:var(--text-3); }
 .entry-price-levels dd { margin:3px 0 0; color:var(--text); font:600 14px var(--font-mono); }
 .research-decision-summary { padding:4px 0; }
+.research-detail .detail-method { font-size:12px; color:var(--text-2); }
+.research-detail .readiness-chip { min-height:44px; min-width:44px; }
 .research-decision-summary > p { margin:4px 0; font-size:16px; line-height:1.6; }
 .research-decision-summary .financial-scope-note { padding:0; border:0; background:none; font-size:12px; color:var(--text-3); margin:4px 0; }
 @media(max-width:600px) { .entry-next-checks li { display:block; } .entry-next-checks span { display:block; } }

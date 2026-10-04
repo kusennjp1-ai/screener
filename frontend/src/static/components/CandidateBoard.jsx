@@ -1,5 +1,5 @@
 import CandidateCharts from './CandidateCharts';
-import PositionMeter from './PositionMeter';
+import ResearchDecisionStatus from './ResearchDecisionStatus';
 import { getStaticDataUrl } from '../../config/runtimeMode';
 import { FinancialGrowthMetric } from './FinancialEvidenceSummary';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../financialEvidencePresentation';
@@ -14,6 +14,7 @@ import { entryReadiness } from '../entryReadiness';
 import { verifiedVolumeRatio } from '../qualificationAudit';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 const SORTS={rank:'選定・買い位置',distance:'ピボットに近い順',rs:'RSが高い順',volume:'出来高比が高い順',state:'状態'};
+const METHOD_NAMES={minervini:'ミネルヴィニ',minervini2:'基本と原則',oneil:'オニール',ibd:'IBD型'};
 const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(state));
 function CandidatePriceTrace({trace,date,symbol}) {
  const [failed,setFailed]=useState(false);
@@ -21,16 +22,17 @@ function CandidatePriceTrace({trace,date,symbol}) {
  return <span className="feed-price-trace">{available?<><img src={getStaticDataUrl(trace.src)} loading="lazy" decoding="async" width="360" height="64" alt={`${symbol} ${trace.caption}`} onError={()=>setFailed(true)}/><small>{trace.caption}</small></>:<span className="feed-trace-unavailable">価格推移 未確認<small>対応する日足・対象期間の根拠が未配信</small></span>}</span>;
 }
 const CandidateRow=memo(function CandidateRow({item,method,date,financialEpoch,nearOnly,selected,onSelect,onCompare,onMove,watched,onWatch}) {
- const {row:r,assessment:a,plan:p,readiness,volume,growth}=item,key=stateKey(p.state),[label,glyph,tone]=STATES[key];
- const dailyLabel=readiness?`日次 ${readiness.passed}/${readiness.total}`:'日次 未確認';
+ const {row:r,assessment:a,plan:p,readiness,volume,growth,annual}=item,[label]=STATES[stateKey(p.state)];
+ const dailyLabel=readiness?`日次確認 ${readiness.passed}/${readiness.total}`:'日次確認 未確認';
  const blockers=readiness?.rules.filter(rule=>rule.state!=='pass')||[];
  const nextCheck=blockers[0];
- const additionalChecks=blockers.slice(1).map(rule=>`${rule.label}：${rule.state==='unknown'?'未確認':'未達'}`).join('。');
+ const annualBlocker=annual?.required&&annual.state!=='pass';
+ const remainingChecks=annualBlocker?blockers:blockers.slice(1);
+ const additionalChecks=remainingChecks.map(rule=>`${rule.label}：${rule.state==='unknown'?'未確認':'未達'}`).join('。');
  const dailyDetail=readiness?.ready?'発注前に最新価格とリスクを確認':nextCheck?`${nextCheck.label}：${nextCheck.state==='unknown'?'未確認':'未達'}`:'分析日または市場環境が未確認';
  const missing=useMemo(()=>nearOnly?singleMissingCondition(assess(r,method,financialEpoch)):null,[nearOnly,r,method,financialEpoch]);
- const selectionLabel=method.startsWith('minervini')?'トレンド':'手法の選定';
  return <article className="candidate-feed-card" data-selected={selected||undefined} data-near-pass={nearOnly||undefined}>
-  <button className="candidate-row" aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。選定 ${a.passed}/${a.total}。${dailyLabel}。${dailyDetail}${additionalChecks?`。${additionalChecks}`:''}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
+  <button className="candidate-row" aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。価格位置 ${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。選定条件 ${a.passed}/${a.total}。${dailyLabel}。${dailyDetail}${annualBlocker?`。必須 年次EPS ${annual.state==='fail'?'未達':'未確認'}`:''}${additionalChecks?`。${additionalChecks}`:''}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
    if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
   }}>
@@ -38,18 +40,13 @@ const CandidateRow=memo(function CandidateRow({item,method,date,financialEpoch,n
 
   </button>
   <div className="feed-card-evidence">
-   <span className="feed-growth-label">成長の裏付け</span>
+   <ResearchDecisionStatus assessment={a} readiness={readiness} plan={p} annual={annual}/>
    <div className="feed-growth">{growth.map(row=><FinancialGrowthMetric key={row.id} row={row} compact/>)}</div>
-   <div className="feed-status-lanes">
-    <span data-state={a.qualified?'pass':a.unknown?'unknown':'fail'}><small>{selectionLabel}</small><strong>{a.passed}/{a.total}{a.unknown?` · ?${a.unknown}`:''}</strong></span>
-    <span className="feed-position" style={{'--position-tone':`var(--${tone})`}}><small>価格位置</small><strong>{glyph} {label}</strong><span className="feed-position-meter"><PositionMeter plan={p}/><span>{signed(p.distance)}</span></span></span>
-    <span><small>日次確認</small><strong className="candidate-daily-check" data-ready={readiness?.ready||undefined}>{dailyLabel}{readiness?.ready?' ✓':''}</strong></span>
-   </div>
-   <CandidatePriceTrace key={`${date}:${r.priceTrace?.src||r.symbol}`} trace={r.priceTrace} date={date} symbol={r.symbol}/>
    {nearOnly&&<span className="feed-missing" data-state={missing?.state||'unknown'}>{missing?.text||'判定資料を再確認'}</span>}
-   <span className="feed-next-check"><strong>次に確認</strong><span>{dailyDetail}</span></span>
-   {additionalChecks&&<div className="feed-other-checks" aria-label="ほかの未達・未確認">{blockers.slice(1).map(rule=><span key={rule.id} data-state={rule.state}>{rule.label}：{rule.state==='unknown'?'未確認':'未達'}</span>)}</div>}
+   <span className="feed-next-check"><strong>次に確認</strong><span>{annualBlocker?`年次EPS：${annual.state==='fail'?'未達':'未確認'}`:dailyDetail}</span></span>
+   {additionalChecks&&<div className="feed-other-checks" aria-label="ほかの未達・未確認">{remainingChecks.map(rule=><span key={rule.id} data-state={rule.state}>{rule.label}：{rule.state==='unknown'?'未確認':'未達'}</span>)}</div>}
    <button className="feed-open-evidence" onClick={()=>onSelect(r.symbol)} aria-label={`${r.symbol} の財務・日次根拠を見る`}>根拠を見る →</button>
+   <CandidatePriceTrace key={`${date}:${r.priceTrace?.src||r.symbol}`} trace={r.priceTrace} date={date} symbol={r.symbol}/>
   </div>
   <footer className="feed-card-footer"><span>価格 {date||'未確認'} 終値 · RS {Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'} · 日次出来高 {times(volume)}</span><div>{onCompare&&<button onClick={()=>onCompare(r.symbol)} aria-label={`${r.symbol} のチャートを開く`}>チャート</button>}{onWatch&&<button className="feed-watch" onClick={()=>onWatch(r.symbol)} aria-label={`${r.symbol} ${watched?'ウォッチ解除':'ウォッチに保存'}`} aria-pressed={watched}>{watched?'★':'☆'}</button>}</div></footer>
  </article>;
@@ -69,7 +66,10 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
  const pageRows=useMemo(()=>view==='list'?ordered.slice(current*50,current*50+50):[],[ordered,current,view]);
  // The page supplies a guarded bundle epoch. Keep financial presentation stable
  // across quote/readiness ticks, and rebuild on its own expiry or replacement.
- const withGrowth=useMemo(()=>pageRows.map(item=>({...item,plan:item.plan||entryPlan(item.row,null,method),volume:verifiedVolumeRatio(item.row,date),growth:financialEvidencePresentation({evidence:buildFinancialEvidencePresentation(item.row,{method,date,generation,now:financialEpoch}),history:item.row.financial_history,symbol:item.row.symbol,date,generation,method,now:financialEpoch}).rows.slice(0,2)})),[pageRows,method,date,generation,financialEpoch]);
+ const withGrowth=useMemo(()=>pageRows.map(item=>{
+  const presentation=financialEvidencePresentation({evidence:buildFinancialEvidencePresentation(item.row,{method,date,generation,now:financialEpoch}),history:item.row.financial_history,symbol:item.row.symbol,date,generation,method,now:financialEpoch});
+  return {...item,plan:item.plan||entryPlan(item.row,null,method),volume:verifiedVolumeRatio(item.row,date),growth:presentation.rows.slice(0,2),annual:presentation.rows.find(row=>row.id==='annual_eps_growth_3y')};
+ }),[pageRows,method,date,generation,financialEpoch]);
  const visible=useMemo(()=>withGrowth.map(item=>({...item,readiness:date&&market?entryReadiness(item.row,date,market,now,method):null})),[withGrowth,method,date,market,now]);
  useLayoutEffect(()=>{
   if(pageStartRef.current!==current)return;
@@ -91,8 +91,8 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
  const sortBy=useCallback(key=>{setSort(key);setPage(0);},[]);
  const move=useCallback((symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){const scroll=element.closest('.candidate-scroll');(onHighlight||onSelect)(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{scroll?.querySelectorAll('.candidate-row')[(index+direction)%50]?.focus({preventScroll:false});});}},[ordered,onSelect,onHighlight]);
  return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="候補リスト" className={`research-panel research-list candidate-guidance candidate-feed${compareOnly?' compare-only':''}`}>
-  {!compareOnly&&<>{toolbar}<div className="candidate-board-heading"><h2>候補リスト <small>{loading?'—':ranked.length.toLocaleString()}件</small></h2><label><span className="sr-only">並び順</span><select aria-label="候補の並び順" value={sort} onChange={e=>sortBy(e.target.value)}>{Object.entries(SORTS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{onNearToggle&&<button className="near-pass-toggle" aria-pressed={nearOnly} onClick={onNearToggle}>あと1条件</button>}{onFilters&&<button onClick={onFilters} aria-label="候補を絞り込む">絞込</button>}</div>
-  <div className="candidate-filter-context">{filterChips}<div className="candidate-guide"><details className="candidate-glossary"><summary>一覧の見方</summary><p>成長の裏付けと、<strong>日次の購入条件</strong>を確認。</p><dl><div><dt>選定と購入条件</dt><dd>手法の条件通過は候補入り。「日次 n/7」は共通の購入条件の通過数です。買いゾーン内でも、未達・未確認があれば購入条件は通過しません。</dd></div><div><dt>ピボット・買い位置</dt><dd>ピボットは値動きから求める買い位置の基準。帯が買いゾーン、線がピボット、点が日次価格です。許容幅は手法ごとのアプリ設定です。</dd></div><div><dt>RS・出来高</dt><dd>RSは株価の相対的な強さの推計値。出来高は検証済み日足の直前50日平均に対する倍率です。未検証は「—」で表示します。RSはRSIとは異なります。</dd></div><div><dt>日次の購入条件</dt><dd>選定、市場、最新取引日、買い位置、出来高、ベース形状、決算予定を別途検証。アプリ独自の組み合わせ・閾値であり、書籍の原文や発注指示ではありません。</dd></div></dl></details></div></div></>}
+  {!compareOnly&&<>{toolbar}<div className="candidate-board-heading"><h2>{METHOD_NAMES[method]} <small>候補 {loading?'—':ranked.length.toLocaleString()}件</small></h2><label><span className="sr-only">並び順</span><select aria-label="候補の並び順" value={sort} onChange={e=>sortBy(e.target.value)}>{Object.entries(SORTS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{onNearToggle&&<button className="near-pass-toggle" aria-pressed={nearOnly} onClick={onNearToggle}>あと1条件</button>}{onFilters&&<button onClick={onFilters} aria-label="候補を絞り込む">絞込</button>}</div>
+  <div className="candidate-filter-context">{filterChips}<div className="candidate-guide"><details className="candidate-glossary"><summary>一覧の見方</summary><p>成長の裏付けと、<strong>日次確認</strong>を確認。</p><dl><div><dt>選定条件と日次確認</dt><dd>手法の条件通過は候補入り。「日次確認 n/7」は共通の購入条件の通過数です。買いゾーン内でも、未達・未確認があれば購入条件は通過しません。</dd></div><div><dt>ピボット・買い位置</dt><dd>ピボットは値動きから求める買い位置の基準。帯が買いゾーン、線がピボット、点が日次価格です。許容幅は手法ごとのアプリ設定です。</dd></div><div><dt>RS・出来高</dt><dd>RSは株価の相対的な強さの推計値。出来高は検証済み日足の直前50日平均に対する倍率です。未検証は「—」で表示します。RSはRSIとは異なります。</dd></div><div><dt>日次確認</dt><dd>選定、市場、最新取引日、買い位置、出来高、ベース形状、決算予定を別途検証。アプリ独自の組み合わせ・閾値であり、書籍の原文や発注指示ではありません。</dd></div></dl></details></div></div></>}
   {!onFilters&&!compareOnly&&<div className="candidate-view-switch" role="group" aria-label="候補の表示形式"><Button aria-pressed={view==='list'} onClick={()=>onView?.('list')}>一覧</Button><Button aria-pressed={view==='charts'} onClick={()=>onView?.('charts')}>チャート比較</Button></div>}
   {view==='charts'&&!loading&&<CandidateCharts ordered={ordered} {...{method,nearOnly,date,generation,market,now,paused}} onSelect={onCompare||onSelect}/>}
   <div className="candidate-scroll" ref={scrollRef} hidden={view!=='list'}>

@@ -6,7 +6,7 @@ export function StateChip({state}) { const [label,glyph,tone]=STATES[stateKey(st
 export default function EntryCard({plan,readiness,onConditions,onConnect}) {
  const missing=readiness.rules.filter(r=>r.state!=='pass');
  return <section className="entry-card entry-evidence" aria-label="エントリー条件">
-  <header><strong>次に確認すること</strong><button onClick={onConditions}>日次 {readiness.passed}/{readiness.total} · すべての根拠 →</button></header>
+  <header><strong>次に確認すること</strong><button onClick={onConditions}>日次確認 {readiness.passed}/{readiness.total} · すべての根拠 →</button></header>
   <p className="entry-note">未達 {readiness.rules.filter(r=>r.state==='fail').length}件・未確認 {readiness.rules.filter(r=>r.state==='unknown').length}件。未達は条件の変化を待ち、未確認は根拠データを確認します。</p>
   <div className="missing-chips" aria-label="日次の未達・未確認">{missing.map(r=><span key={r.id} data-state={r.state}>{r.state==='fail'?'× 未達':'? 未確認'} · {r.label}</span>)}</div>
   <ul className="entry-next-checks">{missing.slice(0,2).map(r=><li key={r.id}><strong>{r.label}</strong><span>{r.detail}</span></li>)}</ul>

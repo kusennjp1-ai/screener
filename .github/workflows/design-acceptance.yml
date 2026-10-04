@@ -59,6 +59,7 @@ jobs:
             (cd "$RUNNER_TEMP/design-baseline/frontend" && npm ci --no-audit --no-fund)
           fi
       - name: Build both production versions without duplicating the large data tree
+        id: production_builds
         env:
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: '/screener/'
@@ -89,6 +90,57 @@ jobs:
           RADAR_BUILD: test-results/radar-build
           DESIGN_REVIEW_OUTPUT: test-results/design-review
         run: node tools/design-review.mjs
+      - name: Build frozen eager chart source for a separate same-data diagnostic
+        if: always() && steps.production_builds.outcome == 'success'
+        id: chart_eager_build
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: '/screener/'
+          CHART_EAGER_REVISION: '80e7d5e5050a2880cc64378ca45dcdc1e2405d53'
+          CHART_EAGER_TREE: '72e56751402a38b58ab89a8a3d30be6b2851bf82'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This diagnostic comparison is independent of the official cd3a6a2
+          # baseline and runs only after all unchanged acceptance measurements.
+          # A squash or deleted branch may leave the pinned source outside the
+          # checkout's fetched history. Fetch only that commit, using the
+          # checkout's existing read authorization, and fail closed if absent.
+          if ! git -C "$GITHUB_WORKSPACE" cat-file -e "$CHART_EAGER_REVISION^{commit}" 2>/dev/null; then
+            timeout 60s git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$CHART_EAGER_REVISION"
+          fi
+          git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/chart-eager"
+          git -C "$RUNNER_TEMP/chart-eager" checkout --detach "$CHART_EAGER_REVISION"
+          test "$(git -C "$RUNNER_TEMP/chart-eager" rev-parse 'HEAD^{tree}')" = "$CHART_EAGER_TREE"
+          eager_source="$RUNNER_TEMP/chart-eager/frontend"
+          cmp frontend/package-lock.json "$eager_source/package-lock.json"
+          ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$eager_source/node_modules"
+          if [ -e "$eager_source/public/static-data" ]; then
+            mv "$eager_source/public/static-data" "$RUNNER_TEMP/chart-eager-unused-data"
+          fi
+          (cd "$eager_source" && npx vite build)
+          # Reuse the current build's exact checked/exported publication; no
+          # second export can change its date, generation, traces or charts.
+          ln -s "$RUNNER_TEMP/design-current-data" "$eager_source/dist/static-data"
+          for chart_source in "$eager_source" "$GITHUB_WORKSPACE/frontend"; do
+            (cd "$chart_source" && node --input-type=module -e '
+              import { writeFileSync } from "node:fs";
+              import { execFileSync } from "node:child_process";
+              const git = arg => execFileSync("git", ["rev-parse", arg], { encoding: "utf8" }).trim();
+              const revision = git("HEAD");
+              writeFileSync("dist/build-source-provenance.json", JSON.stringify({ revision, tree: git("HEAD^{tree}"), label: revision === process.env.CHART_EAGER_REVISION ? "eager" : "current" }));
+            ')
+          done
+      - name: Measure chart encounter and native rendering separately from budgets
+        if: always() && steps.chart_eager_build.outcome == 'success'
+        working-directory: frontend
+        env:
+          CURRENT_BUILD: dist
+          CHART_EAGER_BUILD: ${{ runner.temp }}/chart-eager/frontend/dist
+          CHART_EAGER_REVISION: '80e7d5e5050a2880cc64378ca45dcdc1e2405d53'
+          CURRENT_REVISION: ${{ github.sha }}
+          CHART_DIAGNOSTIC_OUTPUT: test-results/design-review/chart-viewport-diagnostic
+        run: node tools/chart-viewport-diagnostic.mjs
       - name: Require reviewed screenshots and four design scores of at least 8.0
         if: always()
         working-directory: frontend

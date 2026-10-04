@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { expandedChartGeometry, checkExpandedChartGeometry } from '../../tools/expanded-chart-geometry.mjs';
-import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence } from '../../tools/research-feed-acceptance.mjs';
+import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, checkFeedDecisionEvidence } from '../../tools/research-feed-acceptance.mjs';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../../src/static/financialEvidencePresentation.js';
+import { assess } from '../../src/static/researchEngine.js';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { withSyntheticFinancialProof, financialFixtureDate as date, financialFixtureNow as now } from '../../src/test/fixtures/financialCurrent.js';
 
@@ -45,6 +46,11 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
   await page.screenshot({path,fullPage});
   await info.attach(name,{path,contentType:'image/png'});
  };
+ const decisionEvidence=(method,epoch)=>{
+  const context={symbol:row.symbol,date,generation:'synthetic-finance-g1',method,now:epoch};
+  const presentation=financialEvidencePresentation({...context,history:row.financial_history,evidence:buildFinancialEvidencePresentation(row,context)});
+  return {method,selection:assess(row,method,epoch),annual:presentation.rows.find(item=>item.id==='annual_eps_growth_3y')};
+ };
  let feed;
  for(const theme of ['dark','light']){
   if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
@@ -57,26 +63,48 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
   for(const metric of feed.metrics){
    expect(metric.actual.text).toBe('30%');expect(metric.state).toBe('pass');expect(metric.role.text).toBe('必須');
   }
+  const expected=decisionEvidence('oneil',measurements.evaluatedAt);
+  expect(expected.annual.required).toBe(true);expect(expected.annual.state).toBe('unknown');expect(expected.selection.qualified).toBe(false);
+  checkFeedDecisionEvidence(feed,expected,check,`synthetic-required-annual-${width}x${height}-${theme}`);
  }
+ // The same absent annual history is a reference for Minervini. Preserve its
+ // complete 9/9 technical selection while daily confirmation stays incomplete.
+ await page.getByRole('button',{name:'ミネルヴィニ',exact:true}).click();
+ await expect(page.locator('.candidate-feed-card [data-check="selection"]')).toContainText('9/9');
+ for(const theme of ['dark','light']){
+  if(await page.locator('.leader-shell').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:theme==='light'?'ライトモードに切り替え':'ダークモードに切り替え'}).click();
+  await page.evaluate(()=>window.scrollTo(0,0));
+  const measurements=await page.evaluate(researchFeedMetrics);
+  await retain(`synthetic-reference-annual-${width}x${height}-${theme}`,measurements);
+  checkResearchFeedMetrics(measurements,check,`synthetic-reference-annual-${width}x${height}-${theme}`);
+  const expected=decisionEvidence('minervini',measurements.evaluatedAt);
+  expect(expected.annual.required).toBe(false);expect(expected.annual.state).toBe('unknown');expect(expected.selection.qualified).toBe(true);
+  checkFeedDecisionEvidence(measurements.feed,expected,check,`synthetic-reference-annual-${width}x${height}-${theme}`);
+  for(const metric of measurements.feed.metrics){expect(metric.actual.text).toBe('30%');expect(metric.state).toBe('reference');expect(metric.role.text).toBe('参考');}
+  check(measurements.feed.decisions.daily.passed<measurements.feed.decisions.daily.total,'Reference annual evidence does not complete daily confirmation');
+ }
+ await page.getByRole('button',{name:'オニール',exact:true}).click();
+ const oneil=decisionEvidence('oneil',now);
+ await expect(page.locator('.candidate-feed-card [data-check="selection"]')).toContainText(`${oneil.selection.passed}/${oneil.selection.total}`);
  await page.getByRole('button',{name:'ダークモードに切り替え'}).click();
  await page.getByRole('button',{name:'TEST の財務・日次根拠を見る',exact:true}).click();
  const summary=page.getByRole('region',{name:'財務の確認状況'});
  await expect(summary.getByRole('button',{name:/^EPS前年比 30%・✓ 通過/})).toBeVisible();
  const plot=page.locator('.research-detail [data-chart-symbol="TEST"]');
- await expect(plot).toBeVisible();
- const summaryBox=await summary.boundingBox(),plotBox=await plot.boundingBox();
+ const chartSection=page.locator('.research-detail .research-chart');
+ await expect(chartSection).toBeVisible();
+ const summaryBox=await summary.boundingBox(),chartSectionBox=await chartSection.boundingBox();
  // The new summary includes actual, role, condition, period and source plus
  // annual EPS. The former 64/112px chip-summary cap and whole-summary first
  // viewport requirement no longer describe the requested product.
  const selected=await page.evaluate(researchFeedMetrics);
- await retain(`synthetic-financial-initial-${width}x${height}`,{...selected,summary:summaryBox,plot:plotBox});
+ await retain(`synthetic-financial-initial-${width}x${height}`,{...selected,summary:summaryBox,chartSection:chartSectionBox});
  checkResearchFeedMetrics(selected,check,`synthetic-detail-${width}x${height}`,{surface:'detail'});
  checkFeedDetailConsistency(feed,selected.detail,check,`synthetic-detail-${width}x${height}`);
  const context={symbol:row.symbol,date,generation:'synthetic-finance-g1',method:'oneil',now:selected.evaluatedAt};
  const canonical=financialEvidencePresentation({...context,history:row.financial_history,evidence:buildFinancialEvidencePresentation(row,context)});
  checkDetailSourceEvidence(selected.detail,{symbol:row.symbol,rows:canonical.rows},check,`synthetic-detail-${width}x${height}`);
- expect(plotBox.height).toBeGreaterThanOrEqual(width===360?320:400);
- expect(summaryBox.y+summaryBox.height).toBeLessThan(plotBox.y);
+ expect(summaryBox.y+summaryBox.height).toBeLessThan(chartSectionBox.y);
  const targets=await summary.getByRole('button').evaluateAll(buttons=>buttons.map(button=>{
   const style=getComputedStyle(button),rect=button.getBoundingClientRect();
   return {label:button.getAttribute('aria-label'),width:rect.width,height:rect.height,minHeight:style.minHeight,display:style.display};
@@ -85,8 +113,6 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  for(const target of await summary.getByRole('button').all()){
   const box=await target.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.width).toBeGreaterThanOrEqual(44);
  }
- for(const target of await page.locator('.research-detail .research-chart-controls button').all())expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
- await info.attach('synthetic-inline-geometry',{body:JSON.stringify({width,height,summary:summaryBox,plot:plotBox,visiblePlotPixels:Math.max(0,Math.min(height,plotBox.y+plotBox.height)-Math.max(0,plotBox.y))}),contentType:'application/json'});
  for(const theme of ['dark','light']){
   if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
   const measurements=await page.evaluate(researchFeedMetrics);
@@ -104,6 +130,20 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
   await expect(page.locator('#book-financial-evidence')).toContainText('提出日付きの四半期履歴は未取得');
   await summary.scrollIntoViewIfNeeded();
  }
+ // The first-view evidence is already retained. Activate the real inline chart
+ // only when reaching the chart task, then keep its original readability and
+ // control-size gates on rendered pixels rather than on a deferred placeholder.
+ await chartSection.scrollIntoViewIfNeeded();
+ await expect(plot.locator('canvas').first()).toBeVisible();
+ const plotBox=await plot.boundingBox(),activeSummaryBox=await summary.boundingBox();
+ const inlineGeometry={width,height,summary:activeSummaryBox,plot:plotBox,visiblePlotPixels:Math.max(0,Math.min(height,plotBox.y+plotBox.height)-Math.max(0,plotBox.y))};
+ await info.attach('synthetic-inline-geometry',{body:JSON.stringify(inlineGeometry),contentType:'application/json'});
+ await retain(`synthetic-inline-active-${width}x${height}`,inlineGeometry);
+ expect(plotBox.height).toBeGreaterThanOrEqual(width===360?320:400);
+ expect(activeSummaryBox.y+activeSummaryBox.height).toBeLessThan(plotBox.y);
+ const chartControls=page.locator('.research-detail .research-chart-controls button');
+ expect(await chartControls.count()).toBeGreaterThan(0);
+ for(const target of await chartControls.all())expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await page.getByRole('button',{name:'日次チャートを分析'}).click();
  const expanded=page.getByRole('dialog',{name:/TEST/});
  await expect(expanded.locator('[data-chart-symbol="TEST"]')).toBeVisible();

@@ -10,8 +10,9 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../src/static/financialEvidencePresentation.js';
+import { assess } from '../src/static/researchEngine.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
-import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
+import { researchFeedMetrics, checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, checkFeedDecisionEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -211,7 +212,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     await page.goto(current.url);
     await visible(page.locator(readySelector));
     if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
-    check(await page.getByRole('button', { name: '概況を展開', exact: true }).getAttribute('aria-expanded') === 'false' && await page.locator('#research-market-overview').count() === 0, `${key}: overview must start closed`);
+    check(await page.getByRole('button', { name: '全体概況を展開', exact: true }).getAttribute('aria-expanded') === 'false' && await page.locator('#research-market-overview').count() === 0, `${key}: overview must start closed`);
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, viewport, theme, 'home');
     await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
@@ -221,12 +222,12 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
     await page.getByLabel('あと1条件', { exact: true }).uncheck();
     await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
-    await page.getByRole('button', { name: '概況を展開', exact: true }).click();
+    await page.getByRole('button', { name: '全体概況を展開', exact: true }).click();
     await visible(page.locator('#research-market-overview'));
-    check(await page.getByRole('button', { name: '概況をたたむ', exact: true }).getAttribute('aria-expanded') === 'true', `${key}: overview did not expand`);
+    check(await page.getByRole('button', { name: '全体概況をたたむ', exact: true }).getAttribute('aria-expanded') === 'true', `${key}: overview did not expand`);
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, viewport, theme, 'overview-expanded');
-    await page.getByRole('button', { name: '概況をたたむ', exact: true }).click();
+    await page.getByRole('button', { name: '全体概況をたたむ', exact: true }).click();
     check(await page.locator('#research-market-overview').count() === 0, `${key}: overview did not collapse`);
     await page.evaluate(() => window.scrollTo(0, 0));
     if (viewport.width === 1440) {
@@ -315,7 +316,22 @@ for (const viewport of FEED_REVIEW_VIEWPORTS) for (const theme of ['dark', 'ligh
     await evidenceOpener.scrollIntoViewIfNeeded();
     const selectionScrollY = await page.evaluate(() => scrollY);
     record.selection_scroll_y = selectionScrollY;
+    record.selection_before_click = await evidenceOpener.evaluate(node => {
+      const box = node.getBoundingClientRect(), nav = document.querySelector('.leader-mobile-nav')?.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      window.__designEvidenceClick = null;
+      // Playwright may scroll again to clear sticky navigation. Capture the
+      // user's actual click position before React records its Back destination.
+      node.addEventListener('click', event => {
+        window.__designEvidenceClick = { scroll_y: window.scrollY, list_scroll_top: document.querySelector('.candidate-scroll')?.scrollTop ?? null,
+          evaluated_at: new Date().toISOString(), client_x: event.clientX, client_y: event.clientY };
+      }, { capture: true, once: true });
+      return { scroll_y: window.scrollY, button: { top: box.top, bottom: box.bottom }, navigation_top: nav?.height ? nav.top : null,
+        center_unobscured: Boolean(hit && (node.contains(hit) || hit.contains(node))) };
+    });
     await evidenceOpener.click();
+    record.selection_click = await page.evaluate(() => window.__designEvidenceClick);
+    check(Number.isFinite(record.selection_click?.scroll_y), `${key}: actual evidence click position was not observed`);
     await visible(page.locator('.research-detail .financial-evidence-summary'));
     await capture(page, viewport, theme, `detail-${suffix}`, 'detail');
     const selected = await page.evaluate(researchFeedMetrics);
@@ -326,14 +342,18 @@ for (const viewport of FEED_REVIEW_VIEWPORTS) for (const theme of ['dark', 'ligh
     const evidenceContext = { symbol: publishedRow.symbol, date: report.data.as_of_date, generation: report.data.research_generation || report.data.generated_at, method, now: selected.evaluatedAt };
     const canonical = financialEvidencePresentation({ ...evidenceContext, history: publishedRow.financial_history, evidence: buildFinancialEvidencePresentation(publishedRow, evidenceContext) });
     checkDetailSourceEvidence(selected.detail, { symbol: publishedRow.symbol, rows: canonical.rows }, check, key);
+    checkFeedDecisionEvidence(initial.feed, { method, selection: assess(publishedRow, method, selected.evaluatedAt), annual: canonical.rows.find(row => row.id === 'annual_eps_growth_3y') }, check, key);
     record.source_evidence = { symbol: publishedRow.symbol, evaluated_at: new Date(selected.evaluatedAt).toISOString(), expected: canonical.rows.filter(row => ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y'].includes(row.id)) };
     if (viewport.width < 1280) {
       await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
       await visible(page.locator('.candidate-feed-card'));
+      // Restoration is scheduled for the next animation frame by the app.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       check(await page.locator('.research-workbench').getAttribute('data-mobile-view') === 'list', `${key}: Back did not restore the feed`);
       const returned = await page.evaluate(researchFeedMetrics);
       checkFeedDetailConsistency(returned.feed, selected.detail, check, `${key}/Back`);
-      check(Math.abs(returned.scrollY - selectionScrollY) <= 1, `${key}: Back did not restore the feed position at the evidence action`);
+      record.restored_scroll_y = returned.scrollY;
+      check(Number.isFinite(record.selection_click?.scroll_y) && Math.abs(returned.scrollY - record.selection_click.scroll_y) <= 1, `${key}: Back did not restore the actual click position (${returned.scrollY}px versus ${record.selection_click?.scroll_y}px)`);
     }
     const chosen = page.locator('.candidate-feed-card').filter({ has: page.locator('.candidate-name strong', { hasText: new RegExp(`^${initial.feed.symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) });
     check(await chosen.getAttribute('data-selected') === 'true', `${key}: Back changed the selected feed symbol`);

@@ -14,7 +14,7 @@ const props={ranked:[{row,assessment:{qualified:false,passed:5,total:8,unknown:1
 it('shows actual, condition, required role, source and period beside independent selection and daily lanes',()=>{
  render(<CandidateBoard {...props}/>);
  const card=screen.getByRole('article');
- for(const text of ['成長の裏付け','30%','40%','≥ 25%','2026-06-30','提供元あり','取得 2026-10-03','必須','手法の選定','日次 未確認'])expect(card).toHaveTextContent(text);
+ for(const text of ['30%','40%','≥ 25%','2026-06-30','提供元あり','取得 2026-10-03','必須','選定条件','日次確認 未確認'])expect(card).toHaveTextContent(text);
  expect(card).not.toHaveTextContent('元の計算結果を小数第2位に丸めています');
  expect(card).not.toHaveTextContent('yfinance');
  expect(card.querySelector('.feed-growth').closest('details')).toBeNull();
@@ -97,11 +97,14 @@ it('uses the guarded financial epoch for the one-missing-condition label despite
  expect(screen.getByRole('article').querySelector('[data-metric="eps_growth_yy"]')).not.toHaveTextContent('30%');
 });
 
-it('reads core growth evidence before technical status, the price trace and calculation notes',()=>{
+it('reads decision status and the required annual gap before green growth evidence, then supporting trace and notes',()=>{
  render(<CandidateBoard {...props}/>);
  const card=screen.getByRole('article');
  const growth=card.querySelector('.feed-growth');
- for(const supporting of [card.querySelector('.feed-status-lanes'),card.querySelector('.feed-price-trace')])expect(growth.compareDocumentPosition(supporting)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ const decision=card.querySelector('.research-decision-status');
+ expect(decision.compareDocumentPosition(growth)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(decision.querySelector('.decision-annual')).toHaveTextContent('必須 年次EPS 未確認');
+ expect(growth.compareDocumentPosition(card.querySelector('.feed-price-trace'))&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
  for(const metric of card.querySelectorAll('[data-metric]')){
   const condition=metric.querySelector('.financial-growth-condition');
   for(const note of metric.querySelectorAll('.financial-comparison-note'))expect(condition.compareDocumentPosition(note)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

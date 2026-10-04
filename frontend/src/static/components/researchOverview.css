@@ -1,6 +1,6 @@
 /* A compact current-state strip; the optional radar is mounted only when opened. */
 .research-hero.research-overview { display:block; height:auto; min-height:0; padding:0 24px; background:var(--panel); border-bottom:1px solid var(--line); }
-.research-hero.research-overview > h1.sr-only { font-size:26px; }
+.research-hero.research-overview h1.sr-only { font-size:26px; }
 .research-overview .market-context-strip { display:flex; align-items:center; gap:20px; min-height:64px; }
 .market-context-date { display:flex; flex-wrap:wrap; gap:6px 16px; color:var(--text-2); font-size:12px; }
 .market-context-date strong { color:var(--text); }

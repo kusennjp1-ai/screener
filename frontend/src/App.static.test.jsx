@@ -343,7 +343,7 @@ describe('App static mode', () => {
       const hasText = (el) => el.textContent?.includes(heading);
       return hasText(element) && Array.from(element.children).every((child) => !hasText(child));
     };
-    if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'今日の概況'}, {timeout:10000})).toBeInTheDocument();
+    if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'全体概況（ミネルヴィニ）'}, {timeout:10000})).toBeInTheDocument();
     else expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
     const navigation=screen.getByRole('navigation',{name:'メインナビゲーション'});
     expect(navigation.closest('header')).toHaveTextContent('分析');

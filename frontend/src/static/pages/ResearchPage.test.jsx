@@ -105,8 +105,8 @@ describe('100 virtual expert task profiles', () => {
       if (t === 0) {
         const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '5/8' : '5/10';
         expect(screen.getByRole('tab', {name:'判定根拠'})).toHaveAttribute('aria-selected','true');
-        expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定 ${expected}`));
-        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
+        expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定条件 ${expected}`));
+        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定条件 ${expected} · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
       } else if (t === 1) {
         openFilters();
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
@@ -143,7 +143,7 @@ describe('100 virtual expert task profiles', () => {
         closeFilters();
         await screen.findByText(/該当銘柄がありません/);
       } else if (t === 7) {
-        fireEvent.click(screen.getByRole('tab', {name:'購入条件'}));
+        fireEvent.click(screen.getByRole('tab', {name:'日次確認'}));
         expect(screen.getByRole('tabpanel')).toHaveTextContent('未接続');
         expect(screen.getByText(/未接続時は日次価格で計算します/)).toBeInTheDocument();
         expect(screen.getByText('場中価格を接続する')).toBeInTheDocument();
@@ -210,9 +210,9 @@ it('preserves canonical entry prices and unknown conditions while switching deta
   const evidence=screen.getByRole('tab',{name:'判定根拠'});
   act(()=>evidence.focus());
   fireEvent.keyDown(evidence,{key:'ArrowRight'});
-  expect(screen.getByRole('tab',{name:'購入条件'})).toHaveFocus();
+  expect(screen.getByRole('tab',{name:'日次確認'})).toHaveFocus();
   expect(screen.getByRole('tabpanel')).toHaveTextContent('未確認');
-  fireEvent.keyDown(screen.getByRole('tab',{name:'購入条件'}),{key:'End'});
+  fireEvent.keyDown(screen.getByRole('tab',{name:'日次確認'}),{key:'End'});
   expect(screen.getByRole('tab',{name:'メモ'})).toHaveFocus();
   fireEvent.keyDown(screen.getByRole('tab',{name:'メモ'}),{key:'Home'});
   expect(evidence).toHaveFocus();

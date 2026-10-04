@@ -16,20 +16,20 @@ it('starts with an unmounted optional radar and opens it only through the overvi
  localStorage.setItem('research-hero-collapsed','false');
  const first=render(<ResearchHero {...props}/>);
  expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
- const trigger=screen.getByRole('button',{name:'概況を展開'});
+ const trigger=screen.getByRole('button',{name:'全体概況を展開'});
  expect(trigger).toHaveAttribute('aria-expanded','false');
  fireEvent.click(trigger);
  expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
- fireEvent.click(screen.getByRole('button',{name:'概況をたたむ'}));
+ fireEvent.click(screen.getByRole('button',{name:'全体概況をたたむ'}));
  expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
  first.unmount();render(<ResearchHero {...props}/>);
- expect(screen.getByRole('button',{name:'概況を展開'})).toHaveAttribute('aria-expanded','false');
+ expect(screen.getByRole('button',{name:'全体概況を展開'})).toHaveAttribute('aria-expanded','false');
 });
 it('keeps the optional overview usable when storage is denied',()=>{
  vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
  vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
  render(<ResearchHero {...props}/>);
- fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
+ fireEvent.click(screen.getByRole('button',{name:'全体概況を展開'}));
  expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
 });
 it('labels the fixed Minervini overview and never mistakes capped portfolio positions for universe counts',()=>{
@@ -37,16 +37,17 @@ it('labels the fixed Minervini overview and never mistakes capped portfolio posi
  const plan={...props.plan,dailyPositions:[{symbol:'S0'},{symbol:'S1'}]};
  render(<ResearchHero {...props} ranked={ranked} plan={plan} method="oneil"/>);
  expect(screen.getByRole('heading',{level:1})).toHaveAccessibleName('ミネルヴィニ選定候補は 6 銘柄。');
- expect(screen.getByLabelText('ミネルヴィニの選定と価格位置')).toHaveTextContent('トレンド通過 6');
- fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
- expect(screen.getByText(/終値 · ミネルヴィニ概況/)).toBeInTheDocument();
+ expect(screen.getByLabelText('ミネルヴィニの選定と価格位置')).toHaveTextContent('全体概況（ミネルヴィニ）· トレンド通過 6');
+ expect(screen.getByRole('button',{name:'全体概況を展開'})).toHaveTextContent('全体概況');
+ fireEvent.click(screen.getByRole('button',{name:'全体概況を展開'}));
+ expect(screen.getByText(/終値 · 全体概況（ミネルヴィニ）/)).toBeInTheDocument();
  expect(screen.getByText(/財務の成長根拠と日次の購入条件は個別に確認/)).toBeInTheDocument();
  expect(screen.queryByText('2銘柄が条件通過。')).not.toBeInTheDocument();
 });
 it('does not report a real candidate count while the publication is loading',()=>{
  render(<ResearchHero {...props} loading/>);
  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('データを読み込み中。');
- fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
+ fireEvent.click(screen.getByRole('button',{name:'全体概況を展開'}));
  expect(screen.getByText('日足検証 —')).toBeInTheDocument();
 });
 it('groups daily changes with the portfolio action while retaining the full desktop counts',()=>{
@@ -55,7 +56,7 @@ it('groups daily changes with the portfolio action while retaining the full desk
  const trigger=screen.getByRole('button',{name:'候補の日次変化'});
  expect(trigger.closest('.hero-actions')).not.toBeNull();
  expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('新たに通過 7 · 再通過 2 · 脱落 3');
- fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
+ fireEvent.click(screen.getByRole('button',{name:'全体概況を展開'}));
  expect(screen.getByRole('link',{name:'業種の追い風を見る →'}).closest('.overview-market')).not.toBeNull();
 });
 it('shows comparison coverage from summary counts and loads explanations only when opened',()=>{
@@ -86,6 +87,18 @@ it('gives the market link a full touch target and sticky-header focus clearance'
  const styles=readFileSync('src/static/components/researchOverview.css','utf8');
  expect(styles).toMatch(/\.overview-market a \{[^}]*min-height:44px;[^}]*scroll-margin-top:64px;/);
 
+});
+it('applies the allowed heading token to the actual nested screen-reader heading',()=>{
+ const style=document.createElement('style');
+ style.textContent='.research-hero h1 { font-size:28px; }\n'+readFileSync('src/static/components/researchOverview.css','utf8');
+ document.head.append(style);
+ try {
+  render(<ResearchHero {...props}/>);
+  const heading=screen.getByRole('heading',{level:1});
+  expect(heading.parentElement).toHaveClass('market-context-strip');
+  expect(heading.matches('.research-hero.research-overview h1.sr-only')).toBe(true);
+  expect(getComputedStyle(heading).fontSize).toBe('26px');
+ } finally { style.remove(); }
 });
 it('opens daily changes from the keyboard and restores the trigger after Escape and Close',async()=>{
  const user=userEvent.setup();

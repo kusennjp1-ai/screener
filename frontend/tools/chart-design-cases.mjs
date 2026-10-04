@@ -31,6 +31,9 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       check(payload.symbol === symbol && payload.as_of_date === asOf && payload.bars.at(-1)?.date === asOf, `${key}: chart identity/as-of mismatch`);
       await page.goto(`${currentUrl}#/?symbol=${encodeURIComponent(symbol)}`);
       await page.reload(); // the same home route must consume the new initial symbol
+      // The evidence/query is eager; request the below-fold visualization by
+      // approaching its persistent section before waiting for its canvas.
+      await page.locator('.research-chart').scrollIntoViewIfNeeded();
       const chart = page.locator(`.research-chart [data-chart-symbol="${symbol}"]`);
       await ready(chart.locator('canvas'));
       check((await page.locator('.symbol-title h2').textContent())?.trim() === symbol, `${key}: detail symbol mismatch`);

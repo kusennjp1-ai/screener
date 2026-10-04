@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
+import { checkResearchFeedMetrics, checkFeedDetailConsistency, checkDetailSourceEvidence, checkFeedDecisionEvidence, parseResearchCsv, FEED_REVIEW_VIEWPORTS, FEED_REVIEW_METHODS } from './research-feed-acceptance.mjs';
 
 const observed = text => ({ text, shown: true, firstViewport: true, rect: { top: 100, bottom: 200 } });
 const metric = id => ({ id, state: 'unknown', actual: observed('未確認'), status: observed('? 未確認'), role: observed('参考'), condition: observed('選定の数値条件なし・参考'), period: observed('決算期 未確認'), source: observed('提供元 未確認 · 取得日 未確認') });
-const fixture = () => ({ horizontalOverflow: false, feed: { symbol: 'TEST', metrics: ['eps_growth_yy', 'sales_growth_yy'].map(metric), next: observed('出来高：未達。1.4倍以上を確認'), other: observed('ほかの未達・未確認：決算予定：未確認'), traceUnavailable: observed('価格推移 未確認') },
-  detail: { symbol: 'TEST', metrics: ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y'].map(id => ({ ...metric(id), source: observed('提供元 未確認 · 取得時刻 未確認'), basis: observed('指標の種類 未確認 · 計算基準 未確認'), notes: [] })), summary: observed('財務'), chart: { ...observed('チャート'), rect: { top: 201, bottom: 640 } }, evidenceBeforeChart: true, entry: observed('次に確認すること'), blockers: [{ ...observed('× 未達 · 出来高'), label: '出来高', state: 'fail' }, { ...observed('? 未確認 · 決算予定'), label: '決算予定', state: 'unknown' }] } });
+const decisions = () => ({ selection: { ...observed('選定条件 9/9 未達 0 · 未確認 0'), passed: 9, total: 9, failed: 0, unknown: 0, state: 'pass' }, daily: { ...observed('日次確認 5/7 未達1・未確認1'), passed: 5, total: 7, failed: 1, unknown: 1, state: 'fail' }, price: observed('価格位置 買いゾーン内'), annual: null });
+const fixture = () => ({ horizontalOverflow: false, methodId: 'minervini', overviewScope: observed('全体概況 · ミネルヴィニ'), feed: { decisions: decisions(), symbol: 'TEST', metrics: ['eps_growth_yy', 'sales_growth_yy'].map(metric), next: observed('出来高：未達。1.4倍以上を確認'), other: observed('ほかの未達・未確認：決算予定：未確認'), traceUnavailable: observed('価格推移 未確認') },
+  detail: { decisions: decisions(), symbol: 'TEST', metrics: ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y'].map(id => ({ ...metric(id), source: observed('提供元 未確認 · 取得時刻 未確認'), basis: observed('指標の種類 未確認 · 計算基準 未確認'), notes: [] })), summary: observed('財務'), chart: { ...observed('チャート'), rect: { top: 201, bottom: 640 } }, evidenceBeforeChart: true, entry: observed('次に確認すること'), blockers: [{ ...observed('× 未達 · 出来高'), label: '出来高', state: 'fail' }, { ...observed('? 未確認 · 決算予定'), label: '決算予定', state: 'unknown' }] } });
 const failuresFor = (metrics, options) => {
   const failures = [];
   checkResearchFeedMetrics(metrics, (passes, message) => { if (!passes) failures.push(message); }, 'fixture', options);
@@ -56,6 +57,74 @@ describe('research feed task acceptance', () => {
     expect(harness).toContain('metrics.candidate_median_ms <= 3500 && metrics.maximum_switch_ms <= 400 && metrics.longest_initial_task_ms <= 200');
     expect(harness).toContain('run.point_count === 207');
     expect(harness).toContain('run.first_frame_ms <= 50');
+  });
+});
+
+describe('canonical decision hierarchy', () => {
+  const required = () => ({ method: 'oneil', selection: { passed: 5, total: 8, unknown: 3, qualified: false }, annual: { required: true, state: 'unknown' } });
+  const failuresForDecision = (data, expected) => {
+    const failures = [];
+    checkFeedDecisionEvidence(data.feed, expected, (pass, message) => { if (!pass) failures.push(message); }, 'fixture');
+    return failures;
+  };
+  const requiredFixture = () => {
+    const data = fixture();
+    data.methodId = 'oneil';
+    data.feed.decisions.selection = { ...observed('選定条件 5/8 未達 0 · 未確認 3'), passed: 5, total: 8, failed: 0, unknown: 3, state: 'unknown' };
+    data.feed.decisions.annual = { ...observed('年次EPS 必須 未確認'), state: 'unknown', required: true };
+    for (const metric of data.feed.metrics) Object.assign(metric, { state: 'pass', actual: observed('30%'), role: observed('必須') });
+    return data;
+  };
+  it('requires annual uncertainty even when EPS and sales both pass', () => {
+    const data = requiredFixture();
+    expect(failuresForDecision(data, required())).toEqual([]);
+    data.feed.decisions.annual.firstViewport = false;
+    expect(failuresForDecision(data, required())).toEqual([expect.stringContaining('required annual uncertainty is missing')]);
+    data.feed.decisions.annual = { ...observed('年次EPS 必須 通過'), state: 'pass' };
+    expect(failuresForDecision(data, required())).toHaveLength(2);
+  });
+  it('rejects completion states or required annual evidence below the first fold', () => {
+    const data = requiredFixture();
+    expect(failuresFor(data)).toEqual([]);
+    for (const name of ['selection', 'daily', 'annual']) data.feed.decisions[name].firstViewport = false;
+    expect(failuresFor(data)).toEqual(expect.arrayContaining([
+      expect.stringContaining('selection completion state is outside'), expect.stringContaining('daily completion state is outside'),
+      expect.stringContaining('required annual EPS status is outside'),
+    ]));
+    data.feed.decisions.selection = null;
+    expect(failuresFor(data)).toContainEqual(expect.stringContaining('named selection completion state is missing'));
+  });
+  it('rejects contradictory visible counts and card/detail completion drift', () => {
+    const data = fixture(), failures = [];
+    data.feed.decisions.daily.state = 'pass';
+    expect(failuresFor(data)).toContainEqual(expect.stringContaining('daily completion state promotes'));
+    data.detail.decisions.daily.unknown = 0;
+    checkFeedDetailConsistency(data.feed, data.detail, (pass, message) => { if (!pass) failures.push(message); }, 'fixture');
+    expect(failures).toEqual(expect.arrayContaining([expect.stringContaining('daily completion counts/state differ'), expect.stringContaining('named detail blockers')]));
+  });
+  it('keeps absent daily context explicitly unknown without inventing zero counts', () => {
+    const data = fixture();
+    data.feed.decisions.daily = { ...observed('日次確認 未確認 未達 — · 未確認 —'), passed: null, total: null, failed: null, unknown: null, state: 'unknown' };
+    expect(failuresFor(data)).toEqual([]);
+    Object.assign(data.feed.decisions.daily, { text: '日次確認 0/0 未達 0 · 未確認 0', passed: 0, total: 0, failed: 0, unknown: 0 });
+    expect(failuresFor(data)).toContainEqual(expect.stringContaining('counts are incomplete or inconsistent'));
+  });
+  it('rejects promoted selection counts and a fabricated complete selection', () => {
+    const data = requiredFixture();
+    data.feed.decisions.selection = { ...observed('選定条件 8/8 通過'), passed: 8, total: 8, state: 'pass' };
+    expect(failuresForDecision(data, required())).toHaveLength(2);
+  });
+  it('keeps unknown reference annual EPS outside both Minervini qualification gates', () => {
+    const data = fixture();
+    for (const method of ['minervini', 'minervini2']) {
+      const expected = { method, selection: { passed: 9, total: 9, unknown: 0, qualified: true }, annual: { required: false, state: 'unknown' } };
+      expect(failuresForDecision(data, expected)).toEqual([]);
+      data.feed.decisions.annual = { ...observed('年次EPS 参考 未確認'), state: 'unknown' };
+      expect(failuresForDecision(data, expected)).toEqual([]);
+      data.feed.decisions.annual.text = '年次EPS 必須 未確認';
+      expect(failuresForDecision(data, expected)).toEqual([expect.stringContaining('became a Minervini qualification gate')]);
+      data.feed.decisions.annual = null;
+    }
   });
 });
 

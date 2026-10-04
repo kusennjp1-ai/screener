@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { financialEvidencePresentation, financialEvidenceSummary } from '../financialEvidencePresentation';
+import ResearchDecisionStatus from './ResearchDecisionStatus';
 import './financialEvidence.css';
 
 const actionTarget = { minHeight: 44, minWidth: 44 };
@@ -34,7 +35,7 @@ export function FinancialGrowthMetric({ row, compact = false, onNavigate }) {
   </div>;
 }
 
-export default function FinancialEvidenceSummary({ onNavigate, ...input }) {
+export default function FinancialEvidenceSummary({ onNavigate, decision, ...input }) {
   const { evidence, history, bookFinancials, symbol, date, generation, method, now } = input;
   const rows = useMemo(() => {
     const context = { evidence, history, bookFinancials, symbol, date, generation, method, now };
@@ -42,12 +43,12 @@ export default function FinancialEvidenceSummary({ onNavigate, ...input }) {
     const annual = financialEvidencePresentation(context).rows.find(row => row.id === 'annual_eps_growth_3y');
     return { primary: [...summary.slice(0, 2), annual], secondary: summary.slice(2) };
   }, [evidence, history, bookFinancials, symbol, date, generation, method, now]);
-  return <section className="financial-evidence-summary" aria-label="財務の確認状況">
+  return <>{decision && <ResearchDecisionStatus {...decision} annual={rows.primary[2]}/>}<section className="financial-evidence-summary" aria-label="財務の確認状況">
     <header><h3>成長の裏付け</h3><span>実数値・条件・対象期</span></header>
     <div className="financial-growth-primary">{rows.primary.map(row => <FinancialGrowthMetric key={row.id} row={row} onNavigate={onNavigate}/>)}</div>
     <div className="financial-growth-secondary">{rows.secondary.map(row => <button key={row.id} type="button" data-state={row.state} style={actionTarget}
       aria-label={`${row.title} ${row.actual}・${status[row.state]}。書籍検証の根拠を開く`} title={[row.condition,row.period,row.source,row.observedAt,row.explanation].filter(Boolean).join(" ／ ")} onClick={() => onNavigate(row.target, row.id)}>
       <span>{row.title} <small>参考</small></span><strong>{row.actual} ↗</strong><small>{row.condition}</small><small>{row.period} · {row.source}</small>
     </button>)}</div>
-  </section>;
+  </section></>;
 }

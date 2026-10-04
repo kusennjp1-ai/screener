@@ -34,6 +34,19 @@ export function researchFeedMetrics() {
     return Boolean(hit && (node.contains(hit) || hit.contains(node)));
   };
   const observe = node => node ? { text: node.textContent.trim(), shown: shown(node), firstViewport: firstViewport(node), rect: rect(node) } : null;
+  const decisions = root => {
+    const rail = root?.querySelector('.research-decision-status');
+    const count = name => {
+      const node = rail?.querySelector(`[data-check="${name}"]`), observation = observe(node);
+      const counts = /(\d+)\s*\/\s*(\d+)/.exec(observation?.text || '');
+      const failed = /未達\s*(\d+)/.exec(observation?.text || ''), unknown = /未確認\s*(\d+)/.exec(observation?.text || '');
+      return observation && { ...observation, state: node.dataset.state, passed: counts ? Number(counts[1]) : null, total: counts ? Number(counts[2]) : null,
+        failed: failed ? Number(failed[1]) : null, unknown: unknown ? Number(unknown[1]) : null };
+    };
+    const annual = rail?.querySelector('.decision-annual');
+    return { selection: count('selection'), daily: count('daily'), price: observe(rail?.querySelector('[data-check="price"]')),
+      annual: annual ? { ...observe(annual), state: annual.dataset.state, required: annual.dataset.required === 'true' } : null };
+  };
   const metrics = root => ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y'].flatMap(id => {
     const node = root?.querySelector(`[data-metric="${id}"]`);
     return node ? [{ id, state: node.dataset.state, actual: observe(node.querySelector('.financial-summary-result strong')),
@@ -47,13 +60,15 @@ export function researchFeedMetrics() {
   const blockers = [...document.querySelectorAll('.research-detail [aria-label="日次の未達・未確認"] > span')].map(node => ({
     state: node.dataset.state, ...observe(node), label: node.textContent.replace(/^(?:× 未達|\? 未確認)\s*·\s*/, '').trim(),
   }));
+  const method = document.querySelector('.research-list .method-tabs [aria-pressed="true"]')?.textContent.trim() || null;
+  const methodId = { 'ミネルヴィニ': 'minervini', '基本と原則': 'minervini2', 'オニール': 'oneil', 'IBD型': 'ibd' }[method] || null;
   return { viewport: { width: innerWidth, height: innerHeight }, evaluatedAt: Date.now(), scrollY, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
-    method: document.querySelector('.research-list .method-tabs [aria-pressed="true"]')?.textContent.trim() || null,
-    feed: { symbol: card?.querySelector('.candidate-name strong')?.textContent.trim() || null, metrics: metrics(card),
+    method, methodId, overviewScope: observe(document.querySelector('.overview-trigger')),
+    feed: { symbol: card?.querySelector('.candidate-name strong')?.textContent.trim() || null, methodId, decisions: decisions(card), metrics: metrics(card),
       next: observe(card?.querySelector('.feed-next-check > span')), other: observe(card?.querySelector('.feed-other-checks')),
       trace: trace ? { shown: shown(trace), loaded: trace.complete && trace.naturalWidth > 0, alt: trace.alt } : null,
       traceUnavailable: observe(card?.querySelector('.feed-trace-unavailable')) },
-    detail: { symbol: document.querySelector('.symbol-title h2')?.textContent.trim() || null, metrics: metrics(summary),
+    detail: { symbol: document.querySelector('.symbol-title h2')?.textContent.trim() || null, decisions: decisions(document.querySelector('.research-detail')), metrics: metrics(summary),
       summary: observe(summary), chart: observe(chart), evidenceBeforeChart: Boolean(summary && chart && summary.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING),
       entry: observe(document.querySelector('.research-detail .entry-evidence')), blockers,
       completeDaily: /日次モデルの条件をすべて通過/.test(document.querySelector('.research-detail .entry-evidence')?.textContent || '') },
@@ -81,6 +96,25 @@ export function checkResearchFeedMetrics(metrics, check, key, { surface = 'feed'
     if (row.actual?.text === '未確認') check(row.state === 'unknown', `${key}: ${id} unknown actual must not qualify`);
   }
   if (surface === 'feed') {
+    check(Boolean(FEED_REVIEW_METHODS.includes(metrics.methodId)), `${key}: the active method is ambiguous`);
+    check(Boolean(metrics.overviewScope?.shown && /全体概況/.test(metrics.overviewScope.text)), `${key}: the overview is not visibly identified as overall context`);
+    for (const [name, label] of [['selection', '選定条件'], ['daily', '日次確認']]) {
+      const decision = evidence?.decisions?.[name];
+      check(Boolean(decision?.shown && decision.text.includes(label)), `${key}: named ${name} completion state is missing`);
+      if (firstViewport) check(decision?.firstViewport === true, `${key}: ${name} completion state is outside the unobscured first viewport`);
+      const counts = decision && ['passed', 'total', 'failed', 'unknown'].every(field => Number.isInteger(decision[field]) && decision[field] >= 0) && decision.total > 0 && decision.passed + decision.failed + decision.unknown === decision.total;
+      const unavailable = name === 'daily' && decision?.state === 'unknown' && ['passed', 'total', 'failed', 'unknown'].every(field => decision[field] === null) && /日次確認\s*未確認/.test(decision.text) && /未達\s*—/.test(decision.text) && /未確認\s*—/.test(decision.text);
+      check(Boolean(counts || unavailable), `${key}: ${name} visible passed/failed/unknown counts are incomplete or inconsistent`);
+      if (counts) check(decision.state === (decision.passed === decision.total ? 'pass' : decision.failed ? 'fail' : 'unknown'), `${key}: ${name} completion state promotes or contradicts its visible counts`);
+    }
+    check(Boolean(evidence?.decisions?.price?.shown && evidence.decisions.price.text.includes('価格位置')), `${key}: named price-position context is missing`);
+    const annual = evidence?.decisions?.annual;
+    if (['oneil', 'ibd'].includes(metrics.methodId)) {
+      check(Boolean(annual?.shown && annual.required && /必須/.test(annual.text) && /年次EPS/.test(annual.text)), `${key}: required annual EPS status is missing`);
+      if (firstViewport) check(annual?.firstViewport === true, `${key}: required annual EPS status is outside the unobscured first viewport`);
+      check(Boolean(annual && ['pass', 'fail', 'unknown'].includes(annual.state) && annual.text.includes({ pass: '通過', fail: '未達', unknown: '未確認' }[annual.state])), `${key}: required annual EPS wording contradicts its condition state`);
+      if (annual?.state === 'unknown') check(evidence?.decisions?.selection?.state !== 'pass', `${key}: unknown required annual EPS was promoted to complete selection`);
+    } else check(!annual || !annual.required && !/必須/.test(annual.text), `${key}: reference annual EPS became an extra technical qualification gate`);
     check(Boolean(evidence?.next?.shown && evidence.next.text), `${key}: named next check is missing`);
     check(Boolean(evidence?.trace?.shown && evidence.trace.loaded && evidence.trace.alt) || Boolean(evidence?.traceUnavailable?.shown && /未確認/.test(evidence.traceUnavailable.text)), `${key}: price trace must load or explicitly state unavailable`);
   } else {
@@ -92,6 +126,13 @@ export function checkResearchFeedMetrics(metrics, check, key, { surface = 'feed'
 
 export function checkFeedDetailConsistency(feed, detail, check, key) {
   check(feed.symbol === detail.symbol, `${key}: selected detail differs from the chosen feed symbol`);
+  for (const name of ['selection', 'daily']) {
+    const compact = feed.decisions?.[name], full = detail.decisions?.[name];
+    check(Boolean(compact && full?.shown && ['passed', 'total', 'failed', 'unknown', 'state'].every(field => compact[field] === full[field])), `${key}: ${name} completion counts/state differ between card and detail`);
+  }
+  if (feed.decisions?.annual?.required) check(Boolean(detail.decisions?.annual?.shown && detail.decisions.annual.required && detail.decisions.annual.state === feed.decisions.annual.state), `${key}: required annual EPS state differs between card and detail`);
+  const daily = detail.decisions?.daily;
+  check(Boolean(daily && daily.failed === detail.blockers.filter(item => item.state === 'fail').length && daily.unknown === detail.blockers.filter(item => item.state === 'unknown').length), `${key}: daily completion counts disagree with the named detail blockers`);
   for (const expected of feed.metrics) {
     const actual = detail.metrics.find(row => row.id === expected.id);
     check(Boolean(actual) && actual.state === expected.state, `${key}: ${expected.id} state changed between feed and detail`);
@@ -133,6 +174,26 @@ export function checkDetailSourceEvidence(detail, expected, check, key) {
       row.actual !== '未確認' && row.calculationNote,
       row.actual !== '未確認' && row.comparisonLabel !== row.actual && row.comparisonLabel].filter(Boolean);
     for (const note of expectedNotes) check(notes.some(item => item.shown && item.text === note), `${key}: ${id} full comparison/rounding explanation is missing`);
+  }
+}
+
+// Visible decision summaries must keep green individual metrics subordinate to
+// the method's complete selection and daily checks. Canonical annual reference
+// evidence never becomes an extra Minervini qualification requirement.
+export function checkFeedDecisionEvidence(feed, expected, check, key) {
+  const selection = feed.decisions?.selection, annual = feed.decisions?.annual;
+  const assessment = expected.selection;
+  check(Boolean(selection && selection.passed === assessment.passed && selection.total === assessment.total), `${key}: visible selection counts differ from the canonical method assessment`);
+  const state = assessment.qualified ? 'pass' : assessment.failed ? 'fail' : 'unknown';
+  check(selection?.state === state, `${key}: visible selection state differs from the canonical method assessment`);
+  const required = ['oneil', 'ibd'].includes(expected.method);
+  check(expected.annual.required === required, `${key}: annual EPS required/reference role differs from the selected method`);
+  if (required) {
+    check(Boolean(annual && annual.state === expected.annual.state), `${key}: required annual EPS state differs from canonical evidence`);
+    if (expected.annual.state === 'unknown') check(Boolean(annual?.firstViewport && /未確認/.test(annual.text)), `${key}: canonical required annual uncertainty is missing from the first viewport`);
+  } else {
+    check(!annual || !/必須/.test(annual.text), `${key}: reference annual EPS became a Minervini qualification gate`);
+    if (assessment.qualified) check(selection?.state === 'pass' && selection.passed === selection.total, `${key}: reference annual uncertainty invalidated a complete technical selection`);
   }
 }
 

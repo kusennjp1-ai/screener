@@ -11,7 +11,7 @@ it('calculates only visible rank plans, keeps the full sort universe and reuses 
  const {rerender}=render(<CandidateBoard {...props}/>);
  expect(entryPlan).toHaveBeenCalledTimes(50);
  expect(screen.getAllByRole('listitem')).toHaveLength(50);
- expect(screen.getByRole('heading',{name:'候補リスト 103件'})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'ミネルヴィニ 候補 103件'})).toBeInTheDocument();
  rerender(<CandidateBoard {...props} selectedSymbol="S1"/>);
  expect(entryPlan).toHaveBeenCalledTimes(50);
  fireEvent.change(screen.getByRole('combobox',{name:'候補の並び順'}),{target:{value:'rs'}});
@@ -35,7 +35,7 @@ it('keeps keyboard focus when crossing both directions at a 50-row boundary in a
  fireEvent.keyDown(first,{key:'ArrowUp'});
  expect(onSelect).toHaveBeenLastCalledWith('S49');
  nextFrame();expect(screen.getByRole('button',{name:/^S49 の分析/})).toHaveFocus();
- expect(screen.getByRole('heading',{name:'候補リスト 501件'})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'ミネルヴィニ 候補 501件'})).toBeInTheDocument();
 });
 
 it.each([[390,0],[390,.578125],[701,0],[1024,0],[1279,.578125],[1280,0],[1440,0]])('explicit pagination focuses the first row without selecting it at width %s and fractional offset %s',(width,fraction)=>{

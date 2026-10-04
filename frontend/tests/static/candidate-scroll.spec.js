@@ -21,8 +21,8 @@ const rows=Array.from({length:101},(_,index)=>{
 // The approved table → feed layout has variable-height cards and four actions
 // per card. Preserve keyboard reachability and materialized geometry, not the
 // former 51/70px table-row estimate or an unmaterialized total scrollHeight.
-for(const width of [1440,1024,390])test(`offscreen feed cards keep geometry, focus and full pagination at ${width}px`,async({page},info)=>{
-  await page.setViewportSize({width,height:width===390?844:900});
+for(const [width,height] of [[1440,900],[1024,900],[390,844],[360,568]])test(`offscreen feed cards keep geometry, focus and full pagination at ${width}x${height}`,async({page},info)=>{
+  await page.setViewportSize({width,height});
   await page.clock.setFixedTime(new Date(now));
   await page.route('**/static-data/**',route=>{
     const file=new URL(route.request().url()).pathname.split('/').pop();
@@ -31,7 +31,12 @@ for(const width of [1440,1024,390])test(`offscreen feed cards keep geometry, foc
     return route.fulfill({json:payload});
   });
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'候補リスト 101件'})).toBeVisible();
+  const heading=page.getByRole('region',{name:'候補リスト',exact:true}).locator('.candidate-board-heading h2');
+  const expectCandidateHeading=async()=>{
+    await expect(heading).toBeVisible();
+    for(const text of ['ミネルヴィニ','候補','101件'])await expect(heading).toContainText(text);
+  };
+  await expectCandidateHeading();
   const items=page.getByRole('list',{name:'投資手法別の銘柄候補'}).getByRole('listitem');
   await expect(items).toHaveCount(50);
   await expect(page.getByRole('button',{name:'前の50件',exact:true})).toBeDisabled();
@@ -75,23 +80,49 @@ for(const width of [1440,1024,390])test(`offscreen feed cards keep geometry, foc
         const bounds=box(parent);visibleTop=Math.max(visibleTop,bounds.top);visibleBottom=Math.min(visibleBottom,bounds.bottom);
       }
     }
-    const inset=.5;
-    const hit=[row.left+inset,(row.left+row.right)/2,row.right-inset].every(x=>
-      [row.top+inset,(row.top+row.bottom)/2,row.bottom-inset].every(y=>{
-        const hit=document.elementFromPoint(x,y);return hit&&node.contains(hit);
-      }));
+    // Probe both full axes, including their edges. Bounding-box corners are not
+    // necessarily part of a native/rounded button's hit shape. One CSS pixel
+    // also keeps edge probes inside fractional viewport and scroll-clip bounds.
+    const inset=1,cx=(row.left+row.right)/2,cy=(row.top+row.bottom)/2;
+    const points=[0,.25,.5,.75,1].flatMap(fraction=>[
+      {x:cx,y:row.top+inset+(row.height-2*inset)*fraction},
+      {x:row.left+inset+(row.width-2*inset)*fraction,y:cy},
+    ]);
+    const describe=element=>element?{tag:element.tagName,id:element.id,class:element.getAttribute('class'),
+      label:element.getAttribute('aria-label'),text:element.textContent?.trim().slice(0,100),bounds:box(element)}:null;
+    const probe=point=>{
+      const actual=document.elementFromPoint(point.x,point.y);
+      return {...point,hit:Boolean(actual&&node.contains(actual)),actual:describe(actual),
+        stack:document.elementsFromPoint(point.x,point.y).slice(0,4).map(describe)};
+    };
+    const hitPoints=points.map(probe);
+    // Retain the original half-pixel grid diagnostically. In particular, the
+    // mobile square primary action's prior corner miss remains unexplained.
+    const cornerHitPoints=[row.left+.5,cx,row.right-.5].flatMap(x=>
+      [row.top+.5,cy,row.bottom-.5].map(y=>probe({x,y})));
+    const style=getComputedStyle(node),hit=hitPoints.every(point=>point.hit);
     return {row,item:box(item),card:box(card),primary:box(card.querySelector('.candidate-row')),growth:box(card.querySelector('.feed-growth')),nextCheck:box(card.querySelector('.feed-next-check')),footer:box(card.querySelector('.feed-card-footer')),
       previous:item.previousElementSibling?box(item.previousElementSibling):null,next:item.nextElementSibling?box(item.nextElementSibling):null,
-      header:headerBounds,heading:box(heading),controls:[...heading.querySelectorAll('button,select')].map(box),visibleTop,visibleBottom,hit};
+      header:headerBounds,nav:navBounds,heading:box(heading),controls:[...heading.querySelectorAll('button,select')].map(box),visibleTop,visibleBottom,
+      target:describe(node),targetStyle:{borderRadius:style.borderRadius,clipPath:style.clipPath,pointerEvents:style.pointerEvents},hitPoints,cornerHitPoints,hit};
   });
+  let focusCheck=0;
   const expectFocused=async target=>{
     await expect(target).toBeFocused();await expect(target).toBeInViewport({ratio:1});
     const bounds=await geometry(target);
+    const name=`focused-target-${width}-${++focusCheck}`;
+    // Retain actual hit elements and their stacking order before any assertion
+    // can end the test; a boolean alone cannot distinguish clipping/overlays.
+    await info.attach(name,{body:JSON.stringify(bounds),contentType:'application/json'});
+    if(!bounds.hit){
+      const path=info.outputPath(`${name}.png`);
+      await page.screenshot({path});await info.attach(`${name}-screen`,{path,contentType:'image/png'});
+    }
     expect(bounds.row.top).toBeGreaterThanOrEqual(bounds.visibleTop-.1);
     expect(bounds.row.bottom).toBeLessThanOrEqual(bounds.visibleBottom+.1);
     expect(bounds.row.left).toBeGreaterThanOrEqual(0);expect(bounds.row.right).toBeLessThanOrEqual(width);
     expect(bounds.row.width).toBeGreaterThanOrEqual(44);expect(bounds.row.height).toBeGreaterThanOrEqual(44);
-    expect(bounds.hit).toBe(true);
+    expect(bounds.hit,JSON.stringify(bounds.hitPoints.filter(point=>!point.hit))).toBe(true);
     return bounds;
   };
   const expectStableCard=async(target,label)=>{
@@ -165,6 +196,52 @@ for(const width of [1440,1024,390])test(`offscreen feed cards keep geometry, foc
   await expect(items).toHaveCount(1);
   await expectPageStart('PERF100');
   await expect(page.getByRole('button',{name:'次の50件',exact:true})).toBeDisabled();
+  if(width<=700){
+    const finalActions=items.first().getByRole('button');
+    const evidence=page.getByRole('button',{name:'PERF100 の財務・日次根拠を見る',exact:true});
+    // The final card has no following card to supply extra scrolling room.
+    // Reach every action through the keyboard, including the short viewport.
+    for(let index=1;index<await finalActions.count();index++){
+      await page.keyboard.press('Tab');await expectFocused(finalActions.nth(index));
+    }
+    for(let index=await finalActions.count()-2;index>=1;index--){
+      await page.keyboard.press('Shift+Tab');await expectFocused(finalActions.nth(index));
+    }
+    const positioned=await expectFocused(evidence);
+    expect(positioned.nav,'mobile bottom navigation must be present').not.toBeNull();
+    expect(positioned.nav.bottom).toBeCloseTo(height,1);
+    // Exercise a real wheel gesture near the fixed nav, without DOM scrolling
+    // or a locator click silently repositioning the evidence action for us.
+    const delta=Math.ceil(positioned.row.bottom-positioned.visibleBottom+8);
+    const scroll=await page.evaluate(()=>({y:scrollY,max:document.documentElement.scrollHeight-innerHeight}));
+    await page.mouse.move((positioned.row.left+positioned.row.right)/2,(positioned.row.top+positioned.row.bottom)/2);
+    await page.mouse.wheel(0,delta);
+    const expectedScroll=Math.max(0,Math.min(scroll.max,scroll.y+delta));
+    await expect.poll(async()=>Math.abs(await page.evaluate(()=>scrollY)-expectedScroll)).toBeLessThanOrEqual(1);
+    const tappable=await expectFocused(evidence);
+    const before={scrollY:await page.evaluate(()=>scrollY),url:page.url(),
+      filters:await page.getByLabel('現在の絞り込み').textContent()};
+    await info.attach('final-evidence-before-tap',{body:JSON.stringify({...before,bounds:tappable}),contentType:'application/json'});
+    await page.mouse.click((tappable.row.left+tappable.row.right)/2,(tappable.row.top+tappable.row.bottom)/2);
+    await expect(page.getByRole('region',{name:'銘柄詳細',exact:true}).getByRole('heading',{name:'PERF100',exact:true})).toBeVisible();
+    await expect(page.locator('.research-workbench')).toHaveAttribute('data-mobile-view','detail');
+    await page.getByRole('button',{name:'← 候補一覧',exact:true}).click();
+    await expect(page.locator('.research-workbench')).toHaveAttribute('data-mobile-view','list');
+    await expect(items).toHaveCount(1);
+    await expect(items.locator('.candidate-name strong')).toHaveText('PERF100');
+    await expect(finalActions.first()).toBeFocused();
+    await expect(finalActions.first()).toHaveAttribute('aria-current','true');
+    await expect(page.locator('.candidate-pagination')).toContainText('3 / 3');
+    await expect(page.getByRole('button',{name:'次の50件',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'ミネルヴィニ',exact:true})).toHaveAttribute('aria-pressed','true');
+    await expect(page.getByLabel('現在の絞り込み')).toHaveText(before.filters);
+    expect(page.url()).toBe(before.url);
+    await expect.poll(async()=>Math.abs(await page.evaluate(()=>scrollY)-before.scrollY)).toBeLessThanOrEqual(1);
+    const returned=await geometry(evidence);
+    await info.attach('final-evidence-after-back',{body:JSON.stringify({scrollY:await page.evaluate(()=>scrollY),bounds:returned}),contentType:'application/json'});
+    expect(returned.hit,JSON.stringify(returned.hitPoints.filter(point=>!point.hit))).toBe(true);
+    await expectPageGeometry('final-evidence-after-back');
+  }
   await page.getByRole('button',{name:'前の50件',exact:true}).click();
   await expect(items).toHaveCount(50);
   await expectPageStart('PERF050');
@@ -172,5 +249,5 @@ for(const width of [1440,1024,390])test(`offscreen feed cards keep geometry, foc
   await expect(items).toHaveCount(50);
   await expectPageStart('PERF000');
   await expect(page.getByRole('button',{name:'前の50件',exact:true})).toBeDisabled();
-  await expect(page.getByRole('heading',{name:'候補リスト 101件'})).toHaveText('候補リスト 101件');
+  await expectCandidateHeading();
 });

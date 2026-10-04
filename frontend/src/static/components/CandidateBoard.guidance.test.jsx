@@ -28,9 +28,9 @@ it('shows price location and daily purchase status separately, with the next fai
  render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
  const row=screen.getByRole('button',{name:/S0 の分析を表示/});
  expect(row).toHaveAccessibleName(/買いゾーン内/);
- expect(row).toHaveAccessibleName(/選定 9\/9。日次 5\/7。出来高：未達/);
+ expect(row).toHaveAccessibleName(/選定条件 9\/9。日次確認 5\/7。出来高：未達/);
  expect(row.closest('article')).toHaveTextContent('● 買いゾーン内');
- expect(row.closest('article')).toHaveTextContent('日次 5/7');
+ expect(row.closest('article')).toHaveTextContent('日次確認 5/7');
  expect(row.closest('article').querySelector('.feed-next-check')).toHaveTextContent('次に確認出来高：未達');
  expect(row.closest('article').querySelector('.feed-other-checks')).toHaveTextContent('決算予定：未確認');
  expect(row.closest('article')).not.toHaveTextContent('50日平均比が基準未満');
@@ -58,14 +58,14 @@ it('keeps the trading-day blocker accessible when financial selection is also un
 it('marks daily readiness only when all common checks pass and updates when time changes',()=>{
  entryReadiness.mockReturnValueOnce({ready:true,passed:7,total:7,rules:[]}).mockReturnValue(waiting);
  const {rerender}=render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
- expect(screen.getByText('日次 7/7 ✓')).toHaveAttribute('data-ready','true');
+ expect(screen.getByText('日次確認 7/7')).toHaveAttribute('data-ready','true');
  expect(screen.getByRole('button',{name:/S0 の分析を表示/})).toHaveAccessibleName(/発注前に最新価格とリスクを確認/);
  rerender(<CandidateBoard {...props} ranked={ranked.slice(0,1)} now={props.now+1000}/>);
- expect(screen.getByText('日次 5/7')).not.toHaveAttribute('data-ready');
+ expect(screen.getByText('日次確認 5/7')).not.toHaveAttribute('data-ready');
 });
 it('keeps missing context unconfirmed rather than passing and does no list readiness work in chart mode',()=>{
  const {rerender}=render(<CandidateBoard {...props} date={undefined} ranked={ranked.slice(0,1)}/>);
- expect(screen.getByText('日次 未確認')).toBeInTheDocument();
+ expect(screen.getByText('日次確認 未確認')).toBeInTheDocument();
  expect(entryReadiness).not.toHaveBeenCalled();
  rerender(<CandidateBoard {...props} view="charts"/>);
  expect(screen.getByText('比較チャート')).toBeInTheDocument();

@@ -50,10 +50,18 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     if (width === 1440) expect(geometry[mode].hero).toBeLessThanOrEqual(320);
     if (width === 1440) {
       const marketLink = page.getByRole('link', { name: '業種の追い風を見る →' });
+      // The feed keeps its overview compact until requested. Inspect the link
+      // through that real action, then restore the compact state before changes.
+      await expect(marketLink).toHaveCount(0);
+      await page.getByRole('button', { name: '全体概況を展開', exact: true }).click();
+      await expect(marketLink).toBeVisible();
       expect((await marketLink.boundingBox()).height).toBeGreaterThanOrEqual(44);
       await marketLink.focus();
       await expect(marketLink).toBeFocused();
       expect(await marketLink.evaluate(element => parseFloat(getComputedStyle(element).scrollMarginTop))).toBeGreaterThanOrEqual(64);
+      await page.getByRole('button', { name: '全体概況をたたむ', exact: true }).click();
+      await expect(marketLink).toHaveCount(0);
+      expect(fullRequests).toBe(0);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
