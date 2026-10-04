@@ -13,6 +13,65 @@ export const pilot = Object.freeze({ run_id: 37196464126, artifact_id: 113012773
   artifact_name: 'mandatory-financial-source-pilot-b08a9ccaf842da6e172744429fc036d888bd020c-1',
   digest: 'sha256:96673847ade01f667e5efd4645574ed89a7c2a4fe4c67e2c91b1f1f1dcbd463d' });
 
+const positive = value => Number.isSafeInteger(value) && value > 0;
+const allowedBranch = branch => ['main', 'improve/mandatory-financial-source-recovery'].includes(branch);
+
+function checkedRecoveryRun(run, expected, current = false) {
+  if (run?.id !== expected.id || run.run_attempt !== expected.attempt || run.head_sha !== expected.sha ||
+      run.head_branch !== expected.branch || run.path !== recoveryWorkflow || run.event !== 'push' ||
+      run.repository?.full_name !== repository || run.head_repository?.full_name !== repository ||
+      !positive(run.workflow_id) || !positive(run.repository?.id) || run.head_repository?.id !== run.repository.id ||
+      run.status !== (current ? 'in_progress' : 'completed')) throw Error('Untrusted recovery workflow attempt or nonterminal source');
+  return run;
+}
+
+// The run endpoint describes the latest attempt, including this live execution.
+// Only the attempt endpoint can establish that its predecessor is terminal.
+export function recoverySource(context, api = githubApi) {
+  const { id, attempt, sha, branch } = context;
+  if (!positive(id) || !positive(attempt) || !/^[a-f0-9]{40}$/.test(sha ?? '') || !allowedBranch(branch) ||
+      context.repository !== repository || context.event !== 'push') throw Error('Invalid recovery-run context');
+  const current = checkedRecoveryRun(api(`repos/${repository}/actions/runs/${id}`), context, true);
+  const inventory = api(`repos/${repository}/actions/workflows/financial-statement-recovery.yml/runs?event=push&per_page=100`);
+  if (!Array.isArray(inventory.workflow_runs) || !Number.isSafeInteger(inventory.total_count) ||
+      inventory.total_count < 0 || inventory.total_count > 100 || inventory.workflow_runs.length !== inventory.total_count) {
+    throw Error('Incomplete or oversized recovery-run inventory; do not restart a cold batch');
+  }
+  const runs = inventory.workflow_runs;
+  for (const other of runs) {
+    if (other.id === id) checkedRecoveryRun(other, context, true);
+    else if (other.path === recoveryWorkflow && other.repository?.full_name === repository &&
+        other.head_repository?.full_name === repository) {
+      if (other.status === 'in_progress') throw Error('Another recovery execution is live; do not acquire overlapping source batches');
+      if (other.id > id && other.head_branch === branch && other.status === 'completed') {
+        throw Error('A newer recovery run already completed; do not roll back its source progress');
+      }
+    }
+  }
+  let run, initial = false;
+  if (attempt > 1) {
+    // Never leapfrog an absent/failed attempt by selecting another run or pilot.
+    run = checkedRecoveryRun(api(`repos/${repository}/actions/runs/${id}/attempts/${attempt - 1}`),
+      { ...context, attempt: attempt - 1 });
+  } else {
+    const previous = previousRecoveryRun(runs, id, branch);
+    initial = !previous;
+    if (previous) {
+      if (!positive(previous.id) || !positive(previous.run_attempt) || !/^[a-f0-9]{40}$/.test(previous.head_sha ?? '')) throw Error('Invalid prior recovery identity');
+      run = checkedRecoveryRun(api(`repos/${repository}/actions/runs/${previous.id}/attempts/${previous.run_attempt}`),
+        { id: previous.id, attempt: previous.run_attempt, sha: previous.head_sha, branch });
+    } else {
+      run = api(`repos/${repository}/actions/runs/${pilot.run_id}`);
+      if (run.repository?.full_name !== repository || run.head_repository?.full_name !== repository ||
+          run.status !== 'completed' || run.conclusion !== 'success' ||
+          run.path !== '.github/workflows/mandatory-financial-source-pilot.yml') throw Error('Untrusted source workflow');
+    }
+  }
+  if (!initial && (run.workflow_id !== current.workflow_id || run.repository.id !== current.repository.id ||
+      run.head_repository.id !== current.head_repository.id)) throw Error('Recovery workflow or repository identity changed');
+  return { run, initial, current };
+}
+
 export function previousRecoveryRun(runs, currentId, branch) {
   if (!Array.isArray(runs) || !Number.isSafeInteger(currentId) || currentId <= 0 ||
       !['main', 'improve/mandatory-financial-source-recovery'].includes(branch)) throw Error('Invalid recovery-run context');
@@ -25,7 +84,8 @@ export function previousRecoveryRun(runs, currentId, branch) {
   return latest ?? null;
 }
 
-export function checkedArtifact(artifacts, run, initial = false) {
+export function checkedArtifact(artifacts, run, initial = false, current = null) {
+  if (!Array.isArray(artifacts)) throw Error('Invalid source artifact inventory');
   const name = initial ? pilot.artifact_name : `financial-statement-recovery-${run.head_sha}-${run.run_attempt}`;
   const selected = artifacts.filter(item => item.name === name);
   if (selected.length !== 1) throw Error('Missing or ambiguous prior source artifact; do not restart a cold batch');
@@ -34,6 +94,17 @@ export function checkedArtifact(artifacts, run, initial = false) {
       !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes <= 0 || artifact.size_in_bytes > 128 * 1024 * 1024 ||
       !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') || artifact.workflow_run?.id !== run.id ||
       artifact.workflow_run?.head_sha !== run.head_sha) throw Error('Source artifact provenance or size is invalid');
+  if (!initial && current) {
+    const created = Date.parse(artifact.created_at), started = Date.parse(run.run_started_at);
+    const nextStarted = Date.parse(current.run_started_at);
+    // Artifact workflow_run has no run_attempt. The exact immutable name and
+    // creation interval bind it to the separately validated terminal attempt.
+    if (artifact.workflow_run.repository_id !== run.repository.id ||
+        artifact.workflow_run.head_repository_id !== run.head_repository.id ||
+        artifact.workflow_run.head_branch !== run.head_branch ||
+        !Number.isFinite(created) || !Number.isFinite(started) || !Number.isFinite(nextStarted) ||
+        created < started || created >= nextStarted) throw Error('Source artifact does not belong to the prior attempt interval');
+  }
   if (initial && (run.id !== pilot.run_id || run.head_sha !== pilot.head_sha ||
       artifact.id !== pilot.artifact_id || artifact.digest !== pilot.digest)) throw Error('Pilot source identity differs from reviewed evidence');
   return artifact;
@@ -58,23 +129,21 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 
 async function main() {
   const [output, branch = process.env.GITHUB_REF_NAME] = process.argv.slice(2);
-  const currentId = Number(process.env.GITHUB_RUN_ID);
   if (!output) throw Error('Usage: node restore-statement-source.mjs NEW_OUTPUT_DIRECTORY [BRANCH]');
   const root = resolve(output); mkdirSync(root, { recursive: false });
-  const runs = githubApi(`repos/${repository}/actions/runs?branch=${encodeURIComponent(branch)}&event=push&per_page=100`).workflow_runs;
-  const previous = previousRecoveryRun(runs, currentId, branch);
-  const run = previous ?? githubApi(`repos/${repository}/actions/runs/${pilot.run_id}`);
-  if (run.repository?.full_name !== repository || run.head_repository?.full_name !== repository ||
-      (!previous && (run.conclusion !== 'success' || run.path !== '.github/workflows/mandatory-financial-source-pilot.yml'))) throw Error('Untrusted source workflow');
+  const { run, initial, current } = recoverySource({ id: Number(process.env.GITHUB_RUN_ID),
+    attempt: Number(process.env.GITHUB_RUN_ATTEMPT), sha: process.env.GITHUB_SHA, branch,
+    repository: process.env.GITHUB_REPOSITORY, event: process.env.GITHUB_EVENT_NAME });
   const list = githubApi(`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`);
-  if (list.total_count > 100) throw Error('Source artifact inventory exceeds expected bound');
-  const artifact = checkedArtifact(list.artifacts, run, !previous);
+  if (!Number.isSafeInteger(list.total_count) || list.total_count < 0 || list.total_count > 100 ||
+      !Array.isArray(list.artifacts) || list.artifacts.length !== list.total_count) throw Error('Incomplete or oversized source artifact inventory');
+  const artifact = checkedArtifact(list.artifacts, run, initial, current);
   const zip = resolve(root, 'source.zip'); const descriptor = openSync(zip, 'wx');
   try { execFileSync('gh', ['api', `repos/${repository}/actions/artifacts/${artifact.id}/zip`], { stdio: ['ignore', descriptor, 'pipe'] }); }
   finally { closeSync(descriptor); }
   if (`sha256:${sha256(readFileSync(zip))}` !== artifact.digest) throw Error('Source artifact bytes do not match their immutable digest');
   extractSourceArchive(zip, resolve(root, 'files'));
-  const provenance = { schema_version: 'financial-source-restore-v1', kind: previous ? 'recovery_archive' : 'reviewed_pilot',
+  const provenance = { schema_version: 'financial-source-restore-v1', kind: initial ? 'reviewed_pilot' : 'recovery_archive',
     repository, run_id: run.id, run_attempt: run.run_attempt, head_sha: run.head_sha,
     artifact_id: artifact.id, artifact_sha256: artifact.digest.slice(7) };
   writeFileSync(resolve(root, 'restored.json'), JSON.stringify(provenance, null, 2), { flag: 'wx' });

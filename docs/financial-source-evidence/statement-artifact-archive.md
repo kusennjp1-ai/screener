@@ -70,3 +70,55 @@ An empty plan is a valid no-work report and must not be passed to the collector,
 which correctly requires a nonempty selected batch. Archive corruption is fatal;
 the caller must not replace the archive with an empty one or fall back to a new
 first-200 sweep. No raw live pilot fixtures are committed to the repository.
+
+## Controlled workflow-attempt continuation
+
+`financial-statement-recovery.yml` acquires at most 200 selected symbols per
+execution and uploads an immutable cumulative archive named
+`financial-statement-recovery-<head_sha>-<run_attempt>`. Each authorized rerun of
+this acquisition job is a **new bounded acquisition continuation**, not a
+performance-test rerun or a reason to rerun unrelated PR checks. This does not
+schedule reruns or grant permission to start one. The controlling operator must
+check the preceding outcome, source archive and provider-stop state before
+separately authorizing the next execution. A provider latch remains closed until
+the existing explicit recovery requirements are met.
+
+The source restore script first verifies the current live run against the exact
+repository, head revision, workflow, branch, push event and attempt. For attempt
+N > 1 it requests `/actions/runs/<run_id>/attempts/<N-1>` and requires that exact
+previous attempt to be terminal, from the same repository and workflow IDs, and
+on the identical head and branch. It selects only the artifact with that
+previous attempt's exact name. GitHub's current run record describes the latest
+attempt, and an artifact's `workflow_run` does not contain an attempt number;
+neither can stand in for the previous-attempt API response. The artifact must
+also match the run, repository IDs, branch and head, and have a creation time
+at or after the previous attempt's start and strictly before the current
+attempt's start. Missing or ambiguous clocks fail closed.
+
+Attempt 1 retains the previous-run path, selecting the latest terminal recovery
+run on the same branch and validating its exact last attempt. Only an initial
+run with no preceding recovery can import the pinned reviewed pilot. A missing,
+expired, duplicate, corrupt or incomplete preceding archive is a recovery
+blocker. Even if an attempt failed before writing any archive, reruns must not
+skip it, restore an older attempt/run, or restart a cold batch. Existing partial
+archive/journal reconciliation remains mandatory before provider work.
+Run and artifact inventories must be complete within the 100-entry read bound;
+a truncated or larger inventory requires an explicit recovery decision.
+
+The workflow's global concurrency group with `cancel-in-progress: false`
+serializes acquisition. Restore additionally rejects another live recovery,
+superseded current-attempt metadata, or rerunning an older run after a newer
+run on its branch completed. A queued execution does not count as live source
+work. Workflow permissions remain `contents: read` and `actions: read`; rerun
+control is external to the workflow. Original acquisition bytes, receipts,
+attempt IDs and observed-at clocks remain unchanged through restore.
+
+A GitHub rerun executes the original commit. This continuation behavior applies
+only after the commit containing it has started its first recovery execution;
+rerunning an older commit cannot adopt the new restore logic.
+
+Offline source-selection and provenance checks:
+
+```sh
+node --test .github/scripts/restore-statement-source.test.mjs
+```
