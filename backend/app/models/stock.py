@@ -181,6 +181,8 @@ class StockFundamental(Base):
     field_completeness_score = Column(Integer, index=True)
     # {field_name: provider_name} for every populated field.
     field_provenance = Column(JsonColumn)
+    # Shadow lineage only. NULL legacy rows remain unverified; no value backfill.
+    financial_source_evidence = Column(JsonColumn, nullable=True)
 
     # USD normalisation (T3). Computed at storage time using the FX rate
     # captured in ``fx_metadata``; NULL when source currency or amount is

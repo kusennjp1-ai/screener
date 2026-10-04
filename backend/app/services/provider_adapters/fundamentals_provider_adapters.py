@@ -15,6 +15,7 @@ from app.domain.providers.data_plan import (
     PROVIDER_YFINANCE,
     ProviderDataPlan,
 )
+from app.services.financial_payload_boundary import overlay_financial_payload
 from app.services.security_master_service import SecurityIdentity
 
 logger = logging.getLogger(__name__)
@@ -129,7 +130,10 @@ class FinvizFundamentalsAdapter:
         logger.info("Using finvizfinance data for %s fundamentals", context.symbol)
         eps_data = self._host.get_eps_rating_data(context.symbol)
         if eps_data:
-            finviz_data.update(eps_data)
+            finviz_data = overlay_financial_payload(
+                finviz_data, eps_data, skip_none=False,
+                symbol=context.canonical_symbol, market=context.market,
+            )
             logger.debug("Supplemented finviz data with EPS rating data for %s", context.symbol)
         return ProviderExecutionResult(
             provider=self.provider,

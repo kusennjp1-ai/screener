@@ -783,6 +783,7 @@ def _map_row_to_domain(
         "field_availability": joined.get("field_availability"),
         "growth_reporting_cadence": joined.get("growth_reporting_cadence"),
         "growth_metric_basis": joined.get("growth_metric_basis"),
+        "financial_source_evidence": details.get("financial_source_evidence"),
         "minervini_score": result.minervini_score,
         "canslim_score": result.canslim_score,
         "ipo_score": result.ipo_score,

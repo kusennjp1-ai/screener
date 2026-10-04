@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+import math
+import re
 from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
@@ -41,6 +44,55 @@ def _to_timestamp(value: Any) -> Optional[pd.Timestamp]:
         return timestamp
     except Exception:
         return None
+
+
+def _source_period_end(column: Any) -> Optional[str]:
+    """Serialize a supplied day without inventing a day for year-only labels."""
+    if not isinstance(column, (date, datetime, pd.Timestamp)) and not (
+        isinstance(column, str) and re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[ T])", column)
+    ):
+        return None
+    timestamp = _to_timestamp(column)
+    return timestamp.date().isoformat() if timestamp is not None else None
+
+
+def _growth_source_context(
+    income: pd.DataFrame,
+    *,
+    metric: Any,
+    recent_column: Any,
+    comparable_column: Any,
+    cadence: str,
+    basis: str,
+    min_abs_baseline: float,
+    remapped: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Describe the selected inputs only; acquisition belongs to the caller."""
+    inputs = [
+        {
+            "column": str(column),
+            "period_end": _source_period_end(column),
+            "value": float(income.loc[metric, column]),
+        }
+        for column in (recent_column, comparable_column)
+    ]
+    if not all(math.isfinite(item["value"]) for item in inputs):
+        return None
+    periods = [item["period_end"] for item in inputs]
+    return {
+        "metric": str(metric),
+        "period_end": periods[0],
+        "comparable_period_end": periods[1],
+        "period_status": "supplied" if all(periods) else "not_supplied",
+        "cadence": cadence,
+        "basis": f"{basis}/v1",
+        "periods_used": periods,
+        "source_inputs": inputs,
+        "algorithm": "growth-cadence-v1",
+        "minimum_absolute_baseline": min_abs_baseline,
+        "rounding": {"decimal_places": 2},
+        "remapped_to_qq": remapped,
+    }
 
 
 def _compute_growth(recent: Any, baseline: Any, *, min_abs_baseline: float = 0.0) -> Optional[float]:
@@ -112,12 +164,17 @@ def compute_cadence_aware_growth(
     quarterly_income: pd.DataFrame | None,
     *,
     market: str | None = None,
+    include_source_context: bool = False,
 ) -> Dict[str, Any]:
     """Return growth metrics with cadence-aware semantics.
 
     For HK/JP with non-quarterly cadence, ``*_growth_qq`` is set from
     comparable-period YoY (same period prior year) to avoid fabricated
     quarter-over-quarter comparisons.
+
+    Opt-in ``_financial_source_context`` describes each non-null finite result's
+    actual inputs. It contains no acquisition timestamps and leaves legacy
+    fields, selection, arithmetic, and the default return shape unchanged.
     """
     result: Dict[str, Any] = {
         "eps_growth_qq": None,
@@ -131,6 +188,8 @@ def compute_cadence_aware_growth(
         "growth_comparable_period_date": None,
         "growth_reference_gap_days": None,
     }
+    if include_source_context:
+        result["_financial_source_context"] = {}
 
     if quarterly_income is None or quarterly_income.shape[1] < 2:
         return result
@@ -188,16 +247,39 @@ def compute_cadence_aware_growth(
     result["sales_growth_yy"] = comparable_sales
 
     resolved_market = _normalize_market(market)
+
+    def record_context(field: str, row: Any, baseline: Any, basis: str, *, remapped: bool = False) -> None:
+        if not include_source_context or result[field] is None or not math.isfinite(result[field]):
+            return
+        context = _growth_source_context(
+            quarterly_income,
+            metric=row,
+            recent_column=recent_col,
+            comparable_column=baseline,
+            cadence=cadence,
+            basis=basis,
+            min_abs_baseline=0.05 if field.startswith("eps_") else 0.0,
+            remapped=remapped,
+        )
+        if context is not None:
+            result["_financial_source_context"][field] = context
+
+    record_context("eps_growth_yy", eps_row, comparable_col, BASIS_COMPARABLE_YOY)
+    record_context("sales_growth_yy", revenue_row, comparable_col, BASIS_COMPARABLE_YOY)
     if cadence == CADENCE_QUARTERLY:
         result["growth_metric_basis"] = BASIS_QOQ
         result["eps_growth_qq"] = qoq_eps
         result["sales_growth_qq"] = qoq_sales
+        record_context("eps_growth_qq", eps_row, previous_col, BASIS_QOQ)
+        record_context("sales_growth_qq", revenue_row, previous_col, BASIS_QOQ)
         return result
 
     if resolved_market in _MARKETS_COMPARABLE_PERIOD_PRIMARY:
         result["growth_metric_basis"] = BASIS_COMPARABLE_YOY
         result["eps_growth_qq"] = comparable_eps
         result["sales_growth_qq"] = comparable_sales
+        record_context("eps_growth_qq", eps_row, comparable_col, BASIS_COMPARABLE_YOY, remapped=True)
+        record_context("sales_growth_qq", revenue_row, comparable_col, BASIS_COMPARABLE_YOY, remapped=True)
         return result
 
     # For markets where comparable-period YoY is not the primary growth

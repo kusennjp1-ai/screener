@@ -30,6 +30,46 @@ def _parse_date(value: str) -> date:
     return date.fromisoformat(value)
 
 
+def _stored_row_payload(row: StockFeatureDaily) -> dict:
+    """The persisted content, excluding a run's local database identity."""
+    return {
+        "symbol": row.symbol,
+        "as_of_date": row.as_of_date.isoformat(),
+        "composite_score": row.composite_score,
+        "overall_rating": row.overall_rating,
+        "passes_count": row.passes_count,
+        "details_json": row.details_json,
+    }
+
+
+def _incoming_row_payload(row: dict) -> dict:
+    return {
+        "symbol": row["symbol"],
+        "as_of_date": _parse_date(row["as_of_date"]).isoformat(),
+        "composite_score": row.get("composite_score"),
+        "overall_rating": row.get("overall_rating"),
+        "passes_count": row.get("passes_count"),
+        "details_json": row.get("details_json"),
+    }
+
+
+def _same_json_content(left, right) -> bool:
+    """JSON booleans are not numbers; database numeric coercion is harmless."""
+    if isinstance(left, bool) or isinstance(right, bool):
+        return type(left) is type(right) and left == right
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(
+            _same_json_content(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(
+            _same_json_content(a, b) for a, b in zip(left, right)
+        )
+    if isinstance(left, (float, int)) and isinstance(right, (float, int)):
+        return left == right
+    return type(left) is type(right) and left == right
+
+
 def import_bundle(input_path: Path) -> dict:
     raw = input_path.read_bytes()
     if input_path.suffix == ".gz" or raw[:2] == b"\x1f\x8b":
@@ -43,8 +83,10 @@ def import_bundle(input_path: Path) -> dict:
     as_of = _parse_date(run_meta["as_of_date"])
 
     with SessionLocal() as db:
-        # Idempotency: if the pointer already targets a run with this as-of
-        # date and row count, the bundle is already imported.
+        # Equal date/count does not identify equal observations. A same-date
+        # bundle may contain newly captured source evidence or corrected rows.
+        # Compare persisted content; keep prior generations intact on change.
+        # Export/import clocks are intentionally excluded from this comparison.
         pointer = (
             db.query(FeatureRunPointer)
             .filter(FeatureRunPointer.key == pointer_key)
@@ -56,15 +98,26 @@ def import_bundle(input_path: Path) -> dict:
                 existing_rows = (
                     db.query(StockFeatureDaily)
                     .filter(StockFeatureDaily.run_id == existing.id)
-                    .count()
+                    .order_by(StockFeatureDaily.symbol.asc())
+                    .all()
                 )
-                if existing_rows == len(rows):
+                same_metadata = (
+                    existing.run_type == (run_meta.get("run_type") or "daily_snapshot")
+                    and existing.code_version == run_meta.get("code_version")
+                    and _same_json_content(existing.config_json, run_meta.get("config_json"))
+                    and _same_json_content(existing.stats_json, run_meta.get("stats_json"))
+                )
+                same_rows = len(existing_rows) == len(rows) and _same_json_content(
+                    sorted((_stored_row_payload(row) for row in existing_rows), key=lambda row: row["symbol"]),
+                    sorted((_incoming_row_payload(row) for row in rows), key=lambda row: row["symbol"]),
+                )
+                if same_metadata and same_rows:
                     return {
                         "status": "up_to_date",
                         "market": market,
                         "run_id": existing.id,
                         "as_of_date": as_of.isoformat(),
-                        "row_count": existing_rows,
+                        "row_count": len(existing_rows),
                     }
 
         now = datetime.now(timezone.utc)

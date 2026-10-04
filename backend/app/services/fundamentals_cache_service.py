@@ -9,6 +9,9 @@ import logging
 import math
 import pickle
 import inspect
+import hashlib
+from copy import deepcopy
+from sqlalchemy import text
 from typing import Any, Optional, Dict, Callable
 from datetime import datetime, date
 from sqlalchemy.orm import Session
@@ -28,6 +31,9 @@ from ..models.stock import StockFundamental
 from .universe_classification import backfill_universe_classification
 from ..config import settings
 from .errors import CacheRefreshError
+from .financial_source_evidence import (
+    ALIASES, FINANCIAL_FIELDS, equal_value, merge_financial_payloads,
+)
 from .fundamentals_completeness import (
     compute_completeness_score,
     derive_field_provenance,
@@ -130,7 +136,7 @@ class FundamentalsCacheService:
 
     def _normalize_payload_for_storage(self, data: Dict) -> Dict:
         """Normalize payload types before writing to Redis/DB."""
-        normalized = dict(data)
+        normalized = deepcopy(data)
         if "ipo_date" in normalized:
             normalized["ipo_date"] = self._coerce_date(normalized.get("ipo_date"))
         if "recommendation" in normalized:
@@ -234,7 +240,7 @@ class FundamentalsCacheService:
                 cached_data = self._redis_client.get(redis_key)
 
                 if cached_data:
-                    fundamentals = pickle.loads(cached_data)
+                    fundamentals = merge_financial_payloads(pickle.loads(cached_data), {}, symbol=symbol, market=market)
                     if self._needs_db_enrichment(fundamentals):
                         db_data, last_update = self._get_from_database(symbol)
                         if db_data is not None and self._is_data_fresh(last_update):
@@ -332,6 +338,55 @@ class FundamentalsCacheService:
         # No cached data - fetch from yfinance
         logger.info(f"Cache MISS for {symbol} - fetching fresh data")
         return self._fetch_and_cache(symbol, market=market)
+
+    @staticmethod
+    def _financial_payload_from_record(record: StockFundamental) -> Dict:
+        """Read persisted scalars; use JSON raw_values only for fields without columns."""
+        envelope = deepcopy(getattr(record, "financial_source_evidence", None))
+        payload = {"symbol": record.symbol, "financial_source_evidence": envelope}
+        if isinstance(envelope, dict):
+            payload["market"] = envelope.get("market")
+        stored_raw = envelope.get("raw_values", {}) if isinstance(envelope, dict) else {}
+        for field in FINANCIAL_FIELDS:
+            attr = "eps_growth_quarterly" if field == "eps_growth_qq" else field
+            if hasattr(record, attr):
+                payload[field] = getattr(record, attr)
+            elif isinstance(stored_raw, dict) and field in stored_raw:
+                payload[field] = deepcopy(stored_raw[field])
+        for alias in ALIASES:
+            payload[alias] = getattr(record, alias, None)
+        for field in ("field_provenance", "recent_quarter_date", "previous_quarter_date",
+                      "growth_comparable_period_date", "growth_reporting_cadence", "growth_metric_basis",
+                      "growth_reference_gap_days", "yahoo_statements_refreshed_at",
+                      "yahoo_profile_refreshed_at", "finviz_snapshot_at"):
+            value = getattr(record, field, None)
+            payload[field] = value.isoformat() if isinstance(value, datetime) else value
+        return payload
+
+    @classmethod
+    def _restore_financial_payload(cls, record: StockFundamental, fundamentals: Dict) -> Dict:
+        # Old writers can still change scalars without updating JSON. Validate the
+        # pair on every DB read and retain the original mismatched envelope raw.
+        financial = cls._financial_payload_from_record(record)
+        repaired = merge_financial_payloads(financial, {}, symbol=record.symbol, market=financial.get("market"))
+        stored_envelope = financial.get("financial_source_evidence")
+        revision = stored_envelope.get("storage_revision") if isinstance(stored_envelope, dict) else None
+        if isinstance(revision, int) and not isinstance(revision, bool) and revision >= 0:
+            repaired["financial_source_evidence"]["storage_revision"] = revision
+        for field in (*FINANCIAL_FIELDS, *ALIASES, "symbol", "market", "financial_source_evidence"):
+            if field in repaired:
+                fundamentals[field] = repaired[field]
+        return fundamentals
+
+    @staticmethod
+    def _lock_financial_write(db: Session, symbol: str) -> None:
+        """Serialize read/merge/write, including concurrent inserts for one symbol."""
+        dialect = db.get_bind().dialect.name
+        if dialect == "sqlite":
+            db.execute(text("BEGIN IMMEDIATE"))
+        elif dialect == "postgresql":
+            lock_id = int.from_bytes(hashlib.sha256(("financial-source:" + symbol).encode()).digest()[:8], "big", signed=True)
+            db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id})
 
     def _get_from_database(self, symbol: str) -> tuple[Optional[Dict], Optional[datetime]]:
         """
@@ -477,11 +532,15 @@ class FundamentalsCacheService:
                 # T2 quality metadata
                 "field_completeness_score": record.field_completeness_score,
                 "field_provenance": record.field_provenance,
+                "symbol": record.symbol,
+                "financial_source_evidence": record.financial_source_evidence,
                 # T3 FX normalisation
                 "market_cap_usd": record.market_cap_usd,
                 "adv_usd": record.adv_usd,
                 "fx_metadata": record.fx_metadata,
             }
+
+            fundamentals = self._restore_financial_payload(record, fundamentals)
 
             # Compute fallback description (finviz preferred, yfinance as fallback)
             fundamentals["description"] = fundamentals.get("description_finviz") or fundamentals.get("description_yfinance")
@@ -754,13 +813,16 @@ class FundamentalsCacheService:
                 market=market,
             )
 
-            # Cache in Redis (7-day TTL)
-            self._store_in_redis_for_market(symbol, fundamentals, market=market)
-
-            # Persist to database (permanent storage) with data source metadata.
-            self._store_in_database(
+            # Publish only a successfully committed value/evidence pair.
+            if not self._store_in_database(
                 symbol, fundamentals, data_source=data_source, market=market
-            )
+            ):
+                return None
+            persisted, _ = self._get_from_database(symbol)
+            if persisted is None:
+                return None
+            fundamentals = persisted
+            self._store_in_redis_for_market(symbol, fundamentals, market=market)
 
             # Re-add metadata for return value
             fundamentals['data_source'] = data_source
@@ -790,7 +852,7 @@ class FundamentalsCacheService:
             return None
 
     def _redis_data_key(self, symbol: str, market: Optional[str] = None) -> str:
-        return self._cache_policy.key("fundamentals", symbol, market=market)
+        return self._cache_policy.key("fundamentals", symbol, market=market, parts=("financial-source-v1",))
 
     def _store_in_redis_for_market(
         self,
@@ -811,20 +873,42 @@ class FundamentalsCacheService:
         if not self._redis_client:
             return
 
+        db = self._session_factory()
         try:
+            # A delayed publisher must not overwrite a later committed pair.
+            # Hold the same DB lock used by writers through the Redis operation.
+            # There is no persistent Redis revision authority to reset on DB restore.
+            self._lock_financial_write(db, symbol)
+            current = db.query(StockFundamental).filter(StockFundamental.symbol == symbol).first()
+            if current is None:
+                return
+            current_payload = self._restore_financial_payload(current, {})
+            current_envelope = current_payload["financial_source_evidence"]
+            envelope = data.get("financial_source_evidence")
+            if not isinstance(envelope, dict):
+                return
+            if current_envelope.get("storage_revision", 0) != envelope.get("storage_revision", 0):
+                return
+            if current_envelope["fields"] != envelope.get("fields"):
+                return
+            for field in FINANCIAL_FIELDS:
+                expected, actual = current_payload.get(field), data.get(field)
+                if expected is None and actual is None:
+                    continue
+                if not equal_value(expected, actual):
+                    return
             redis_key = self._redis_data_key(symbol, market)
-            pickled_data = pickle.dumps(data)
-
             self._redis_client.setex(
-                redis_key,
-                self._cache_policy.ttl_seconds("fundamentals", market=market),
-                pickled_data
+                redis_key, self._cache_policy.ttl_seconds("fundamentals", market=market),
+                pickle.dumps(data),
             )
-
             logger.debug(f"Cached {symbol} fundamental data in Redis (TTL: 7 days)")
-
         except Exception as e:
             logger.error(f"Error storing {symbol} in Redis: {e}", exc_info=True)
+        finally:
+            # Read-only transaction: rollback releases SQLite/advisory locks.
+            db.rollback()
+            db.close()
 
     def _store_in_database(
         self,
@@ -853,6 +937,8 @@ class FundamentalsCacheService:
         try:
             if market is None:
                 market = self._resolve_market(symbol)
+            data = deepcopy(data)
+            self._lock_financial_write(db, symbol)
 
             # Prefer pre-computed values from the dict (attached by
             # ``_enrich_with_quality_metadata`` on the write path); only
@@ -869,6 +955,19 @@ class FundamentalsCacheService:
             existing_record = db.query(StockFundamental).filter(
                 StockFundamental.symbol == symbol
             ).first()
+
+            existing_financial = self._financial_payload_from_record(existing_record) if existing_record else {}
+            paired = merge_financial_payloads(data, existing_financial, symbol=symbol, market=market)
+            old_envelope = existing_financial.get("financial_source_evidence")
+            revision = old_envelope.get("storage_revision", 0) if isinstance(old_envelope, dict) else 0
+            if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+                revision = 0
+            # Only this locked transaction assigns generations. Imported/source
+            # revisions never advance the local persistence or source clocks.
+            paired["financial_source_evidence"]["storage_revision"] = revision + 1
+            for field in (*FINANCIAL_FIELDS, *ALIASES, "financial_source_evidence"):
+                if field in paired:
+                    data[field] = paired[field]
 
             if existing_record:
                 # Update existing record - organized by category
@@ -1008,6 +1107,7 @@ class FundamentalsCacheService:
                 # T2 quality metadata
                 existing_record.field_completeness_score = completeness_score
                 existing_record.field_provenance = provenance
+                existing_record.financial_source_evidence = deepcopy(data["financial_source_evidence"])
                 # T3 FX normalisation
                 _assign_if_present(existing_record, "market_cap_usd", data, "market_cap_usd")
                 _assign_if_present(existing_record, "adv_usd", data, "adv_usd")
@@ -1140,6 +1240,7 @@ class FundamentalsCacheService:
                     # T2 quality metadata
                     field_completeness_score=completeness_score,
                     field_provenance=provenance,
+                    financial_source_evidence=deepcopy(data["financial_source_evidence"]),
                     # T3 FX normalisation
                     market_cap_usd=data.get("market_cap_usd"),
                     adv_usd=data.get("adv_usd"),
@@ -1232,11 +1333,7 @@ class FundamentalsCacheService:
     @staticmethod
     def _merge_fundamentals(primary: Dict, fallback: Dict) -> Dict:
         """Merge two fundamentals payloads, preferring non-null primary values."""
-        merged = dict(primary)
-        for key, value in fallback.items():
-            if key not in merged or merged[key] is None:
-                merged[key] = value
-        return merged
+        return merge_financial_payloads(primary, fallback)
 
     def _get_many_from_database(
         self,
@@ -1401,11 +1498,15 @@ class FundamentalsCacheService:
                     # T2 quality metadata
                     "field_completeness_score": record.field_completeness_score,
                     "field_provenance": record.field_provenance,
+                    "symbol": record.symbol,
+                    "financial_source_evidence": record.financial_source_evidence,
                     # T3 FX normalisation
                     "market_cap_usd": record.market_cap_usd,
                     "adv_usd": record.adv_usd,
                     "fx_metadata": record.fx_metadata,
                 }
+
+                fundamentals = self._restore_financial_payload(record, fundamentals)
 
                 # Compute fallback description
                 fundamentals["description"] = fundamentals.get("description_finviz") or fundamentals.get("description_yfinance")
@@ -1507,7 +1608,8 @@ class FundamentalsCacheService:
             for symbol, raw_data in zip(symbols, results):
                 if raw_data:
                     try:
-                        fundamentals = pickle.loads(raw_data)
+                        symbol_market = self._market_for_symbol(symbol, market=market, market_by_symbol=market_by_symbol)
+                        fundamentals = merge_financial_payloads(pickle.loads(raw_data), {}, symbol=symbol, market=symbol_market)
                         cached_data[symbol] = fundamentals
                         if self._needs_db_enrichment(fundamentals):
                             redis_needs_enrichment.append(symbol)
@@ -1649,15 +1751,16 @@ class FundamentalsCacheService:
             market=market,
         )
 
-        # Store in Redis
-        self._store_in_redis_for_market(symbol, normalized_data, market=market)
-
-        # Store in database
+        # A failed DB commit must never publish an uncommitted observation.
         persisted = self._store_in_database(
             symbol, normalized_data, data_source=data_source, market=market
         )
-
         if persisted:
+            committed, _ = self._get_from_database(symbol)
+            if committed is not None:
+                self._store_in_redis_for_market(symbol, committed, market=market)
+            else:
+                self.invalidate_cache(symbol, market=market)
             logger.debug(f"Stored fundamentals for {symbol} from {data_source}")
         return persisted
 
@@ -1699,7 +1802,8 @@ class FundamentalsCacheService:
 
         try:
             redis_key = self._redis_data_key(symbol, market=market)
-            self._redis_client.delete(redis_key)
+            legacy_key = self._cache_policy.key("fundamentals", symbol, market=market)
+            self._redis_client.delete(redis_key, legacy_key, self.REDIS_KEY_FORMAT.format(symbol=symbol))
 
             logger.info(f"Invalidated fundamental cache for {symbol}")
 

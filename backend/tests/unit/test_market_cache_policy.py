@@ -66,7 +66,7 @@ def test_cache_services_delegate_market_scoped_key_construction_to_policy():
     price = PriceCacheService(redis_client=None, session_factory=lambda: None)
 
     assert benchmark._redis_data_key("^HSI", "2y", market="HK") == "benchmark:HK:^HSI:2y"
-    assert fundamentals._redis_data_key("0700.HK", market="HK") == "fundamentals:HK:0700.HK"
+    assert fundamentals._redis_data_key("0700.HK", market="HK") == "fundamentals:HK:0700.HK:financial-source-v1"
     assert price._redis_recent_key("0700.HK", market="HK") == "price:HK:0700.HK:recent"
     assert price._redis_fetch_meta_key("0700.HK", market="HK") == "price:HK:0700.HK:fetch_meta"
 
@@ -154,8 +154,10 @@ def test_fundamentals_bulk_get_reads_market_scoped_keys():
 
     result = service.get_many(["0700.HK"], market_by_symbol={"0700.HK": "HK"})
 
-    assert result["0700.HK"] == payload
-    assert redis.pipeline_instance.keys == ["fundamentals:HK:0700.HK"]
+    assert result["0700.HK"]["market_cap"] == payload["market_cap"]
+    assert result["0700.HK"]["sector"] == payload["sector"]
+    assert result["0700.HK"]["financial_source_evidence"]["fields"] == {}
+    assert redis.pipeline_instance.keys == ["fundamentals:HK:0700.HK:financial-source-v1"]
 
 
 def test_fundamentals_bulk_db_fallback_warms_market_scoped_keys(monkeypatch):
@@ -247,7 +249,7 @@ def test_fundamentals_cache_invalidate_uses_market_scoped_key():
 
     service.invalidate_cache("0700.HK", market="HK")
 
-    assert redis.deleted == ["fundamentals:HK:0700.HK"]
+    assert redis.deleted == ["fundamentals:HK:0700.HK:financial-source-v1", "fundamentals:HK:0700.HK", "fundamentals:0700.HK"]
 
 
 def test_benchmark_cache_invalidate_deletes_each_market_scope():

@@ -21,6 +21,8 @@ import time
 from ..config import settings
 from ..domain.providers.price_symbol_support import yahoo_price_no_data_error_for_symbol
 from .growth_cadence_service import compute_cadence_aware_growth
+from .financial_source_capture import acquire_yahoo_value, attach_evidence, info_evidence, statement_evidence
+from .financial_payload_boundary import overlay_financial_payload
 from .price_fetch_failures import (
     PriceFetchFailureKind,
     classify_price_fetch_error,
@@ -300,7 +302,10 @@ class BulkDataFetcher:
 
         return _coerce_int("market_cap"), _coerce_int("shares"), _coerce_float("last_price")
 
-    def _extract_fundamentals(self, ticker: Any, info: Dict) -> Dict:
+    def _extract_fundamentals(
+        self, ticker: Any, info: Dict, *, info_contexts: Dict | None = None,
+        symbol: str | None = None, market: str | None = None,
+    ) -> Dict:
         if info is None:
             info = {}
 
@@ -406,6 +411,12 @@ class BulkDataFetcher:
             'data_source_timestamp': datetime.utcnow().isoformat(),
         }
 
+        identity_symbol = symbol or getattr(ticker, "ticker", None) or info.get("symbol")
+        if identity_symbol:
+            attach_evidence(
+                fundamentals, info_evidence(fundamentals, info_contexts or {}, percent_points=True),
+                symbol=identity_symbol, market=market,
+            )
         # Remove None values to save space
         return {k: v for k, v in fundamentals.items() if v is not None}
 
@@ -420,6 +431,7 @@ class BulkDataFetcher:
         ticker,
         *,
         market: str | None = None,
+        symbol: str | None = None,
     ) -> Dict[str, Optional[float]]:
         """
         Extract cadence-aware growth metrics from ticker income statement.
@@ -432,14 +444,19 @@ class BulkDataFetcher:
             Dict with quarterly growth metrics
         """
         try:
-            quarterly_income = ticker.quarterly_income_stmt
-            return compute_cadence_aware_growth(quarterly_income, market=market)
+            quarterly_income, acquisitions = acquire_yahoo_value(ticker, "quarterly_income_stmt", symbol=symbol, market=market)
+            result = compute_cadence_aware_growth(quarterly_income, market=market, include_source_context=True)
+            source_contexts = result.pop("_financial_source_context", {})
+            identity_symbol = symbol or getattr(ticker, "ticker", None)
+            if identity_symbol:
+                attach_evidence(result, statement_evidence(result, source_contexts, acquisitions), symbol=identity_symbol, market=market)
+            return result
 
         except Exception as e:
             logger.debug(f"Error extracting quarterly growth: {e}")
             return compute_cadence_aware_growth(None, market=market)
 
-    def _extract_eps_rating_data(self, ticker) -> Dict[str, Optional[float]]:
+    def _extract_eps_rating_data(self, ticker, *, symbol: str | None = None, market: str | None = None) -> Dict[str, Any]:
         """
         Extract EPS rating data from ticker's annual and quarterly income statements.
 
@@ -471,18 +488,22 @@ class BulkDataFetcher:
 
         try:
             # Get annual income statement (for 5-year CAGR)
-            annual_income = ticker.income_stmt
+            annual_income, annual_acquisition = acquire_yahoo_value(ticker, "income_stmt", symbol=symbol, market=market)
 
             # Get quarterly income statement (for YoY comparisons)
-            quarterly_income = ticker.quarterly_income_stmt
+            quarterly_income, quarterly_acquisition = acquire_yahoo_value(ticker, "quarterly_income_stmt", symbol=symbol, market=market)
 
             # Use EPS rating service to calculate all components
             eps_data = self._eps_rating_service.calculate_eps_rating_data(
                 annual_income,
-                quarterly_income
+                quarterly_income,
+                include_source_context=True,
             )
-
+            source_contexts = eps_data.pop("_financial_source_context", {})
             result.update(eps_data)
+            identity_symbol = symbol or getattr(ticker, "ticker", None)
+            if identity_symbol:
+                attach_evidence(result, statement_evidence(result, source_contexts, {**annual_acquisition, **quarterly_acquisition}), symbol=identity_symbol, market=market)
             logger.debug(f"Extracted EPS rating data: CAGR={result['eps_5yr_cagr']}, Q1={result['eps_q1_yoy']}, Q2={result['eps_q2_yoy']}")
 
         except Exception as e:
@@ -1067,20 +1088,22 @@ class BulkDataFetcher:
                         ticker = tickers.tickers[symbol]
 
                         # Get info (fundamentals)
-                        info = ticker.info
-                        fundamentals = self._extract_fundamentals(ticker, info)
+                        symbol_market = (market_by_symbol or {}).get(symbol) or market
+                        info, info_contexts = acquire_yahoo_value(ticker, "info", symbol=symbol, market=symbol_market)
+                        fundamentals = self._extract_fundamentals(ticker, info, info_contexts=info_contexts, symbol=symbol, market=symbol_market)
 
                         # Optionally get quarterly growth
                         if include_quarterly:
                             quarterly = self._extract_quarterly_growth(
                                 ticker,
                                 market=(market_by_symbol or {}).get(symbol) or market,
+                                symbol=symbol,
                             )
-                            fundamentals.update(quarterly)
+                            fundamentals = overlay_financial_payload(fundamentals, quarterly, skip_none=False, symbol=symbol, market=symbol_market)
 
                             # Also extract EPS rating data
-                            eps_rating_data = self._extract_eps_rating_data(ticker)
-                            fundamentals.update(eps_rating_data)
+                            eps_rating_data = self._extract_eps_rating_data(ticker, symbol=symbol, market=symbol_market)
+                            fundamentals = overlay_financial_payload(fundamentals, eps_rating_data, skip_none=False, symbol=symbol, market=symbol_market)
 
                         all_results[symbol] = fundamentals
 
@@ -1198,19 +1221,21 @@ class BulkDataFetcher:
                 for i, symbol in enumerate(batch_symbols):
                     try:
                         ticker = tickers.tickers[symbol]
-                        info = ticker.info
-                        fundamentals = self._extract_fundamentals(ticker, info)
+                        symbol_market = (market_by_symbol or {}).get(symbol)
+                        info, info_contexts = acquire_yahoo_value(ticker, "info", symbol=symbol, market=symbol_market)
+                        fundamentals = self._extract_fundamentals(ticker, info, info_contexts=info_contexts, symbol=symbol, market=symbol_market)
 
                         if include_quarterly:
                             quarterly = self._extract_quarterly_growth(
                                 ticker,
                                 market=(market_by_symbol or {}).get(symbol),
+                                symbol=symbol,
                             )
-                            fundamentals.update(quarterly)
+                            fundamentals = overlay_financial_payload(fundamentals, quarterly, skip_none=False, symbol=symbol, market=symbol_market)
 
                             # Also extract EPS rating data
-                            eps_rating_data = self._extract_eps_rating_data(ticker)
-                            fundamentals.update(eps_rating_data)
+                            eps_rating_data = self._extract_eps_rating_data(ticker, symbol=symbol, market=symbol_market)
+                            fundamentals = overlay_financial_payload(fundamentals, eps_rating_data, skip_none=False, symbol=symbol, market=symbol_market)
 
                         batch_results[symbol] = fundamentals
 

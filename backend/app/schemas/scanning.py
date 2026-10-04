@@ -225,6 +225,9 @@ class ScanResultItem(BaseModel):
     field_availability: Optional[Dict[str, Dict[str, Any]]] = None
     growth_reporting_cadence: Optional[str] = None
     growth_metric_basis: Optional[str] = None
+    # Acquisition evidence retained for audit; this does not certify current
+    # availability or an independently calculated/rounded scanner metric.
+    financial_source_evidence: Optional[Dict[str, Any]] = None
     data_status: Optional[str] = None
     is_scannable: Optional[bool] = None
     scan_mode: Optional[str] = None
@@ -395,6 +398,7 @@ class ScanResultItem(BaseModel):
             field_availability=ef.get("field_availability"),
             growth_reporting_cadence=ef.get("growth_reporting_cadence"),
             growth_metric_basis=ef.get("growth_metric_basis"),
+            financial_source_evidence=ef.get("financial_source_evidence"),
             data_status=ef.get("data_status"),
             is_scannable=ef.get("is_scannable"),
             scan_mode=ef.get("scan_mode"),

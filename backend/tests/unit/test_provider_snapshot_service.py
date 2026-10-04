@@ -1575,8 +1575,9 @@ def test_fetch_and_cache_normalizes_recommendation_before_writes(monkeypatch):
         "_store_in_database",
         lambda symbol, data, data_source="unknown", market=None: captured_db.update(
             {symbol: {"data": dict(data), "data_source": data_source, "market": market}}
-        ),
+        ) or True,
     )
+    monkeypatch.setattr(service, "_get_from_database", lambda symbol: (captured_db[symbol]["data"], datetime(2026, 10, 3)))
 
     result = service._fetch_and_cache("0700.HK", market="HK")
 
