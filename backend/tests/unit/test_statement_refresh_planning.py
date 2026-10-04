@@ -427,3 +427,133 @@ def test_export_rejects_horizon_beyond_selected_acquisition_lifetime():
     assert export_statement_batch_plan(replace(quarter_only, required_valid_through=NOW + SOURCE_TTL), **args)
     with pytest.raises(ValueError):
         export_statement_batch_plan(replace(quarter_only, required_valid_through=NOW + SOURCE_TTL + timedelta(seconds=1)), **args)
+
+
+def test_history_reporting_period_expiry_is_new_work_before_72h_receipt_ttl():
+    period_expiry = NOW + timedelta(hours=12)
+    state = valid()
+    state = replace(state, annual_history=replace(state.annual_history, expires_at=period_expiry))
+    attempts = (AcquisitionAttempt("AAPL", "source-acquired", NOW, "succeeded"),)
+    assert plan(statuses={"AAPL": state}, attempts=attempts, now=period_expiry).symbols == ()
+    result = plan(statuses={"AAPL": state}, attempts=attempts, now=period_expiry + timedelta(milliseconds=1))
+    assert result.symbols == ("AAPL",)
+    assert result.cause_counts == {"annual_history_expired": 1}
+    assert result.batch[0].ready_targets == ("annual_history",)
+    assert result.batch[0].requirements[0].due_since == period_expiry
+    early = plan(statuses={"AAPL": state}, attempts=attempts, refresh_through=period_expiry)
+    assert early.cause_counts == {"annual_history_expiring": 1}
+
+
+def test_history_structural_expiry_cannot_extend_source_ttl_or_predate_source():
+    state = valid()
+    extended = replace(state, annual_history=replace(state.annual_history, expires_at=NOW + timedelta(days=9)))
+    result = plan(statuses={"AAPL": extended}, now=NOW + FINANCIAL_HISTORY_TTL + timedelta(seconds=1))
+    assert result.cause_counts == {"annual_history_expired": 1}
+    invalid = replace(state, annual_history=replace(state.annual_history, expires_at=NOW - timedelta(seconds=1)))
+    result = plan(statuses={"AAPL": invalid})
+    assert result.cause_counts == {"annual_history_acquisition_gap": 1}
+    assert result.invalid_receipts == ("AAPL:annual_history_expiry",)
+
+
+@pytest.mark.parametrize("reason", ["nonpositive_comparison_base", "unsupported_contract", "invalid_source_inputs"])
+def test_acquired_source_limitation_is_distinct_from_missing_period_and_proof(reason):
+    state = valid()
+    state = replace(state, eps=replace(state.eps, state="source_limited", source_reason=reason))
+    result = plan(statuses={"AAPL": state})
+    assert result.symbols == ()
+    assert result.required_work == ()
+    assert result.cause_counts == {f"eps_source_limited:{reason}": 1}
+    attempts = (AcquisitionAttempt("AAPL", "acquired", NOW, "succeeded"),)
+    expired = plan(statuses={"AAPL": state}, attempts=attempts, now=NOW + SOURCE_TTL + timedelta(seconds=1))
+    eps = next(r for r in expired.batch[0].requirements if r.target == "eps")
+    assert eps.cause == "eps_source_limited_expired"
+    assert eps.state == "ready"
+    maintenance = plan(statuses={"AAPL": state}, attempts=attempts, refresh_through=NOW + SOURCE_TTL)
+    assert any(r.cause == "eps_source_limited_expiring" for r in maintenance.batch[0].requirements)
+
+
+def test_source_limitation_does_not_suppress_unverified_receipt_or_expiry():
+    state = valid()
+    limited = replace(state.eps, state="source_limited", source_reason="nonpositive_comparison_base")
+    for change in [{"receipts": ()}, {"expires_at": None}, {"expires_at": NOW + SOURCE_TTL + timedelta(seconds=1)}]:
+        result = plan(statuses={"AAPL": replace(state, eps=replace(limited, **change))})
+        assert result.cause_counts == {"eps_proof_gap": 1}
+        assert result.symbols == ("AAPL",)
+    for reason in [None, "", "x" * 81, "not a diagnostic"]:
+        with pytest.raises(ValueError):
+            plan(statuses={"AAPL": replace(state, eps=replace(limited, source_reason=reason))})
+
+
+def scoped_history_state():
+    quarter = receipt(observed_at=NOW, attribute="quarterly_income_stmt")
+    annual = receipt(observed_at=NOW + timedelta(seconds=2), contract=HISTORY_CONTRACT, attribute="income_stmt")
+    proof = ProofStatus("proved", (quarter,), NOW + SOURCE_TTL)
+    history_quarter = replace(quarter, contract=HISTORY_CONTRACT)
+    return SymbolStatus(proof, proof, HistoryStatus("available", history_quarter,
+                        receipts=(history_quarter, annual)))
+
+
+def test_sequential_getter_clocks_do_not_hold_new_history_maintenance():
+    state = scoped_history_state()
+    attempts = (
+        AcquisitionAttempt("AAPL", "quarter", NOW, "succeeded", attributes=("quarterly_income_stmt",)),
+        AcquisitionAttempt("AAPL", "annual", NOW + timedelta(seconds=2), "succeeded", attributes=("income_stmt",)),
+    )
+    result = plan(statuses={"AAPL": state}, attempts=attempts, now=NOW + timedelta(hours=66),
+                  refresh_through=NOW + timedelta(hours=78))
+    assert result.symbols == ("AAPL",)
+    assert result.batch[0].ready_targets == ("annual_history",)
+    assert dict(result.batch[0].requirements[0].receipt_clocks) == {
+        "quarterly_income_stmt": NOW, "income_stmt": NOW + timedelta(seconds=2),
+    }
+
+
+def test_later_success_on_other_attribute_cannot_erase_failed_getter_hold():
+    state = scoped_history_state()
+    attempts = (
+        AcquisitionAttempt("AAPL", "quarter-failed", NOW + timedelta(hours=1), "failed",
+                           attributes=("quarterly_income_stmt",)),
+        AcquisitionAttempt("AAPL", "annual-success", NOW + timedelta(hours=2), "succeeded",
+                           attributes=("income_stmt",)),
+    )
+    # A real later annual receipt does not resolve the failed quarterly getter.
+    newer = replace(state.annual_history.receipts[1], observed_at=NOW + timedelta(hours=2))
+    state = replace(state, annual_history=replace(state.annual_history,
+                    receipts=(state.annual_history.receipts[0], newer)))
+    result = plan(statuses={"AAPL": state}, attempts=attempts, now=NOW + timedelta(hours=66),
+                  refresh_through=NOW + timedelta(hours=78))
+    assert result.symbols == ()
+    assert result.required_work[0].requirements[0].state == "retry_decision_required"
+
+
+def test_annual_only_history_uses_verified_quarter_clock_for_attempt_matching_only():
+    quarter_time = NOW + timedelta(days=1)
+    quarter = receipt(observed_at=quarter_time, attribute="quarterly_income_stmt")
+    annual = receipt(contract=HISTORY_CONTRACT, attribute="income_stmt")
+    proof = ProofStatus("proved", (quarter,), quarter_time + SOURCE_TTL)
+    state = SymbolStatus(proof, proof, HistoryStatus("available", annual, receipts=(annual,)))
+    attempts = (
+        AcquisitionAttempt("AAPL", "annual", NOW, "succeeded", attributes=("income_stmt",)),
+        AcquisitionAttempt("AAPL", "quarter", quarter_time, "succeeded", attributes=("quarterly_income_stmt",)),
+    )
+    result = plan(statuses={"AAPL": state}, attempts=attempts, now=NOW + timedelta(days=9))
+    history = next(r for r in result.batch[0].requirements if r.target == "annual_history")
+    assert history.state == "ready"
+    assert history.due_since == NOW + FINANCIAL_HISTORY_TTL
+    assert history.last_acquired_at == NOW
+    assert dict(history.receipt_clocks)["quarterly_income_stmt"] == quarter_time
+
+
+def test_history_scoped_receipts_must_be_verified_unique_and_bind_oldest_primary():
+    state = scoped_history_state()
+    first, second = state.annual_history.receipts
+    for changes in [
+        {"receipts": (first, replace(second, symbol="MSFT"))},
+        {"receipts": (first, replace(second, attribute="quarterly_income_stmt"))},
+        {"receipts": (first, replace(second, attribute=None))},
+        {"receipt": second},
+    ]:
+        result = plan(statuses={"AAPL": replace(state, annual_history=replace(state.annual_history, **changes))},
+                      now=NOW + timedelta(hours=1))
+        assert result.cause_counts == {"annual_history_acquisition_gap": 1}
+        assert "AAPL:annual_history_receipts" in result.invalid_receipts

@@ -633,7 +633,9 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
     events, stop, active = [], {"reason": None}, {"symbol": None, "attribute": None}
     statuses, reasons = {}, Counter()
     counts = Counter({key: 0 for key in ("captured_attributes", "reused_attributes", "failed_attributes",
-                                       "not_attempted_attributes", "budget_stopped_attributes", "source_valid_field_proofs", "annual_history_available")})
+                                       "not_attempted_attributes", "budget_stopped_attributes", "source_valid_field_proofs", "annual_history_available",
+                                       "annual_history_complete", "annual_growth_comparable", "annual_growth_nonpositive_base",
+                                       "current_comparable_field_proofs", "source_reference_field_proofs")})
     result_index = {}
     provider_getters = 0
     processing_failed = False
@@ -773,7 +775,16 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
                               envelope_sha256=envelope_sha, financial_current=proof, financial_history=history,
                               history_source_diagnostics=history_diagnostics, source_diagnostics=diagnostics)
                 counts["source_valid_field_proofs"] += len(proof["p"])
-                counts["annual_history_available"] += diagnostics["annual_history"] == "available"
+                counts["current_comparable_field_proofs"] += proof["r"].count("0")
+                counts["source_reference_field_proofs"] += proof["r"].count("f")
+                # The original key counted comparable growth, not all complete
+                # histories. Keep it for old artifact readers and expose both
+                # source completeness and comparison semantics explicitly.
+                annual_reason = diagnostics["annual_history"]
+                counts["annual_history_available"] += annual_reason == "available"
+                counts["annual_growth_comparable"] += annual_reason == "available"
+                counts["annual_growth_nonpositive_base"] += annual_reason == "nonpositive_comparison_base"
+                counts["annual_history_complete"] += annual_reason in {"available", "nonpositive_comparison_base"}
             except Exception as exc:
                 result.update(status="normalization_failed", error_type=type(exc).__name__, raw_acquisitions_preserved=True)
                 processing_failed = True

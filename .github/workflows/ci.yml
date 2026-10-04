@@ -67,6 +67,13 @@ jobs:
           tests/unit/test_financial_source_producers.py
           tests/unit/test_financial_source_transport_capture.py
           tests/unit/test_financial_source_yahoo_contract.py
+          tests/unit/test_static_financial_evidence.py
+          tests/unit/test_mandatory_statement_selection.py
+          tests/unit/test_financial_statement_batch.py
+          tests/unit/test_statement_refresh_planning.py
+          tests/unit/test_statement_refresh_collection.py
+          tests/unit/test_statement_artifact_archive.py
+          tests/unit/test_quarterly_eps_pair_selection.py
           tests/unit/test_provider_snapshot_financial_evidence.py
           tests/unit/test_eps_selected_source_context.py
           tests/unit/test_growth_selected_source_context.py

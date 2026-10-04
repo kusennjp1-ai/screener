@@ -517,6 +517,28 @@ class TestFinancialStatementBatch(unittest.TestCase):
         self.assertIn(str(FINANCIAL_FIELDS.index("eps_growth_yy")), result["financial_current"]["p"])
         self.assertEqual(result["financial_history"]["quarterly"][0]["eps"], -1.)
         self.assertGreater(summary["source_reason_counts"]["nonpositive_comparison_base"], 0)
+        self.assertGreater(summary["counts"]["source_reference_field_proofs"], 0)
+        self.assertEqual(summary["counts"]["source_valid_field_proofs"],
+                         summary["counts"]["current_comparable_field_proofs"] + summary["counts"]["source_reference_field_proofs"])
+
+    def test_complete_annual_source_is_distinct_from_positive_base_comparability(self):
+        def mixed(symbol, attribute):
+            payload = body(symbol, attribute)
+            if attribute == "income_stmt" and symbol == "NVDA":
+                payload["timeseries"]["result"][0]["annualDilutedEPS"][-2]["reportedValue"]["raw"] = -1.
+            if attribute == "income_stmt" and symbol == "VIRT":
+                for row in payload["timeseries"]["result"]:
+                    key = row["meta"]["type"][0]
+                    row[key] = row[key][:3]
+                    row["timestamp"] = row["timestamp"][:3]
+            return 200, payload
+        self.reply = mixed
+        summary, code = self.run_batch()
+        self.assertEqual(code, 0)
+        self.assertEqual(summary["counts"]["annual_history_complete"], 2)
+        self.assertEqual(summary["counts"]["annual_growth_comparable"], 1)
+        self.assertEqual(summary["counts"]["annual_growth_nonpositive_base"], 1)
+        self.assertEqual(summary["counts"]["annual_history_available"], 1)  # Legacy comparable-growth alias.
 
     def test_zero_base_is_semantic_limitation_without_inventing_a_scalar(self):
         def zero(symbol, attribute):

@@ -46,17 +46,41 @@ must derive them as follows:
    means the required annual chain is structurally valid, including finite
    explicit cells; it does not require positive growth. Re-evaluate this
    structural status against the current evaluation/as-of context on each run.
+   Carry the original valid annual chain's exact existing reporting-period
+   deadline in `HistoryStatus.expires_at`. Its effective lifetime is the minimum
+   of that deadline and the oldest included source receipt plus 72 hours. This
+   makes a newly crossed reporting-period deadline due work even when the source
+   receipt is only hours old. An expiry before its source clock is invalid
+   availability metadata; do not use historical replay to label an already-stale
+   annual acquisition available.
    Preserve the real source receipt under contract `financial_history`; if the
    artifact combines acquisitions, use the oldest required original clock and
    retain the bindings for all constituent source snapshots. A cache's `retrieved_at`,
    `updated_at`, file mtime, proof evaluation time or successful cache write is
    never sufficient to produce this receipt. On replay preserve the original
    observed-at clock; reserialization does not renew acquisition freshness.
+   Bind each receipt's `attribute` to its audited statement getter. Populate
+   `HistoryStatus.receipts` with the actually included original acquisitions;
+   its primary `receipt` must be a member with the oldest original clock.
+   Duplicate, unverified, incorrectly scoped or mismatched constituent receipts
+   invalidate the availability metadata. Legacy unscoped receipts retain
+   conservative behavior and are not assigned invented acquisition identities.
 6. Use `source_period_missing` only after a verified actual acquisition shows
    that a required metric/period is absent. A null scalar, unsupported producer,
    failed getter, invalid identity, bad digest or empty transport failure is not
    proof that the source genuinely lacks the period. These remain gaps/failures.
    Never interpolate a missing year, infer zero, or derive Q4 by subtraction.
+
+If an audited acquisition has a known semantic limitation, such as a zero
+comparison base, an unsupported scalar contract, or an algorithm's minimum-base
+restriction, use `source_limited` with an explicit bounded `source_reason`,
+verified original receipts and the exact existing source/reporting-period expiry.
+This means acquired-but-not-certifiable: the scalar remains unknown in current
+financial proof, and no proof tuple is invented. It is distinct from an absent
+source period and from the existing `nonpositive_proved` state. A valid limitation
+does not cause immediate refill, but its actual expiry or requested maintenance
+horizon can make acquisition due. Missing/invalid receipt or expiry metadata
+falls back to a proof gap instead of suppressing work.
 
 The planner deliberately does not duplicate proof arithmetic, reporting-period
 validation, currency/basis verification or source identity resolution against raw
@@ -99,6 +123,9 @@ annual-history expiry, genuine absent source periods, source-valid nonpositive
 states, and quarantined derived ratings. Counts are diagnostic observations per
 symbol/target, not a sum of mutually exclusive stocks; absent categories have no
 entry. Quarantined ratings alone never add a required work item.
+Acquired semantic limitations are counted separately as
+`eps_source_limited:<source_reason>` or `sales_source_limited:<source_reason>`;
+their due work is labeled `*_source_limited_expired` or `*_source_limited_expiring`.
 
 Ordering is deterministic: never-serviced symbols first, then the oldest actual
 service time, then canonical symbol. Service time uses verified original receipts
@@ -118,6 +145,16 @@ Success without a new verified receipt cannot fill a gap or repeatedly refresh
 an early maintenance request. Attempt holds apply only to intersecting statement
 attributes. A newly due expiry of evidence actually acquired after a successful
 attempt does not remain suppressed by that old attempt.
+
+Match the latest attempt separately for each required statement attribute using
+that attribute's verified original receipt. Sequential getters have different
+clocks: history's oldest quarterly receipt can legitimately precede the later
+annual getter attempt. Comparing those two clocks as though they described one
+getter would block valid maintenance. Likewise, a later annual success must not
+erase an unresolved quarterly failure. If the current history projection omits
+an expired quarter, its independently verified EPS/sales receipt can supply the
+quarterly clock for attempt matching only; it does not change history's oldest
+included receipt or its TTL.
 
 Failures, partial results, in-flight records and genuine missing source periods
 are not retried immediately. The caller must provide a finite `retry_not_before`

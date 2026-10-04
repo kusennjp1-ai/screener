@@ -132,6 +132,16 @@ five-quarter source explicitly reports that the second quarterly YoY comparison
 needs a missing sixth point. A valid nonpositive comparison base remains a source
 valid semantic limitation, distinct from a fetch gap.
 
+Coverage counters distinguish those meanings. `annual_history_complete` includes
+complete four-year records with nonpositive comparison bases;
+`annual_growth_comparable` and `annual_growth_nonpositive_base` split that count.
+The original `annual_history_available` key remains a legacy alias for comparable
+growth. In the first 200-symbol artifact it was 114, while complete histories were
+181 (including 67 nonpositive-base histories). That immutable artifact is not
+rewritten. Likewise `source_valid_field_proofs` includes reason `f` references;
+`current_comparable_field_proofs` counts reason `0` and
+`source_reference_field_proofs` counts reason `f`. None counts qualifying stocks.
+
 `financial_history` uses the existing consumer schema. Annual history requires
 four consecutive reported diluted-EPS years for completeness, exact USD source
 currency, current periods and the 72-hour original receipt. Basic annual EPS and

@@ -38,6 +38,7 @@ class VerifiedAcquisition:
     original_receipt_verified: bool = False
     identity_verified: bool = False
     contract_verified: bool = False
+    attribute: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,13 +48,16 @@ class ProofStatus:
     ``expires_at`` is the earliest exact expiry returned by the existing proof
     verifier (source 7d, quarterly period 190d, annual period 550d). An absent
     source period requires a verified original receipt but has no valid proof.
+    ``source_limited`` retains a checked acquisition's explicit semantic reason
+    and exact source/period expiry; it never asserts a certified scalar proof.
     """
 
-    state: Literal["gap", "proved", "nonpositive_proved", "source_period_missing"] = "gap"
+    state: Literal["gap", "proved", "nonpositive_proved", "source_period_missing", "source_limited"] = "gap"
     receipts: tuple[VerifiedAcquisition, ...] = ()
     expires_at: datetime | None = None
     recheck_after: datetime | None = None
     attributes: tuple[str, ...] = ("quarterly_income_stmt",)
+    source_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,11 +66,15 @@ class HistoryStatus:
 
     ``available`` means the required annual chain, currency and basis were
     validated by the history adapter. It does not mean positive growth.
+    ``expires_at`` optionally carries its existing reporting-period expiry,
+    which can only shorten the independent 72-hour acquisition lifetime.
     """
 
     state: Literal["gap", "available", "source_period_missing"] = "gap"
     receipt: VerifiedAcquisition | None = None
     recheck_after: datetime | None = None
+    expires_at: datetime | None = None
+    receipts: tuple[VerifiedAcquisition, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,6 +130,7 @@ class Requirement:
     due_since: datetime | None = None
     attributes: tuple[str, ...] = ()
     last_acquired_at: datetime | None = None
+    receipt_clocks: tuple[tuple[str, datetime], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -173,6 +182,7 @@ def _receipt_clock(receipt: VerifiedAcquisition, symbol: str, market: str,
             or receipt.contract != contract
             or receipt.original_receipt_verified is not True
             or receipt.identity_verified is not True or receipt.contract_verified is not True
+            or (receipt.attribute is not None and receipt.attribute not in STATEMENT_ATTRIBUTES)
             or not isinstance(receipt.receipt_id, str) or not receipt.receipt_id.strip()
             or not isinstance(receipt.payload_sha256, str)
             or not re.fullmatch(r"[a-f0-9]{64}", receipt.payload_sha256)):
@@ -182,6 +192,17 @@ def _receipt_clock(receipt: VerifiedAcquisition, symbol: str, market: str,
     except ValueError:
         return None
     return stamp if stamp <= now else None
+
+
+def _attribute_clocks(receipts: Sequence[VerifiedAcquisition], stamps: Sequence[datetime],
+                      attributes: tuple[str, ...]) -> tuple[tuple[str, datetime], ...]:
+    """Original clocks only; unscoped legacy metadata gets no invented binding."""
+    clocks: dict[str, datetime] = {}
+    for receipt, stamp in zip(receipts, stamps):
+        attribute = receipt.attribute or (attributes[0] if len(attributes) == 1 else None)
+        if attribute is not None:
+            clocks[attribute] = min(clocks.get(attribute, stamp), stamp)
+    return tuple((attribute, clocks[attribute]) for attribute in STATEMENT_ATTRIBUTES if attribute in clocks)
 
 
 def _deferred_missing(target: str, recheck: datetime | None, receipt_at: datetime,
@@ -304,13 +325,20 @@ def plan_statement_refresh(*, eligible_symbols: Sequence[str], market: str,
         status = statuses.get(symbol, SymbolStatus())
         requirements: list[Requirement] = []
         acquired: list[datetime] = []
+        known_receipt_clocks: dict[str, datetime] = {}
         for target, proof in (("eps", status.eps), ("sales", status.sales)):
-            if proof.state not in {"gap", "proved", "nonpositive_proved", "source_period_missing"}:
+            if proof.state not in {"gap", "proved", "nonpositive_proved", "source_period_missing", "source_limited"}:
                 raise ValueError("Unknown proof state")
+            if proof.state == "source_limited" and (not isinstance(proof.source_reason, str)
+                    or not re.fullmatch(r"[a-z][a-z0-9_]{0,79}", proof.source_reason)):
+                raise ValueError("Source-limited observations require an explicit bounded diagnostic reason")
             if (not proof.attributes or tuple(a for a in STATEMENT_ATTRIBUTES if a in proof.attributes) != proof.attributes):
                 raise ValueError("Proof acquisition attributes must be a nonempty canonical statement subset")
             stamps = [_receipt_clock(r, symbol, market, PROOF_CONTRACT, now) for r in proof.receipts]
             valid_receipts = bool(stamps) and all(stamp is not None for stamp in stamps)
+            if valid_receipts and any(r.attribute is not None and r.attribute not in proof.attributes for r in proof.receipts):
+                valid_receipts = False
+                invalid.append(f"{symbol}:{target}_attribute")
             if any(stamp is None for stamp in stamps):
                 invalid.append(f"{symbol}:{target}")
             acquired.extend(stamp for stamp in stamps if stamp is not None)
@@ -318,18 +346,31 @@ def plan_statement_refresh(*, eligible_symbols: Sequence[str], market: str,
             source_expiry = min(stamps) + SOURCE_TTL if valid_receipts else None
             proof_valid = (valid_receipts and expiry is not None
                            and max(stamps) <= expiry <= source_expiry)
-            if proof.state in {"proved", "nonpositive_proved"} and proof_valid and now <= expiry:
+            receipt_clocks = _attribute_clocks(proof.receipts, stamps, proof.attributes) if valid_receipts else ()
+            for attribute, observed in receipt_clocks:
+                known_receipt_clocks[attribute] = max(known_receipt_clocks.get(attribute, observed), observed)
+            if proof.state == "source_limited" and proof_valid:
+                cause = f"{target}_source_limited:{proof.source_reason}"
+                counts[cause] += 1
+                if now > expiry or (refresh_through is not None and expiry <= horizon):
+                    suffix = "expired" if now > expiry else "expiring"
+                    requirements.append(Requirement(target, f"{target}_source_limited_{suffix}",
+                                                    due_since=expiry, attributes=proof.attributes,
+                                                    last_acquired_at=min(stamps), receipt_clocks=receipt_clocks))
+            elif proof.state in {"proved", "nonpositive_proved"} and proof_valid and now <= expiry:
                 if proof.state == "nonpositive_proved":
                     counts[f"{target}_nonpositive_proved"] += 1
                 if refresh_through is not None and expiry <= horizon:
                     requirements.append(Requirement(target, f"{target}_proof_expiring", due_since=expiry,
-                                                    attributes=proof.attributes, last_acquired_at=min(stamps)))
+                                                    attributes=proof.attributes, last_acquired_at=min(stamps),
+                                                    receipt_clocks=receipt_clocks))
             elif proof.state == "source_period_missing" and valid_receipts:
                 requirements.append(_deferred_missing(target, proof.recheck_after, max(stamps), now, proof.attributes))
             else:
                 requirements.append(Requirement(target, f"{target}_proof_gap",
                                                 due_since=expiry if proof_valid else None, attributes=proof.attributes,
-                                                last_acquired_at=min(stamps) if valid_receipts else None))
+                                                last_acquired_at=min(stamps) if valid_receipts else None,
+                                                receipt_clocks=receipt_clocks))
 
         history = status.annual_history
         if history.state not in {"gap", "available", "source_period_missing"}:
@@ -338,20 +379,48 @@ def plan_statement_refresh(*, eligible_symbols: Sequence[str], market: str,
                  if history.receipt is not None else None)
         if history.receipt is not None and stamp is None:
             invalid.append(f"{symbol}:annual_history")
+        history_clocks = ()
+        if history.receipts:
+            scoped_stamps = [_receipt_clock(r, symbol, market, HISTORY_CONTRACT, now) for r in history.receipts]
+            attributes = [r.attribute for r in history.receipts]
+            valid_history_receipts = (all(t is not None for t in scoped_stamps)
+                                      and all(a in STATEMENT_ATTRIBUTES for a in attributes)
+                                      and len(set(attributes)) == len(attributes)
+                                      and history.receipt in history.receipts
+                                      and stamp == min((t for t in scoped_stamps if t is not None), default=None))
+            if not valid_history_receipts:
+                invalid.append(f"{symbol}:annual_history_receipts")
+                stamp = None
+            else:
+                history_clocks = _attribute_clocks(history.receipts, scoped_stamps, STATEMENT_ATTRIBUTES)
+                acquired.extend(scoped_stamps)
+        # History may omit an expired quarter while EPS/sales still retain its
+        # audited original receipt. Use that clock only to match getter attempts;
+        # it never changes the oldest included clock that owns history's TTL.
+        history_clock_map = {**known_receipt_clocks, **dict(history_clocks)}
+        history_clocks = tuple((a, history_clock_map[a]) for a in STATEMENT_ATTRIBUTES if a in history_clock_map)
         if stamp is not None:
             acquired.append(stamp)
+        history_expiry = stamp + FINANCIAL_HISTORY_TTL if stamp is not None else None
+        if history.state == "available" and history.expires_at is not None and stamp is not None:
+            structural_expiry = _clock(history.expires_at, "history.expires_at")
+            if structural_expiry < stamp:
+                invalid.append(f"{symbol}:annual_history_expiry")
+                history_expiry = None
+            else:
+                history_expiry = min(history_expiry, structural_expiry)
         if history.state == "source_period_missing" and stamp is not None:
             requirements.append(_deferred_missing("annual_history", history.recheck_after, stamp, now, STATEMENT_ATTRIBUTES))
-        elif history.state != "available" or stamp is None:
+        elif history.state != "available" or stamp is None or history_expiry is None:
             requirements.append(Requirement("annual_history", "annual_history_acquisition_gap", attributes=STATEMENT_ATTRIBUTES))
-        elif now > stamp + FINANCIAL_HISTORY_TTL:
+        elif now > history_expiry:
             requirements.append(Requirement("annual_history", "annual_history_expired",
-                                            due_since=stamp + FINANCIAL_HISTORY_TTL, attributes=STATEMENT_ATTRIBUTES,
-                                            last_acquired_at=stamp))
-        elif refresh_through is not None and stamp + FINANCIAL_HISTORY_TTL <= horizon:
+                                            due_since=history_expiry, attributes=STATEMENT_ATTRIBUTES,
+                                            last_acquired_at=stamp, receipt_clocks=history_clocks))
+        elif refresh_through is not None and history_expiry <= horizon:
             requirements.append(Requirement("annual_history", "annual_history_expiring",
-                                            due_since=stamp + FINANCIAL_HISTORY_TTL, attributes=STATEMENT_ATTRIBUTES,
-                                            last_acquired_at=stamp))
+                                            due_since=history_expiry, attributes=STATEMENT_ATTRIBUTES,
+                                            last_acquired_at=stamp, receipt_clocks=history_clocks))
         if status.quarantined_derived_rating:
             counts["quarantined_derived_rating"] += 1
         attempt = latest_attempts.get(symbol)
@@ -361,16 +430,20 @@ def plan_statement_refresh(*, eligible_symbols: Sequence[str], market: str,
             state, deadline = requirement.state, requirement.not_before
             # An old successful attempt must not suppress a NEW expiry. A
             # failure/partial result with unresolved gaps needs a retry decision.
-            relevant = [a for a in attempts_by_symbol.get(symbol, ()) if set(a.attributes).intersection(requirement.attributes)]
-            target_attempt = max(relevant, key=lambda a: (a.attempted_at, a.attempt_id), default=None)
-            newly_due = (target_attempt is not None and target_attempt.outcome == "succeeded"
-                         and requirement.due_since is not None
-                         and requirement.due_since > target_attempt.attempted_at
-                         and requirement.last_acquired_at is not None
-                         and requirement.last_acquired_at >= target_attempt.attempted_at)
-            if target_attempt is not None and not newly_due:
+            receipt_clocks = dict(requirement.receipt_clocks)
+            for attribute in requirement.attributes:
+                relevant = [a for a in attempts_by_symbol.get(symbol, ()) if attribute in a.attributes]
+                target_attempt = max(relevant, key=lambda a: (a.attempted_at, a.attempt_id), default=None)
+                acquired_at = receipt_clocks.get(attribute, requirement.last_acquired_at)
+                newly_due = (target_attempt is not None and target_attempt.outcome == "succeeded"
+                             and requirement.due_since is not None
+                             and requirement.due_since > target_attempt.attempted_at
+                             and acquired_at is not None and acquired_at >= target_attempt.attempted_at)
+                if target_attempt is None or newly_due:
+                    continue
                 if target_attempt.retry_not_before is None:
                     state, deadline = "retry_decision_required", None
+                    break
                 elif now < target_attempt.retry_not_before:
                     state = "cooldown"
                     deadline = max(d for d in (deadline, target_attempt.retry_not_before) if d is not None)
@@ -379,7 +452,8 @@ def plan_statement_refresh(*, eligible_symbols: Sequence[str], market: str,
             if provider_state != "available":
                 state = "provider_stopped"
             adjusted.append(Requirement(requirement.target, requirement.cause, state, deadline,
-                                        requirement.due_since, requirement.attributes, requirement.last_acquired_at))
+                                        requirement.due_since, requirement.attributes, requirement.last_acquired_at,
+                                        requirement.receipt_clocks))
         if adjusted:
             serviced = acquired + ([attempt.attempted_at] if attempt is not None else [])
             work.append(WorkItem(symbol, tuple(adjusted), max(serviced) if serviced else None))
