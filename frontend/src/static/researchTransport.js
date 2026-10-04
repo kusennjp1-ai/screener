@@ -2,6 +2,7 @@
 // formatted by the UI, never rounded before a threshold or order calculation.
 export const RESEARCH_TRANSPORT_VERSION = 'research-table-v1';
 export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
+const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version'];
 
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
 export function researchListRow(row) {
@@ -51,7 +52,8 @@ export function encodeResearchIndex(index, orders) {
   let financialProofEncoding;
   for (const row of rows) if (row.financial_current?.p && typeof row.financial_current.p === 'object' && !Array.isArray(row.financial_current.p)) {
     const proof = row.financial_current;
-    if (Object.values(proof.p).every(tuple=>Array.isArray(tuple) && tuple.length===6)) {
+    const tupleLength = proof.v === 2 ? 8 : proof.v === 1 ? 6 : null;
+    if (tupleLength && Object.values(proof.p).every(tuple=>Array.isArray(tuple) && tuple.length===tupleLength)) {
       row.financial_current={...proof,p:Object.fromEntries(Object.entries(proof.p).map(([field,tuple])=>[field,Object.fromEntries(tuple.map((value,index)=>[String(index),value]))]))};
       financialProofEncoding='tuple-columns-v1';
     } else row.financial_current={...proof,invalid_transport_proof:true};
@@ -97,7 +99,7 @@ export function encodeResearchIndex(index, orders) {
       if (length < size) { columns[column] = candidate; size = length; }
     }
   }
-  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
+  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, ...pick(index, evaluationFields), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
 }
 
 export function decodeResearchIndex(value) {
@@ -142,11 +144,13 @@ export function decodeResearchIndex(value) {
   }
   if (value.financial_proof_encoding !== undefined && value.financial_proof_encoding !== 'tuple-columns-v1') throw Error('Unsupported financial proof encoding');
   if (value.financial_proof_encoding) for (const row of rows) if (row.financial_current?.p) {
+    const length = row.financial_current.v === 2 ? 8 : row.financial_current.v === 1 ? 6 : null;
+    const keys = length ? Array.from({ length }, (_, index) => String(index)) : [];
     for (const [field,tuple] of Object.entries(row.financial_current.p)) {
       if (Array.isArray(tuple)) continue;
-      if (!tuple || Object.keys(tuple).length!==6 || ['0','1','2','3','4','5'].some(key=>!Object.hasOwn(tuple,key))) {row.financial_current.invalid_transport_proof=true;continue;}
-      row.financial_current.p[field]=['0','1','2','3','4','5'].map(key=>tuple[key]);
+      if (!length || !tuple || Object.keys(tuple).length!==length || keys.some(key=>!Object.hasOwn(tuple,key))) {row.financial_current.invalid_transport_proof=true;continue;}
+      row.financial_current.p[field]=keys.map(key=>tuple[key]);
     }
   }
-  return { as_of_date: value.as_of_date, rows, orders: value.orders };
+  return { as_of_date: value.as_of_date, ...pick(value, evaluationFields), rows, orders: value.orders };
 }

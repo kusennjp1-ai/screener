@@ -84,17 +84,19 @@ export default function ResearchPage({compareOnly=false}) {
   const readinessBoundaryAt = useMemo(() => prepareReadinessTimeline(rows), [rows]);
   const availableSymbols = useMemo(() => new Set(rows.map(r => r.symbol)), [rows]);
   const selectedSummary = ranked.find(r => r.row.symbol === symbol)?.row || ranked[0]?.row;
-  const detail = useQuery({queryKey:['researchDetail', selectedSummary?.research_detail_path, version],
-    enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity,
-    queryFn:async () => {
-      const value = await fetchStaticJson(selectedSummary.research_detail_path);
-      if (value.symbol !== selectedSummary.symbol || value.as_of_date !== bundle.data?.date) throw Error('Detail identity mismatch');
-      return value;
+  const detail = useQuery({queryKey:['researchDetail', selectedSummary?.symbol, selectedSummary?.research_detail_path, bundle.data?.date, version],
+    enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity, placeholderData:()=>undefined,
+    queryFn:async ({queryKey}) => {
+      const [,symbol,path,date,generation] = queryKey;
+      const value = await fetchStaticJson(path);
+      if (value.symbol !== symbol || value.as_of_date !== date) throw Error('Detail identity mismatch');
+      return {value,symbol,date,generation,path};
     }});
-  const selectedClockRows=useMemo(()=>[selectedSummary,detail.data].filter(Boolean),[selectedSummary,detail.data]);
+  const detailResponse = detail.data;
+  const selectedClockRows=useMemo(()=>[selectedSummary,detailResponse?.value].filter(Boolean),[selectedSummary,detailResponse]);
   const selectedFinancialNow=useFinancialClock(selectedClockRows);
   const financialNow = Math.max(bundle.evaluatedNow ?? Date.now(),selectedFinancialNow);
-  const selected = useMemo(() => mergeFinancialDetail(selectedSummary,detail.data,{now:financialNow,asOfDate:bundle.data?.date,generation:version,expectedDetailPath:selectedSummary?.research_detail_path}), [selectedSummary,detail.data,bundle.data?.date,version,financialNow]);
+  const selected = useMemo(() => mergeFinancialDetail(selectedSummary,detailResponse?.value,{now:financialNow,asOfDate:bundle.data?.date,generation:version,detailGeneration:detailResponse?.generation,expectedDetailPath:selectedSummary?.research_detail_path,detailPath:detailResponse?.path}), [selectedSummary,detailResponse,bundle.data?.date,version,financialNow]);
   const initialSymbol = useRef(params.get('symbol'));
   useEffect(() => {
     // RouterLink uses pushState, which does not emit hashchange. Restore every

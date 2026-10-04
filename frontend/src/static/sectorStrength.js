@@ -12,7 +12,7 @@ export function relativeIndex(bars, benchmark, asOf, lookback, compatible) {
   const base=prices.get(first.date)/first.close;
   return {value:100*(prices.get(last.date)/last.close)/base,from:first.date,to:last.date,sessions:lookback};
 }
-export function sectorStrength(rows, prices, asOf) {
+export function sectorStrength(rows, prices, asOf, now = Date.now()) {
   const benchmark=prices?.as_of_date===asOf ? prices.series?.SPY || [] : [];
   const groups=[...SECTORS,['Unknown','分類不明',null]];
   return {as_of:asOf,source:prices?.source || null,retrieved_at:prices?.retrieved_at || null,adjustment:prices?.adjustment || null,
@@ -20,7 +20,7 @@ export function sectorStrength(rows, prices, asOf) {
     groups:groups.map(([key,label,etf])=>{
       const members=rows.filter(r=>(sectorKey(r.gics_sector)===key) && liquidState(r)===true);
       const rates=Object.fromEntries(['minervini','minervini2','oneil','ibd'].map(method=>{
-        const states=members.map(r=>selectionState(assessmentSummary(r,method)));
+        const states=members.map(r=>selectionState(assessmentSummary(r,method,now)));
         const pass=states.filter(s=>s==='pass').length,unknown=states.filter(s=>s==='unknown').length;
         return [method,{pass,total:members.length,unknown,percent:members.length?100*pass/members.length:null}];
       }));

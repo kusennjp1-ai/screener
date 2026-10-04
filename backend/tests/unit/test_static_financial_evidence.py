@@ -16,8 +16,8 @@ from app.services.financial_source_evidence import (
 )
 from app.services.growth_cadence_service import compute_cadence_aware_growth
 from app.services.static_financial_evidence import (
-    CONTRACTS, METRICS, REASON_CODES, add_static_financial_metadata,
-    build_static_financial_current, subset_static_financial_current,
+    CONTRACTS, METRICS, REASON_CODES, VERSION, PROOF_REASON_CODES, COMPARISON_CODES, CALCULATION_CODES,
+    add_static_financial_metadata, build_static_financial_current, subset_static_financial_current, comparison_code,
 )
 from tests.unit.test_financial_source_yahoo_contract import real_transport  # noqa: F401
 
@@ -28,13 +28,13 @@ OBSERVED = "2026-10-01T00:00:00.000Z"
 
 
 def source_row(*, observed=OBSERVED, quarter_periods=None, annual_periods=None,
-               quarter_values=None, annual_values=None):
+               quarter_values=None, annual_values=None, metric="Diluted EPS"):
     """Use actual PR69 arithmetic and evidence producers; no vendor calls."""
     quarter_periods = quarter_periods or ["2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"]
     annual_periods = annual_periods or ["2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31", "2021-12-31"]
     quarterly = pd.DataFrame([quarter_values or [1., 1., 2., 3., 2., -2.], [100., 100., 120., 130., 110., 150.]],
-                             index=["Diluted EPS", "Total Revenue"], columns=pd.to_datetime(quarter_periods))
-    annual = pd.DataFrame([annual_values or [5., 4., 3., 2., 1.]], index=["Diluted EPS"], columns=pd.to_datetime(annual_periods))
+                             index=[metric, "Total Revenue"], columns=pd.to_datetime(quarter_periods))
+    annual = pd.DataFrame([annual_values or [5., 4., 3., 2., 1.]], index=[metric], columns=pd.to_datetime(annual_periods))
     acquisitions = {}
     for attribute, frame in [("quarterly_income_stmt", quarterly), ("income_stmt", annual)]:
         subset = _statement_subset(frame)
@@ -86,13 +86,22 @@ def fixture_cases():
 
     def add(name, row, now=NOW, as_of=AS_OF):
         proof = summary(row, now, as_of)
-        values = {field: (deepcopy(row.get(field)) if str(i) in proof["p"] else None) for i, field in enumerate(FINANCIAL_FIELDS)}
+        values = {field: (deepcopy(row.get(field)) if proof["r"][i] == "0" else None) for i, field in enumerate(FINANCIAL_FIELDS)}
         cases.append({"id": name, "now": now, "as_of_date": as_of, "row": row, "expected": {
             "values": values, "reasons": {field: reason(proof, field) for field in FINANCIAL_FIELDS},
             "compact": proof, "next_expiry_at": min((p[5] for p in proof["p"].values()), default=None),
         }})
 
     add("fresh-zero-and-negative", fresh)
+    for name, recent, baseline in [
+        ("loss-narrowing", -.2, -.4), ("loss-widening", -.4, -.2), ("loss-unchanged", -.2, -.2),
+        ("turnaround", .1, -.2), ("zero-baseline", .1, 0.), ("new-loss", -.1, .2),
+        ("profit-to-zero", 0., .2), ("break-even", 0., -.2), ("profitable-growth", .3, .2),
+        ("profitable-decline", .1, .2), ("profitable-unchanged", .2, .2),
+        ("clipped-growth", 2., .1), ("clipped-new-loss", -2., .1),
+    ]:
+        add(name, source_row(quarter_values=[recent, recent, 1., 1., baseline, baseline]))
+    add("basic-eps-growth", source_row(quarter_values=[.3, .3, 1., 1., .2, .2], metric="Basic EPS"))
     add("source-exact-seven-day-boundary", source_row(observed="2026-09-26T16:35:00.000Z"))
     add("source-one-millisecond-expired", source_row(observed="2026-09-26T16:34:59.999Z"))
     add("future-source", source_row(observed="2026-10-03T16:35:00.001Z"))
@@ -132,11 +141,16 @@ def fixture_cases():
 
 
 def test_contract_registry_matches_runtime():
-    contract = json.loads((ROOT / "contracts/static_financial_current_v1.json").read_text())
+    contract = json.loads((ROOT / "frontend/contracts/static_financial_current_v1.json").read_text())
     assert contract["field_order"] == list(FINANCIAL_FIELDS)
     assert contract["reason_codes"] == REASON_CODES
     assert contract["contracts"] == CONTRACTS
     assert contract["metrics"] == METRICS
+    assert contract["version"] == VERSION == 2
+    assert contract["proof_reason_codes"] == PROOF_REASON_CODES
+    assert contract["comparison_codes"] == COMPARISON_CODES
+    assert contract["calculation_codes"] == CALCULATION_CODES
+    assert len(contract["proof_tuple"]) == 8
 
 
 def test_shared_producer_fixtures_match_python():
@@ -235,7 +249,7 @@ def test_digest_valid_inline_records_with_malformed_capture_map_are_unknown():
     ("gapped-annual-history", "eps_5yr_cagr", "invalid_reporting_period"),
     ("future-period", "eps_growth_yy", "invalid_reporting_period"),
     ("turnaround-is-not-positive-cagr", "eps_5yr_cagr", "unsupported_contract"),
-    ("quarter-period-exact-expiry", "eps_q2_yoy", "available"),
+    ("quarter-period-exact-expiry", "eps_q2_yoy", "nonpositive_comparison_base"),
     ("quarter-period-next-day", "eps_q2_yoy", "stale_reporting_period"),
     ("annual-period-exact-expiry", "eps_5yr_cagr", "available"),
     ("annual-period-next-day", "eps_5yr_cagr", "stale_reporting_period"),
@@ -271,3 +285,68 @@ def test_pinned_vendor_normalization_reaches_static_proof_without_reclocking(rea
     assert cached["financial_source_evidence"] == first["financial_source_evidence"]
     assert late["r"][0] == "7" and late["r"][2] == "7" and not late["p"]
     assert len(real_transport["calls"]) == 1
+
+
+@pytest.mark.parametrize("recent,baseline,state", [
+    (-.2, -.4, "loss_narrowing"), (.1, -.2, "turnaround"), (.1, 0., "undefined_base"),
+    (-.1, .2, "new_loss"), (.3, .2, "profitable_growth"), (.1, .2, "profitable_decline"),
+    (.2, .2, "profitable_unchanged"), (0., -.2, "break_even"), (0., .2, "profit_to_zero"),
+    (-.4, -.2, "loss_widening"), (-.2, -.2, "loss_unchanged"),
+])
+def test_comparison_classifies_explicit_finite_cells(recent, baseline, state):
+    assert COMPARISON_CODES[comparison_code(recent, baseline)] == state
+    row = source_row(quarter_values=[recent, recent, 1., 1., baseline, baseline])
+    before = deepcopy(row)
+    proof = summary(row)
+    if baseline == 0:
+        # The existing producer supplies no finite percentage or observed field.
+        # Do not invent an EPS pair from a percentage or unrelated retained rows.
+        assert row["eps_growth_yy"] is None
+        assert "eps_growth_yy" not in row["financial_source_evidence"]["fields"]
+        assert reason(proof, "eps_growth_yy") == "missing_or_invalid_value"
+        assert "1" not in proof["p"]
+    else:
+        entry = proof["p"]["1"]
+        assert entry[0] == row["eps_growth_yy"]
+        assert COMPARISON_CODES[entry[6]] == state
+        assert CALCULATION_CODES[entry[7]] == "rounded_percent_change"
+        assert reason(proof, "eps_growth_yy") == ("nonpositive_comparison_base" if baseline < 0 else "available")
+    assert row == before
+
+
+@pytest.mark.parametrize("recent,baseline", [(None, 1), (1, None), (True, 1), (1, False), (float("inf"), 1), (1, float("nan")), (".1", -.2)])
+def test_comparison_does_not_coerce_or_infer_source_cells(recent, baseline):
+    assert comparison_code(recent, baseline) is None
+
+
+def test_clipping_and_annual_heuristics_are_not_mislabeled_as_exact_growth():
+    for recent, expected, state in [(2., 500., "profitable_growth"), (-2., -100., "new_loss")]:
+        row = source_row(quarter_values=[recent, recent, 1., 1., .1, .1])
+        proof = summary(row)
+        assert proof["p"]["6"][0] == expected
+        assert COMPARISON_CODES[proof["p"]["6"][6]] == state
+        assert CALCULATION_CODES[proof["p"]["6"][7]] == "clipped_percent_change"
+        assert CALCULATION_CODES[proof["p"]["1"][7]] == "rounded_percent_change"
+        assert row["eps_growth_yy"] != expected
+    row = source_row(annual_values=[5., 4., 3., 2., -.1])
+    raw = row["eps_5yr_cagr"]
+    enriched = add_static_financial_metadata(row, now=NOW, as_of_date=AS_OF)
+    assert reason(enriched["financial_current"], "eps_5yr_cagr") == "unsupported_contract"
+    assert enriched["financial_reference"]["values"]["eps_5yr_cagr"] == raw
+    assert enriched["financial_source_evidence"] == row["financial_source_evidence"]
+
+
+def test_negative_base_reference_proof_survives_group_subsetting_without_becoming_available():
+    row = source_row(quarter_values=[-.2, -.2, 1., 1., -.4, -.4])
+    narrow = subset_static_financial_current(summary(row), {"eps_growth_yy": row["eps_growth_yy"]})
+    assert set(narrow["p"]) == {"1"}
+    assert reason(narrow, "eps_growth_yy") == "nonpositive_comparison_base"
+    assert narrow["p"]["1"][6] == "l"
+
+
+def test_positive_cagr_clipping_keeps_explicit_calculation_kind():
+    row = source_row(annual_values=[10000., 4., 3., 2., .1])
+    entry = summary(row)["p"]["5"]
+    assert entry[0] == 500.
+    assert COMPARISON_CODES[entry[6]] == "profitable_growth"
+    assert CALCULATION_CODES[entry[7]] == "clipped_positive_cagr"

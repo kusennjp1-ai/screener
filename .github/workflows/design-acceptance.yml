@@ -10,7 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths: ['frontend/**', 'contracts/static_financial_current_v1.json', 'docs/design-review/**', '.github/scripts/**', '.github/workflows/design-acceptance.yml', '.github/workflows/research-ui-release.yml', '.github/workflows/static-site.yml']
+    paths: ['frontend/**', 'docs/design-review/**', '.github/scripts/**', '.github/workflows/design-acceptance.yml', '.github/workflows/research-ui-release.yml', '.github/workflows/static-site.yml']
 
 permissions:
   contents: read

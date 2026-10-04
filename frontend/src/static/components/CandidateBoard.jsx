@@ -15,9 +15,10 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
  const {row:r,assessment:a,plan:p,readiness,volume}=item,key=stateKey(p.state),[label,glyph,tone]=STATES[key];
  const dailyLabel=readiness?`日次 ${readiness.passed}/${readiness.total}`:'日次 未確認';
  const nextCheck=readiness?.rules.find(rule=>rule.state!=='pass');
+ const additionalChecks=readiness?.rules.filter(rule=>rule.state!=='pass').slice(1).map(rule=>`${rule.label}：${rule.state==='unknown'?'未確認':'未達'}`).join('。');
  const dailyDetail=readiness?.ready?'日次の購入条件をすべて通過。発注前に最新価格とリスクを確認':nextCheck?`${nextCheck.label}：${nextCheck.state==='unknown'?'未確認':'未達'}。${nextCheck.detail}`:'分析日または市場環境が未確認';
  const missing=useMemo(()=>nearOnly?singleMissingCondition(assess(r,method)):null,[nearOnly,r,method]);
- return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。選定 ${a.passed}/${a.total}。${dailyLabel}。${dailyDetail}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
+ return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。選定 ${a.passed}/${a.total}。${dailyLabel}。${dailyDetail}${additionalChecks?`。${additionalChecks}`:''}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
   if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
  }}>

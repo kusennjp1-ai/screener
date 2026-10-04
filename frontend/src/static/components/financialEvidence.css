@@ -34,7 +34,7 @@
 @media (max-width:600px) { .financial-evidence-metadata { grid-template-columns:minmax(0,1fr); } .financial-evidence-heading { align-items:flex-start; } }
 
 .financial-evidence-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; margin:6px 0 8px; min-width:0; }
-.financial-summary-item { min-width:0; min-height:48px; padding:5px 8px; text-align:left; color:var(--text-2); background:var(--panel); border:1px solid var(--line); border-radius:4px; cursor:pointer; font:inherit; }
+.financial-evidence-summary > .financial-summary-item { min-width:0; min-height:48px; padding:5px 8px; text-align:left; color:var(--text-2); background:var(--panel); border:1px solid var(--line); border-radius:4px; cursor:pointer; font:inherit; }
 .financial-summary-item:hover { border-color:var(--accent); }
 .financial-summary-item:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .financial-summary-title { display:block; font-size:11px; line-height:1.35; }

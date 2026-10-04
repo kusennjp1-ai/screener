@@ -34,6 +34,19 @@ it('shows price location and daily purchase status separately, with the next fai
  expect(row).not.toHaveTextContent('✓');
  fireEvent.click(row);expect(props.onSelect).toHaveBeenLastCalledWith('S0');
 });
+it('keeps the trading-day blocker accessible when financial selection is also unknown',()=>{
+ entryReadiness.mockReturnValue({ready:false,passed:3,total:7,rules:[
+  {id:'selection',label:'選定条件',state:'unknown',detail:'財務根拠が未確認'},
+  {id:'latest',label:'最新の取引日',state:'unknown',detail:'最新取引日を確認できません'},
+  {id:'earnings',label:'決算予定',state:'unknown',detail:'決算日が未確認'},
+ ]});
+ render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
+ const row=screen.getByRole('button',{name:/S0 の分析を表示/});
+ expect(row).toHaveAccessibleName(/選定条件：未確認/);
+ expect(row).toHaveAccessibleName(/最新の取引日：未確認/);
+ expect(row).toHaveAccessibleName(/決算予定：未確認/);
+ expect(row).not.toHaveTextContent('✓');
+});
 it('marks daily readiness only when all common checks pass and updates when time changes',()=>{
  entryReadiness.mockReturnValueOnce({ready:true,passed:7,total:7,rules:[]}).mockReturnValue(waiting);
  const {rerender}=render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);

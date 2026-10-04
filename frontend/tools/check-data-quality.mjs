@@ -2,12 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
-import { prepareResearchBundle } from '../src/static/researchPreprocess.js';
 import { sectorStrength } from '../src/static/sectorStrength.js';
 import { summarizeWorkbench, validateWorkbenchSummary, validateWorkbenchDetails } from '../src/static/workbenchSummary.js';
-import { assess, assessmentSummary, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from '../src/static/researchEngine.js';
+import { researchEvaluation, validatePublishedSummaries, validateResearchParity } from './research-quality.mjs';
 import {canonicalPivot} from '../src/static/researchPresentation.js';
-import {buildPortfolioPlan} from '../src/static/portfolioPlan.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
 const manifest=await read('manifest.json');
@@ -15,20 +13,15 @@ const indexPath=(manifest.markets?.US||manifest).assets.research.path;
 const wireRaw=await readFile(`public/static-data/${indexPath}`);
 const wire=JSON.parse(wireRaw.toString('utf8'));
 const index=decodeResearchIndex(wire);
-const prepared=prepareResearchBundle([wire],index.as_of_date);
+const evaluatedAt=researchEvaluation(index,(manifest.markets?.US||manifest).assets.research);
+const checkedAt=Date.now();
 if(wire.schema && (wireRaw.length>8000000 || gzipSync(wireRaw).length>1000000)) throw Error(`Research payload budget exceeded: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes`);
-for(const method of ['minervini','minervini2','oneil','ibd']) {
-  if(prepared.rankings[method].map(item=>item.row.symbol).join(',')!==rankCandidates(index.rows,method).map(item=>item.row.symbol).join(',')) throw Error(`Exported ranking differs: ${method}`);
-}
 const quality=await read('data-quality.json');
-for(const row of index.rows) for(const method of ['minervini','minervini2','oneil','ibd']) {
-  const {rules,...expected}=assess(row,method); void rules;
-  if(row.method_summary?.version!==RULE_SUMMARY_VERSION || JSON.stringify(expected)!==JSON.stringify(assessmentSummary(row,method))) throw Error(`Rule summary mismatch: ${row.symbol}/${method}`);
-}
+validatePublishedSummaries(index.rows,evaluatedAt);
 if(!quality.total || quality.as_of_date!==index.as_of_date || quality.verified/quality.total<.9) {
   throw Error(`Daily verification below 90%: ${quality.verified}/${quality.total}. Keep last good publication and repair the source; never relax selection criteria.`);
 }
-console.log(`Quality gate passed: ${quality.verified}/${quality.total} verified; all exported assessments reproduce.`);
+console.log(`Quality gate passed: ${quality.verified}/${quality.total} verified; all serialized assessments reproduce at ${new Date(evaluatedAt).toISOString()}.`);
 
 const market=manifest.markets?.US||manifest;
 const scan=await read(market.pages.scan.list_path);
@@ -50,18 +43,9 @@ for(const row of index.rows) {
   // agree with its own exported summary (which could hide transport drift).
   const detail=await read(row.research_detail_path);
   canonicalRows.push(detail);
-  for(const method of ['minervini','minervini2','oneil','ibd']) {
-    if(JSON.stringify(assess(row,method))!==JSON.stringify(assess(detail,method))) throw Error(`Canonical detail rule mismatch: ${row.symbol}/${method}`);
-    if(researchCsv([{row}],method,index.as_of_date)!==researchCsv([{row:detail}],method,index.as_of_date)) throw Error(`Canonical CSV mismatch: ${row.symbol}/${method}`);
-  }
 }
-const planTime=Date.now();
-const planContract=rows=>{
-  const plan=buildPortfolioPlan(rows,index.as_of_date,100000,planTime);
-  return {positions:plan.positions,dailyPositions:plan.dailyPositions,candidateCount:plan.candidateCount,invested:plan.invested,cash:plan.cash,exposure:plan.exposure,risk:plan.risk,
-    readiness:plan.readiness.map(item=>({symbol:item.symbol,passed:item.passed,ready:item.ready,states:item.rules.map(rule=>[rule.id,rule.state])}))};
-};
-if(JSON.stringify(planContract(index.rows))!==JSON.stringify(planContract(canonicalRows))) throw Error('Compact research changes order plan or entry readiness');
+validatePublishedSummaries(canonicalRows,evaluatedAt);
+for(const now of new Set([evaluatedAt,checkedAt])) validateResearchParity(wire,canonicalRows,now);
 console.log(`Research transport gate passed: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes; full canonical rules, CSV, rankings and order plan agree.`);
 // Open real normal, repaired, split and incomplete symbols. All surfaces use
 // these same canonical details; chart stubs may not retain old levels.
@@ -82,7 +66,7 @@ const original=await read(market.pages.scan.path),full=new Map();
 for(const chunk of original.chunks)for(const row of (await read(chunk.path)).rows)full.set(row.symbol,row);
 for(const filters of [{},{minVolume:20000000,price:{min:10}},{seSetupReady:true},{seSetupReady:false},{rsRating:{min:85}},{symbolSearch:'AMD'}]) {
   for(const key of ['se_setup_score','current_price','rs_rating']) {
-    const ids=rows=>sortStaticScanRows(filterStaticScanRows(rows,filters),key,'desc').map(r=>r.symbol).join(',');
+    const ids=rows=>sortStaticScanRows(filterStaticScanRows(rows,filters,{now:checkedAt}),key,'desc',{now:checkedAt}).map(r=>r.symbol).join(',');
     if(ids(list)!==ids([...full.values()]))throw Error(`Lazy scan changes global filters/sort: ${key}`);
   }
 }
@@ -92,6 +76,7 @@ const workbenchRef=market.assets.workbench;
 const workbenchRaw=await readFile(`public/static-data/${workbenchRef.path}`,'utf8');
 if(createHash('sha256').update(workbenchRaw).digest('hex')!==workbenchRef.sha256) throw Error('Workbench hash mismatch');
 const workbench=JSON.parse(workbenchRaw);
+if(workbench.financial_evaluated_at!==evaluatedAt || workbench.financial_semantics!==index.financial_semantics) throw Error('Mixed workbench evaluation');
 if(workbench.as_of!==index.as_of_date || workbench.source_research_sha256!==manifest.research_generation || workbench.snapshot_id!==workbenchRef.snapshot_id) throw Error('Mixed workbench snapshot');
 const summaryRef=market.assets.workbench_summary;
 const summaryRaw=await readFile(`public/static-data/${summaryRef.path}`,'utf8');
@@ -101,7 +86,7 @@ validateWorkbenchSummary(summary,summaryRef,workbenchRef,index.as_of_date,market
 validateWorkbenchDetails(workbench,summary);
 if(JSON.stringify(summarizeWorkbench(workbench,workbenchRef))!==summaryRaw)throw Error('Workbench summary does not reproduce');
 const sectorPrices=await read('sector-prices.json');
-if(JSON.stringify(sectorStrength(index.rows,sectorPrices,index.as_of_date))!==JSON.stringify(workbench.sectors)) throw Error('Sector evidence does not reproduce');
+if(JSON.stringify(sectorStrength(index.rows,sectorPrices,index.as_of_date,evaluatedAt))!==JSON.stringify(workbench.sectors)) throw Error('Sector evidence does not reproduce');
 const saved=await readFile(`public/static-data/${workbench.current_snapshot.path}`);
 if(createHash('sha256').update(saved).digest('hex')!==workbench.current_snapshot.sha256)throw Error('Saved observation hash mismatch');
 const recorded=JSON.parse(gunzipSync(saved).toString('utf8'));

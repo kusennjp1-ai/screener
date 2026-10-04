@@ -7,12 +7,16 @@ source-age policy, or Minervini Research technical rule was changed. Historical
 annual/SEC inputs remain independent; reported quarterly history cannot fill a
 different legacy growth basis.
 
-The browser accepts only `static-financial-current-v1` compact source proofs,
+The browser accepts only `static-financial-current-v2` compact source proofs,
 bound to the exact symbol, market, snapshot, value, source contract, reporting
 periods, acquisition time, and expiry. Source/capture digest validation remains
 in Python. The browser does not reproduce Python JSON digests. Missing, old,
 malformed, mismatched, future, or expired proofs produce unknown values.
-Genuine zero and negative eligible values survive.
+Genuine zero and negative eligible values survive. EPS loss narrowing and
+turnaround remain fresh sourced references with an unknown ordinary-growth
+condition; their original percentages never become ordinary growth passes.
+Comparison labels come from validated source cells. Zero-base division and
+annual heuristics stay unknown. Existing clipped calculations are identified.
 
 EPS/SMR/Composite ratings and legacy financial-dependent scanner scores,
 ratings, pass claims, and Code 33 remain unknown. Their raw values and nested
@@ -113,3 +117,18 @@ The end-to-end exporter test additionally checks index/list/detail consistency,
 zero preservation, raw historical retention, current preset counts, decision
 artifact timing labels, and byte-identical untouched historical files. Browser
 geometry, cold-load behavior, and release/design checks remain separate gates.
+
+## EPS comparison v2 recheck
+
+The retained 5,901-row replay still yields zero current financial values and
+unchanged technical counts. The v2 varied source stress transports 41,307
+source-valid proofs, of which 5,901 are current turnaround references with
+unknown ordinary-growth conditions. Exact proof and decision roundtrip passes
+at 4,188,310 raw / 993,889 gzip bytes. The original hard cap remains unchanged;
+6,111 gzip bytes of headroom is a bounded fixture result, not a general forecast.
+Full raw inputs/captures are unchanged and no provider was contacted.
+
+A special comparison survives raw projection, compact encoding, JSON decode,
+reprojection and selected-detail merge with an explicit null ordinary scalar.
+Its tuple reference remains bound to the source/metric/unit/period/expiry and
+never qualifies a growth threshold. The v2 browser rejects v1 compact proofs.

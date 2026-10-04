@@ -7,7 +7,9 @@ export function withFinancialProof(input, now = FINANCIAL_TEST_NOW, date = FINAN
   const r = '22222222b222bbbb'.split(''), p = {};
   const periods = ['2026-06-30','2026-03-31','2025-12-31','2025-09-30','2025-06-30'];
   for (const [index,field] of ['eps_growth_qq','eps_growth_yy','sales_growth_qq','sales_growth_yy'].entries()) if (typeof row[field] === 'number' && Number.isFinite(row[field])) {
-    r[index]='0'; p[index]=[row[field],index%2?'1':'0',index<2?'Diluted EPS':'Total Revenue',index%2?periods:periods.slice(0,2),now-3600000,now+6*86400000];
+    // These synthetic tests explicitly assume positive source baselines.
+    const comparison = index < 2 ? row[field] > 0 ? 'g' : row[field] === 0 ? 'u' : row[field] === -100 ? 'z' : row[field] < -100 ? 'n' : 'd' : row[field] > 0 ? 'G' : row[field] < 0 ? 'D' : 'U';
+    r[index]='0'; p[index]=[row[field],index%2?'1':'0',index<2?'Diluted EPS':'Total Revenue',index%2?periods:periods.slice(0,2),now-3600000,now+6*86400000,comparison,'r'];
   }
-  return {...row,financial_current:{v:1,t:now,s:row.symbol,m:row.market,a:date,r:r.join(''),p}};
+  return {...row,financial_current:{v:2,t:now,s:row.symbol,m:row.market,a:date,r:r.join(''),p}};
 }

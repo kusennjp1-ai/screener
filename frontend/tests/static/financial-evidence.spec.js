@@ -33,6 +33,12 @@ for (const [width,height] of [[1440,900],[1440,760],[360,844],[360,568]]) test(`
  expect(plotBox.height).toBeGreaterThanOrEqual(width===360?320:400);
  expect(summaryBox.y+summaryBox.height).toBeLessThan(plotBox.y);
  await expect(summary).toBeInViewport({ratio:1});
+ const targets=await summary.getByRole('button').evaluateAll(buttons=>buttons.map(button=>{
+  const style=getComputedStyle(button),rect=button.getBoundingClientRect();
+  return {label:button.getAttribute('aria-label'),width:rect.width,height:rect.height,minHeight:style.minHeight,display:style.display};
+ }));
+ await info.attach('synthetic-financial-targets',{body:JSON.stringify(targets),contentType:'application/json'});
+ await page.screenshot({path:info.outputPath(`synthetic-financial-initial-${width}x${height}.png`)});
  for(const target of await summary.getByRole('button').all())expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
  for(const target of await page.locator('.research-detail .research-chart-controls button').all())expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await info.attach('synthetic-inline-geometry',{body:JSON.stringify({width,height,summary:summaryBox,plot:plotBox,visiblePlotPixels:Math.max(0,Math.min(height,plotBox.y+plotBox.height)-Math.max(0,plotBox.y))}),contentType:'application/json'});

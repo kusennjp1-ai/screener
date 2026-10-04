@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixtures from '../../../contracts/static_financial_current_fixtures_v1.json';
-import contract from '../../../contracts/static_financial_current_v1.json';
+import contract from '../../contracts/static_financial_current_v1.json';
 import {
   FINANCIAL_DEPENDENT_FIELDS,
   FINANCIAL_FIELDS,
@@ -17,8 +17,8 @@ const expiresAt = observedAt + contract.source_max_age_ms;
 const provenRow = (value = 0) => ({
   symbol: 'TEST', market: 'US', as_of_date: '2026-10-01', eps_growth_qq: value,
   financial_current: {
-    v: 1, t: now, s: 'TEST', m: 'US', a: '2026-10-01', r: '0222222222222222',
-    p: { 0: [value, '0', 'Diluted EPS', ['2026-06-30', '2026-03-31'], observedAt, expiresAt] },
+    v: 2, t: now, s: 'TEST', m: 'US', a: '2026-10-01', r: '0222222222222222',
+    p: { 0: [value, '0', 'Diluted EPS', ['2026-06-30', '2026-03-31'], observedAt, expiresAt, value > 0 ? 'g' : value < 0 ? 'd' : 'u', 'r'] },
   },
 });
 const project = (row, options = {}) => projectFinancialRow(row, { now, ...options });
@@ -296,4 +296,75 @@ describe('financial detail merge boundaries', () => {
     expect(result.eps_growth_qq).toBe(0);
     expect(result.new_technical).toBeUndefined();
   });
+});
+
+
+describe('EPS comparison semantics', () => {
+  const comparisonRow = (value, comparison, reason = 'f') => {
+    const row = provenRow(value);
+    row.financial_current.r = reason + row.financial_current.r.slice(1);
+    row.financial_current.p[0][6] = comparison;
+    return row;
+  };
+  it.each([
+    [50, 'l', 'loss_narrowing'], [150, 't', 'turnaround'], [-100, 'w', 'loss_widening'],
+    [0, 's', 'loss_unchanged'], [100, 'b', 'break_even'],
+  ])('keeps source-valid %s reference separate from %s ordinary-growth eligibility', (value, code, comparison) => {
+    const input = comparisonRow(value, code);
+    const result = project(input);
+    expect(result.eps_growth_qq).toBeNull();
+    expect(result.eps_growth_quarterly).toBeNull();
+    expect(state(result)).toMatchObject({ value: null, availability: 'unknown', reason: 'nonpositive_comparison_base', reference_value: value, comparison, source_validated: true, ordinary_growth_eligible: false });
+    expect(result.financial_historical.values.eps_growth_qq).toBe(value);
+    expect(input.eps_growth_qq).toBe(value);
+    expect(state(project(result, { now: now + 1 }))).toMatchObject({ comparison, reference_value: value });
+    const detail = { ...input, new_technical: true };
+    expect(state(mergeFinancialDetail(result, detail, { now }))).toMatchObject({ comparison, reference_value: value, value: null });
+    expect(state(project(result, { now: expiresAt + 1 }))).toMatchObject({ reason: 'stale_source', value: null });
+  });
+  it.each([[-150, 'n', 'new_loss'], [-100, 'z', 'profit_to_zero'], [50, 'g', 'profitable_growth'], [-50, 'd', 'profitable_decline'], [0, 'u', 'profitable_unchanged']])('retains a positive-base %s value and exact %s classification', (value, code, comparison) => {
+    expect(state(project(comparisonRow(value, code, '0')))).toMatchObject({ value, comparison, availability: 'current', ordinary_growth_eligible: true });
+  });
+  it.each([
+    ['negative-base promoted to available', 50, 'l', '0'],
+    ['profitable growth with negative percentage', -50, 'g', '0'],
+    ['new loss with growth percentage', 50, 'n', '0'],
+    ['growth fabricated for a zero baseline', 50, '0', 'f'],
+    ['EPS mislabeled as revenue', 50, 'G', '0'],
+    ['profitable decline beyond zero earnings', -150, 'd', '0'],
+    ['unchanged with growth percentage', 50, 'u', '0'],
+  ])('rejects %s', (_label, value, comparison, reason) => {
+    expect(state(project(comparisonRow(value, comparison, reason)))).toMatchObject({ value: null, reason: 'invalid_source_inputs' });
+  });
+  it('retains only a validated reference across copies and rejects missing/conflicting scalars or old proof', () => {
+    const result = project(comparisonRow(50, 'l'));
+    expect(state(project({ ...result }, { now: now + 1 }))).toMatchObject({ value: null, comparison: 'loss_narrowing', reference_value: 50 });
+    const missing = { ...result }; delete missing.eps_growth_qq;
+    expect(state(project(missing))).toMatchObject({ reason: 'missing_or_invalid_value' });
+    expect(state(project({ ...result, eps_growth_qq: 99 }))).toMatchObject({ reason: 'value_mismatch' });
+    const unproven = { ...result }; delete unproven.financial_current;
+    expect(state(project(unproven))).toMatchObject({ value: null, reason: 'missing_evidence' });
+    expect(state(project(unproven))).not.toHaveProperty('reference_value');
+    const old = comparisonRow(50, 'l');
+    old.financial_current.v = 1;
+    old.financial_current.r = '0' + old.financial_current.r.slice(1);
+    old.financial_current.p[0] = old.financial_current.p[0].slice(0, 6);
+    expect(state(project(old))).toMatchObject({ value: null, reason: 'invalid_envelope' });
+  });
+  it('does not invent comparison metadata from an unsupported percentage-only value', () => {
+    const input = { symbol: 'TEST', market: 'US', as_of_date: '2026-10-01', eps_growth_qq: 50 };
+    const result = project(input);
+    expect(state(result)).not.toHaveProperty('comparison');
+    expect(state(result)).not.toHaveProperty('source_validated');
+    expect(result.financial_historical.values.eps_growth_qq).toBe(50);
+  });
+});
+
+it('retains clipping metadata and rejects an unapproved heuristic calculation', () => {
+  const fixture=fixtures.cases.find(item=>item.id==='clipped-growth');
+  const input={...fixture.row,financial_current:structuredClone(fixture.expected.compact)};
+  const row=projectFinancialRow(input,{now:fixtureClock(fixture.now),asOfDate:fixture.as_of_date});
+  expect(row.financial_current_state.fields.eps_q1_yoy).toMatchObject({value:500,comparison:'profitable_growth',clipped:true,calculation:'clipped_percent_change'});
+  input.financial_current.p[6][7]='heuristic';
+  expect(projectFinancialRow(input,{now:fixtureClock(fixture.now),asOfDate:fixture.as_of_date}).financial_current_state.fields.eps_q1_yoy).toMatchObject({value:null,reason:'invalid_source_inputs'});
 });

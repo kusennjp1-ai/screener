@@ -18,7 +18,7 @@ from .financial_source_evidence import (
 )
 from .security_master_service import security_master_resolver
 
-VERSION = 1
+VERSION = 2
 QUARTER_MAX_AGE_DAYS = 190
 ANNUAL_MAX_AGE_DAYS = 550
 YEAR_GAP_DAYS = (345, 385)
@@ -28,7 +28,19 @@ REASON_CODES = {
     "6": "future_source_timestamp", "7": "stale_source", "8": "unsupported_contract",
     "9": "invalid_reporting_period", "a": "stale_reporting_period",
     "b": "unverified_derivation_and_cohort", "c": "invalid_evaluation_context",
-    "d": "alias_conflict", "e": "invalid_source_inputs",
+    "d": "alias_conflict", "e": "invalid_source_inputs", "f": "nonpositive_comparison_base",
+}
+PROOF_REASON_CODES = ["0", "f"]
+COMPARISON_CODES = {
+    "g": "profitable_growth", "d": "profitable_decline", "u": "profitable_unchanged",
+    "n": "new_loss", "z": "profit_to_zero", "l": "loss_narrowing",
+    "w": "loss_widening", "s": "loss_unchanged", "t": "turnaround",
+    "b": "break_even", "0": "undefined_base", "G": "growth", "D": "decline",
+    "U": "unchanged", "X": "nonpositive_base",
+}
+CALCULATION_CODES = {
+    "r": "rounded_percent_change", "c": "clipped_percent_change",
+    "a": "rounded_positive_cagr", "k": "clipped_positive_cagr",
 }
 METRICS = {"eps": ["Diluted EPS", "Basic EPS"], "sales": ["Total Revenue", "Operating Revenue"]}
 _QUARTER_PRODUCER = "yfinance.quarterly_income_stmt/transport-capture-v1"
@@ -77,6 +89,27 @@ def _valid_value(field: str, value: Any) -> bool:
         return valid_value(field, value)
     except (ValueError, TypeError, OverflowError):
         return False
+
+
+def comparison_code(recent: Any, baseline: Any, metric_type: str = "eps") -> str | None:
+    """Classify explicit source cells, never a percentage or an inferred EPS."""
+    if not _finite(recent) or not _finite(baseline):
+        return None
+    if baseline == 0:
+        return "0"
+    if metric_type == "sales":
+        return "X" if baseline < 0 else "G" if recent > baseline else "D" if recent < baseline else "U"
+    if baseline < 0:
+        if recent > 0:
+            return "t"
+        if recent == 0:
+            return "b"
+        return "l" if recent > baseline else "w" if recent < baseline else "s"
+    if recent < 0:
+        return "n"
+    if recent == 0:
+        return "z"
+    return "g" if recent > baseline else "d" if recent < baseline else "u"
 
 
 def _period(column: Any) -> date | None:
@@ -216,6 +249,7 @@ def _statement_proof(field: str, record: dict, envelope: dict, *, now: datetime,
         if contract_id in {"0", "1"} and record.get("remapped_to_qq") is not False:
             return "8", None
         expected = ((recent - baseline) / abs(baseline)) * 100
+    calculated = expected
     if contract_id in {"2", "3"}:
         if record.get("clipping") != {"minimum": -100.0, "maximum": 500.0}:
             return "8", None
@@ -224,7 +258,12 @@ def _statement_proof(field: str, record: dict, envelope: dict, *, now: datetime,
         return "e", None
     period_expiry = _ms(datetime.combine(first + timedelta(days=max_age + 1), time.min, timezone.utc)) - 1
     expiry = min(_ms(observed) + SOURCE_POLICY["max_age_ms"], period_expiry)
-    return "0", [deepcopy(record["value"]), contract_id, record["metric"], [period.isoformat() for period in chain], _ms(observed), expiry]
+    comparison = comparison_code(recent, baseline, metric_type)
+    calculation = ("k" if calculated != expected else "a") if annual else ("c" if calculated != expected else "r")
+    # Source-valid loss improvement is useful evidence, but is not ordinary
+    # positive-base growth. Keep its original percentage solely as a reference.
+    reason = "f" if baseline <= 0 else "0"
+    return reason, [deepcopy(record["value"]), contract_id, record["metric"], [period.isoformat() for period in chain], _ms(observed), expiry, comparison, calculation]
 
 
 def build_static_financial_current(row: Mapping[str, Any], *, now: datetime | str,

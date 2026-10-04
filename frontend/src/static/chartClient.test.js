@@ -10,8 +10,8 @@ const expiresAt = observedAt + 7 * 86400000;
 const provenRow = (value) => ({
   symbol: 'TEST', market: 'US', eps_growth_qq: value,
   financial_current: {
-    v: 1, t: now, s: 'TEST', m: 'US', a: '2026-10-01', r: '0222222222222222',
-    p: { 0: [value, '0', 'Diluted EPS', ['2026-06-30', '2026-03-31'], observedAt, expiresAt] },
+    v: 2, t: now, s: 'TEST', m: 'US', a: '2026-10-01', r: '0222222222222222',
+    p: { 0: [value, '0', 'Diluted EPS', ['2026-06-30', '2026-03-31'], observedAt, expiresAt, value > 0 ? 'g' : value < 0 ? 'd' : 'u', 'r'] },
   },
 });
 

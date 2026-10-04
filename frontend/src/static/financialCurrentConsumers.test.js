@@ -121,3 +121,38 @@ describe('one current evaluation across consumers',()=>{
     expect(malformed.financial_current).not.toHaveProperty('invalid_transport_proof');
   });
 });
+
+it('round-trips mixed old/new proof versions without upgrading v1 or loss improvement', () => {
+  const fresh=withFinancialProof({symbol:'FRESH',eps_growth_yy:50});
+  const loss=withFinancialProof({symbol:'LOSS',eps_growth_yy:50});
+  loss.financial_current.r=loss.financial_current.r.slice(0,1)+'f'+loss.financial_current.r.slice(2);
+  loss.financial_current.p[1][6]='l';
+  const old=withFinancialProof({symbol:'OLD',eps_growth_yy:50});
+  old.financial_current.v=1;old.financial_current.p[1]=old.financial_current.p[1].slice(0,6);
+  const rows=[fresh,loss,old];
+  const decoded=decodeResearchIndex(JSON.parse(JSON.stringify(encodeResearchIndex({as_of_date:date,rows})))).rows;
+  decoded.forEach((value,index)=>expect(value.financial_current).toEqual(rows[index].financial_current));
+  expect(decoded.map(row=>projectFinancialRow(row,{now}).eps_growth_yy)).toEqual([50,null,null]);
+  expect(assess(decoded[1],'oneil',now).rules[0].state).toBe('unknown');
+  expect(filterStaticScanRows(decoded,{epsGrowthYy:{min:25}},{now}).map(row=>row.symbol)).toEqual(['FRESH']);
+});
+
+it('keeps a fresh loss comparison as sourced reference through projected export, wire decode and detail merge', () => {
+  const raw=withFinancialProof({eps_growth_yy:50});
+  raw.financial_current.r=raw.financial_current.r.slice(0,1)+'f'+raw.financial_current.r.slice(2);
+  raw.financial_current.p[1][6]='l';
+  const projected=projectFinancialRow(raw,{now});
+  expect(projected.eps_growth_yy).toBeNull();
+  const wire=JSON.stringify(encodeResearchIndex({as_of_date:date,rows:[projected]}));
+  const decoded=decodeResearchIndex(JSON.parse(wire)).rows[0];
+  expect(decoded.eps_growth_yy).toBeNull();
+  expect(decoded).not.toHaveProperty('financial_current_state');
+  expect(decoded).not.toHaveProperty('financial_historical');
+  const current=projectFinancialRow(decoded,{now:now+1});
+  const merged=mergeFinancialDetail(current,JSON.parse(JSON.stringify(projected)),{now:now+1,asOfDate:date});
+  for (const row of [projected,current,merged]) {
+    expect(row.financial_current_state.fields.eps_growth_yy).toMatchObject({value:null,availability:'unknown',reference_value:50,reference_availability:'current',comparison:'loss_narrowing',source_validated:true,ordinary_growth_eligible:false});
+    expect(assess(row,'oneil',now+1).rules[0].state).toBe('unknown');
+    expect(filterStaticScanRows([row],{epsGrowthYy:{min:25}},{now:now+1})).toEqual([]);
+  }
+});

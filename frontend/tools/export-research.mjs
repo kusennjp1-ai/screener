@@ -163,12 +163,12 @@ await writeFile(resolve(root,chartIndexPath),chartIndexContent);
 entry.assets.charts={...entry.assets.charts,path:chartIndexPath};
 scan.charts={...scan.charts,path:chartIndexPath};
 const listFields = (FINANCIAL_FIELDS.join(' ')+' financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
-const researchIndex = {as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
+const researchIndex = {...currentEvaluation,as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
   // Full provenance and detector reasons remain in the content-addressed detail.
   if(row.price_quality) summary.price_quality={status:row.price_quality.status,as_of_date:row.price_quality.as_of_date};
   if(row.setup_recalculation) summary.setup_recalculation={status:row.setup_recalculation.status,as_of_date:row.setup_recalculation.as_of_date,...(row.setup_recalculation.status==='calculated'?{}:{reason:row.setup_recalculation.reason})};
-  summary.method_summary={version:RULE_SUMMARY_VERSION,...Object.fromEntries(['minervini','minervini2','oneil','ibd'].map(method=>[method,encodeAssessment(row.method_summary[method])]))};
+  summary.method_summary={...row.method_summary,...Object.fromEntries(['minervini','minervini2','oneil','ibd'].map(method=>[method,encodeAssessment(row.method_summary[method])]))};
   return summary;
 })};
 // Runtime orders are rebuilt from current inputs at each evaluation epoch.
@@ -195,7 +195,7 @@ await writeFile(resolve(root,entry.pages.scan.list_path),lightContent);
 manifest.research_generation = createHash('sha256').update(researchContent).digest('hex');
 const researchPath = `research-index-${manifest.research_generation.slice(0,16)}.json`;
 await writeFile(resolve(root, researchPath), researchContent);
-entry.assets.research = {path:researchPath};
+entry.assets.research = {path:researchPath,...currentEvaluation};
 
 // Remove only obsolete, generated hash-addressed files in these known folders.
 // No source data or historical candidate snapshots are included in this cleanup.

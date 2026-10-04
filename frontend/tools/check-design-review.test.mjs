@@ -19,7 +19,7 @@ function fixture() {
   write('frontend/package.json', '{"type":"module"}');
   write('frontend/tools/check-design-review.mjs', checker);
   write('frontend/src/current.js', 'export const version = 1;');
-  write('contracts/static_financial_current_v1.json', '{"version":1,"source_max_age_ms":604800000}');
+  write('frontend/contracts/static_financial_current_v1.json', '{"version":1,"source_max_age_ms":604800000}');
   git('add', '.'); git('commit', '-m', 'Synthetic captured source');
   const observed = git('rev-parse', 'HEAD').trim();
   // Synthetic metadata exercises source binding only. It is not an actual
@@ -38,7 +38,7 @@ describe('visual review source binding includes the compiled financial contract'
     const f = fixture(); f.write('docs/unrelated.md', 'Documentation only.'); f.commit();
     expect(f.run().status).toBe(0);
   });
-  it.each(['contracts/static_financial_current_v1.json', 'frontend/src/current.js'])(
+  it.each(['frontend/contracts/static_financial_current_v1.json', 'frontend/src/current.js'])(
     'rejects a review captured before %s changed', path => {
       const f = fixture(); f.write(path, path.endsWith('.json') ? '{"version":1,"source_max_age_ms":999999999}' : 'export const version = 2;'); f.commit();
       const result = f.run();

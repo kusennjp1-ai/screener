@@ -1,10 +1,10 @@
-import contract from '../../../contracts/static_financial_current_v1.json' with { type: 'json' };
+import contract from '../../contracts/static_financial_current_v1.json' with { type: 'json' };
 import { validClock, validEvidenceDay, evidenceTimestamp } from './evidenceTime.js';
 import { financialHistory } from './financialHistory.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 
 export const FINANCIAL_FIELDS = Object.freeze(contract.field_order);
-export const FINANCIAL_CURRENT_VERSION = 'static-financial-current-v1';
+export const FINANCIAL_CURRENT_VERSION = contract.schema;
 export const FINANCIAL_DEPENDENT_FIELDS = Object.freeze([
   'composite_score', 'composite_reason', 'minervini_score', 'canslim_score', 'ipo_score', 'custom_score',
   'minervini_rating','minervini_passes','canslim_rating','canslim_passes','ipo_rating','ipo_passes','custom_rating','custom_passes',
@@ -37,22 +37,49 @@ function envelopeReason(row, proof, now, date, market) {
   if (proof.v !== contract.version || !validClock(proof.t) || typeof proof.r !== 'string' || proof.r.length !== FINANCIAL_FIELDS.length ||
       [...proof.r].some(code => !Object.hasOwn(contract.reason_codes, code)) || !object(proof.p) ||
       Object.keys(proof).some(key => !contract.summary_keys.includes(key)) ||
-      Object.keys(proof.p).some(key => !/^(?:[0-9]|1[0-5])$/.test(key) || proof.r[Number(key)] !== '0') ||
-      [...proof.r].some((code, index) => (code === '0') !== Object.hasOwn(proof.p, String(index)))) return 'invalid_envelope';
+      Object.keys(proof.p).some(key => !/^(?:[0-9]|1[0-5])$/.test(key) || !contract.proof_reason_codes.includes(proof.r[Number(key)])) ||
+      [...proof.r].some((code, index) => contract.proof_reason_codes.includes(code) !== Object.hasOwn(proof.p, String(index)))) return 'invalid_envelope';
   if ((row.as_of_date != null && row.as_of_date !== date) || (row.technical_audit?.as_of_date != null && row.technical_audit.as_of_date !== date) || proof.s !== row.symbol || proof.m !== market || row.market !== market || proof.a !== date || !validEvidenceDay(proof.a)) return 'identity_mismatch';
   if (now < proof.t) return 'invalid_evaluation_context';
   return null;
 }
 
+function comparisonValid(value, id, comparison, calculation, sales, reason) {
+  if (!Object.hasOwn(contract.comparison_codes, comparison) || !Object.hasOwn(contract.calculation_codes, calculation)) return false;
+  const supported = sales ? ['G', 'D', 'U', 'X'] : ['g', 'd', 'u', 'n', 'z', 'l', 'w', 's', 't', 'b'];
+  if (!supported.includes(comparison)) return false;
+  const withheld = ['l', 'w', 's', 't', 'b', 'X'].includes(comparison);
+  if ((reason === 'f') !== withheld) return false;
+  if (id === '3' ? !['a', 'k'].includes(calculation) || !['g', 'd', 'u'].includes(comparison) : !['r', 'c'].includes(calculation)) return false;
+  if (['0', '1'].includes(id) && calculation !== 'r') return false;
+  if (['c', 'k'].includes(calculation) && ![-100, 500].includes(value)) return false;
+  if (['g', 'l', 'G'].includes(comparison) && value < 0) return false;
+  if (['d', 'w', 'D'].includes(comparison) && value > 0) return false;
+  if (comparison === 'd' && value < -100) return false;
+  if (['u', 's', 'U'].includes(comparison) && value !== 0) return false;
+  if (comparison === 'n' && value > -100) return false;
+  if (comparison === 'z' && value !== -100) return false;
+  if (comparison === 't' && value < 100) return false;
+  if (comparison === 'b' && value !== 100) return false;
+  if (comparison === 'l' && value > 100) return false;
+  return true;
+}
+
 function validateField(row, field, index, proof, now, date) {
   const entry = proof.p[String(index)];
-  if (proof.r[index] !== '0') return { reason: contract.reason_codes[proof.r[index]] };
-  if (!Array.isArray(entry) || entry.length !== 6) return { reason: 'invalid_envelope' };
-  const [value, id, metric, periods, observed, expiry] = entry;
+  if (!contract.proof_reason_codes.includes(proof.r[index])) return { reason: contract.reason_codes[proof.r[index]] };
+  if (!Array.isArray(entry) || entry.length !== contract.proof_tuple.length) return { reason: 'invalid_envelope' };
+  const [value, id, metric, periods, observed, expiry, comparison, calculation] = entry;
   const rule = typeof id === 'string' && /^[0-3]$/.test(id) ? contract.contracts[id] : null;
   if (!rule?.fields.includes(field) || !contract.metrics[field.startsWith('sales') ? 'sales' : 'eps'].includes(metric)) return { reason: 'unsupported_contract' };
-  if (!finite(value) || !finite(row[field])) return { reason: 'missing_or_invalid_value' };
-  if (row[field] !== value) return { reason: 'value_mismatch' };
+  // v2 reason f certifies a reference, never an ordinary-growth scalar. After
+  // projection/serialization the latter is explicitly null; the exact reference
+  // remains bound by the source tuple. An absent or conflicting scalar still
+  // fails. No public availability flag, state object or history is consulted.
+  const scalar = proof.r[index] === 'f' && row[field] === null ? value : row[field];
+  if (!finite(value) || !finite(scalar)) return { reason: 'missing_or_invalid_value' };
+  if (scalar !== value) return { reason: 'value_mismatch' };
+  if (!comparisonValid(value, id, comparison, calculation, field.startsWith('sales'), proof.r[index])) return { reason: 'invalid_source_inputs' };
   for (const [alias, canonical] of Object.entries(contract.aliases)) if (canonical === field && Object.hasOwn(row, alias) && row[alias] != null && row[alias] !== value) return { reason: 'alias_conflict' };
   if (!validClock(observed) || !validClock(expiry) || expiry < observed || expiry > observed + contract.source_max_age_ms || expiry < proof.t) return { reason: 'invalid_envelope' };
   if (observed > now || observed > proof.t) return { reason: 'future_source_timestamp' };
@@ -67,7 +94,11 @@ function validateField(row, field, index, proof, now, date) {
   if (expiry > periodExpiry) return { reason: 'invalid_envelope' };
   if (now > periodExpiry) return { reason: 'stale_reporting_period' };
   if (now > expiry) return { reason: 'stale_source' };
-  return { value, availability: 'current', reason: null, source: rule.source, producer: rule.producer, metric, basis: rule.basis,
+  const withheld = proof.r[index] === 'f';
+  return { value: withheld ? null : value, availability: withheld ? 'unknown' : 'current', reason: withheld ? contract.reason_codes.f : null,
+    reference_value: value, reference_availability: 'current', source_validated: true, ordinary_growth_eligible: !withheld,
+    comparison: contract.comparison_codes[comparison], calculation: contract.calculation_codes[calculation],
+    clipped: ['c', 'k'].includes(calculation), source: rule.source, producer: rule.producer, metric, basis: rule.basis,
     unit: rule.unit, observed_at: iso(observed), valid_until: iso(expiry), period_end: periods[0], comparable_period_end: periods.at(-1), periods_used: [...periods], expiry };
 }
 

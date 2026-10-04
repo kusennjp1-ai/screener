@@ -37,7 +37,9 @@ describe('research rules and financial data integrity', () => {
     const row=withAuditFixture({symbol:'TEST',current_price:100,se_volume_vs_50d:3});
     row.technical_audit.values.volumeRatio=1.2;
     row.method_summary={version:'research-summary-v2',oneil:[8,0,0,8,0]};
-    expect(assessmentSummary(row,'oneil')).toEqual(assess(row,'oneil'));
+    const {rules,...expected}=assess(row,'oneil');
+    expect(rules).toHaveLength(expected.total);
+    expect(assessmentSummary(row,'oneil')).toEqual(expected);
     expect(assessmentSummary(row,'oneil').qualified).toBe(false);
   });
   it('rejects coerced values and applies the top-20 industry threshold', () => {

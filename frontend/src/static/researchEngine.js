@@ -100,7 +100,9 @@ export const RULE_SUMMARY_VERSION = 'research-summary-v4-financial-current';
 export function assessmentSummary(row, method, now = Date.now()) {
   // Packed summaries and orders from legacy bundles are observations, not
   // authority for current decisions. Preparation recomputes once per epoch.
-  return assess(row, method, now);
+  const { rules, ...summary } = assess(row, method, now);
+  void rules;
+  return summary;
 }
 
 export function entryChecks(row, method = 'minervini') {

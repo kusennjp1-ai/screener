@@ -41,6 +41,7 @@ export const financialUnknownReason = reason => ({
   future_source_timestamp: '提供元の取得時刻が判定時刻より後です。',
   alias_conflict: '同じ指標の配信値が一致していません。',
   invalid_source_inputs: '計算元の値と提供元の対応を確認できません。',
+  nonpositive_comparison_base: '比較期のEPS・売上が正ではないため、通常の成長率条件は未確認です。赤字縮小や黒字転換は別の状態として表示します。',
   historical_observation: '保持した過去の観測値です。現在の条件判定には使用しません。',
   missing_evidence: '現在の判定に使える財務根拠が未配信です。',
   identity_mismatch: '銘柄・分析日・方式・配信版の対応を確認できません。',
@@ -113,6 +114,12 @@ const basisLabel = basis => ({
   'quarterly_eps_yoy/v1': '四半期EPSの前年同期比（報告値）',
   'annual_eps_cagr/v1': '年次EPSの年平均成長率（報告値）',
 }[basis] || (text(basis) ? basis : '計算基準 未確認'));
+const comparisonLabel = comparison => ({
+  profitable_growth: '黒字増益', profitable_decline: '黒字減益', profitable_unchanged: '黒字横ばい',
+  new_loss: '赤字転落', profit_to_zero: '利益ゼロ', loss_narrowing: '赤字縮小', loss_widening: '赤字拡大',
+  loss_unchanged: '赤字横ばい', turnaround: '黒字転換', break_even: '損益ゼロ', undefined_base: '比較基準ゼロ',
+  growth: '増収', decline: '減収', unchanged: '売上横ばい', nonpositive_base: '比較基準が非正',
+}[comparison] || null);
 
 const metadata = data => ({
   period: validEvidenceDay(data?.period_end) ? `${data.period_end}${validEvidenceDay(data.comparable_period_end) ? ` / 比較 ${data.comparable_period_end}` : ''}` : '決算期 未確認',
@@ -121,6 +128,10 @@ const metadata = data => ({
   metric: sourceMetricLabel(data?.metric),
   basis: basisLabel(data?.basis),
   unit: text(data?.unit) ? data.unit : '単位 未確認',
+  comparison: data?.comparison || null,
+  comparisonLabel: comparisonLabel(data?.comparison),
+  calculation: data?.calculation || null,
+  calculationNote: data?.clipped ? '原計算を−100%～500%に制限した参考値です。' : data?.source_validated ? '元の計算結果を小数第2位に丸めています。' : null,
 });
 
 function annualRow(history, context, required, condition) {
@@ -165,7 +176,9 @@ export function financialEvidencePresentation({ evidence, history, symbol, date,
       if (problem && required) result = { ...result, state: 'unknown', reason: problem };
     } else {
       const reason = problem || scalarReason(metric, data, date, now);
-      result = { ...metadata(data), actual: reason ? '未確認' : `${number(data.value)}${metric.suffix}`,
+      const comparisonOnly = !problem && reason === 'nonpositive_comparison_base' && data?.source_validated;
+      result = { ...metadata(data), actual: comparisonOnly ? comparisonLabel(data.comparison) || '未確認' : reason ? '未確認' : `${number(data.value)}${metric.suffix}${data.clipped ? '（上下限処理あり）' : ''}`,
+        referenceActual: comparisonOnly && finite(data.reference_value) ? `${number(data.reference_value)}%（比較期の絶対値を分母とした参考値）` : null,
         ...(reason ? { state: 'unknown', reason } : required ? conditionState(condition, data.value) : { state: 'reference', reason: null }) };
     }
     return { id: metric.id, label: metric.label, required,
@@ -202,7 +215,7 @@ export function buildFinancialEvidencePresentation(row, { method, date, generati
     ...current.financial_current_state.fields[id],
     condition: ruleMatchers[id] ? assessment.rules.find(ruleMatchers[id]) : undefined,
   }]));
-  const deadlines = Object.values(metrics).filter(metric => metric.availability === 'current').map(metric => timestamp(metric.valid_until)).filter(finite);
+  const deadlines = Object.values(metrics).filter(metric => metric.availability === 'current' || metric.source_validated).map(metric => timestamp(metric.valid_until)).filter(finite);
   const history = financialHistory(current.financial_history, current.symbol, date, now);
   const historyObserved = timestamp(current.financial_history?.retrieved_at);
   if (history.valid && finite(historyObserved)) deadlines.push(historyObserved + 72 * 3600000);

@@ -63,3 +63,14 @@ it.each([['Basic EPS','基本EPS（報告値）'],['Diluted EPS','希薄化EPS�
  expect(input.evidence.metrics.eps_growth_yy.metric).toBe(metric);
  expect(financialEvidencePresentation(input).rows[0]).toMatchObject({metric:label,actual:'30%',state:'pass',basis:'比較可能な四半期の前年同期比（報告値）'});
 });
+
+it.each([[50,'l','loss_narrowing','赤字縮小'],[150,'t','turnaround','黒字転換'],[0,'s','loss_unchanged','赤字横ばい']])('presents %s as a %s reference and keeps ordinary growth unknown', (value,code,comparison,label) => {
+  const row=withSyntheticFinancialProof({eps_growth_yy:value});
+  row.financial_current.r=row.financial_current.r.slice(0,1)+'f'+row.financial_current.r.slice(2);
+  row.financial_current.p[1][6]=code;
+  const input=present(row), detail=financialEvidencePresentation(input).rows[0], summary=financialEvidenceSummary(input)[0];
+  expect(detail).toMatchObject({state:'unknown',actual:label,comparison,comparisonLabel:label,source:'yfinance',metric:'希薄化EPS（報告値）',referenceActual:`${value}%（比較期の絶対値を分母とした参考値）`});
+  expect(summary.actual).toBe(detail.actual);
+  expect(assess(row,'oneil',now).rules[0].state).toBe('unknown');
+  expect(assess(row,'minervini',now).rules).toEqual(assess({...row,financial_current:undefined},'minervini',now).rules);
+});

@@ -1,4 +1,4 @@
-# Static current proof, version 1
+# Static current proof, version 2
 
 `static_financial_evidence` adds metadata to public static exports. It does not
 project or null their existing scalars, change scanner classifications, query
@@ -9,22 +9,56 @@ separately reviewed compatible static frontend.
 
 ## Boundary and representation
 
-The canonical registry is `contracts/static_financial_current_v1.json`; Python
-constants are checked against it in tests. `financial_current` has:
+The canonical registry is `frontend/contracts/static_financial_current_v1.json`.
+It stays within the frontend Docker build context for the browser import and
+workbench source hash. Python production uses constants, checked against this
+same registry in tests; it does not load the frontend file at runtime. Shared
+producer fixtures remain test-only in
+`contracts/static_financial_current_fixtures_v1.json`. `financial_current` has:
 
 | Key | Meaning |
 | --- | --- |
-| `v` | Supported summary version, currently 1 |
+| `v` | Supported summary version, currently 2 |
 | `t` | Static export evaluation instant, integer UTC epoch milliseconds |
 | `s`, `m`, `a` | Exact symbol, canonical market, artifact as-of date |
 | `r` | One reason character for each of the existing 16 canonical fields |
-| `p` | Available proofs keyed by the canonical field's decimal index |
+| `p` | Source-valid proofs for reason `0` or `f`, keyed by field's decimal index |
 
 Each proof is `[value, contract_id, metric, periods_newest_first, observed_ms,
-expires_ms]`. The fixed contract ID binds source, producer, basis, unit and
+expires_ms, comparison_code, calculation_code]`. The fixed contract ID binds source, producer, basis, unit and
 cadence. The value is the original finite number, including zero and negative
 values, without a transport-specific rounding step. The period chain contains
 every selected quarter/year needed to exclude gaps, not only endpoints.
+
+The registry's existing filename remains the canonical import path, but the
+schema and numeric version are v2. Six-cell v1 proofs remain decodable by the
+transport and cannot authorize current values in a v2 browser. V1 browsers
+likewise reject v2 summaries. The table wire schema remains unchanged.
+
+Comparison classification is derived only from the exact captured recent and
+baseline cells after all source, metric, currency, period and arithmetic checks.
+EPS distinguishes profitable growth, decline, unchanged, new loss, profit to
+zero, loss narrowing, loss widening, unchanged loss, turnaround and break-even.
+Revenue uses separate growth/decline/unchanged labels. Original finite zero and
+negative growth percentages remain valid when their comparison base is positive.
+No signs or EPS amounts are inferred from the growth percentage alone.
+
+Reason `f` (`nonpositive_comparison_base`) retains a fresh, source-valid reference
+proof for loss comparisons while the ordinary-growth scalar and its condition
+remain unknown. In v2, tuple value is explicitly the certified reference: the
+row scalar must match it before projection or be explicit null after projection.
+A missing or conflicting scalar still fails. This binding survives export,
+JSON/table roundtrip and detail merges without restoring the ordinary-growth
+number or trusting a copied availability flag. The reference retains the same
+source/period expiry; it is not automatically a stale historical observation.
+
+Zero-base percentage division has no existing producer observation, so the
+current field remains unknown without an invented source pair. Annual
+nonpositive-base heuristics remain unsupported. Calculation codes distinguish
+rounded percent change or positive CAGR from the existing −100%/500% clipping;
+the original source arithmetic and thresholds are unchanged. Raw EPS amounts,
+their Basic/Diluted basis, and actual statement currency remain in full captured
+detail; trading currency never supplies a missing statement currency.
 
 Python calls the existing strict envelope validator before semantic checks.
 This verifies observation digests, retained source-subset digests and exact
