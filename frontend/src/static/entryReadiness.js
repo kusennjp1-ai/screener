@@ -66,7 +66,7 @@ export function entryReadiness(row, date, market, now = Date.now(), method = 'mi
   const checkedAt = timestamp(earnings?.checked_at);
   const recentEarnings = nowKnown && Number.isFinite(checkedAt) && now >= checkedAt && now - checkedAt <= 72*3600000;
   const shape = dated ? evidence.shape : null;
-  const minervini = assess(row, 'minervini'), ibd = assess(row, 'ibd');
+  const minervini = assess(row, 'minervini', now), ibd = assess(row, 'ibd', now);
   const excluded = Boolean(row.corporate_action?.cash_acquisition || row.price_activity?.lowRange);
   const selection = excluded || minervini.failed > 0 || ibd.failed > 0 ? false : minervini.unknown + ibd.unknown > 0 ? null : true;
   const audit = row.technical_audit?.as_of_date === date ? auditValues(row) : {};

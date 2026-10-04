@@ -327,7 +327,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontWeight: 600, color: 'primary.main', fontFamily: 'monospace', width: 50, minWidth: 50 }}>
-        {row.composite_score?.toFixed(1) || '-'}
+        {row.composite_score?.toFixed(1) || (row.financial_current_state ? '未確認' : '-')}
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', width: 45, minWidth: 45 }}>
@@ -418,7 +418,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
       </TableCell>
 
       <TableCell align="center" sx={{ fontFamily: 'monospace', color: getEpsRatingColor(row.eps_rating), width: 55, minWidth: 55 }}>
-        {row.eps_rating != null ? row.eps_rating : '-'}
+        {row.eps_rating != null ? row.eps_rating : (row.financial_current_state ? '未確認' : '-')}
       </TableCell>
 
       <TableCell align="center" sx={{ width: 40, minWidth: 40 }}>
@@ -517,7 +517,7 @@ const VirtualTableRow = memo(function VirtualTableRow({
 
       <TableCell align="center" sx={{ width: 80, minWidth: 80 }}>
         <Chip
-          label={ratingLabel(row.rating)}
+          label={row.financial_current_state && row.rating == null ? '未確認' : ratingLabel(row.rating)}
           color={getRatingColor(row.rating)}
           size="small" variant="outlined"
         />

@@ -8,7 +8,7 @@ const date = '2026-09-29';
 const sample = extra => withAuditFixture({ symbol: 'TEST', market: 'US', currency: 'USD', current_price: 102, adv_usd: 25000000,
   rs_rating: 90, eps_rating: 80, composite_rating: 90, ibd_group_rank: 20, eps_growth_yy: 25, sales_growth_yy: 25,
   annual_eps_growth_3y: [25, 25, 25], se_pivot_price: 100, ...extra }, date);
-const ordersFor = rows => Object.fromEntries(RESEARCH_METHODS.map(method => [method, rankCandidates(rows, method).map(({row}) => rows.indexOf(row))]));
+const ordersFor = rows => Object.fromEntries(RESEARCH_METHODS.map(method => [method, rankCandidates(rows, method).map(({row}) => rows.findIndex(source=>source.symbol===row.symbol))]));
 const encode = rows => encodeResearchIndex({ as_of_date: date, rows }, ordersFor(rows));
 
 describe('lossless compact research transport', () => {
@@ -32,7 +32,7 @@ describe('lossless compact research transport', () => {
     const decoded = prepareResearchBundle([JSON.parse(JSON.stringify(encode(rows)))], date);
     for (const method of RESEARCH_METHODS) {
       expect(decoded.rankings[method].map(({row}) => row.symbol)).toEqual(rankCandidates(rows, method).map(({row}) => row.symbol));
-      expect(researchCsv(decoded.rankings[method], method, date)).toBe(researchCsv(rankCandidates(rows, method), method, date));
+      expect(researchCsv(decoded.rankings[method], method, date,0)).toBe(researchCsv(rankCandidates(rows, method), method, date,0));
       rows.forEach((row, i) => expect(assess(decoded.rows[i], method)).toEqual(assess(row, method)));
     }
     expect(decoded.rows[0].chart_path).toBe(rows[0].chart_path);
@@ -53,7 +53,7 @@ describe('lossless compact research transport', () => {
     expect(() => decodeResearchIndex(wrongColumn)).toThrow();
     const wrongPath = structuredClone(packed); wrongPath.fields[0] = ['__proto__', 'bad'];
     expect(() => decodeResearchIndex(wrongPath)).toThrow();
-    expect(() => prepareResearchBundle([{ ...packed, orders: { ...packed.orders, minervini: [0, 0] } }], date)).toThrow('Invalid published ranking');
+    expect(prepareResearchBundle([{ ...packed, orders: { ...packed.orders, minervini: [0, 0] } }], date).rankings.minervini).toHaveLength(1);
     expect(() => prepareResearchBundle([packed], '2026-09-28')).toThrow('Snapshot date mismatch');
   });
   it('recalculates rankings and portfolio input after an explicit verification invalidates a row', () => {
@@ -92,7 +92,7 @@ describe('published rule-summary invalidation',()=>{
   expect(bundle.rankings.minervini[0].row.symbol).toBe('NOW_FIRST');
   expect(bundle.rankings.minervini.find(x=>x.row.symbol==='OLD_FIRST').assessment.qualified).toBe(false);
  });
- it('retains validated current-version published order and shared row identity',()=>{
+ it('recomputes current-version summaries and preserves shared prepared row identity',()=>{
   const rows=[sample({symbol:'A'}),sample({symbol:'B'})].map(summarize),orders=ordersFor(rows);
   const bundle=prepareResearchBundle([{as_of_date:date,rows,orders}],date);
   for(const method of RESEARCH_METHODS)expect(bundle.rankings[method].map(item=>bundle.rows.indexOf(item.row))).toEqual(orders[method]);
@@ -106,5 +106,5 @@ it.each([[],[9,0,1,9,0],{}, {passed:9,failed:0,unknown:0,total:9,qualified:true,
  rows[0].method_summary.minervini=malformed;
  const bundle=prepareResearchBundle([{as_of_date:date,rows,orders}],date);
  expect(bundle.rankings.minervini.map(x=>x.row.symbol)).toEqual(['HIGH','LOW']);
- expect(bundle.rankings.minervini[1].assessment).toEqual(assess(rows[0],'minervini'));
+ const {rules,...expected}=assess(rows[0],'minervini');expect(rules.length).toBe(expected.total);expect(bundle.rankings.minervini[1].assessment).toEqual(expected);
 });

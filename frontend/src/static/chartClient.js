@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchStaticJson } from './dataClient';
+import { projectFinancialPayload } from './financialCurrent';
 
 export const staticChartKeys = {
   index: (path) => ['staticChartsIndex', path],
@@ -14,4 +15,7 @@ export const useStaticChartIndex = (path, enabled = true) => useQuery({
   gcTime: Infinity,
 });
 
-export const fetchStaticChartPayload = (path) => fetchStaticJson(path);
+export const fetchStaticChartPayload = async (path, { now, asOfDate, market } = {}) => {
+  const payload = await fetchStaticJson(path, {now,asOfDate,market});
+  return projectFinancialPayload(payload, { now: now === undefined ? Date.now() : now, asOfDate, market });
+};

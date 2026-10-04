@@ -125,3 +125,16 @@ describe('StockMetricsSidebar fundamental bonus (C44)', () => {
     expect(screen.queryByTestId('fundamental-bonus')).not.toBeInTheDocument();
   });
 });
+
+
+it('keeps static raw and fallback financial values unknown without affecting company or price metadata', () => {
+  renderWithProviders(<StockMetricsSidebar currentFinancialOnly date="2026-10-02" now={Date.parse('2026-10-03T12:00:00Z')}
+    stockData={{ symbol: 'TEST', company_name: 'Synthetic company', eps_growth_yy: null, composite_score: 98, minervini_score: 95, eps_rating: 94, rating: 'Strong Buy', fundamental_bonus: 9, fundamental_bonus_detail: {components:{code33:{met:true,points:4}}} }}
+    fundamentals={{ symbol: 'TEST', eps_growth_yy: 888, sales_growth_qq: 777, roe: 66, profit_margin: 55 }}/>);
+  expect(screen.getByText('Synthetic company')).toBeInTheDocument();
+  expect(screen.getByText(/財務に依存する推計・補助スコアは未確認/)).toBeInTheDocument();
+  expect(screen.getAllByText('未確認').length).toBeGreaterThan(5);
+  expect(screen.queryByText('Strong Buy')).not.toBeInTheDocument();
+  expect(screen.queryByText('888.0%')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('fundamental-bonus')).not.toBeInTheDocument();
+});

@@ -6,6 +6,8 @@ export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
 export function researchListRow(row) {
   const out = { ...row };
+  // Evidence envelopes and raw history belong to immutable on-demand detail.
+  delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
   if (row.institutional_evidence) {
     // Preserve the validator's dates/unit, not just a precomputed pass flag.
     out.institutional_evidence = pick(row.institutional_evidence, ['symbol', 'status', 'unit', 'publication_cutoff']);
@@ -43,6 +45,17 @@ const leaves = (value, path = [], result = []) => {
 // inputs. High-cardinality columns stay direct to avoid a second ID array.
 export function encodeResearchIndex(index, orders) {
   const rows = index.rows.map(researchListRow);
+  // Expand only compact proof tuples into transport columns. Repeated source,
+  // cadence, periods and clocks then share dictionaries; exact values can copy
+  // the canonical scalar column. Decode restores the original proof contract.
+  let financialProofEncoding;
+  for (const row of rows) if (row.financial_current?.p && typeof row.financial_current.p === 'object' && !Array.isArray(row.financial_current.p)) {
+    const proof = row.financial_current;
+    if (Object.values(proof.p).every(tuple=>Array.isArray(tuple) && tuple.length===6)) {
+      row.financial_current={...proof,p:Object.fromEntries(Object.entries(proof.p).map(([field,tuple])=>[field,Object.fromEntries(tuple.map((value,index)=>[String(index),value]))]))};
+      financialProofEncoding='tuple-columns-v1';
+    } else row.financial_current={...proof,invalid_transport_proof:true};
+  }
   const paths = {};
   for (const [field, directory] of [['chart_path', 'verified-charts'], ['research_detail_path', 'research-details']]) {
     if (!rows.every(row => row[field] == null || (typeof row[field] === 'string' && /-[a-f0-9]{16}\.json$/.test(row[field]) && row[field] === `${directory}/${encodeURIComponent(row.symbol)}-${row[field].slice(-21, -5)}.json`))) continue;
@@ -84,7 +97,7 @@ export function encodeResearchIndex(index, orders) {
       if (length < size) { columns[column] = candidate; size = length; }
     }
   }
-  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders };
+  return { schema: RESEARCH_TRANSPORT_VERSION, as_of_date: index.as_of_date, count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders, ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
 }
 
 export function decodeResearchIndex(value) {
@@ -126,6 +139,14 @@ export function decodeResearchIndex(value) {
       if (!/^[a-f0-9]{16}$/.test(row[field]) || typeof row.symbol !== 'string') throw Error('Invalid research asset hash');
       row[field] = `${directory}/${encodeURIComponent(row.symbol)}-${row[field]}.json`;
     });
+  }
+  if (value.financial_proof_encoding !== undefined && value.financial_proof_encoding !== 'tuple-columns-v1') throw Error('Unsupported financial proof encoding');
+  if (value.financial_proof_encoding) for (const row of rows) if (row.financial_current?.p) {
+    for (const [field,tuple] of Object.entries(row.financial_current.p)) {
+      if (Array.isArray(tuple)) continue;
+      if (!tuple || Object.keys(tuple).length!==6 || ['0','1','2','3','4','5'].some(key=>!Object.hasOwn(tuple,key))) {row.financial_current.invalid_transport_proof=true;continue;}
+      row.financial_current.p[field]=['0','1','2','3','4','5'].map(key=>tuple[key]);
+    }
   }
   return { as_of_date: value.as_of_date, rows, orders: value.orders };
 }

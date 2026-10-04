@@ -66,7 +66,7 @@ it('reports absent data instead of converting it into a zero or a chart',async()
   expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
 });
 
-it.each([['minervini2','6/7',103,false],['minervini','7/7',105,true]])('keeps %s application limits and first-book context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
+it.each([['minervini2','5/7',103,false],['minervini','6/7',105,true]])('keeps %s application limits and first-book context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
  const {withAuditFixture}=await import('../testAuditFixture');
  const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
   chart_path:'LIMIT.json',entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);

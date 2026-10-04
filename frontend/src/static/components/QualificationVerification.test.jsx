@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
+import { assess } from '../researchEngine';
+import { withAuditFixture } from '../testAuditFixture';
+import { withSyntheticFinancialProof, financialFixtureDate as date, financialFixtureNow as now } from '../../test/fixtures/financialCurrent';
 import QualificationVerification from './QualificationVerification';
 const fetchPayload = vi.hoisted(() => vi.fn());
 vi.mock('../chartClient', () => ({ fetchStaticChartPayload: fetchPayload }));
@@ -35,4 +38,22 @@ it('returns failed evidence to the parent so stale qualifications can be removed
   fireEvent.click(screen.getByRole('button', { name: '日足を取得して再検証' }));
   await screen.findByRole('alert');
   expect(onVerified).toHaveBeenCalledWith('A', expect.objectContaining({ audit: expect.objectContaining({ valid: false }) }), '2026-09-23', 'snapshot-1');
+});
+
+
+it('re-evaluates a cached verification against the current financial clock', () => {
+  const row=withSyntheticFinancialProof(withAuditFixture({symbol:'TEST',current_price:100,rs_rating:95},date));
+  const client=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}});
+  client.setQueryData(['independentVerification','TEST','chart.json',date,'g1','oneil'],{audit:row.technical_audit,assessment:{qualified:true,passed:8,total:8,rules:[]}});
+  const element=time=><QueryClientProvider client={client}><QualificationVerification includeFinancial={false} row={row} entry={{path:'chart.json'}} date={date} generation="g1" method="oneil" now={time}/></QueryClientProvider>;
+  const view=render(element(now));
+  const first=assess(row,'oneil',now);
+  expect(screen.getByRole('alert')).toHaveTextContent(`（${first.passed}/${first.total}）`);
+  const later=now+8*86400000;
+  view.rerender(element(later));
+  const expired=assess(row,'oneil',later);
+  expect(expired.passed).toBeLessThan(first.passed);
+  expect(screen.getByRole('alert')).toHaveTextContent(`（${expired.passed}/${expired.total}）`);
+  expect(screen.getByRole('alert')).toHaveTextContent('四半期 EPS');
+  expect(fetchPayload).not.toHaveBeenCalled();
 });

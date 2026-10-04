@@ -12,7 +12,8 @@ describe('compact assessment transport',()=>{
         expect(decodeAssessment(encodeAssessment(full))).toEqual(full);
         expect(decodeAssessment(full)).toBe(full);
         const packed={...row,method_summary:{version:RULE_SUMMARY_VERSION,[method]:encodeAssessment(full)}};
-        expect(assessmentSummary(packed,method)).toEqual(full);
+        const {rules:recomputedRules,...recomputed}=assessmentSummary(packed,method);
+        expect(recomputedRules).toHaveLength(full.total);expect(recomputed).toEqual(full);
         expect(full.qualified).toBe(assess(row,method).qualified);
       }
     }

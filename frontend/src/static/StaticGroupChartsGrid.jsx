@@ -57,7 +57,7 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
   const lastClose = bars && bars.length > 0 ? bars[bars.length - 1].close : null;
   const groupRank = stockData?.ibd_group_rank ?? null;
   const adrValue = stockData?.adr_percent ?? fundamentals?.adr_percent ?? null;
-  const epsRating = stockData?.eps_rating ?? fundamentals?.eps_rating ?? null;
+  // Derived EPS ratings remain unknown in compact financial contract v1.
   const companyName = stockData?.company_name || fundamentals?.company_name || null;
 
   const adrBg = adrValue == null
@@ -65,14 +65,6 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
     : Number(adrValue) >= 4
       ? 'success.main'
       : Number(adrValue) >= 2
-        ? 'warning.main'
-        : 'error.main';
-
-  const epsBg = epsRating == null
-    ? null
-    : epsRating >= 80
-      ? 'success.main'
-      : epsRating >= 50
         ? 'warning.main'
         : 'error.main';
 
@@ -141,9 +133,7 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
           {adrValue != null ? (
             <StatBadge value={`${Number(adrValue).toFixed(1)}%`} label="ADR" bgcolor={adrBg} />
           ) : null}
-          {epsRating != null ? (
-            <StatBadge value={epsRating} label="EPS Rtg" bgcolor={epsBg} />
-          ) : null}
+          <Typography component="span" sx={{fontSize:12,color:'text.secondary'}}>EPS推計 未確認</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {lastClose != null ? (

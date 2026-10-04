@@ -15,8 +15,10 @@ describe('research worker lifecycle', () => {
     const pending = loadResearchBundle('research-index-0123456789abcdef.json', '2026-09-29', fetchJson);
     expect(instance.options.type).toBe('module');
     expect(instance.postMessage.mock.calls[0][0]).toMatchObject({ operation: 'research', date: '2026-09-29' });
-    instance.onmessage({ data: { result: { rows: [], date: '2026-09-29' } } });
-    expect(await pending).toEqual({ rows: [], date: '2026-09-29' });
+    const evaluation=instance.postMessage.mock.calls[0][0].evaluation;
+    const result={rows:[],date:'2026-09-29',evaluated_at:evaluation.now,generation:evaluation.generation,evaluation_epoch:evaluation.evaluationEpoch};
+    instance.onmessage({data:{result}});
+    expect(await pending).toEqual(result);
     expect(fetchJson).not.toHaveBeenCalled();
     expect(instance.terminate).toHaveBeenCalledOnce();
   });

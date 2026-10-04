@@ -12,8 +12,7 @@ const makeRow = (composite) => ({
 });
 
 describe('usePresetScreens', () => {
-  it('caps the match count to a preset limit', () => {
-    // 8 rows clear the IBD-50 gates; the preset caps the reported count to 3.
+  it('does not count raw composite ratings as current preset matches', () => {
     const rows = [98, 97, 96, 96, 95, 95, 95, 95].map(makeRow);
     const screens = [
       {
@@ -32,10 +31,10 @@ describe('usePresetScreens', () => {
       usePresetScreens({ screens, allRows: rows, hydrationComplete: true })
     );
 
-    expect(result.current.matchCounts.ibd50).toBe(3);
+    expect(result.current.matchCounts.ibd50).toBe(0);
   });
 
-  it('reports the full match count when no limit is set', () => {
+  it('does not count raw composite ratings when no preset limit is set', () => {
     const rows = [98, 97, 96].map(makeRow);
     const screens = [
       {
@@ -48,7 +47,17 @@ describe('usePresetScreens', () => {
       usePresetScreens({ screens, allRows: rows, hydrationComplete: true })
     );
 
-    expect(result.current.matchCounts.ibd_composite).toBe(3);
+    expect(result.current.matchCounts.ibd_composite).toBe(0);
+  });
+
+  it('preserves capped and uncapped counts for technical-only presets', () => {
+    const rows = [98, 97, 96, 95].map(makeRow);
+    const screens = [
+      { id: 'capped', limit: 3, filters: { rsRating: { min: 85 }, ibdGroupRank: { max: 60 } } },
+      { id: 'uncapped', filters: { rsRating: { min: 85 }, week52HighDistance: { min: -15 } } },
+    ];
+    const { result } = renderHook(() => usePresetScreens({ screens, allRows: rows, hydrationComplete: true }));
+    expect(result.current.matchCounts).toEqual({ capped: 3, uncapped: 4 });
   });
 
   it('preserves rating filter keys when building preset filters', () => {

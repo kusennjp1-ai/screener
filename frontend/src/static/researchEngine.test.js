@@ -1,3 +1,4 @@
+import { withFinancialProof, FINANCIAL_TEST_NOW } from './testFinancialFixture';
 import { describe, expect, it } from 'vitest';
 import { withAuditFixture } from './testAuditFixture';
 import { assess, assessmentSummary, compareReference, entryPlan, quoteStatus, rankCandidates, researchCsv, snapshotFreshness } from './researchEngine';
@@ -5,8 +6,8 @@ import { assess, assessmentSummary, compareReference, entryPlan, quoteStatus, ra
 describe('research rules and financial data integrity', () => {
   it('requires three annual growth rates rather than substituting CAGR', () => {
     expect(assess({ eps_cagr_3y: 100 }, 'oneil').rules[2].state).toBe('unknown');
-    expect(assess({ annual_eps_growth_3y: [50, -10, 100] }, 'oneil').rules[2].state).toBe('fail');
-    expect(assess({ annual_eps_growth_3y: [25, 30, 40] }, 'oneil').rules[2].state).toBe('pass');
+    expect(assess({ annual_eps_growth_3y: [50, -10, 100] }, 'oneil').rules[2].state).toBe('unknown');
+    expect(assess({ annual_eps_growth_3y: [25, 30, 40] }, 'oneil').rules[2].state).toBe('unknown');
     expect(assess({ annual_eps_growth_3y: [25, 30] }, 'oneil').rules[2].state).toBe('unknown');
   });
   it('uses the audited preceding-session volume and change for the demand proxy', () => {
@@ -73,7 +74,7 @@ describe('research rules and financial data integrity', () => {
     expect(rankCandidates(rows, 'ibd', { liquidOnly: true }).map(r => r.row.symbol)).toEqual(['GOOD']);
   });
   it('does not use QoQ as the CAN SLIM C growth criterion', () => {
-    const result = assess({ eps_growth_qq: 200, eps_growth_yy: -10 }, 'oneil');
+    const result = assess(withFinancialProof({ eps_growth_qq: 200, eps_growth_yy: -10 }), 'oneil', FINANCIAL_TEST_NOW);
     expect(result.rules[0].state).toBe('fail');
     expect(assess({ eps_growth_qq: 200 }, 'oneil').rules[0].state).toBe('unknown');
   });
@@ -82,7 +83,7 @@ describe('research rules and financial data integrity', () => {
     expect(assess({}, 'ibd').unknown).toBe(10);
   });
   it('keeps a known zero distinct from absent data', () => {
-    expect(assess({ eps_growth_yy: 0 }, 'oneil').rules[0].state).toBe('fail');
+    expect(assess(withFinancialProof({ eps_growth_yy: 0 }), 'oneil', FINANCIAL_TEST_NOW).rules[0].state).toBe('fail');
     expect(assess({ rs_rating: NaN }, 'ibd').rules[1].state).toBe('unknown');
   });
   it('handles pivot boundary, extension, waiting and invalid prices', () => {
