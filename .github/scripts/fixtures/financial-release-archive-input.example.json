@@ -1,0 +1,12 @@
+{
+  "directory": "/tmp/financial-release-archive-run",
+  "diagnostic_zip": "inputs/diagnostic.zip",
+  "diagnostic_sha256": "f38b5ee7160f3bb81c686e2b87024f9f6cf9d2d285a18edfb51d7a16f698f239",
+  "source_zip": "inputs/source.zip",
+  "source_sha256": "c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb",
+  "certificate_zip": "inputs/certificate.zip",
+  "certificate_sha256": "fbe0e5e2a8a683596acaa6a133c8e642215fde0e4f332449cc635feec3a11958",
+  "predecessor_zip": "inputs/predecessor.zip",
+  "predecessor_sha256": "7bb431dc9c730c5dd1b290c68d5b6e738d8ffc808578162ba2fbd7f28aaa246d",
+  "predecessor_root": "inputs/predecessor"
+}

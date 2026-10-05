@@ -481,8 +481,7 @@ function exportMetadata() {
   writeFileSync(join(directory, 'source.json'), JSON.stringify({ price_observations: observations, price_observations_sha256: priceObservationDigest(observations), run_id: runId, run_attempt: attempt, source_sha: process.env.GITHUB_SHA,
     artifact_name: `static-site-data-${runId}-${attempt}`, manifest_json: bytes.toString('utf8'), manifest_sha256: sha256(bytes) }));
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const command = process.argv[2];
+async function runCommand(command) {
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); materialize(readState().source, resolve('frontend/public')); }
   else if (command === 'restore') { const state = readState(); if(state.activation)restoreActivation(state);else{materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
@@ -492,4 +491,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   else if (command === 'recheck') await recheck();
   else if (command === 'export-metadata') exportMetadata();
   else throw Error('Expected plan, design, restore, compose, check-design-data, recheck or export-metadata');
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // Finish evaluating this module before activation lazily imports preview,
+  // which imports verifyArchive from this entrypoint.
+  // A pending promise cannot keep Node alive; unfinished commands fail closed.
+  let completed = false;
+  process.once('beforeExit', () => {
+    if (!completed) { console.error('Release source command did not complete'); process.exitCode = 1; }
+  });
+  runCommand(process.argv[2]).then(
+    () => { completed = true; },
+    error => { completed = true; console.error(error.stack || error); process.exitCode = 1; },
+  );
 }
