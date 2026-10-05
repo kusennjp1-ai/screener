@@ -1,0 +1,1589 @@
+{
+  "purpose": "Retained negative local diagnostics; not a browser result or release acceptance",
+  "input_basis": "Earlier corrected retained replay, distinct from the later pinned CI diagnostic wire",
+  "input_sha256": "2b55dc301d67300199f7dac02f887cb2850ad1467aeecb1f10013ddbe9923894",
+  "baseline_commit": "05ecf74c076b17f90efe117c23ea3bc20da52416",
+  "final_candidate_commit": "052348df903493c1948a076bbd4fb0b8b9b24f79",
+  "final_source_note": "After the final measurement the ASCII check regex was rewritten to its semantically equivalent Unicode range for lint. No additional local run was requested.",
+  "conclusion": "No local performance gain established. Exact sizing and receiver validation add measurable cost. All eight alternating pairs per variant are retained; compare only within each variant.",
+  "variants": [
+    {
+      "variant": "per-item TextEncoder",
+      "measurements": {
+        "runtime": "v24.19.0",
+        "description": "Local Node worker_threads structured-clone/inline ACK transport, no browser/React/layout; preparation excluded. Retains original prepared objects. Sizing overhead and local transport only, not P1 acceptance.",
+        "inputSha256": "2b55dc301d67300199f7dac02f887cb2850ad1467aeecb1f10013ddbe9923894",
+        "samples": [
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.18919300000061412,
+              "ranking": 5.218393999997261,
+              "complete": 0.020821000000069034
+            },
+            "maxReceiveMs": {
+              "rows": 0.047911999999996624,
+              "ranking": 0.11343100000021877,
+              "complete": 0.020821000000069034
+            },
+            "rankingTailMs": 65.29673099999991,
+            "totalDeliveryMs": 354.02163100000007,
+            "generationMs": {
+              "rows": 1.6825550000007752,
+              "ranking": 9.32614699999749,
+              "complete": 0.042673999999806256
+            },
+            "sendMs": {
+              "rows": 114.99593899999809,
+              "ranking": 18.051343999999972,
+              "complete": 0.1815729999998439
+            },
+            "pair": 0
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.33518599999979415,
+              "ranking": 14.360127000007196,
+              "complete": 0.0753629999999248
+            },
+            "maxReceiveMs": {
+              "rows": 0.02504799999996976,
+              "ranking": 0.696816000000581,
+              "complete": 0.0753629999999248
+            },
+            "rankingTailMs": 102.51839599999948,
+            "totalDeliveryMs": 380.9575319999999,
+            "generationMs": {
+              "rows": 2.3124540000021625,
+              "ranking": 36.273707999999715,
+              "complete": 0.12724100000014005
+            },
+            "sendMs": {
+              "rows": 116.52742699999908,
+              "ranking": 30.95032899999751,
+              "complete": 0.12138300000060553
+            },
+            "pair": 0
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.27231799999754003,
+              "ranking": 15.482594999999492,
+              "complete": 0.043765999999777705
+            },
+            "maxReceiveMs": {
+              "rows": 0.016324999999596912,
+              "ranking": 0.6833470000001398,
+              "complete": 0.043765999999777705
+            },
+            "rankingTailMs": 117.25262900000052,
+            "totalDeliveryMs": 371.1828740000001,
+            "generationMs": {
+              "rows": 1.9339660000041476,
+              "ranking": 37.627793000000565,
+              "complete": 0.0754529999994702
+            },
+            "sendMs": {
+              "rows": 108.35352999999941,
+              "ranking": 12.500859000002492,
+              "complete": 0.14473799999996118
+            },
+            "pair": 1
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.44817799999964336,
+              "ranking": 4.74466599999414,
+              "complete": 0.02175199999965116
+            },
+            "maxReceiveMs": {
+              "rows": 0.28787300000021787,
+              "ranking": 0.2301050000005489,
+              "complete": 0.02175199999965116
+            },
+            "rankingTailMs": 101.64952099999937,
+            "totalDeliveryMs": 353.756077,
+            "generationMs": {
+              "rows": 1.6209439999956885,
+              "ranking": 8.385701999999583,
+              "complete": 0.009283999999752268
+            },
+            "sendMs": {
+              "rows": 112.53737800000181,
+              "ranking": 18.12569500000336,
+              "complete": 0.16824300000007497
+            },
+            "pair": 1
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.12310499999784952,
+              "ranking": 1.5731519999990269,
+              "complete": 0.006980999999541382
+            },
+            "maxReceiveMs": {
+              "rows": 0.00889400000050955,
+              "ranking": 0.10110200000053737,
+              "complete": 0.006980999999541382
+            },
+            "rankingTailMs": 58.84025299999939,
+            "totalDeliveryMs": 260.57040400000005,
+            "generationMs": {
+              "rows": 1.2832869999983814,
+              "ranking": 5.409742000002552,
+              "complete": 0.008683000000019092
+            },
+            "sendMs": {
+              "rows": 93.08756599999742,
+              "ranking": 14.844527000003836,
+              "complete": 0.14995599999929254
+            },
+            "pair": 2
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.4079310000006444,
+              "ranking": 10.34674200000245,
+              "complete": 0.042242999999871245
+            },
+            "maxReceiveMs": {
+              "rows": 0.09341000000040367,
+              "ranking": 0.4164460000001782,
+              "complete": 0.042242999999871245
+            },
+            "rankingTailMs": 71.90850899999987,
+            "totalDeliveryMs": 326.9242469999999,
+            "generationMs": {
+              "rows": 1.0738020000007964,
+              "ranking": 29.40979899999911,
+              "complete": 0.021092000000862754
+            },
+            "sendMs": {
+              "rows": 112.4666419999985,
+              "ranking": 11.350104000000101,
+              "complete": 0.19408199999998033
+            },
+            "pair": 2
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.27268699999422097,
+              "ranking": 10.061212000003252,
+              "complete": 0.021711999999752152
+            },
+            "maxReceiveMs": {
+              "rows": 0.014932000000044354,
+              "ranking": 0.5021850000002814,
+              "complete": 0.021711999999752152
+            },
+            "rankingTailMs": 81.22380299999986,
+            "totalDeliveryMs": 308.2968529999998,
+            "generationMs": {
+              "rows": 0.9750610000019151,
+              "ranking": 31.11114699999962,
+              "complete": 0.021463000000039756
+            },
+            "sendMs": {
+              "rows": 105.56309099999726,
+              "ranking": 18.7323069999984,
+              "complete": 0.10317499999928259
+            },
+            "pair": 3
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.14935399999922083,
+              "ranking": 1.6350079999992886,
+              "complete": 0.07967000000007829
+            },
+            "maxReceiveMs": {
+              "rows": 0.011958000000049651,
+              "ranking": 0.21943000000010215,
+              "complete": 0.07967000000007829
+            },
+            "rankingTailMs": 51.05007300000034,
+            "totalDeliveryMs": 273.3503490000003,
+            "generationMs": {
+              "rows": 1.1082019999976183,
+              "ranking": 4.094797000001563,
+              "complete": 0.008984000000054948
+            },
+            "sendMs": {
+              "rows": 102.12456999999904,
+              "ranking": 12.194863000001533,
+              "complete": 0.11660500000016327
+            },
+            "pair": 3
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.13651900000240857,
+              "ranking": 1.083227000003717,
+              "complete": 0.007351000000198837
+            },
+            "maxReceiveMs": {
+              "rows": 0.00897400000030757,
+              "ranking": 0.029072999999698368,
+              "complete": 0.007351000000198837
+            },
+            "rankingTailMs": 38.69892499999969,
+            "totalDeliveryMs": 280.55567599999995,
+            "generationMs": {
+              "rows": 0.9487269999990531,
+              "ranking": 5.0826840000008815,
+              "complete": 0.008162999999512977
+            },
+            "sendMs": {
+              "rows": 104.33501299999716,
+              "ranking": 13.181712999994488,
+              "complete": 0.10638999999991938
+            },
+            "pair": 4
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.49978899999950954,
+              "ranking": 12.485191000005216,
+              "complete": 0.11288899999999558
+            },
+            "maxReceiveMs": {
+              "rows": 0.14315499999975145,
+              "ranking": 0.9274539999996705,
+              "complete": 0.11288899999999558
+            },
+            "rankingTailMs": 91.66781199999969,
+            "totalDeliveryMs": 360.38120400000025,
+            "generationMs": {
+              "rows": 1.0699700000004668,
+              "ranking": 36.081450000002405,
+              "complete": 0.02803200000016659
+            },
+            "sendMs": {
+              "rows": 127.22517399999924,
+              "ranking": 19.925712000000203,
+              "complete": 0.11578499999995984
+            },
+            "pair": 4
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.3497869999982868,
+              "ranking": 10.349837999999181,
+              "complete": 0.09657500000048458
+            },
+            "maxReceiveMs": {
+              "rows": 0.045428000000356406,
+              "ranking": 0.4783189999998285,
+              "complete": 0.09657500000048458
+            },
+            "rankingTailMs": 82.08719000000019,
+            "totalDeliveryMs": 321.8865770000002,
+            "generationMs": {
+              "rows": 2.155107999999018,
+              "ranking": 31.322274999998626,
+              "complete": 0.038717999999789754
+            },
+            "sendMs": {
+              "rows": 112.85173700000269,
+              "ranking": 18.597459000000526,
+              "complete": 0.1059690000001865
+            },
+            "pair": 5
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.1379949999973178,
+              "ranking": 1.3482209999974657,
+              "complete": 0.029274000000441447
+            },
+            "maxReceiveMs": {
+              "rows": 0.010535999999774504,
+              "ranking": 0.13468299999931332,
+              "complete": 0.029274000000441447
+            },
+            "rankingTailMs": 46.365004000000226,
+            "totalDeliveryMs": 314.54279099999985,
+            "generationMs": {
+              "rows": 1.1882100000011633,
+              "ranking": 5.776683000005505,
+              "complete": 0.008413000000473403
+            },
+            "sendMs": {
+              "rows": 121.59141999999974,
+              "ranking": 15.189967999998771,
+              "complete": 0.16116199999942182
+            },
+            "pair": 5
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.14193099999829428,
+              "ranking": 1.1615780000011,
+              "complete": 0.00650000000041473
+            },
+            "maxReceiveMs": {
+              "rows": 0.008321999999679974,
+              "ranking": 0.03257899999971414,
+              "complete": 0.00650000000041473
+            },
+            "rankingTailMs": 42.94032200000038,
+            "totalDeliveryMs": 256.19306700000016,
+            "generationMs": {
+              "rows": 1.1825120000030438,
+              "ranking": 5.491381000005276,
+              "complete": 0.006509999999252614
+            },
+            "sendMs": {
+              "rows": 94.91433600000073,
+              "ranking": 14.996838000003663,
+              "complete": 0.1148830000001908
+            },
+            "pair": 6
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.4849800000010873,
+              "ranking": 12.467162000005374,
+              "complete": 0.044446000000789354
+            },
+            "maxReceiveMs": {
+              "rows": 0.19539400000030582,
+              "ranking": 0.6592810000001919,
+              "complete": 0.044446000000789354
+            },
+            "rankingTailMs": 91.31044400000064,
+            "totalDeliveryMs": 325.616575,
+            "generationMs": {
+              "rows": 0.9453470000007655,
+              "ranking": 31.303618000002643,
+              "complete": 0.03043600000000879
+            },
+            "sendMs": {
+              "rows": 109.11663599999974,
+              "ranking": 11.585208000004968,
+              "complete": 0.10836300000028132
+            },
+            "pair": 6
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 48,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.3996829999905458,
+              "ranking": 11.052510999987135,
+              "complete": 0.02191300000049523
+            },
+            "maxReceiveMs": {
+              "rows": 0.0867099999995844,
+              "ranking": 0.5446479999991425,
+              "complete": 0.02191300000049523
+            },
+            "rankingTailMs": 78.61874100000023,
+            "totalDeliveryMs": 303.63753799999995,
+            "generationMs": {
+              "rows": 1.3903679999984888,
+              "ranking": 26.858152999993763,
+              "complete": 0.046119000000544474
+            },
+            "sendMs": {
+              "rows": 97.7020259999963,
+              "ranking": 10.33624000000782,
+              "complete": 0.1053780000002007
+            },
+            "pair": 7
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.16220000000066648,
+              "ranking": 1.0025499999956082,
+              "complete": 0.023105000000214204
+            },
+            "maxReceiveMs": {
+              "rows": 0.012709000000540982,
+              "ranking": 0.07177699999920151,
+              "complete": 0.023105000000214204
+            },
+            "rankingTailMs": 38.366125000000466,
+            "totalDeliveryMs": 253.45159500000045,
+            "generationMs": {
+              "rows": 1.0405890000038198,
+              "ranking": 5.00985600000422,
+              "complete": 0.005638000000544707
+            },
+            "sendMs": {
+              "rows": 98.32972799999334,
+              "ranking": 13.79118200000994,
+              "complete": 0.11335000000144646
+            },
+            "pair": 7
+          }
+        ],
+        "summary": [
+          {
+            "flavor": "baseline",
+            "medianRankingTailMs": 48.70753850000028,
+            "medianTotalDeliveryMs": 276.9530125000001,
+            "medianRankReceiveMs": 1.4606864999982463,
+            "medianRankGenerateMs": 5.450561500003914,
+            "medianRankSendMs": 14.92068250000375,
+            "maxRankingReceiveMs": 0.2301050000005489
+          },
+          {
+            "flavor": "candidate",
+            "medianRankingTailMs": 86.69881700000042,
+            "medianTotalDeliveryMs": 326.27041099999997,
+            "medianRankReceiveMs": 11.759836499996254,
+            "medianRankGenerateMs": 31.312946500000635,
+            "medianRankSendMs": 15.54915900000151,
+            "maxRankingReceiveMs": 0.9274539999996705
+          }
+        ]
+      }
+    },
+    {
+      "variant": "chunk TextEncoder",
+      "measurements": {
+        "runtime": "v24.19.0",
+        "description": "Local Node worker_threads structured-clone/inline ACK transport, no browser/React/layout; preparation excluded. Retains original prepared objects. Sizing overhead and local transport only, not P1 acceptance.",
+        "inputSha256": "2b55dc301d67300199f7dac02f887cb2850ad1467aeecb1f10013ddbe9923894",
+        "samples": [
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.16448799999898256,
+              "ranking": 4.463237999997546,
+              "complete": 0.017475999999987835
+            },
+            "maxReceiveMs": {
+              "rows": 0.012709000000086235,
+              "ranking": 0.17844800000011674,
+              "complete": 0.017475999999987835
+            },
+            "rankingTailMs": 50.52160300000014,
+            "totalDeliveryMs": 354.3612250000001,
+            "generationMs": {
+              "rows": 1.824167999997826,
+              "ranking": 6.578597999999147,
+              "complete": 0.023134999999911088
+            },
+            "sendMs": {
+              "rows": 130.43071200000077,
+              "ranking": 15.212144000004173,
+              "complete": 0.06443599999965954
+            },
+            "pair": 0
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.5958139999997911,
+              "ranking": 10.41159499999958,
+              "complete": 0.04307500000004438
+            },
+            "maxReceiveMs": {
+              "rows": 0.10627999999996973,
+              "ranking": 0.3512769999997545,
+              "complete": 0.04307500000004438
+            },
+            "rankingTailMs": 65.4886419999998,
+            "totalDeliveryMs": 372.39833799999997,
+            "generationMs": {
+              "rows": 1.618719000000965,
+              "ranking": 20.225984999999582,
+              "complete": 0.042533999999704974
+            },
+            "sendMs": {
+              "rows": 122.46334599999909,
+              "ranking": 13.555187000000387,
+              "complete": 0.13658600000007937
+            },
+            "pair": 0
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.3280290000025161,
+              "ranking": 10.174481999999443,
+              "complete": 0.12946499999998196
+            },
+            "maxReceiveMs": {
+              "rows": 0.026720000000750588,
+              "ranking": 0.4664619999994102,
+              "complete": 0.12946499999998196
+            },
+            "rankingTailMs": 85.79001499999958,
+            "totalDeliveryMs": 345.2150579999998,
+            "generationMs": {
+              "rows": 0.9146829999995134,
+              "ranking": 20.242371999999705,
+              "complete": 0.0581769999998869
+            },
+            "sendMs": {
+              "rows": 109.00168399999802,
+              "ranking": 12.650742999999238,
+              "complete": 0.33073700000022654
+            },
+            "pair": 1
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.2562740000012127,
+              "ranking": 2.944473999990805,
+              "complete": 0.015843999999560765
+            },
+            "maxReceiveMs": {
+              "rows": 0.030205000000023574,
+              "ranking": 0.29581400000006397,
+              "complete": 0.015843999999560765
+            },
+            "rankingTailMs": 84.74106299999949,
+            "totalDeliveryMs": 351.27919199999997,
+            "generationMs": {
+              "rows": 1.2147369999993316,
+              "ranking": 7.771123999991687,
+              "complete": 0.007520999999542255
+            },
+            "sendMs": {
+              "rows": 102.65703899999608,
+              "ranking": 16.902499999996508,
+              "complete": 0.06981500000074448
+            },
+            "pair": 1
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.1658690000003844,
+              "ranking": 1.819693999995252,
+              "complete": 0.007971999999426771
+            },
+            "maxReceiveMs": {
+              "rows": 0.009504999999990105,
+              "ranking": 0.1557439999996859,
+              "complete": 0.007971999999426771
+            },
+            "rankingTailMs": 67.60043200000018,
+            "totalDeliveryMs": 276.9916910000002,
+            "generationMs": {
+              "rows": 1.421954999997979,
+              "ranking": 7.413870999998835,
+              "complete": 0.006739999999808788
+            },
+            "sendMs": {
+              "rows": 97.54993400000149,
+              "ranking": 17.753608000004533,
+              "complete": 0.12432699999953911
+            },
+            "pair": 2
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.36670800000047166,
+              "ranking": 9.423889000002418,
+              "complete": 0.08654999999998836
+            },
+            "maxReceiveMs": {
+              "rows": 0.07656500000030064,
+              "ranking": 0.4016040000005887,
+              "complete": 0.08654999999998836
+            },
+            "rankingTailMs": 56.348399999999856,
+            "totalDeliveryMs": 287.86753599999975,
+            "generationMs": {
+              "rows": 1.1699080000034883,
+              "ranking": 16.017964000000575,
+              "complete": 0.023564999999507563
+            },
+            "sendMs": {
+              "rows": 101.92497699999876,
+              "ranking": 11.258598000000347,
+              "complete": 0.10686100000020815
+            },
+            "pair": 2
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.5117589999990741,
+              "ranking": 9.789026000000376,
+              "complete": 0.019338999999490625
+            },
+            "maxReceiveMs": {
+              "rows": 0.18849299999965297,
+              "ranking": 0.2994799999996758,
+              "complete": 0.019338999999490625
+            },
+            "rankingTailMs": 56.72809099999995,
+            "totalDeliveryMs": 286.007791,
+            "generationMs": {
+              "rows": 0.8373169999995298,
+              "ranking": 15.802028000002792,
+              "complete": 0.02202300000044488
+            },
+            "sendMs": {
+              "rows": 90.53204399999777,
+              "ranking": 11.53228100000615,
+              "complete": 0.10202399999980116
+            },
+            "pair": 3
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.49438100000134,
+              "ranking": 32.787171999997554,
+              "complete": 0.20525899999938702
+            },
+            "maxReceiveMs": {
+              "rows": 0.11639500000001135,
+              "ranking": 15.103249999999207,
+              "complete": 0.20525899999938702
+            },
+            "rankingTailMs": 340.5870419999992,
+            "totalDeliveryMs": 595.5416419999992,
+            "generationMs": {
+              "rows": 1.6152989999991405,
+              "ranking": 52.15400899999622,
+              "complete": 0.009203999999954249
+            },
+            "sendMs": {
+              "rows": 127.82481700000335,
+              "ranking": 47.58493299999827,
+              "complete": 0.2503259999994043
+            },
+            "pair": 3
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.33707399999730114,
+              "ranking": 1.7838419999961843,
+              "complete": 0.009202999999615713
+            },
+            "maxReceiveMs": {
+              "rows": 0.11426100000062434,
+              "ranking": 0.09642500000063592,
+              "complete": 0.009202999999615713
+            },
+            "rankingTailMs": 56.98544700000002,
+            "totalDeliveryMs": 323.9646439999997,
+            "generationMs": {
+              "rows": 1.5448919999989812,
+              "ranking": 6.906860999998571,
+              "complete": 0.009023999999953958
+            },
+            "sendMs": {
+              "rows": 124.67671100000007,
+              "ranking": 18.268824000000677,
+              "complete": 0.12490799999977753
+            },
+            "pair": 4
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.43405000000166183,
+              "ranking": 11.695885000002818,
+              "complete": 0.08711099999982252
+            },
+            "maxReceiveMs": {
+              "rows": 0.05856800000037765,
+              "ranking": 0.646932000000561,
+              "complete": 0.08711099999982252
+            },
+            "rankingTailMs": 82.4019530000005,
+            "totalDeliveryMs": 359.2125809999998,
+            "generationMs": {
+              "rows": 2.13322700000208,
+              "ranking": 20.233651999998074,
+              "complete": 0.031097000000045227
+            },
+            "sendMs": {
+              "rows": 114.11361500000203,
+              "ranking": 14.313615000002756,
+              "complete": 0.11894800000027317
+            },
+            "pair": 4
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.5697979999958989,
+              "ranking": 11.444353999998384,
+              "complete": 0.022863999999572115
+            },
+            "maxReceiveMs": {
+              "rows": 0.09504300000025978,
+              "ranking": 0.5202620000000024,
+              "complete": 0.022863999999572115
+            },
+            "rankingTailMs": 81.59692799999993,
+            "totalDeliveryMs": 321.0114459999995,
+            "generationMs": {
+              "rows": 1.1539010000014969,
+              "ranking": 22.228328999995938,
+              "complete": 0.02613900000051217
+            },
+            "sendMs": {
+              "rows": 115.22586000000047,
+              "ranking": 14.454529999999977,
+              "complete": 0.1798900000003414
+            },
+            "pair": 5
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.19471600000269973,
+              "ranking": 4.7482629999949495,
+              "complete": 0.024536999999327236
+            },
+            "maxReceiveMs": {
+              "rows": 0.013460000000122818,
+              "ranking": 1.626564999999573,
+              "complete": 0.024536999999327236
+            },
+            "rankingTailMs": 69.35548899999958,
+            "totalDeliveryMs": 315.49919599999976,
+            "generationMs": {
+              "rows": 1.8161309999977675,
+              "ranking": 6.971135000004324,
+              "complete": 0.006510000000162108
+            },
+            "sendMs": {
+              "rows": 112.3952289999961,
+              "ranking": 14.6954769999993,
+              "complete": 0.09835800000018935
+            },
+            "pair": 5
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.1850570000051448,
+              "ranking": 1.4827080000013666,
+              "complete": 0.009474000000409433
+            },
+            "maxReceiveMs": {
+              "rows": 0.011207000000467815,
+              "ranking": 0.029504000000088126,
+              "complete": 0.009474000000409433
+            },
+            "rankingTailMs": 58.52072500000031,
+            "totalDeliveryMs": 319.5955220000005,
+            "generationMs": {
+              "rows": 0.9091150000003836,
+              "ranking": 8.524536999990232,
+              "complete": 0.008222999999816238
+            },
+            "sendMs": {
+              "rows": 101.61605899999631,
+              "ranking": 18.528688000003967,
+              "complete": 0.1484230000005482
+            },
+            "pair": 6
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 4.4629590000013195,
+              "ranking": 15.582342000003337,
+              "complete": 0.03849799999989045
+            },
+            "maxReceiveMs": {
+              "rows": 2.020016000000396,
+              "ranking": 0.8237479999988864,
+              "complete": 0.03849799999989045
+            },
+            "rankingTailMs": 107.20470599999862,
+            "totalDeliveryMs": 549.0040319999998,
+            "generationMs": {
+              "rows": 3.6950350000006438,
+              "ranking": 36.55423200000041,
+              "complete": 0.029463999999279622
+            },
+            "sendMs": {
+              "rows": 177.67793599999823,
+              "ranking": 25.541175000002113,
+              "complete": 0.10497799999939161
+            },
+            "pair": 6
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.39758899999469577,
+              "ranking": 10.392383999998856,
+              "complete": 0.09469199999875855
+            },
+            "maxReceiveMs": {
+              "rows": 0.07782700000097975,
+              "ranking": 0.5859700000000885,
+              "complete": 0.09469199999875855
+            },
+            "rankingTailMs": 76.32547899999918,
+            "totalDeliveryMs": 319.58721999999943,
+            "generationMs": {
+              "rows": 2.0453450000077282,
+              "ranking": 20.708087000009982,
+              "complete": 0.021032000000559492
+            },
+            "sendMs": {
+              "rows": 117.30800000000454,
+              "ranking": 13.881283999997322,
+              "complete": 0.10463700000036624
+            },
+            "pair": 7
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.2910619999947812,
+              "ranking": 0.7978839999977936,
+              "complete": 0.025016999999934342
+            },
+            "maxReceiveMs": {
+              "rows": 0.05930899999839312,
+              "ranking": 0.09363099999973201,
+              "complete": 0.025016999999934342
+            },
+            "rankingTailMs": 41.19232000000011,
+            "totalDeliveryMs": 327.0363350000007,
+            "generationMs": {
+              "rows": 1.4547240000047168,
+              "ranking": 5.509890000006635,
+              "complete": 0.0065900000008696225
+            },
+            "sendMs": {
+              "rows": 115.64698899999348,
+              "ranking": 14.975513999987015,
+              "complete": 0.09947900000042864
+            },
+            "pair": 7
+          }
+        ],
+        "summary": [
+          {
+            "flavor": "baseline",
+            "medianRankingTailMs": 63.06057850000025,
+            "medianTotalDeliveryMs": 325.5004895000002,
+            "medianRankReceiveMs": 2.3820839999930286,
+            "medianRankGenerateMs": 7.1925030000015795,
+            "medianRankSendMs": 17.32805400000052,
+            "maxRankingReceiveMs": 15.103249999999207
+          },
+          {
+            "flavor": "candidate",
+            "medianRankingTailMs": 78.96120349999956,
+            "medianTotalDeliveryMs": 333.11325199999965,
+            "medianRankReceiveMs": 10.401989499999218,
+            "medianRankGenerateMs": 20.23801199999889,
+            "medianRankSendMs": 13.718235499998855,
+            "maxRankingReceiveMs": 0.8237479999988864
+          }
+        ]
+      }
+    },
+    {
+      "variant": "chunk ASCII fast path",
+      "measurements": {
+        "runtime": "v24.19.0",
+        "description": "Local Node worker_threads structured-clone/inline ACK transport, no browser/React/layout; preparation excluded. Retains original prepared objects. Sizing overhead and local transport only, not P1 acceptance.",
+        "inputSha256": "2b55dc301d67300199f7dac02f887cb2850ad1467aeecb1f10013ddbe9923894",
+        "samples": [
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.14100000000053114,
+              "ranking": 4.357808999999634,
+              "complete": 0.02048000000013417
+            },
+            "maxReceiveMs": {
+              "rows": 0.011347000000114349,
+              "ranking": 0.14773199999990538,
+              "complete": 0.02048000000013417
+            },
+            "rankingTailMs": 47.14021600000024,
+            "totalDeliveryMs": 314.70549800000026,
+            "generationMs": {
+              "rows": 1.5598269999995864,
+              "ranking": 5.979536000002099,
+              "complete": 0.030995999999959167
+            },
+            "sendMs": {
+              "rows": 113.58869200000208,
+              "ranking": 14.61818300000823,
+              "complete": 0.08348499999965497
+            },
+            "pair": 0
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.26889500000015687,
+              "ranking": 13.347457999998369,
+              "complete": 0.04694100000051549
+            },
+            "maxReceiveMs": {
+              "rows": 0.019659999999930733,
+              "ranking": 0.4669109999995271,
+              "complete": 0.04694100000051549
+            },
+            "rankingTailMs": 62.91381000000001,
+            "totalDeliveryMs": 324.4113930000003,
+            "generationMs": {
+              "rows": 3.0764809999996032,
+              "ranking": 18.03218200000265,
+              "complete": 0.04861299999993207
+            },
+            "sendMs": {
+              "rows": 110.1090340000028,
+              "ranking": 12.019255000003795,
+              "complete": 0.09346999999979744
+            },
+            "pair": 0
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.3277529999986655,
+              "ranking": 17.805954999997994,
+              "complete": 0.06068100000084087
+            },
+            "maxReceiveMs": {
+              "rows": 0.07582399999955669,
+              "ranking": 1.98830899999939,
+              "complete": 0.06068100000084087
+            },
+            "rankingTailMs": 99.72727400000076,
+            "totalDeliveryMs": 365.899668,
+            "generationMs": {
+              "rows": 1.6116220000003523,
+              "ranking": 16.830470000002606,
+              "complete": 0.10790199999973993
+            },
+            "sendMs": {
+              "rows": 100.80155700000432,
+              "ranking": 10.927153999999064,
+              "complete": 0.19085699999959616
+            },
+            "pair": 1
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.5611410000019532,
+              "ranking": 3.9389050000045245,
+              "complete": 0.017276000000492786
+            },
+            "maxReceiveMs": {
+              "rows": 0.38927500000045256,
+              "ranking": 0.2644080000000031,
+              "complete": 0.017276000000492786
+            },
+            "rankingTailMs": 84.22015999999985,
+            "totalDeliveryMs": 331.4419200000002,
+            "generationMs": {
+              "rows": 1.6453429999974105,
+              "ranking": 6.9126899999946545,
+              "complete": 0.007550999999693886
+            },
+            "sendMs": {
+              "rows": 108.52016500000173,
+              "ranking": 14.951249999992797,
+              "complete": 0.08582899999964866
+            },
+            "pair": 1
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.14943700000367244,
+              "ranking": 0.9504539999979897,
+              "complete": 0.006970000000364962
+            },
+            "maxReceiveMs": {
+              "rows": 0.008573000000069442,
+              "ranking": 0.027761999999711406,
+              "complete": 0.006970000000364962
+            },
+            "rankingTailMs": 50.417325999999775,
+            "totalDeliveryMs": 266.2175219999999,
+            "generationMs": {
+              "rows": 1.0974019999985103,
+              "ranking": 5.154323999993721,
+              "complete": 0.007010000000263972
+            },
+            "sendMs": {
+              "rows": 96.62548900000002,
+              "ranking": 13.157257000002573,
+              "complete": 0.13433199999963108
+            },
+            "pair": 2
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.40938200000073266,
+              "ranking": 11.437890999998672,
+              "complete": 0.02451699999983248
+            },
+            "maxReceiveMs": {
+              "rows": 0.07844800000020768,
+              "ranking": 0.4751139999998486,
+              "complete": 0.02451699999983248
+            },
+            "rankingTailMs": 64.5050569999994,
+            "totalDeliveryMs": 306.22686499999963,
+            "generationMs": {
+              "rows": 1.852785999999469,
+              "ranking": 19.030119999995804,
+              "complete": 0.020521000000371714
+            },
+            "sendMs": {
+              "rows": 107.28920400000061,
+              "ranking": 12.192079000003105,
+              "complete": 0.09487300000000687
+            },
+            "pair": 2
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.2785489999996571,
+              "ranking": 10.473699999997734,
+              "complete": 0.01984900000024936
+            },
+            "maxReceiveMs": {
+              "rows": 0.013920999999754713,
+              "ranking": 0.48242499999923893,
+              "complete": 0.01984900000024936
+            },
+            "rankingTailMs": 57.277728000000025,
+            "totalDeliveryMs": 285.8543230000005,
+            "generationMs": {
+              "rows": 0.9230940000034025,
+              "ranking": 15.863953000002766,
+              "complete": 0.02298499999960768
+            },
+            "sendMs": {
+              "rows": 99.7579029999988,
+              "ranking": 11.040742999999566,
+              "complete": 0.09841799999958312
+            },
+            "pair": 3
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.2254410000068674,
+              "ranking": 1.0223080000005211,
+              "complete": 0.08578899999974965
+            },
+            "maxReceiveMs": {
+              "rows": 0.06272400000034395,
+              "ranking": 0.0692140000001018,
+              "complete": 0.08578899999974965
+            },
+            "rankingTailMs": 55.742865999999594,
+            "totalDeliveryMs": 291.99841800000013,
+            "generationMs": {
+              "rows": 1.2241510000003473,
+              "ranking": 6.6796400000002905,
+              "complete": 0.007381000000350468
+            },
+            "sendMs": {
+              "rows": 99.85485199999948,
+              "ranking": 17.34788700000081,
+              "complete": 0.1365349999996397
+            },
+            "pair": 3
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.18569900000147754,
+              "ranking": 2.136020999995708,
+              "complete": 0.15459199999986595
+            },
+            "maxReceiveMs": {
+              "rows": 0.01264900000023772,
+              "ranking": 0.29480299999977433,
+              "complete": 0.15459199999986595
+            },
+            "rankingTailMs": 54.54513599999973,
+            "totalDeliveryMs": 274.61633600000005,
+            "generationMs": {
+              "rows": 1.0357100000019273,
+              "ranking": 7.17925999999261,
+              "complete": 0.008292999999866879
+            },
+            "sendMs": {
+              "rows": 95.24418699999751,
+              "ranking": 16.81580699999904,
+              "complete": 0.1444869999995717
+            },
+            "pair": 4
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.43190600000161794,
+              "ranking": 10.490168000001177,
+              "complete": 0.03936900000007881
+            },
+            "maxReceiveMs": {
+              "rows": 0.04266399999960413,
+              "ranking": 0.7456010000005335,
+              "complete": 0.03936900000007881
+            },
+            "rankingTailMs": 57.712696999999935,
+            "totalDeliveryMs": 310.4490509999996,
+            "generationMs": {
+              "rows": 1.7573759999995673,
+              "ranking": 15.733608000003187,
+              "complete": 0.023495000000366417
+            },
+            "sendMs": {
+              "rows": 106.27466000000004,
+              "ranking": 10.779750999998214,
+              "complete": 0.18787300000076357
+            },
+            "pair": 4
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.4118900000021313,
+              "ranking": 10.313633000002483,
+              "complete": 0.020371000000523054
+            },
+            "maxReceiveMs": {
+              "rows": 0.03646500000013475,
+              "ranking": 0.3465510000005452,
+              "complete": 0.020371000000523054
+            },
+            "rankingTailMs": 59.88575300000048,
+            "totalDeliveryMs": 297.52268600000025,
+            "generationMs": {
+              "rows": 1.4035900000008041,
+              "ranking": 18.905248000002757,
+              "complete": 0.0245070000000851
+            },
+            "sendMs": {
+              "rows": 105.51726500000223,
+              "ranking": 11.232370000001538,
+              "complete": 0.09737700000005134
+            },
+            "pair": 5
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.26231299999926705,
+              "ranking": 2.046818000008898,
+              "complete": 0.07999999999992724
+            },
+            "maxReceiveMs": {
+              "rows": 0.06441700000050332,
+              "ranking": 0.3407120000001669,
+              "complete": 0.07999999999992724
+            },
+            "rankingTailMs": 66.78872899999988,
+            "totalDeliveryMs": 281.70040900000004,
+            "generationMs": {
+              "rows": 1.3248840000014752,
+              "ranking": 6.225902000007409,
+              "complete": 0.006069000000024971
+            },
+            "sendMs": {
+              "rows": 104.61877500000355,
+              "ranking": 14.292650000006688,
+              "complete": 0.09799699999985023
+            },
+            "pair": 5
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.142136000001301,
+              "ranking": 1.4039249999932508,
+              "complete": 0.008972999999969034
+            },
+            "maxReceiveMs": {
+              "rows": 0.011287000000265834,
+              "ranking": 0.02621900000031019,
+              "complete": 0.008972999999969034
+            },
+            "rankingTailMs": 61.68850199999997,
+            "totalDeliveryMs": 269.0106999999998,
+            "generationMs": {
+              "rows": 1.1084700000001249,
+              "ranking": 6.272098999994341,
+              "complete": 0.009433999999600928
+            },
+            "sendMs": {
+              "rows": 99.94839900000261,
+              "ranking": 16.139706999998452,
+              "complete": 0.1435959999998886
+            },
+            "pair": 6
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.2515770000018165,
+              "ranking": 10.206798999999592,
+              "complete": 0.04241400000046269
+            },
+            "maxReceiveMs": {
+              "rows": 0.02139199999965058,
+              "ranking": 0.432941000000028,
+              "complete": 0.04241400000046269
+            },
+            "rankingTailMs": 58.021757000000434,
+            "totalDeliveryMs": 272.8983440000002,
+            "generationMs": {
+              "rows": 2.1365349999996397,
+              "ranking": 17.68114500000047,
+              "complete": 0.019769999999880383
+            },
+            "sendMs": {
+              "rows": 100.47768599999836,
+              "ranking": 11.014941000002182,
+              "complete": 0.08986499999991793
+            },
+            "pair": 6
+          },
+          {
+            "flavor": "candidate",
+            "counts": {
+              "rows": 40,
+              "ranking": 52,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.4482529999986582,
+              "ranking": 9.512078000000656,
+              "complete": 0.02222299999993993
+            },
+            "maxReceiveMs": {
+              "rows": 0.11792700000023615,
+              "ranking": 0.3407120000010764,
+              "complete": 0.02222299999993993
+            },
+            "rankingTailMs": 55.412859999999455,
+            "totalDeliveryMs": 297.96875699999964,
+            "generationMs": {
+              "rows": 1.689380999997411,
+              "ranking": 16.61841000000277,
+              "complete": 0.02213300000039453
+            },
+            "sendMs": {
+              "rows": 111.66279299999769,
+              "ranking": 10.697407000006024,
+              "complete": 0.09167800000068382
+            },
+            "pair": 7
+          },
+          {
+            "flavor": "baseline",
+            "counts": {
+              "rows": 40,
+              "ranking": 160,
+              "complete": 1
+            },
+            "receiveMs": {
+              "rows": 0.23824700000477605,
+              "ranking": 1.1799269999937678,
+              "complete": 0.007661000001462526
+            },
+            "maxReceiveMs": {
+              "rows": 0.05179800000041723,
+              "ranking": 0.06852299999991374,
+              "complete": 0.007661000001462526
+            },
+            "rankingTailMs": 37.93846400000075,
+            "totalDeliveryMs": 258.7767380000005,
+            "generationMs": {
+              "rows": 1.0217739999970945,
+              "ranking": 4.0132790000061505,
+              "complete": 0.006089000000429223
+            },
+            "sendMs": {
+              "rows": 98.04094300000725,
+              "ranking": 12.552883999995174,
+              "complete": 0.09885900000153924
+            },
+            "pair": 7
+          }
+        ],
+        "summary": [
+          {
+            "flavor": "baseline",
+            "medianRankingTailMs": 55.14400099999966,
+            "medianTotalDeliveryMs": 278.15837250000004,
+            "medianRankReceiveMs": 1.7253715000010743,
+            "medianRankGenerateMs": 6.249000500000875,
+            "medianRankSendMs": 14.784716500000513,
+            "maxRankingReceiveMs": 0.3407120000001669
+          },
+          {
+            "flavor": "candidate",
+            "medianRankingTailMs": 58.953755000000456,
+            "medianTotalDeliveryMs": 302.09781099999964,
+            "medianRankReceiveMs": 10.481933999999455,
+            "medianRankGenerateMs": 17.255807500001538,
+            "medianRankSendMs": 11.027842000000874,
+            "maxRankingReceiveMs": 1.98830899999939
+          }
+        ]
+      }
+    }
+  ]
+}

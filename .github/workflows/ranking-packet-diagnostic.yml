@@ -1,0 +1,93 @@
+name: Ranking Packet Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - diagnostic/ranking-packet-20261005
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ranking-packet-diagnostic
+  cancel-in-progress: false
+jobs:
+  compare-packets:
+    # Review-only output: no Pages, deployment, provider acquisition or release.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: candidate/frontend/package-lock.json
+      - name: Prepare the exact baseline from the diagnostic branch ancestry
+        working-directory: candidate
+        run: |
+          git cat-file -e 776ba38f857ba6f24617be67892d1e85dad78da0^{commit}
+          test "$(git rev-parse 776ba38f857ba6f24617be67892d1e85dad78da0^{tree})" = e95fc0667237a5aa773d57c194f59ab1d8047d7f
+          git worktree add --detach ../baseline 776ba38f857ba6f24617be67892d1e85dad78da0
+          cmp frontend/package.json ../baseline/frontend/package.json
+          cmp frontend/package-lock.json ../baseline/frontend/package-lock.json
+      - name: Install the single shared dependency set
+        timeout-minutes: 3
+        working-directory: candidate/frontend
+        run: npm ci --no-audit --no-fund
+      - name: Install the lockfile-pinned Chromium runtime
+        timeout-minutes: 5
+        working-directory: candidate/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Verify packet and proof contracts
+        timeout-minutes: 2
+        working-directory: candidate/frontend
+        run: |
+          npm run test:run -- --maxWorkers=2 src/static/researchWorkerPackets.test.js src/static/researchWorker.delivery.test.js src/static/researchWorkerClient.test.js src/static/researchTemporal.test.js tools/ranking-packet-diagnostic-proof.test.mjs tools/ranking-packet-diagnostic-source.test.mjs
+          python3 -m unittest discover -s tools -p 'test_extract_ranking_diagnostic.py'
+      - name: Read the exact unapproved diagnostic artifact
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ranking-packet-input" candidate/frontend/test-results/ranking-packets
+          gh api repos/kusennjp1-ai/screener/actions/artifacts/11319208142 > "$RUNNER_TEMP/ranking-packet-input/artifact.json"
+          gh api repos/kusennjp1-ai/screener/actions/runs/37244922910/attempts/1 > "$RUNNER_TEMP/ranking-packet-input/run.json"
+          python3 - "$RUNNER_TEMP/ranking-packet-input" <<'PY'
+          import json, pathlib, sys
+          root=pathlib.Path(sys.argv[1]); artifact=json.loads((root/'artifact.json').read_text()); run=json.loads((root/'run.json').read_text())
+          assert artifact['id']==11319208142 and artifact['name']=='unapproved-financial-diagnostic-37244922910-1'
+          assert artifact['size_in_bytes']==361900724 and artifact['expired'] is False
+          assert artifact['digest']=='sha256:2f1de2c2bd4c8107daff636caad2723ec6ac1c5aa97b07af0e0cbaaad08f236a'
+          assert artifact['workflow_run']['id']==37244922910 and artifact['workflow_run']['head_sha']=='776ba38f857ba6f24617be67892d1e85dad78da0'
+          assert run['id']==37244922910 and run['run_attempt']==1 and run['repository']['full_name']=='kusennjp1-ai/screener'
+          assert run['head_sha']=='776ba38f857ba6f24617be67892d1e85dad78da0' and run['status']=='completed'
+          # Successful execution would not grant this artifact release authority.
+          receipt={'status':'UNAPPROVED','purpose':'review-only packet diagnostic','activation_eligible':False,'artifact':artifact,'run_id':run['id'],'run_attempt':run['run_attempt'],'github_run_head_sha':run['head_sha'],'capture_checkout_sha':'5895525a5688eca4ee31e6768d577fb8ea76d1d2','equivalent_source_tree':'e95fc0667237a5aa773d57c194f59ab1d8047d7f'}
+          pathlib.Path('candidate/frontend/test-results/ranking-packets/artifact-provenance.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          PY
+          # Bound the existing gh download route to <400 MiB before ZIP parsing.
+          (ulimit -f 400000; gh api repos/kusennjp1-ai/screener/actions/artifacts/11319208142/zip > "$RUNNER_TEMP/ranking-packet-input/artifact.zip")
+          python3 candidate/frontend/tools/extract-ranking-diagnostic.py --archive "$RUNNER_TEMP/ranking-packet-input/artifact.zip" --output "$RUNNER_TEMP/ranking-packet-input/research.json" > candidate/frontend/test-results/ranking-packets/extraction-provenance.json
+      - name: Run sixteen cold alternating browser trials
+        timeout-minutes: 30
+        working-directory: candidate/frontend
+        run: |
+          node tools/ranking-packet-browser-diagnostic.mjs --baseline ../../baseline --wire "$RUNNER_TEMP/ranking-packet-input/research.json" --output test-results/ranking-packets
+      - name: Preserve the earlier negative local results
+        if: always()
+        run: |
+          mkdir -p candidate/frontend/test-results/ranking-packets
+          cp candidate/frontend/tools/fixtures/ranking-packet-node-comparison.json candidate/frontend/test-results/ranking-packets/prior-negative-node-results.json
+      - name: Retain every diagnostic trial and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranking-packet-diagnostic-${{ github.sha }}-${{ github.run_attempt }}
+          path: candidate/frontend/test-results/ranking-packets/
+          if-no-files-found: error
+          retention-days: 14

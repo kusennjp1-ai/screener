@@ -66,3 +66,14 @@ it('reports a deferred generator failure rather than continuing a partial public
   await self.onmessage({ data: { operation: 'next-packet' } });
   expect(messages[1]).toEqual({ error: 'Invalid workbench change records' });
 });
+
+it('reports an oversized ranking assessment after row acknowledgement without sending completion',async()=>{
+ const row={symbol:'S'},bundle={rows:[row],rankings:{minervini:[{row,assessment:{reason:'x'.repeat(65536)}}]},prepared:{candidates:[row]}};
+ prepareResearchBundle.mockReturnValue(bundle);
+ await self.onmessage({data:{operation:'prepare',payloads:[{rows:[row]}]}});
+ expect(messages).toHaveLength(1);
+ expect(messages[0].packet.kind).toBe('rows');
+ await self.onmessage({data:{operation:'next-packet'}});
+ expect(messages).toHaveLength(2);
+ expect(messages[1]).toEqual({error:'Oversized research ranking item'});
+});

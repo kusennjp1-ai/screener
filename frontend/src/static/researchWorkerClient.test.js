@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadResearchBundle, runDataWorker } from './researchWorkerClient';
 import { RULE_SUMMARY_VERSION } from './researchEngine';
+import { researchPackets } from './researchWorkerPackets';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('research worker lifecycle', () => {
@@ -93,11 +94,11 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const pending = runDataWorker({ operation: 'research' });
     const row = { symbol: 'SAFE', precise: 1 / 7, unknown: null };
-    instance.onmessage({ data: { packet: { kind: 'rows', rows: [row] } } });
+    instance.onmessage({ data: { packet: { kind: 'rows', sequence: 0, offset: 0, rows: [row] } } });
     expect(instance.postMessage.mock.calls).toEqual([[{ operation: 'research' }], [{ operation: 'next-packet' }]]);
-    instance.onmessage({ data: { packet: { kind: 'ranking', method: 'minervini', items: [{ id: 0, assessment: { qualified: true } }] } } });
+    instance.onmessage({ data: { packet: { kind: 'ranking', sequence: 1, offset: 0, method: 'minervini', items: [{ id: 0, assessment: { qualified: true } }] } } });
     expect(instance.postMessage).toHaveBeenCalledTimes(3);
-    instance.onmessage({ data: { packet: { kind: 'complete', date: '2026-09-30', prepared: { candidates: [0] } } } });
+    instance.onmessage({ data: { packet: { kind: 'complete', sequence: 2, row_count: 1, ranking_counts: { minervini: 1 }, date: '2026-09-30', prepared: { candidates: [0] } } } });
     const result = await pending;
     expect(result.rows).toEqual([row]);
     expect(result.rankings.minervini[0].row).toBe(result.rows[0]);
@@ -112,11 +113,11 @@ describe('research worker lifecycle', () => {
     const controller = new AbortController();
     const pending = runDataWorker({ operation: 'research' }, controller.signal);
     const queuedHandler = instance.onmessage;
-    queuedHandler({ data: { packet: { kind: 'rows', rows: [{ symbol: 'OLD' }] } } });
+    queuedHandler({ data: { packet: { kind: 'rows', sequence: 0, offset: 0, rows: [{ symbol: 'OLD' }] } } });
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     const readObsoleteData = vi.fn();
-    queuedHandler({ get data() { readObsoleteData(); return { packet: { kind: 'rows', rows: [] } }; } });
+    queuedHandler({ get data() { readObsoleteData(); return { packet: { kind: 'rows', sequence: 0, offset: 0, rows: [{ symbol: 'S' }] } }; } });
     expect(readObsoleteData).not.toHaveBeenCalled();
     expect(instance.postMessage).toHaveBeenCalledTimes(2);
     expect(instance.terminate).toHaveBeenCalledOnce();
@@ -137,7 +138,7 @@ describe('research worker lifecycle', () => {
       terminate = vi.fn();
     });
     const pending = runDataWorker({ operation: 'research' });
-    if (phase === 'acknowledgement') instance.onmessage({ data: { packet: { kind: 'rows', rows: [] } } });
+    if (phase === 'acknowledgement') instance.onmessage({ data: { packet: { kind: 'rows', sequence: 0, offset: 0, rows: [{ symbol: 'S' }] } } });
     await expect(pending).rejects.toThrow('Delivery failed');
     expect(instance.terminate).toHaveBeenCalledOnce();
     expect(instance.onmessage).toBeNull();
@@ -151,4 +152,32 @@ describe('research worker lifecycle', () => {
     expect(instance.postMessage).toHaveBeenCalledOnce();
     expect(instance.terminate).toHaveBeenCalledOnce();
   });
+});
+
+
+it.each(['date', 'generation', 'evaluated_at', 'evaluation_epoch'])('rejects a fully received ranking stream with stale %s before resolving', async field => {
+ let instance;
+ vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+ const now=Date.parse('2026-10-04T00:00:00Z'),date='2026-09-30';
+ const pending=runDataWorker({operation:'research',date,evaluation:{now,generation:'g1',evaluationEpoch:4}});
+ const row={symbol:'S'},bundle={rows:[row],date,evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION,rankings:{minervini:[{row,assessment:{qualified:true}}]},prepared:{candidates:[row]}};
+ const packets=[...researchPackets(bundle)];
+ packets.at(-1)[field]=typeof bundle[field]==='number' ? bundle[field]+1 : 'different';
+ for(const packet of packets)instance.onmessage({data:{packet}});
+ await expect(pending).rejects.toThrow('Obsolete research evaluation');
+ expect(instance.postMessage).toHaveBeenCalledTimes(packets.length);
+ expect(instance.terminate).toHaveBeenCalledOnce();
+});
+
+it('does not acknowledge a duplicated ranking batch or expose its partial bundle', async()=>{
+ let instance;
+ vi.stubGlobal('Worker', class { constructor() { instance=this; } postMessage=vi.fn();terminate=vi.fn(); });
+ const pending=runDataWorker({operation:'research'});
+ const row={symbol:'S'},packets=[...researchPackets({rows:[row],rankings:{minervini:[{row,assessment:{qualified:true}}]},prepared:{candidates:[row]}})];
+ instance.onmessage({data:{packet:packets[0]}});
+ instance.onmessage({data:{packet:packets[1]}});
+ instance.onmessage({data:{packet:packets[1]}});
+ await expect(pending).rejects.toThrow('Invalid research packet sequence');
+ expect(instance.postMessage).toHaveBeenCalledTimes(3);
+ expect(instance.terminate).toHaveBeenCalledOnce();
 });
