@@ -97,7 +97,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
   function invoke(path,args=[],cwd=releaseRoot,extra={}){save();return spawnSync(process.execPath,[path,...args],{cwd,encoding:'utf8',timeout:30000,env:environment(extra)});}
   function success(result,label){assert.ifError(result.error);assert.equal(result.status,0,`${label}\n${result.stdout}\n${result.stderr}`);return result;}
   function frontendAt(directory){mkdirSync(join(directory,'frontend'),{recursive:true});for(const name of ['src','tools','package.json'])symlinkSync(join(repoRoot,'frontend',name),join(directory,'frontend',name));mkdirSync(join(directory,'data/ibd_reference/ibd50'),{recursive:true});return join(directory,'frontend');}
-  function exportBundle(directory,date,price,history=null,extra={}){
+  function exportBundle(directory,date,price,history=null,extra={},financialHistory=null){
     const frontend=frontendAt(directory),dataRoot=join(frontend,'public/static-data'),value=row(date,price);
     write(join(dataRoot,'manifest.json'),{as_of_date:date,default_market:'US',supported_markets:['US'],generated_at:now,markets:{US:{market:'US',as_of_date:date,pages:{scan:{path:'scan.json'}},assets:{charts:{path:'charts-index.json'}}}}});
     write(join(dataRoot,'scan.json'),{as_of_date:date,initial_rows:[value],preview_rows:[value],chunks:[{path:'chunk.json'}]});
@@ -105,7 +105,8 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     write(join(dataRoot,'charts-index.json'),{market:'US',symbols:[{symbol:'OWNED',path:'charts/OWNED.json'}]});
     const chart={symbol:'OWNED',market:'US',as_of_date:date,bars:bars(date,price),stock_data:value,fundamentals:{...value},eps_line:[]};
     write(join(dataRoot,'charts/OWNED.json'),chart);write(join(dataRoot,'raw/OWNED.json'),chart);
-    write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
+    // false models a clean price export before any history acquisition step.
+    if(financialHistory!==false)write(join(dataRoot,'financial-history.json'),financialHistory??{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
     if(history)cpSync(history,join(dataRoot,'candidate-history'),{recursive:true});
     else {write(join(dataRoot,'candidate-history/index.json'),{schema_version:1,snapshots:[]});write(join(dataRoot,'candidate-history/retained-history.json'),'retained original history bytes\n');}
     success(invoke(join(frontend,'tools/export-research.mjs'),[],frontend,{FINANCIAL_EVALUATED_AT:now,...extra}),'export fixture');
@@ -145,10 +146,10 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
       financial_release:prepared.reference,financial_generation:prepared.receipt.financial_generation,financial_lineage_sha256:lineage.id,data_inventory_sha256:inventoryDigest(dataInventory(publicRoot))}));
     return deploy(publicRoot,30);
   }
-  function advance({id,date,price,time}){
+  function advance({id,date,price,time,financialHistory=null}){
     now=time;releaseId=id;releaseRoot=join(root,`release-${id}`);frontendAt(join(releaseRoot,'release'));
     const output=join(releaseRoot,'output'),envFile=join(releaseRoot,'environment');
-    const fresh=exportBundle(join(root,`export-${id}`),date,price,join(config.liveRoot,'static-data/candidate-history'));
+    const fresh=exportBundle(join(root,`export-${id}`),date,price,join(config.liveRoot,'static-data/candidate-history'),{},financialHistory);
     const exportId=id+100,artifact=pack(exportId,`static-site-data-${exportId}-1`,fresh);
     const manifestBytes=readFileSync(join(fresh,'static-data/manifest.json')),observed=extractPriceObservations({dataRoot:join(fresh,'static-data'),manifest:JSON.parse(manifestBytes)});
     const metadata=join(root,`source-${id}.json`);write(metadata,{run_id:exportId,run_attempt:1,source_sha:sha,artifact_name:artifact.name,manifest_json:manifestBytes.toString(),manifest_sha256:sha256(manifestBytes),price_observations:observed,price_observations_sha256:priceObservationDigest(observed)});

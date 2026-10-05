@@ -8,6 +8,7 @@ import {extractPriceObservations,priceObservationDigest} from '../price-observat
 import {contract,dataInventory,digest} from '../financial-correction.mjs';
 import {financialReleasePolicy as policy,completeInventory,protectedCodeInventory,verifyFinancialReleaseAssets} from '../financial-release-activation.mjs';
 import {createLifecycleDiagnostics,lifecycleCommandLabel} from './financial-release-lifecycle-diagnostics.mjs';
+import {syntheticHistoryPriceTarget} from './financial-history-price-target.mjs';
 
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,typeof value==='string'?value:JSON.stringify(value));};
@@ -272,6 +273,8 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
     verified_canonical_paths:[...expectedCanonical].filter(path=>advancedPaths.has(path)).length,advanced_alias_paths:advancedPaths.size,
     advanced_symbols:advancedSymbols.size,catalog_symbols_without_history:withoutHistory.size,all_updated_ohlcv_prefixes_preserved:true});
   beginPhase('export synthetic next-price bundle');
+  const historyPath=join(root,'financial-history.json'),previousFinancialHistory=read(historyPath);
+  write(historyPath,syntheticHistoryPriceTarget(previousFinancialHistory,entry.as_of_date,targetDate));
   manifest.as_of_date=targetDate;manifest.generated_at=targetTime;entry.as_of_date=targetDate;
   write(join(root,'manifest.json'),manifest);
   run(process.execPath,['tools/export-research.mjs'],{cwd:releaseFrontend,env:{...env,FINANCIAL_EVALUATED_AT:targetTime}});

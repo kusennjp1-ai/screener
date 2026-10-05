@@ -121,7 +121,7 @@ jobs:
           available_bytes=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
           test "$available_bytes" -ge 17179869184
       - name: Run bounded strict carry regression
-        run: node --test --test-concurrency=1 .github/scripts/financial-lifecycle-watchdog.test.mjs .github/scripts/financial-release-lifecycle.test.mjs
+        run: node --test --test-concurrency=1 .github/scripts/financial-lifecycle-watchdog.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-carry-history-date.test.mjs
       - name: Rehearse first activation and advancing carry offline
         timeout-minutes: 77
         env:

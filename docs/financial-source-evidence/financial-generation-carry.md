@@ -88,3 +88,32 @@ npx vitest run tools/financial-generation-carry.test.mjs tools/financial-correct
 
 The helper never calls a provider, converts FX, rebuilds the original archive,
 renews source timestamps, or authorizes publication.
+
+## Offline next-price fixture date semantics
+
+`financial-history.json.as_of_date` is the containing analysis/price date.
+The ordinary producer takes it from `qualification-audit.json`; the research
+exporter uses exact equality with the scan date before attaching any history.
+Source freshness remains separate: `retrieved_at`,
+`annual_source.observed_at`, `quarterly_retrieved_at`, and receipt proof clocks
+retain the original observation instants. The carry retains
+`financial_current.t` while advancing its own `financial_evaluated_at`.
+
+The real-archive lifecycle fixture synthesizes a new price input by copying the
+published bundle. Its preparation must explicitly advance the containing
+history header along with the scan and manifest. The fixture-only
+`syntheticHistoryPriceTarget` helper preserves every other value, including
+per-symbol destination dates until admitted carry projects the current symbols,
+and any removed-symbol history outside that carry's ownership. It does not
+simulate a new financial acquisition. An ordinary research export deliberately
+does not repair a stale incoming history header.
+
+`financial-carry-history-date.test.mjs` reproduces the stale-header compose
+failure, verifies the repaired fixture through compose and both rechecks, and
+checks that the strict comparator still rejects date, source-clock, unowned
+history and same-path derived metadata mutations. Production carry and
+comparison rules remain unchanged. Run it with:
+
+```
+node --test .github/scripts/financial-carry-history-date.test.mjs
+```
