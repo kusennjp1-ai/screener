@@ -1,0 +1,64 @@
+name: Financial Statement Recovery
+
+on:
+  push:
+    branches: [improve/mandatory-financial-source-recovery]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: financial-statement-recovery
+  cancel-in-progress: false
+
+jobs:
+  statement-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the reviewed statement transport
+        run: >-
+          python -m pip install
+          yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0 pytest==8.3.5
+      - name: Check acquisition bounds and source restoration offline
+        run: |
+          node --test .github/scripts/prepare-statement-cohort.test.mjs .github/scripts/restore-statement-source.test.mjs
+          python -m pytest --noconftest backend/tests/unit/test_financial_statement_batch.py backend/tests/unit/test_statement_refresh_planning.py backend/tests/unit/test_statement_refresh_collection.py backend/tests/unit/test_statement_artifact_archive.py backend/tests/unit/test_quarterly_eps_pair_selection.py -q
+      - name: Bind the full liquid cohort to the published input
+        run: node .github/scripts/prepare-statement-cohort.mjs "$RUNNER_TEMP/recovery-input"
+      - name: Restore original acquisition receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/restore-statement-source.mjs "$RUNNER_TEMP/recovery-source"
+      - name: Continue one bounded source batch from original receipts
+        run: >-
+          python .github/scripts/run-statement-recovery-cycle.py
+          --inputs "$RUNNER_TEMP/recovery-input"
+          --restored "$RUNNER_TEMP/recovery-source"
+          --output "$RUNNER_TEMP/financial-recovery"
+      - name: Retain partial source progress and original pilot receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-statement-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-recovery/
+          retention-days: 14
+          if-no-files-found: warn
+
+# Artifact-only bounded continuation. No schedule, release, database, Pages deployment,
+# changed public values, new credentials or bypass of publication acceptance.
+# Every continuation restores and validates the cumulative original receipts.
+# Archive failure stops acquisition; it never restarts a cold first-200 sweep.

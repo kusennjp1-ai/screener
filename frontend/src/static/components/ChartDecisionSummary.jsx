@@ -1,3 +1,4 @@
+import { instrumentApplicability, instrumentApplicabilityLabel } from '../instrumentApplicability';
 import { Box, Typography } from '@mui/material';
 import { entryPlan } from '../researchEngine';
 import { entryReadiness } from '../entryReadiness';
@@ -7,6 +8,7 @@ import EntrySourceNote, { EntrySourceDetails } from './EntrySourceNote';
 const money = value => Number.isFinite(value) ? `$${value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '未確認';
 export default function ChartDecisionSummary({row, date, market, method = 'minervini', quote = null, now = Date.now()}) {
   if (!row) return null;
+  const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
   const plan = entryPlan(row, quote, method);
   const readiness = entryReadiness(row, date, market || modelMarket([row]), now, method);
   const missing = readiness.rules.filter(rule => rule.state !== 'pass').slice(0,3);
@@ -19,7 +21,7 @@ export default function ChartDecisionSummary({row, date, market, method = 'miner
     </Box>
     <Box sx={{display:'flex',flexWrap:'wrap',alignItems:'baseline',gap:'4px 24px',mt:.5}}>
       <Typography sx={{fontSize:12,color:'text.secondary'}}>価格時点：{quote?.as_of ? new Date(quote.as_of).toLocaleString('ja-JP') : `${date || '未確認'} 日次終値`} · 購入条件は日次検証</Typography>
-      <Typography sx={{fontSize:13}}>{missing.length ? `未達・未確認：${missing.map(rule=>rule.label).join(' ／ ')}` : '日次の購入条件を確認済み。発注時は現在価格と約定条件を確認。'}</Typography>
+      <Typography sx={{fontSize:13}}>{applicabilityLabel || (missing.length ? `未達・未確認：${missing.map(rule=>rule.label).join(' ／ ')}` : '日次の購入条件を確認済み。発注時は現在価格と約定条件を確認。')}</Typography>
     </Box>
     {!plan.pivot && <Typography sx={{fontSize:12,mt:.5}}>{plan.pivotSource}</Typography>}
     <EntrySourceNote plan={plan} showDetails={false}/>

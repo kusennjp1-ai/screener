@@ -1,5 +1,13 @@
 import { CHANGE_LABELS } from './candidateHistory';
 
+export function comparisonBasisPresentation(basis) {
+  if (basis?.schema_version !== 'current-policy-comparison-v1') return null;
+  if (basis.mode === 'incompatible_policy') return '現在のルールでは比較不能。保存済みの旧ルールの通過・脱落を、現在の候補変化として表示しません。';
+  if (basis.mode === 'saved_first_same_policy') return '同じルールで保存した初回判定を比較しています。同じ基準日の後からの財務更新で、過去の通過・脱落を変更しません。';
+  if (basis.mode === 'no_previous') return '保存済みの前回判定がないため、候補の変化はまだ比較できません。';
+  return null;
+}
+
 // Coverage comes from the published summary alone. Do not fetch detailed rows
 // or infer a shared cause: missing evidence can differ from stock to stock.
 export function dailyChangePresentation(query, method) {
@@ -10,6 +18,13 @@ export function dailyChangePresentation(query, method) {
   const total = Object.keys(CHANGE_LABELS).reduce((sum, key) => sum + counts[key], 0);
   if (summary.item_count != null && summary.item_count !== total) return { label: '変化：集計未取得' };
   if (!query.data.history) return { label: '変化：集計未取得' };
+  const basis=query.data.comparison_basis;
+  if(basis?.schema_version!=='current-policy-comparison-v1' || !['incompatible_policy','saved_first_same_policy','no_previous'].includes(basis.mode)
+    || (basis.mode==='no_previous')!==!query.data.history.previous_as_of
+    || (basis.mode==='incompatible_policy'&&Object.entries(counts).some(([key,value])=>key!=='incomparable'&&value!==0))) return {
+    label:'変化：比較基準未確認',blocked:true,
+    explanation:'保存済み判定と現在のルールの比較基準を確認できません。過去の件数を現在の候補変化として表示しません。',
+  };
   if (!query.data.history.previous_as_of) return { ready: true, label: '変化：記録開始（次回から）' };
   if (!total) return { ready: true, label: '変化：比較対象なし' };
   if (counts.incomparable === total) return {

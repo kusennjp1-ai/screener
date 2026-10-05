@@ -68,6 +68,7 @@ function CandlestickChart({
   bookAnnotations = false,
   researchView = false,
   researchActions = null,
+  researchMetaActions = null,
   comparisonSessions = null,
   smallScreen = false,
   chartIdentity = null,
@@ -823,12 +824,13 @@ function CandlestickChart({
       <button type="button" onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</button>
       <button type="button" aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</button>{researchActions}
     </div>}
-    {researchView && !compact && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary'}}>
+    {researchView && !compact && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary',...(researchMetaActions && {display:'flex',flexWrap:'wrap',alignItems:'center',gap:1,'& > details':{flexShrink:0},'& > details[open]':{flexBasis:'100%',maxWidth:'100%'}})}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
       <Box component={smallScreen ? 'details' : 'div'} sx={{mt:.5,'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>
-        {smallScreen && <summary>移動平均線・株価の乖離率</summary>}
+        {smallScreen && <summary aria-label="移動平均線・株価の乖離率">{researchMetaActions ? '移動平均・乖離率' : '移動平均線・株価の乖離率'}</summary>}
         {[[50,chartData?.sma50],[150,chartData?.sma150],[200,chartData?.sma200]].map(([period,points])=>{const value=points?.at(-1)?.value, delta=(chartData?.candlesticks.at(-1)?.close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
       </Box>
+      {researchMetaActions}
     </Box>}
     {researchView && !compact && !smallScreen && !hideOhlcLegend && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
       始 {legendData.open.toFixed(2)} · 高 {legendData.high.toFixed(2)} · 安 {legendData.low.toFixed(2)} · 終 {legendData.close.toFixed(2)}

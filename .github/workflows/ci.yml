@@ -67,6 +67,15 @@ jobs:
           tests/unit/test_financial_source_producers.py
           tests/unit/test_financial_source_transport_capture.py
           tests/unit/test_financial_source_yahoo_contract.py
+          tests/unit/test_static_financial_evidence.py
+          tests/unit/test_mandatory_statement_selection.py
+          tests/unit/test_financial_statement_batch.py
+          tests/unit/test_statement_refresh_planning.py
+          tests/unit/test_statement_refresh_collection.py
+          tests/unit/test_statement_artifact_archive.py
+          tests/unit/test_export_statement_projection.py
+          tests/unit/test_native_annual_projection.py
+          tests/unit/test_quarterly_eps_pair_selection.py
           tests/unit/test_provider_snapshot_financial_evidence.py
           tests/unit/test_eps_selected_source_context.py
           tests/unit/test_growth_selected_source_context.py
@@ -138,6 +147,18 @@ jobs:
 
       - name: Lint
         run: cd frontend && npm run lint
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Financial correction controller contracts
+        # The ZIP/schema verifier uses the same pinned helper as source replay.
+        run: |
+          python3 -m pip install -r .github/scripts/financial-correction-certification-requirements.txt
+          python3 -m unittest discover -s .github/scripts -p "test_retain_financial_diagnostic.py"
+          python3 -m unittest discover -s .github/scripts -p test_restore_financial_diagnostic.py
+          node --test --test-concurrency=2 .github/scripts/financial-performance-exception.test.mjs .github/scripts/financial-performance-lifecycle.test.mjs .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
 
       - name: Test
         run: cd frontend && npm run test:run

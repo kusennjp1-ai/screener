@@ -1,0 +1,42 @@
+{
+  "schema_version": "financial-release-request-v1",
+  "correction": {
+    "schema_version": "financial-correction-v1",
+    "kind": "financial_source_correction",
+    "reason": "audited_statement_source_recovery",
+    "previous_publication_identity": "37178754997/1/d3bf2db07c00b89d40c3c12434dba35345e45692382c0a696dec53225f36aebd/2088600d992497406b1cc1636f1ede6d65a114c96641c3a1abc10887af3f77a3",
+    "source": {
+      "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+      "archive_manifest_sha256": "f49657581a65a88a7cdbb920e6650295e5406f3d9da162f4636614951f2fefaa",
+      "artifact_id": 11307162746,
+      "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-8",
+      "artifact_sha256": "c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb",
+      "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580",
+      "head_sha": "4b27798b9b04528737938bb5844a8d86a704c58d",
+      "repository": "kusennjp1-ai/screener",
+      "run_attempt": 8,
+      "run_id": 37203329163,
+      "workflow": ".github/workflows/financial-statement-recovery.yml"
+    }
+  },
+  "source_validation": {
+    "guard": "certified_source_artifact_v1",
+    "certificate": {
+      "schema_version": "financial-source-certificate-reference-v1",
+      "repository": "kusennjp1-ai/screener",
+      "workflow": ".github/workflows/financial-source-certification.yml",
+      "head_sha": "2a8f31dac1192850ea690392273f006ed58a396f",
+      "run_id": 37212616278,
+      "run_attempt": 1,
+      "job_id": 111466684170,
+      "artifact_id": 11307009412,
+      "artifact_name": "financial-source-certification-2a8f31dac1192850ea690392273f006ed58a396f-1",
+      "artifact_sha256": "fbe0e5e2a8a683596acaa6a133c8e642215fde0e4f332449cc635feec3a11958",
+      "certificate_sha256": "88abae152b9d8741283cd0c20b0077331f10f90200d42db7bf98a4263018c585"
+    }
+  },
+  "destination_projection": {
+    "projector": "native_annual_destination_v1",
+    "policy": "financial-correction-native-annual-v1"
+  }
+}

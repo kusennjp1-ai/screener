@@ -53,6 +53,25 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it('shares the mobile metadata row without losing the MA disclosure or rebuilding a selected chart',()=>{
+    const actions=<button type="button">拡大・移動</button>;
+    const props={priceData:longBars,smallScreen:true,researchMetaActions:actions};
+    const view=setup(props),instance=instances[0];
+    const summary=screen.getByText('移動平均・乖離率');
+    expect(summary).toHaveAttribute('aria-label','移動平均線・株価の乖離率');
+    expect(summary.closest('.chart-research-meta')).toContainElement(screen.getByRole('button',{name:'拡大・移動'}));
+    fireEvent.click(summary);
+    expect(summary.parentElement).toHaveAttribute('open');
+    expect(summary.parentElement).toHaveTextContent('SMA50');
+    expect(summary.parentElement).toHaveTextContent('SMA150');
+    expect(summary.parentElement).toHaveTextContent('SMA200');
+    fireEvent.click(screen.getByRole('button',{name:'1か月'}));
+    const selected={...instance.timeScale.getVisibleLogicalRange()};
+    view.update({...props,researchMetaActions:null,height:308});
+    expect(screen.getByText('移動平均線・株価の乖離率').parentElement).toHaveAttribute('open');
+    expect(instance.timeScale.getVisibleLogicalRange()).toEqual(selected);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
   it('does not invalidate chart options or RS scale options for a reused static symbol',()=>{
     const view=setup(),instance=instances[0];
     expect(instance.chart.applyOptions).not.toHaveBeenCalled();

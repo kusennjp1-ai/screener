@@ -1,3 +1,5 @@
+import { projectFinancialRow } from '../financialCurrent';
+import { useFinancialClock } from '../useFinancialClock';
 import { modelMarket } from '../portfolioPlan';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -54,19 +56,22 @@ const formatNumber = (value, digits = 0) => {
 
 function StaticHomePage() {
   const manifestQuery = useStaticManifest();
+  const generation = manifestQuery.data?.research_generation || manifestQuery.data?.generated_at;
   const { selectedMarket } = useStaticMarket();
   const marketEntry = useMemo(
     () => resolveStaticMarketEntry(manifestQuery.data, selectedMarket),
     [manifestQuery.data, selectedMarket],
   );
   const homeQuery = useQuery({
-    queryKey: ['staticHome', marketEntry.pages?.home?.path],
+    queryKey: ['staticHome', marketEntry.pages?.home?.path, generation],
+    placeholderData: () => undefined,
     queryFn: () => fetchStaticJson(marketEntry.pages.home.path),
     enabled: Boolean(marketEntry.pages?.home?.path),
     staleTime: Infinity,
   });
   const scanBundleQuery = useQuery({
-    queryKey: ['staticHomeScanRows', marketEntry.pages?.scan?.path],
+    queryKey: ['staticHomeScanRows', marketEntry.pages?.scan?.path, generation],
+    placeholderData: () => undefined,
     queryFn: async () => {
       const scanManifest = await fetchStaticJson(marketEntry.pages.scan.path);
       const rowsBySymbol = new Map(
@@ -82,6 +87,7 @@ function StaticHomePage() {
       });
       return {
         rows: Array.from(rowsBySymbol.values()),
+        as_of_date: scanManifest.as_of_date,
         defaultFilters: scanManifest.default_filters || {},
         presetScreens: scanManifest.preset_screens || [],
       };
@@ -139,21 +145,25 @@ function StaticHomePage() {
     }),
     [marketCapMin, scanDefaultFilters]
   );
-  const scanRows = scanBundleQuery.data?.rows ?? EMPTY_RESULTS;
+  const rawScanRows = scanBundleQuery.data?.rows ?? EMPTY_RESULTS;
+  const now = useFinancialClock(rawScanRows);
+  const scanRows = useMemo(() => rawScanRows.map(row => projectFinancialRow(row, { now, asOfDate: scanBundleQuery.data?.as_of_date, market: selectedMarket })), [rawScanRows, now, scanBundleQuery.data?.as_of_date, selectedMarket]);
+  const financialUnknownCount = scanRows.filter(row => row.financial_current_state?.dependent_reason).length;
+  const financialEmptyMessage = financialUnknownCount ? `財務・Code33の根拠が未確認の銘柄 ${financialUnknownCount}件。必要な条件を確認できず、現在の候補には数えていません。` : '現在の条件に一致する銘柄はありません。';
   const topResults = useMemo(() => {
     return sortStaticScanRows(
-      filterStaticScanRows(scanRows, topCandidateFilters),
+      filterStaticScanRows(scanRows, topCandidateFilters, { now }),
       'composite_score',
-      'desc'
+      'desc', { now }
     ).slice(0, DEFAULT_TOP_RESULTS);
-  }, [scanRows, topCandidateFilters]);
+  }, [scanRows, topCandidateFilters, now]);
   const backtestAlignedRows = useMemo(() => {
     return sortStaticScanRows(
-      filterStaticScanRows(scanRows, backtestAlignedFilters),
+      filterStaticScanRows(scanRows, backtestAlignedFilters, { now }),
       'rs_rating',
-      'desc'
+      'desc', { now }
     ).slice(0, DEFAULT_TOP_RESULTS);
-  }, [scanRows, backtestAlignedFilters]);
+  }, [scanRows, backtestAlignedFilters, now]);
   const leadingGroupScreen = useMemo(
     () => scanBundleQuery.data?.presetScreens?.find((screen) => screen.id === LEADERS_SCREEN_ID) ?? null,
     [scanBundleQuery.data?.presetScreens]
@@ -163,12 +173,12 @@ function StaticHomePage() {
       return EMPTY_RESULTS;
     }
     return sortStaticScanRows(
-      filterStaticScanRows(scanRows, buildFiltersFromPreset(leadingGroupScreen)),
+      filterStaticScanRows(scanRows, buildFiltersFromPreset(leadingGroupScreen), { now }),
       leadingGroupScreen.sort_by,
       leadingGroupScreen.sort_order,
-      { prioritizeCompositeScanMode: false }
+      { prioritizeCompositeScanMode: false, now }
     ).slice(0, DEFAULT_TOP_RESULTS);
-  }, [leadingGroupScreen, scanRows]);
+  }, [leadingGroupScreen, scanRows, now]);
 
   const chartEntries = useMemo(() => chartIndexQuery.data?.symbols || [], [chartIndexQuery.data]);
   const chartEnabledSymbols = useMemo(() => new Set(chartEntries.map((e) => e.symbol)), [chartEntries]);
@@ -263,18 +273,19 @@ function StaticHomePage() {
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} researchExposure={Math.min(modelMarket(scanRows).cap,.25)*100} />
 
-      {/* C86: held/watched names first — the exit is the edge. Surfaces each
-          watched symbol's exported sell action + stop, most-urgent first. */}
+      {/* Saved sell-model observations do not establish actual holdings. */}
       <WatchlistCard
         indexData={chartIndexQuery.data}
+        market={selectedMarket}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
       />
 
-      {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
-          risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
+      {/* Dated technical observations; Research owns full purchase readiness. */}
       <TodaysBuysCard
         indexData={chartIndexQuery.data}
         scanRows={scanRows}
+        market={selectedMarket}
+        marketAsOf={scanBundleQuery.data?.as_of_date}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
       />
 
@@ -315,7 +326,7 @@ function StaticHomePage() {
                   <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px' }}>
                     {item.symbol}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '10px' }}>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '11px' }}>
                     {item.display_name}
                   </Typography>
                   <Typography variant="body1" sx={{ mt: 0.5, fontFamily: 'monospace', fontWeight: 600 }}>
@@ -334,7 +345,7 @@ function StaticHomePage() {
                       }}
                     >
                       {item.change_1d != null
-                        ? `${item.change_1d > 0 ? '+' : ''}${formatNumber(item.change_1d, 2)}%`
+                        ? `${item.change_1d > 0 ? '+' : ''}${formatNumber(item.change_1d, 2).replace(/^-/, '−')}%`
                         : '-'}
                     </Typography>
                   </Box>
@@ -367,7 +378,7 @@ function StaticHomePage() {
         chartEnabledSymbols={chartEnabledSymbols}
         navigationSymbols={topNavigationSymbols}
         onOpenChart={handleRowClick}
-        emptyMessage="現在の条件に一致する銘柄はありません。"
+        emptyMessage={financialEmptyMessage}
         showRating
         action={(
           <TextField
@@ -424,8 +435,16 @@ function StaticHomePage() {
         <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
           業種グループ トップ10
         </Typography>
-        <TableContainer>
-          <Table size="small">
+        <TableContainer
+          role="region"
+          aria-label="業種グループ トップ10の表（横スクロール）"
+          tabIndex={0}
+          sx={{
+            '& .MuiTableCell-head': { fontSize: '11px' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
+          }}
+        >
+          <Table size="small" aria-label="業種グループ トップ10の表">
             <TableHead>
               <TableRow>
                 <GlossaryHeaderCell glossaryId="group_rank" openInfo={openInfo}>順位</GlossaryHeaderCell>
@@ -453,12 +472,13 @@ function StaticHomePage() {
       </Paper>
 
       <StaticChartViewerModal
+        generation={generation}
+        now={now}
         date={marketEntry.as_of_date}
         open={chartModalOpen}
         onClose={closeChartModal}
         initialSymbol={selectedChartSymbol}
         researchRows={scanRows}
-        generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at}
         chartIndex={chartIndexQuery.data}
         navigationSymbols={modalNavigationSymbols}
       />

@@ -73,3 +73,10 @@ describe('StaticGroupDetailModal', () => {
     expect(dialogPaper.className).toMatch(/MuiDialog-paperWidthFalse/);
   });
 });
+
+
+it('shows unknown growth instead of raw positives when current proof is absent', () => {
+  renderModal({detail:{...detail,as_of_date:'2026-10-02',stocks:[{...detail.stocks[0],eps_growth_qq:777,eps_growth_yy:888,sales_growth_qq:666,sales_growth_yy:999}]}});
+  expect(screen.getAllByText('未確認')).toHaveLength(4);
+  expect(screen.queryByText('+888%')).not.toBeInTheDocument();
+});

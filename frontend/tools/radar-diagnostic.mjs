@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, extname, relative, isAbsolute } from 'node:path';
 import { chromium } from '@playwright/test';
+import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 const root=resolve('test-results/radar-build'), output=resolve(process.env.RADAR_DIAGNOSTIC_OUTPUT || 'test-results/radar-diagnostic');
 await mkdir(output,{recursive:true});
 const server=createServer(async(req,res)=>{
@@ -41,9 +42,12 @@ try {
   const alignmentContext=await browser.newContext({viewport,deviceScaleFactor:2,serviceWorkers:'block'}),alignmentPage=await alignmentContext.newPage();
   await alignmentPage.goto(url);await alignmentPage.waitForFunction(()=>typeof window.measureRadar==='function');
   const alignmentSession=await alignmentContext.newCDPSession(alignmentPage);await alignmentSession.send('Emulation.setCPUThrottlingRate',{rate:4});
-  const alignment=await alignmentPage.evaluate(()=>window.measureRadar({width:innerWidth<768?358:828}));
+  const alignment=await alignmentPage.evaluate(()=>window.measureRadar({width:matchMedia('(max-width:700px)').matches?358:828}));
   await alignmentContext.close();
-  report.push({viewport,cpu_rate:4,runs,instrumented,alignment,pass:runs.length===3&&runs.every(run=>run.point_count===207&&run.final_point_count===207&&run.pixel_alignment.matches&&run.first_frame_ms<=50)&&alignment.pixel_alignment.matches&&alignment.final_point_count===207});
+  report.push({viewport,cpu_rate:4,harness_version:RADAR_HARNESS_VERSION,runs,instrumented,alignment,
+   failures:runs.flatMap((run,index)=>radarMeasurementFailures(run).map(failure=>`run ${index+1}: ${failure}`)),
+   alignment_failures:radarMeasurementFailures(alignment,{timing:false}),
+   pass:runs.length===3&&runs.every(run=>radarMeasurementFailures(run).length===0)&&radarMeasurementFailures(alignment,{timing:false}).length===0});
  }
  await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2));
  await writeFile(resolve(output,'benchmark.js.map'),await readFile(resolve(root,'benchmark.js.map')));

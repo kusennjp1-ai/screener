@@ -66,7 +66,7 @@ it('reports absent data instead of converting it into a zero or a chart',async()
   expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
 });
 
-it.each([['minervini2','6/7',103,false],['minervini','7/7',105,true]])('keeps %s application limits and first-book context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
+it.each([['minervini2','5/7',103,false],['minervini','6/7',105,true]])('keeps %s application limits and first-book context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
  const {withAuditFixture}=await import('../testAuditFixture');
  const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
   chart_path:'LIMIT.json',entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
@@ -80,4 +80,15 @@ it.each([['minervini2','6/7',103,false],['minervini','7/7',105,true]])('keeps %s
  if(sourceWarning){expect(description).toHaveTextContent('書籍の追随目安外');expect(within(card).getByRole('note')).toBeInTheDocument();}
  else expect(description).not.toHaveTextContent('書籍の追随目安外');
  await screen.findByTestId('price-chart');
+});
+
+it('keeps an unknown condition, the source warning and price together without a separate warning row',()=>{
+ const row=withAuditFixture({symbol:'UNKNOWN',company_name:'Unverified relative-strength company',market:'US',current_price:104,se_pivot_price:100,rs_rating:null},date);
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,assessment:{passed:8,total:9}}]} nearOnly date={date} method="minervini" market={{cap:.5,label:'上昇'}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
+ const card=screen.getByRole('article',{name:'UNKNOWN 比較チャート'}),line=card.querySelector('.comparison-company');
+ expect(line).toHaveTextContent('未確認：RS ≥ 70');
+ expect(line).toHaveTextContent('$104.00');
+ expect(within(line).getByRole('note',{name:/書籍の追随目安外：アプリの範囲内ですが/})).toHaveTextContent('△ 書籍目安2〜3%超');
+ expect(card.querySelector('.entry-source-note')).toBeNull();
+ expect(within(card).getByRole('button',{name:'UNKNOWN を分析'})).toHaveAccessibleDescription(/購入条件.*未達・未確認/);
 });
