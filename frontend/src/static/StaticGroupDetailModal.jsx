@@ -1,3 +1,5 @@
+import { projectFinancialRow } from './financialCurrent';
+import { useFinancialClock } from './useFinancialClock';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
@@ -37,6 +39,8 @@ import StaticGroupChartsGrid from './StaticGroupChartsGrid';
 const CHARTS_TOP_N_GROUPS = 50;
 
 function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClose }) {
+  const financialNow = useFinancialClock(detail?.stocks);
+  const stocks = useMemo(() => (detail?.stocks || []).map(stock => projectFinancialRow(stock, { now: financialNow, asOfDate: detail?.as_of_date || chartIndex?.as_of_date, market: detail?.market })), [detail, chartIndex?.as_of_date, financialNow]);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -238,7 +242,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {detail.stocks.map((stock) => (
+                      {stocks.map((stock) => (
                         <TableRow key={stock.symbol} hover>
                           <TableCell>
                             <TickerCell symbol={stock.symbol} companyName={stock.company_name} />
@@ -281,9 +285,9 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
                           {['eps_growth_qq', 'eps_growth_yy', 'sales_growth_qq', 'sales_growth_yy'].map((field) => (
                             <TableCell key={field} align="right" sx={{
                               fontFamily: 'monospace',
-                              color: stock[field] > 0 ? 'success.main' : stock[field] < 0 ? 'error.main' : 'text.secondary',
+                              color: 'text.secondary',
                             }}>
-                              {stock[field] != null ? `${stock[field] > 0 ? '+' : ''}${stock[field].toFixed(0)}%` : '-'}
+                              {stock[field] != null ? `${stock[field] > 0 ? '+' : ''}${stock[field].toFixed(0)}%` : '未確認'}
                             </TableCell>
                           ))}
                           <TableCell align="center">

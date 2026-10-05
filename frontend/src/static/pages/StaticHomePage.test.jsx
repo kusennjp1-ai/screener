@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import StaticHomePage from './StaticHomePage';
+import { dailyObservationIndex } from '../testDailyObservationFixture';
 
 const fetchStaticJson = vi.fn();
 const useStaticManifest = vi.fn();
@@ -220,7 +221,88 @@ describe('StaticHomePage', () => {
     });
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
+
+  it('keeps all Daily tables named and keyboard reachable even when no chart row can receive focus', async () => {
+    useStaticChartIndex.mockReturnValue({ data: { symbols: [] } });
+    scanManifestPayload.initial_rows = [];
+    scanChunkPayload.rows = [];
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    await screen.findByRole('region', { name: '業種グループ トップ10の表（横スクロール）' });
+    const regions = screen.getAllByRole('region', { name: /の表（横スクロール）$/ });
+    expect(regions).toHaveLength(4);
+    for (const region of regions) {
+      expect(region).toHaveAttribute('tabindex', '0');
+      region.focus();
+      expect(region).toHaveFocus();
+      for (const header of within(region).getAllByRole('columnheader')) {
+        expect(header).toHaveStyle({ fontSize: '11px' });
+      }
+    }
+  });
+
+  it('keeps Daily market/rank values while using readable captions and Unicode minus', async () => {
+    homePayload.key_markets = [
+      { symbol: 'IDX', display_name: 'Market caption', latest_close: 99, currency: 'USD', change_1d: -1.25, history: [{ close: 100 }, { close: 99 }] },
+      { symbol: 'UP', display_name: 'Up market', latest_close: 102, currency: 'USD', change_1d: 2.5, history: [{ close: 100 }, { close: 102 }] },
+    ];
+    homePayload.top_groups = [{ industry_group: 'Test sector', rank: 1, rank_change_1w: -3, rank_change_1m: 2 }];
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    expect(await screen.findByText('−1.25%')).toBeInTheDocument();
+    expect(screen.getByText('+2.50%')).toBeInTheDocument();
+    expect(screen.getByText('−3')).toBeInTheDocument();
+    expect(screen.queryByText('-1.25%')).not.toBeInTheDocument();
+    expect(screen.getByText('Market caption')).toHaveStyle({ fontSize: '11px' });
+    expect(within(screen.getByTestId('backtest-aligned-section')).getByText(/現在のスナップショットから/)).toHaveStyle({ fontSize: '11px' });
+  });
+
+  it.each([
+    ['missing finance', { financial_current: null }],
+    ['missing source', { financial_history: { source: null } }],
+    ['zero financial history', { financial_history: { quarters: [], annual: [] } }],
+    ['insufficient financial history', { financial_history: { annual: [{ fiscal_year: 2025, diluted_eps: 1 }] } }],
+    ['zero price history', { technical_audit: { valid: false, bars: 0, values: {} } }],
+    ['unknown market', { market_regime: null }],
+    ['unknown volume', { volume: null, se_volume_vs_50d: null }],
+  ])('renders actual Daily observations without a purchase pass for %s', async (_label, extra) => {
+    const symbol = dailyObservationIndex.symbols[0].symbol;
+    useStaticChartIndex.mockReturnValue({ data: {
+      ...dailyObservationIndex,
+      symbols: [{ ...dailyObservationIndex.symbols[0], buy: { ...dailyObservationIndex.symbols[0].buy, barrels_passed: undefined } }],
+    } });
+    scanManifestPayload.as_of_date = '2026-09-30';
+    scanManifestPayload.initial_rows = [{ ...makeLeaderRow(1), symbol, passes_template: true, code33: true,
+      market: 'US', market_regime: 'confirmed_uptrend', market_above_50dma: true, market_above_200dma: true, ...extra }];
+    scanManifestPayload.chunks = [];
+    renderWithProviders(<MemoryRouter initialEntries={['/daily']}><StaticHomePage /></MemoryRouter>);
+    const card = await screen.findByTestId('todays-buys-card');
+    expect(card).toHaveTextContent('テクニカル観測記録');
+    expect(card).toHaveTextContent('記録終値 66.23 · シグナル基準値 65.63');
+    expect(card).toHaveTextContent('旧モデル確認数（barrels） 未確認');
+    expect(card).toHaveTextContent('配信基準日 2026-10-01');
+    expect(card).toHaveTextContent('スキャン基準日 2026-09-30');
+    expect(card).toHaveTextContent('最新取引日は未確認');
+    expect(card).toHaveTextContent('未確認や履歴不足は合格に数えません');
+    expect(card.textContent).not.toMatch(/BUY NOW|今日の買い候補|日次の買い条件通過|size |now |資金|株数/);
+    expect(within(card).getByRole('link', { name: `${symbol}の購入条件をResearchで確認` })).toHaveAttribute('href', `/?symbol=${symbol}`);
+    expect(screen.getByTestId('top-scan-candidates-section')).toHaveTextContent('必要な条件を確認できず、現在の候補には数えていません');
+  });
+
+  it('wires both Daily model cards to the selected market instead of routing non-US symbols into Research', async () => {
+    const symbol = '7203.T';
+    useStaticManifest.mockReturnValue({ data: { markets: { JP: { ...manifest.markets.US, display_name: 'Japan' } } }, isLoading: false, isError: false });
+    useStaticMarket.mockReturnValue({ selectedMarket: 'JP' });
+    useStaticChartIndex.mockReturnValue({ data: { ...dailyObservationIndex, symbols: [{ ...dailyObservationIndex.symbols[0], symbol }] } });
+    localStorage.setItem('todaysWatchlist', JSON.stringify([symbol]));
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    const card = await screen.findByTestId('todays-buys-card');
+    expect(card).toHaveAttribute('data-freshness', 'unverified');
+    expect(within(card).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('watchlist-card')).queryByRole('link')).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(within(card).getByRole('button', { name: `${symbol}の記録チャートを開く` }));
+    expect(modalSpy).toHaveBeenLastCalledWith(expect.objectContaining({ open: true, initialSymbol: symbol }));
+  });
 
   it('keeps the technical reference filters, RS ordering, top-20 cap and market-cap control unchanged', async () => {
     scanManifestPayload.initial_rows = Array.from({ length: 21 }, (_, index) => makeLeaderRow(index + 1, {
@@ -316,7 +398,7 @@ describe('StaticHomePage', () => {
     }));
   });
 
-  it('keeps top candidate price sparklines within the compact table width', async () => {
+  it('keeps technical-reference sparklines readable when financial candidates are unknown', async () => {
     scanChunkPayload.rows[0].price_sparkline_data = [20, 22, 24];
     scanChunkPayload.rows[0].price_trend = 1;
     scanChunkPayload.rows[0].price_change_1d = 12.3;
@@ -325,22 +407,22 @@ describe('StaticHomePage', () => {
 
     // 0700.HK now also appears in the backtest-aligned list (C97), so scope the
     // assertion to the top-candidates section it is testing.
-    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    const topSection = await screen.findByTestId('backtest-aligned-section');
     expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
     expect(priceSparklineSpy).toHaveBeenCalledWith(expect.objectContaining({
       data: [20, 22, 24],
-      width: 137,
-      sparklineWidth: 86,
+      width: 195,
+      sparklineWidth: 150,
       change1d: 12.3,
     }));
   });
 
-  it('loads top candidates from the static scan bundle, filters by market cap, and keeps chart navigation aligned', async () => {
+  it('keeps the independent technical-reference market-cap filter and chart navigation aligned', async () => {
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 
     // Symbols can appear in both the top-candidates and backtest-aligned lists
     // (C97), so scope every symbol assertion to the top-candidates section.
-    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    const topSection = await screen.findByTestId('backtest-aligned-section');
     expect(await within(topSection).findByText('0700.HK')).toBeInTheDocument();
     expect(screen.getAllByText('時価総額').length).toBeGreaterThan(0);
     expect(within(topSection).getByText('$500.0M')).toBeInTheDocument();
@@ -371,7 +453,7 @@ describe('StaticHomePage', () => {
     });
   });
 
-  it('uses the static scan manifest default volume for Daily top candidates', async () => {
+  it('keeps the manifest volume floor and explains unknown financial prerequisites', async () => {
     scanManifestPayload.default_filters = { minVolume: 1_300_000 };
     scanManifestPayload.preset_screens = [makeLeadersPresetScreen(1_300_000)];
     scanManifestPayload.initial_rows = [
@@ -416,9 +498,13 @@ describe('StaticHomePage', () => {
 
     // LOCALPASS passes RS>=70 so it also lists in the backtest-aligned section
     // (C97); scope to the top-candidates section under test.
-    const topSection = await screen.findByTestId('top-scan-candidates-section');
+    const topSection = await screen.findByTestId('backtest-aligned-section');
     expect(await within(topSection).findByText('LOCALPASS')).toBeInTheDocument();
     expect(within(topSection).queryByText('TOOTHIN')).not.toBeInTheDocument();
+    const financialSection=screen.getByTestId('top-scan-candidates-section');
+    expect(financialSection).toHaveTextContent('財務・Code33の根拠が未確認の銘柄 2件');
+    expect(financialSection).toHaveTextContent('売買代金 1,300,000 以上');
+    expect(financialSection).not.toHaveTextContent('現在の条件に一致する銘柄はありません');
   });
 
   it('uses market liquidity defaults and composite ranking for leaders in leading groups', async () => {

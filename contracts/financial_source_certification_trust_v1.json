@@ -1,0 +1,125 @@
+{
+  "schema_version": "financial-source-certification-trust-v1",
+  "reviewed_requests": [
+    {
+      "reviewed_commit": "5bfa00bfab04b0e40de98622b10816a7b93bffca",
+      "tree_sha": "08f4b10a0fb57671802fa803fc25b140eb0ad3dc",
+      "request": {
+        "path": ".github/financial-source-certification-request.json",
+        "git_blob_sha": "52154d17aa83f23f1396fd0415385593013480e0",
+        "raw_sha256": "18d1f5fef8b447f9642bdc84d2a866693ec347c73dc73fd83bbb856b542a5c3a",
+        "canonical_sha256": "9c1e494aedf7d13fae2985def0e70b3f05564f84d5a18b612206f39b19c2d372",
+        "source": {
+          "repository": "kusennjp1-ai/screener",
+          "workflow": ".github/workflows/financial-statement-recovery.yml",
+          "head_sha": "4b27798b9b04528737938bb5844a8d86a704c58d",
+          "run_id": 37203329163,
+          "run_attempt": 3,
+          "artifact_id": 11304558864,
+          "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-3",
+          "artifact_sha256": "a9831aa5ee6da63eed203f4db240d689204839d82f01bbb639e3c892b0ce0925",
+          "archive_manifest_sha256": "549b6133d431d72f1d35999238261db382aa8fee1fb10a5771e8ba41b60ef85b",
+          "acquisition_base_sha256": "bbf846484deda7f78cdd0a384dd1521362b68a6a5d653f7417628dd5c2c8d395",
+          "cohort_sha256": "775d2ed6b6781a70940c62d3be584b16b1502deb16ca77c51ba8516c3c53d775"
+        }
+      }
+    },
+    {
+      "reviewed_commit": "16145829c9f06a51a5404a4044229b32b638c3c6",
+      "tree_sha": "16accf63ff4caef0da2adae8f4f9bbe46c913886",
+      "request": {
+        "path": ".github/financial-source-certification-request.json",
+        "git_blob_sha": "b3b503534eb3d9cb5181441b2f0b2ea2a4dd509f",
+        "raw_sha256": "21c9edb79be45bd00166485978dc690a40affe58f82d677e729d917f334f2bd3",
+        "canonical_sha256": "98d591afd8ee10fa53dc85d7643b4f14fcf1153ca77184a954ec096a11f77b9e",
+        "source": {
+          "repository": "kusennjp1-ai/screener",
+          "workflow": ".github/workflows/financial-statement-recovery.yml",
+          "head_sha": "4b27798b9b04528737938bb5844a8d86a704c58d",
+          "run_id": 37203329163,
+          "run_attempt": 8,
+          "artifact_id": 11307162746,
+          "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-8",
+          "artifact_sha256": "c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb",
+          "archive_manifest_sha256": "f49657581a65a88a7cdbb920e6650295e5406f3d9da162f4636614951f2fefaa",
+          "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+          "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
+        }
+      }
+    }
+  ],
+  "files": {
+    ".github/scripts/prepare-statement-certification.mjs": {
+      "sha256": "481c4f3d1a065192d8ae7550e016931482a1b9d5fe0125309d7da2b5030d825b",
+      "git_blob_sha": "f1223b8264f54325ea87dc700994e143d4c5dd25"
+    },
+    ".github/workflows/financial-source-certification.yml": {
+      "sha256": "4fe99dc38944680378a9e8306f38e1ac53b2dd40e30c1020fd864b1ab16688e4",
+      "git_blob_sha": "7e58995d4f1ef715bf05ebfe0a4b6484b08e8e6d"
+    },
+    "backend/app/scripts/certify_statement_source.py": {
+      "sha256": "ff130af2464c693f2c1fe5913b190a0e61fbe2e73b3fc42d322afd82f7f3a328",
+      "git_blob_sha": "3eda0d618a7b3977a12f65d34d2ff63e2be853e1"
+    },
+    "backend/app/services/eps_rating_service.py": {
+      "sha256": "c6c44939ba6733c1bffd54b22435c89d7a545496036a69a54efe59660f909444",
+      "git_blob_sha": "4d60d16f04b3119b59e51d0f8f4b1da0f493ab32"
+    },
+    "backend/app/services/financial_source_capture.py": {
+      "sha256": "edf0b8a7e78884cdd7356c613b6d9543b4fbadd807d966c5c4dcd4ae1d6d82fa",
+      "git_blob_sha": "3590f3ba1ed34b1f2e655d3b0c2a578a483cb510"
+    },
+    "backend/app/services/financial_source_evidence.py": {
+      "sha256": "3814769b3fa3a06d471d5de42128abe97cd88089a3b19bf7509dea295d828f95",
+      "git_blob_sha": "b97fbea516a25f54e199f254c25a172c0e84c131"
+    },
+    "backend/app/services/financial_statement_batch.py": {
+      "sha256": "21b0d9bdb0cb858ea6ea28ee52177d78c395761df6b27f8794f3296aa730010d",
+      "git_blob_sha": "773d8df6f42b648640722fee652ed72127d5260c"
+    },
+    "backend/app/services/growth_cadence_service.py": {
+      "sha256": "751f45d72a9d09d3ae8b61eedc171794eaa434d4624367f127291bf4487b786e",
+      "git_blob_sha": "4129153a316859e511e7d0e3bc73b683b088f929"
+    },
+    "backend/app/services/quarterly_eps_selection.py": {
+      "sha256": "4f734a5854b7a90aae2cb5de5019014901c3245a5d8aee538c80b35d10e67ad1",
+      "git_blob_sha": "9bf43a43c865538bb66cf7e19258e7f863573fb6"
+    },
+    "backend/app/services/statement_artifact_archive.py": {
+      "sha256": "c784c2848eb968dffd3cddf9a0597fc0f15c2e8d6a1ef3184fb16bf7c3b3e18a",
+      "git_blob_sha": "b7c0fdd4acf9cd15293c3717af64693a1927a01f"
+    },
+    "backend/app/services/statement_refresh_planning.py": {
+      "sha256": "1e5ecf69b3c436320ff885f85a72a7ef67ce390282f40f88769ebf3c4e4ed770",
+      "git_blob_sha": "0cbd4f3bf430ef3e24f5dcccc25d008f6cd235d9"
+    },
+    "backend/app/services/statement_source_certification.py": {
+      "sha256": "42ed70a8d4b84af58c244dced6e27130e55fa871b979b2bfe996ccb8d2cecfc3",
+      "git_blob_sha": "38b679ee1d3afa9ed5e38e069f8366c56935c2af"
+    },
+    "backend/app/services/static_financial_evidence.py": {
+      "sha256": "7b195c2928ee398eef7ab469d2723bc2f9db13b2cdced32dc3c9bd84100303a6",
+      "git_blob_sha": "d5fdd07f86ad2b53921681abaf8adf7707388fd5"
+    },
+    "contracts/financial_source_certification_v1.json": {
+      "sha256": "d7a3ede506715f5347c02b48a3390cef54bb22442c737889ad4c0600cd2e1b2e",
+      "git_blob_sha": "82ecd083056d34d79fad1d877e21f857c52a3f2e"
+    },
+    "contracts/financial_source_certification_v1.schema.json": {
+      "sha256": "fe254c0f4b19d917ec1f6c4e4b40bd28dc10053dc23a65a2839d3122bdef4630",
+      "git_blob_sha": "a5f82969371c7370e1e82aaa17755f8b1850aa6e"
+    },
+    "contracts/financial_source_evidence_v1.json": {
+      "sha256": "6ff3013ed5f1bbd8e699c669d8662145bf2619d8cd4831fece9859f01b1dd1da",
+      "git_blob_sha": "87e2ba9d1fcc27546eba43803a32fdfffdee7275"
+    },
+    "contracts/financial_source_reviewed_migrations_v1.json": {
+      "sha256": "3b233a88311f6dc7492ec920ca256479524ff33839398980694149b559e31cdb",
+      "git_blob_sha": "fe36f674187c449d6d70a5e0edfee8914be6e4d3"
+    },
+    "contracts/static_financial_current_v1.json": {
+      "sha256": "28a190c808802c27effa99c9c70b3e9e9c546a7ba749e6e1d51a918cccb869a4",
+      "git_blob_sha": "679445c8dc264478130138c47e19d6c186d4271f"
+    }
+  }
+}

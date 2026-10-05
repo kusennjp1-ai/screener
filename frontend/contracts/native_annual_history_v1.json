@@ -1,0 +1,41 @@
+{
+  "schema_version": "native-annual-history-policy-v1",
+  "policy_id": "financial-correction-native-annual-v1",
+  "history_schema": "provider-reported-native-annual-eps-v1",
+  "source_policy_id": "financial-correction-explicit-ownership-v1",
+  "provider_metric": "annualDilutedEPS",
+  "basis": "reported_diluted_eps",
+  "unit": "reporting_currency_per_provider_share",
+  "share_basis": "provider_reported_split_adr_unverified",
+  "supported_currencies": [
+    "USD",
+    "ARS",
+    "BRL",
+    "CAD",
+    "CHF",
+    "CNY",
+    "COP",
+    "DKK",
+    "EUR",
+    "GBP",
+    "HKD",
+    "INR",
+    "JPY",
+    "KRW",
+    "KZT",
+    "MXN",
+    "PEN",
+    "TWD"
+  ],
+  "source_max_age_hours": 72,
+  "latest_period_max_age_days": 550,
+  "period_gap_days": [
+    345,
+    385
+  ],
+  "limitations": [
+    "Provider-reported share units and split/ADR restatement are not independently verified; this limitation also applies to accepted USD annual histories.",
+    "A singleton currency set establishes agreement of recorded codes, not a currency code independently verified on every cell.",
+    "No FX conversion, valuation use, basic EPS substitution, quarterly reconstruction or historical knowledge claim."
+  ]
+}

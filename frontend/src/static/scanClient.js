@@ -1,3 +1,5 @@
+import { projectFinancialRow } from './financialCurrent.js';
+
 const RANGE_FILTER_TO_FIELD = {
   compositeScore: 'composite_score',
   minerviniScore: 'minervini_score',
@@ -71,6 +73,11 @@ const RATING_SORT_ORDER = {
 
 const IPO_PRESET_MONTHS = { '6m': 6, '1y': 12, '2y': 24, '3y': 36, '5y': 60 };
 
+const NUMERIC_SORT_FIELDS = new Set([
+  ...Object.values(RANGE_FILTER_TO_FIELD), 'volume', 'market_cap', 'market_cap_usd',
+]);
+const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
 const resolveIpoCutoff = (preset, now = new Date()) => {
   if (!preset) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(preset)) return preset;
@@ -89,7 +96,9 @@ const isEmptyRange = (range) => !range || (range.min == null && range.max == nul
 
 const valueMatchesRange = (value, range) => {
   if (isEmptyRange(range)) return true;
-  if (value == null) return false;
+  if (!isFiniteNumber(value)) return false;
+  if (range.min != null && !isFiniteNumber(range.min)) return false;
+  if (range.max != null && !isFiniteNumber(range.max)) return false;
   if (range.min != null && value < range.min) return false;
   if (range.max != null && value > range.max) return false;
   return true;
@@ -128,14 +137,15 @@ const getScanModeSortPriority = (row) => {
 
 const getSortValue = (row, sortBy) => {
   if (sortBy === 'rating') {
-    return RATING_SORT_ORDER[row.rating] ?? 0;
+    return RATING_SORT_ORDER[row.rating] ?? null;
   }
-  return row?.[sortBy];
+  const value = row?.[sortBy];
+  return NUMERIC_SORT_FIELDS.has(sortBy) && !isFiniteNumber(value) ? null : value;
 };
 
-export const filterStaticScanRows = (rows, filters) => {
-  const ipoCutoff = resolveIpoCutoff(filters.ipoAfter);
-  return rows.filter((row) => {
+export const filterStaticScanRows = (rows, filters = {}, { now = Date.now() } = {}) => {
+  const ipoCutoff = resolveIpoCutoff(filters.ipoAfter, new Date(now));
+  return rows.map((row) => projectFinancialRow(row, { now })).filter((row) => {
     const hasSymbolSearch = Boolean(filters.symbolSearch);
     if (hasSymbolSearch) {
       const needle = filters.symbolSearch.toLowerCase();
@@ -172,12 +182,12 @@ export const filterStaticScanRows = (rows, filters) => {
     if (
       !bypassMinVolumeForListingSearch &&
       filters.minVolume != null &&
-      (row.volume == null || row.volume < filters.minVolume)
+      !valueMatchesRange(row.volume, { min: filters.minVolume })
     ) {
       return false;
     }
 
-    if (filters.minMarketCap != null && (row.market_cap == null || row.market_cap < filters.minMarketCap)) {
+    if (!valueMatchesRange(row.market_cap, { min: filters.minMarketCap })) {
       return false;
     }
 
@@ -212,13 +222,13 @@ export const sortStaticScanRows = (
   rows,
   sortBy,
   sortOrder = 'desc',
-  { prioritizeCompositeScanMode = true } = {},
+  { prioritizeCompositeScanMode = true, now = Date.now() } = {},
 ) => {
   const direction = sortOrder === 'asc' ? 1 : -1;
   const useCompositeModePriority = prioritizeCompositeScanMode &&
     sortBy === 'composite_score' &&
     sortOrder === 'desc';
-  return [...rows].sort((left, right) => {
+  return rows.map((row) => projectFinancialRow(row, { now })).sort((left, right) => {
     if (useCompositeModePriority) {
       const modeComparison = compareValues(
         getScanModeSortPriority(left),
@@ -233,14 +243,6 @@ export const sortStaticScanRows = (
     // Unknown values are unknown, and remain last in either sort direction.
     if (leftValue == null && rightValue != null) return 1;
     if (leftValue != null && rightValue == null) return -1;
-    if (sortBy === 'composite_score' && sortOrder === 'desc') {
-      if (leftValue == null && rightValue != null) {
-        return 1;
-      }
-      if (leftValue != null && rightValue == null) {
-        return -1;
-      }
-    }
     const comparison = compareValues(leftValue, rightValue);
     if (comparison !== 0) {
       return comparison * direction;

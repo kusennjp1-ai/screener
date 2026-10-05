@@ -16,7 +16,7 @@ for(const width of [1440,390])test(`offscreen candidates keep height, focus and 
     return route.fulfill({json:payload});
   });
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'候補リスト 101件'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'対象銘柄 101件'})).toBeVisible();
   const items=page.getByRole('list',{name:'投資手法別の銘柄候補'}).getByRole('listitem');
   await expect(items).toHaveCount(50);
   await expect(items.last()).toHaveCSS('content-visibility','auto');
@@ -63,5 +63,5 @@ for(const width of [1440,390])test(`offscreen candidates keep height, focus and 
   await expectPageStart('PERF050');
   await page.getByRole('button',{name:'前の50件',exact:true}).click();
   await expectPageStart('PERF000');
-  await expect(page.getByRole('heading',{name:'候補リスト 101件'})).toHaveText('候補リスト 101件');
+  await expect(page.getByRole('heading',{name:'対象銘柄 101件'})).toHaveText('対象銘柄 101件');
 });

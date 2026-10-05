@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from .quarterly_eps_selection import select_quarterly_eps_pair_row
+
 logger = logging.getLogger(__name__)
 
 
@@ -246,9 +248,13 @@ class EPSRatingService:
             q2_yoy = None
 
             # Q1 YoY: Compare col[0] to col[4] (most recent vs same quarter last year)
-            if quarterly_income_stmt.shape[1] >= 5:
-                recent_q1 = quarterly_income_stmt.loc[eps_row, quarterly_income_stmt.columns[0]]
-                year_ago_q1 = quarterly_income_stmt.loc[eps_row, quarterly_income_stmt.columns[4]]
+            q1_row = select_quarterly_eps_pair_row(
+                quarterly_income_stmt, eps_row,
+                quarterly_income_stmt.columns[0], quarterly_income_stmt.columns[4],
+            )
+            if q1_row is not None:
+                recent_q1 = quarterly_income_stmt.loc[q1_row, quarterly_income_stmt.columns[0]]
+                year_ago_q1 = quarterly_income_stmt.loc[q1_row, quarterly_income_stmt.columns[4]]
 
                 if pd.notna(recent_q1) and pd.notna(year_ago_q1) and abs(year_ago_q1) > 0.01:
                     q1_yoy = ((recent_q1 - year_ago_q1) / abs(year_ago_q1)) * 100
@@ -256,7 +262,7 @@ class EPSRatingService:
                     q1_yoy = round(q1_yoy, 2)
                     if source_context is not None:
                         context = self._quarterly_source_context(
-                            eps_row,
+                            q1_row,
                             quarterly_income_stmt.columns[0], recent_q1,
                             quarterly_income_stmt.columns[4], year_ago_q1,
                             column_positions=[0, 4],
@@ -266,9 +272,13 @@ class EPSRatingService:
                             source_context["eps_q1_yoy"] = context
 
             # Q2 YoY: Compare col[1] to col[5] (prior quarter vs same quarter last year)
-            if quarterly_income_stmt.shape[1] >= 6:
-                recent_q2 = quarterly_income_stmt.loc[eps_row, quarterly_income_stmt.columns[1]]
-                year_ago_q2 = quarterly_income_stmt.loc[eps_row, quarterly_income_stmt.columns[5]]
+            q2_row = select_quarterly_eps_pair_row(
+                quarterly_income_stmt, eps_row,
+                quarterly_income_stmt.columns[1], quarterly_income_stmt.columns[5],
+            ) if quarterly_income_stmt.shape[1] >= 6 else None
+            if q2_row is not None:
+                recent_q2 = quarterly_income_stmt.loc[q2_row, quarterly_income_stmt.columns[1]]
+                year_ago_q2 = quarterly_income_stmt.loc[q2_row, quarterly_income_stmt.columns[5]]
 
                 if pd.notna(recent_q2) and pd.notna(year_ago_q2) and abs(year_ago_q2) > 0.01:
                     q2_yoy = ((recent_q2 - year_ago_q2) / abs(year_ago_q2)) * 100
@@ -276,7 +286,7 @@ class EPSRatingService:
                     q2_yoy = round(q2_yoy, 2)
                     if source_context is not None:
                         context = self._quarterly_source_context(
-                            eps_row,
+                            q2_row,
                             quarterly_income_stmt.columns[1], recent_q2,
                             quarterly_income_stmt.columns[5], year_ago_q2,
                             column_positions=[1, 5],

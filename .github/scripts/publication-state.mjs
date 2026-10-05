@@ -107,6 +107,17 @@ export function validateReceipt(receipt) {
     || !receipt.ui_files || !Object.keys(receipt.ui_files).length || !receipt.ui_files['index.html'] || !receipt.ui_files['sw.js']
     || Object.entries(receipt.ui_files).some(([path, hash]) => !safePath(path) || isData(path) || path === 'publication.json' || !/^[a-f0-9]{64}$/.test(hash))
     || receipt.ui_digest !== inventoryDigest(receipt.ui_files)) throw Error('Invalid or truncated live publication receipt');
+  if (receipt.financial_release !== undefined) {
+    const ref=receipt.financial_release;
+    if(receipt.financial_correction!==undefined||!ref||Object.keys(ref).sort().join(',')!=='path,schema_version,sha256'||ref.schema_version!=='financial-release-receipt-v1'
+      ||!/^[a-f0-9]{64}$/.test(ref.sha256||'')||ref.path!==`static-data/financial-corrections/release-${ref.sha256}.json`
+      ||!['financial_generation','financial_lineage_sha256','data_inventory_sha256'].every(key=>/^[a-f0-9]{64}$/.test(receipt[key]||'')))throw Error('Invalid publication financial release reference');
+  } else if (receipt.financial_correction !== undefined || receipt.financial_generation !== undefined || receipt.data_inventory_sha256 !== undefined || receipt.financial_lineage_sha256 !== undefined) {
+    const ref = receipt.financial_correction;
+    if (!ref || Object.keys(ref).sort().join(',') !== 'path,schema_version,sha256' || ref.schema_version !== 'financial-correction-v1'
+      || !/^[a-f0-9]{64}$/.test(ref.sha256 || '') || ref.path !== `static-data/financial-corrections/receipt-${ref.sha256}.json`
+      || !/^[a-f0-9]{64}$/.test(receipt.financial_generation || '') || !/^[a-f0-9]{64}$/.test(receipt.data_inventory_sha256 || '')) throw Error('Invalid publication financial correction reference');
+  }
   return receipt;
 }
 
@@ -178,10 +189,28 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   const receipt = receiptBytes ? validateReceipt(JSON.parse(receiptBytes)) : null;
   const anchor = deploymentAnchor(receipt || { run_id: bootstrap.approved_run_id, run_attempt: bootstrap.approved_attempt }, repository, api);
   const latest = latestDeployment(repository, api, anchor);
+  let financialCorrection = null, financialRelease = null;
   if (receipt) {
     if (receipt.run_id !== latest.runId || receipt.run_attempt !== latest.attempt) throw Error('Pages has not converged to its latest successful deployment');
     if (receipt.data_manifest_sha256 !== sha256(manifestBytes) || receipt.verification_universe.as_of_date !== manifest.markets.US?.as_of_date) throw Error('Live receipt and data disagree');
     verifyApproval(receipt, repository, api);
+    if (receipt.financial_correction) {
+      const reference = receipt.financial_correction, bytes = await read(reference.path);
+      if (sha256(bytes) !== reference.sha256) throw Error('Live financial correction receipt hash mismatch');
+      const { validateCorrectionReceipt } = await import('./financial-correction.mjs');
+      const correction = validateCorrectionReceipt(JSON.parse(bytes));
+      financialCorrection = correction;
+      if (correction.financial.generation !== receipt.financial_generation || correction.validation.consumer_sha !== receipt.ui_sha
+        || correction.validation.ui_digest !== receipt.ui_digest) throw Error('Live financial correction and UI disagree');
+    }
+    if(receipt.financial_release){
+      const reference=receipt.financial_release,bytes=await read(reference.path);
+      if(sha256(bytes)!==reference.sha256)throw Error('Live financial release receipt hash mismatch');
+      const {validateFinancialReleaseReceipt}=await import('./financial-release-activation.mjs');
+      financialRelease=validateFinancialReleaseReceipt(JSON.parse(bytes));
+      if(financialRelease.financial_generation!==receipt.financial_generation||financialRelease.lineage_sha256!==receipt.financial_lineage_sha256
+        ||financialRelease.ui.approved_sha!==receipt.ui_sha||financialRelease.ui.digest!==receipt.ui_digest)throw Error('Live financial release and publication disagree');
+    }
   } else if (latest.headSha !== bootstrap.ui_sha) throw Error('Legacy Pages is no longer the approved a9 UI');
   const uiFiles = receipt?.ui_files || bootstrap.ui_files;
   // Verify every non-data file, including HTML, service worker, icons and manifests.
@@ -204,11 +233,11 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   const finalDeployment = latestDeployment(repository, api, latest);
   if (latest.runId !== finalDeployment.runId || latest.attempt !== finalDeployment.attempt) throw Error('A new deployment completed while reading Pages');
   return { identity: `${latest.runId}/${latest.attempt}/${sha256(receiptBytes || '')}/${sha256(manifestBytes)}`, latest,
-    receipt, legacyArtifact: legacy?.artifact || null, priceObservations, knownPriceDates, manifest, manifestHash: sha256(manifestBytes), uiSha: receipt?.ui_sha || bootstrap.ui_sha,
+    receipt, financialCorrection, financialRelease, legacyArtifact: legacy?.artifact || null, priceObservations, knownPriceDates, manifest, manifestHash: sha256(manifestBytes), uiSha: receipt?.ui_sha || bootstrap.ui_sha,
     verificationUniverse: receipt?.verification_universe || bootstrap.verification_universe, receiptHash: sha256(receiptBytes || ''), uiFiles, uiDigest: inventoryDigest(uiFiles), approval: receipt?.approval || { type: 'bootstrap', sha: bootstrap.ui_sha } };
 }
 
-export function downloadArtifact(artifact, directory, repository = bootstrap.repository, expectedFile = 'artifact.tar') {
+export function downloadArtifact(artifact, directory, repository = bootstrap.repository, expectedFile = 'artifact.tar', maximumBytes = null) {
   if (!positive(artifact.id)) throw Error('Missing immutable artifact ID');
   mkdirSync(directory, { recursive: true });
   const zip = join(directory, 'artifact.zip');
@@ -223,8 +252,9 @@ export function downloadArtifact(artifact, directory, repository = bootstrap.rep
   execFileSync('python3', ['-c', `import zipfile,pathlib,shutil,stat,sys
 z=zipfile.ZipFile(sys.argv[1]); names=z.infolist(); expected=sys.argv[3]
 assert len(names)==1 and names[0].filename==expected and not stat.S_ISLNK(names[0].external_attr>>16), 'Unexpected artifact ZIP members'
+assert sys.argv[4]=='none' or names[0].file_size<=int(sys.argv[4]), 'Artifact ZIP member exceeds size limit'
 with z.open(names[0]) as src, open(pathlib.Path(sys.argv[2])/expected,'wb') as dst: shutil.copyfileobj(src,dst)
-`, zip, directory, expectedFile], { stdio: 'pipe' });
+`, zip, directory, expectedFile, maximumBytes === null ? 'none' : String(maximumBytes)], { stdio: 'pipe' });
   return directory;
 }
 
@@ -283,4 +313,3 @@ print(json.dumps({'manifest':manifest,'ui':ui}))
   }
   return { artifact: artifact, priceObservations: observationProof.observations };
 }
-

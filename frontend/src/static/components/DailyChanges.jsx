@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { Alert, Button, Paper } from '@mui/material';
 import { CHANGE_LABELS } from '../candidateHistory';
-import { dailyChangePresentation } from '../dailyChangePresentation';
+import { comparisonBasisPresentation, dailyChangePresentation } from '../dailyChangePresentation';
 const display=tuple=>!tuple?'—':`${({pass:'通過',fail:'未通過',unknown:'未確認'})[tuple[0]]} · ${typeof tuple[1]==='boolean'?(tuple[1]?'はい':'いいえ'):tuple[1]??'—'}${tuple[2]?` (${tuple[2]})`:''}`;
 export default function DailyChanges({query,method,onSelect,availableSymbols}) {
   const [selectedKind,setKind]=useState(null),[page,setPage]=useState(0);
   if(query.isError) return <Alert severity="warning">候補の変化を取得できません。脱落とは扱いません。</Alert>;
   const data=query.data, summary=data?.changes?.[method];
   const presentation=dailyChangePresentation(query,method);
+  const basis=comparisonBasisPresentation(data?.comparison_basis);
+  if(presentation.blocked) return <Alert severity="info">{presentation.explanation}</Alert>;
   if(!presentation.ready || !Array.isArray(summary?.items)) return <p role="status">候補の変化の内訳を読み込み中… 未取得を0件とは扱いません。</p>;
   const kind=selectedKind ?? (presentation.fullyIncomparable?'incomparable':'new');
   const items=summary.items.filter(i=>i.state===kind);
   const current=Math.min(page,Math.max(0,Math.ceil(items.length/20)-1));
   return <Paper component="section" className="daily-changes" variant="outlined" aria-label="候補の日次変化">
     <div className="daily-changes-heading"><strong>候補の変化</strong><span>{data.history.previous_as_of?`${data.history.previous_as_of} → ${data.as_of}`:`記録開始 ${data.as_of}`}</span></div>
+    {basis&&<p role="note" className="comparison-basis">{basis}</p>}
     {!data.history.previous_as_of ? <p>前回比較は、次の営業日の公開後から表示します。</p> : <p>日次の選定条件の変化です。購入シグナルではありません。全業種・流動性フィルター内を比較します。</p>}
     {presentation.explanation&&<Alert severity="info">{presentation.explanation}</Alert>}
     {data.history.previous_as_of&&<p>{Object.entries(CHANGE_LABELS).filter(([key])=>key!=='unchanged').map(([key,label])=>`${label} ${summary.counts[key]}`).join(' · ')}</p>}

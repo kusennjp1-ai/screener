@@ -1,0 +1,17 @@
+{
+  "schema_version": "financial-release-policy-v1",
+  "activation_enabled": true,
+  "request_path": ".github/financial-release-request.json",
+  "activation_candidate_path": ".github/financial-activation-candidate.json",
+  "candidate_workflow": ".github/workflows/design-acceptance.yml",
+  "candidate_job": "Real-data design and performance budgets",
+  "candidate_steps": [
+    "Prepare the certified financial candidate",
+    "Measure all routes, screenshots, accessibility and CPU 4x",
+    "Require reviewed screenshots and four design scores of at least 8.0",
+    "Seal the exact tested financial candidate"
+  ],
+  "protected_prefixes": ["frontend/", "backend/", "contracts/", "data/ibd_reference/", ".github/scripts/", ".github/workflows/"],
+  "maximum_archive_bytes": 8589934592,
+  "maximum_archive_files": 200000
+}

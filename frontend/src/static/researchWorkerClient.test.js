@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadResearchBundle, runDataWorker } from './researchWorkerClient';
+import { RULE_SUMMARY_VERSION } from './researchEngine';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('research worker lifecycle', () => {
@@ -15,9 +16,67 @@ describe('research worker lifecycle', () => {
     const pending = loadResearchBundle('research-index-0123456789abcdef.json', '2026-09-29', fetchJson);
     expect(instance.options.type).toBe('module');
     expect(instance.postMessage.mock.calls[0][0]).toMatchObject({ operation: 'research', date: '2026-09-29' });
-    instance.onmessage({ data: { result: { rows: [], date: '2026-09-29' } } });
-    expect(await pending).toEqual({ rows: [], date: '2026-09-29' });
+    const evaluation=instance.postMessage.mock.calls[0][0].evaluation;
+    const result={rows:[],date:'2026-09-29',evaluated_at:evaluation.now,generation:evaluation.generation,evaluation_epoch:evaluation.evaluationEpoch,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION};
+    instance.onmessage({data:{result}});
+    expect(await pending).toEqual(result);
     expect(fetchJson).not.toHaveBeenCalled();
+    expect(instance.terminate).toHaveBeenCalledOnce();
+  });
+  it.each([undefined, NaN, Infinity, '2026-10-04', 0, -1])('rejects a malformed or nonfuture worker deadline %s before accepting the bundle', async deadline => {
+    let instance;
+    vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+    const now = Date.parse('2026-10-04T00:00:00Z');
+    const pending = loadResearchBundle('research.json', '2026-09-29', vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:deadline,assessment_version:RULE_SUMMARY_VERSION}}});
+    await expect(pending).rejects.toThrow('Invalid research evaluation deadline');
+    expect(instance.terminate).toHaveBeenCalledOnce();
+    expect(instance.onmessage).toBeNull();
+  });
+  it.each(['date','generation','evaluated_at','evaluation_epoch'])('rejects a worker deadline belonging to a different %s', async field => {
+    let instance;
+    vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+    const now = Date.parse('2026-10-04T00:00:00Z');
+    const pending = loadResearchBundle('research.json', '2026-09-29', vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    const result = {rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:now+1,assessment_version:RULE_SUMMARY_VERSION};
+    result[field] = typeof result[field] === 'number' ? result[field] + 1 : 'different';
+    instance.onmessage({data:{result}});
+    await expect(pending).rejects.toThrow('Obsolete research evaluation');
+    expect(instance.terminate).toHaveBeenCalledOnce();
+  });
+  it('accepts the first invalid millisecond computed by the worker without extending its deadline', async () => {
+    let instance;
+    vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+    const now = Date.parse('2026-10-04T00:00:00Z');
+    const pending = loadResearchBundle('research.json', '2026-09-29', vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:now+1,assessment_version:RULE_SUMMARY_VERSION}}});
+    expect((await pending).next_expiry_at).toBe(now+1);
+  });
+  it.each([undefined,null])('accepts a valid actual worker snapshot when expected date is %s', async expectedDate => {
+    let instance;
+    vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+    const now = Date.parse('2026-10-04T00:00:00Z');
+    const pending = loadResearchBundle('research.json', expectedDate, vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION}}});
+    expect((await pending).date).toBe('2026-09-29');
+    expect(instance.terminate).toHaveBeenCalledOnce();
+  });
+  it.each([undefined,null,'2026-02-30','invalid',42])('rejects malformed actual date %s even without an expected date', async actualDate => {
+    let instance;
+    vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+    const now = Date.parse('2026-10-04T00:00:00Z');
+    const pending = loadResearchBundle('research.json', undefined, vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    instance.onmessage({data:{result:{rows:[],date:actualDate,evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION}}});
+    await expect(pending).rejects.toThrow('Invalid research evaluation');
+    expect(instance.terminate).toHaveBeenCalledOnce();
+  });
+  it.each(['','invalid','2026-02-30','2026-09-28'])('rejects the explicit unmatched expected date %s', async expectedDate => {
+    let instance;
+    vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
+    const now = Date.parse('2026-10-04T00:00:00Z');
+    const pending = loadResearchBundle('research.json', expectedDate, vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION}}});
+    await expect(pending).rejects.toThrow('Obsolete research evaluation');
     expect(instance.terminate).toHaveBeenCalledOnce();
   });
   it('terminates aborted workers without accepting their obsolete result', async () => {

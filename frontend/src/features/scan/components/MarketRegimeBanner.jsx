@@ -2,33 +2,32 @@ import { Box, Chip, Paper, Tooltip, Typography } from '@mui/material';
 import GlossaryLabel from '../../../components/common/GlossaryLabel';
 import { MOTION, enterSlideFade, pulseRing } from '../../../theme/motion';
 
-// Minervini's first rule: trade with the general market, scale exposure to its
-// health. The regime is computed once per scan (identical across rows), so read
-// it off the first result and show a single banner above the table.
+// The regime is a scan-time model observation, normally replicated across rows.
+// Its classification and reference exposure do not establish purchase readiness.
 const REGIME_META = {
   confirmed_uptrend: {
     label: 'Confirmed Uptrend',
     color: 'success',
     pulse: '#4caf50',
-    hint: 'General market in a confirmed uptrend — full exposure warranted.（上昇トレンド確認済み — フル投資が正当化される局面）',
+    hint: 'Model observation: confirmed uptrend.（配信データの市場モデルは上昇トレンドに分類）',
   },
   uptrend_under_pressure: {
     label: 'Uptrend Under Pressure',
     color: 'warning',
     pulse: null,
-    hint: 'Distribution building — trade smaller, tighten stops.（機関の売りが積み上がり中 — ロットを落とし損切りを引き締める）',
+    hint: 'Model observation: uptrend under selling pressure.（配信データの市場モデルは上昇トレンドへの売り圧力を観測）',
   },
   correction: {
     label: 'Correction',
     color: 'warning',
     pulse: null,
-    hint: 'Market in correction — raise cash, only pilot buys.（市場は調整中 — 現金比率を上げ、試し玉のみ）',
+    hint: 'Model observation: market correction.（配信データの市場モデルは調整局面に分類）',
   },
   downtrend: {
     label: 'Downtrend',
     color: 'error',
     pulse: '#f44336',
-    hint: "Downtrend — don't fight the tape; setups are watchlist-only.（下落トレンド — 逆らわない。監視リスト入りに留める）",
+    hint: 'Model observation: downtrend.（配信データの市場モデルは下落トレンドに分類）',
   },
 };
 
@@ -85,10 +84,10 @@ const HealthMeter = ({ health }) => {
 };
 
 /**
- * Suggested-exposure ladder: four rising segments (Minervini scales in — pilot
- * → add → build → full). Lit segments arrive in a stagger, bottom-up.
+ * Reference-exposure ladder: four rising segments. Lit segments arrive in a
+ * stagger, bottom-up; their height does not authorize increasing exposure.
  */
-const ExposureLadder = ({ exposure, label = 'Suggested exposure' }) => {
+const ExposureLadder = ({ exposure, label = 'Model exposure cap' }) => {
   const value = Math.max(0, Math.min(100, exposure));
   const litSegments = Math.round((value / 100) * 4);
   return (
@@ -147,7 +146,7 @@ export default function MarketRegimeBanner({ results, researchExposure }) {
     label: row.market_regime,
     color: 'default',
     pulse: null,
-    hint: '',
+    hint: 'Unrecognized model classification.（市場モデルの区分を解釈できません）',
   };
   const health = row.market_health;
   const exposure = researchExposure ?? row.market_exposure_pct;
@@ -192,7 +191,7 @@ export default function MarketRegimeBanner({ results, researchExposure }) {
         </GlossaryLabel>
       )}
       {health != null && <HealthMeter health={health} />}
-      {exposure != null && <ExposureLadder exposure={exposure} label={researchExposure == null ? undefined : "新規資金の試行配分上限"} />}
+      {exposure != null && <ExposureLadder exposure={exposure} label={researchExposure == null ? undefined : "新規資金の試行配分上限（参考）"} />}
       {distDays != null && (
         <GlossaryLabel term="distribution_days">
           <Chip
@@ -203,6 +202,9 @@ export default function MarketRegimeBanner({ results, researchExposure }) {
           />
         </GlossaryLabel>
       )}
+      <Typography variant="caption" color="text.secondary" sx={{ flexBasis: '100%' }}>
+        市場モデルの観測値（鮮度未確認）。配分は条件付きの参考上限です。銘柄ごとの財務・決算予定・購入条件は別に確認します。
+      </Typography>
     </Paper>
   );
 }

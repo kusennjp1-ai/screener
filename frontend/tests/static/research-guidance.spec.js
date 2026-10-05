@@ -26,6 +26,11 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
   const candidate = page.getByRole('button', { name: /^EDGE の分析を表示/ });
   await expect(candidate).toBeVisible();
   await expect(candidate).toHaveAccessibleName(/日次 .*最新の取引日：未確認/);
+  await expect(candidate).toHaveAccessibleName(/共通購入モデルへの適合：未確認。選択中の手法とは別に、ミネルヴィニとIBD型の両方を確認/);
+  const dailySummary = await candidate.locator('.candidate-daily-check').getAttribute('title');
+  expect(dailySummary).toContain('最新の取引日：未確認');
+  expect(dailySummary).toContain('共通購入モデルへの適合：未確認');
+  expect(await candidate.getAttribute('aria-label')).toContain(dailySummary);
   const glossary = page.locator('.candidate-glossary');
   await glossary.locator('summary').focus();
   await page.keyboard.press('Enter');
