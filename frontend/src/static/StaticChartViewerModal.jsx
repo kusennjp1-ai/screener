@@ -226,10 +226,11 @@ function StaticChartViewerModal({
   const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
   const pivotLabel = '共通ピボット';
   const chartHeight = fittedChartHeight ?? (isMobile ? MOBILE_EXPANDED_CHART_HEIGHT : MIN_EXPANDED_CHART_HEIGHT);
-  const mobileInteraction = isMobile && <Box ref={mobileInteractionRef} data-testid="mobile-chart-interaction"
+  // Keep the original 12px hint when nested under the metadata's 11px div rule.
+  const mobileInteraction = isMobile && <Box ref={mobileInteractionRef} data-testid="mobile-chart-interaction" style={{fontSize:12}}
     onFocusCapture={() => { mobileInteractionFocused.current = true; }}
     onBlurCapture={() => { mobileInteractionFocused.current = false; }}
-    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:0, flex:1, fontSize:12, lineHeight:1.5, color:'text.secondary' }}>
+    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:0, flex:1, lineHeight:1.5, color:'text.secondary' }}>
     <span>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
     <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : '拡大・移動'}</Button>
   </Box>;

@@ -2,9 +2,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import StaticChartViewerModal from './StaticChartViewerModal';
 import { staticChartKeys } from './chartClient';
+
+// Vitest stubs CSS imports in this suite, so read the actual cascade input.
+const workbenchCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'workbench.css'), 'utf8');
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -12,7 +18,7 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <><div data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
+    return <><div className="chart-research-meta" data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
   },
 }));
 
@@ -226,6 +232,10 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   const payload = {symbol:'FIT',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:104}],stock_data:{symbol:'FIT',current_price:104,se_pivot_price:100}};
   const { unmount } = renderModal(props, payload);
   await screen.findByTestId('static-candlestick-chart');
+  // Exercise the real metadata-child selector after MUI's styles exist,
+  // including a late-loaded stylesheet. RTL cleans up this style node.
+  expect(workbenchCss).toContain('.chart-research-meta>div{margin:0!important;font-size:11px}');
+  render(<style>{workbenchCss}</style>);
   const header = screen.getByTestId('expanded-chart-header');
   const readiness = screen.getByTestId('mobile-chart-readiness');
   const interaction = screen.getByTestId('mobile-chart-interaction');
@@ -237,9 +247,11 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   expect(screen.getByText('$104.00 · 2026-10-01 日次終値')).toBeInTheDocument();
   expect(interaction.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
   expect(interaction).toHaveTextContent('左スワイプ：次 ／ 右：前');
+  expect(getComputedStyle(interaction).fontSize).toBe('12px');
   expect(screen.getByRole('button',{name:'チャート操作（拡大・移動）'})).toHaveStyle({minHeight:'44px'});
   fireEvent.click(screen.getByRole('button',{name:'チャート操作（拡大・移動）'}));
   expect(interaction).toHaveTextContent('チャートを拡大・移動中');
+  expect(getComputedStyle(interaction).fontSize).toBe('12px');
   expect(screen.getByRole('button',{name:'銘柄スワイプに戻る'})).toHaveAttribute('aria-pressed','true');
   expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
   fireEvent.click(screen.getByRole('button',{name:'チャートを閉じる'}));
