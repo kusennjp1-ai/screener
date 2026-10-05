@@ -173,7 +173,10 @@ export function overlayFinancialCorrection(row, projection, inheritedScope = {})
   const priorScopes = [...(Array.isArray(row.financial_identity?.prior_observed_scopes) ? row.financial_identity.prior_observed_scopes : [])];
   // Only an admitted daily carry may advance the containing price date. Keep
   // the old observed scope and every original source/proof clock separately.
-  const carriedScope = observedFinancialCarryScope(projection, row, observedScope);
+  // Chart aliases may inherit market/date from their observed containing chart.
+  // Pass that same context to carry admission without materializing new price
+  // identity fields on the alias. Explicit row values still take precedence.
+  const carriedScope = observedFinancialCarryScope(projection, { ...inheritedScope, ...row }, observedScope);
   if (carriedScope) {
     priorScopes.push(structuredClone(observedScope));
     observedScope.as_of_date = carriedScope.as_of_date;
