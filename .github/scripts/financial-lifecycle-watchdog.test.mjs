@@ -11,20 +11,29 @@ const diagnostics=new URL('./fixtures/financial-release-lifecycle-diagnostics.mj
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const gone=pid=>{try{process.kill(pid,0);return false;}catch(error){if(error.code==='ESRCH')return true;throw error;}};
 
-function fixture(code,{timeout=2,allocationReason=null,heartbeat=30,preparedSeconds=null}={}){
+function fixture(code,{timeout=2,allocationReason=null,heartbeat=30,preparedSeconds=null,clockOrigin=5000}={}){
   const root=mkdtempSync(join(tmpdir(),'lifecycle-watchdog-')),report=join(root,'report');
   const budgetArgs=[];
+  let pythonEntry=[watchdog];
   if(preparedSeconds!==null){
-    const clockPath=join(root,'job-clock.json'),clock=spawnSync('python3',['-c','import time;print(time.monotonic())'],{encoding:'utf8'});
-    assert.equal(clock.status,0,clock.stderr);
-    writeFileSync(clockPath,JSON.stringify({schema_version:'offline-financial-lifecycle-job-clock-v1',started_at:'fixture start',started_monotonic_seconds:Number(clock.stdout)-preparedSeconds}));
+    // A fresh runner can have less uptime than the simulated preparation.
+    // Shift the test-only monotonic origin while preserving real elapsed time;
+    // never expose a clock override through the production CLI/environment.
+    const clockPath=join(root,'job-clock.json');
+    writeFileSync(clockPath,JSON.stringify({schema_version:'offline-financial-lifecycle-job-clock-v1',started_at:'fixture start',started_monotonic_seconds:clockOrigin-preparedSeconds}));
+    const driver=`import importlib.util,sys,time
+spec=importlib.util.spec_from_file_location('watchdog',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+real_monotonic=time.monotonic;real_start=real_monotonic();origin=float(sys.argv[2])
+module.time.monotonic=lambda:origin+(real_monotonic()-real_start)
+sys.exit(module.main(sys.argv[3:]))`;
+    pythonEntry=['-c',driver,watchdog,String(clockOrigin)];
     budgetArgs.push('--job-clock',clockPath,'--job-timeout-seconds','5400','--upload-reserve-seconds','600','--minimum-runtime-seconds','3600');
   }
   const prefix=`import {mkdirSync,writeFileSync} from 'node:fs';
     import {createLifecycleDiagnostics} from ${JSON.stringify(diagnostics)};
     const root=${JSON.stringify(root)},directory=${JSON.stringify(report)};
     mkdirSync(directory);const report={phases:[]},progress=createLifecycleDiagnostics(directory,report);`;
-  return {root,report,run(){return spawnSync('python3',[watchdog,'--timeout-seconds',String(timeout),'--heartbeat-seconds',String(heartbeat),...(allocationReason?['--allocation-reason',allocationReason]:[]),...budgetArgs,'--report-directory',report,'--',process.execPath,'--input-type=module','-e',prefix+code],
+  return {root,report,run(){return spawnSync('python3',[...pythonEntry,'--timeout-seconds',String(timeout),'--heartbeat-seconds',String(heartbeat),...(allocationReason?['--allocation-reason',allocationReason]:[]),...budgetArgs,'--report-directory',report,'--',process.execPath,'--input-type=module','-e',prefix+code],
     {encoding:'utf8',timeout:6000,maxBuffer:1024*1024,env:{PATH:process.env.PATH}});},
     cleanup(){rmSync(root,{recursive:true,force:true});}};
 }
@@ -90,6 +99,19 @@ test('exhausted remaining job budget records refusal without launching the expen
     assert.equal(guard.status,'insufficient_job_budget');assert.equal(guard.child_launched,false);assert.equal(guard.child_exit_code,null);
     assert.equal(existsSync(join(f.root,'launched')),false);assert.equal(existsSync(join(f.report,'report.json')),false);
     assert.ok(guard.timeout_seconds<3600);assert.match(guard.reason,/test was not launched/);
+  }finally{f.cleanup();}
+});
+
+test('an invalid pre-boot fixture clock is rejected independently of the host uptime',()=>{
+  const f=fixture(`writeFileSync(root+'/launched','must not happen');`,
+    {timeout:4500,allocationReason:'Invalid test clock reproducer.',preparedSeconds:120,clockOrigin:10});
+  try{
+    const result=f.run();assert.ifError(result.error);assert.equal(result.status,125,result.stderr);
+    const guard=read(join(f.report,'watchdog.json'));
+    assert.equal(guard.status,'insufficient_job_budget');assert.equal(guard.child_launched,false);
+    assert.equal(existsSync(join(f.root,'launched')),false);
+    assert.match(guard.reason,/early job clock is missing or invalid/);
+    assert.equal(guard.job_budget,undefined);
   }finally{f.cleanup();}
 });
 
