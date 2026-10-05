@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import {chmodSync,closeSync,cpSync,existsSync,mkdirSync,openSync,readFileSync,readdirSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {bootstrap,dataFiles,inventoryDigest,sha256,uiInventory} from '../publication-state.mjs';
 import {extractPriceObservations,priceObservationDigest} from '../price-observations.mjs';
 import {contract,dataInventory,digest} from '../financial-correction.mjs';
 import {financialReleasePolicy as policy,completeInventory,protectedCodeInventory,verifyFinancialReleaseAssets} from '../financial-release-activation.mjs';
+import {createLifecycleDiagnostics,lifecycleCommandLabel} from './financial-release-lifecycle-diagnostics.mjs';
 
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,typeof value==='string'?value:JSON.stringify(value));};
-const hashFile=path=>execFileSync('sha256sum',[path],{encoding:'utf8'}).split(' ')[0];
 const repository=bootstrap.repository,prefix=`repos/${repository}`;
 const ownRoot=fileURLToPath(new URL('../../../',import.meta.url));
 
@@ -39,13 +39,21 @@ export function assertSyntheticPriceAdvance(before,after,targetDate){
 export async function runArchiveLifecycle(inputPath){
   const input=read(inputPath),directory=resolve(input.directory);
   assert.equal(existsSync(directory),false,'archive lifecycle scratch must be new');
-  for(const key of ['diagnostic','source','certificate','predecessor'])assert.equal(hashFile(input[`${key}_zip`]),input[`${key}_sha256`],`${key} archive digest`);
   mkdirSync(directory,{recursive:true});
   const report={schema_version:'offline-financial-activation-lifecycle-v1',authority:'none',gate_evidence:'synthetic GitHub transport; real immutable source and compiler bytes',phases:[]};
-  const checkpoint=(phase,extra={})=>{report.phases.push({phase,...extra});write(join(directory,'report.json'),report);console.log(`Archive lifecycle: ${phase}`);};
-  const run=(command,args,options={})=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:15*60*1000,maxBuffer:8*1024*1024,...options});
-    if(result.status!==0||result.error){write(join(directory,'last-failure.json'),{command,args,status:result.status,error:result.error?.message,stdout:result.stdout,stderr:result.stderr});}
-    assert.ifError(result.error);assert.equal(result.status,0,`${command} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`);return result.stdout;};
+  const diagnostics=createLifecycleDiagnostics(directory,report),{beginPhase,checkpoint}=diagnostics;
+  const excerpt=value=>typeof value==='string'?value.slice(-4000):null;
+  const run=(command,args,options={})=>{const label=lifecycleCommandLabel(command,args),record=diagnostics.commandStart(label);
+    const result=spawnSync(command,args,{encoding:'utf8',timeout:15*60*1000,maxBuffer:8*1024*1024,...options});
+    diagnostics.commandEnd(record,result);
+    if(result.status!==0||result.error){write(join(directory,'last-failure.json'),{command:label,status:result.status,signal:result.signal,error:result.error?.message,
+      stdout:excerpt(result.stdout),stderr:excerpt(result.stderr),output_truncated:[result.stdout,result.stderr].some(value=>typeof value==='string'&&value.length>4000)});}
+    assert.ifError(result.error);assert.equal(result.status,0,`${label}\n${excerpt(result.stdout)||''}\n${excerpt(result.stderr)||''}`);return result.stdout;};
+  const hashFile=path=>run('sha256sum',[path]).split(' ')[0];
+  beginPhase('verify immutable input archives');
+  for(const key of ['diagnostic','source','certificate','predecessor'])assert.equal(hashFile(input[`${key}_zip`]),input[`${key}_sha256`],`${key} archive digest`);
+  checkpoint('verified immutable input archives');
+  beginPhase('extract and verify corrected diagnostic');
   const stage=join(directory,'candidate-stage');mkdirSync(stage);
   // Stream the ZIP's single diagnostic tarball. Reject unsafe/special members;
   // retain only the exact review-only tree, without another large TAR copy.
@@ -73,6 +81,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   assert.equal(inventoryDigest(uiInventory(join(stage,'corrected'))),preview.candidate_ui.digest);
   checkpoint('verified original corrected bundle',{files:Object.keys(completeInventory(join(stage,'corrected'))).length,captured_sha:preview.candidate_ui.sha});
 
+  beginPhase('checkout captured code and replay current baseline');
   const checkout=join(directory,'controller');
   run('git',['clone','--shared','--no-checkout',ownRoot,checkout]);
   run('git',['-C',checkout,'checkout','--detach',preview.candidate_ui.sha]);
@@ -108,13 +117,17 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   for(const path of dataFiles)renameSync(join(publicRoot,path),join(baseline,path));
   assert.equal(inventoryDigest(dataInventory(baseline)),preview.bundles.baseline_data_sha256,'exact current baseline compiler replay');
   checkpoint('replayed exact current baseline',{data_sha256:preview.bundles.baseline_data_sha256});
+  beginPhase('retain original audit archives');
   for(const [name,path]of [['original-source/source.zip',input.source_zip],['original-certification/artifact.zip',input.certificate_zip],['original-predecessor/artifact.zip',input.predecessor_zip]]){
     mkdirSync(dirname(join(stage,name)),{recursive:true});cpSync(path,join(stage,name));
   }
+  checkpoint('retained original audit archives');
+  beginPhase('inventory the captured candidate record');
   const capturedRecord={schema_version:'financial-release-candidate-v1',producer:{repository,workflow:policy.candidate_workflow,head_sha:preview.candidate_ui.sha,run_id:88001,run_attempt:1},
     captured_ui:preview.candidate_ui,request_sha256:digest(request),preview_receipt_sha256:sha256(readFileSync(join(stage,'preview-receipt.json'))),
     corrected_inventory_sha256:inventoryDigest(completeInventory(join(stage,'corrected'))),protected_code_sha256:digest(read(join(stage,'protected-code.json')))};
-  const seal=id=>{run(process.execPath,[join(checkout,'.github/scripts/financial-release-activation.mjs'),'design-seal'],{cwd:checkout,
+  checkpoint('inventoried the captured candidate record');
+  const seal=id=>{beginPhase(`seal synthetic candidate ${id}`);run(process.execPath,[join(checkout,'.github/scripts/financial-release-activation.mjs'),'design-seal'],{cwd:checkout,
     env:{...env,FINANCIAL_CANDIDATE_DIR:stage,GITHUB_SHA:run('git',['-C',checkout,'rev-parse','HEAD']).trim(),GITHUB_RUN_ID:String(id)}});
     const tar=join(directory,'candidate.tar'),size=statSync(tar).size;
     assert.ok(size>0&&size<=policy.maximum_archive_bytes,'production raw candidate TAR exceeds the member-size bound');
@@ -123,11 +136,13 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   // Production sealing emits an uncompressed TAR. The fixture then gzip-wraps
   // those exact TAR bytes for transport. Report its original size/hash so this
   // resource optimization cannot be mistaken for production packing behavior.
-  function pack(name,root=stage,member='candidate.tar'){const tar=join(directory,`${name}.tar.gz`),zip=join(directory,`${name}.zip`);
+  function pack(name,root=stage,member='candidate.tar'){beginPhase(`pack ${name}`);const tar=join(directory,`${name}.tar.gz`),zip=join(directory,`${name}.zip`);
     if(root===stage){const raw=join(directory,'candidate.tar'),fd=openSync(tar,'wx');try{run('gzip',['-c',raw],{stdio:['ignore',fd,'pipe']});}finally{closeSync(fd);}rmSync(raw);}
     else run('tar',['-czf',tar,'-C',root,'.']);
-    run('python3',['-c','import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as z:z.write(sys.argv[2],sys.argv[3])',zip,tar,member]);rmSync(tar);return zip;}
-  const originalZip=pack('captured-candidate'),pin={schema_version:'financial-activation-candidate-v1',repository,workflow:policy.candidate_workflow,head_sha:preview.candidate_ui.sha,
+    run('python3',['-c','import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as z:z.write(sys.argv[2],sys.argv[3])',zip,tar,member]);rmSync(tar);checkpoint(`packed ${name}`);return zip;}
+  const originalZip=pack('captured-candidate');
+  beginPhase('prepare synthetic activation control');
+  const pin={schema_version:'financial-activation-candidate-v1',repository,workflow:policy.candidate_workflow,head_sha:preview.candidate_ui.sha,
     run_id:88001,run_attempt:1,job_id:89001,artifact_id:87001,artifact_name:'financial-release-candidate-88001-1',artifact_sha256:hashFile(originalZip),candidate_record_sha256:sha256(readFileSync(join(stage,'candidate.json'))),
     projection_sha256:preview.financial.projection_sha256,preview_receipt_sha256:capturedRecord.preview_receipt_sha256};
   write(join(checkout,policy.request_path),request);write(join(checkout,policy.activation_candidate_path),pin);
@@ -136,11 +151,14 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   const mainSha=run('git',['-C',checkout,'rev-parse','HEAD']).trim();env.RELEASE_SHA=mainSha;
   assert.deepEqual(protectedCodeInventory(checkout,mainSha),protectedCodeInventory(checkout,preview.candidate_ui.sha));
   write(join(stage,'captured-candidate.json'),capturedRecord);write(join(stage,'activation-candidate.json'),pin);
+  checkpoint('prepared synthetic activation control');
   seal(88002);
   assert.deepEqual(read(join(stage,'candidate.json')),{...capturedRecord,producer:{...capturedRecord.producer,head_sha:mainSha,run_id:88002}});
-  const currentZip=pack('current-candidate');rmSync(stage,{recursive:true});
+  const currentZip=pack('current-candidate');
+  beginPhase('verify packaged archives and release staging');rmSync(stage,{recursive:true});
   checkpoint('packaged immutable synthetic gate artifacts',{captured_zip_sha256:pin.artifact_sha256,current_zip_sha256:hashFile(currentZip)});
 
+  beginPhase('configure synthetic activation transport');
   const runEvidence=(id,path,sha,extra={})=>({id,run_attempt:1,head_sha:sha,path,head_branch:'main',event:'push',status:'completed',conclusion:'success',run_started_at:preview.financial.evaluated_at,repository:{full_name:repository},head_repository:{full_name:repository},...extra});
   function register(ref,value){const base=`${prefix}/actions/runs/${ref.run_id}`;
     api[`${base}/attempts/${ref.run_attempt}`]=value.run;api[`${base}/attempts/${ref.run_attempt}/jobs?per_page=100`]=[{jobs:value.jobs}];api[`${base}/artifacts?per_page=100`]=[{artifacts:value.artifacts}];}
@@ -168,16 +186,20 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
     jobs:[{run_attempt:1,started_at:new Date(jobStarted).toISOString(),steps:[{name:'Deploy to GitHub Pages',conclusion:'success',started_at:new Date(started).toISOString(),completed_at:new Date(completed).toISOString()}]}],artifacts:[]});}
   const live=evidence.live;deployment(live.latest.runId,live.latest.headSha,live.latest.started,live.latest.completed,live.latest.jobStarted);
   save();
+  checkpoint('configured synthetic activation transport');
   const controller=join(checkout,'.github/scripts/select-release-source.mjs');
-  const command=name=>{save();const output=run(process.execPath,[controller,name],{cwd:checkout,env});write(join(directory,`${name}-${report.phases.length}.log`),output);checkpoint(name);};
+  const command=name=>{beginPhase(name);save();const output=run(process.execPath,[controller,name],{cwd:checkout,env});write(join(directory,`${name}-${report.phases.length}.log`),output);checkpoint(name);};
   command('plan');
   const state=read(join(env.RUNNER_TEMP,'verified-publication/state.json'));assert.equal(state.decision.mode,'activation');assert.equal(state.live.identity,live.identity);
   // The workflow checks out the approved UI into release. Only the code used
   // by compose/rechecks is needed; restore supplies every public/dist byte.
+  beginPhase('materialize approved UI source');
   const release=join(checkout,'release');mkdirSync(release);run('git',['-C',checkout,'archive','--format=tar','-o',join(directory,'release-source.tar'),mainSha,'frontend','contracts','data/ibd_reference']);
   run('tar',['-xf',join(directory,'release-source.tar'),'-C',release]);rmSync(join(directory,'release-source.tar'));
-  command('restore');rmSync(join(release,'frontend/public'),{recursive:true});
+  checkpoint('materialized approved UI source');
+  command('restore');beginPhase('release duplicate public fixture');rmSync(join(release,'frontend/public'),{recursive:true});checkpoint('released duplicate public fixture');
   command('compose');command('recheck');command('recheck');
+  beginPhase('verify simulated deployed activation');
   const dist=join(release,'frontend/dist'),publication=read(join(dist,'publication.json'));
   const financial=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
   assert.equal(financial.mode,'activation');assert.equal(financial.previous_publication_identity,live.identity);
@@ -188,6 +210,7 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   const deployed=JSON.parse(run(process.execPath,['--input-type=module','-e',`import {livePublication} from ${JSON.stringify(liveModule)};console.log(JSON.stringify(await livePublication()));`],{cwd:checkout,env}));
   assert.equal(deployed.receipt.run_id,88003);assert.deepEqual(deployed.financialRelease,financial);
   checkpoint('read simulated deployed activation',{publication_identity:deployed.identity,financial_generation:deployed.receipt.financial_generation,lineage_sha256:deployed.receipt.financial_lineage_sha256});
+  beginPhase('prepare synthetic next-price target');
   const targetBase=read(join(state.activation.candidate,'target-base.json'));
   // The first activation is established. Release only this fixture's generated
   // candidate copies before the next-price carry, keeping every original input.
@@ -248,12 +271,16 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   checkpoint('verified synthetic next-price coverage',{target_rows:targetBase.rows.length,canonical_chart_paths:expectedCanonical.size,
     verified_canonical_paths:[...expectedCanonical].filter(path=>advancedPaths.has(path)).length,advanced_alias_paths:advancedPaths.size,
     advanced_symbols:advancedSymbols.size,catalog_symbols_without_history:withoutHistory.size,all_updated_ohlcv_prefixes_preserved:true});
+  beginPhase('export synthetic next-price bundle');
   manifest.as_of_date=targetDate;manifest.generated_at=targetTime;entry.as_of_date=targetDate;
   write(join(root,'manifest.json'),manifest);
   run(process.execPath,['tools/export-research.mjs'],{cwd:releaseFrontend,env:{...env,FINANCIAL_EVALUATED_AT:targetTime}});
   assert.deepEqual(readFileSync(join(root,'candidate-history/index.json')),previousHistory,'ordinary preparation preserves prior first observations');
   const freshManifest=readFileSync(join(root,'manifest.json')),observations=extractPriceObservations({dataRoot:root,manifest:JSON.parse(freshManifest)});
-  const exportZip=pack('advancing-price-export',freshPublic,'artifact.tar'),sourcePath=join(directory,'advancing-source.json');
+  checkpoint('exported synthetic next-price bundle');
+  const exportZip=pack('advancing-price-export',freshPublic,'artifact.tar');
+  beginPhase('configure synthetic advancing export');
+  const sourcePath=join(directory,'advancing-source.json');
   write(sourcePath,{run_id:88005,run_attempt:1,source_sha:mainSha,artifact_name:'static-site-data-88005-1',manifest_json:freshManifest.toString(),manifest_sha256:sha256(freshManifest),
     price_observations:observations,price_observations_sha256:priceObservationDigest(observations)});
   const metadataZip=join(directory,'advancing-source.zip');run('python3',['-c','import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as z:z.write(sys.argv[2],"source.json")',metadataZip,sourcePath]);
@@ -264,15 +291,19 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   api[`${prefix}/actions/artifacts?per_page=100`]=[{artifacts:freshArtifacts}];
   rmSync(freshPublic,{recursive:true});
   env.GITHUB_ENV=join(directory,'carry.env');
+  checkpoint('configured synthetic advancing export');
   command('plan');assert.ok(read(join(env.RUNNER_TEMP,'verified-publication/state.json')).carry);
   command('restore');command('prepare-carry');
+  beginPhase('build carried price bundle');
   const carryEnv=Object.fromEntries(readFileSync(env.GITHUB_ENV,'utf8').trim().split('\n').map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];}));
   for(const script of ['export-research.mjs','record-candidate-history.mjs'])run(process.execPath,[`tools/${script}`],{cwd:releaseFrontend,env:{...env,...carryEnv}});
   renameSync(freshPublic,dist);
   // This is the same approved UI SHA. Supply its exact verified build bytes;
   // the integration exercises data publication without rebuilding the UI.
   for(const path of Object.keys(uiInventory(deployedRoot))){mkdirSync(dirname(join(dist,path)),{recursive:true});cpSync(join(deployedRoot,path),join(dist,path));}
+  checkpoint('built carried price bundle');
   command('compose');command('recheck');command('recheck');
+  beginPhase('verify simulated deployed carry');
   const carriedPublication=read(join(dist,'publication.json')),carried=verifyFinancialReleaseAssets(dist,carriedPublication.financial_release,carriedPublication);
   assert.equal(carried.mode,'carry');assert.equal(carried.previous_publication_identity,deployed.identity);
   assert.equal(carriedPublication.ui_digest,deployed.uiDigest);
@@ -290,5 +321,6 @@ appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\
   const carriedLive=JSON.parse(run(process.execPath,['--input-type=module','-e',`import {livePublication} from ${JSON.stringify(liveModule)};console.log(JSON.stringify(await livePublication()));`],{cwd:checkout,env}));
   assert.deepEqual(carriedLive.financialRelease,carried);
   checkpoint('read simulated deployed next-price carry',{publication_identity:carriedLive.identity,financial_generation:carriedLive.receipt.financial_generation,lineage_sha256:carriedLive.receipt.financial_lineage_sha256,synthetic_chart_alias_observations:appended});
+  diagnostics.complete();
   return {directory,report,deployed,carried:carriedLive};
 }

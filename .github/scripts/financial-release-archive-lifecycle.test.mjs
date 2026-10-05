@@ -6,6 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {archiveApiPayload,assertSyntheticPriceAdvance,runArchiveLifecycle} from './fixtures/financial-release-archive-lifecycle.mjs';
 
+// The external supervisor owns enforcement; align the cooperative Node timer
+// with its explicit allocation instead of retaining a conflicting 30m timer.
+const watchdogSeconds=Number(process.env.FINANCIAL_RELEASE_ARCHIVE_WATCHDOG_SECONDS||1800);
+assert.ok(Number.isFinite(watchdogSeconds)&&watchdogSeconds>0&&watchdogSeconds<=4500,'invalid lifecycle watchdog allocation');
+
 test('offline gh preserves paginated gates and bounded certificate/source inventories',()=>{
   for(const key of ['jobs','artifacts','workflow_runs']){
     const pages=[{[key]:[{id:7}]}];
@@ -36,7 +41,7 @@ test('the synthetic price feed preserves every historical OHLCV cell and adds on
 
 test('real retained source passes the strict first-activation publication lifecycle',{
   skip:!process.env.FINANCIAL_RELEASE_ARCHIVE_INPUT,
-  timeout:30*60*1000,
+  timeout:watchdogSeconds*1000,
 },async()=>{
   await runArchiveLifecycle(process.env.FINANCIAL_RELEASE_ARCHIVE_INPUT);
 });
