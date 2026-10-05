@@ -17,7 +17,7 @@ beforeEach(()=>{
   resizeObservers.length=0;
   vi.stubGlobal('ResizeObserver',class {
     constructor(callback){this.callback=callback;this.disconnect=vi.fn();resizeObservers.push(this);}
-    observe(){}
+    observe(element){this.element=element;}
   });
   vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));
   vi.stubGlobal('cancelAnimationFrame',vi.fn());
@@ -186,7 +186,7 @@ describe('validated static chart instance reuse',()=>{
   });
   it.each([null,'AAA:1'])('preserves selected ranges and manual pan across fitted heights (identity: %s)',chartIdentity=>{
     const props={chartIdentity,priceData:longBars,height:420,smallScreen:true};
-    const view=setup(props),instance=instances[0],observer=resizeObservers[0];
+    const view=setup(props),instance=instances[0],observer=resizeObservers.find(observer=>observer.element?.hasAttribute('data-chart-symbol'));
     for(const [label,height] of [['1か月',310],['3か月',300],['pan',420]]){
       if(label==='pan')instance.timeScale.setVisibleLogicalRange({from:10.25,to:50.5});
       else fireEvent.click(screen.getByRole('button',{name:label}));

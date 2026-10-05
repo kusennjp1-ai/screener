@@ -263,16 +263,17 @@ function StaticHomePage() {
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} researchExposure={Math.min(modelMarket(scanRows).cap,.25)*100} />
 
-      {/* C86: held/watched names first — the exit is the edge. Surfaces each
-          watched symbol's exported sell action + stop, most-urgent first. */}
+      {/* Watched symbols show dated model observations, not verified holdings. */}
       <WatchlistCard
+        market={selectedMarket}
         indexData={chartIndexQuery.data}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
       />
 
-      {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
-          risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
+      {/* Auxiliary index observations link to Research for purchase checks. */}
       <TodaysBuysCard
+        marketAsOf={freshness.scan_as_of_date}
+        market={selectedMarket}
         indexData={chartIndexQuery.data}
         scanRows={scanRows}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}

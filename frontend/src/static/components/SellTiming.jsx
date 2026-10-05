@@ -8,34 +8,29 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import RemoveIcon from '@mui/icons-material/Remove';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { C } from '../designTokens';
+import { observationFreshness } from '../technicalObservation';
 
-// Shared, fallback-safe sell-timing renderer (C97). The promise is that EVERY
-// name the user sees always shows its exit: an action pill + a protective stop
-// + the 2R/3R targets. It NEVER returns null — a hold shows "保有継続 · stop x",
-// a name with no computed plan shows an explicit "未計算" state. One vocabulary
-// (ACTION_META) so every surface — watchlist, buy card, scan tables, chart —
-// speaks the same exit language.
-
-// rank drives urgency ordering; rank<=1 == sell now.
+// These are exported model observations, without a verified holding, entry,
+// current quote, or executed order. Rank preserves the existing watchlist order.
 export const ACTION_META = {
-  stop_hit: { label: 'ストップ割れ・執行を確認', Icon: BlockIcon, color: C.red, rank: 0 },
-  exit: { label: '売り — 50日線割れ', Icon: TrendingDownIcon, color: C.red, rank: 1 },
-  sell_into_strength: { label: '強さへ利確 (climax)', Icon: BoltIcon, color: C.amber, rank: 2 },
-  tighten_stop: { label: 'ストップ引き上げ', Icon: KeyboardDoubleArrowUpIcon, color: C.amber, rank: 3 },
-  raise_stop: { label: 'ストップ上げ (利益ロック)', Icon: ArrowUpwardIcon, color: C.green, rank: 4 },
-  hold: { label: '保有継続', Icon: RemoveIcon, color: C.grey, rank: 5 },
-  no_data: { label: 'エグジット未計算', Icon: HelpOutlineIcon, color: C.dim, rank: 6 },
+  stop_hit: { label: 'モデル停止水準割れの記録', Icon: BlockIcon, color: C.red, rank: 0 },
+  exit: { label: '50日線割れの記録', Icon: TrendingDownIcon, color: C.red, rank: 1 },
+  sell_into_strength: { label: '過熱候補の記録', Icon: BoltIcon, color: C.amber, rank: 2 },
+  tighten_stop: { label: '停止水準見直しのモデル記録', Icon: KeyboardDoubleArrowUpIcon, color: C.amber, rank: 3 },
+  raise_stop: { label: '利益保護のモデル記録', Icon: ArrowUpwardIcon, color: C.blue, rank: 4 },
+  hold: { label: '売却条件の検出なし（モデル記録）', Icon: RemoveIcon, color: C.grey, rank: 5 },
+  no_data: { label: '売却モデル未計算', Icon: HelpOutlineIcon, color: C.grey, rank: 6 },
 };
 export const DEFAULT_META = ACTION_META.no_data;
 
 const EXPLANATIONS = {
-  stop_hit: '配信モデルでは停止水準を下回っています。最新価格・設定した注文・約定履歴を照合してください。',
-  exit: '配信モデルが50日線割れを検出しています。実際の保有期間・最新の終値・売却ルールを確認してください。',
-  sell_into_strength: '配信モデルが過熱の候補を検出しています。初期の強さか後期の急騰かを、チャートと保有状況で確認してください。',
-  tighten_stop: '配信モデルが停止水準の引き上げを示しています。現在の逆指値と、表示水準の根拠を照合してください。',
-  raise_stop: '配信モデルが利益保護を示しています。実際の買値・最高値・現在の逆指値を確認してください。',
-  hold: '配信モデルでは売却条件が検出されていません。保有の安全性や値上がりを保証する判定ではありません。',
-  no_data: '有効な売却判定がありません。情報不足を保有継続の根拠にせず、チャートと保有情報を確認してください。',
+  stop_hit: '配信時のモデルで停止水準割れが記録されています。',
+  exit: '配信時のモデルで50日線割れが記録されています。',
+  sell_into_strength: '配信時のモデルで過熱の候補が記録されています。',
+  tighten_stop: '配信時のモデルで停止水準の見直し条件が記録されています。',
+  raise_stop: '配信時のモデルで利益保護の条件が記録されています。',
+  hold: '配信時のモデルで売却条件が検出されなかった記録です。保有継続や安全性を示す判定ではありません。',
+  no_data: '有効な売却モデルの記録がありません。',
 };
 const numeric = (value, positive = false) => {
   if ((typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && !value.trim())) return null;
@@ -68,7 +63,7 @@ function Pill({ meta, compact }) {
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
-      borderRadius: 1, bgcolor: `${meta.color}22`, border: `1px solid ${meta.color}`,
+      borderRadius: 1, bgcolor: `color-mix(in srgb, ${meta.color} 13%, transparent)`, border: `1px solid ${meta.color}`,
     }}>
       <Icon sx={{ fontSize: compact ? 12 : 13, color: meta.color }} />
       <Typography sx={{ fontWeight: 800, fontSize: compact ? 10 : 11, color: meta.color, lineHeight: 1.2 }}>
@@ -78,38 +73,29 @@ function Pill({ meta, compact }) {
   );
 }
 
-// `sell` may be the index block, the sell_plan block, or null/undefined; in every
-// case this renders something. `stale` marks a last-known (offline) reading.
-export default function SellTiming({ sell, compact = false, stale = false, currency = '' }) {
-  const n = normalizeSell(sell) || { action: 'no_data', stop: null, rMultiple: null, target2r: null, target3r: null };
+// The separate sell block must never be presented as the buy block's risk
+// plan. Its entry/basis can differ; no R ladder or position P&L is inferred.
+export default function SellTiming({ sell, compact = false, stale = false, freshness = observationFreshness(null), currency = '' }) {
+  const n = normalizeSell(sell) || { action: 'no_data', stop: null };
   const meta = ACTION_META[n.action] || DEFAULT_META;
-  const money = (v) => (v == null ? null : `${currency}${fmt(v)}`);
+  const basis = n.stopBasis === 'initial' ? '初期モデル' : n.stopBasis;
+  const freshnessLabel = `${stale ? '前回の保存記録・鮮度未確認 · ' : ''}${freshness.label}`;
 
   return (
-    <Box data-testid="sell-timing" data-action={n.action}
-      sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', rowGap: 0.25 }}>
-      {stale && (
-        <Typography sx={{ fontSize: 11, color: C.dim, fontWeight: 700 }}>前回</Typography>
-      )}
+    <Box data-testid="sell-timing" data-action={n.action} data-freshness={freshness.state} data-record-source={stale ? 'saved' : 'exported'}
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', rowGap: 0.5 }}>
+      <Typography sx={{ fontSize: 11, color: C.grey }}>売却モデル参考</Typography>
       <Pill meta={meta} compact={compact} />
-      {n.stop != null ? (
-        <Typography sx={{ fontSize: compact ? 10.5 : 11.5, color: C.ink, fontFamily: 'monospace' }}>
-          損切り {money(n.stop)}{n.stopBasis && !compact ? ` · ${n.stopBasis}` : ''}
-        </Typography>
-      ) : (
-        <Typography sx={{ fontSize: compact ? 10.5 : 11.5, color: C.grey }}>
-          {n.action === 'no_data' ? 'チャートで確認' : '損切り —'}
-        </Typography>
-      )}
-      {!compact && (n.target2r != null || n.target3r != null) && (
-        <Typography sx={{ fontSize: 11, color: C.grey, fontFamily: 'monospace' }}>
-          利確 {n.target2r != null ? money(n.target2r) : '-'} / {n.target3r != null ? money(n.target3r) : '-'}
-        </Typography>
-      )}
+      {n.stop != null && <Typography sx={{ fontSize: compact ? 10.5 : 11.5, color: C.ink, fontFamily: 'monospace' }}>
+        モデル停止水準 {currency}{fmt(n.stop)}{basis ? ` · ${basis}` : ''}
+      </Typography>}
+      <Typography sx={{ fontSize: 11, color: C.grey, flexBasis: '100%' }}>
+        配信基準日 {freshness.date || '未確認'} · {freshnessLabel}
+      </Typography>
       {!compact && <Box component="details" sx={{ flexBasis: '100%', fontSize: 12, color: C.grey }}>
-        <summary style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>売却判断の根拠と次の確認</summary>
-        <p>{stale ? '前回のデータによる判定です。最新データの取得が先です。' : ''}{EXPLANATIONS[n.action]}</p>
-        <p>表示水準は配信モデルの計算値です。あなたの保有・注文・約定を確認したものではありません。ギャップや滑りにより、停止水準での約定や損失額は保証されません。</p>
+        <summary style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>売却モデルの記録について</summary>
+        <p>{EXPLANATIONS[n.action]}</p>
+        <p>停止水準は別の売却モデルの参考値です。上のシグナル基準値に対する損失率や、実際の保有の損益・追随ストップを示しません。あなたの保有・注文・約定を確認したものではありません。</p>
       </Box>}
     </Box>
   );
