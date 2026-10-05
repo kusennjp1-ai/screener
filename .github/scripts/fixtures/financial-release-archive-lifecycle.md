@@ -1,12 +1,12 @@
 # Retained-archive lifecycle integration
 
 This opt-in test uses the original reviewed source, certificate, predecessor and
-current diagnostic ZIPs. It preserves the full 5,901-row acquisition base and
+captured diagnostic ZIPs. It preserves the full 5,901-row acquisition base and
 replays the current baseline with the captured production code. It does not
 replace the production trust registry or fetch provider data.
 
 The GitHub CI/Design/deployment responses are **synthetic transport evidence**.
-The current diagnostic is unapproved fixture material. Passing this test does
+The diagnostic is unapproved fixture material. Passing this test does
 not establish that its real Design job passed and does not authorize publishing
 it. Control pins and publication receipts exist only inside the disposable test
 clone. Never upload the clone, candidate ZIPs, Pages dist or control files as
@@ -17,9 +17,10 @@ accepted release artifacts.
 - Use a dedicated Linux runner with Node 22, Python 3, Git, GNU tar and sha256sum.
 - Install the existing `.github/scripts/financial-release-projection-requirements.txt`.
   The exporter does not require npm install or a browser for this integration.
-- Checkout with full Git history, including captured commit
-  `e253d22762c1dd79eb4b35851f94dd142903e628` and its exact tree
-  `351f5e3ea64606f1e28df284a840bd0e56856069`.
+- Checkout with full Git history, including the diagnostic receipt's literal
+  captured commit and exact tree. The helper checks out that commit before
+  exercising the publisher; changing the surrounding test branch cannot change
+  the captured controller.
 - Reserve at least 16 GiB free scratch space after materializing the original
   inputs. The helper streams diagnostic extraction. It exercises production
   sealing with its uncompressed TAR, then gzip-wraps those exact TAR bytes for
@@ -32,8 +33,17 @@ accepted release artifacts.
 
 Create an input JSON file with the schema in
 `financial-release-archive-input.example.json`, using absolute local paths and a
-new scratch directory. The example pins the reviewed October 5 diagnostic and
+new scratch directory. The example pins the October 5 diagnostic from run 37271081269 and
 all three original ZIP hashes; do not silently substitute another artifact.
+The previous diagnostic from run 37263438505 captures commit `e253d22762c1dd79eb4b35851f94dd142903e628`
+and tree `351f5e3ea64606f1e28df284a840bd0e56856069`. Run
+[37269230373](https://github.com/kusennjp1-ai/screener/actions/runs/37269230373)
+verified its complete input inventory and baseline, then reproduced the selector's
+unsettled top-level-await failure before activation. It is a retained failing
+reproduction, not a passing lifecycle receipt. A fixed-controller rehearsal
+requires a newly captured diagnostic with matching protected-source inventory
+and separately recorded ZIP hash; never patch the old captured files or claim
+that a new test branch changes their code.
 `predecessor_root` must contain the exact extracted predecessor TAR. Input
 materialization belongs to the workflow; the test never downloads these files.
 
@@ -74,3 +84,11 @@ The scratch directory retains `report.json`, phase logs, `trace.jsonl` and
 `last-failure.json` on failure. Publish only these diagnostics if needed, under
 an explicitly **unapproved test report** artifact name. A skipped, incomplete or
 failed run must never be reported as a successful activation integration.
+
+The current example is bound to diagnostic artifact `11328759405`, SHA256
+`5d6df382917f5343708d8534a7c2ec779ec51c88cb51c9307c21030243d7561c`,
+which captures `2a25b5a73b0b4b5ce65d027c32f925dc4118cd0a` / tree
+`9c3a6aa58e4b7112d85cdc0863b892a31f2f5152`. Its real Design run failed
+performance limits; this is a fresh controller reproduction input, not an
+approved release. The new helper run must verify these captured bytes before
+claiming the startup fix is exercised.

@@ -157,7 +157,7 @@ jobs:
         run: |
           python3 -m pip install -r .github/scripts/financial-correction-certification-requirements.txt
           python3 -m unittest discover -s .github/scripts -p "test_retain_financial_diagnostic.py"
-          node --test .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/financial-release-lifecycle.test.mjs
+          node --test .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
 
       - name: Test
         run: cd frontend && npm run test:run
