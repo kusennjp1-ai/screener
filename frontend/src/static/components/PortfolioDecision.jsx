@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Button, Paper, Typography } from '@mui/material';
 import PortfolioPlanDrawer from './PortfolioPlanDrawer';
 import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
@@ -7,7 +7,10 @@ import { presentPortfolio } from '../portfolioPresentation';
 // A precomputed plan and a custom trigger let the home hero reuse the exact same
 // presentation without duplicating allocation or readiness calculations.
 export default function PortfolioDecision({ rows = [], date, now, plan: suppliedPlan, prepared: suppliedPrepared, compact = false, renderTrigger, onInspect, onBrowse }) {
-  const prepared = useMemo(() => suppliedPlan ? null : suppliedPrepared || preparePortfolioRows(rows), [rows, suppliedPlan, suppliedPrepared]);
+  const preparedCache=useRef(null);
+  const evaluationNow=now ?? Date.now();
+  if (!suppliedPlan && !suppliedPrepared && (!preparedCache.current || preparedCache.current.rows!==rows || preparedCache.current.date!==date || preparedCache.current.value.evaluated_at>evaluationNow || (preparedCache.current.value.next_expiry_at!==null && evaluationNow>=preparedCache.current.value.next_expiry_at))) preparedCache.current={rows,date,value:preparePortfolioRows(rows,evaluationNow)};
+  const prepared=suppliedPlan?null:suppliedPrepared || preparedCache.current.value;
   const plan = useMemo(() => suppliedPlan || buildPortfolioPlan(rows, date, 100000, now, prepared), [rows, date, now, prepared, suppliedPlan]);
   const presentation = useMemo(() => presentPortfolio(plan), [plan]);
   const [open, setOpen] = useState(false);

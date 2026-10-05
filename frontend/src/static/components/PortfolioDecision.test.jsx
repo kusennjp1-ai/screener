@@ -2,13 +2,22 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import PortfolioDecision from './PortfolioDecision';
-import { withAuditFixture } from '../testAuditFixture';
-import { buildPortfolioPlan } from '../portfolioPlan';
 afterEach(cleanup);
 const row = { symbol: 'LEAD', market: 'US', currency: 'USD', gics_sector: 'Technology', market_regime: 'confirmed_uptrend', market_above_50dma: true, market_above_200dma: true, passes_template: true, rs_rating: 95, week_52_low_distance: 50, week_52_high_distance: 3, composite_rating: 95, eps_rating: 90, ibd_group_rank: 10, adv_usd: 50000000, current_price: 101, se_pivot_price: 100, se_pattern_confidence: 80 };
 const now = Date.parse('2026-09-24T14:00:00Z');
 const date = '2026-09-23';
-const makePlan = () => buildPortfolioPlan([withAuditFixture(row)], date, 100000, now);
+// Synthetic supplied-plan presentation fixture, not a current allocation or
+// evidence that uncertified financial ratings can qualify a stock.
+const makePlan = () => ({
+  date, capital:100000, market:{label:'合成テストの市場',cap:.5}, allocationCap:.25,
+  decision:'候補あり・未達条件を確認', candidateCount:1, blockers:[],
+  positions:[{symbol:'LEAD',sector:'Technology',dailyReady:false,buy:101,stop:93.93,target:121.2,pivot:100,shares:70,cost:7070,loss:494.9,weight:.0707}],
+  readiness:[{symbol:'LEAD',ready:false,passed:1,total:3,rules:[
+    {id:'position',label:'買い位置',state:'pass',detail:'合成テスト内の位置'},
+    {id:'volume',label:'出来高',state:'fail',detail:'合成テスト内の未達'},
+    {id:'financial',label:'選定条件',state:'unknown',detail:'現在の財務根拠は未確認'},
+  ]}], dailyPositions:[], invested:7070,cash:92930,exposure:.0707,risk:494.9,executionExposure:0,executionCash:100000,
+});
 
 it('shows each failed and unknown condition alongside the conditional prices with no extra expansion', () => {
   const inspect = vi.fn(), plan = makePlan();

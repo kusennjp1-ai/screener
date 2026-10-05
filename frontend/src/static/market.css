@@ -80,7 +80,8 @@
 .sector-rank-head > span:nth-child(2) { text-align:center; }
 .sector-rank-list { margin:0;padding:0;list-style:none; }
 .sector-rank-list li { border-bottom:1px solid var(--line);border-radius:8px; }
-.sector-rank-row { height:48px;color:var(--text);text-decoration:none;padding:0 4px; }
+/* Leave room for the source-status line while preserving full touch targets. */
+.sector-rank-row { height:46px;color:var(--text);text-decoration:none;padding:0 4px; }
 .sector-rank-list li:hover,.sector-rank-list li[data-highlight="true"],.sector-table-scroll tr[data-highlight="true"] { background:var(--surface-2); }
 .sector-rank-list li[data-highlight="true"] { outline:1px solid var(--accent);outline-offset:-1px; }
 .sector-name { min-width:0;font-size:13px; }

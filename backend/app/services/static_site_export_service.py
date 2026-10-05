@@ -24,6 +24,7 @@ from app.domain.markets.catalog import get_market_catalog
 from app.domain.markets.key_markets import key_market_instruments
 from app.infra.db.models.feature_store import FeatureRun, FeatureRunPointer
 from app.infra.db.repositories.feature_store_repo import SqlFeatureStoreRepository
+from app.services.static_financial_evidence import add_static_financial_metadata, subset_static_financial_current
 from app.models.stock import StockPrice
 from app.schemas.groups import (
     ConstituentStock,
@@ -702,7 +703,14 @@ class StaticSiteExportService:
         chunk_dir = scan_dir / "chunks"
         chunk_dir.mkdir(parents=True, exist_ok=True)
 
-        serialized_rows = [self._serialize_scan_row(row) for row in rows]
+        # Metadata only: an older approved UI must continue receiving exactly
+        # its legacy scalar values/classifications during a data-only refresh.
+        serialized_rows = [
+            add_static_financial_metadata(
+                self._serialize_scan_row(row), now=generated_at,
+                as_of_date=run.as_of_date.isoformat(), market=market or self._run_market(run),
+            ) for row in rows
+        ]
         # Exclude ETFs/ETNs — this is a stock screener; funds are not valid
         # Minervini/CANSLIM/VCP candidates and were inflating the counts.
         serialized_rows = [
@@ -800,6 +808,16 @@ class StaticSiteExportService:
             if not bars:
                 skipped_symbols.append(symbol)
                 return
+            # The independently cached fundamentals cannot borrow a scan's
+            # source proof, even when their financial numbers happen to match.
+            stock_data = add_static_financial_metadata(
+                stock_data, now=generated_at, as_of_date=run.as_of_date.isoformat(),
+                market=market, symbol=symbol,
+            )
+            fundamentals_value = add_static_financial_metadata(
+                fundamentals_value, now=generated_at, as_of_date=run.as_of_date.isoformat(),
+                market=market, symbol=symbol,
+            )
             rs_line, blue_dots = self._serialize_rs_line(price_df, benchmark_df)
             rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
             buy_points = self._compute_buy_points(price_df)
@@ -973,7 +991,10 @@ class StaticSiteExportService:
                     skipped_symbols.append(symbol)
                     continue
                 rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
-                stock_data = self._serialize_scan_row(row)
+                stock_data = add_static_financial_metadata(
+                    self._serialize_scan_row(row), now=generated_at,
+                    as_of_date=run.as_of_date.isoformat(), market=market, symbol=symbol,
+                )
                 self._write_json(output_dir / rel_path, {
                     "schema_version": CHART_BUNDLE_SCHEMA_VERSION,
                     "generated_at": generated_at, "as_of_date": run.as_of_date.isoformat(),
@@ -1248,11 +1269,22 @@ class StaticSiteExportService:
             for row in rankings:
                 group_name = row["industry_group"]
                 try:
-                    group_details[group_name] = service.get_group_history(
+                    group_detail = service.get_group_history(
                         db,
                         group_name,
                         days=STATIC_GROUP_DETAIL_HISTORY_DAYS,
                     )
+                    # Legacy group service has no financial evidence. Its
+                    # current stock list receives explicit unknown metadata;
+                    # dated ranking/history entries remain untouched.
+                    if isinstance(group_detail, dict) and isinstance(group_detail.get("stocks"), list):
+                        group_detail = {**group_detail, "stocks": [
+                            add_static_financial_metadata(
+                                member, now=generated_at, as_of_date=expected_as_of_date.isoformat(),
+                                market=market, include_reference=False,
+                            ) for member in group_detail["stocks"]
+                        ]}
+                    group_details[group_name] = group_detail
                 except Exception:
                     logger.warning("Failed to export detail for group %s", group_name, exc_info=True)
                     db.rollback()
@@ -1758,6 +1790,11 @@ class StaticSiteExportService:
                 history=history,
                 stocks=stock_payload,
             ).model_dump(mode="json")
+            # Pydantic's shared API schema intentionally has no static-only
+            # contract. Add proof after serialization, without changing it.
+            for member, source_row in zip(details[group_name]["stocks"], stocks):
+                if isinstance(source_row.get("financial_current"), dict):
+                    member["financial_current"] = subset_static_financial_current(source_row["financial_current"], member)
         return details
 
     @staticmethod

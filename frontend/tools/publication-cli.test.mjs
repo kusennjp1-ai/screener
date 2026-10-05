@@ -219,6 +219,7 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   // archive verification run unchanged against the tiny publication history.
   const scripts = join(root, '.github/scripts');
   cpSync(dirname(cli), scripts, { recursive: true });
+  cpSync(join(project, 'contracts'), join(root, 'contracts'), { recursive: true });
   const pinPath = join(scripts, 'approved-ui-bootstrap.json');
   write(pinPath, jsonBytes({
     site_url: siteUrl, repository, ui_sha: uiSha, ui_files: approvedHashes,
@@ -276,7 +277,10 @@ globalThis.fetch = async (input, options) => {
   };
   const dist = join(root, 'release/frontend/dist');
   const installTransport = (frontend = 'release/frontend') => {
-    write(join(root, frontend, 'src/static/researchTransport.js'), readFileSync(join(project, 'frontend/src/static/researchTransport.js')));
+    for (const name of ['researchTransport.js', 'researchFloat64.js', 'researchHex.js', 'financialHistory.js', 'evidenceTime.js']) {
+      write(join(root, frontend, 'src/static', name), readFileSync(join(project, 'frontend/src/static', name)));
+    }
+    write(join(root, frontend, 'contracts/native_annual_history_v1.json'), readFileSync(join(project, 'frontend/contracts/native_annual_history_v1.json')));
     write(join(root, frontend, 'package.json'), '{"type":"module"}');
   };
   const simulateBuild = () => {
@@ -312,6 +316,33 @@ function addExportCharts(f, dates) {
 }
 
 describe('split Pages publication CLI', () => {
+  it('holds all new UI with any pending correction but permits proven data advances', () => {
+    const f = fixture({ designPassed: true, expired: true });
+    write(join(f.root, '.github/pending-financial-correction.json'), '{ malformed or superseded hold');
+    expect(f.success('plan').output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\n`);
+    expect(f.state().decision.pendingFinancialCorrection).toBe(true);
+    expect(f.state().decision.approval).toBeUndefined();
+    f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
+    expect(uiTree(f.dist)).toEqual(approvedBytes);
+  });
+
+  it('holds equal-date automatic UI promotion as a no-op without weakening metadata migration', () => {
+    for (const legacy of [false, true]) {
+      const f = fixture({ designPassed: true, fresh: false, legacy });
+      write(join(f.root, '.github/pending-financial-correction.json'), '{}');
+      const result = f.success('plan');
+      if (!legacy) expect(result.output).toBe('publish=false\n');
+      else expect(f.state()).toMatchObject({ sourceSha: uiSha, decision: { mode: 'data', migration: true } });
+    }
+  });
+
+  it('recheck rejects a UI build when a pending correction appears after planning', () => {
+    const f = fixture({ designPassed: true, expired: true });
+    f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose');
+    write(join(f.root, '.github/pending-financial-correction.json'), '{}');
+    expect(f.invoke('recheck').text).toContain('Current-main publication gates changed');
+  });
+
   it('advances data after the old Pages artifact expires while failing current Design preserves every approved UI byte', () => {
     const f = fixture({ expired: true });
     const plan = f.success('plan');
@@ -351,19 +382,21 @@ describe('split Pages publication CLI', () => {
       runs: f.currentGates.map(run => ({ id: run.id, attempt: run.run_attempt, path: run.path })) } });
   });
 
-  it('skips a duplicate automatic event but keeps manual same-code recovery actionable', () => {
+  it('marks a newly approved UI using existing prices as offline published input', () => {
+    const f = fixture({ fresh: false, designPassed: true });
+    expect(f.success('plan').output).toBe(`publish=true\nsha=${mainSha}\nmode=ui\nmigration=false\npublished_input=true\n`);
+    expect(f.state().source.artifact.id).toBe(700);
+    f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
+  });
+
+  it('skips duplicate automatic and untyped manual same-code data changes', () => {
     const f = fixture({ fresh: false, sameCode: true });
     expect(f.success('plan').output).toBe('publish=false\n');
     expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
     f.env.GITHUB_EVENT_NAME = 'workflow_dispatch';
-    expect(f.success('plan').output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\n`);
-    expect(f.state().source).toMatchObject({ runId: 500, attempt: 2, artifact: { id: 700 } });
-    f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
-    expect(readFileSync(join(f.dist, 'static-data/manifest.json'))).toEqual(f.liveManifest);
-    expect(uiTree(f.dist)).toEqual(approvedBytes);
-    expect(f.finalReceipt().data_source).toEqual({ artifact_id: 700, run_id: 500, attempt: 2 });
+    expect(f.success('plan').output).toBe('publish=false\n');
+    expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
   });
-
   it('fails the final deployment recheck when a different valid live publication supersedes the plan', () => {
     const f = fixture();
     f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
@@ -693,5 +726,53 @@ describe('split Pages publication CLI', () => {
     expect(f.finalReceipt()).toMatchObject({ price_observations: priceObservations('2026-11-04'),
       known_price_dates: priceObservations('2026-11-04') });
     expect(uiTree(f.dist)).toEqual(approvedBytes);
+  });
+});
+
+function correctionFixture() {
+  const f = fixture({fresh:true});
+  const contract = JSON.parse(readFileSync(join(project,'contracts/financial_correction_v1.json'),'utf8'));
+  const base = jsonBytes({market:'US',as_of_date:'2026-11-01',rows:[{symbol:'KEEP',market:'US',current_price:20,adv_usd:30000000}]}), cohort = jsonBytes({symbols:['KEEP'],base_artifact_sha256:hash(base)}), archive = jsonBytes({schema_version:'fixture-archive'});
+  const artifact = {id:990,name:`financial-statement-recovery-${exportSha}-2`,expired:false,size_in_bytes:1000,created_at:'2026-11-03T01:05:00Z',workflow_run:{id:950,head_sha:exportSha}};
+  const zip=join(f.root,'correction-source.zip');artifact.digest=makeArchive(zip,{'base.json':base,'cohort.json':cohort,'archive/manifest.json':archive},{tar:false});
+  f.config.downloads[repoApi('/actions/artifacts/990/zip')]=zip;
+  const source={repository,workflow:contract.source_workflow,head_sha:exportSha,run_id:950,run_attempt:2,artifact_id:990,artifact_name:artifact.name,artifact_sha256:artifact.digest.slice(7),archive_manifest_sha256:hash(archive),acquisition_base_sha256:hash(base),cohort_sha256:hash(cohort)};
+  const run={id:950,run_attempt:2,repository:{full_name:repository},head_repository:{full_name:repository},head_sha:exportSha,path:contract.source_workflow,head_branch:'improve/mandatory-financial-source-recovery',event:'push',status:'completed',conclusion:'success'};
+  f.config.api[repoApi('/actions/runs/950/attempts/2')]=run;
+  f.config.api[repoApi('/actions/runs/950/attempts/2/jobs?per_page=100')]=[{jobs:[{id:9502,name:'statement-recovery',run_attempt:2,conclusion:'success',started_at:'2026-11-03T01:00:00Z',completed_at:'2026-11-03T01:06:00Z'}]}];
+  f.config.api[repoApi('/actions/runs/950/artifacts?per_page=100')]=[{artifacts:[artifact]}];
+  for(const ref of [f.currentGates[0],...approvedGates.map(gate=>f.config.api[repoApi(`/actions/runs/${gate.id}/attempts/${gate.attempt}`)])]) {
+    f.config.api[repoApi(`/actions/runs/${ref.id}/attempts/${ref.run_attempt}`)]=ref;
+    const names=ref.path.endsWith('ci.yml')?contract.required_ci_jobs:['Real-data design and performance budgets'];
+    f.config.api[repoApi(`/actions/runs/${ref.id}/attempts/${ref.run_attempt}/jobs?per_page=100`)]=[{jobs:names.map((name,i)=>({id:ref.id*10+i+1,name,run_attempt:ref.run_attempt,status:'completed',conclusion:'success'}))}];
+  }
+  const intent={schema_version:contract.schema_version,kind:contract.kind,reason:contract.reason,previous_publication_identity:`500/2/${hash(jsonBytes(f.receipt))}/${hash(f.liveManifest)}`,source};
+  f.env.GITHUB_EVENT_NAME='workflow_dispatch';
+  const setIntent=value=>write(f.env.GITHUB_EVENT_PATH,jsonBytes({inputs:{ui_only:false,financial_correction:JSON.stringify(value)}}));setIntent(intent);
+  return {...f,intent,setIntent};
+}
+
+describe('typed financial correction preparation CLI',()=>{
+  it('pins the published predecessor rather than selecting the newer ordinary export',()=>{
+    const f=correctionFixture();expect(f.success('plan').output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\ncorrection=true\ncorrection_prepare_only=true\n`);
+    expect(f.state()).toMatchObject({source:{artifact:{id:700}},sourceSha:uiSha,controllerSha:mainSha,correction:{intent:f.intent}});
+    const endpoints=f.requests().filter(v=>v.kind==='gh').map(v=>v.args.at(-1));expect(endpoints).not.toContain(repoApi('/actions/runs/600/attempts/3'));
+  });
+  it('cannot inject a main-only helper into an incompatible approved release checkout',()=>{
+    const f=correctionFixture();f.success('plan');
+    write(join(f.root,'frontend/tools/financial-correction-overlay.mjs'),'throw Error("ROOT helper must never run");');
+    const result=f.invoke('restore');expect(result.status).not.toBe(0);expect(result.text).toContain('Approved UI lacks the financial correction consumer hook');expect(result.text).not.toContain('ROOT helper must never run');
+    expect(existsSync(join(f.root,'release/frontend/tools/financial-correction-overlay.mjs'))).toBe(false);
+    expect(f.requests().some(v=>v.kind==='gh'&&v.args.at(-1)===repoApi('/actions/artifacts/990/zip'))).toBe(false);
+  });
+  it.each(['controller','consumer','design'])('rejects skipped exact %s jobs rather than ordinary data fallback',kind=>{
+    const f=correctionFixture(),id=kind==='controller'?201:kind==='consumer'?101:102,attempt=kind==='controller'?4:kind==='consumer'?2:3;
+    f.config.api[repoApi(`/actions/runs/${id}/attempts/${attempt}/jobs?per_page=100`)][0].jobs[0].conclusion='skipped';
+    const result=f.invoke('plan');expect(result.status).not.toBe(0);expect(result.text).toMatch(/Correction.*(?:successful|CI job)/);expect(existsSync(join(f.runner,'verified-publication/state.json'))).toBe(false);
+  });
+  it('rejects an intent bound to a superseded predecessor before restoring a source',()=>{
+    const f=correctionFixture();f.setIntent({...f.intent,previous_publication_identity:`499/1/${'a'.repeat(64)}/${'b'.repeat(64)}`});
+    const result=f.invoke('plan');expect(result.status).not.toBe(0);expect(result.text).toContain('predecessor is missing or superseded');
+    expect(f.requests().some(v=>v.kind==='gh'&&v.args.at(-1)===repoApi('/actions/artifacts/990/zip'))).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import ResearchHero from './ResearchHero';
 import { readFileSync } from 'node:fs';
+import registry from '../../../contracts/financial_instrument_applicability_v1.json';
 import { CHANGE_LABELS } from '../candidateHistory';
 import { useWorkbenchDetails } from '../useWorkbench';
 vi.mock('./PortfolioDecision',()=>({default:()=>null}));
@@ -10,6 +11,7 @@ vi.mock('./SetupRadar',()=>({default:()=> <section aria-label="セットアッ�
 vi.mock('../useWorkbench',()=>({useWorkbenchDetails:vi.fn(()=>({isLoading:true}))}));
 const props={rows:[],ranked:[],date:'2026-09-29',plan:{dailyPositions:[],allocationCap:0,market:{label:'市場未確認'}},workbench:{},availableSymbols:new Set()};
 const counts=extra=>({...Object.fromEntries(Object.keys(CHANGE_LABELS).map(key=>[key,0])),...extra});
+const comparisonBasis={schema_version:'current-policy-comparison-v1',mode:'saved_first_same_policy'};
 beforeEach(()=>{localStorage.clear();vi.clearAllMocks();});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('persists the compact hero choice across mounts and restores its content',()=>{
@@ -50,15 +52,18 @@ it('does not report a real candidate count while the publication is loading',()=
  expect(screen.getByText('日足検証 —')).toBeInTheDocument();
 });
 it('groups daily changes with the portfolio action while retaining the full desktop counts',()=>{
- const workbench={data:{history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({new:7,returned:2,dropped:3})}}}};
- render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
+ const workbench={data:{comparison_basis:comparisonBasis,history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({new:7,returned:2,dropped:3})}}}};
+ const {rerender}=render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
  const trigger=screen.getByRole('button',{name:'候補の日次変化'});
  expect(trigger.closest('.hero-actions')).not.toBeNull();
  expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('新たに通過 7 · 再通過 2 · 脱落 3');
  expect(screen.getByRole('link',{name:'業種の追い風を見る →'}).closest('.overview-market')).not.toBeNull();
+ rerender(<ResearchHero {...props} workbench={{data:{...workbench.data,comparison_basis:undefined}}} method="minervini"/>);
+ expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('変化：比較基準未確認');
+ expect(trigger).not.toHaveTextContent('新たに通過 7');
 });
 it('shows comparison coverage from summary counts and loads explanations only when opened',()=>{
- const workbench={data:{history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({incomparable:2430}),item_count:2430}}}};
+ const workbench={data:{comparison_basis:comparisonBasis,history:{previous_as_of:'2026-09-28'},changes:{minervini:{counts:counts({incomparable:2430}),item_count:2430}}}};
  const {rerender}=render(<ResearchHero {...props} workbench={workbench} method="minervini"/>);
  const trigger=screen.getByRole('button',{name:'候補の日次変化'});
  expect(trigger.querySelector('.changes-desktop')).toHaveTextContent('変化：全2430銘柄が比較不能');
@@ -112,4 +117,16 @@ it('opens daily changes from the keyboard and restores the trigger after Escape 
  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'候補の日次変化'})).not.toBeInTheDocument());
  expect(trigger).toHaveAttribute('aria-expanded','false');
  expect(trigger).toHaveFocus();
+});
+
+it('keeps the price and financial universes with all verified exclusions in the market summary',()=>{
+ const rows=[{symbol:'COMPANY',market:'US',current_price:100,adv_usd:3e7},...registry.records.map(record=>({symbol:record.symbol,company_name:record.name,market:record.market,current_price:100,adv_usd:3e7}))];
+ render(<ResearchHero {...props} rows={rows}/>);
+ const scope=screen.getByText(/価格・流動性対象 4件/);
+ expect(scope).toHaveTextContent('企業財務判定の対象 1件');
+ expect(scope).toHaveTextContent('確認済みファンド BITU・SBIT・ETHE は対象外');
+ expect(scope).toHaveClass('overview-universe');
+ expect(scope).not.toHaveClass('hero-subtitle');
+ expect(scope.closest('.overview-market')).not.toBeNull();
+ expect(screen.getByRole('link',{name:'業種の追い風を見る →'})).toBeInTheDocument();
 });

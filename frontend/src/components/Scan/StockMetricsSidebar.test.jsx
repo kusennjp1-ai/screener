@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../test/renderWithProviders';
 import StockMetricsSidebar from './StockMetricsSidebar';
+import { withSyntheticFinancialProof, financialFixtureDate as date, financialFixtureNow as now } from '../../test/fixtures/financialCurrent';
 
 describe('StockMetricsSidebar market-cap display', () => {
   it('falls back to scan-row market cap when fundamentals market cap is missing', () => {
@@ -124,4 +125,42 @@ describe('StockMetricsSidebar fundamental bonus (C44)', () => {
 
     expect(screen.queryByTestId('fundamental-bonus')).not.toBeInTheDocument();
   });
+});
+
+
+it('keeps static raw and fallback financial values unknown without affecting company or price metadata', () => {
+  renderWithProviders(<StockMetricsSidebar currentFinancialOnly date="2026-10-02" now={Date.parse('2026-10-03T12:00:00Z')}
+    stockData={{ symbol: 'TEST', company_name: 'Synthetic company', eps_growth_yy: null, composite_score: 98, minervini_score: 95, eps_rating: 94, rating: 'Strong Buy', fundamental_bonus: 9, fundamental_bonus_detail: {components:{code33:{met:true,points:4}}} }}
+    fundamentals={{ symbol: 'TEST', eps_growth_yy: 888, sales_growth_qq: 777, roe: 66, profit_margin: 55 }}/>);
+  expect(screen.getByText('Synthetic company')).toBeInTheDocument();
+  expect(screen.getByText(/財務に依存する推計・補助スコアは未確認/)).toBeInTheDocument();
+  expect(screen.getAllByText('未確認').length).toBeGreaterThan(5);
+  expect(screen.queryByText('Strong Buy')).not.toBeInTheDocument();
+  expect(screen.queryByText('888.0%')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('fundamental-bonus')).not.toBeInTheDocument();
+});
+
+it('does not revive an unknown scan value from a separately certified fundamentals cache', () => {
+  renderWithProviders(<StockMetricsSidebar currentFinancialOnly date={date} now={now}
+    stockData={{symbol:'TEST',market:'US',as_of_date:date,eps_growth_yy:null,sales_growth_yy:null}}
+    fundamentals={withSyntheticFinancialProof({symbol:'TEST',eps_growth_yy:888,sales_growth_yy:777})}/>);
+  expect(screen.queryByText('+888.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText('+777.0%')).not.toBeInTheDocument();
+  expect(screen.getByText('EPS Y/Y').closest('div')).toHaveTextContent('未確認');
+  expect(screen.getByText('Sales Y/Y').closest('div')).toHaveTextContent('未確認');
+});
+
+it('uses certified scan values until expiry and then hides them without consulting raw fallback values', () => {
+  const stockData=withSyntheticFinancialProof({symbol:'TEST'});
+  const element=time=><StockMetricsSidebar currentFinancialOnly date={date} now={time} stockData={stockData}
+    fundamentals={{symbol:'TEST',eps_growth_yy:888,sales_growth_yy:777}}/>;
+  const view=renderWithProviders(element(now));
+  expect(screen.getByText('+30.0%')).toBeInTheDocument();
+  expect(screen.getByText('+40.0%')).toBeInTheDocument();
+  expect(screen.getByText('EPS TTM').closest('div')).toHaveTextContent('未確認');
+  view.rerender(element(now+8*86400000));
+  expect(screen.queryByText('+30.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText('+40.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText('+888.0%')).not.toBeInTheDocument();
+  expect(screen.getByText('EPS Y/Y').closest('div')).toHaveTextContent('未確認');
 });

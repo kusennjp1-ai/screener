@@ -39,7 +39,7 @@ describe('100 virtual portfolio monitoring scenarios', () => {
         expect(p.target).toBeGreaterThan(p.buy);
       }
       if ([2,3,4,5,6,7].includes(scenario)) expect(plan.positions).toHaveLength(0);
-      if (scenario === 0) expect(plan.positions.length).toBeGreaterThan(0);
+      if (scenario === 0) { expect(plan.positions).toEqual([]); expect(plan.candidateCount).toBe(0); }
       if (scenario === 1) expect(plan.exposure).toBeLessThanOrEqual(.25);
       if (scenario === 8) expect(plan.blockers[0]).toContain('分析基準日');
       if (scenario === 9) expect(plan.invested).toBeLessThanOrEqual(20000);

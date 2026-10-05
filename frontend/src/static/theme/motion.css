@@ -2,6 +2,6 @@
 @keyframes research-rise { from { opacity:0;transform:translateY(4px) } to { opacity:1;transform:translateY(0) } }
 @keyframes research-zone { from { opacity:.35 } to { opacity:1 } }
 .research-hero .hero-copy { animation:research-rise 180ms ease-out both; }
-.research-hero .radar-plot { animation:research-rise 220ms ease-out both; }
+/* Radar points must be visible at their first painted frame. */
 .entry-gauge .gauge-zone { animation:research-zone 300ms ease-out both; }
 @media(prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important} }

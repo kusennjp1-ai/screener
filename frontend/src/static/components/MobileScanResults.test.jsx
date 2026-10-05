@@ -21,3 +21,8 @@ it('disables zero-result presets without treating unavailable counts as zero',()
   expect(zero).toHaveAttribute('aria-disabled','true');
   expect(screen.getByRole('button',{name:'補助 VCP'})).not.toHaveAttribute('aria-disabled','true');
 });
+it('labels the technical setup default independently of the quarantined auxiliary score',()=>{
+  renderWithProviders(<MobileScanResults {...props} sortBy="se_setup_score"/>);
+  expect(screen.getByRole('combobox',{name:'詳細スキャンの並び順'})).toHaveTextContent('セットアップ点');
+  expect(screen.getByRole('combobox',{name:'詳細スキャンの並び順'})).not.toHaveTextContent('補助スコア');
+});

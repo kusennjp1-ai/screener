@@ -1,8 +1,13 @@
+import { loadFinancialGenerationCarry } from './financial-generation-carry.mjs';
+import { orderResearchExportRows } from './research-export-order.mjs';
+import { applicabilityUniverse } from '../src/static/instrumentApplicability.js';
+import { loadFinancialCorrection, correctionMetadata, CORRECTION_METADATA_FIELDS, overlayFinancialCorrection, overlayFinancialChart, rewriteCorrectionChartAliases, writeCorrectionHistory } from './financial-correction-overlay.mjs';
+import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, financialNextExpiry } from '../src/static/financialCurrent.js';
+import { filterStaticScanRows, sortStaticScanRows } from '../src/static/scanClient.js';
 import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { encodeAssessment } from '../src/static/assessmentEncoding.js';
-import { encodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
+import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
@@ -19,6 +24,9 @@ import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } from '../src/static/qualificationAudit.js';
 
 const root = resolve('public/static-data');
+const evaluatedAt = process.env.FINANCIAL_EVALUATED_AT ? Date.parse(process.env.FINANCIAL_EVALUATED_AT) : Date.now();
+if (!Number.isFinite(evaluatedAt)) throw Error('Invalid financial evaluation instant');
+const currentEvaluation={financial_evaluated_at:evaluatedAt,financial_semantics:'current_at_evaluation_not_historical_publication',assessment_version:RULE_SUMMARY_VERSION};
 async function read(relative) {
   const path = resolve(root, relative);
   if (!path.startsWith(root + '/') && !path.startsWith(root + '\\')) throw Error('Invalid data path');
@@ -38,7 +46,14 @@ for (const chunk of scan.chunks || []) {
   chunks.push({ path: chunk.path, payload });
 }
 if (entry.as_of_date !== scan.as_of_date) throw Error('Manifest / scan date mismatch');
-const merged = mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_date);
+// initial_rows is rewritten in UI sort order below. Preserve canonical export
+// order across rebuilds while recalculating every value from the current scan.
+const merged = await orderResearchExportRows(mergeScanRows([scan, ...chunks.map(c => c.payload)], scan.as_of_date), resolve('public/qualification-audit.json'), scan.as_of_date);
+const carry = await loadFinancialGenerationCarry({rows:merged,asOfDate:scan.as_of_date});
+const correction = carry || await loadFinancialCorrection({rows:merged,asOfDate:scan.as_of_date});
+const correctionMeta = correctionMetadata(correction);
+Object.assign(currentEvaluation,correctionMeta);
+if(correction) Object.assign(manifest,correctionMeta);
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
 const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
@@ -100,11 +115,14 @@ for (const row of merged) {
     earnings:entryContext?.as_of_date === scan.as_of_date ? entryContext.earnings?.[row.symbol] || null : null,
     shape:setupEvidence(row,shape,scan.as_of_date),
     volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
-  rows.set(row.symbol, { ...row, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
+  rows.set(row.symbol, projectFinancialRow(overlayFinancialCorrection({ ...row, as_of_date:scan.as_of_date, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
-    book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null });
+    book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
 }
+await writeCorrectionHistory(root,correction,currentFinancials);
+await rewriteCorrectionChartAliases(root,correction);
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));
+currentEvaluation.instrument_applicability_universe=applicabilityUniverse([...rows.values()]);
 if (breadth) {
   if (breadth.payload?.current?.date === scan.as_of_date) {
     breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
@@ -119,16 +137,16 @@ const compactRows = new Map();
 const currentDetails=new Set();
 const currentCharts=new Set();
 for (const row of rows.values()) {
-  row.passes_template=row.technical_audit.valid ? assess(row,'minervini').qualified : null;
-  row.method_summary = {version:RULE_SUMMARY_VERSION};
+  row.passes_template=row.technical_audit.valid ? assess(row,'minervini',evaluatedAt).qualified : null;
+  row.method_summary = {version:RULE_SUMMARY_VERSION,evaluated_at:evaluatedAt,next_expiry_at:financialNextExpiry([row],evaluatedAt)};
   for (const method of ['minervini','minervini2','oneil','ibd']) {
-    const {rules,...summary} = assess(row,method); row.method_summary[method] = summary;
+    const {rules,...summary} = assess(row,method,evaluatedAt); row.method_summary[method] = summary;
   }
 }
 for (const [symbol, row] of rows) {
   let canonicalChart=null;
   if (availableCharts.has(symbol)) {
-    canonicalChart=await read(paths.get(symbol));
+    canonicalChart=projectFinancialPayload(overlayFinancialChart(await read(paths.get(symbol)),correction,symbol),{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
     Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
     const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
     const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
@@ -152,25 +170,26 @@ for (const [symbol, row] of rows) {
   }
 }
 chartIndex.symbols=chartIndex.symbols.map(item=>availableCharts.has(item.symbol)?{...item,path:paths.get(item.symbol)}:item);
+if(correction) Object.assign(chartIndex,correctionMeta);
 const chartIndexContent=JSON.stringify(chartIndex),chartIndexHash=createHash('sha256').update(chartIndexContent).digest('hex').slice(0,16);
 const chartIndexPath=`charts-index-${chartIndexHash}.json`;
 await writeFile(resolve(root,chartIndexPath),chartIndexContent);
-entry.assets.charts={...entry.assets.charts,path:chartIndexPath};
-scan.charts={...scan.charts,path:chartIndexPath};
-const listFields = 'institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path method_summary symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance'.split(' ');
-const researchIndex = {as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
+entry.assets.charts={...entry.assets.charts,...correctionMeta,path:chartIndexPath};
+scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
+const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
+const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1',as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
   // Full provenance and detector reasons remain in the content-addressed detail.
   if(row.price_quality) summary.price_quality={status:row.price_quality.status,as_of_date:row.price_quality.as_of_date};
   if(row.setup_recalculation) summary.setup_recalculation={status:row.setup_recalculation.status,as_of_date:row.setup_recalculation.as_of_date,...(row.setup_recalculation.status==='calculated'?{}:{reason:row.setup_recalculation.reason})};
-  summary.method_summary={version:RULE_SUMMARY_VERSION,...Object.fromEntries(['minervini','minervini2','oneil','ibd'].map(method=>[method,encodeAssessment(row.method_summary[method])]))};
   return summary;
 })};
-const researchRowIds = new Map(researchIndex.rows.map((row, index) => [row.symbol, index]));
-const researchOrders = Object.fromEntries(RESEARCH_METHODS.map(method => [method,
-  rankCandidates(researchIndex.rows, method).map(({ row }) => researchRowIds.get(row.symbol)),
-]));
-const researchContent = JSON.stringify(encodeResearchIndex(researchIndex, researchOrders));
+// Runtime orders are rebuilt from current inputs at each evaluation epoch.
+// Omit ignored cached permutations and list summaries. Canonical detail keeps
+// its independently checked publication summaries; every exact input remains.
+const researchContent = JSON.stringify(encodeResearchIndex(researchIndex, undefined, {
+  columnBytes: column => gzipSync(JSON.stringify(column)).length,
+}));
 if (Buffer.byteLength(researchContent) > 8000000 || gzipSync(researchContent).length > 1000000) {
   throw Error(`Research index exceeds its unchanged 8 MB raw / 1 MB gzip budget: ${Buffer.byteLength(researchContent)} raw / ${gzipSync(researchContent).length} gzip bytes`);
 }
@@ -178,19 +197,22 @@ if (Buffer.byteLength(researchContent) > 8000000 || gzipSync(researchContent).le
 await mkdir(resolve(root,'scan-list'),{recursive:true});
 const scanRows=[...compactRows.values()].map(scanListRow), scanChunks=[];
 for(let offset=0;offset<scanRows.length;offset+=1000) {
-  const content=JSON.stringify({as_of_date:scan.as_of_date,rows:scanRows.slice(offset,offset+1000)});
+  const content=JSON.stringify({...correctionMeta,as_of_date:scan.as_of_date,rows:scanRows.slice(offset,offset+1000)});
   const hash=createHash('sha256').update(content).digest('hex').slice(0,16);
   const path=`scan-list/chunk-${hash}.json`;await writeFile(resolve(root,path),content);
   scanChunks.push({path,count:Math.min(1000,scanRows.length-offset)});
 }
-const lightScan={...scan,sort:{field:'se_setup_score',order:'desc'},initial_rows:[],chunks:scanChunks,embedded_chart_paths:true};
+const currentPresets=(scan.preset_screens || []).map(screen=>{const count=filterStaticScanRows(scanRows,screen.filters || {},{now:evaluatedAt}).length;return {...screen,match_count:screen.limit?Math.min(count,screen.limit):count};});
+const filteredScanRows=sortStaticScanRows(filterStaticScanRows(scanRows,scan.default_filters || {},{now:evaluatedAt}),'se_setup_score','desc',{now:evaluatedAt});
+for(const key of ['rows','results','stocks','members']) if(Array.isArray(scan[key])) scan[key]=scan[key].map(row=>compactRows.get(row?.symbol)).filter(Boolean);
+const lightScan={...scan,...correctionMeta,preview_rows:filteredScanRows.slice(0,10).map(scanListRow),default_filtered_rows_total:filteredScanRows.length,preset_screens:currentPresets,financial_evaluated_at:evaluatedAt,sort:{field:'se_setup_score',order:'desc'},initial_rows:[],chunks:scanChunks,embedded_chart_paths:true};
 const lightContent=JSON.stringify(lightScan),lightHash=createHash('sha256').update(lightContent).digest('hex').slice(0,16);
 entry.pages.scan.list_path=`scan-list/index-${lightHash}.json`;
 await writeFile(resolve(root,entry.pages.scan.list_path),lightContent);
 manifest.research_generation = createHash('sha256').update(researchContent).digest('hex');
 const researchPath = `research-index-${manifest.research_generation.slice(0,16)}.json`;
 await writeFile(resolve(root, researchPath), researchContent);
-entry.assets.research = {path:researchPath};
+entry.assets.research = {path:researchPath,...currentEvaluation};
 
 // Remove only obsolete, generated hash-addressed files in these known folders.
 // No source data or historical candidate snapshots are included in this cleanup.
@@ -204,19 +226,27 @@ for(const name of await readdir(root)) if(/^research-index-[a-f0-9]{16}\.json$/.
 for(const name of await readdir(root)) if(/^charts-index-[a-f0-9]{16}\.json$/.test(name) && name!==chartIndexPath) await unlink(resolve(root,name));
 
 // Stamp the generated bundle, so every UI and the portfolio share verified data.
-scan.initial_rows = (scan.initial_rows || []).map(r => compactRows.get(r?.symbol)).filter(Boolean);
+scan.preset_screens = currentPresets;
+scan.financial_evaluated_at=evaluatedAt;
+if(correction) Object.assign(scan,correctionMeta);
+scan.sort={field:'se_setup_score',order:'desc'};
+scan.default_filtered_rows_total=filteredScanRows.length;
+scan.preview_rows=filteredScanRows.slice(0,10).map(scanListRow);
+scan.initial_rows = sortStaticScanRows(filterStaticScanRows([...compactRows.values()],scan.default_filters || {},{now:evaluatedAt}),'se_setup_score','desc',{now:evaluatedAt}).slice(0,50).map(row=>compactRows.get(row.symbol));
 await writeFile(resolve(root, entry.pages.scan.path), JSON.stringify(scan));
 for (const { path, payload } of chunks) {
   payload.rows = (payload.rows || []).map(r => compactRows.get(r?.symbol)).filter(Boolean);
+  if(correction) Object.assign(payload,correctionMeta);
+  for(const key of ['initial_rows','preview_rows','results','stocks','members']) if(Array.isArray(payload[key])) payload[key]=payload[key].map(row=>compactRows.get(row?.symbol)).filter(Boolean);
   await writeFile(resolve(root, path), JSON.stringify(payload));
 }
 const verification = [...rows.values()].map(row => ({ symbol: row.symbol, audit: row.technical_audit,
-  methods: Object.fromEntries(['minervini', 'minervini2', 'ibd'].map(method => { const a = assess(row, method); return [method, a || null]; })) }));
-await writeFile('public/qualification-audit.json', JSON.stringify({ version: AUDIT_VERSION, as_of_date: scan.as_of_date,
+  methods: Object.fromEntries(['minervini', 'minervini2', 'ibd'].map(method => { const a = assess(row, method,evaluatedAt); return [method, a || null]; })) }));
+await writeFile('public/qualification-audit.json', JSON.stringify({ ...currentEvaluation, version: AUDIT_VERSION, as_of_date: scan.as_of_date,
   generated_at: manifest.generated_at, independently_recalculated: verification.filter(r => r.audit.valid).length,
   total: rows.size, results: verification }));
 const candidates = Object.fromEntries(['oneil', 'minervini', 'minervini2', 'ibd'].map(method => [method,
-  rankCandidates([...rows.values()], method, { liquidOnly: true }).filter(r => r.assessment.qualified).slice(0, 50).map(({ row, assessment }) => ({ symbol: row.symbol, rs_estimate: row.rs_rating, passed: assessment.passed, total: assessment.total }))]));
+  rankCandidates([...rows.values()], method, { liquidOnly: true, now:evaluatedAt }).filter(r => r.assessment.qualified).slice(0, 50).map(({ row, assessment }) => ({ symbol: row.symbol, rs_estimate: row.rs_rating, passed: assessment.passed, total: assessment.total }))]));
 // Only explicitly verified references are eligible. Old lists remain historical;
 // they can never inflate today's overlap. No scraping or invented IBD membership.
 let reference = null;
@@ -226,9 +256,9 @@ for (const file of (await readdir(referenceDir)).filter(f => /^\d{4}-\d{2}-\d{2}
   if (value.verified === true && value.as_of_date === scan.as_of_date && value.source && value.constituents?.length) { reference = value; break; }
 }
 await writeFile('public/ibd-reference.json', JSON.stringify(reference));
-await writeFile('public/portfolio-model.json', JSON.stringify({ model_version: 'cash-first-v1', source_generated_at: manifest.generated_at, ...buildPortfolioPlan([...rows.values()], scan.as_of_date) }, null, 2));
+await writeFile('public/portfolio-model.json', JSON.stringify({ ...currentEvaluation, model_version: 'cash-first-v1', source_generated_at: manifest.generated_at, ...buildPortfolioPlan([...rows.values()], scan.as_of_date,100000,evaluatedAt) }, null, 2));
 await writeFile('public/research-daily.json', JSON.stringify({
-  schema_version: 1, rule_version: 'research-v5-book-evidence', as_of_date: scan.as_of_date,
+  ...currentEvaluation, schema_version: 1, rule_version: 'research-v6-static-financial-current', as_of_date: scan.as_of_date,
   generated_at: manifest.generated_at, universe_size: rows.size, ratings: 'independent_estimates',
   liquidity: { min_price_usd: 10, min_average_dollar_volume: 20000000 },
   candidates, ibd_comparison: compareReference(candidates.ibd, reference, scan.as_of_date),
@@ -239,6 +269,6 @@ const liquid=[...rows.values()].filter(r=>r.current_price>=10&&r.adv_usd>=200000
 const failures={};for(const row of liquid)for(const reason of row.technical_audit.errors)failures[reason]=(failures[reason]||0)+1;
 await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:liquid.length,verified:liquid.filter(r=>r.technical_audit.valid).length,reasons:failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));
 
-await exportWorkbench({root,rows:[...rows.values()],manifest,entry,researchContent});
+await exportWorkbench({root,rows:[...rows.values()],manifest,entry,researchContent,now:evaluatedAt,financialCorrection:correctionMeta});
 // Publish the manifest pointer only after every referenced asset is complete.
 await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));

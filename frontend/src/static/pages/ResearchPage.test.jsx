@@ -103,10 +103,10 @@ describe('100 virtual expert task profiles', () => {
       fireEvent.click(screen.getByRole('button', { name: methods[s % 3], exact: true }));
       const table = candidates();
       if (t === 0) {
-        const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '8/8' : '10/10';
+        const expected=s % 3 === 0 ? '9/9' : s % 3 === 1 ? '5/8' : '5/10';
         expect(screen.getByRole('tab', {name:'判定根拠'})).toHaveAttribute('aria-selected','true');
         expect(within(table).getByRole('button',{name:/^LEAD の分析/})).toHaveAccessibleName(new RegExp(`選定 ${expected}`));
-        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未確認 0`);
+        expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未達 0 · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
       } else if (t === 1) {
         openFilters();
         fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
@@ -196,7 +196,7 @@ it('opens detailed verification from its tab and returns filter focus to the can
   expect(screen.getByRole('tabpanel')).toHaveAccessibleName('書籍検証');
   openFilters();
   fireEvent.click(screen.getByRole('button',{name:'候補を確認する →'}));
-  await waitFor(()=>expect(screen.getByRole('region',{name:'候補リスト',exact:true})).toHaveFocus());
+  await waitFor(()=>expect(screen.getByRole('region',{name:'対象銘柄',exact:true})).toHaveFocus());
   expect(screen.queryByLabelText('銘柄・企業名を検索')).not.toHaveFocus();
 });
 

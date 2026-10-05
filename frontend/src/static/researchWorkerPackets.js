@@ -2,11 +2,15 @@
 // monopolizes the main thread even when all computation ran in a Worker.
 export function* researchPackets(bundle, size = 150) {
   const ids = new Map(bundle.rows.map((row, index) => [row, index]));
+  // The row reference is a local ownership binding, never another copy of the
+  // full universe in the final packet. The receiver binds its assembled rows.
+  const temporal = bundle.temporal?.rows === bundle.rows && bundle.temporal?.date === bundle.date
+    ? {date:bundle.temporal.date,session_intervals:bundle.temporal.session_intervals,readiness_boundaries:bundle.temporal.readiness_boundaries} : undefined;
   for (let offset=0;offset<bundle.rows.length;offset+=size) yield {kind:'rows',rows:bundle.rows.slice(offset,offset+size)};
   for (const [method, ranked] of Object.entries(bundle.rankings)) for (let offset=0;offset<ranked.length;offset+=size) {
     yield {kind:'ranking',method,items:ranked.slice(offset,offset+size).map(({row,assessment})=>({id:ids.get(row),assessment}))};
   }
-  yield {kind:'complete',date:bundle.date,prepared:{...bundle.prepared,candidates:bundle.prepared.candidates.map(row=>ids.get(row))}};
+  yield {kind:'complete',instrument_applicability_universe:bundle.instrument_applicability_universe,date:bundle.date,evaluated_at:bundle.evaluated_at,next_expiry_at:bundle.next_expiry_at,generation:bundle.generation,evaluation_epoch:bundle.evaluation_epoch,assessment_version:bundle.assessment_version,temporal,prepared:{...bundle.prepared,candidates:bundle.prepared.candidates.map(row=>ids.get(row))}};
 }
 
 // Workbench history has thousands of change records, independent of the row
@@ -27,7 +31,7 @@ export function createResearchReceiver() {
   return packet => {
     if(packet.kind==='rows') rows.push(...packet.rows);
     else if(packet.kind==='ranking') (rankings[packet.method] ||= []).push(...packet.items.map(({id,assessment})=>({row:rows[id],assessment})));
-    else if(packet.kind==='complete') return {rows,rankings,date:packet.date,prepared:{...packet.prepared,candidates:packet.prepared.candidates.map(id=>rows[id])}};
+    else if(packet.kind==='complete') return {rows,rankings,instrument_applicability_universe:packet.instrument_applicability_universe,date:packet.date,evaluated_at:packet.evaluated_at,next_expiry_at:packet.next_expiry_at,generation:packet.generation,evaluation_epoch:packet.evaluation_epoch,assessment_version:packet.assessment_version,temporal:packet.temporal && {...packet.temporal,rows},prepared:{...packet.prepared,candidates:packet.prepared.candidates.map(id=>rows[id])}};
     else if(packet.kind==='workbench-start') workbench=packet.value;
     else if(packet.kind==='workbench-items') {
       if(!workbench || !Object.hasOwn(workbench.changes,packet.method)) throw Error('Invalid workbench packet');

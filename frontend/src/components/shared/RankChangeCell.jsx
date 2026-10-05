@@ -13,7 +13,7 @@ const RankChangeCell = ({ value, justifyContent = 'flex-end' }) => {
       {value > 0 && <TrendingUpIcon sx={{ fontSize: 12, mr: 0.25, color }} />}
       {value < 0 && <TrendingDownIcon sx={{ fontSize: 12, mr: 0.25, color }} />}
       <Box component="span" sx={{ color, fontWeight: value !== 0 ? 600 : 400, fontSize: '11px' }}>
-        {prefix}{value}
+        {prefix}{String(value).replace(/^-/, '−')}
       </Box>
     </Box>
   );

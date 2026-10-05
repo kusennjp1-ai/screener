@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 
+import { withSyntheticFinancialProof, financialFixtureDate, financialFixtureNow } from '../../test/fixtures/financialCurrent';
 import StaticScanPage from './StaticScanPage';
 
 const filterPanelSpy = vi.fn();
@@ -90,6 +91,7 @@ describe('StaticScanPage', () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('uses compact chunks without requesting legacy rows or the global chart index',async()=>{
@@ -341,8 +343,8 @@ describe('StaticScanPage', () => {
     await waitFor(() => {
       const latestResults = resultsTableSpy.mock.calls.at(-1)?.[0]?.results ?? [];
       expect(latestResults).toHaveLength(2);
-      expect(latestResults[0].company_name).toBe('NVIDIA Corporation');
-      expect(latestResults[1].company_name).toBe('Microsoft Corporation');
+      expect(latestResults.map(row => row.company_name).sort()).toEqual(['Microsoft Corporation', 'NVIDIA Corporation']);
+      expect(latestResults.every(row => row.composite_score == null)).toBe(true);
     });
   });
 
@@ -939,4 +941,23 @@ describe('StaticScanPage', () => {
     expect(screen.getByTestId('results-table-rows')).toHaveTextContent('NVDA,MSFT,AAPL');
     expect(screen.getByText(/チャート 143 銘柄/i)).toBeInTheDocument();
   });
+
+  it('expires current rows while the scan stays open, before filtering or display', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(financialFixtureNow);
+    const row=withSyntheticFinancialProof({symbol:'CURRENT',volume:200000000});
+    for(const proof of Object.values(row.financial_current.p))proof[5]=financialFixtureNow+1000;
+    const payloads={
+      'manifest.json':{generated_at:'synthetic',pages:{scan:{path:'scan.json'}}},
+      'scan.json':{as_of_date:financialFixtureDate,rows_total:1,initial_rows:[row],chunks:[],default_filters:{minVolume:0}},
+    };
+    globalThis.fetch=vi.fn(async url=>({ok:true,status:200,json:async()=>payloads[String(url).split('/static-data/')[1]]||{}}));
+    const view=renderPage();
+    for(let step=0;step<5;step++)await act(async()=>{await vi.advanceTimersByTimeAsync(10);});
+    expect(resultsTableSpy.mock.calls.at(-1)[0].results[0].eps_growth_yy).toBe(30);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1001);});
+    expect(resultsTableSpy.mock.calls.at(-1)[0].results[0].eps_growth_yy).toBeNull();
+    expect(resultsTableSpy.mock.calls.at(-1)[0].results[0].financial_current_state.fields.eps_growth_yy.availability).toBe('unknown');
+    view.unmount();vi.useRealTimers();
+  });
+
 });

@@ -10,6 +10,7 @@ from app.models.stock import StockPrice
 
 from app.services.benchmark_cache_service import BenchmarkCacheService
 import app.services.benchmark_cache_service as benchmark_cache_module
+import app.services.market_calendar_service as market_calendar_module
 
 
 def _benchmark_history(close, session="2026-04-10"):
@@ -253,8 +254,23 @@ def test_is_data_fresh_us_fallback_after_close_requires_same_day(monkeypatch):
 
 
 @pytest.fixture
-def benchmark_history():
-    sessions = pd.bdate_range(end=date.today(), periods=120, name="Date")
+def benchmark_clock(monkeypatch):
+    # UTC has rolled over to Monday while the US market is still on Sunday.
+    now = datetime.fromisoformat("2026-10-05T01:15:00+00:00")
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(market_calendar_module, "datetime", FixedDateTime)
+    return now
+
+
+@pytest.fixture
+def benchmark_history(benchmark_clock):
+    # Use completed bars and keep the database lookback independent of wall time.
+    sessions = pd.bdate_range(end="2026-10-02", periods=120, name="Date")
     close = pd.Series([100. + i * .1 for i in range(120)], index=sessions)
     return pd.DataFrame({
         "Open": close, "High": close * 1.01, "Low": close * .99,
@@ -411,3 +427,21 @@ def test_benchmark_storage_round_trip_preserves_valid_history(db_session, benchm
         check_dtype=False, check_freq=False,
     )
     assert db_session.query(StockPrice).filter(StockPrice.symbol == "SPY").count() == len(benchmark_history)
+
+
+def test_benchmark_database_read_uses_market_date_at_utc_rollover(
+    db_session, benchmark_history, benchmark_clock,
+):
+    service = BenchmarkCacheService(redis_client=Mock())
+    assert benchmark_clock.date() == date(2026, 10, 5)
+    assert service._market_calendar.market_now("US").date() == date(2026, 10, 4)
+    assert service._market_calendar.last_completed_trading_day("US") == date(2026, 10, 2)
+    data = pd.concat([benchmark_history, _benchmark_history(112., "2026-10-05")])
+
+    service._store_in_database("SPY", data)
+
+    pd.testing.assert_frame_equal(
+        service._get_from_database("SPY", "2y"), benchmark_history,
+        check_dtype=False, check_freq=False,
+    )
+    assert db_session.query(StockPrice).filter(StockPrice.symbol == "SPY").count() == 121

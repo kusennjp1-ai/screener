@@ -1,0 +1,8 @@
+{
+  "schema_version": "financial-source-certificate-reference-v1",
+  "reference_keys": ["schema_version", "repository", "workflow", "head_sha", "run_id", "run_attempt", "job_id", "artifact_id", "artifact_name", "artifact_sha256", "certificate_sha256"],
+  "authority": "source_artifact_validation_only",
+  "publication_authority": "none",
+  "maximum_zip_bytes": 134217728,
+  "maximum_projection_bytes": 268435456
+}

@@ -39,6 +39,7 @@ it('rejects mixed dates, generations, full references, counts and incomplete det
   expect(()=>validateWorkbenchSummary(summary,summaryRef,ref,date,'research-index-cccccccccccccccc.json',true)).toThrow('generation mismatch');
   expect(()=>validateWorkbenchDetails({...full,generated_at:'2026-09-30T00:00:00Z'},summary)).toThrow('generation mismatch');
   expect(()=>validateWorkbenchDetails({...full,history:{previous_as_of:'2026-09-25'}},summary)).toThrow('history mismatch');
+  expect(()=>validateWorkbenchDetails({...full,comparison_basis:{mode:'saved_first_same_policy'}},summary)).toThrow('comparison basis mismatch');
   for(const changes of [{},{minervini:{counts:{new:1,incomparable:1}}},{minervini:{counts:{new:2,incomparable:0},items:full.changes.minervini.items}}]) {
     expect(()=>validateWorkbenchDetails({...full,changes},summary)).toThrow();
   }

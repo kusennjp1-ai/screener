@@ -70,14 +70,22 @@ function DailyScanRowsTable({
           <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
             {title}
           </Typography>
-          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '10px' }}>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '11px' }}>
             {subtitle}
           </Typography>
         </Box>
         {action}
       </Box>
-      <TableContainer>
-        <Table size="small">
+      <TableContainer
+        role="region"
+        aria-label={`${title}の表（横スクロール）`}
+        tabIndex={0}
+        sx={{
+          '& .MuiTableCell-head': { fontSize: '11px' },
+          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
+        }}
+      >
+        <Table size="small" aria-label={`${title}の表`}>
           <TableHead>
             <TableRow>
               <GlossaryHeaderCell glossaryId="symbol" openInfo={openInfo}>銘柄</GlossaryHeaderCell>

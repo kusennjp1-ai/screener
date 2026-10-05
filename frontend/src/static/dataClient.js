@@ -1,11 +1,14 @@
+import { projectFinancialPayload } from './financialCurrent';
 import { useQuery } from '@tanstack/react-query';
 import { getStaticDataUrl } from '../config/runtimeMode';
 import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 import { runDataWorker } from './researchWorkerClient';
 import { summarizeWorkbench } from './workbenchSummary';
 
-export const fetchStaticJson = async (relativePath, { sha256, worker = false } = {}) => {
-  if (worker && typeof Worker !== 'undefined') return runDataWorker({ operation: ['workbench', 'workbench-summary'].includes(worker) ? worker : 'json', url: new URL(getStaticDataUrl(relativePath), location.href).href, sha256 });
+export const fetchStaticJson = async (relativePath, { sha256, worker = false, now, asOfDate, market } = {}) => {
+  const currentAsset = /(?:^|\/)(?:research-details\/|verified-charts\/|charts\/|scan\/|scan-list\/|groups\.json$|home\.json$)/.test(relativePath);
+  const project = value => currentAsset ? projectFinancialPayload(value,{now:now === undefined?Date.now():now,asOfDate,market}) : value;
+  if (worker && typeof Worker !== 'undefined') return project(await runDataWorker({ operation: ['workbench', 'workbench-summary'].includes(worker) ? worker : 'json', url: new URL(getStaticDataUrl(relativePath), location.href).href, sha256 }));
   const response = await fetch(getStaticDataUrl(relativePath), {
     cache: /(?:index|chunk|workbench(?:-summary)?|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
     headers: {
@@ -23,10 +26,10 @@ export const fetchStaticJson = async (relativePath, { sha256, worker = false } =
     const actual=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
     if(actual!==sha256) throw new Error('Static asset integrity mismatch');
     const value = JSON.parse(raw);
-    return worker === 'workbench-summary' ? summarizeWorkbench(value) : value;
+    return worker === 'workbench-summary' ? summarizeWorkbench(value) : project(value);
   }
   const value = await response.json();
-  return worker === 'workbench-summary' ? summarizeWorkbench(value) : value;
+  return worker === 'workbench-summary' ? summarizeWorkbench(value) : project(value);
 };
 
 export const useStaticManifest = () => useQuery({

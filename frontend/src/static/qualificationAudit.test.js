@@ -26,11 +26,11 @@ describe('independent OHLCV verification and adversarial loop', () => {
     rows[0].technical_audit.as_of_date = '2000-01-01';
     expect(rankVerifiedUniverse(rows).every(r => r.rs_rating === null)).toBe(true);
   });
-  it('independently verifies eight template rules and IBD growth evidence', () => {
+  it('independently verifies technical template while uncertified IBD evidence stays unknown', () => {
     const { row, payload, date } = historyFixture();
     row.technical_audit = auditDailyBars(row, payload, date);
     expect(assess(row).qualified).toBe(true);
-    expect(assess(row, 'ibd').qualified).toBe(true);
+    expect(assess(row, 'ibd').qualified).toBe(false); expect(assess(row,'ibd').unknown).toBeGreaterThan(0);
     expect(row.technical_audit.values.sma50).toBeCloseTo(113.625);
     expect(assess({ ...row, passes_template: false }).qualified).toBe(true);
     expect(assess({ ...row, passes_template: false }).templateMismatch).toBe(true);
