@@ -1,5 +1,7 @@
-// Publication authority comes only from current-main gates and immutable tested
-// artifacts. A preview or source certificate never grants that authority.
+import {exceptionType, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation, performanceExceptionPolicy} from './financial-performance-exception.mjs';
+// Publication authority requires current-main CI and immutable tested artifacts,
+// through strict Design gates or the separate exact performance exception.
+// A preview or source certificate alone never grants that authority.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, closeSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -76,6 +78,7 @@ export function completeInventory(root) {
   }};walk(root);return files;
 }
 export function validateCandidateRecord(record) {
+  if(record?.schema_version==='financial-performance-candidate-v1')return validateExceptionCandidate(record);
   exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256'],'candidate record');
   exact(record.producer,['repository','workflow','head_sha','run_id','run_attempt'],'producer');
   exact(record.captured_ui,['sha','tree','digest'],'captured UI');
@@ -289,6 +292,7 @@ export async function selectActivationCandidate({live,request,mainSha,approval,p
 }
 
 export async function verifyActivationCandidate(state,live,root=process.cwd(),api=githubApi) {
+  if(state.exception)return verifyExceptionActivation(state,live,root,api);
   const {candidate,request,record}=state;
   if(live.identity!==request.correction.previous_publication_identity)throw Error('Activation predecessor was superseded');
   equal(read(join(candidate,'candidate.json')),record,'sealed candidate record');
@@ -307,7 +311,7 @@ export async function verifyActivationCandidate(state,live,root=process.cwd(),ap
   return verifyCandidatePayload(state,live,root,api);
 }
 
-async function verifyCandidatePayload(state,live,root,api) {
+export async function verifyCandidatePayload(state,live,root,api) {
   const {candidate,request,record}=state;
   if(live.identity!==request.correction.previous_publication_identity)throw Error('Candidate predecessor was superseded');
   if(git(root,['rev-parse',`${record.captured_ui.sha}^{tree}`])!==record.captured_ui.tree)throw Error('Captured consumer commit/tree changed');
@@ -378,6 +382,12 @@ export function validateFinancialReleaseReceipt(value) {
   validateAssetReference(value.evaluation_projection,value.mode==='activation'?'source-projection':'carry-projection');
   if(value.source_projection.sha256!==value.lineage.source_projection_sha256)throw Error('Financial source projection changed lineage');
   exact(value.ui,['approved_sha','captured_sha','digest','approval','checks'],'UI');
+  const exception=value.ui.approval?.type===exceptionType;
+  if(exception){
+    parseExceptionUiApproval(value.ui.approval);
+    if(value.ui.approved_sha!==performanceExceptionPolicy.captured_ui.sha||value.ui.captured_sha!==value.ui.approved_sha||value.ui.digest!==performanceExceptionPolicy.captured_ui.digest)throw Error('Invalid exact financial exception UI');
+    validateExceptionChecks(value.ui.approval,value.ui.checks);
+  }else{
   if(!sha(value.ui.approved_sha)||!sha(value.ui.captured_sha)||!hash(value.ui.digest)||value.ui.approval?.type!=='gates'||value.ui.approval.sha!==value.ui.approved_sha
     ||!Array.isArray(value.ui.checks)||value.ui.checks.length!==contract.required_ci_jobs.length+1)throw Error('Invalid financial release UI approval');
   for(const name of [...contract.required_ci_jobs,policy.candidate_job]){
@@ -385,11 +395,13 @@ export function validateFinancialReleaseReceipt(value) {
     if(checks.length!==1||!['job_id','run_id','run_attempt'].every(key=>positive(checks[0][key]))||checks[0].head_sha!==value.ui.approved_sha
       ||checks[0].workflow!==`.github/workflows/${name===policy.candidate_job?'design-acceptance.yml':'ci.yml'}`)throw Error('Invalid financial release gate job');
   }
+  }
   exact(value.price_input,['artifact_id','artifact_sha256','manifest_sha256','price_observations_sha256','known_price_dates_sha256'],'price input');
   if(!positive(value.price_input.artifact_id)||!['artifact_sha256','manifest_sha256','price_observations_sha256','known_price_dates_sha256'].every(key=>hash(value.price_input[key])))throw Error('Invalid financial price input');
   if(value.mode==='activation'){
     exact(value.candidate,['repository','workflow','head_sha','run_id','run_attempt','job_id','artifact_id','artifact_name','artifact_sha256','candidate_receipt_sha256','record_sha256'],'activation candidate');
-    if(value.candidate.repository!==bootstrap.repository||value.candidate.workflow!==policy.candidate_workflow||value.candidate.head_sha!==value.ui.approved_sha||!['run_id','run_attempt','job_id','artifact_id'].every(key=>positive(value.candidate[key]))||!['artifact_sha256','candidate_receipt_sha256','record_sha256'].every(key=>hash(value.candidate[key])))throw Error('Invalid activated candidate reference');
+    if(value.candidate.repository!==bootstrap.repository||value.candidate.workflow!==(exception?performanceExceptionPolicy.workflow:policy.candidate_workflow)||value.candidate.head_sha!==(exception?value.ui.approval.controller_sha:value.ui.approved_sha)||!['run_id','run_attempt','job_id','artifact_id'].every(key=>positive(value.candidate[key]))||!['artifact_sha256','candidate_receipt_sha256','record_sha256'].every(key=>hash(value.candidate[key])))throw Error('Invalid activated candidate reference');
+    if(exception){const pin=value.ui.approval.certificate;for(const key of ['repository','workflow','head_sha','run_id','run_attempt','job_id','artifact_id','artifact_name','artifact_sha256'])if(value.candidate[key]!==pin[key])throw Error('Financial exception certificate disagrees with activation');if(value.candidate.record_sha256!==pin.candidate_record_sha256||value.candidate.candidate_receipt_sha256!==pin.preview_receipt_sha256)throw Error('Financial exception candidate seal changed');}
     equal(value.source_projection,value.evaluation_projection,'activation projection');
   }else if(value.candidate!==null)throw Error('A carry cannot claim new activation authority');
   return value;
@@ -416,7 +428,8 @@ export function verifyFinancialReleaseAssets(root,reference,publication=null) {
   const receipt=validateFinancialReleaseReceipt(JSON.parse(bytes));
   for(const ref of [receipt.source_projection,receipt.source_base,receipt.evaluation_projection])if(sha256(readFileSync(join(root,ref.path)))!==ref.sha256)throw Error('Financial lineage asset changed');
   if(inventoryDigest(dataInventory(root,[reference.path]))!==receipt.data_inventory_sha256)throw Error('Financial release inventory changed');
-  if(publication&&(publication.financial_generation!==receipt.financial_generation||publication.financial_lineage_sha256!==receipt.lineage_sha256||publication.ui_sha!==receipt.ui.approved_sha||publication.ui_digest!==receipt.ui.digest||publication.data_inventory_sha256!==inventoryDigest(dataInventory(root))))throw Error('Publication and financial release disagree');
+  if(publication&&(publication.financial_generation!==receipt.financial_generation||publication.financial_lineage_sha256!==receipt.lineage_sha256||publication.ui_sha!==receipt.ui.approved_sha||publication.ui_digest!==receipt.ui.digest||publication.data_inventory_sha256!==inventoryDigest(dataInventory(root))
+    ||(publication.approval?.type===exceptionType||receipt.ui.approval?.type===exceptionType)&&digest(publication.approval)!==digest(receipt.ui.approval)))throw Error('Publication and financial release disagree');
   return receipt;
 }
 export function assertFinancialLineageContinuity(live,candidate) {

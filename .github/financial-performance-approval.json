@@ -1,0 +1,157 @@
+{
+  "schema_version": "financial-performance-approval-v1",
+  "scope": "one-captured-financial-repair",
+  "approved_at": "2026-10-05T22:19:12Z",
+  "activation_not_after": "2026-10-07T10:46:54.945Z",
+  "captured_ui": {
+    "sha": "34ecbf507a4270f796078d669c21c373c0d1279a",
+    "tree": "9331c7c06b54dc2ad54fabff3d6503f3b24a673b",
+    "digest": "8ce392f29270efbd7d7e47da996c4b7cff18eb550ab88b2243b3c1ef61a7a38f"
+  },
+  "request_sha256": "f56b7ee8f00788fae52f05d9c0760ecc3856b03f60a084d4e3859f90bf983a52",
+  "preview_receipt_sha256": "a98583c380013eee94dd0eca325c761411f44a753b808353915effe81851f2a5",
+  "projection_sha256": "d3e2ddcffb600666f5ad699c2a2d4dc04c99aea654c5e5deaf974a080890cab8",
+  "report_sha256": "46df361c20e46c6cb8cfcfc438c4b14d69847bb0d04122cb049c3535016050de",
+  "review": {
+    "path": "docs/design-review/2026-10-05-pr72-financial-nonperformance-34ecbf50.json",
+    "sha256": "1bc6fa4780f56714b03223c9a11ca13fdd3953c82bd289ac1fb21b277895ae5d"
+  },
+  "failures": [
+    "1440: Q1 candidate median 4505ms > 4200ms",
+    "1440: Q1 method switch 570ms > 480ms",
+    "1440: P1 exact limits not met (3500ms / 400ms / 200ms)",
+    "390: P1 exact limits not met (3500ms / 400ms / 200ms)",
+    "1440: D9 first paint opportunity 104.7ms > 50ms",
+    "1440: D9 run 1: first frame 104.70000000018626ms (limit 50ms)",
+    "390: D9 first paint opportunity 95.4ms > 50ms",
+    "390: D9 run 1: first frame 95.39999999990687ms (limit 50ms)"
+  ],
+  "budgets": {
+    "p1_ready_ms": 3500,
+    "p1_switch_ms": 400,
+    "p1_long_task_ms": 200,
+    "q1_ready_ms": 4200,
+    "q1_switch_ms": 480,
+    "radar_ms": 50
+  },
+  "captured_code_sha256": "4568740abc71c0250fa2639cd343c81f08c4825f15c099b66d1749b41bb4cb49",
+  "controller_code_sha256": "683240e8e44878276a7a933bb39cb22396f75d597b924fca4210e8fca2fa5461",
+  "controller_changes": {
+    ".github/scripts/financial-release-activation.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "09ef886619a7f2482ae749ba0b97e9e810cd48a9"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "da7b7ebf756198c5736c59f97a6ee965b6427688"
+      }
+    },
+    ".github/scripts/fixtures/financial-release-lifecycle.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "ac2b74fcf22ba9f028bc3b07baef9af371509bfd"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "0fca60260fee40a8b4944c0edaf047f43dc239ac"
+      }
+    },
+    ".github/scripts/publication-state.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "fb591100f28ebdf9b94449fb21465bc1ec2b9e5c"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "d760f3ac01e7fe2d7fbd101d7ee9cb7ed6ea67cf"
+      }
+    },
+    ".github/scripts/select-release-source.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "d2f9c24b62b317500427791dabdff4e958d2058d"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "a1ea7185903ca02835e3eaa0f80ef26992126c9e"
+      }
+    },
+    ".github/workflows/ci.yml": {
+      "before": {
+        "mode": "100644",
+        "sha": "4104d53f1b6c5cd793156336e70f1bd60e5a9ed8"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "4cf2788e129ba0c0a9199747aa4b8b674e25d78d"
+      }
+    },
+    ".github/workflows/research-ui-release.yml": {
+      "before": {
+        "mode": "100644",
+        "sha": "39c85439aa569efaa5d07905741981ff20486df7"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "4ef9e7ffcd39113515b1a1ac8423b76a3844f566"
+      }
+    },
+    ".github/scripts/financial-performance-exception.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "47b4b532ae212e266cbe7215cb22ac09310605a2"
+      }
+    },
+    ".github/scripts/financial-performance-exception.test.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "4f92d7174c16b02309de79713cf36205c14ab6d3"
+      }
+    },
+    ".github/scripts/financial-performance-lifecycle.test.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "9c33970f0978ae1ae2a21ef65149985cd77a0e7d"
+      }
+    },
+    ".github/scripts/fixtures/financial-performance-lifecycle.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "86d26b0df0358702f4847c5b1ea56530e60bdf84"
+      }
+    },
+    ".github/scripts/restore-financial-diagnostic.py": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "27681c923550cb32962d9a7fa0e477dd1b7c4928"
+      }
+    },
+    ".github/scripts/test_restore_financial_diagnostic.py": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "9a932fdae26fd3fcf7c72a593f7f7c6cca46de13"
+      }
+    },
+    ".github/workflows/financial-performance-certification.yml": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "42a9110da45cf0d26ed9759c4b834cbb8708b20c"
+      }
+    },
+    "contracts/financial_performance_exception_v1.json": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "dc3429fde628c9ac41cf9f5a6747110d8214f3d2"
+      }
+    }
+  }
+}

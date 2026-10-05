@@ -1,0 +1,139 @@
+{
+  "schema_version": "financial-performance-exception-policy-v1",
+  "approval_path": ".github/financial-performance-approval.json",
+  "workflow": ".github/workflows/financial-performance-certification.yml",
+  "job": "Certify exact financial performance exception",
+  "steps": [
+    "Verify exact approval and immutable capture",
+    "Recheck financial proofs and seal exact exception candidate"
+  ],
+  "captured_ui": {
+    "sha": "34ecbf507a4270f796078d669c21c373c0d1279a",
+    "tree": "9331c7c06b54dc2ad54fabff3d6503f3b24a673b",
+    "digest": "8ce392f29270efbd7d7e47da996c4b7cff18eb550ab88b2243b3c1ef61a7a38f"
+  },
+  "capture_head_sha": "0e2c0b6c5cd684f847ec6dc1803a12aef5d5286d",
+  "capture_base_sha": "a1218771825f1c3ecee810a4cee3a94aa3f6c951",
+  "ci_run_id": 37282323017,
+  "design_run_id": 37282323021,
+  "design_job_id": 111673030103,
+  "capture_attempt": 1,
+  "diagnostic": {
+    "id": 11333869601,
+    "name": "unapproved-financial-diagnostic-37282323021-1",
+    "sha256": "2df75f7c8e8f0b43b4ea36ddc5c79531c97407d67593cdcb75e6127aa2dce0f9",
+    "bytes": 361892204
+  },
+  "design_artifact": {
+    "id": 11334685099,
+    "name": "design-acceptance-34ecbf507a4270f796078d669c21c373c0d1279a",
+    "sha256": "2766ce629ae414737435682b70609df6e5ffe801766dcb7bcaaba302bf692762"
+  },
+  "report_sha256": "46df361c20e46c6cb8cfcfc438c4b14d69847bb0d04122cb049c3535016050de",
+  "review_sha256": "1bc6fa4780f56714b03223c9a11ca13fdd3953c82bd289ac1fb21b277895ae5d",
+  "failures": [
+    "1440: Q1 candidate median 4505ms > 4200ms",
+    "1440: Q1 method switch 570ms > 480ms",
+    "1440: P1 exact limits not met (3500ms / 400ms / 200ms)",
+    "390: P1 exact limits not met (3500ms / 400ms / 200ms)",
+    "1440: D9 first paint opportunity 104.7ms > 50ms",
+    "1440: D9 run 1: first frame 104.70000000018626ms (limit 50ms)",
+    "390: D9 first paint opportunity 95.4ms > 50ms",
+    "390: D9 run 1: first frame 95.39999999990687ms (limit 50ms)"
+  ],
+  "budgets": {
+    "p1_ready_ms": 3500,
+    "p1_switch_ms": 400,
+    "p1_long_task_ms": 200,
+    "q1_ready_ms": 4200,
+    "q1_switch_ms": 480,
+    "radar_ms": 50
+  },
+  "controller_only_paths": [
+    ".github/scripts/financial-performance-exception.mjs",
+    ".github/scripts/financial-performance-exception.test.mjs",
+    ".github/scripts/restore-financial-diagnostic.py",
+    ".github/scripts/test_restore_financial_diagnostic.py",
+    ".github/scripts/publication-state.mjs",
+    ".github/scripts/financial-release-activation.mjs",
+    ".github/scripts/select-release-source.mjs",
+    ".github/workflows/financial-performance-certification.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/research-ui-release.yml",
+    "contracts/financial_performance_exception_v1.json",
+    ".github/scripts/financial-performance-lifecycle.test.mjs",
+    ".github/scripts/fixtures/financial-performance-lifecycle.mjs",
+    ".github/scripts/fixtures/financial-release-lifecycle.mjs"
+  ],
+  "pin_path": ".github/financial-performance-candidate.json",
+  "release_intent_path": ".github/financial-performance-release.json",
+  "capture_ci_jobs": [
+    {
+      "name": "Backend Quality Gates",
+      "id": 111673032324,
+      "conclusion": "success"
+    },
+    {
+      "name": "Frontend",
+      "id": 111673032348,
+      "conclusion": "success"
+    },
+    {
+      "name": "Static Browser Regression",
+      "id": 111673032232,
+      "conclusion": "success"
+    },
+    {
+      "name": "Assistant Compose Smoke",
+      "id": 111673032404,
+      "conclusion": "success"
+    },
+    {
+      "name": "Publish Docker Images",
+      "id": 111675246153,
+      "conclusion": "skipped"
+    }
+  ],
+  "design_steps": [
+    {
+      "name": "Prepare the certified financial candidate",
+      "conclusion": "success"
+    },
+    {
+      "name": "Restore checked input and record the comparison basis",
+      "conclusion": "success"
+    },
+    {
+      "name": "Build both production versions without duplicating the large data tree",
+      "conclusion": "success"
+    },
+    {
+      "name": "Measure all routes, screenshots, accessibility and CPU 4x",
+      "conclusion": "failure"
+    },
+    {
+      "name": "Require reviewed screenshots and four design scores of at least 8.0",
+      "conclusion": "failure"
+    },
+    {
+      "name": "Package UNAPPROVED financial diagnostics after unsuccessful Design",
+      "conclusion": "success"
+    },
+    {
+      "name": "Retain UNAPPROVED financial diagnostics for review only",
+      "conclusion": "success"
+    },
+    {
+      "name": "Seal the exact tested financial candidate",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "Retain the exact tested financial candidate",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "Preserve all results even when a budget fails",
+      "conclusion": "success"
+    }
+  ]
+}

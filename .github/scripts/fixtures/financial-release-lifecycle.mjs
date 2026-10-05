@@ -58,7 +58,7 @@ function bars(date,price) {
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
-export function lifecycleFixture() {
+export function lifecycleFixture({controllerPath=controller}={}) {
   const root=mkdtempSync(join(tmpdir(),'financial-release-lifecycle-')),certificate=certifiedSourceFixture();
   const configPath=join(root,'remote.json'),preload=join(root,'transport.mjs'),bin=join(root,'bin');mkdirSync(bin);
   const config={api:{},zips:{},liveRoot:null},api=config.api,prefix=`repos/${repository}`;
@@ -160,7 +160,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     // durable, hash-bound source assets from the verified Pages publication.
     save();
     return {root:releaseRoot,dist:join(releaseRoot,'release/frontend/dist'),frontend:join(releaseRoot,'release/frontend'),output,envFile,
-      command(command,{allowFailure=false,env={}}={}){const result=invoke(controller,[command],releaseRoot,{GITHUB_OUTPUT:output,GITHUB_ENV:envFile,...env});return allowFailure?result:success(result,command);},
+      command(command,{allowFailure=false,env={}}={}){const result=invoke(controllerPath,[command],releaseRoot,{GITHUB_OUTPUT:output,GITHUB_ENV:envFile,...env});return allowFailure?result:success(result,command);},
       build(){const env=Object.fromEntries(readFileSync(envFile,'utf8').trim().split('\n').map(line=>{const at=line.indexOf('=');return [line.slice(0,at),line.slice(at+1)];}));
         for(const script of ['export-research.mjs','record-candidate-history.mjs'])success(invoke(join(this.frontend,'tools',script),[],this.frontend,env),script);
         cpSync(join(this.frontend,'public'),this.dist,{recursive:true});},

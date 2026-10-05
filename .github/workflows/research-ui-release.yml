@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       ui_only:
-        description: 'Reuse verified evidence; new UI still requires both quality gates'
+        description: 'Reuse verified evidence; ordinary new UI requires both quality gates'
         type: boolean
         default: false
       financial_correction:
@@ -46,6 +46,9 @@ jobs:
         with:
           ref: ${{ steps.main.outputs.sha }}
           fetch-depth: 0
+      - name: Restore the exact exception capture Git object
+        if: hashFiles('.github/financial-performance-candidate.json') != ''
+        run: git fetch --no-tags origin 34ecbf507a4270f796078d669c21c373c0d1279a
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -201,6 +204,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs recheck
+      # The performance exception additionally needs its separate hash-bound
+      # release-intent record. A certificate or pin alone never enables it.
       # Correction activation needs a separately reviewed, hash-bound promotion
       # request after durable operator backup. No boolean can bypass that step.
       - name: Deploy to GitHub Pages

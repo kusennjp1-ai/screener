@@ -1,3 +1,4 @@
+import {exceptionType, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -136,7 +137,12 @@ async function plan(design = false) {
   let activation=null;
   if(releaseRequest&&!alreadyActive){
     const pin=readFinancialActivationCandidate();
-    if(financialReleasePolicy.activation_enabled&&pin&&gated.mode==='ui'){
+    const exceptionPin=readExceptionPin(),exceptionIntent=readExceptionReleaseIntent();
+    if(financialReleasePolicy.activation_enabled&&exceptionPin&&exceptionIntent){
+      if(event.inputs?.ui_only===true||event.inputs?.ui_only==='true')throw Error('Exception activation requires ui_only=false');
+      activation=await selectExceptionActivation({live,request:releaseRequest,mainSha:sha});
+      Object.assign(decision,{publish:true,mode:'activation',approval:activation.approval,reason:'Explicit one-capture performance exception; Design remains failed'});
+    }else if(financialReleasePolicy.activation_enabled&&pin&&gated.mode==='ui'){
       activation=await selectActivationCandidate({live,request:releaseRequest,pin,mainSha:sha,approval:gated.approval,pages});
       Object.assign(decision,gated,{mode:'activation'});
     }else if(decision.mode==='ui'){
@@ -164,9 +170,10 @@ async function plan(design = false) {
     decision.mode = 'data';
   }
   const source = fresh || publishedSource(live, pages);
-  const sourceSha = ['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
+  const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
   const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(correction ? { correction } : {}),...(activation?{activation}:{}),
     ...(!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
+  if(state.carry&&live.approval?.type===exceptionType)state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
   if (design && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN=${source.runId}\n`);
   output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(state.carry?{carry:true}:{}) });
@@ -178,7 +185,7 @@ async function recheck() {
   const gated=checkPublication(event, state.controllerSha, repository());
   const decision = state.activation?gated:applyPendingCorrectionHold(gated, readPendingCorrection());
   if (!decision.publish || (state.decision.mode === 'ui' && decision.mode !== 'ui')) throw Error('Current-main publication gates changed');
-  if(state.activation&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
+  if(state.activation&&!state.activation.exception&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
   const live = await livePublication({ repository: repository() });
   if (live.identity !== state.live.identity) throw Error('Live UI or data changed; discard this superseded publication');
   const finalManifest = JSON.parse(readFileSync('release/frontend/dist/static-data/manifest.json', 'utf8'));
@@ -194,6 +201,7 @@ async function recheck() {
   if (!state.correction && !state.activation && !state.decision.migration && state.sourceSha === live.uiSha
     && compareData(finalManifest, live.manifest) !== 'advance' && !progress.advances) throw Error('No observed data advance remains after preparation');
   if (state.correction) await verifyPreparedCorrection(state, live);
+  if(state.carry&&live.approval?.type===exceptionType&&digest(verifyCorrectionChecks(repository(),state.controllerSha))!==digest(state.carry.controllerChecks))throw Error('Exception carry controller CI changed');
   if(state.activation||state.carry)await verifyPreparedFinancialRelease(state,live);
   if(live.financialRelease&&!state.activation&&!state.carry)throw Error('Ordinary release lost required financial carry');
   if (receipt.ui_sha !== state.sourceSha || receipt.ui_digest !== inventoryDigest(uiInventory('release/frontend/dist'))
@@ -354,6 +362,10 @@ async function carryAssessment(state,root) {
   const {compatibility,equality}=await verifyCarriedBundle({baselineRoot:state.carry.baseline,root,frontendRoot:frontend,carry,evaluatedAt:Date.now(),excludePaths:state.financialPrepared?.added||[]});
   return {carry,compatibility,equality};
 }
+function financialConsumerChecks(uiSha,uiDigest,approval){
+  if(approval?.type===exceptionType)return verifyPerformanceUiApproval({ui_sha:uiSha,ui_digest:uiDigest,approval},repository()).checks;
+  return verifyCorrectionConsumerChecks({uiSha,approval},repository());
+}
 async function prepareFinancialReleaseReceipt(state,dist,publication) {
   const priceInput={artifact_id:state.source.artifact.id,artifact_sha256:state.source.artifact.digest.slice(7),manifest_sha256:state.source.manifestHash,
     price_observations_sha256:priceObservationDigest(publication.price_observations),known_price_dates_sha256:priceObservationDigest(publication.known_price_dates)};
@@ -368,7 +380,7 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
   }
   const assessed=await carryAssessment(state,dist),previous=state.live.financialRelease;
   state.carry.assessment={compatibility:assessed.compatibility,equality:assessed.equality};
-  const consumerChecks=verifyCorrectionConsumerChecks({uiSha:state.sourceSha,approval:publication.approval},repository());
+  const consumerChecks=financialConsumerChecks(state.sourceSha,publication.ui_digest,publication.approval);
   return writeFinancialReleaseReceipt({dist,mode:'carry',previousIdentity:state.live.identity,lineage:{id:previous.lineage_sha256,value:previous.lineage},
     sourceProjectionBytes:readFileSync(join(state.carry.sourceRoot,previous.source_projection.path)),sourceBaseBytes:readFileSync(join(state.carry.sourceRoot,previous.source_base.path)),evaluationBytes:readFileSync(state.carry.projectionPath),
     generation:assessed.carry.financial_generation,evaluatedAt:assessed.carry.financial_evaluated_at,ui:{approved_sha:state.sourceSha,captured_sha:state.sourceSha===state.live.uiSha?previous.ui.captured_sha:state.sourceSha,digest:publication.ui_digest,approval:publication.approval,checks:consumerChecks},priceInput});
@@ -376,8 +388,9 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
 async function verifyPreparedFinancialRelease(state,live) {
   const dist=resolve('release/frontend/dist'),publication=JSON.parse(readFileSync(join(dist,'publication.json'),'utf8'));
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
+  if(publication.approval?.type===exceptionType)verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
   if(receipt.previous_publication_identity!==live.identity)throw Error('Financial release predecessor changed');
-  const checks=verifyCorrectionConsumerChecks({uiSha:state.sourceSha,approval:receipt.ui.approval},repository());
+  const checks=financialConsumerChecks(state.sourceSha,receipt.ui.digest,receipt.ui.approval);
   if(digest(checks)!==digest(receipt.ui.checks))throw Error('Financial release consumer checks changed');
   if(state.activation){
     await verifyActivationCandidate(state.activation,live);
