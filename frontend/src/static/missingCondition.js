@@ -1,7 +1,7 @@
 // A watch view, never an alternate qualification rule. Accept only one
 // genuinely non-passing rule from the canonical assessment.
 export function singleMissingCondition(assessment) {
-  if (!assessment || assessment.total < 1 || assessment.passed !== assessment.total - 1 || !Array.isArray(assessment.rules)) return null;
+  if (!assessment || assessment.method_status || assessment.total < 1 || assessment.passed !== assessment.total - 1 || !Array.isArray(assessment.rules)) return null;
   const missing = assessment.rules.filter(rule => rule.state !== 'pass');
   if (missing.length !== 1 || !['fail', 'unknown'].includes(missing[0].state)) return null;
   const rule = missing[0];

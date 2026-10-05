@@ -10,7 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths: ['frontend/**', 'docs/design-review/**', '.github/scripts/**', '.github/workflows/design-acceptance.yml', '.github/workflows/research-ui-release.yml', '.github/workflows/static-site.yml']
+    paths: ['frontend/**', 'contracts/**', 'docs/design-review/**', '.github/scripts/**', '.github/financial-release-request.json', '.github/financial-activation-candidate.json', '.github/workflows/design-acceptance.yml', '.github/workflows/research-ui-release.yml', '.github/workflows/static-site.yml']
 
 permissions:
   contents: read
@@ -37,7 +37,30 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - name: Restore identical real input for both versions
+      - uses: actions/setup-python@v5
+        if: hashFiles('.github/financial-release-request.json') != ''
+        with:
+          python-version: '3.11'
+      - name: Install certified offline projection dependencies
+        if: hashFiles('.github/financial-release-request.json') != ''
+        run: |
+          python -m venv "$RUNNER_TEMP/financial-replay-runtime"
+          "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
+          echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
+      - name: Verify isolated offline native projection runtime
+        if: hashFiles('.github/financial-release-request.json') != ''
+        env:
+          PYTHONPATH: backend
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: python -m unittest tests.unit.test_native_annual_projection.TestNativeAnnualProjection.test_new_policy_binds_source_without_changing_originals_or_quarterly_scalars
+      - name: Prepare the certified financial candidate
+        id: financial
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
+        run: node .github/scripts/financial-release-activation.mjs design-prepare
+      - name: Restore checked input and record the comparison basis
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -46,13 +69,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Both versions consume identical checked export/live input. Fresh
-          # exports remain usable when the old Pages artifact has expired.
-          node .github/scripts/select-release-source.mjs design
-          cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
+          # Normal runs share checked input. A financial correction preserves
+          # every price byte while explicitly changing financial evidence.
+          if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
+            # The comparison baseline uses the verified predecessor evidence.
+            # Current dist is the corrected candidate; its financial difference
+            # is explicit in the sealed preview receipt and semantic proofs.
+            cp "$FINANCIAL_CANDIDATE_DIR/preview-receipt.json" "$RUNNER_TEMP/design-input-provenance.json"
+            echo "DESIGN_INPUT_BASIS=same_prices_repaired_financials" >> "$GITHUB_ENV"
+          else
+            node .github/scripts/select-release-source.mjs design
+            cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
+            echo "DESIGN_INPUT_BASIS=same_verified_input" >> "$GITHUB_ENV"
+          fi
           git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
           git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
-          cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
+            mv "$FINANCIAL_CANDIDATE_DIR/predecessor/static-data" "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          else
+            cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          fi
           if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
             ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
           else
@@ -71,6 +107,11 @@ jobs:
             else
               source="$GITHUB_WORKSPACE/frontend"
             fi
+            if [ "$target" = current ] && [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
+              # Measure, seal and publish these exact bytes. No post-test build.
+              ln -s "$FINANCIAL_CANDIDATE_DIR/corrected" "$source/dist"
+              continue
+            fi
             (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
             if [ "$target" = current ]; then
               (cd "$source" && node tools/check-data-quality.mjs)
@@ -88,11 +129,42 @@ jobs:
           BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
           RADAR_BUILD: test-results/radar-build
           DESIGN_REVIEW_OUTPUT: test-results/design-review
+          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: node tools/design-review.mjs
       - name: Require reviewed screenshots and four design scores of at least 8.0
         if: always()
         working-directory: frontend
         run: node tools/check-design-review.mjs
+      - name: Package UNAPPROVED financial diagnostics after unsuccessful Design
+        id: financial_diagnostic
+        if: (failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true'
+        env:
+          FINANCIAL_PREPARATION_OUTCOME: ${{ steps.financial.outcome }}
+          FINANCIAL_CANDIDATE: ${{ steps.financial.outputs.candidate }}
+          DESIGN_JOB_STATUS: ${{ job.status }}
+        run: python3 .github/scripts/retain-financial-diagnostic.py
+      - name: Retain UNAPPROVED financial diagnostics for review only
+        if: (failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true' && steps.financial_diagnostic.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unapproved-financial-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/financial-release-candidate/unapproved-financial-diagnostic.tar.gz
+            ${{ runner.temp }}/financial-release-candidate/unapproved-financial-diagnostic-metadata.json
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Seal the exact tested financial candidate
+        if: success() && steps.financial.outputs.candidate == 'true'
+        run: node .github/scripts/financial-release-activation.mjs design-seal
+      - name: Retain the exact tested financial candidate
+        if: success() && steps.financial.outputs.candidate == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-release-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-release-candidate/candidate.tar
+          retention-days: 90
+          if-no-files-found: error
       - name: Preserve all results even when a budget fails
         if: always()
         uses: actions/upload-artifact@v4

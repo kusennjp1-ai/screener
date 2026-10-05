@@ -1,0 +1,54 @@
+{
+  "schema_version": "financial-source-certification-v1",
+  "kind": "source_artifact_validation",
+  "projection_schema": "financial-source-certified-projection-v1",
+  "projection_policy": "original-receipts-current-availability-v1",
+  "knowledge_basis": "current_observation_at_source_capture",
+  "request_keys": [
+    "schema_version",
+    "source"
+  ],
+  "source_keys": [
+    "repository",
+    "workflow",
+    "head_sha",
+    "run_id",
+    "run_attempt",
+    "artifact_id",
+    "artifact_name",
+    "artifact_sha256",
+    "archive_manifest_sha256",
+    "acquisition_base_sha256",
+    "cohort_sha256"
+  ],
+  "certificate_keys": [
+    "schema_version",
+    "kind",
+    "result",
+    "evaluated_at",
+    "validation",
+    "source",
+    "bindings",
+    "projection",
+    "source_execution",
+    "published"
+  ],
+  "source_workflow": ".github/workflows/financial-statement-recovery.yml",
+  "source_job": "statement-recovery",
+  "certifier_workflow": ".github/workflows/financial-source-certification.yml",
+  "certifier_job": "certify-source-artifacts",
+  "certifier_branch": "preview/financial-source-certification",
+  "invariants": {
+    "no_provider_calls": true,
+    "producer_conclusions_preserved": true,
+    "complete_availability_required": false,
+    "qualification_authority": false,
+    "point_in_time": false,
+    "source_publication_date": null,
+    "blocked_provider_prevents_new_provider_work": true,
+    "valid_preblock_receipts_may_be_certified": true,
+    "all_retained_objects_audited": true,
+    "required_unknown_never_passes": true,
+    "published": false
+  }
+}

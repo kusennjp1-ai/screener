@@ -1,3 +1,4 @@
+import { corporateFinancialsAllowed } from './instrumentApplicability.js';
 import { sectorKey } from './sectorDefinitions.js';
 import { evidenceTimestamp, newYorkDate, validEvidenceDay } from './evidenceTime.js';
 // Shared presentation contracts: a price level is not evidence of a valid base.
@@ -14,8 +15,8 @@ export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearO
   return ranked.filter(({row:r, assessment:a}) =>
     (!sector || sectorKey(r.gics_sector)===sector) &&
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
-    (!qualifiedOnly || a.qualified) && (!watchlist || watchlist.includes(r.symbol)) &&
-    (!nearOnly || (a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
+    (!qualifiedOnly || (corporateFinancialsAllowed(r) && a.qualified)) && (!watchlist || watchlist.includes(r.symbol)) &&
+    (!nearOnly || (corporateFinancialsAllowed(r) && a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
     (!query || `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query)) &&
     (coverage === 'all' || (coverage === 'verified') === (r.technical_audit?.valid === true)));
 }
@@ -29,7 +30,13 @@ export function sessionCurrent(rows, date, now) {
 // clock ticks and method changes only need the original inclusive/exclusive
 // time comparison, without parsing thousands of identical ISO timestamps.
 export function prepareSessionCurrent(rows, date) {
-  if (!validEvidenceDay(date)) return () => false;
+  return sessionCurrentFromIntervals(prepareSessionIntervals(rows, date), date);
+}
+
+// Plain arrays cross the research Worker boundary without rebuilding the
+// publication-wide calendar index during the first synchronous React render.
+export function prepareSessionIntervals(rows, date) {
+  if (!validEvidenceDay(date)) return [];
   const intervals = new Map(), timestamps = new Map();
   const stamp = value => {
     if (!timestamps.has(value)) timestamps.set(value, evidenceTimestamp(value));
@@ -41,7 +48,11 @@ export function prepareSessionCurrent(rows, date) {
     const from = stamp(calendar.evaluated_at), until = stamp(calendar.valid_until);
     if (Number.isFinite(from) && Number.isFinite(until)) intervals.set(`${from}/${until}`, [from, until]);
   }
-  const ranges = [...intervals.values()];
+  return [...intervals.values()];
+}
+
+export function sessionCurrentFromIntervals(ranges, date) {
+  if (!validEvidenceDay(date)) return () => false;
   return now => {
     const today = newYorkDate(now);
     return Boolean(today && date <= today && ranges.some(([from, until]) => now >= from && now < until));

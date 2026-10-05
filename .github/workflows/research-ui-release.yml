@@ -6,6 +6,10 @@ on:
         description: 'Reuse verified evidence; new UI still requires both quality gates'
         type: boolean
         default: false
+      financial_correction:
+        description: 'Prepare only: financial-correction-v1 intent bound to exact predecessor/source; never deploys'
+        type: string
+        default: ''
   workflow_run:
     workflows: [CI, Design Acceptance, Static Site]
     types: [completed]
@@ -41,9 +45,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.main.outputs.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        if: hashFiles('.github/financial-release-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
+        with:
+          python-version: '3.11'
+      - name: Install offline statement projection dependencies
+        if: hashFiles('.github/financial-release-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
+        run: |
+          python -m venv "$RUNNER_TEMP/financial-replay-runtime"
+          "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
+          echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
+      - name: Verify isolated offline native projection runtime
+        if: hashFiles('.github/financial-release-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
+        env:
+          PYTHONPATH: backend
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: python -m unittest tests.unit.test_native_annual_projection.TestNativeAnnualProjection.test_new_policy_binds_source_without_changing_originals_or_quarterly_scalars
       - name: Verify live provenance, UI gates and non-regressing data
         id: plan
         env:
@@ -74,14 +96,14 @@ jobs:
         run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/components/DailyChanges.test.jsx src/static/components/CandidateCharts.test.jsx --maxWorkers=2
         working-directory: release/frontend
       - name: Cache public SEC archives and security mappings
-        if: steps.plan.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true'
         uses: actions/cache@v4
         with:
           path: release/.cache/sec13f
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
-        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && !inputs.ui_only }}
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.published_input != 'true' && !inputs.ui_only }}
         working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
@@ -105,27 +127,48 @@ jobs:
           node tools/export-research.mjs
           python tools/export-entry-context.py
       - name: Prepare workbench using verified published evidence
-        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && inputs.ui_only }}
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.published_input != 'true' && inputs.ui_only }}
         working-directory: release/frontend
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/export-book-benchmark.py --allow-unavailable
           python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
+      - name: Carry the active financial source onto the new price target
+        if: steps.plan.outputs.carry == 'true'
+        run: node .github/scripts/select-release-source.mjs prepare-carry
+      # Correction mode runs only the pinned archive projector and approved
+      # exporter. It deliberately skips every provider/enrichment/repair step.
       - name: Build with daily selection export
         if: steps.plan.outputs.publish == 'true'
         working-directory: release/frontend
         env:
           METADATA_MIGRATION: ${{ steps.plan.outputs.migration }}
+          FINANCIAL_ACTIVATION: ${{ steps.plan.outputs.activation }}
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: |
-          if [ "$METADATA_MIGRATION" != true ]; then npm run build; fi
+          if [ "$METADATA_MIGRATION" != true ] && [ "$FINANCIAL_ACTIVATION" != true ]; then npm run build; fi
           node tools/check-data-quality.mjs
       - name: Preserve approved UI bytes or record verified new UI
         if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs compose
+      - name: Preserve correction source and predecessor audit material
+        if: steps.plan.outputs.correction == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-correction-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/verified-publication/correction-source
+            ${{ runner.temp }}/verified-publication/correction-predecessor
+            ${{ runner.temp }}/verified-publication/correction-predecessor-artifact
+            ${{ runner.temp }}/verified-publication/correction-projection
+            ${{ runner.temp }}/verified-publication/state.json
+          retention-days: 90
+          if-no-files-found: error
       - name: Preserve retained-universe verification diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -139,8 +182,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs recheck
+      - name: Retain reviewed financial correction candidate
+        if: steps.plan.outputs.correction == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-correction-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/frontend/dist
+          retention-days: 90
+          if-no-files-found: error
       - uses: actions/upload-pages-artifact@v4
-        if: steps.plan.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
         with:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: release/frontend/dist
@@ -150,8 +201,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs recheck
+      # Correction activation needs a separately reviewed, hash-bound promotion
+      # request after durable operator backup. No boolean can bypass that step.
       - name: Deploy to GitHub Pages
-        if: steps.plan.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
         uses: actions/deploy-pages@v4
         id: deploy
         with:

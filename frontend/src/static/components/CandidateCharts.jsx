@@ -1,3 +1,4 @@
+import { instrumentApplicability, instrumentApplicabilityLabel } from '../instrumentApplicability';
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Paper, useMediaQuery } from '@mui/material';
@@ -8,7 +9,7 @@ import { assess, entryPlan } from '../researchEngine';
 import { singleMissingCondition } from '../missingCondition';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 import './comparison.css';
-import EntrySourceNote from './EntrySourceNote';
+import { EntrySourceBadge } from './EntrySourceNote';
 import { verifiedVolumeRatio } from '../qualificationAudit';
 
 const Card = memo(function ComparisonCard({ item, date, generation, method, nearOnly, market, now, sessions, onSelect, paused }) {
@@ -25,12 +26,13 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
   const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
+  const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
   const volume = verifiedVolumeRatio(row, date);
-  const missing = nearOnly ? singleMissingCondition(assess(row, method)) : null;
+  const missing = nearOnly ? singleMissingCondition(assess(row, method, now)) : null;
   return <Paper ref={ref} component="article" variant="outlined" className="comparison-card" data-method={method} aria-label={`${row.symbol} 比較チャート`}>
     <button className="comparison-card-click" onClick={() => onSelect(row.symbol)} aria-label={`${row.symbol} を分析`} aria-describedby={descriptionId}><span className="sr-only">{row.symbol} を分析</span></button>
     <div className="comparison-heading"><h3>{row.symbol}</h3><span className="comparison-state-chip" style={{ color: `var(--${tone})` }} title={plan.state}>{mark} {stateLabel}</span><span className="comparison-distance">ピボット比 <b style={{ color: `var(--${tone})` }}>{signed(plan.distance)}</b></span></div>
-    <div className="comparison-company"><span title={nearOnly ? `${row.company_name || ''} · ${missing?.csv || ''}` : row.company_name}>{nearOnly ? missing?.text || '判定資料を再確認' : row.company_name || '企業名未配信'}</span><strong>{money(row.current_price)}</strong></div>
+    <div className="comparison-company"><span className="comparison-company-label" title={nearOnly ? `${row.company_name || ''} · ${missing?.csv || ''}` : row.company_name}>{nearOnly ? missing?.text || '判定資料を再確認' : row.company_name || '企業名未配信'}</span><EntrySourceBadge plan={plan}/><strong>{money(row.current_price)}</strong></div>
     <div className="comparison-canvas" data-active-chart={!invalidHistory && visible && !paused && Boolean(bars?.length)}>
       {query.isError || invalidIdentity ? <Alert severity="warning">銘柄・日付の整合性または取得状態を確認できません。</Alert>
         : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || '最終日足が分析日と不一致'}。現在の比較チャートには使用しません。</Alert>
@@ -40,8 +42,8 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
                 : <div className="comparison-skeleton" role="status" aria-label={`${row.symbol} チャートを読み込み中`}><span /><span /><span /></div>}
     </div>
     <dl className="comparison-metrics"><div><dt>アプリ上限</dt><dd className="comparison-upper">{money(plan.upper)}</dd></div><div><dt>損切り例</dt><dd className="comparison-stop">{money(plan.stopExample)}</dd></div><div><dt>RS / 出来高</dt><dd>{Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '—'} · {times(volume)}</dd></div><div><dt>購入条件</dt><dd>{ready.passed}/{ready.total}</dd></div></dl>
-    <EntrySourceNote plan={plan} compact/>
-    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? '書籍の追随目安外：第1冊の約2〜3%目安を超えています。' : ''}損切り例 {money(plan.stopExample)}。選定 {item.assessment.passed}/{item.assessment.total}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
+    {applicabilityLabel && <p>{applicabilityLabel}。価格・テクニカルは参考表示です。</p>}
+    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? '書籍の追随目安外：第1冊の約2〜3%目安を超えています。' : ''}損切り例 {money(plan.stopExample)}。{applicabilityLabel || `選定 ${item.assessment.passed}/${item.assessment.total}`}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
   </Paper>;
 });
 

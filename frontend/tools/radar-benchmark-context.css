@@ -1,0 +1,5 @@
+/* App.jsx's outer CssBaseline supplies body1 (14px / 400 / 1.5) and strong.
+   MUI omits its default Roboto letter-spacing for App's custom Inter family.
+   Keep this CSS-only: mounting CssBaseline would warm React before timing. */
+body { font-size:14px; font-weight:400; line-height:1.5; }
+strong,b { font-weight:700; }

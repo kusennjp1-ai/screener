@@ -1,0 +1,7 @@
+# Match the reviewed statement capture/replay adapters, even for offline use.
+yfinance==0.2.66
+curl_cffi==0.16.3
+pandas==2.2.0
+numpy==1.26.3
+requests==2.31.0
+jsonschema==4.23.0

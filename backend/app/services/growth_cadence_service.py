@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 
 from . import provider_routing_policy as routing_policy
+from .quarterly_eps_selection import select_quarterly_eps_pair_row
 from .field_capability_registry import (
     SUPPORT_STATE_AVAILABLE,
     SUPPORT_STATE_COMPUTED,
@@ -174,7 +175,9 @@ def compute_cadence_aware_growth(
 
     Opt-in ``_financial_source_context`` describes each non-null finite result's
     actual inputs. It contains no acquisition timestamps and leaves legacy
-    fields, selection, arithmetic, and the default return shape unchanged.
+    fields, arithmetic, and the default return shape unchanged. Each EPS
+    comparison keeps the preferred row if complete, otherwise it can select a
+    complete reported Basic/Diluted EPS pair for the same periods.
     """
     result: Dict[str, Any] = {
         "eps_growth_qq": None,
@@ -214,10 +217,11 @@ def compute_cadence_aware_growth(
 
     qoq_eps = None
     qoq_sales = None
-    if eps_row is not None:
+    qoq_eps_row = select_quarterly_eps_pair_row(quarterly_income, eps_row, recent_col, previous_col)
+    if qoq_eps_row is not None:
         qoq_eps = _compute_growth(
-            quarterly_income.loc[eps_row, recent_col],
-            quarterly_income.loc[eps_row, previous_col],
+            quarterly_income.loc[qoq_eps_row, recent_col],
+            quarterly_income.loc[qoq_eps_row, previous_col],
             min_abs_baseline=0.05,
         )
     if revenue_row is not None:
@@ -229,12 +233,13 @@ def compute_cadence_aware_growth(
     comparable_col, _ = _find_comparable_period_column(columns, recent_ts)
     comparable_eps = None
     comparable_sales = None
+    comparable_eps_row = select_quarterly_eps_pair_row(quarterly_income, eps_row, recent_col, comparable_col)
     if comparable_col is not None:
         result["growth_comparable_period_date"] = str(comparable_col)
-        if eps_row is not None:
+        if comparable_eps_row is not None:
             comparable_eps = _compute_growth(
-                quarterly_income.loc[eps_row, recent_col],
-                quarterly_income.loc[eps_row, comparable_col],
+                quarterly_income.loc[comparable_eps_row, recent_col],
+                quarterly_income.loc[comparable_eps_row, comparable_col],
                 min_abs_baseline=0.05,
             )
         if revenue_row is not None:
@@ -264,13 +269,13 @@ def compute_cadence_aware_growth(
         if context is not None:
             result["_financial_source_context"][field] = context
 
-    record_context("eps_growth_yy", eps_row, comparable_col, BASIS_COMPARABLE_YOY)
+    record_context("eps_growth_yy", comparable_eps_row, comparable_col, BASIS_COMPARABLE_YOY)
     record_context("sales_growth_yy", revenue_row, comparable_col, BASIS_COMPARABLE_YOY)
     if cadence == CADENCE_QUARTERLY:
         result["growth_metric_basis"] = BASIS_QOQ
         result["eps_growth_qq"] = qoq_eps
         result["sales_growth_qq"] = qoq_sales
-        record_context("eps_growth_qq", eps_row, previous_col, BASIS_QOQ)
+        record_context("eps_growth_qq", qoq_eps_row, previous_col, BASIS_QOQ)
         record_context("sales_growth_qq", revenue_row, previous_col, BASIS_QOQ)
         return result
 
@@ -278,7 +283,7 @@ def compute_cadence_aware_growth(
         result["growth_metric_basis"] = BASIS_COMPARABLE_YOY
         result["eps_growth_qq"] = comparable_eps
         result["sales_growth_qq"] = comparable_sales
-        record_context("eps_growth_qq", eps_row, comparable_col, BASIS_COMPARABLE_YOY, remapped=True)
+        record_context("eps_growth_qq", comparable_eps_row, comparable_col, BASIS_COMPARABLE_YOY, remapped=True)
         record_context("sales_growth_qq", revenue_row, comparable_col, BASIS_COMPARABLE_YOY, remapped=True)
         return result
 

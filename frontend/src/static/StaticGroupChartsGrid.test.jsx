@@ -173,3 +173,13 @@ describe('StaticGroupChartsGrid', () => {
     expect(aaplButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+
+it('never refills the current EPS badge with a raw stock or fundamentals rating', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, status:200, json:async()=>({symbol:'NVDA',stock_data:{symbol:'NVDA',eps_rating:98},fundamentals:{eps_rating:99},bars:[]}) });
+  renderGrid();
+  await screen.findByTestId('static-candlestick-chart');
+  expect(screen.getByText('EPS推計 未確認')).toBeInTheDocument();
+  expect(screen.queryByText('98')).not.toBeInTheDocument();
+  expect(screen.queryByText('99')).not.toBeInTheDocument();
+});

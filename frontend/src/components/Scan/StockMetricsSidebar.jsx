@@ -1,3 +1,5 @@
+import { instrumentApplicability, instrumentApplicabilityLabel } from '../../static/instrumentApplicability';
+import { projectFinancialRow } from '../../static/financialCurrent';
 import { Box, Typography, Divider, Chip, Button } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleIcon from '@mui/icons-material/People';
@@ -137,7 +139,20 @@ const SectionHeader = ({ children }) => (
  * @param {Object} props.stockData - Stock result data from scan (optional for watchlists)
  * @param {Object} props.fundamentals - Fundamentals data from cache
  */
-function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetupDetails }) {
+function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetupDetails, currentFinancialOnly = false, date, now }) {
+  // Current static views may not refill withheld values from a raw cache.
+  const evaluationNow = now ?? Date.now();
+  if (currentFinancialOnly) {
+    stockData = stockData ? projectFinancialRow(stockData, { now: evaluationNow, asOfDate: date }) : stockData;
+    fundamentals = fundamentals ? projectFinancialRow(fundamentals, { now: evaluationNow, asOfDate: date }) : fundamentals;
+  }
+  // The legacy eps_growth_annual alias is quarter YoY, not TTM evidence.
+  const financialValue = field => currentFinancialOnly
+    ? (stockData ? stockData[field] : fundamentals?.[field])
+    : (stockData?.[field] ?? fundamentals?.[field]);
+  const applicabilityLabel = currentFinancialOnly ? instrumentApplicabilityLabel(instrumentApplicability(stockData || fundamentals || {})) : null;
+  const financialPercent = value => applicabilityLabel ? '対象外・判定保留' : (currentFinancialOnly && value == null ? '未確認' : formatPercent(value));
+  const growthColor = value => currentFinancialOnly ? 'text.secondary' : getGrowthColor(value);
   // Show loading only if neither stockData nor fundamentals are available
   if (!stockData && !fundamentals) {
     return (
@@ -205,26 +220,26 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
             <MetricRow
               label="EPS Q/Q"
             term="eps_qq"
-              value={formatPercent(fundamentals.eps_growth_qq)}
-              color={getGrowthColor(fundamentals.eps_growth_qq)}
+              value={financialPercent(fundamentals.eps_growth_qq)}
+              color={growthColor(fundamentals.eps_growth_qq)}
             />
             <MetricRow
               label="Sales Q/Q"
             term="sales_qq"
-              value={formatPercent(fundamentals.sales_growth_qq)}
-              color={getGrowthColor(fundamentals.sales_growth_qq)}
+              value={financialPercent(fundamentals.sales_growth_qq)}
+              color={growthColor(fundamentals.sales_growth_qq)}
             />
             <MetricRow
               label="EPS TTM"
             term="eps_ttm"
-              value={formatPercent(fundamentals.eps_growth_annual)}
-              color={getGrowthColor(fundamentals.eps_growth_annual)}
+              value={financialPercent(currentFinancialOnly ? null : fundamentals.eps_growth_annual)}
+              color={growthColor(currentFinancialOnly ? null : fundamentals.eps_growth_annual)}
             />
             <MetricRow
               label="Rev Growth"
             term="rev_growth"
-              value={formatPercent(fundamentals.revenue_growth)}
-              color={getGrowthColor(fundamentals.revenue_growth)}
+              value={financialPercent(fundamentals.revenue_growth)}
+              color={growthColor(fundamentals.revenue_growth)}
             />
           </Box>
         </Box>
@@ -240,13 +255,13 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
             <MetricRow term="fwd_pe" label="Fwd P/E" value={formatRatio(fundamentals.forward_pe)} />
             <MetricRow term="peg" label="PEG" value={formatRatio(fundamentals.peg_ratio)} />
             <MetricRow
-              label="ROE"
+              label={currentFinancialOnly ? 'ROE（参考）' : 'ROE'}
             term="roe"
-              value={fundamentals.roe != null ? `${fundamentals.roe.toFixed(1)}%` : '-'}
+              value={fundamentals.roe != null ? `${fundamentals.roe.toFixed(1)}%` : (currentFinancialOnly ? '未確認' : '-')}
             />
             <MetricRow
-              label="Profit"
-              value={fundamentals.profit_margin != null ? `${fundamentals.profit_margin.toFixed(1)}%` : '-'}
+              label={currentFinancialOnly ? '純利益率（参考）' : 'Profit'}
+              value={fundamentals.profit_margin != null ? `${fundamentals.profit_margin.toFixed(1)}%` : (currentFinancialOnly ? '未確認' : '-')}
             />
             <MetricRow
               label="Inst Own"
@@ -284,6 +299,7 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
         gap: 1.5,
       }}
     >
+      {applicabilityLabel && <Typography role="note" sx={{fontSize:12}}>{applicabilityLabel}。価格・テクニカルは参考表示です。</Typography>}
       {/* Header: Company Name + Rating */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
         <Typography variant="body2" fontWeight="medium" sx={{ flex: 1, lineHeight: 1.3 }}>
@@ -345,23 +361,24 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
       {/* Scores - Composite + Screener Scores combined */}
       <Box>
         <SectionHeader>SCORES</SectionHeader>
+        {currentFinancialOnly && <Typography role="note" sx={{fontSize:12,color:'text.secondary',mb:1}}>財務に依存する推計・補助スコアは未確認です。古い評価を現在の合格に使用しません。</Typography>}
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
           <MetricRow
             label="Composite"
             term="composite"
-            value={stockData.composite_score?.toFixed(1) || '-'}
+            value={stockData.composite_score?.toFixed(1) || (currentFinancialOnly ? '未確認' : '-')}
             color="primary.main"
           />
           <MetricRow
             label="EPS Rating"
             term="eps_rating"
-            value={stockData.eps_rating != null ? stockData.eps_rating : '-'}
+            value={stockData.eps_rating != null ? stockData.eps_rating : (currentFinancialOnly ? '未確認' : '-')}
             color={getEpsRatingColor(stockData.eps_rating)}
           />
-          <MetricRow term="minervini" label="Minervini" value={stockData.minervini_score?.toFixed(1) || '-'} />
-          <MetricRow term="canslim" label="CANSLIM" value={stockData.canslim_score?.toFixed(1) || '-'} />
-          <MetricRow label="IPO" value={stockData.ipo_score?.toFixed(1) || '-'} />
-          <MetricRow label="Custom" value={stockData.custom_score?.toFixed(1) || '-'} />
+          <MetricRow term="minervini" label="Minervini" value={stockData.minervini_score?.toFixed(1) || (currentFinancialOnly ? '未確認' : '-')} />
+          <MetricRow term="canslim" label="CANSLIM" value={stockData.canslim_score?.toFixed(1) || (currentFinancialOnly ? '未確認' : '-')} />
+          <MetricRow label="IPO" value={stockData.ipo_score?.toFixed(1) || (currentFinancialOnly ? '未確認' : '-')} />
+          <MetricRow label="Custom" value={stockData.custom_score?.toFixed(1) || (currentFinancialOnly ? '未確認' : '-')} />
           <MetricRow label="Vol Break" value={stockData.volume_breakthrough_score?.toFixed(1) || '-'} />
         </Box>
         <FundamentalBonusBreakdown
@@ -404,38 +421,38 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
           <MetricRow
             label="EPS Q/Q"
             term="eps_qq"
-            value={formatPercent(stockData.eps_growth_qq ?? fundamentals?.eps_growth_qq)}
-            color={getGrowthColor(stockData.eps_growth_qq ?? fundamentals?.eps_growth_qq)}
+            value={financialPercent(financialValue('eps_growth_qq'))}
+            color={growthColor(financialValue('eps_growth_qq'))}
           />
           <MetricRow
             label="Sales Q/Q"
             term="sales_qq"
-            value={formatPercent(stockData.sales_growth_qq ?? fundamentals?.sales_growth_qq)}
-            color={getGrowthColor(stockData.sales_growth_qq ?? fundamentals?.sales_growth_qq)}
+            value={financialPercent(financialValue('sales_growth_qq'))}
+            color={growthColor(financialValue('sales_growth_qq'))}
           />
           <MetricRow
             label="EPS Y/Y"
             term="eps_yy"
-            value={formatPercent(stockData.eps_growth_yy ?? fundamentals?.eps_growth_yy)}
-            color={getGrowthColor(stockData.eps_growth_yy ?? fundamentals?.eps_growth_yy)}
+            value={financialPercent(financialValue('eps_growth_yy'))}
+            color={growthColor(financialValue('eps_growth_yy'))}
           />
           <MetricRow
             label="Sales Y/Y"
             term="sales_yy"
-            value={formatPercent(stockData.sales_growth_yy ?? fundamentals?.sales_growth_yy)}
-            color={getGrowthColor(stockData.sales_growth_yy ?? fundamentals?.sales_growth_yy)}
+            value={financialPercent(financialValue('sales_growth_yy'))}
+            color={growthColor(financialValue('sales_growth_yy'))}
           />
           <MetricRow
             label="EPS TTM"
             term="eps_ttm"
-            value={formatPercent(fundamentals?.eps_growth_annual)}
-            color={getGrowthColor(fundamentals?.eps_growth_annual)}
+            value={financialPercent(currentFinancialOnly ? null : fundamentals?.eps_growth_annual)}
+            color={growthColor(currentFinancialOnly ? null : fundamentals?.eps_growth_annual)}
           />
           <MetricRow
             label="Rev Growth"
             term="rev_growth"
-            value={formatPercent(fundamentals?.revenue_growth)}
-            color={getGrowthColor(fundamentals?.revenue_growth)}
+            value={financialPercent(currentFinancialOnly ? financialValue('revenue_growth') : fundamentals?.revenue_growth)}
+            color={growthColor(currentFinancialOnly ? financialValue('revenue_growth') : fundamentals?.revenue_growth)}
           />
         </Box>
       </Box>
@@ -451,13 +468,13 @@ function StockMetricsSidebar({ stockData, fundamentals, onViewPeers, onViewSetup
           <MetricRow term="fwd_pe" label="Fwd P/E" value={formatRatio(fundamentals?.forward_pe)} />
           <MetricRow term="peg" label="PEG" value={formatRatio(fundamentals?.peg_ratio)} />
           <MetricRow
-            label="ROE"
+            label={currentFinancialOnly ? 'ROE（参考）' : 'ROE'}
             term="roe"
-            value={fundamentals?.roe != null ? `${fundamentals.roe.toFixed(1)}%` : '-'}
+            value={(currentFinancialOnly ? financialValue('roe') : fundamentals?.roe) != null ? `${(currentFinancialOnly ? financialValue('roe') : fundamentals.roe).toFixed(1)}%` : (currentFinancialOnly ? '未確認' : '-')}
           />
           <MetricRow
-            label="Profit"
-            value={fundamentals?.profit_margin != null ? `${fundamentals.profit_margin.toFixed(1)}%` : '-'}
+            label={currentFinancialOnly ? '純利益率（参考）' : 'Profit'}
+            value={(currentFinancialOnly ? financialValue('profit_margin') : fundamentals?.profit_margin) != null ? `${(currentFinancialOnly ? financialValue('profit_margin') : fundamentals.profit_margin).toFixed(1)}%` : (currentFinancialOnly ? '未確認' : '-')}
           />
           <MetricRow
             label="Inst Own"

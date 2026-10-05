@@ -23,16 +23,27 @@ it('adds daily readiness only for the visible 50 and reuses it when selection ch
  fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
  expect(entryReadiness).toHaveBeenCalledTimes(103);
 });
-it('shows price location and daily purchase status separately, with the next failed check in the accessible name',()=>{
+it('shows price location and daily purchase status separately, with failed and unknown checks in the accessible name',()=>{
  entryReadiness.mockReturnValue(waiting);
  render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
  const row=screen.getByRole('button',{name:/S0 の分析を表示/});
  expect(row).toHaveAccessibleName(/買いゾーン内/);
  expect(row).toHaveAccessibleName(/選定 9\/9。日次 5\/7。出来高：未達/);
+ expect(row).toHaveAccessibleName(/決算予定：未確認/);
  expect(row).toHaveTextContent('● 買いゾーン内');
  expect(row).toHaveTextContent('日次 5/7');
  expect(row).not.toHaveTextContent('✓');
  fireEvent.click(row);expect(props.onSelect).toHaveBeenLastCalledWith('S0');
+});
+it('keeps selection and freshness blockers together in the visible badge tooltip and accessible summary',()=>{
+ const rules=[{id:'selection',state:'unknown',label:'選定条件',detail:'共通の購入モデル：財務根拠が未確認'},{id:'date',state:'unknown',label:'最新の取引日',detail:'取引カレンダー未取得'}];
+ entryReadiness.mockReturnValue({...waiting,rules});
+ render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
+ const row=screen.getByRole('button',{name:/S0 の分析を表示/}),badge=screen.getByText('日次 5/7');
+ const detail='選定条件：未確認。共通の購入モデル：財務根拠が未確認。最新の取引日：未確認。取引カレンダー未取得';
+ expect(badge).toHaveAttribute('title',detail);
+ expect(row.getAttribute('aria-label')).toContain(`日次 5/7。${detail}`);
+ expect(badge).not.toHaveAttribute('data-ready');
 });
 it('marks daily readiness only when all common checks pass and updates when time changes',()=>{
  entryReadiness.mockReturnValueOnce({ready:true,passed:7,total:7,rules:[]}).mockReturnValue(waiting);

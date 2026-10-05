@@ -1,0 +1,53 @@
+{
+  "schema_version": "financial-instrument-applicability-v1",
+  "verified_at": "2026-10-04T12:50:56Z",
+  "purpose": "Reviewed applicability observations; not an instrument-to-price or instrument-to-statement identity binding",
+  "records": [
+    {
+      "market": "US",
+      "symbol": "BITU",
+      "name": "ProShares Ultra Bitcoin ETF",
+      "instrument_class": "exchange_traded_fund",
+      "cusip": "74349Y704",
+      "source": "https://www.proshares.com/our-etfs/leveraged-and-inverse/BITU",
+      "source_owner": "ProShares",
+      "source_kind": "official_fund_page",
+      "corporate_growth_screen_applicability": "not_applicable",
+      "identity_match_limit": "Published row has matching ticker and product name, but no instrument identifier; recorded official CUSIP is not yet bound to price or financial receipts."
+    },
+    {
+      "market": "US",
+      "symbol": "SBIT",
+      "name": "ProShares UltraShort Bitcoin ETF",
+      "instrument_class": "exchange_traded_fund",
+      "cusip": "74349Y563",
+      "source": "https://www.proshares.com/our-etfs/leveraged-and-inverse/sbit",
+      "source_owner": "ProShares",
+      "source_kind": "official_fund_page",
+      "corporate_growth_screen_applicability": "not_applicable",
+      "identity_match_limit": "Published row has matching ticker and product name, but no instrument identifier; recorded official CUSIP is not yet bound to price or financial receipts."
+    },
+    {
+      "market": "US",
+      "symbol": "ETHE",
+      "name": "Grayscale Ethereum Staking ETF",
+      "instrument_class": "exchange_traded_product",
+      "cik": "0001725210",
+      "cusip": "389638107",
+      "isin": "US3896381072",
+      "source": "https://www.sec.gov/Archives/edgar/data/1725210/000172521026000003/ethe_fact_sheet_4.23.26.htm",
+      "source_owner": "Grayscale",
+      "source_kind": "issuer_fact_sheet_filed_with_SEC",
+      "document_date": "2026-04-23",
+      "document_data_as_of": "2026-03-31",
+      "corporate_growth_screen_applicability": "not_applicable",
+      "identity_match_limit": "Published row has matching ticker and product name, but no instrument identifier. This filing establishes product identity and type, not October financial freshness or price-series identity."
+    }
+  ],
+  "limitations": [
+    "These three official observations do not classify any other symbol or name match.",
+    "Not-applicable is not a passed EPS, sales or annual-growth condition.",
+    "No recorded identifier is bound to price series or statement receipts by this registry.",
+    "Conflicting current or legacy issuer evidence requires quarantine and explicit review before historical data are joined."
+  ]
+}
