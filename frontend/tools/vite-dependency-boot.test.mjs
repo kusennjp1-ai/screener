@@ -30,12 +30,12 @@ describe('cold Vite dependency initialization', () => {
   // optimizer's split-chunk ordering bug. Evaluate the actual generated ESM in
   // a fresh process per entry: loading styles first would hide the Box failure.
   // Only direct entrypoints still imported by the app are expected in Vite
-  // discovery. Tooltip is now provided through @mui/material, not a deep import.
+  // discovery. Tooltip and Chip now use the @mui/material barrel; the app no
+  // longer imports their standalone entries. Check Chip on that actual entry.
   it.each([
     '@mui/material/Box',
     '@mui/material',
     '@mui/material/styles',
-    '@mui/material/Chip',
     '@mui/material/CircularProgress',
     '@mui/material/Link',
     '@mui/material/Typography',
@@ -46,7 +46,7 @@ describe('cold Vite dependency initialization', () => {
     const result = spawnSync(process.execPath, [
       '--input-type=module',
       '-e',
-      `await import(${JSON.stringify(url)});`,
+      `const entry = await import(${JSON.stringify(url)});${id === '@mui/material' ? "if (!entry.Chip) throw new Error('Material barrel must provide Chip');" : ''}`,
     ], { encoding: 'utf8' });
 
     expect(result.error).toBeUndefined();

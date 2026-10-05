@@ -273,18 +273,19 @@ function StaticHomePage() {
           read off the loaded scan rows (regime fields ride on every row). */}
       <MarketRegimeBanner results={scanRows} researchExposure={Math.min(modelMarket(scanRows).cap,.25)*100} />
 
-      {/* C86: held/watched names first — the exit is the edge. Surfaces each
-          watched symbol's exported sell action + stop, most-urgent first. */}
+      {/* Saved sell-model observations do not establish actual holdings. */}
       <WatchlistCard
         indexData={chartIndexQuery.data}
+        market={selectedMarket}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
       />
 
-      {/* C83: one-glance buy decisions — market gate, buy zone (pivot..+5%),
-          risk_plan stop/size, ordered best-setup-first. Rows open the chart. */}
+      {/* Dated technical observations; Research owns full purchase readiness. */}
       <TodaysBuysCard
         indexData={chartIndexQuery.data}
         scanRows={scanRows}
+        market={selectedMarket}
+        marketAsOf={scanBundleQuery.data?.as_of_date}
         onOpenChart={(symbol) => handleRowClick(symbol, (chartIndexQuery.data?.symbols || []).map((e) => e.symbol))}
       />
 
@@ -325,7 +326,7 @@ function StaticHomePage() {
                   <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px' }}>
                     {item.symbol}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '10px' }}>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '11px' }}>
                     {item.display_name}
                   </Typography>
                   <Typography variant="body1" sx={{ mt: 0.5, fontFamily: 'monospace', fontWeight: 600 }}>
@@ -344,7 +345,7 @@ function StaticHomePage() {
                       }}
                     >
                       {item.change_1d != null
-                        ? `${item.change_1d > 0 ? '+' : ''}${formatNumber(item.change_1d, 2)}%`
+                        ? `${item.change_1d > 0 ? '+' : ''}${formatNumber(item.change_1d, 2).replace(/^-/, '−')}%`
                         : '-'}
                     </Typography>
                   </Box>

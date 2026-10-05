@@ -12,6 +12,7 @@ import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
 import { retainProfileSources } from './retain-profile-sources.mjs';
 import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
+import { verifyDailyObservationCases, dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
 import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 
@@ -277,11 +278,12 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   }
   await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
+  await verifyDailyObservationCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await context.close();
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme)];
+  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme), ...dailyObservationDesignScreens(viewport, theme)];
   for (const screen of screens) {
     const key = `${screen}/${viewport.width}/${theme}`;
     check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
