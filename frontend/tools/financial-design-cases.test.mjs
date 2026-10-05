@@ -58,6 +58,18 @@ describe('bounded financial Design capture contract', () => {
     expect(harness.indexOf('checkFinancialViewportGeometry(geometry')).toBeLessThan(harness.indexOf('else await page.screenshot'));
     expect(checker).toContain('actual.screens.some(screen => !reviewedKeys.has(screen.key))');
   });
+
+  it('captures evidence at the original viewport with the complete first row as its visibility target', () => {
+    const cases = readFileSync(new URL('./financial-design-cases.mjs', import.meta.url), 'utf8');
+    // A full-element capture can be taller than the viewport and embed fixed
+    // chrome over its rows. Every financial screen must use the measured path.
+    expect(cases).not.toContain('full-element-at-original-viewport');
+    expect(cases).not.toContain('takeSupplement');
+    expect(cases.match(/await capture\(/g)).toHaveLength(1);
+    expect(cases).toContain("await capture(page, viewport, theme, screen, { scope: 'scrolled-viewport', viewportTargets });");
+    expect(cases).toContain("await takeViewport('evidence', ['#financial-evidence-eps_growth_yy']);");
+    expect(cases.indexOf('await inspectFinancialRows(panel, expected, check, key)')).toBeLessThan(cases.indexOf("await takeViewport('evidence'"));
+  });
 });
 
 describe('named financial source categories fail closed', () => {
@@ -122,6 +134,14 @@ describe('financial viewport visibility proof', () => {
     const header = observation(); header.targets[0].rect.top = 32;
     const footer = observation(); footer.targets[0].rect.bottom = 812;
     for (const value of [header, footer]) expect(failures(value)).toContainEqual(expect.stringContaining('between chrome/clipping boundaries'));
+  });
+  it('requires the complete quarterly evidence row, including its lower metadata, to fit the original viewport', () => {
+    const complete = observation();
+    complete.targets[0].selector = '#financial-evidence-eps_growth_yy';
+    complete.targets[0].rect = { top: 60, bottom: 410, left: 33, right: 357 };
+    expect(failures(complete)).toEqual([]);
+    complete.targets[0].rect.bottom = 820;
+    expect(failures(complete)).toContainEqual(expect.stringContaining('#financial-evidence-eps_growth_yy between chrome/clipping boundaries'));
   });
   it('rejects other clipping, overlap, missing targets, changed viewports, or hidden chrome', () => {
     const mutations = [

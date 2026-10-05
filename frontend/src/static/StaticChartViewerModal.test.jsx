@@ -12,7 +12,7 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div>;
+    return <><div data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
   },
 }));
 
@@ -217,6 +217,62 @@ describe('StaticChartViewerModal', () => {
     expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('購入条件を読み込み中…');
     expect(screen.getByTestId('mobile-chart-readiness')).not.toHaveTextContent('0/7');
   });
+});
+
+it.each([false, true])('keeps the complete mobile warning and swipe controls when short-viewport reflow is %s', async short => {
+  vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: query.includes('max-height') ? short : true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
+  vi.stubGlobal('fetch', vi.fn());
+  const props = { open:true, onClose:vi.fn(), initialSymbol:'FIT', date:'2026-10-01', chartIndex:{symbols:[{symbol:'FIT',path:'charts/FIT.json'}]} };
+  const payload = {symbol:'FIT',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:104}],stock_data:{symbol:'FIT',current_price:104,se_pivot_price:100}};
+  const { unmount } = renderModal(props, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  const header = screen.getByTestId('expanded-chart-header');
+  const readiness = screen.getByTestId('mobile-chart-readiness');
+  const interaction = screen.getByTestId('mobile-chart-interaction');
+  expect(readiness.closest('[data-testid="expanded-chart-header"]')).toBe(header);
+  expect(readiness.parentElement).toHaveStyle({display:short ? 'contents' : 'block'});
+  expect(getComputedStyle(readiness).gridColumn.replaceAll(' ', '')).toBe(short ? '1/-1' : '1');
+  expect(getComputedStyle(readiness).fontSize).toBe('12px');
+  expect(readiness.querySelector('.entry-source-badge')).toHaveTextContent('△ 書籍目安2〜3%超');
+  expect(screen.getByText('$104.00 · 2026-10-01 日次終値')).toBeInTheDocument();
+  expect(interaction.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
+  expect(interaction).toHaveTextContent('左スワイプ：次 ／ 右：前');
+  expect(screen.getByRole('button',{name:'チャート操作（拡大・移動）'})).toHaveStyle({minHeight:'44px'});
+  fireEvent.click(screen.getByRole('button',{name:'チャート操作（拡大・移動）'}));
+  expect(interaction).toHaveTextContent('チャートを拡大・移動中');
+  expect(screen.getByRole('button',{name:'銘柄スワイプに戻る'})).toHaveAttribute('aria-pressed','true');
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
+  fireEvent.click(screen.getByRole('button',{name:'チャートを閉じる'}));
+  expect(props.onClose).toHaveBeenCalledOnce();
+  unmount(); vi.unstubAllGlobals();
+});
+
+it('preserves pan mode and keyboard focus as short-phone controls move between rows', async () => {
+  const heightListeners = new Set();
+  const heightQuery = { matches:false, addListener:callback => heightListeners.add(callback), removeListener:callback => heightListeners.delete(callback) };
+  vi.stubGlobal('matchMedia', vi.fn(query => query.includes('max-height') ? heightQuery : { matches:true, addListener:vi.fn(), removeListener:vi.fn() }));
+  vi.stubGlobal('fetch', vi.fn());
+  const props = { open:true, onClose:vi.fn(), initialSymbol:'FIT', date:'2026-10-01', chartIndex:{symbols:[{symbol:'FIT',path:'charts/FIT.json'}]} };
+  const payload = {symbol:'FIT',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:104}],stock_data:{symbol:'FIT',current_price:104,se_pivot_price:100}};
+  const { unmount } = renderModal(props, payload);
+  await screen.findByTestId('static-candlestick-chart');
+  fireEvent.click(screen.getByRole('button',{name:'チャート操作（拡大・移動）'}));
+  act(() => screen.getByRole('button',{name:'銘柄スワイプに戻る'}).focus());
+  for (const short of [true, false, true]) {
+    act(() => { heightQuery.matches = short; heightListeners.forEach(callback => callback()); });
+    const control = screen.getByRole('button',{name:'銘柄スワイプに戻る'});
+    expect(control).toHaveFocus();
+    expect(control).toHaveAttribute('aria-pressed','true');
+    expect(control.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
+    expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
+  }
+  const close = screen.getByRole('button',{name:'チャートを閉じる'});
+  act(() => close.focus());
+  act(() => { heightQuery.matches = false; heightListeners.forEach(callback => callback()); });
+  expect(close).toHaveFocus();
+  fireEvent.keyDown(window,{key:'Escape'});
+  expect(props.onClose).toHaveBeenCalledOnce();
+  unmount(); vi.unstubAllGlobals();
 });
 
 it('fits mobile cached opens and resizes without allowing scrolling or below-chart disclosures to shrink the plot', async () => {

@@ -191,12 +191,6 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const requiredFailed = expected.rows.filter(row => row.required && row.state === 'fail').length;
         record.financial_summary = { required: expected.requiredCount, failed: requiredFailed, unknown: expected.requiredUnknown, heading: await panel.locator('header p').textContent() };
         check(record.financial_summary.heading === `財務の必須条件 ${expected.requiredCount}件 · 未達 ${requiredFailed}件 · 未確認 ${expected.requiredUnknown}件`, `${key}: financial totals must show failed and unknown conditions separately`);
-        const takeSupplement = async (view, target) => {
-          const screen = `financial-${item.symbol}-${view}`;
-          await capture(page, viewport, theme, screen, { target, scope: 'full-element-at-original-viewport' });
-          record.views.push({ screen, target, scope: 'full-element-at-original-viewport',
-            limitation: 'Supplemental full-element capture can include fixed-chrome overlap. It is not viewport visibility proof; see the separately measured viewport captures.' });
-        };
         const takeViewport = async (view, viewportTargets) => {
           const screen = `financial-${item.symbol}-${view}`;
           await scrollFinancialViewport(page, viewportTargets);
@@ -204,7 +198,11 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           record.views.push({ screen, scope: 'scrolled-viewport', targets: viewportTargets,
             limitation: 'Visibility proof covers the named targets at this scroll position; it does not imply the complete section fits above the fold.' });
         };
-        await takeSupplement('evidence', '[aria-label="財務の判定根拠"]');
+        // Keep the evidence screen at the original viewport size with the first
+        // complete financial row below the real page header. Its full row target
+        // includes the source metadata and any nonpositive-comparison reason.
+        // Annual/history evidence has separate views; all rows are audited above.
+        await takeViewport('evidence', ['#financial-evidence-eps_growth_yy']);
         const annualSelector = '#financial-evidence-annual_eps_growth_3y';
         await takeViewport('annual-viewport', ['.financial-evidence-heading h4', '.financial-evidence-status', '.financial-evidence-value strong',
           '.financial-evidence-value span', '.financial-evidence-metadata > div:nth-child(1)', '.financial-evidence-metadata > div:nth-child(2)',

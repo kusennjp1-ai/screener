@@ -62,6 +62,8 @@ function StaticChartViewerModal({
   const [panMode, setPanMode] = useState(false);
   const swipeStart = useRef(null);
   const contentRef = useRef(null);
+  const mobileInteractionRef = useRef(null);
+  const mobileInteractionFocused = useRef(false);
   // Portal descendants can mount after this component's layout effect, also
   // on a cached reopen without a loading transition. Observe the actual node.
   const [chartSection, setChartSection] = useState(null);
@@ -69,6 +71,8 @@ function StaticChartViewerModal({
   const theme = useTheme();
   // モバイルでは縦積みレイアウト（チャート上・指標下）＋画面上の前後ボタンに切り替える
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isShortViewport = useMediaQuery('(max-height:600px)');
+  const compactMobileChrome = isMobile && isShortViewport;
   const { selectedMarket } = useStaticMarket() || {};
 
   const entries = useMemo(() => chartIndex?.symbols || [], [chartIndex]);
@@ -222,6 +226,19 @@ function StaticChartViewerModal({
   const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
   const pivotLabel = '共通ピボット';
   const chartHeight = fittedChartHeight ?? (isMobile ? MOBILE_EXPANDED_CHART_HEIGHT : MIN_EXPANDED_CHART_HEIGHT);
+  const mobileInteraction = isMobile && <Box ref={mobileInteractionRef} data-testid="mobile-chart-interaction"
+    onFocusCapture={() => { mobileInteractionFocused.current = true; }}
+    onBlurCapture={() => { mobileInteractionFocused.current = false; }}
+    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:0, flex:1, fontSize:12, lineHeight:1.5, color:'text.secondary' }}>
+    <span>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
+    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : '拡大・移動'}</Button>
+  </Box>;
+  // Reflow only the chrome on short phones. The chart instance and selection
+  // stay mounted; carry keyboard focus with the relocated pan-mode control.
+  useLayoutEffect(() => {
+    if (mobileInteractionFocused.current) mobileInteractionRef.current?.querySelector('button')?.focus({ preventScroll: true });
+  }, [compactMobileChrome]);
+  useEffect(() => { if (!open) mobileInteractionFocused.current = false; }, [open]);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
@@ -246,7 +263,7 @@ function StaticChartViewerModal({
     observer.observe(section);
     window.addEventListener('resize', scheduleFit);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', scheduleFit); };
-  }, [open, isMobile, isLoading, isError, currentSymbol, chartSection]);
+  }, [open, isMobile, compactMobileChrome, isLoading, isError, currentSymbol, chartSection]);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
 
   return (
@@ -272,15 +289,17 @@ function StaticChartViewerModal({
           }}
         >
           {rowDetail.isError && <Alert severity="warning" sx={{flexShrink:0}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>}
-          <Box sx={{display:'flex',flexShrink:0,alignItems:'center',justifyContent:'space-between',px:2,py:1,borderBottom:1,borderColor:'divider'}}>
-            <Box sx={{minWidth:0,flex:1}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
-              <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
-              {isMobile && <Box data-testid="mobile-chart-readiness" sx={{fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
+          <Box data-testid="expanded-chart-header" sx={{display:compactMobileChrome ? 'grid' : 'flex',gridTemplateColumns:'minmax(0, 1fr) auto',flexShrink:0,alignItems:'center',justifyContent:'space-between',px:2,py:compactMobileChrome ? .5 : 1,borderBottom:1,borderColor:'divider'}}>
+            <Box sx={{display:compactMobileChrome ? 'contents' : 'block',minWidth:0,flex:1}}>
+              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
+                <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
+              </Box>
+              {isMobile && <Box data-testid="mobile-chart-readiness" sx={{gridColumn:compactMobileChrome ? '1 / -1' : '1',gridRow:2,fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
                 <Box sx={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:'0 8px'}}><strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong><EntrySourceBadge plan={plan}/></Box>
                 {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : '日次条件を確認済み。現在価格は発注時に確認。'}</Box>}
               </Box>}
             </Box>
-            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{alignSelf:'flex-start'}}><CloseIcon /></IconButton>
+            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start'}}><CloseIcon /></IconButton>
           </Box>
           <Box
             ref={contentRef}
@@ -342,14 +361,12 @@ function StaticChartViewerModal({
                       their existing accessible disclosure above the plot. */}
                   {!isMobile && <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
                   {!isMobile && <ChartInfoStrip />}
-                  {isMobile && <Box data-testid="mobile-chart-interaction" sx={{ px: 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:1, minHeight:44, fontSize:12, color:'text.secondary' }}>
-                    <span>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
-                    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : '拡大・移動'}</Button>
-                  </Box>}
+                  {!compactMobileChrome && mobileInteraction}
                   <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
                     sx={{ flex: 1, minHeight: 0, position: 'relative', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
                     <CandlestickChart smallScreen={isMobile} researchView bookAnnotations interactive={!isMobile || panMode}
+                      researchMetaActions={compactMobileChrome ? mobileInteraction : null}
                       symbol={currentSymbol}
                       period="6mo"
                       height={chartHeight}
