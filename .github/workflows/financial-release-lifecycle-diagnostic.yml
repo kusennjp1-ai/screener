@@ -1,0 +1,127 @@
+name: Financial Release Lifecycle Rehearsal
+on:
+  push:
+    branches: [diagnostic/financial-release-lifecycle-20261005]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: financial-lifecycle-rehearsal-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check rehearsal storage budget
+        run: |
+          set -euo pipefail
+          df -h "$RUNNER_TEMP"
+          available_bytes=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
+          test "$available_bytes" -ge 17179869184
+      - name: Install existing offline projection dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/financial-replay-runtime"
+          "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
+      - name: Download exact retained review inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          input_dir="$RUNNER_TEMP/financial-release-fixture-inputs"
+          mkdir -p "$input_dir"
+          for pair in source:11307162746 certificate:11307009412 predecessor:11294926674 diagnostic:11325772883; do
+            kind=${pair%%:*}
+            artifact_id=${pair##*:}
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id" > "$input_dir/$kind-metadata.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$input_dir/$kind.zip"
+          done
+      - name: Verify archives and restore the original predecessor
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, shutil, stat, tarfile, zipfile
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          inputs = root / 'financial-release-fixture-inputs'
+          expected = {
+            'source': (11307162746, 27524165, 'c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb'),
+            'certificate': (11307009412, 3152346, 'fbe0e5e2a8a683596acaa6a133c8e642215fde0e4f332449cc635feec3a11958'),
+            'predecessor': (11294926674, 306512046, '7bb431dc9c730c5dd1b290c68d5b6e738d8ffc808578162ba2fbd7f28aaa246d'),
+            'diagnostic': (11325772883, 361896546, 'f38b5ee7160f3bb81c686e2b87024f9f6cf9d2d285a18edfb51d7a16f698f239'),
+          }
+          manifest = {'directory': str(root / 'financial-release-archive-lifecycle'),
+                      'predecessor_root': str(inputs / 'predecessor')}
+          for kind, (artifact_id, size, checksum) in expected.items():
+            path = inputs / (kind + '.zip')
+            metadata = json.loads((inputs / (kind + '-metadata.json')).read_text())
+            assert metadata['id'] == artifact_id and metadata['expired'] is False
+            assert metadata['size_in_bytes'] == size and metadata['digest'] == 'sha256:' + checksum
+            assert path.stat().st_size == size
+            with path.open('rb') as f:
+              assert hashlib.file_digest(f, 'sha256').hexdigest() == checksum
+            manifest[kind + '_zip'] = str(path)
+            manifest[kind + '_sha256'] = checksum
+          destination = pathlib.Path(manifest['predecessor_root'])
+          destination.mkdir()
+          with zipfile.ZipFile(inputs / 'predecessor.zip') as z:
+            members = [m for m in z.infolist() if not m.is_dir()]
+            assert len(members) == 1 and members[0].filename == 'artifact.tar'
+            assert not stat.S_ISLNK(members[0].external_attr >> 16)
+            total, seen = 0, set()
+            with z.open(members[0]) as source, tarfile.open(fileobj=source, mode='r|*') as t:
+              for m in t:
+                name = m.name
+                while name.startswith('./'):
+                  name = name[2:]
+                name = name.rstrip('/')
+                if not name or name == '.':
+                  continue
+                assert not name.startswith('/') and '\\' not in name
+                assert all(p not in ('', '.', '..') for p in name.split('/')) and name not in seen
+                assert m.isfile() or m.isdir()
+                seen.add(name)
+                total += m.size
+                assert len(seen) <= 200000 and total <= 8589934592
+                path = destination / name
+                if m.isdir():
+                  path.mkdir(parents=True, exist_ok=True)
+                else:
+                  path.parent.mkdir(parents=True, exist_ok=True)
+                  with t.extractfile(m) as src, path.open('xb') as dst:
+                    shutil.copyfileobj(src, dst)
+          (root / 'financial-release-input.json').write_text(json.dumps(manifest))
+          print('Verified four immutable archives. This rehearsal has no publication authority.')
+          PY
+      - name: Check remaining space after restoring inputs
+        run: |
+          set -euo pipefail
+          df -h "$RUNNER_TEMP"
+          available_bytes=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
+          test "$available_bytes" -ge 17179869184
+      - name: Run bounded strict carry regression
+        run: node --test --test-concurrency=1 .github/scripts/financial-release-lifecycle.test.mjs
+      - name: Rehearse first activation and advancing carry offline
+        env:
+          FINANCIAL_RELEASE_ARCHIVE_INPUT: ${{ runner.temp }}/financial-release-input.json
+        run: node --test --test-concurrency=1 .github/scripts/financial-release-archive-lifecycle.test.mjs
+      - name: Retain rehearsal evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-release-lifecycle-rehearsal-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/financial-release-archive-lifecycle/report.json
+            ${{ runner.temp }}/financial-release-archive-lifecycle/last-failure.json
+            ${{ runner.temp }}/financial-release-archive-lifecycle/trace.jsonl
+          if-no-files-found: warn
+          retention-days: 14
