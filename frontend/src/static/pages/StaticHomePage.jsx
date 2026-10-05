@@ -435,8 +435,16 @@ function StaticHomePage() {
         <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px', mb: 0.5 }}>
           業種グループ トップ10
         </Typography>
-        <TableContainer>
-          <Table size="small">
+        <TableContainer
+          role="region"
+          aria-label="業種グループ トップ10の表（横スクロール）"
+          tabIndex={0}
+          sx={{
+            '& .MuiTableCell-head': { fontSize: '11px' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
+          }}
+        >
+          <Table size="small" aria-label="業種グループ トップ10の表">
             <TableHead>
               <TableRow>
                 <GlossaryHeaderCell glossaryId="group_rank" openInfo={openInfo}>順位</GlossaryHeaderCell>

@@ -109,6 +109,25 @@ export async function verifyDailyObservationCases({ page, viewport, theme, captu
     await page.keyboard.press('Space');
     await watch.waitFor({ state: 'detached' });
     record.watch_keyboard_removed = true;
+
+    // Empty or chart-disabled rows must not remove keyboard access to wide tables.
+    const regions = page.getByRole('region', { name: /の表（横スクロール）$/ });
+    check(await regions.count() === 4, `${key}: the four Daily tables lack named keyboard scroll regions`);
+    record.table_keyboard_scroll = [];
+    for (const region of await regions.all()) {
+      const dimensions = await region.evaluate(node => ({ width: node.clientWidth, content: node.scrollWidth }));
+      await region.focus();
+      check(await region.evaluate(node => node === document.activeElement), `${key}: a Daily table cannot receive keyboard focus`);
+      let moved = null;
+      if (dimensions.content > dimensions.width + 1) {
+        await region.evaluate(node => { node.scrollLeft = 0; });
+        await page.keyboard.press('ArrowRight');
+        await page.waitForFunction(node => node.scrollLeft > 0, await region.elementHandle(), { timeout: 2000 });
+        moved = await region.evaluate(node => node.scrollLeft > 0);
+        check(moved, `${key}: a wide Daily table does not respond to keyboard scrolling`);
+      }
+      record.table_keyboard_scroll.push({ name: await region.getAttribute('aria-label'), ...dimensions, moved });
+    }
   } catch (error) {
     record.error = error.message;
     check(false, `${key}: observation verification interrupted: ${error.message}`);

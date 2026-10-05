@@ -223,6 +223,24 @@ describe('StaticHomePage', () => {
 
   afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
 
+  it('keeps all Daily tables named and keyboard reachable even when no chart row can receive focus', async () => {
+    useStaticChartIndex.mockReturnValue({ data: { symbols: [] } });
+    scanManifestPayload.initial_rows = [];
+    scanChunkPayload.rows = [];
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    await screen.findByRole('region', { name: '業種グループ トップ10の表（横スクロール）' });
+    const regions = screen.getAllByRole('region', { name: /の表（横スクロール）$/ });
+    expect(regions).toHaveLength(4);
+    for (const region of regions) {
+      expect(region).toHaveAttribute('tabindex', '0');
+      region.focus();
+      expect(region).toHaveFocus();
+      for (const header of within(region).getAllByRole('columnheader')) {
+        expect(header).toHaveStyle({ fontSize: '11px' });
+      }
+    }
+  });
+
   it('keeps Daily market/rank values while using readable captions and Unicode minus', async () => {
     homePayload.key_markets = [
       { symbol: 'IDX', display_name: 'Market caption', latest_close: 99, currency: 'USD', change_1d: -1.25, history: [{ close: 100 }, { close: 99 }] },

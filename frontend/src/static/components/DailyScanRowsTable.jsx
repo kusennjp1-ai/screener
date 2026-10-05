@@ -76,8 +76,16 @@ function DailyScanRowsTable({
         </Box>
         {action}
       </Box>
-      <TableContainer>
-        <Table size="small">
+      <TableContainer
+        role="region"
+        aria-label={`${title}の表（横スクロール）`}
+        tabIndex={0}
+        sx={{
+          '& .MuiTableCell-head': { fontSize: '11px' },
+          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
+        }}
+      >
+        <Table size="small" aria-label={`${title}の表`}>
           <TableHead>
             <TableRow>
               <GlossaryHeaderCell glossaryId="symbol" openInfo={openInfo}>銘柄</GlossaryHeaderCell>
