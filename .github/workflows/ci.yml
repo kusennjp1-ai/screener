@@ -158,13 +158,13 @@ jobs:
           python3 -m pip install -r .github/scripts/financial-correction-certification-requirements.txt
           python3 -m unittest discover -s .github/scripts -p "test_retain_financial_diagnostic.py"
           python3 -m unittest discover -s .github/scripts -p test_restore_financial_diagnostic.py
-          node --test --test-concurrency=2 .github/scripts/financial-performance-exception.test.mjs .github/scripts/financial-performance-exception-v2.test.mjs .github/scripts/financial-performance-lifecycle.test.mjs .github/scripts/financial-performance-packed-carry.test.mjs .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
+          node --test --test-concurrency=2 .github/scripts/financial-audit-history.test.mjs .github/scripts/financial-performance-exception.test.mjs .github/scripts/financial-performance-exception-v2.test.mjs .github/scripts/financial-performance-lifecycle.test.mjs .github/scripts/financial-performance-packed-carry.test.mjs .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
 
       - name: Final GitHub Pages payload guard contracts
         run: python3 -m unittest discover -s .github/scripts -p test_check_pages_payload.py
 
       - name: Lossless transport and publication boundary contracts
-        run: node --test --test-concurrency=2 frontend/tools/static-transport/contracts.node.mjs frontend/tools/static-transport/browser-harness.node.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs .github/scripts/design-transport.test.mjs
+        run: node --test --test-concurrency=2 frontend/tools/static-transport/contracts.node.mjs frontend/tools/static-transport/browser-harness.node.mjs .github/scripts/financial-audit-transport.test.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs .github/scripts/design-transport.test.mjs
 
       - name: Test
         run: cd frontend && npm run test:run

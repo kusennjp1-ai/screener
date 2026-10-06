@@ -55,7 +55,14 @@ export function exceptionPolicyForVersion(version,{allowDisabled=false}={}) {
     controller_only_paths:[...legacy.controller_only_paths.filter(p=>p!=='contracts/financial_performance_exception_v1.json'),
       'contracts/financial_performance_exception_v2.json','.github/scripts/financial-performance-policy.mjs',
       '.github/scripts/financial-performance-exception-v2.test.mjs','.github/scripts/financial-performance-packed-carry.test.mjs',
-      '.github/scripts/financial-candidate-preview-v2.test.mjs','.github/scripts/fixtures/financial-release-archive-lifecycle.mjs','.github/scripts/financial-release-archive-lifecycle.test.mjs']};
+      '.github/scripts/financial-candidate-preview-v2.test.mjs','.github/scripts/fixtures/financial-release-archive-lifecycle.mjs','.github/scripts/financial-release-archive-lifecycle.test.mjs',
+      // Exact reviewed audit-retention helpers and their verification surfaces.
+      // Runtime UI, financial projectors, v1 authority and future paths stay out.
+      '.github/scripts/financial-audit-history.mjs','.github/scripts/financial-audit-history.test.mjs',
+      '.github/scripts/financial-audit-transport.mjs','.github/scripts/financial-audit-transport.test.mjs',
+      '.github/scripts/financial-release-activation.test.mjs','.github/scripts/financial-release-lifecycle.test.mjs',
+      '.github/scripts/static-transport-publication.mjs','.github/scripts/static-transport-publication.test.mjs','.github/scripts/static-transport-carry.test.mjs',
+      'frontend/src/static/staticPublication.test.js','frontend/tools/production-bootstrap-diagnostic.mjs','frontend/tools/production-bootstrap-diagnostic.test.mjs']};
 }
 export function exceptionPolicyFor(value) {
   for(const version of exceptionVersions){const p=profile(version);if(value?.type===p.type||[p.approval_schema,p.candidate_schema,p.pin_schema,p.intent_schema].includes(value?.schema_version))return exceptionPolicyForVersion(version);}

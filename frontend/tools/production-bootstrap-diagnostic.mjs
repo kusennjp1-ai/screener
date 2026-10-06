@@ -11,7 +11,7 @@ export function productionShapedBootstrap(preview,predecessor) {
   // Retain real public ledger/universe fields to exercise their parsing cost.
   // Remove all authority and old financial release references. This object
   // exists only in a Playwright route, never in the candidate or hosted tree.
-  for(const key of ['approval','financial_release','financial_correction','financial_generation','financial_lineage_sha256','data_inventory_sha256'])delete result[key];
+  for(const key of ['approval','financial_audit_files','financial_release','financial_correction','financial_generation','financial_lineage_sha256','data_inventory_sha256'])delete result[key];
   result.schema=1;
   result.publication_authority='none';
   result.diagnostic_only='synthetic metadata envelope; retained public ledger; no publication authority';

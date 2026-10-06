@@ -1,0 +1,249 @@
+{
+  "schema": "financial-audit-codec-measurement-v1",
+  "scope": "synthetic opaque envelopes; local nonpublishing codec validation only; no certification or publication authority",
+  "implementation_commit": "b5f48ae006412e6f7a6e7eab61c5c73302446a4c",
+  "started_at": "2026-10-06T08:34:04.777Z",
+  "finished_at": "2026-10-06T08:51:55.234Z",
+  "captured_ui": {
+    "sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "tree": "1c0219a170dcbdeb1af539e4cf7a04018251ca02",
+    "digest": "72fd791b42a691e286279cada721207a812d13b13233e814d0c2cfde73571788"
+  },
+  "source_recomputed": false,
+  "provider_calls": 0,
+  "browser_launches": 0,
+  "remote_writes": 0,
+  "baseline": {
+    "logical_bytes": 1980234183,
+    "logical_files": 19597,
+    "logical_inventory_sha256": "353d7a183f776a7d8e4ca9acad1630f70a9eac7dda11a0bd89dc029e3afbc69a",
+    "logical_data_inventory_sha256": "b78f28dedae6b05a2a0848367c3e8695d41b5c21d2406c028f02e0ccdb0fd900",
+    "original_gzip_files": 14645,
+    "original_gzip_map_sha256": "47284587a331e726a4ebc7c87dcfa427fd4541c21601df64fa2c8c72f7fcc119",
+    "physical_bytes_including_publication": 687232801,
+    "tar_bytes": 702535680
+  },
+  "inputs": {
+    "source": {
+      "path": "static-data/financial-corrections/source-projection-a93042a6f6ad40c9bbf0f518bf5580d1a1a014e2fc70380569edcde76c965b9a.json",
+      "sha256": "a93042a6f6ad40c9bbf0f518bf5580d1a1a014e2fc70380569edcde76c965b9a",
+      "bytes": 38219744
+    },
+    "base": {
+      "path": "static-data/financial-corrections/source-base-94d3f1f08869fe625c678e64c1699bf024050c7a5208847168a67c3c0e2b8b27.json",
+      "sha256": "94d3f1f08869fe625c678e64c1699bf024050c7a5208847168a67c3c0e2b8b27",
+      "bytes": 15281559
+    }
+  },
+  "carries": [
+    {
+      "path": "static-data/financial-corrections/carry-projection-f878e84b8676d83b4ef6d1746b7230bf5afb1db74212ffd322ea691cb003046c.json",
+      "sha256": "f878e84b8676d83b4ef6d1746b7230bf5afb1db74212ffd322ea691cb003046c",
+      "bytes": 120813637,
+      "evaluated_at": "2026-10-06T08:17:31.198Z",
+      "predecessor_identity": "1/1/2222222222222222222222222222222222222222222222222222222222222222/3333333333333333333333333333333333333333333333333333333333333333",
+      "raw_source_clocks_preserved": true
+    },
+    {
+      "path": "static-data/financial-corrections/carry-projection-4505921fa0c682c5b7699fc771fcbfe65e8793e94605b76b71d78ce76283af88.json",
+      "sha256": "4505921fa0c682c5b7699fc771fcbfe65e8793e94605b76b71d78ce76283af88",
+      "bytes": 120813637,
+      "evaluated_at": "2026-10-06T08:42:17.608Z",
+      "predecessor_identity": "2/1/395b8a94ab582d22461c0306625e0dd6550c3f777793b3a2b3735c518f5da73c/047bbf08b244ce00323c003add2072b217b7a42f10e2beb2caf35432d8c1397b",
+      "raw_source_clocks_preserved": true
+    },
+    {
+      "path": "static-data/financial-corrections/carry-projection-9b842a1f91aa7b321bfd6a771a857b784817d68b0a10f42e6894a520bb993d1e.json",
+      "sha256": "9b842a1f91aa7b321bfd6a771a857b784817d68b0a10f42e6894a520bb993d1e",
+      "bytes": 120813637,
+      "evaluated_at": "2026-10-06T08:45:55.776Z",
+      "predecessor_identity": "3/1/203f72547a26e3f981c3c54e70c1719c0dc953b4548cfe1650e9c9b27bb10de0/54eac626b0134cd0f38986825284b2dce4061a8c2abc308e04cac2837cec83b4",
+      "raw_source_clocks_preserved": true
+    }
+  ],
+  "logical_measurement_note": "Phase logical bytes/files exclude publication.json; the final committed-controller restore budget below includes its exact bytes and one file.",
+  "phases": [
+    {
+      "phase": "R0",
+      "carry_count": 0,
+      "audit_files": 3,
+      "audit_logical_bytes": 53502160,
+      "logical_bytes": 2033736343,
+      "logical_files": 19600,
+      "physical_bytes": 692521719,
+      "tar_bytes": 708341760,
+      "physical_headroom": 307478281,
+      "tar_headroom": 291658240,
+      "original_logical_inventory_sha256": "353d7a183f776a7d8e4ca9acad1630f70a9eac7dda11a0bd89dc029e3afbc69a",
+      "original_gzip_map_sha256": "47284587a331e726a4ebc7c87dcfa427fd4541c21601df64fa2c8c72f7fcc119",
+      "all_original_bytes_exact": true,
+      "append_only_audits": true,
+      "all_audit_hashes_exact": true,
+      "shards": {
+        "shards": 256,
+        "entries": 19860,
+        "max_shard_bytes": 41157,
+        "root_bytes": 54900,
+        "format_sha256": "d6983e2a536332261b7f644309e40e42272e22dc54c304748b3a99923694ef40"
+      },
+      "remote_reader": {
+        "files": 2,
+        "decoded_bytes": 53501303,
+        "requests": 5,
+        "fetch_mode": "local file-backed WHATWG Response, pinned production URL mapping; no network",
+        "all_byte_hashes_exact": true
+      },
+      "logical_data_inventory_sha256": "09116bd665b7d85dcc0fe8307ebf76cf15f84ced75bed3dc9e3148c0735795fb",
+      "physical_inventory_sha256": "aa5acde4af75102f65e16ba9159e7a33b8d8fe856fb4e08ea17d8b5f708341e0"
+    },
+    {
+      "phase": "C1",
+      "carry_count": 1,
+      "audit_files": 5,
+      "audit_logical_bytes": 174317084,
+      "logical_bytes": 2154551267,
+      "logical_files": 19602,
+      "physical_bytes": 702966320,
+      "tar_bytes": 718786560,
+      "physical_headroom": 297033680,
+      "tar_headroom": 281213440,
+      "original_logical_inventory_sha256": "353d7a183f776a7d8e4ca9acad1630f70a9eac7dda11a0bd89dc029e3afbc69a",
+      "original_gzip_map_sha256": "47284587a331e726a4ebc7c87dcfa427fd4541c21601df64fa2c8c72f7fcc119",
+      "all_original_bytes_exact": true,
+      "append_only_audits": true,
+      "all_audit_hashes_exact": true,
+      "shards": {
+        "shards": 256,
+        "entries": 19862,
+        "max_shard_bytes": 41157,
+        "root_bytes": 54900,
+        "format_sha256": "d6983e2a536332261b7f644309e40e42272e22dc54c304748b3a99923694ef40"
+      },
+      "remote_reader": {
+        "files": 3,
+        "decoded_bytes": 174314940,
+        "requests": 7,
+        "fetch_mode": "local file-backed WHATWG Response, pinned production URL mapping; no network",
+        "all_byte_hashes_exact": true
+      },
+      "logical_data_inventory_sha256": "52b234eb08c2a60523ccb0f5bccf6a5c0b934aae4b22711e0495711e738ccd4f",
+      "physical_inventory_sha256": "e4f0b63d2e879ec7b80a29ec0960d7ddbd4e4ddc90433003df2b6c508a2714bc"
+    },
+    {
+      "phase": "C2",
+      "carry_count": 2,
+      "audit_files": 7,
+      "audit_logical_bytes": 295132008,
+      "logical_bytes": 2275366191,
+      "logical_files": 19604,
+      "physical_bytes": 713411096,
+      "tar_bytes": 729231360,
+      "physical_headroom": 286588904,
+      "tar_headroom": 270768640,
+      "original_logical_inventory_sha256": "353d7a183f776a7d8e4ca9acad1630f70a9eac7dda11a0bd89dc029e3afbc69a",
+      "original_gzip_map_sha256": "47284587a331e726a4ebc7c87dcfa427fd4541c21601df64fa2c8c72f7fcc119",
+      "all_original_bytes_exact": true,
+      "append_only_audits": true,
+      "all_audit_hashes_exact": true,
+      "shards": {
+        "shards": 256,
+        "entries": 19864,
+        "max_shard_bytes": 41157,
+        "root_bytes": 54900,
+        "format_sha256": "d6983e2a536332261b7f644309e40e42272e22dc54c304748b3a99923694ef40"
+      },
+      "remote_reader": {
+        "files": 4,
+        "decoded_bytes": 295128577,
+        "requests": 9,
+        "fetch_mode": "local file-backed WHATWG Response, pinned production URL mapping; no network",
+        "all_byte_hashes_exact": true
+      },
+      "logical_data_inventory_sha256": "fe7542c5ce56e15a2c022cb76cb2a1b50849790252cefdb23378f848d862598e",
+      "physical_inventory_sha256": "6450e20a45b86dbd2cac8a86e855545894bbebe5d7e638c33caf02bfe8afa1ce"
+    },
+    {
+      "phase": "C3",
+      "carry_count": 3,
+      "audit_files": 9,
+      "audit_logical_bytes": 415946932,
+      "logical_bytes": 2396181115,
+      "logical_files": 19606,
+      "physical_bytes": 723855846,
+      "tar_bytes": 739686400,
+      "physical_headroom": 276144154,
+      "tar_headroom": 260313600,
+      "original_logical_inventory_sha256": "353d7a183f776a7d8e4ca9acad1630f70a9eac7dda11a0bd89dc029e3afbc69a",
+      "original_gzip_map_sha256": "47284587a331e726a4ebc7c87dcfa427fd4541c21601df64fa2c8c72f7fcc119",
+      "all_original_bytes_exact": true,
+      "append_only_audits": true,
+      "all_audit_hashes_exact": true,
+      "shards": {
+        "shards": 256,
+        "entries": 19866,
+        "max_shard_bytes": 41157,
+        "root_bytes": 54900,
+        "format_sha256": "d6983e2a536332261b7f644309e40e42272e22dc54c304748b3a99923694ef40"
+      },
+      "remote_reader": {
+        "files": 5,
+        "decoded_bytes": 415942214,
+        "requests": 11,
+        "fetch_mode": "local file-backed WHATWG Response, pinned production URL mapping; no network",
+        "all_byte_hashes_exact": true
+      },
+      "logical_data_inventory_sha256": "c73d6b1c0ada2835b4a8e0a10ffd36c9e425d2d821b70fbfc84cf45e92f6ed81",
+      "physical_inventory_sha256": "7ce709a9d9d80e2652158ecfe8978194d02c0e5710644286040626a71fdff5cb"
+    }
+  ],
+  "captured_pack_verify_sha256": {
+    "pack.mjs": "638359ce5146aba4b0339de98da9a0d5f0b3cf2dbe4fb9408c92c6a9abdfce42",
+    "verify.mjs": "feb85ef1f9dd6732d4d8473e13745d247534082263ba24fc915ca279265dc73f"
+  },
+  "captured_assets_api": {
+    "logical_inventory_sha256": "353d7a183f776a7d8e4ca9acad1630f70a9eac7dda11a0bd89dc029e3afbc69a",
+    "encoded_payload_inventory_sha256": "47284587a331e726a4ebc7c87dcfa427fd4541c21601df64fa2c8c72f7fcc119"
+  },
+  "updated_controller_validation": {
+    "controller_hashes": {
+      "static-transport-publication.mjs": "f2fa9402c2dfe81bee871ffefaaa31f27c2ba506e60269171a62aecf75f365d2",
+      "financial-audit-transport.mjs": "6c878d09a2a08240bb2fc476c3fd21c970b4d63e8f06b0c52edde597b74f42ca",
+      "financial-audit-history.mjs": "41ad58114cb2532d712fff961838523b8023c80d38140e66e6543b75858e9547"
+    },
+    "changed_controller_files": [
+      "static-transport-publication.mjs",
+      "financial-audit-transport.mjs"
+    ],
+    "declared_change_scope": "Include final publication.json bytes and one file in the existing archive/disk budget; assert bounded final receipt and full canonical archive count at pack completion. Codec, captured pack/verify, and reconstruction algorithms unchanged.",
+    "fresh_process": true,
+    "full_C3_verify_passed": true,
+    "restore_budget": {
+      "canonicalBytes": 2396185885,
+      "canonicalFiles": 19607,
+      "publicationBytes": 4770,
+      "restoreBytes": 2579963702,
+      "availableBytes": 4894883840
+    },
+    "all_input_hashes_unchanged": true,
+    "all_captured_pack_verify_hashes_unchanged": true,
+    "full_C3_canonical_restore_passed": true
+  },
+  "synthetic_envelope_scope": {
+    "outer_financial_generation": "69c80cd8bfa2a4bedf891aea1e82229b4d6768e59914f15fb9ef9e09b51c7de7",
+    "manifest_financial_generation_unchanged": true,
+    "outer_app_ui_source_bindings_exact": true,
+    "carry_artifacts": "Distinct retained byte evidence only; their synthetic generations do not replace the active manifest generation.",
+    "full_application_bootstrap_or_publication_authority": false
+  },
+  "disk": {
+    "largest_observed_validation_allocation_bytes": 3246698496,
+    "minimum_observed_free_bytes": 2417295360,
+    "conservative_C3_packed_plus_restore_bytes": 3303819548,
+    "observation_note": "Largest observed allocation is sampled, not a continuous peak. Conservative peak combines exact packed payload with helper restore reserve; files are processed serially.",
+    "max_rss_for_main_run": null,
+    "max_rss_note": "The main process was already running without a resource wrapper and was not visible from later isolated shell process namespaces."
+  },
+  "supplemental_process_max_rss_kib": 501760,
+  "complete_local_record_sha256": "12955c4cad5d4f6a1d4e97ac3f4a8f52671792fa7b4d004034dc964cfbeb6dd3",
+  "ok": true
+}

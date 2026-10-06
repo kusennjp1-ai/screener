@@ -6,11 +6,25 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {performanceLifecycleFixture} from './fixtures/financial-performance-lifecycle.mjs';
 import {validatePackedExceptionPolicy,exceptionPolicyForVersion} from './financial-performance-policy.mjs';
-import {readPerformanceApproval,readExceptionPin,readExceptionReleaseIntent,selectExceptionVersion,exceptionWorkflowControls} from './financial-performance-exception.mjs';
+import {parsePerformanceApproval,readPerformanceApproval,readExceptionPin,readExceptionReleaseIntent,selectExceptionVersion,exceptionWorkflowControls} from './financial-performance-exception.mjs';
 import {sha256} from './publication-state.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url)),H='9'.repeat(64),S='9'.repeat(40);
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,JSON.stringify(value));};
+
+test('audit deployment binding remains finite, v2-only and cannot authorize consumer or projector changes',()=>{
+  const v1=exceptionPolicyForVersion(1),v2=exceptionPolicyForVersion(2),approval=readPerformanceApproval(root,{version:2});
+  assert.equal(new Set(v2.controller_only_paths).size,v2.controller_only_paths.length);
+  assert.equal(v2.controller_only_paths.includes('.github/scripts/financial-audit-transport.mjs'),true);
+  assert.equal(v1.controller_only_paths.includes('.github/scripts/financial-audit-transport.mjs'),false);
+  for(const path of ['frontend/src/static/staticPublication.js','frontend/src/static/financialCurrent.js',
+    'backend/app/scripts/export_native_annual_projection.py','backend/app/services/native_annual_history.py','.github/scripts/unreviewed-audit-helper.mjs',
+    'contracts/financial_performance_exception_v1.json']){
+    const changed=structuredClone(approval);
+    changed.controller_changes[path]={before:null,after:{mode:'100644',sha:S}};
+    assert.throws(()=>parsePerformanceApproval(changed),/Unapproved consumer\/projector or controller change/);
+  }
+});
 
 test('the isolated unbound packed policy grants no authority and preserves legacy controls',async t=>{
   const scratch=mkdtempSync(join(tmpdir(),'disabled-packed-control-'));t.after(()=>rmSync(scratch,{recursive:true,force:true}));

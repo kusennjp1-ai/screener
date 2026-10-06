@@ -11,7 +11,7 @@ import {currentFinancialHistory} from '../../frontend/src/static/financialCurren
 import {sha256} from './publication-state.mjs';
 
 const frontend=fileURLToPath(new URL('../../frontend',import.meta.url));
-test('packed approved UI survives two real carry lifecycles with original price bytes and expiring source clocks',{timeout:120000},async()=>{
+test('packed approved UI survives R0 to C3 with compressed audit retention and expiring source clocks',{timeout:120000},async()=>{
   const fixture=lifecycleFixture({packedTransport:true});
   try{
     fixture.seed();
@@ -26,17 +26,21 @@ test('packed approved UI survives two real carry lifecycles with original price 
     assert.equal(readFileSync(join(predecessor.logicalRoot,initial.financial_release.path),'utf8'),readFileSync(join(fixture.liveRoot,initial.financial_release.path),'utf8'));
     rmSync(predecessor.logicalRoot,{recursive:true,force:true});
     let last=initial;
-    for(const target of [{id:40,date:'2026-10-05',price:120,time:'2026-10-05T12:00:00.000Z'},{id:50,date:'2026-10-06',price:130,time:'2026-10-06T12:00:00.000Z'}]){
+    const retained=new Map();
+    for(const target of [{id:40,date:'2026-10-05',price:120,time:'2026-10-05T12:00:00.000Z'},{id:50,date:'2026-10-06',price:130,time:'2026-10-06T12:00:00.000Z'},{id:60,date:'2026-10-07',price:140,time:'2026-10-07T12:00:00.000Z'}]){
       const release=fixture.advance(target);release.command('plan');release.command('restore');release.command('prepare-carry');release.build();
       const priceBytes=readFileSync(join(release.dist,'static-data/charts/OWNED.json'));
       release.command('compose');
       const publication=read(join(release.dist,'publication.json'));
+      assert.ok(publication.financial_audit_transport);
       assert.equal(publication.ui_digest,initial.ui_digest);assert.equal(publication.ui_sha,initial.ui_sha);
       assert.equal(publication.transport.root.bindings.appCommit,initial.ui_sha);
       assert.equal(publication.transport.root.bindings.financialGeneration,publication.financial_generation);
       assert.notEqual(publication.transport.root.generation,last.transport.root.generation);
       const logical=await canonicalPublication({root:release.dist,frontendRoot:frontend,publication,restore:join(release.root,'checked-logical')});
       const receipt=verifyFinancialReleaseAssets(logical,publication.financial_release,publication);
+      for(const [path,bytes]of retained)assert.deepEqual(readFileSync(join(logical,path)),bytes,'every prior receipt and evaluation stays exact');
+      for(const path of Object.keys(publication.financial_audit_files))retained.set(path,readFileSync(join(logical,path)));
       assert.equal(receipt.mode,'carry');assert.equal(receipt.candidate,null);
       assert.equal(readFileSync(join(logical,receipt.source_projection.path),'utf8'),fixture.original.bytes);
       assert.equal(readFileSync(join(logical,receipt.source_base.path),'utf8'),fixture.original.base);
