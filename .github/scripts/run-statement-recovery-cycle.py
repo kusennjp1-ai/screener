@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -71,20 +72,64 @@ def restore_archive(restored, destination, *, base, cohort, now):
     return digest, provenance
 
 
-def run(inputs, restored, output, *, dry_run=False):
+def bounded_bridge():
+    path = Path(__file__).with_name("bounded-statement-refresh-plan.py")
+    spec = importlib.util.spec_from_file_location("bounded_statement_refresh_plan", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def bounded_acquisition_budget(job_started_at, *, now):
+    """Charge actual setup/staging time before reserving 420s for finalization."""
+    if not isinstance(job_started_at, str) or not job_started_at:
+        raise ValueError("Bounded refresh requires an explicit RFC3339 job-started-at clock")
+    started = batch.clock(job_started_at)
+    elapsed = (now - started).total_seconds()
+    if elapsed < 0:
+        raise ValueError("Bounded refresh job-started-at is in the future")
+    allowance = min(1080, 1500 - elapsed - 420)
+    if allowance <= 0:
+        raise ValueError("Bounded refresh setup exhausted the acquisition allowance; finalization reserve is retained")
+    return allowance
+
+
+def run(inputs, restored, output, *, dry_run=False, reviewed_plan=None, job_started_at=None):
+    if reviewed_plan is None and job_started_at is not None:
+        raise ValueError("job-started-at is only supported for a bounded reviewed refresh")
     base = (inputs / "base.json").read_bytes()
-    cohort = archive._read(inputs / "cohort.json")[0]
+    cohort, cohort_bytes = archive._read(inputs / "cohort.json")
     now = datetime.now(timezone.utc)
+    bridge, review, admission_bytes, retention_guard = None, None, None, None
+    if reviewed_plan is not None:
+        bounded_acquisition_budget(job_started_at, now=now)
+        bridge = bounded_bridge()
+        review = bridge.load_review(reviewed_plan, now=now)
+        _, admission_bytes = bridge.load_admission(reviewed_plan, review, now=now, dry_run=dry_run)
+        original_base, original_cohort = bridge.verify_restored_source(review, restored, now=now)
+        if base != original_base or cohort_bytes != original_cohort:
+            raise ValueError("Bounded refresh inputs must retain the exact original base and full cohort bytes")
     archive.verify_base(base, cohort, now=now)
     output.mkdir(parents=True, exist_ok=False)
     (output / "base.json").write_bytes(base)
-    batch.write_json(output / "cohort.json", cohort)
+    if review is not None:
+        (output / "cohort.json").write_bytes(cohort_bytes)
+        for name, content in review.contents.items():
+            (output / name).write_bytes(content)
+        (output / "dispatch-admission.json").write_bytes(admission_bytes)
+    else:
+        batch.write_json(output / "cohort.json", cohort)
     destination = output / "archive"
     digest, provenance = restore_archive(restored, destination, base=base, cohort=cohort, now=now)
     batch.write_json(output / "source-provenance.json", provenance)
     previous_digest = digest
     current = archive.load_archive(destination, digest, base_bytes=base, cohort=cohort, now=now)
-    planned, plan, _ = archive.plan_archive(current, base_bytes=base, cohort=cohort, now=now)
+    if review is not None:
+        planned = bridge.validate_archive(review, current, base_bytes=base, cohort_bytes=cohort_bytes,
+                                           provenance=provenance, now=now)
+        plan = review.plan
+    else:
+        planned, plan, _ = archive.plan_archive(current, base_bytes=base, cohort=cohort, now=now)
     batch.write_json(output / "plan.json", plan)
     report = {"eligible": planned.eligible_count, "selected": len(planned.symbols),
               "symbols": list(planned.symbols), "provider_state": planned.provider_state,
@@ -100,13 +145,34 @@ def run(inputs, restored, output, *, dry_run=False):
     result, code = None, 0
     if planned.symbols:
         cache, cache_sha = archive.export_cache(current, plan, base, output / "selected-cache", now=now)
+        bounded_kwargs = {}
+        acquisition_budget_seconds = 1080
+        if review is not None:
+            if cache_sha != bridge.SELECTED_CACHE_SHA256:
+                raise ValueError("Reviewed selected original receipt cache changed")
+            if not dry_run:
+                # The whole output tree, next getter/transport and immutable
+                # merge/finalization must fit before any provider exists.
+                from app.services.statement_retention_budget import StatementRetentionBudget
+                retention_guard = StatementRetentionBudget(output, selected_symbols=200, max_transport_requests=1000)
+                retention_guard.check("initial")
+                bounded_kwargs["retention_guard"] = retention_guard
+            # Setup, full-source validation and retention scans are charged to
+            # the real job clock. Never consume the finalization/upload reserve.
+            ready_at = datetime.now(timezone.utc)
+            bridge.check_dispatch_clock(review, now=ready_at)
+            acquisition_budget_seconds = bounded_acquisition_budget(job_started_at, now=ready_at)
         result, code = batch.collect(plan, base, output / "batch", cache_manifest=cache, cache_sha256=cache_sha,
-                                    dry_run=dry_run, acquisition_budget_seconds=1080,
-                                    max_statement_getter_calls=400, max_transport_requests=1000)
+                                    dry_run=dry_run, acquisition_budget_seconds=acquisition_budget_seconds,
+                                    max_statement_getter_calls=400, max_transport_requests=1000, **bounded_kwargs)
         if not dry_run:
+            if retention_guard is not None:
+                retention_guard.before_merge()
+            merge_kwargs = ({"maximum_manifest_bytes": retention_guard.maximum_manifest_bytes}
+                            if retention_guard is not None else {})
             digest = archive.merge_batch(destination, digest, batch_dir=output / "batch",
                 summary_sha256=file_hash(output / "batch" / "summary.json"),
-                base_bytes=base, cohort=cohort, now=datetime.now(timezone.utc))
+                base_bytes=base, cohort=cohort, now=datetime.now(timezone.utc), **merge_kwargs)
     elif planned.provider_state != "available":
         code = 2
     checked = archive.load_archive(destination, digest, base_bytes=base, cohort=cohort,
@@ -119,10 +185,15 @@ def run(inputs, restored, output, *, dry_run=False):
              "retained_symbols": len({item["symbol"] for item in checked.manifest["receipts"].values()}),
              "selected_symbols": len(planned.symbols), "provider_state_before": planned.provider_state,
              "exit_code": code, "published": False}
-    batch.write_json(output / "cycle.json", cycle)
+    cycle_sha = batch.write_json(output / "cycle.json", cycle)
+    if retention_guard is not None:
+        retention_guard.authorize_finalization(archive_manifest_sha256=digest, cycle_sha256=cycle_sha,
+                                             archive_object_sha256s=checked.manifest["objects"])
+    retention_report = retention_guard.verify_final() if retention_guard is not None else None
     print(json.dumps({**cycle, "next_batch_first": list(planned.symbols)[:3],
                       "next_batch_last": list(planned.symbols)[-3:],
-                      "acquisition_counts": result.get("counts") if result else None}, sort_keys=True))
+                      "acquisition_counts": result.get("counts") if result else None,
+                      **({"retention": retention_report} if retention_report is not None else {})}, sort_keys=True))
     return code
 
 
@@ -132,5 +203,8 @@ if __name__ == "__main__":
     parser.add_argument("--restored", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--reviewed-plan", type=Path)
+    parser.add_argument("--job-started-at", help="Bounded refresh only: the workflow first-step RFC3339 clock")
     args = parser.parse_args()
-    raise SystemExit(run(args.inputs, args.restored, args.output, dry_run=args.dry_run))
+    raise SystemExit(run(args.inputs, args.restored, args.output, dry_run=args.dry_run,
+                         reviewed_plan=args.reviewed_plan, job_started_at=args.job_started_at))

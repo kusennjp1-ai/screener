@@ -285,7 +285,7 @@ def _write_immutable(path, raw_bytes):
         os.close(descriptor)
 
 
-def _commit(root, manifest, pending, expected_sha256):
+def _commit(root, manifest, pending, expected_sha256, *, maximum_manifest_bytes=None):
     if (len(manifest["objects"]) > MAX_OBJECTS or len(manifest["receipts"]) > MAX_RECEIPTS
             or len(manifest["attempts"]) > MAX_ATTEMPTS
             or sum(item["bytes"] for item in manifest["objects"].values()) > MAX_TOTAL_BYTES):
@@ -293,6 +293,11 @@ def _commit(root, manifest, pending, expected_sha256):
     content = batch._json_bytes(manifest)
     if len(content) > MAX_MANIFEST_BYTES:
         raise InvalidArchive("Archive manifest size bound exceeded")
+    if maximum_manifest_bytes is not None:
+        if type(maximum_manifest_bytes) is not int or not 0 < maximum_manifest_bytes <= MAX_MANIFEST_BYTES:
+            raise InvalidArchive("Invalid bounded-visit manifest reservation")
+        if len(content) > maximum_manifest_bytes:
+            raise InvalidArchive("Bounded-visit manifest reservation exhausted; preserve the partial batch")
     root = _safe(root)
     root.mkdir(parents=True, exist_ok=True)
     lock_path = _safe(root / ".archive.lock")
@@ -420,7 +425,7 @@ def _relative(root, relative):
 
 def merge_batch(root, expected_sha256, *, batch_dir, summary_sha256=None,
                 plan_sha256=None, attempts_sha256=None, cache_sha256=None,
-                base_bytes, cohort, now):
+                base_bytes, cohort, now, maximum_manifest_bytes=None):
     """Atomically retain a completed batch or explicitly trusted crash journal.
 
     Complete batches require their trusted summary SHA. Interrupted batches
@@ -535,7 +540,7 @@ def merge_batch(root, expected_sha256, *, batch_dir, summary_sha256=None,
         "summary_sha256": summary_sha256, "provider_stop": summary.get("provider_stop") if summary else None,
         "execution_stop": summary.get("execution_stop") if summary else None}
     manifest.update(binding=verify_base(base_bytes, cohort, now=now), committed_at=batch.timestamp(now))
-    return _commit(root, manifest, pending, expected_sha256)
+    return _commit(root, manifest, pending, expected_sha256, maximum_manifest_bytes=maximum_manifest_bytes)
 
 
 def _verified(context, contract):
