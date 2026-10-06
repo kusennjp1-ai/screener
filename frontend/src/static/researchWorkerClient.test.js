@@ -1,3 +1,4 @@
+vi.mock('./staticPublication', () => ({ resolveStaticPublication: async ({ publication, generation } = {}) => publication || { mode: 'legacy', baseURL: 'https://example.test/', generation } }));
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadResearchBundle, runDataWorker } from './researchWorkerClient';
 import { RULE_SUMMARY_VERSION } from './researchEngine';
@@ -14,6 +15,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', WorkerMock);
     const fetchJson = vi.fn();
     const pending = loadResearchBundle('research-index-0123456789abcdef.json', '2026-09-29', fetchJson);
+    await Promise.resolve();
     expect(instance.options.type).toBe('module');
     expect(instance.postMessage.mock.calls[0][0]).toMatchObject({ operation: 'research', date: '2026-09-29' });
     const evaluation=instance.postMessage.mock.calls[0][0].evaluation;
@@ -28,6 +30,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const now = Date.parse('2026-10-04T00:00:00Z');
     const pending = loadResearchBundle('research.json', '2026-09-29', vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    await Promise.resolve();
     instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:deadline,assessment_version:RULE_SUMMARY_VERSION}}});
     await expect(pending).rejects.toThrow('Invalid research evaluation deadline');
     expect(instance.terminate).toHaveBeenCalledOnce();
@@ -38,6 +41,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const now = Date.parse('2026-10-04T00:00:00Z');
     const pending = loadResearchBundle('research.json', '2026-09-29', vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    await Promise.resolve();
     const result = {rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:now+1,assessment_version:RULE_SUMMARY_VERSION};
     result[field] = typeof result[field] === 'number' ? result[field] + 1 : 'different';
     instance.onmessage({data:{result}});
@@ -49,6 +53,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const now = Date.parse('2026-10-04T00:00:00Z');
     const pending = loadResearchBundle('research.json', '2026-09-29', vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    await Promise.resolve();
     instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:now+1,assessment_version:RULE_SUMMARY_VERSION}}});
     expect((await pending).next_expiry_at).toBe(now+1);
   });
@@ -57,6 +62,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const now = Date.parse('2026-10-04T00:00:00Z');
     const pending = loadResearchBundle('research.json', expectedDate, vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    await Promise.resolve();
     instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION}}});
     expect((await pending).date).toBe('2026-09-29');
     expect(instance.terminate).toHaveBeenCalledOnce();
@@ -66,6 +72,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const now = Date.parse('2026-10-04T00:00:00Z');
     const pending = loadResearchBundle('research.json', undefined, vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    await Promise.resolve();
     instance.onmessage({data:{result:{rows:[],date:actualDate,evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION}}});
     await expect(pending).rejects.toThrow('Invalid research evaluation');
     expect(instance.terminate).toHaveBeenCalledOnce();
@@ -75,6 +82,7 @@ describe('research worker lifecycle', () => {
     vi.stubGlobal('Worker', class { constructor() { instance = this; } postMessage = vi.fn(); terminate = vi.fn(); });
     const now = Date.parse('2026-10-04T00:00:00Z');
     const pending = loadResearchBundle('research.json', expectedDate, vi.fn(), undefined, {now,generation:'g1',evaluationEpoch:4});
+    await Promise.resolve();
     instance.onmessage({data:{result:{rows:[],date:'2026-09-29',evaluated_at:now,generation:'g1',evaluation_epoch:4,next_expiry_at:null,assessment_version:RULE_SUMMARY_VERSION}}});
     await expect(pending).rejects.toThrow('Obsolete research evaluation');
     expect(instance.terminate).toHaveBeenCalledOnce();

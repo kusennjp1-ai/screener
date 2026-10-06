@@ -24,22 +24,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Resolve the exact versioned exception controls
+        id: controls
+        run: node .github/scripts/financial-performance-exception.mjs controls
       - uses: actions/setup-python@v5
-        if: hashFiles('.github/financial-performance-approval.json') != '' && hashFiles('.github/financial-performance-candidate.json') == ''
+        if: steps.controls.outputs.pending == 'true'
         with:
           python-version: '3.11'
       - name: Restore the original captured Git object
-        if: hashFiles('.github/financial-performance-approval.json') != '' && hashFiles('.github/financial-performance-candidate.json') == ''
-        run: git fetch --no-tags origin 34ecbf507a4270f796078d669c21c373c0d1279a
+        if: steps.controls.outputs.pending == 'true'
+        env:
+          CAPTURE_SHA: ${{ steps.controls.outputs.capture_sha }}
+        run: git fetch --no-tags origin "$CAPTURE_SHA"
       - name: Install isolated offline projection dependencies
-        if: hashFiles('.github/financial-performance-approval.json') != '' && hashFiles('.github/financial-performance-candidate.json') == ''
+        if: steps.controls.outputs.pending == 'true'
         run: |
           python -m venv "$RUNNER_TEMP/financial-replay-runtime"
           "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
           echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
           echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
       - name: Verify isolated offline projection runtime
-        if: hashFiles('.github/financial-performance-approval.json') != '' && hashFiles('.github/financial-performance-candidate.json') == ''
+        if: steps.controls.outputs.pending == 'true'
         env:
           PYTHONPATH: backend
           LITELLM_LOCAL_MODEL_COST_MAP: 'true'

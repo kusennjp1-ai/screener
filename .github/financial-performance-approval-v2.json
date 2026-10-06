@@ -1,0 +1,58 @@
+{
+  "schema_version": "financial-performance-approval-v2",
+  "scope": "one-captured-financial-repair",
+  "approved_at": "2026-10-05T22:19:12Z",
+  "activation_not_after": "2026-10-07T10:46:54.945Z",
+  "captured_ui": {
+    "sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "tree": "1c0219a170dcbdeb1af539e4cf7a04018251ca02",
+    "digest": "72fd791b42a691e286279cada721207a812d13b13233e814d0c2cfde73571788"
+  },
+  "request_sha256": "f56b7ee8f00788fae52f05d9c0760ecc3856b03f60a084d4e3859f90bf983a52",
+  "preview_receipt_sha256": "cf7aa99e329b3c5b9178ccbdbcfe3ea957e3ab89380e00d0cc4325bda2a13f4c",
+  "projection_sha256": "a93042a6f6ad40c9bbf0f518bf5580d1a1a014e2fc70380569edcde76c965b9a",
+  "report_sha256": "229763f913b471200c5a71ba2b1c0dfa819ba0d8bee51b85f5fca9c9adb91ec8",
+  "review": {
+    "path": "docs/design-review/2026-10-06-pr75-packed-nonperformance-1e1943e1.json",
+    "sha256": "3724d07f2652b482ee58ff35d75736168887279f858d44947b082bd29523beac"
+  },
+  "failures": [
+    "1440: D9 first paint opportunity 58.4ms > 50ms",
+    "1440: D9 run 1: first frame 58.4000000001397ms (limit 50ms)",
+    "390: D9 first paint opportunity 51.1ms > 50ms",
+    "390: D9 run 1: first frame 51.10000000009313ms (limit 50ms)"
+  ],
+  "budgets": {
+    "p1_ready_ms": 3500,
+    "p1_switch_ms": 400,
+    "p1_long_task_ms": 200,
+    "q1_ready_ms": 4200,
+    "q1_switch_ms": 480,
+    "radar_ms": 50
+  },
+  "transport_sha256": "93c5e3e5afbd62200dc38f977255625a96492624ee4aacf3bfb0fbc222eaa4e5",
+  "captured_code_sha256": "59f2aefe53cc1099604212562c11133253cdd40018b702095cec29a68b1e86ba",
+  "controller_code_sha256": "3b6874904a7c906031a746585af40bc1c4a996fba128a998287b1fd70843322f",
+  "controller_changes": {
+    ".github/scripts/financial-performance-exception-v2.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "76585013dd996257043e747ca4d87cee8978d000"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "03ba6305cfaa56cc6ccc7f09be0c6f910b68b771"
+      }
+    },
+    "contracts/financial_performance_exception_v2.json": {
+      "before": {
+        "mode": "100644",
+        "sha": "205562a8fed92d9ad8774bfbc79cd4ece23364c1"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "7045f3b14ed35bf15a0309e8ed8267ae3b18b274"
+      }
+    }
+  }
+}

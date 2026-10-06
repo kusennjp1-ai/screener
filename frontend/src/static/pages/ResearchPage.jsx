@@ -5,6 +5,7 @@ import ConnectionStatus from '../components/ConnectionStatus';
 import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
+import ResearchFreshnessNotice from '../components/ResearchFreshnessNotice';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, prepareSessionCurrent, sessionCurrentFromIntervals } from '../researchPresentation';
@@ -67,7 +68,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [watch, setWatch] = useState(() => {
     try { const value = JSON.parse(localStorage.getItem('research-watch') || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; }
   });
-  const bundle = useResearchBundle(researchPath, entry.as_of_date, version);
+  const bundle = useResearchBundle(researchPath, entry.as_of_date, version, entry.publication);
   const reference = useQuery({ queryKey: ['researchReference', version], queryFn: async () => {
     const response = await fetch(`${import.meta.env.BASE_URL}ibd-reference.json`, { cache: 'no-cache' });
     return response.ok ? response.json() : null;
@@ -89,7 +90,7 @@ export default function ResearchPage({compareOnly=false}) {
     enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity, placeholderData:()=>undefined,
     queryFn:async ({queryKey}) => {
       const [,symbol,path,date,generation] = queryKey;
-      const value = await fetchStaticJson(path);
+      const value = await fetchStaticJson(path, { generation, publication: entry.publication });
       if (value.symbol !== symbol || value.as_of_date !== date) throw Error('Detail identity mismatch');
       return {value,symbol,date,generation,path};
     }});
@@ -130,7 +131,7 @@ export default function ResearchPage({compareOnly=false}) {
     return () => cancelAnimationFrame(frame);
   }, [selected?.symbol, location.key, location.pathname, location.search]);
   const embeddedCharts = useMemo(() => rows.some(r=>Object.hasOwn(r,'chart_path')) ? {symbols:rows.filter(r=>r.chart_path).map(r=>({symbol:r.symbol,path:r.chart_path}))} : null, [rows]);
-  const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts);
+  const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts, entry.publication);
   const index = {data:embeddedCharts || fetchedIndex.data};
   const chartEntry = index.data?.symbols?.find(r => r.symbol === selected?.symbol);
   const endpoint = import.meta.env.VITE_RESEARCH_QUOTE_URL;
@@ -221,13 +222,17 @@ export default function ResearchPage({compareOnly=false}) {
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
   const actualView=compareOnly?'charts':view;
+  const freshnessNotice=bundle.data&&freshness.state!=='recent'
+    ? <ResearchFreshnessNotice date={bundle.data.date||entry.as_of_date} freshness={freshness}/>
+    : null;
+  const detailFreshness=smallScreen&&mobileView==='detail'&&!compareOnly;
   const methodControls=useMemo(()=><div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>,[method]);
   return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
-    {!compareOnly&&<ResearchHero loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
-    {compareOnly&&<header className="comparison-page-heading"><div><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div><Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
+    {!compareOnly&&<ResearchHero freshnessNotice={detailFreshness?null:freshnessNotice} loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
+    {compareOnly&&<header className="comparison-page-heading"><div className="comparison-page-title"><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div>{freshnessNotice}<Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
-    {bundle.data&&freshness.state!=='recent'&&<Alert severity="warning">{freshness.state==='old'?`分析基準日は米国東部の日付から${freshness.days}暦日前です。更新日時と価格の基準日は別です。`:'分析基準日が未確認、または未来の日付です。'}</Alert>}
+    {detailFreshness&&freshnessNotice}
     <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>
       <ResearchSearch value={search} onChange={setSearch}/>
@@ -266,6 +271,6 @@ export default function ResearchPage({compareOnly=false}) {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>}
-    {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
+    {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} publication={entry.publication} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
   </Box>;
 }

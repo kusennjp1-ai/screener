@@ -1,3 +1,4 @@
+import { prepareLegacyStaticFetch } from '../../test/legacyStaticFetch';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -60,6 +61,7 @@ const deferred = () => {
 };
 
 const renderPage = () => {
+  prepareLegacyStaticFetch(globalThis.fetch);
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {

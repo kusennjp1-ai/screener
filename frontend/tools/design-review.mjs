@@ -15,6 +15,7 @@ import { verifyFinancialCases, financialDesignScreens } from './financial-design
 import { verifyDailyObservationCases, dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
 import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
+import { recordProductionBootstrapDiagnostic } from './production-bootstrap-diagnostic.mjs';
 
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
 const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
@@ -381,6 +382,12 @@ if (radar) for (const viewport of viewportSizes) {
   report.radar.push({ viewport, cpu_rate: 4, harness_version: RADAR_HARNESS_VERSION, method: 'actual SetupRadar in production CSS ancestry and original fixed component slot; 207 canonical real 2026-09-29 observations; cold initial mount, synchronous layout and next animation frame with same-task pixel/CSS/transform visibility evidence; no prerender or glyph warmup; not comparable to former bare-div harness', runs });
   await context.close();
 }
+// A preview descriptor is smaller than the production price-ledger receipt.
+// Retain the primary exact-candidate trials above and expose that extra cost
+// in separate, explicitly synthetic metadata trials using the actual app.
+try{report.production_bootstrap_diagnostic=await recordProductionBootstrapDiagnostic({browser,url:current.url,currentRoot,viewports:viewportSizes,readySelector,
+  onProgress:async diagnostic=>{report.production_bootstrap_diagnostic=diagnostic;await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2));}});}
+catch(error){if(report.production_bootstrap_diagnostic)report.production_bootstrap_diagnostic.status='interrupted';report.failures.push(`Production-shaped bootstrap diagnostic unavailable: ${error.message}`);}
 await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();
 if (report.profile_diagnostics_attempted) {
   try {

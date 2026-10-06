@@ -1,3 +1,4 @@
+import { publicationQueryIdentity } from '../staticPublication';
 import { projectFinancialRow } from '../financialCurrent';
 import { useFinancialClock } from '../useFinancialClock';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -47,13 +48,13 @@ function StaticScanPage() {
     [manifestQuery.data, selectedMarket],
   );
   const scanManifestQuery = useQuery({
-    queryKey: ['staticScanManifest', marketEntry.pages?.scan?.list_path || marketEntry.pages?.scan?.path, generation],
+    queryKey: ['staticScanManifest', marketEntry.pages?.scan?.list_path || marketEntry.pages?.scan?.path, generation, publicationQueryIdentity(marketEntry.publication)],
     placeholderData: () => undefined,
-    queryFn: () => fetchStaticJson(marketEntry.pages.scan.list_path || marketEntry.pages.scan.path),
+    queryFn: () => fetchStaticJson(marketEntry.pages.scan.list_path || marketEntry.pages.scan.path, { publication: marketEntry.publication }),
     enabled: Boolean(marketEntry.pages?.scan?.path),
     staleTime: Infinity,
   });
-  const chartIndexQuery = useStaticChartIndex(scanManifestQuery.data?.charts?.path, !scanManifestQuery.data?.embedded_chart_paths);
+  const chartIndexQuery = useStaticChartIndex(scanManifestQuery.data?.charts?.path, !scanManifestQuery.data?.embedded_chart_paths, marketEntry.publication);
 
   const theme = useTheme();
   // 初期状態は適用件数を残して折りたたみ、結果を先に見せる。
@@ -159,7 +160,7 @@ function StaticScanPage() {
       try {
         for (let index = 0; index < chunks.length; index += HYDRATION_BATCH_SIZE) {
           const batch = chunks.slice(index, index + HYDRATION_BATCH_SIZE);
-          const payloads = await Promise.all(batch.map((chunk) => fetchStaticJson(chunk.path)));
+          const payloads = await Promise.all(batch.map((chunk) => fetchStaticJson(chunk.path, { publication: marketEntry.publication, sha256: chunk.sha256 })));
           if (cancelled) {
             return;
           }
@@ -208,7 +209,7 @@ function StaticScanPage() {
     return () => {
       cancelled = true;
     };
-  }, [scanManifestQuery.data, generation]);
+  }, [scanManifestQuery.data, generation, marketEntry.publication]);
   const now = useFinancialClock(hydrationState.rows);
   const hydrationMatches = hydrationState.generation === generation && hydrationState.manifest === scanManifestQuery.data;
   const hydrationComplete = hydrationMatches && hydrationState.status === 'complete';
@@ -458,6 +459,7 @@ function StaticScanPage() {
         initialSymbol={selectedChartSymbol}
         researchRows={hydratedRows}
         generation={generation}
+        publication={marketEntry.publication}
         now={now}
         chartIndex={effectiveChartIndex}
         date={scanManifestQuery.data.as_of_date}

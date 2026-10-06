@@ -5,13 +5,13 @@ import { loadResearchBundle, refreshResearchBundle } from './researchWorkerClien
 import { researchBundleCurrent, validResearchEvaluation } from './researchPreprocess';
 import { useFinancialDeadlineClock } from './useFinancialClock';
 
-export function useResearchBundle(path, date, version) {
+export function useResearchBundle(path, date, version, publication) {
   const client = useQueryClient();
   const epoch = useRef(0);
   const query = useQuery({
     queryKey: ['researchRows', path, version], enabled: Boolean(path),
     placeholderData: () => undefined, staleTime: Infinity, structuralSharing: false,
-    queryFn: ({ signal }) => loadResearchBundle(path, date, fetchStaticJson, signal, { now:Date.now(), generation:version ?? null, evaluationEpoch:++epoch.current }),
+    queryFn: ({ signal }) => loadResearchBundle(path, date, fetchStaticJson, signal, { now:Date.now(), generation:version ?? null, evaluationEpoch:++epoch.current, publication }),
   });
   // Worker completion binds this validated deadline to the requested snapshot,
   // generation and evaluation epoch. Re-scanning its cloned rows here would

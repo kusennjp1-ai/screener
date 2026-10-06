@@ -1,39 +1,25 @@
 import { projectFinancialPayload } from './financialCurrent';
 import { useQuery } from '@tanstack/react-query';
-import { getStaticDataUrl } from '../config/runtimeMode';
 import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 import { runDataWorker } from './researchWorkerClient';
 import { summarizeWorkbench } from './workbenchSummary';
+import { loadStaticManifest, publicationForManifest, publicationQueryIdentity, readStaticPayload, resolveStaticPublication } from './staticPublication';
 
-export const fetchStaticJson = async (relativePath, { sha256, worker = false, now, asOfDate, market } = {}) => {
+export const fetchStaticJson = async (relativePath, { sha256, worker = false, now, asOfDate, market, publication, generation, signal } = {}) => {
+  if (relativePath === 'manifest.json') return loadStaticManifest();
+  const pinned = await resolveStaticPublication({ publication, generation });
   const currentAsset = /(?:^|\/)(?:research-details\/|verified-charts\/|charts\/|scan\/|scan-list\/|groups\.json$|home\.json$)/.test(relativePath);
   const project = value => currentAsset ? projectFinancialPayload(value,{now:now === undefined?Date.now():now,asOfDate,market}) : value;
-  if (worker && typeof Worker !== 'undefined') return project(await runDataWorker({ operation: ['workbench', 'workbench-summary'].includes(worker) ? worker : 'json', url: new URL(getStaticDataUrl(relativePath), location.href).href, sha256 }));
-  const response = await fetch(getStaticDataUrl(relativePath), {
-    cache: /(?:index|chunk|workbench(?:-summary)?|research-details\/[^/]+|verified-charts\/[^/]+)-[a-f0-9]{16}\.json$/.test(relativePath) ? 'default' : 'no-cache',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to load static data: ${relativePath} (${response.status})`);
-  }
-
-  if (sha256) {
-    const raw=await response.text();
-    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
-    const actual=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-    if(actual!==sha256) throw new Error('Static asset integrity mismatch');
-    const value = JSON.parse(raw);
-    return worker === 'workbench-summary' ? summarizeWorkbench(value) : project(value);
-  }
-  const value = await response.json();
-  return worker === 'workbench-summary' ? summarizeWorkbench(value) : project(value);
+  const useWorker = worker && typeof Worker !== 'undefined';
+  const value = useWorker
+    ? await runDataWorker({ operation: ['workbench', 'workbench-summary'].includes(worker) ? worker : 'json', path: relativePath, publication: pinned, sha256 }, signal)
+    : await readStaticPayload(relativePath, { publication: pinned, sha256, signal });
+  return !useWorker && worker === 'workbench-summary' ? summarizeWorkbench(value) : project(value);
 };
 
 export const useStaticManifest = () => useQuery({
   queryKey: ['staticManifest'],
+  structuralSharing: false,
   queryFn: () => fetchStaticJson('manifest.json'),
   staleTime: 60000,
   refetchInterval: 60000,
@@ -43,8 +29,9 @@ export const useStaticManifest = () => useQuery({
 export const useStaticGroupsRRG = (marketEntry) => {
   const path = marketEntry?.assets?.groups_rrg?.path;
   return useQuery({
-    queryKey: ['staticGroupsRRG', path],
-    queryFn: () => fetchStaticJson(path),
+    queryKey: ['staticGroupsRRG', path, publicationQueryIdentity(marketEntry?.publication)],
+    placeholderData: () => undefined,
+    queryFn: () => fetchStaticJson(path, { publication: marketEntry.publication }),
     enabled: Boolean(path),
     staleTime: Infinity,
     gcTime: Infinity,
@@ -71,6 +58,7 @@ export const resolveStaticMarketEntry = (manifest, selectedMarket) => {
   if (marketEntry) {
     return {
       market: resolvedMarket,
+      publication: publicationForManifest(manifest),
       display_name: marketEntry.display_name || resolvedMarket,
       as_of_date: marketEntry.as_of_date || manifest?.as_of_date || null,
       features: marketEntry.features || {},
@@ -82,6 +70,7 @@ export const resolveStaticMarketEntry = (manifest, selectedMarket) => {
 
   return {
     market: resolvedMarket,
+    publication: publicationForManifest(manifest),
     display_name: resolvedMarket,
     as_of_date: manifest?.as_of_date || null,
     features: manifest?.features || {},

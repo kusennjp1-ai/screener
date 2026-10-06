@@ -6,7 +6,7 @@ import { reviewBookPattern } from '../bookPatternReview';
 const show = n => typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2).replace(/^-/, '−') : '未確認';
 const fields = [['advanceStart', '先行上昇の起点'], ['baseStart', 'ベース開始'], ['troughDate', 'ベースの底'], ['cheatStart', 'チート開始'], ['cheatEnd', 'チート終了'], ['breakoutDate', 'ブレイク日（未発生なら空欄）']];
 
-function PatternForm({ row, entry, date }) {
+function PatternForm({ row, entry, date, generation }) {
   const storageKey = `book-pattern-review-v1:${row.symbol}:${date}`;
   const saved = () => { try { const data = JSON.parse(localStorage.getItem(storageKey)); return data?.symbol === row.symbol && data?.date === date && data.review && typeof data.review === 'object' && ['vcp', 'three-c', 'low-cheat', 'power-play'].includes(data.review.pattern) ? data.review : null; } catch { return null; } };
   const [form, setForm] = useState(() => saved() || { pattern: 'three-c', source: '', tickSize: .01 });
@@ -17,7 +17,7 @@ function PatternForm({ row, entry, date }) {
   async function calculate(event) {
     event.preventDefault(); setLoading(true); setError(''); setResult(null);
     try {
-      const payload = await fetchStaticChartPayload(entry.path);
+      const payload = await fetchStaticChartPayload(entry.path, { generation });
       const review = { ...form, ipoPrice: form.ipoPrice ? Number(form.ipoPrice) : null, context, reviewedAt: new Date().toISOString() };
       const evidence = reviewBookPattern(row, payload, date, review);
       setResult(evidence);

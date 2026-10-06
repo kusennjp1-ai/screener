@@ -1,3 +1,4 @@
+import { publicationForManifest, publicationQueryIdentity } from '../staticPublication';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -33,9 +34,12 @@ function SummaryMetric({ label, value }) {
 
 function StaticThemesPage() {
   const manifestQuery = useStaticManifest();
+  const publication = publicationForManifest(manifestQuery.data);
+  const publicationIdentity = publicationQueryIdentity(publication);
   const themesIndexQuery = useQuery({
-    queryKey: ['staticThemesIndex', manifestQuery.data?.pages?.themes?.path],
-    queryFn: () => fetchStaticJson(manifestQuery.data.pages.themes.path),
+    queryKey: ['staticThemesIndex', manifestQuery.data?.pages?.themes?.path, publicationIdentity],
+    placeholderData: () => undefined,
+    queryFn: () => fetchStaticJson(manifestQuery.data.pages.themes.path, { publication }),
     enabled: Boolean(manifestQuery.data?.pages?.themes?.path),
     staleTime: Infinity,
   });
@@ -65,8 +69,9 @@ function StaticThemesPage() {
   const activeThemeView = activeVariantKey?.split(':')[1] || themeView;
   const isFallbackActive = Boolean(activeVariantKey && activeVariantKey !== variantKey);
   const variantQuery = useQuery({
-    queryKey: ['staticThemesVariant', activeVariantMeta?.path],
-    queryFn: () => fetchStaticJson(activeVariantMeta.path),
+    queryKey: ['staticThemesVariant', activeVariantMeta?.path, publicationIdentity],
+    placeholderData: () => undefined,
+    queryFn: () => fetchStaticJson(activeVariantMeta.path, { publication }),
     enabled: Boolean(activeVariantMeta?.available && activeVariantMeta?.path),
     staleTime: Infinity,
   });

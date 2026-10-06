@@ -5,7 +5,7 @@ import { buildBookExitEvidence } from '../bookExitEvidence';
 const n = v => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2).replace(/^-/, '−') : '未確認';
 const yes = v => v === null ? '未確認' : v ? '該当' : '非該当';
 
-function ExitForm({ row, entry, date }) {
+function ExitForm({ row, entry, date, generation }) {
   const [form, setForm] = useState({ breakoutDate: '', reviewDate: '', source: '', stage: '', baseCount: '', setupConfirmed: false });
   const [result, setResult] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState('');
@@ -14,7 +14,7 @@ function ExitForm({ row, entry, date }) {
   async function calculate(e) {
     e.preventDefault(); setResult(null); setError(''); setSaved(''); setLoading(true);
     try {
-      const evidence = buildBookExitEvidence(row, await fetchStaticChartPayload(entry.path), date, form);
+      const evidence = buildBookExitEvidence(row, await fetchStaticChartPayload(entry.path, { generation }), date, form);
       setResult(evidence);
       if (evidence.valid && form.setupConfirmed === true) {
         try {
