@@ -2,7 +2,7 @@ import {exceptionType, readExceptionPin, readExceptionReleaseIntent, selectExcep
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { applyPendingCorrectionHold, readPendingCorrection } from './pending-financial-correction.mjs';
 import { contract, parseCorrectionIntent, verifyCorrectionSource, verifyCorrectionChecks, verifyCorrectionConsumerChecks, restoreCorrectionSource, verifyConsumerCapability, compareCorrectionData, assertCorrectionProgress, validateCorrectionReceipt, dataInventory, digest } from './financial-correction.mjs';
 import { checkPublication, githubApi, sameRepository, workflowPath } from './publication-gate.mjs';
@@ -181,6 +181,11 @@ async function plan(design = false) {
 }
 async function recheck() {
   const state = readState();
+  // Queued runs can retain older workflow YAML while checking out current main.
+  // Enforce the same physical payload bound through their existing recheck too.
+  // Prepare-only correction archives are never deployed and keep their own bounds.
+  if (!state.correction) execFileSync('python3', [fileURLToPath(new URL('./check-pages-payload.py', import.meta.url)),
+    resolve('release/frontend/dist')], { stdio: 'inherit' });
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
   const gated=checkPublication(event, state.controllerSha, repository());
   const decision = state.activation?gated:applyPendingCorrectionHold(gated, readPendingCorrection());
@@ -495,11 +500,6 @@ function exportMetadata() {
     artifact_name: `static-site-data-${runId}-${attempt}`, manifest_json: bytes.toString('utf8'), manifest_sha256: sha256(bytes) }));
 }
 async function runCommand(command) {
-  // Temporary publication-wide hold while the hosted payload exceeds Pages' 1 GB limit.
-  // Replace this hold only with a tested physical-payload gate; collection/design remain available.
-  const capacityHold = 'Pages publication paused: resolve the documented 1 GB hosted-site limit';
-  if (command === 'plan') { output({ publish: false }); console.log(capacityHold); return; }
-  if (command === 'recheck') throw Error(capacityHold);
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); materialize(readState().source, resolve('frontend/public')); }
   else if (command === 'restore') { const state = readState(); if(state.activation)restoreActivation(state);else{materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
