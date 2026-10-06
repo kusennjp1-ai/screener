@@ -101,6 +101,31 @@ def inspect_containers(records):
     return result
 
 
+def verified_pytest_summary(root):
+    """Count emitted cases separately from pytest's subtest-inclusive totals."""
+    outcomes = ("failures", "errors", "skipped")
+    declared = {name: 0 for name in ("tests", *outcomes)}
+    for suite in root.iter("testsuite"):
+        for name in declared:
+            declared[name] += int(suite.get(name, "0"))
+    cases = list(root.iter("testcase"))
+    redis_module = "tests.integration.test_price_pilot_redis"
+    totals = {
+        "tests": len(cases),
+        "redis_tests": sum(case.get("classname", "") == redis_module
+                           or case.get("classname", "").startswith(redis_module + ".")
+                           for case in cases),
+        "upstream_declared": declared,
+        **{name: sum(case.find(tag) is not None for case in cases)
+           for name, tag in (("failures", "failure"), ("errors", "error"), ("skipped", "skipped"))},
+    }
+    # A declared/actual test-count difference alone is normal with unittest
+    # subtests. Failures, errors and skips from either representation still fail.
+    if not cases or any(totals[name] or declared[name] for name in outcomes):
+        raise RuntimeError(f"required test suite did not pass without skips: {totals}")
+    return totals
+
+
 def prepare(args):
     root = Path(args.root).resolve()
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
@@ -110,8 +135,14 @@ def prepare(args):
              root / "backend/app/scripts/bounded_price_recovery.py",
              root / "backend/app/services/bounded_price_recovery.py",
              root / "backend/app/services/price_pilot_admission.py",
+             root / "backend/app/services/price_pilot_push.py",
+             root / "backend/app/scripts/price_pilot_push.py",
+             root / ".github/workflows/four-symbol-price-push.yml",
+             *root.glob(".github/price-pilot-push-*.json"),
              root / "backend/tests/unit/test_bounded_price_recovery.py",
              root / "backend/tests/unit/test_price_pilot_admission.py",
+             root / "backend/tests/unit/test_price_pilot_push.py",
+             root / "backend/tests/unit/test_price_pilot_push_workflow.py",
              root / "backend/tests/integration/test_price_pilot_redis.py",
              root / "backend/tests/fixtures/bounded_price_pilot_transport.json",
              *root.glob("backend/requirements*.txt"),
@@ -183,6 +214,8 @@ def check(args):
             [sys.executable, "-m", "pytest", "--noconftest", "-p", "no:cacheprovider", "-q",
              "backend/tests/unit/test_bounded_price_recovery.py",
              "backend/tests/unit/test_price_pilot_admission.py",
+             "backend/tests/unit/test_price_pilot_push.py",
+             "backend/tests/unit/test_price_pilot_push_workflow.py",
              "backend/tests/integration/test_price_pilot_redis.py",
              f"--junitxml={artifacts / 'pytest.xml'}"],
         ]
@@ -192,14 +225,7 @@ def check(args):
             print(completed.stdout, end="", flush=True)
             if completed.returncode:
                 raise RuntimeError(f"test command {index + 1} exited {completed.returncode}")
-        suites = ET.parse(artifacts / "pytest.xml").getroot().iter("testsuite")
-        totals = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
-        for suite in suites:
-            for name in totals:
-                totals[name] += int(suite.get(name, "0"))
-        if totals["tests"] == 0 or any(totals[name] for name in ("failures", "errors", "skipped")):
-            raise RuntimeError(f"required test suite did not pass without skips: {totals}")
-        report["pytest"] = totals
+        report["pytest"] = verified_pytest_summary(ET.parse(artifacts / "pytest.xml").getroot())
         report["status"] = "passed_offline_only"
         return 0
     except Exception as exc:

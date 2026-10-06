@@ -152,8 +152,16 @@ def consume_attempt(approval, admission_sha256, *, environment=None, api=github_
     if not re.fullmatch(r'[a-f0-9]{64}', admission_sha256):
         raise ValueError('Admission must have its full verified file hash')
     environment = os.environ if environment is None else environment
+    if environment.get('GITHUB_EVENT_NAME') == 'push' and approval.get('source_registration') is not None:
+        from .price_pilot_push import consume_push_attempt
+        return consume_push_attempt(approval, admission_sha256, environment=environment, api=api, clock=clock)
     context = context_from_environment(environment, approval)
     live = check_current_attempt(context, api)
+    return consume_validated_context(live, admission_sha256, environment=environment,
+        recheck=lambda: check_current_attempt(context,api), clock=clock)
+
+
+def consume_validated_context(live, admission_sha256, *, environment, recheck, clock):
     root = Path(environment.get('RUNNER_TEMP', ''))
     if not root.is_absolute() or not root.is_dir() or root.is_symlink():
         raise ValueError("Trusted runner temporary directory is unavailable")
@@ -176,7 +184,7 @@ def consume_attempt(approval, admission_sha256, *, environment=None, api=github_
         raise ValueError('Attempt marker outcome is uncertain; do not retry')
     # Authority can advance while the marker is written. A failed reread spends
     # the attempt and cannot restore/reset the marker.
-    if check_current_attempt(context, api) != live:
+    if recheck() != live:
         raise ValueError('Attempt authority changed after consumption')
     return claim
 

@@ -6,6 +6,7 @@ import shlex
 from types import SimpleNamespace
 import unittest
 from urllib.parse import urlsplit
+import xml.etree.ElementTree as ET
 
 spec = importlib.util.spec_from_file_location("offline_check", Path(__file__).with_name("price-pilot-offline-check.py"))
 check = importlib.util.module_from_spec(spec)
@@ -119,6 +120,46 @@ class OfflineHarnessTests(unittest.TestCase):
                     check.inspect_containers(mutated)
         with self.assertRaises(ValueError):
             check.inspect_containers(records[:2])
+
+
+class PytestReportTests(unittest.TestCase):
+    def report(self):
+        root = ET.Element("testsuites")
+        suite = ET.SubElement(root, "testsuite", tests="144", failures="0", errors="0", skipped="0")
+        for index in range(106):
+            module = ("tests.integration.test_price_pilot_redis" if index < 66
+                      else "tests.unit.test_bounded_price_recovery.Example")
+            ET.SubElement(suite, "testcase", classname=module, name=f"test_{index}")
+        return root
+
+    def test_subtest_inclusive_declared_count_does_not_inflate_actual_cases(self):
+        summary = check.verified_pytest_summary(self.report())
+        self.assertEqual(summary["tests"], 106)
+        self.assertEqual(summary["redis_tests"], 66)
+        self.assertEqual(summary["upstream_declared"],
+                         {"tests": 144, "failures": 0, "errors": 0, "skipped": 0})
+        self.assertEqual([summary[name] for name in ("failures", "errors", "skipped")], [0, 0, 0])
+
+    def test_declared_failure_error_or_skip_still_fails(self):
+        for outcome in ("failures", "errors", "skipped"):
+            with self.subTest(outcome=outcome):
+                root = self.report()
+                root.find("testsuite").set(outcome, "1")
+                with self.assertRaisesRegex(RuntimeError, "did not pass without skips"):
+                    check.verified_pytest_summary(root)
+
+    def test_testcase_failure_error_or_skip_cannot_hide_behind_zero_totals(self):
+        for tag in ("failure", "error", "skipped"):
+            with self.subTest(tag=tag):
+                root = self.report()
+                ET.SubElement(root.find(".//testcase"), tag)
+                with self.assertRaisesRegex(RuntimeError, "did not pass without skips"):
+                    check.verified_pytest_summary(root)
+
+    def test_nonzero_declared_count_without_any_testcases_fails(self):
+        root = ET.fromstring('<testsuites><testsuite tests="144" failures="0" errors="0" skipped="0"/></testsuites>')
+        with self.assertRaisesRegex(RuntimeError, "did not pass without skips"):
+            check.verified_pytest_summary(root)
 
 
 if __name__ == "__main__":

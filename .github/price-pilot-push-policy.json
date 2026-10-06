@@ -1,0 +1,5 @@
+{
+  "schema_version": "four-symbol-price-push-policy-v1",
+  "branch": "capture/four-symbol-price-pilot",
+  "enabled": false
+}
