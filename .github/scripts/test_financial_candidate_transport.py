@@ -288,7 +288,7 @@ class CandidateTransportTests(unittest.TestCase):
     def test_production_bounds_and_workflow_scope(self):
         size, chunk = transport.SOURCE["size_in_bytes"], transport.PART_BYTES
         self.assertEqual([min(chunk, size - start) for start in range(0, size, chunk)],
-                         [419430400, 419430400, 223064601])
+                         [419430400, 419430400, 223063062])
         # Stored deflate block overhead plus a generous ZIP header allowance.
         self.assertLess(chunk + 5 * ((chunk + 16382) // 16383) + 65536, transport.DOWNLOAD_LIMIT)
         workflow = SCRIPT.parents[1] / "workflows/financial-candidate-transport.yml"

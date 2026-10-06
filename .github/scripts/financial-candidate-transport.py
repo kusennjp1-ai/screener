@@ -24,16 +24,16 @@ SOURCE = {
     "repository": REPOSITORY,
     "workflow": ".github/workflows/financial-performance-certification.yml",
     "workflow_name": "Financial Performance Certification",
-    "head_sha": "cb186d2c7b918b2d4e8f153160a6bd0bded2b0cb",
+    "head_sha": "5098a762f640d8d477594cbe337cf12baf5866a5",
     "head_branch": "main",
-    "run_id": 37428810908,
+    "run_id": 37445347016,
     "run_attempt": 1,
-    "job_id": 112154560627,
+    "job_id": 112208692939,
     "job_name": "Certify exact financial performance exception",
-    "artifact_id": 11397016433,
-    "artifact_name": "financial-performance-candidate-37428810908-1",
-    "size_in_bytes": 1061925401,
-    "sha256": "ea6918a778424a2e86eb76239514db23c499cacf3dfaaca23c81b469e91b2a1f",
+    "artifact_id": 11404350877,
+    "artifact_name": "financial-performance-candidate-37445347016-1",
+    "size_in_bytes": 1061923862,
+    "sha256": "05bfb0f4406ebc617ca69faa8e3e33a98862b1df8e783c4ec6a2dcb6c5f912ca",
 }
 PART_BYTES = 400 * 1024 * 1024
 DOWNLOAD_LIMIT = 512 * 1024 * 1024
