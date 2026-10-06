@@ -32,7 +32,7 @@
   },
   "transport_sha256": "93c5e3e5afbd62200dc38f977255625a96492624ee4aacf3bfb0fbc222eaa4e5",
   "captured_code_sha256": "59f2aefe53cc1099604212562c11133253cdd40018b702095cec29a68b1e86ba",
-  "controller_code_sha256": "3b6874904a7c906031a746585af40bc1c4a996fba128a998287b1fd70843322f",
+  "controller_code_sha256": "8b7ee19a07422ac69137762d0d63da1d792be3afd523805bc7e235d57e9175c9",
   "controller_changes": {
     ".github/scripts/financial-performance-exception-v2.test.mjs": {
       "before": {
@@ -42,6 +42,26 @@
       "after": {
         "mode": "100644",
         "sha": "03ba6305cfaa56cc6ccc7f09be0c6f910b68b771"
+      }
+    },
+    ".github/scripts/financial-performance-exception.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "e7fdec3d6d7296dd460c1b51911ae60a805094f7"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "4c2e711478e1f2ec971d096656e8b0188acda353"
+      }
+    },
+    ".github/scripts/financial-performance-exception.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "4f92d7174c16b02309de79713cf36205c14ab6d3"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "0a6b60f9fceb912c6545137731b0a7cb2debee08"
       }
     },
     "contracts/financial_performance_exception_v2.json": {
