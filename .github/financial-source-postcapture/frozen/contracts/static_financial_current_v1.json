@@ -1,0 +1,187 @@
+{
+  "schema": "static-financial-current-v2",
+  "version": 2,
+  "field_order": [
+    "eps_growth_qq",
+    "eps_growth_yy",
+    "sales_growth_qq",
+    "sales_growth_yy",
+    "annual_eps_growth_3y",
+    "eps_5yr_cagr",
+    "eps_q1_yoy",
+    "eps_q2_yoy",
+    "eps_raw_score",
+    "revenue_growth",
+    "profit_margin",
+    "roe",
+    "eps_rating",
+    "smr_rating",
+    "composite_rating",
+    "composite_rating_score"
+  ],
+  "aliases": {
+    "eps_growth_quarterly": "eps_growth_qq",
+    "eps_growth_annual": "eps_growth_yy"
+  },
+  "summary_keys": [
+    "v",
+    "t",
+    "s",
+    "m",
+    "a",
+    "r",
+    "p"
+  ],
+  "proof_tuple": [
+    "value",
+    "contract_id",
+    "metric",
+    "periods_newest_first",
+    "observed_at_ms",
+    "expires_at_ms",
+    "comparison_code",
+    "calculation_code"
+  ],
+  "reason_codes": {
+    "0": "available",
+    "1": "missing_or_invalid_value",
+    "2": "missing_evidence",
+    "3": "invalid_envelope",
+    "4": "identity_mismatch",
+    "5": "value_mismatch",
+    "6": "future_source_timestamp",
+    "7": "stale_source",
+    "8": "unsupported_contract",
+    "9": "invalid_reporting_period",
+    "a": "stale_reporting_period",
+    "b": "unverified_derivation_and_cohort",
+    "c": "invalid_evaluation_context",
+    "d": "alias_conflict",
+    "e": "invalid_source_inputs",
+    "f": "nonpositive_comparison_base"
+  },
+  "source_max_age_ms": 604800000,
+  "quarter_max_age_days": 190,
+  "annual_max_age_days": 550,
+  "year_gap_days": [
+    345,
+    385
+  ],
+  "expiry_boundary": "available while now <= expires_at_ms; period expiry is final millisecond of latest-period plus max-age UTC day",
+  "contracts": {
+    "0": {
+      "fields": [
+        "eps_growth_qq",
+        "sales_growth_qq"
+      ],
+      "source": "yfinance",
+      "producer": "yfinance.quarterly_income_stmt/transport-capture-v1",
+      "basis": "quarterly_qoq/v1",
+      "unit": "percent_points",
+      "cadence": "quarterly",
+      "quarter_gap_days": [
+        70,
+        130
+      ],
+      "period_count": [
+        2,
+        2
+      ],
+      "comparison": "quarter_over_quarter"
+    },
+    "1": {
+      "fields": [
+        "eps_growth_yy",
+        "sales_growth_yy"
+      ],
+      "source": "yfinance",
+      "producer": "yfinance.quarterly_income_stmt/transport-capture-v1",
+      "basis": "comparable_period_yoy/v1",
+      "unit": "percent_points",
+      "cadence": "quarterly",
+      "quarter_gap_days": [
+        70,
+        130
+      ],
+      "period_count": [
+        5,
+        5
+      ],
+      "comparison": "quarter_year_over_year"
+    },
+    "2": {
+      "fields": [
+        "eps_q1_yoy",
+        "eps_q2_yoy"
+      ],
+      "source": "yfinance",
+      "producer": "yfinance.quarterly_income_stmt/transport-capture-v1",
+      "basis": "quarterly_eps_yoy/v1",
+      "unit": "percent_points",
+      "cadence": "quarterly",
+      "quarter_gap_days": [
+        70,
+        110
+      ],
+      "period_count": [
+        5,
+        5
+      ],
+      "comparison": "quarter_year_over_year"
+    },
+    "3": {
+      "fields": [
+        "eps_5yr_cagr"
+      ],
+      "source": "yfinance",
+      "producer": "yfinance.income_stmt/transport-capture-v1",
+      "basis": "annual_eps_cagr/v1",
+      "unit": "percent_points",
+      "cadence": "annual",
+      "period_count": [
+        2,
+        5
+      ],
+      "comparison": "positive_annual_eps_cagr"
+    }
+  },
+  "metrics": {
+    "eps": [
+      "Diluted EPS",
+      "Basic EPS"
+    ],
+    "sales": [
+      "Total Revenue",
+      "Operating Revenue"
+    ]
+  },
+  "trust_boundary": "Python validates observation and capture digests and concrete source semantics. Browser validates this versioned summary, exact value/identity/as-of binding and expiry; it must not recompute Python JSON digests. For reason f only, an explicit null ordinary-growth scalar retains the certified tuple value as a reference; absent or conflicting scalars never qualify. Summary is not a portable cryptographic signature. Missing, old, malformed or mismatched summaries never grant availability.",
+  "proof_reason_codes": [
+    "0",
+    "f"
+  ],
+  "comparison_codes": {
+    "g": "profitable_growth",
+    "d": "profitable_decline",
+    "u": "profitable_unchanged",
+    "n": "new_loss",
+    "z": "profit_to_zero",
+    "l": "loss_narrowing",
+    "w": "loss_widening",
+    "s": "loss_unchanged",
+    "t": "turnaround",
+    "b": "break_even",
+    "0": "undefined_base",
+    "G": "growth",
+    "D": "decline",
+    "U": "unchanged",
+    "X": "nonpositive_base"
+  },
+  "calculation_codes": {
+    "r": "rounded_percent_change",
+    "c": "clipped_percent_change",
+    "a": "rounded_positive_cagr",
+    "k": "clipped_positive_cagr"
+  },
+  "comparison_policy": "Classifications bind validated captured source cells, never inferred EPS signs from a percentage. A nonpositive comparison base cannot supply ordinary growth; reason f retains a source-valid reference proof while the projected scalar stays unknown. Zero-base division and annual heuristics remain unsupported. Basic/Diluted metric, periods and percent-point units are explicit; full original inputs stay in detail evidence."
+}

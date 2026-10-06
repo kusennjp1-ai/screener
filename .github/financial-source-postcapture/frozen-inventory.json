@@ -1,0 +1,188 @@
+{
+  "schema_version": "postcapture-frozen-code-v1",
+  "reviewed_commit": "16145829c9f06a51a5404a4044229b32b638c3c6",
+  "reviewed_tree": "16accf63ff4caef0da2adae8f4f9bbe46c913886",
+  "policy_sha256": "9c8de1e4d17b737f85db68fb9a031e24649134651b0cb01689a2f64e41c50114",
+  "policy_paths": [
+    ".github/scripts/prepare-statement-certification.mjs",
+    ".github/workflows/financial-source-certification.yml",
+    "backend/app/scripts/certify_statement_source.py",
+    "backend/app/services/eps_rating_service.py",
+    "backend/app/services/financial_source_capture.py",
+    "backend/app/services/financial_source_evidence.py",
+    "backend/app/services/financial_statement_batch.py",
+    "backend/app/services/growth_cadence_service.py",
+    "backend/app/services/quarterly_eps_selection.py",
+    "backend/app/services/statement_artifact_archive.py",
+    "backend/app/services/statement_refresh_planning.py",
+    "backend/app/services/statement_source_certification.py",
+    "backend/app/services/static_financial_evidence.py",
+    "contracts/financial_source_certification_v1.json",
+    "contracts/financial_source_certification_v1.schema.json",
+    "contracts/financial_source_evidence_v1.json",
+    "contracts/financial_source_reviewed_migrations_v1.json",
+    "contracts/static_financial_current_v1.json"
+  ],
+  "files": {
+    ".github/scripts/prepare-statement-certification.mjs": {
+      "sha256": "481c4f3d1a065192d8ae7550e016931482a1b9d5fe0125309d7da2b5030d825b",
+      "git_blob_sha": "f1223b8264f54325ea87dc700994e143d4c5dd25"
+    },
+    ".github/workflows/financial-source-certification.yml": {
+      "sha256": "4fe99dc38944680378a9e8306f38e1ac53b2dd40e30c1020fd864b1ab16688e4",
+      "git_blob_sha": "7e58995d4f1ef715bf05ebfe0a4b6484b08e8e6d"
+    },
+    "backend/app/__init__.py": {
+      "sha256": "89cada6d20bcd3d9d20c367142c1d4d1c5f033ef5e535280548ba1768c86d3de",
+      "git_blob_sha": "838b80fb6376de71ac0a30058d610cd6778e0c9a"
+    },
+    "backend/app/domain/__init__.py": {
+      "sha256": "d15897e5ad24629303f3dfa2d22525aca42b33bbab457d88bd778863048e96c7",
+      "git_blob_sha": "347532d87689e4a301b243f3203aa889a76544be"
+    },
+    "backend/app/domain/markets/__init__.py": {
+      "sha256": "1e949e4f44dce2eb4286b516d2831d6db0ef0168dd818ba83bed2c493fb47ee9",
+      "git_blob_sha": "26185737b9a84c4777a3786fa04bf0a2b80cadca"
+    },
+    "backend/app/domain/markets/catalog.py": {
+      "sha256": "f40cfc0ff7787bb8861d0b1acaa5995250fc0c09ffe389409178f162784c7a0a",
+      "git_blob_sha": "2ed8c01fca647bfbce471cecaf06ff3308a4459f"
+    },
+    "backend/app/domain/markets/market.py": {
+      "sha256": "bfa8f3aeeb3a8080eb65da99ee1ac5228a6694bd06c75150ff50e15a72597240",
+      "git_blob_sha": "94cc5545abea16c46351f6d845df6b4ba039bf00"
+    },
+    "backend/app/domain/markets/mic.py": {
+      "sha256": "53c2816c606b6f95065fd43c51767a3328220f63c2686070127a52d86f0c370c",
+      "git_blob_sha": "6dcba04e0fc4a46e3d7c3ff7002c3af44f67fdd9"
+    },
+    "backend/app/domain/markets/mic_aliases.py": {
+      "sha256": "d9bc971224bd99c87e77b4a42804b1308e7b83798ff5cc5dc03c4ac66ba12467",
+      "git_blob_sha": "1547a2de7d589c48b7b82a153861c15e58a34c3d"
+    },
+    "backend/app/domain/markets/registry.py": {
+      "sha256": "fbcafb66c5b589f4287e8c665bc3fca0833dcc478d7d676c8b14c01cd1bb526f",
+      "git_blob_sha": "13765dffd090f6730ebe00c836032b10b9ac0cf0"
+    },
+    "backend/app/domain/markets/symbol_suffixes.py": {
+      "sha256": "ba2d7d906b884c4843e5fc09e9448721661a7a2c282c576e7e89fe37d2be4896",
+      "git_blob_sha": "b4486f2f946b01686cef010e156ae08ff117cc56"
+    },
+    "backend/app/domain/providers/__init__.py": {
+      "sha256": "ac56b242ac323382d75cca12506601f9164608e7aabedc11d289231bc28c43f5",
+      "git_blob_sha": "721b4350a1f2b48a809ae4a36a4dd24951b76041"
+    },
+    "backend/app/domain/providers/data_plan.py": {
+      "sha256": "783a53ed1231a5b90fbdb65b78186aa7574a33ac55e3a6eb5827d405dd76b7e2",
+      "git_blob_sha": "45f43dbd8fa87f9f2870a3e043706da2d678a17d"
+    },
+    "backend/app/domain/universe/__init__.py": {
+      "sha256": "9836cab6af3198f45764aa0a4aa56810d95ec177960c852faad06a9f182b5a0d",
+      "git_blob_sha": "0f2300a511338808ef9a0d9ff7a2b93b1ff0b062"
+    },
+    "backend/app/domain/universe/definitions.py": {
+      "sha256": "e54c19dd9394e8badc8c8f9d0f24bca28b307399776572d7178c672b27e799d9",
+      "git_blob_sha": "0a3f7ee2530f4be00ce1105163b323497cf55110"
+    },
+    "backend/app/domain/universe/indexes.py": {
+      "sha256": "e894756438e9192458b49f4452dabef77ca85db5ebef0b4a386aee609d6aa991",
+      "git_blob_sha": "90b2516741bcb78ae090b3764164c77b5e02aa01"
+    },
+    "backend/app/domain/universe/ingestion.py": {
+      "sha256": "5982563224a5cc44ebf1535ba8b1b62a26c0d5d4a61047e42cb090b8892c7f84",
+      "git_blob_sha": "1c6f80b50e1235ec2d297524130e8529f56e0455"
+    },
+    "backend/app/domain/universe/listing_tiers.py": {
+      "sha256": "621a00db984c11382f5f3ae52d58a137f24343990f9518bb3ac5a847d5d8c279",
+      "git_blob_sha": "974b8592588a2adb74aa207b155e591888e668b6"
+    },
+    "backend/app/scripts/certify_statement_source.py": {
+      "sha256": "ff130af2464c693f2c1fe5913b190a0e61fbe2e73b3fc42d322afd82f7f3a328",
+      "git_blob_sha": "3eda0d618a7b3977a12f65d34d2ff63e2be853e1"
+    },
+    "backend/app/services/__init__.py": {
+      "sha256": "fcfce939abf54761dbcdb422fc0226d88ae2c6fd971a1e32edb9842b5bf14edf",
+      "git_blob_sha": "e8e9fcbd236c5cceeea93bca5782099a654514af"
+    },
+    "backend/app/services/eps_rating_service.py": {
+      "sha256": "c6c44939ba6733c1bffd54b22435c89d7a545496036a69a54efe59660f909444",
+      "git_blob_sha": "4d60d16f04b3119b59e51d0f8f4b1da0f493ab32"
+    },
+    "backend/app/services/field_capability_registry.py": {
+      "sha256": "f82f1d19ac04f5949bdd370fd1eacc9b577eae6480834fc95b361bffaf8e3e71",
+      "git_blob_sha": "663768c05ca2e1431af6bf7f4d1694138feefd44"
+    },
+    "backend/app/services/financial_source_capture.py": {
+      "sha256": "edf0b8a7e78884cdd7356c613b6d9543b4fbadd807d966c5c4dcd4ae1d6d82fa",
+      "git_blob_sha": "3590f3ba1ed34b1f2e655d3b0c2a578a483cb510"
+    },
+    "backend/app/services/financial_source_evidence.py": {
+      "sha256": "3814769b3fa3a06d471d5de42128abe97cd88089a3b19bf7509dea295d828f95",
+      "git_blob_sha": "b97fbea516a25f54e199f254c25a172c0e84c131"
+    },
+    "backend/app/services/financial_statement_batch.py": {
+      "sha256": "21b0d9bdb0cb858ea6ea28ee52177d78c395761df6b27f8794f3296aa730010d",
+      "git_blob_sha": "773d8df6f42b648640722fee652ed72127d5260c"
+    },
+    "backend/app/services/finviz_parser.py": {
+      "sha256": "bb9b2de583f0d1829705e6efc79386546d6a63a88470bd134763665a7d9e3547",
+      "git_blob_sha": "c30fa614229f5ce5848369f5ea8e71334865d565"
+    },
+    "backend/app/services/fundamentals_completeness.py": {
+      "sha256": "de673fb9882d0db59357b28a86625386cca5ac91ff12e1acfbd4670a952c458e",
+      "git_blob_sha": "66182857ddb3e2ae8871e0ebb31606c736b20404"
+    },
+    "backend/app/services/growth_cadence_service.py": {
+      "sha256": "751f45d72a9d09d3ae8b61eedc171794eaa434d4624367f127291bf4487b786e",
+      "git_blob_sha": "4129153a316859e511e7d0e3bc73b683b088f929"
+    },
+    "backend/app/services/provider_routing_policy.py": {
+      "sha256": "96e8c00159030cd831e167aaafc79d278fb8a26372474188f4e9f81f968f8550",
+      "git_blob_sha": "f438f425e21703d2ae96ef009ac95ba44638c192"
+    },
+    "backend/app/services/quarterly_eps_selection.py": {
+      "sha256": "4f734a5854b7a90aae2cb5de5019014901c3245a5d8aee538c80b35d10e67ad1",
+      "git_blob_sha": "9bf43a43c865538bb66cf7e19258e7f863573fb6"
+    },
+    "backend/app/services/security_master_service.py": {
+      "sha256": "8417cbd3a8a38a8f3ba1e59eea7f155549fb5005b813d402d2ecb9fc933c987f",
+      "git_blob_sha": "44672d5f4623d6a525f54154a8a516606f72bcff"
+    },
+    "backend/app/services/statement_artifact_archive.py": {
+      "sha256": "c784c2848eb968dffd3cddf9a0597fc0f15c2e8d6a1ef3184fb16bf7c3b3e18a",
+      "git_blob_sha": "b7c0fdd4acf9cd15293c3717af64693a1927a01f"
+    },
+    "backend/app/services/statement_refresh_planning.py": {
+      "sha256": "1e5ecf69b3c436320ff885f85a72a7ef67ce390282f40f88769ebf3c4e4ed770",
+      "git_blob_sha": "0cbd4f3bf430ef3e24f5dcccc25d008f6cd235d9"
+    },
+    "backend/app/services/statement_source_certification.py": {
+      "sha256": "42ed70a8d4b84af58c244dced6e27130e55fa871b979b2bfe996ccb8d2cecfc3",
+      "git_blob_sha": "38b679ee1d3afa9ed5e38e069f8366c56935c2af"
+    },
+    "backend/app/services/static_financial_evidence.py": {
+      "sha256": "7b195c2928ee398eef7ab469d2723bc2f9db13b2cdced32dc3c9bd84100303a6",
+      "git_blob_sha": "d5fdd07f86ad2b53921681abaf8adf7707388fd5"
+    },
+    "contracts/financial_source_certification_v1.json": {
+      "sha256": "d7a3ede506715f5347c02b48a3390cef54bb22442c737889ad4c0600cd2e1b2e",
+      "git_blob_sha": "82ecd083056d34d79fad1d877e21f857c52a3f2e"
+    },
+    "contracts/financial_source_certification_v1.schema.json": {
+      "sha256": "fe254c0f4b19d917ec1f6c4e4b40bd28dc10053dc23a65a2839d3122bdef4630",
+      "git_blob_sha": "a5f82969371c7370e1e82aaa17755f8b1850aa6e"
+    },
+    "contracts/financial_source_evidence_v1.json": {
+      "sha256": "6ff3013ed5f1bbd8e699c669d8662145bf2619d8cd4831fece9859f01b1dd1da",
+      "git_blob_sha": "87e2ba9d1fcc27546eba43803a32fdfffdee7275"
+    },
+    "contracts/financial_source_reviewed_migrations_v1.json": {
+      "sha256": "3b233a88311f6dc7492ec920ca256479524ff33839398980694149b559e31cdb",
+      "git_blob_sha": "fe36f674187c449d6d70a5e0edfee8914be6e4d3"
+    },
+    "contracts/static_financial_current_v1.json": {
+      "sha256": "28a190c808802c27effa99c9c70b3e9e9c546a7ba749e6e1d51a918cccb869a4",
+      "git_blob_sha": "679445c8dc264478130138c47e19d6c186d4271f"
+    }
+  }
+}

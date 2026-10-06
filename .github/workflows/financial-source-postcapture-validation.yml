@@ -1,0 +1,75 @@
+name: Financial Source Postcapture Validation
+
+on:
+  push:
+    branches: [preview/financial-source-postcapture-validation]
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: financial-source-postcapture-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-captured-source:
+    if: github.repository == 'kusennjp1-ai/screener'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify target runtimes
+        run: |
+          mkdir -p "$RUNNER_TEMP/postcapture-reports"
+          python -c 'import sys; assert sys.version_info[:2] == (3,11); print(sys.version)' | tee "$RUNNER_TEMP/postcapture-reports/python-version.txt"
+          node -e 'if (process.versions.node.split(".")[0] !== "22") throw Error("Node22 required"); console.log(process.version)' | tee "$RUNNER_TEMP/postcapture-reports/node-version.txt"
+      - name: Install the frozen verifier dependencies
+        run: >-
+          python -m pip install
+          yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0 jsonschema==4.23.0 pytest==8.3.5
+      - name: Test exact-source retrieval guards
+        run: node --test --test-concurrency=2 .github/scripts/restore-postcapture-source.test.mjs | tee "$RUNNER_TEMP/postcapture-reports/retrieval-tests.log"
+      - name: Test offline companion validation guards
+        run: python -m pytest --import-mode=importlib --noconftest -p no:cacheprovider .github/scripts/validate-postcapture-source.test.py -q --junitxml="$RUNNER_TEMP/postcapture-reports/validation-tests.xml" | tee "$RUNNER_TEMP/postcapture-reports/validation-tests.log"
+      - name: Retrieve only the exact retained source and original job log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/restore-postcapture-source.mjs "$RUNNER_TEMP/postcapture-source" 2>&1 | tee "$RUNNER_TEMP/postcapture-reports/retrieval.log"
+      - name: Validate captured evidence with acquisition denied
+        run: |
+          python .github/scripts/validate-postcapture-source.py \
+            --source-zip "$RUNNER_TEMP/postcapture-source/source.zip" \
+            --api-evidence "$RUNNER_TEMP/postcapture-source/api-evidence.json" \
+            --job-log "$RUNNER_TEMP/postcapture-source/job.log" \
+            --output "$RUNNER_TEMP/postcapture-reports/companion" 2>&1 | tee "$RUNNER_TEMP/postcapture-reports/companion-validation.log"
+      - name: Retain independent validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-source-postcapture-validation-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/postcapture-reports/
+            ${{ runner.temp }}/postcapture-source/api-evidence.json
+            ${{ runner.temp }}/postcapture-source/job.log
+          retention-days: 14
+          if-no-files-found: error
+
+# This branch cannot trigger recovery or Pages. This workflow has no dispatch,
+# schedule, provider credentials, source updates or publication authority.
+# The original source ZIP is neither modified nor reuploaded as a new producer.

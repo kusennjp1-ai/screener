@@ -1,0 +1,67 @@
+name: Financial Source Certification
+
+on:
+  push:
+    branches: [preview/financial-source-certification]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: financial-source-certification
+  cancel-in-progress: false
+
+jobs:
+  certify-source-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
+      LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install reviewed offline validation dependencies
+        run: >-
+          python -m pip install
+          yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0 pytest==8.3.5 jsonschema==4.23.0
+      - name: Verify certificate boundaries offline
+        run: |
+          node --test .github/scripts/prepare-statement-certification.test.mjs
+          python -m pytest --noconftest backend/tests/unit/test_statement_source_certification.py backend/tests/unit/test_statement_artifact_archive.py backend/tests/unit/test_financial_statement_batch.py -q
+      - name: Retrieve the explicitly pinned original producer artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node .github/scripts/prepare-statement-certification.mjs
+          .github/financial-source-certification-request.json "$RUNNER_TEMP/certification-input"
+      - name: Certify exact receipts and independently recomputed projections
+        run: >-
+          python -m app.scripts.certify_statement_source
+          --request .github/financial-source-certification-request.json
+          --api-evidence "$RUNNER_TEMP/certification-input/source-api-evidence.json"
+          --source-zip "$RUNNER_TEMP/certification-input/source.zip"
+          --output-dir "$RUNNER_TEMP/financial-source-certification"
+          --evaluated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          --code-sha "$GITHUB_SHA"
+      - name: Retain successful source certification
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-source-certification-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-source-certification/
+          if-no-files-found: error
+          retention-days: 14
+
+# Read-only, explicitly pinned, branch-only validation. A successful job certifies
+# artifact integrity, not producer success, full availability, qualification or
+# publication. Provider failures/blocks and unknown fields remain in the receipt.
+# No provider calls, workflow_run trigger, schedule, release or Pages deployment.

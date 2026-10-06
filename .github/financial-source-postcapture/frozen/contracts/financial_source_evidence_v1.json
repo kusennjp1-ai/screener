@@ -1,0 +1,739 @@
+{
+  "schema": "financial-source-evidence-v1",
+  "field_order": [
+    "eps_growth_qq",
+    "eps_growth_yy",
+    "sales_growth_qq",
+    "sales_growth_yy",
+    "annual_eps_growth_3y",
+    "eps_5yr_cagr",
+    "eps_q1_yoy",
+    "eps_q2_yoy",
+    "eps_raw_score",
+    "revenue_growth",
+    "profit_margin",
+    "roe",
+    "eps_rating",
+    "smr_rating",
+    "composite_rating",
+    "composite_rating_score"
+  ],
+  "projection_cases": [
+    {
+      "name": "fresh_positive",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:d4098f1106bff9bc33d83cdd5a41606175ce8faa97fbe5e9691040b26920e3cd",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": 12.5,
+      "expected_reason": null
+    },
+    {
+      "name": "fresh_zero",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 0,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:39c44430825a533fc45c3fef4ff371939a14ebeec8d8cf36ae39be78331b3cc3",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 0
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": 0,
+      "expected_reason": null
+    },
+    {
+      "name": "fresh_negative",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": -8,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:55df9cfdfbdf9ad0e342584d0cc8e3a03911b842880083aa50a1962e76882e56",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": -8
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": -8,
+      "expected_reason": null
+    },
+    {
+      "name": "exact_seven_days",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:05c1e1853fafcaeaa1a074394dbf149668c9387744d845cc0acf0cfee2d35dfc",
+              "observed_at": "2026-09-26T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": 12.5,
+      "expected_reason": null
+    },
+    {
+      "name": "one_millisecond_over",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:485a20b2912053f8dc7865fcea6429e512483db4e242aef4d555a721a8533cb4",
+              "observed_at": "2026-09-26T11:59:59.999Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "stale_source"
+    },
+    {
+      "name": "future_source",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:290cc9fa895a5aa9248f7bdf938feb2e3b3da211fda9eb7b227721d7649f337c",
+              "observed_at": "2026-10-03T12:00:00.001Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "future_source_timestamp"
+    },
+    {
+      "name": "wrong_unit",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:5ab80b05a8d378949a556a26ddd95351b2d102a8f06ec6fd2852f3290f26ea88",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "fraction",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "unapproved_semantic_contract"
+    },
+    {
+      "name": "wrong_basis",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "ttm-yoy-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:cc10f2b38eca48b3952d9255a05e9035424d3c5a67c1f06eeca92c0d6f2d2c71",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "unapproved_semantic_contract"
+    },
+    {
+      "name": "wrong_symbol",
+      "row": {
+        "symbol": "OTHER",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:d4098f1106bff9bc33d83cdd5a41606175ce8faa97fbe5e9691040b26920e3cd",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "missing_or_mismatched_evidence"
+    },
+    {
+      "name": "wrong_market",
+      "row": {
+        "symbol": "ACME",
+        "market": "HK",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:d4098f1106bff9bc33d83cdd5a41606175ce8faa97fbe5e9691040b26920e3cd",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "missing_or_mismatched_evidence"
+    },
+    {
+      "name": "mismatched_value",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 100,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:d4098f1106bff9bc33d83cdd5a41606175ce8faa97fbe5e9691040b26920e3cd",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "missing_or_mismatched_evidence"
+    },
+    {
+      "name": "unknown_schema",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "future-v2",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:d4098f1106bff9bc33d83cdd5a41606175ce8faa97fbe5e9691040b26920e3cd",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        }
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": null,
+      "expected_reason": "missing_or_mismatched_evidence"
+    },
+    {
+      "name": "operational_clock_ignored",
+      "row": {
+        "symbol": "ACME",
+        "market": "US",
+        "eps_growth_qq": 12.5,
+        "financial_source_evidence": {
+          "schema": "financial-source-evidence-v1",
+          "symbol": "ACME",
+          "market": "US",
+          "fields": {
+            "eps_growth_qq": {
+              "basis": "quarterly-qoq-v1",
+              "cadence": "quarterly",
+              "capture_id": "capture-1",
+              "comparable_period_end": "2026-03-31",
+              "field": "eps_growth_qq",
+              "market": "US",
+              "metric": "Diluted EPS",
+              "observation_id": "sha256:d4098f1106bff9bc33d83cdd5a41606175ce8faa97fbe5e9691040b26920e3cd",
+              "observed_at": "2026-10-03T12:00:00.000Z",
+              "period_end": "2026-06-30",
+              "period_status": "supplied",
+              "periods_used": null,
+              "producer": "fixture.statement/v1",
+              "provenance_kind": "observed",
+              "provider_symbol": "ACME",
+              "raw_payload_availability": "retained_normalized_subset",
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb",
+              "source": "yfinance",
+              "source_revision": null,
+              "symbol": "ACME",
+              "unit": "percent_points",
+              "value": 12.5
+            }
+          },
+          "retained_candidates": {},
+          "captures": {
+            "capture-1": {
+              "source_payload": {
+                "Diluted EPS": {
+                  "2026-03-31": 1,
+                  "2026-06-30": 1.125
+                }
+              },
+              "raw_payload_sha256": "e6ba000adf2cf802a09401b748592d3dc0d4d53198eca203fccd87f59d28eabb"
+            }
+          }
+        },
+        "updated_at": "2030-01-01T00:00:00Z"
+      },
+      "field": "eps_growth_qq",
+      "now": "2026-10-03T12:00:00.000Z",
+      "expected_value": 12.5,
+      "expected_reason": null
+    }
+  ]
+}

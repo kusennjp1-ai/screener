@@ -1,0 +1,19 @@
+{
+  "scope": "Isolated writer/restore-boundary reproduction; no provider calls or financial receipt changes",
+  "root": "/tmp/actual-refresh-lock-repro-l6j0skir",
+  "producer_writer": "statement_artifact_archive._commit",
+  "initial_hidden_lock_omitted": true,
+  "new_paths_after_exact_writer": [
+    "archive/.archive.lock"
+  ],
+  "lock": {
+    "path": "archive/.archive.lock",
+    "bytes": 0,
+    "regular": true,
+    "nlink": 1,
+    "mode": "0o644",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "archive_manifest_unchanged": true,
+  "final_guard_error": "Unowned retained source addition"
+}

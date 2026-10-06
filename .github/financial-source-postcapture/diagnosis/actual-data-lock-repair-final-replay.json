@@ -1,0 +1,22 @@
+{
+  "scope": "Diagnostic shadow replay with final dir-fd lock helper; not a producer artifact or authoritative certificate",
+  "archive_helper_sha256": "b359f8e464a04bff72e458a0eac799cedf154fb3756472e328d478ec60ef3703",
+  "original_artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+  "source_files_compared": 10055,
+  "original_source_lock_still_absent": true,
+  "new_control_path": "archive/.archive.lock",
+  "new_control_bytes": 0,
+  "provider_calls": 0,
+  "original_run_conclusion": "failure",
+  "original_cycle_exit_code": 0,
+  "final_guard": {
+    "expanded_bytes": 227789637,
+    "compressed_bound_bytes": 34686172,
+    "member_count": 10066,
+    "maximum_member_bytes": 4963082,
+    "canonical_zip_bytes": 33829522,
+    "canonical_zip_sha256": "99080445e5179c3c7cba5579adef8d36dc9f67137ab46e21c9ea19d7ec77be1a",
+    "actual_actions_artifact_readback_required": true
+  },
+  "elapsed_seconds": 28.004623226006515
+}

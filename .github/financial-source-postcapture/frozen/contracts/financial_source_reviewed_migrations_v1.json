@@ -1,0 +1,217 @@
+{
+  "migration_id": "uniform-complete-same-metric-eps-pair-v1",
+  "original_batch_summary_sha256": "856918a6ccea581b85bf2fdba601457c1da1631737717e4dc700f8d8e7dcc2ce",
+  "source_fix_commit": "284ca2dd6bed2ace2c00394a4c637b925a228f46",
+  "integrated_fix_commit": "f9b4ebf41707326e5971e0a61fbd33ba0cbb7012",
+  "symbols": {
+    "APLD": {
+      "original_envelope_sha256": "22ad4a986dc43ad3b65d3a809136c4d1329b089ebd628f295d9e7c5185bcfad7",
+      "observed_changes": [
+        {
+          "symbol": "APLD",
+          "field": "eps_q2_yoy",
+          "before": null,
+          "after": -100.0,
+          "metric": "Basic EPS",
+          "basis": "quarterly_eps_yoy/v1",
+          "before_reason": "missing_or_invalid_value",
+          "after_reason": "stale_reporting_period",
+          "source_identity": {
+            "capture_id": "2c7c363c-9c49-4f83-bbe3-b623bd11fd69",
+            "observed_at": "2026-10-04T11:42:21.433Z",
+            "raw_payload_sha256": "1d37704d6a9718c2371cd0cc87fbb7cf176f192bb1fb0810c981fa8ca7c41b07",
+            "transport_payload_sha256": "cf5a70924b0172103520de4f6108e5c96c8589d14c8562b18ea4b73308327814",
+            "source_inputs": [
+              {
+                "column": "2026-02-28 00:00:00",
+                "period_end": "2026-02-28",
+                "value": -0.36
+              },
+              {
+                "column": "2025-02-28 00:00:00",
+                "period_end": "2025-02-28",
+                "value": -0.16
+              }
+            ]
+          }
+        }
+      ],
+      "scalar_changes": [
+        {
+          "symbol": "APLD",
+          "field": "eps_q2_yoy",
+          "before": null,
+          "after": -100.0
+        },
+        {
+          "symbol": "APLD",
+          "field": "eps_raw_score",
+          "before": -41.25,
+          "after": -46.88
+        }
+      ]
+    },
+    "AUB": {
+      "original_envelope_sha256": "525e8cc47831ae5eef45a47b728779dca22eaa1121dc1c6179f6381924963857",
+      "observed_changes": [
+        {
+          "symbol": "AUB",
+          "field": "eps_growth_qq",
+          "before": null,
+          "after": 32.14,
+          "metric": "Basic EPS",
+          "basis": "quarterly_qoq/v1",
+          "before_reason": "missing_or_invalid_value",
+          "after_reason": "available",
+          "source_identity": {
+            "capture_id": "ddefaf2d-971f-4473-89df-c64dca61bbd2",
+            "observed_at": "2026-10-04T11:44:45.691Z",
+            "raw_payload_sha256": "6ab603fead651d6797b96f86a5e95a2d816b3e783e4eea6ea347357792bacefb",
+            "transport_payload_sha256": "1c928582f7252496fb91b632c6c922d1fe3eba218adaafb416fdeda8dcd8ad7b",
+            "source_inputs": [
+              {
+                "column": "2026-06-30 00:00:00",
+                "period_end": "2026-06-30",
+                "value": 1.11
+              },
+              {
+                "column": "2026-03-31 00:00:00",
+                "period_end": "2026-03-31",
+                "value": 0.84
+              }
+            ]
+          }
+        },
+        {
+          "symbol": "AUB",
+          "field": "eps_growth_yy",
+          "before": null,
+          "after": 825.0,
+          "metric": "Basic EPS",
+          "basis": "comparable_period_yoy/v1",
+          "before_reason": "missing_or_invalid_value",
+          "after_reason": "available",
+          "source_identity": {
+            "capture_id": "ddefaf2d-971f-4473-89df-c64dca61bbd2",
+            "observed_at": "2026-10-04T11:44:45.691Z",
+            "raw_payload_sha256": "6ab603fead651d6797b96f86a5e95a2d816b3e783e4eea6ea347357792bacefb",
+            "transport_payload_sha256": "1c928582f7252496fb91b632c6c922d1fe3eba218adaafb416fdeda8dcd8ad7b",
+            "source_inputs": [
+              {
+                "column": "2026-06-30 00:00:00",
+                "period_end": "2026-06-30",
+                "value": 1.11
+              },
+              {
+                "column": "2025-06-30 00:00:00",
+                "period_end": "2025-06-30",
+                "value": 0.12
+              }
+            ]
+          }
+        },
+        {
+          "symbol": "AUB",
+          "field": "eps_q1_yoy",
+          "before": null,
+          "after": 500.0,
+          "metric": "Basic EPS",
+          "basis": "quarterly_eps_yoy/v1",
+          "before_reason": "missing_or_invalid_value",
+          "after_reason": "available",
+          "source_identity": {
+            "capture_id": "ddefaf2d-971f-4473-89df-c64dca61bbd2",
+            "observed_at": "2026-10-04T11:44:45.691Z",
+            "raw_payload_sha256": "6ab603fead651d6797b96f86a5e95a2d816b3e783e4eea6ea347357792bacefb",
+            "transport_payload_sha256": "1c928582f7252496fb91b632c6c922d1fe3eba218adaafb416fdeda8dcd8ad7b",
+            "source_inputs": [
+              {
+                "column": "2026-06-30 00:00:00",
+                "period_end": "2026-06-30",
+                "value": 1.11
+              },
+              {
+                "column": "2025-06-30 00:00:00",
+                "period_end": "2025-06-30",
+                "value": 0.12
+              }
+            ]
+          }
+        }
+      ],
+      "scalar_changes": [
+        {
+          "symbol": "AUB",
+          "field": "eps_growth_qq",
+          "before": null,
+          "after": 32.14
+        },
+        {
+          "symbol": "AUB",
+          "field": "eps_growth_yy",
+          "before": null,
+          "after": 825.0
+        },
+        {
+          "symbol": "AUB",
+          "field": "eps_q1_yoy",
+          "before": null,
+          "after": 500.0
+        },
+        {
+          "symbol": "AUB",
+          "field": "eps_raw_score",
+          "before": null,
+          "after": 245.24
+        }
+      ]
+    },
+    "AVAV": {
+      "original_envelope_sha256": "f8730e5170fa686aec6e068fe9f85e630725c3d2e57e3b94862ed479f98742fe",
+      "observed_changes": [
+        {
+          "symbol": "AVAV",
+          "field": "eps_q2_yoy",
+          "before": null,
+          "after": 113.56,
+          "metric": "Basic EPS",
+          "basis": "quarterly_eps_yoy/v1",
+          "before_reason": "missing_or_invalid_value",
+          "after_reason": "available",
+          "source_identity": {
+            "capture_id": "a39f3c27-9cc1-4849-90a0-b07a68eb27d5",
+            "observed_at": "2026-10-04T11:44:59.282Z",
+            "raw_payload_sha256": "c233fdb8ce39e39cc81687bbf05de22b4863687e358cd09c2b8568e8942dd75b",
+            "transport_payload_sha256": "1f96f5d0157d162bf290d48b4806902fbae99c87dfc653caa67c081a53b4b19c",
+            "source_inputs": [
+              {
+                "column": "2026-04-30 00:00:00",
+                "period_end": "2026-04-30",
+                "value": 1.26
+              },
+              {
+                "column": "2025-04-30 00:00:00",
+                "period_end": "2025-04-30",
+                "value": 0.59
+              }
+            ]
+          }
+        }
+      ],
+      "scalar_changes": [
+        {
+          "symbol": "AVAV",
+          "field": "eps_q2_yoy",
+          "before": null,
+          "after": 113.56
+        },
+        {
+          "symbol": "AVAV",
+          "field": "eps_raw_score",
+          "before": null,
+          "after": 61.44
+        }
+      ]
+    }
+  }
+}
