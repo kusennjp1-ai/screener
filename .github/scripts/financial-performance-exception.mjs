@@ -141,6 +141,10 @@ function verifyExceptionArtifact(artifact,pin,run,job,now){
     ||!positive(artifact.size_in_bytes)||artifact.size_in_bytes>8589934592||clocks.some(t=>!Number.isFinite(t))||clocks.some((t,i)=>i&&t<clocks[i-1])||clocks.at(-1)>now
     ||!stamp(artifact.expires_at)||Date.parse(artifact.expires_at)<=now)throw Error('Invalid exact exception artifact');
 }
+// Git paths outside the protected inventory may contain spaces or Unicode.
+// Keep structural checks on the complete tree without relaxing asset authority.
+const safeGitTreePath=path=>typeof path==='string'&&path.length>0&&!path.startsWith('/')&&!/^[A-Za-z]:/.test(path)
+  &&!/[\\\u0000-\u001f\u007f-\u009f]/.test(path)&&!path.split('/').some(part=>!part||part==='.'||part==='..');
 export function remoteProtectedCodeInventory(revision,api=githubApi) {
   if(!sha(revision))throw Error('Invalid immutable controller revision');
   const commit=api(`repos/${repo}/git/commits/${revision}`);
@@ -149,9 +153,10 @@ export function remoteProtectedCodeInventory(revision,api=githubApi) {
   if(tree.sha!==commit.tree.sha||tree.truncated!==false||!Array.isArray(tree.tree))throw Error('Incomplete immutable controller tree');
   const files={},seen=new Set();
   for(const item of tree.tree){
-    if(!safePath(item.path)||seen.has(item.path))throw Error('Unsafe or duplicate immutable controller path');seen.add(item.path);
-    if(item.type==='tree')continue;
+    if(!safeGitTreePath(item.path)||seen.has(item.path))throw Error('Unsafe or duplicate immutable controller path');seen.add(item.path);
     if(!releasePolicy.protected_prefixes.some(prefix=>item.path.startsWith(prefix)))continue;
+    if(!safePath(item.path))throw Error('Unsafe immutable protected source path');
+    if(item.type==='tree')continue;
     if(item.type!=='blob'||!['100644','100755'].includes(item.mode)||!sha(item.sha))throw Error('Special immutable protected source');
     files[item.path]={mode:item.mode,sha:item.sha};
   }

@@ -21,6 +21,24 @@ publication authority. The original v1 policy, approval, and pin remain exact.
 The disabled-policy path is still tested using an isolated on-disk fixture,
 without any runtime authority override.
 
+The first sealed artifact from run `37422668368` remains retained, but is not
+eligible for activation: independent validation found that the remote inventory
+reader rejected an unrelated Git filename containing spaces. The corrected
+reader validates complete-tree structure and duplicates, then applies the
+unchanged strict publication-path grammar only to protected source paths.
+The approval records this script and its regression test as two additional exact
+controller changes. The captured UI, financial inputs, original failures, policy,
+review and source deadline remain byte-identical. A new successful controller CI
+and read-only certification are required before a new candidate may be pinned.
+
+The real-input packed rehearsal `37418746182` completed activation and carry
+composition, but reached its 75-minute process limit during the first final carry
+recheck. Its failed/incomplete result is retained. The next diagnostic allocation
+is 95 minutes within a 110-minute job, including at least 10 minutes for evidence
+upload; all validators, stages and UI budgets remain unchanged. Recorded phase
+costs imply roughly 85–87 minutes for the complete trial. Completion still needs
+both carry rechecks and the final simulated-publication proof.
+
 An enabled v2 policy must describe exactly one newly reviewed packed capture:
 its executed Git commit/tree/UI digest, PR head/base and CI/failed Design attempts
 and jobs, original diagnostic and Design ZIP identities/hashes, report/review

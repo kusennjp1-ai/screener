@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,mkdirSync,readFileSync,rmSync,chmodSync} from 'node:fs';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {performanceExceptionPolicy as p,exceptionType,parsePerformanceApproval,verifyExceptionCode,parseExceptionPin,parseExceptionUiApproval,verifyOriginalExceptionCapture,verifyExceptionCertificate,verifyPerformanceUiApproval,verifyExceptionFinancialScope,validateExceptionChecks,validatePerformanceReviewContent,verifyPerformanceReview,readExceptionPin,readExceptionReleaseIntent,verifyRetainedDesignArchive} from './financial-performance-exception.mjs';
+import {performanceExceptionPolicy as p,exceptionType,parsePerformanceApproval,verifyExceptionCode,parseExceptionPin,parseExceptionUiApproval,verifyOriginalExceptionCapture,verifyExceptionCertificate,verifyPerformanceUiApproval,verifyExceptionFinancialScope,validateExceptionChecks,validatePerformanceReviewContent,verifyPerformanceReview,readExceptionPin,readExceptionReleaseIntent,verifyRetainedDesignArchive,remoteProtectedCodeInventory,verifyImmutableExceptionController} from './financial-performance-exception.mjs';
 import {digest,verifyCorrectionConsumerChecks} from './financial-correction.mjs';
-import {verifyApproval,sha256} from './publication-state.mjs';
+import {verifyApproval,sha256,safePath} from './publication-state.mjs';
+import {protectedCodeInventory} from './financial-release-activation.mjs';
 import {publicationDecision} from './publication-gate.mjs';
 const H='a'.repeat(64),S='b'.repeat(40),T='c'.repeat(40),repo='kusennjp1-ai/screener';
 const clone=structuredClone;
@@ -35,6 +36,70 @@ function fixture(){
   const calls=[],api=endpoint=>{calls.push(endpoint);if(!Object.hasOwn(apiData,endpoint))throw Error(`Unexpected API ${endpoint}`);return clone(apiData[endpoint]);};
   return {approval,request,bytes,pin,ui,captured,current,apiData,api,calls,cert,receipt:{ui_sha:ui.sha,ui_digest:ui.ui_digest,approval:ui,financial_release:{schema_version:'financial-release-receipt-v1'}}};
 }
+test('remote protected inventory matches local Git with complete trees and unrelated spaced or Unicode paths',()=>{
+  const root=mkdtempSync(join(tmpdir(),'exception-git-paths-'));
+  try{
+    for(const path of ['frontend/package-lock.json','backend/app/scripts/export_native_annual_projection.py','.github/scripts/controller.mjs',
+      'trading-skills/docs/internal/revisions/Breadth Chart Analyst Skill_IMPROVEMENTS_v2.0.md','docs/日本語/notes #1?.md']){
+      mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),'offline inventory fixture\n');
+    }
+    execFileSync('git',['init','-q',root]);execFileSync('git',['-C',root,'add','.']);
+    execFileSync('git',['-C',root,'-c','user.name=Offline fixture','-c','user.email=fixture@example.invalid','commit','-qm','Synthetic Git inventory']);
+    const git=args=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();
+    const revision=git(['rev-parse','HEAD']),treeSha=git(['rev-parse','HEAD^{tree}']);
+    const tree=git(['ls-tree','-r','-t','-z',revision]).split('\0').filter(Boolean).map(record=>{
+      const tab=record.indexOf('\t'),[mode,type,sha]=record.slice(0,tab).split(' ');return {path:record.slice(tab+1),mode,type,sha};
+    });
+    const api=endpoint=>{
+      if(endpoint===`repos/${repo}/git/commits/${revision}`)return {sha:revision,tree:{sha:treeSha}};
+      assert.equal(endpoint,`repos/${repo}/git/trees/${treeSha}?recursive=1`);return {sha:treeSha,truncated:false,tree};
+    };
+    assert.ok(tree.some(item=>item.type==='tree'&&!safePath(item.path)));
+    assert.deepEqual(remoteProtectedCodeInventory(revision,api),protectedCodeInventory(root,revision));
+    assert.equal(safePath('frontend/spaced file.js'),false,'publication authority path grammar stays strict');
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+test('immutable controller and durable UI readers tolerate unrelated valid Git names in both full trees',()=>{
+  const f=fixture();
+  for(const treeSha of [p.captured_ui.tree,T])f.apiData[`repos/${repo}/git/trees/${treeSha}?recursive=1`].tree.push(
+    {path:'docs/design notes',type:'tree',mode:'040000',sha:T},
+    {path:'docs/design notes/日本語 #1?.md',type:'blob',mode:'100644',sha:T},
+    {path:'docs/unrelated-link',type:'blob',mode:'120000',sha:T},
+    {path:'docs/unrelated-submodule',type:'commit',mode:'160000',sha:T});
+  assert.deepEqual(remoteProtectedCodeInventory(p.captured_ui.sha,f.api),f.captured);
+  assert.deepEqual(remoteProtectedCodeInventory(S,f.api),f.current);
+  assert.equal(verifyImmutableExceptionController(f.approval,S,f.api),true);
+  assert.deepEqual(verifyPerformanceUiApproval(f.receipt,repo,f.api).approval,f.approval);
+});
+for(const path of ['',null,7,'/docs/file','C:/docs/file','C:docs/file','docs\\file','docs//file','docs/./file','docs/../file','../docs/file','docs/file/',
+  'docs/file\0name','docs/file\nname','docs/file\tname','docs/file\u007fname','docs/file\u0085name']){
+  test(`remote inventory rejects malformed unrelated Git path ${JSON.stringify(path)}`,()=>{
+    const f=fixture();f.apiData[`repos/${repo}/git/trees/${T}?recursive=1`].tree.push({path,type:'blob',mode:'100644',sha:T});
+    assert.throws(()=>remoteProtectedCodeInventory(S,f.api),/Unsafe or duplicate/);
+  });
+}
+for(const [name,mutate,pattern]of [
+  ['duplicate unrelated blobs',tree=>tree.tree.push(...Array.from({length:2},()=>({path:'docs/valid spaced.md',type:'blob',mode:'100644',sha:T}))),/duplicate/],
+  ['duplicate unrelated trees',tree=>tree.tree.push(...Array.from({length:2},()=>({path:'docs/valid spaced',type:'tree',mode:'040000',sha:T}))),/duplicate/],
+  ['duplicate tree and blob',tree=>tree.tree.push({path:'docs/shared',type:'tree',mode:'040000',sha:T},{path:'docs/shared',type:'blob',mode:'100644',sha:T}),/duplicate/],
+  ['protected spaced filename',tree=>tree.tree.push({path:'frontend/spaced file.js',type:'blob',mode:'100644',sha:T}),/protected source path/],
+  ['protected spaced directory',tree=>tree.tree.push({path:'frontend/spaced directory',type:'tree',mode:'040000',sha:T}),/protected source path/],
+  ['protected symlink',tree=>tree.tree[0].mode='120000',/Special/],
+  ['protected submodule',tree=>Object.assign(tree.tree[0],{type:'commit',mode:'160000'}),/Special/],
+  ['protected unsupported mode',tree=>tree.tree[0].mode='100664',/Special/],
+  ['protected unsupported type',tree=>tree.tree[0].type='unknown',/Special/],
+  ['protected invalid SHA',tree=>tree.tree[0].sha='z'.repeat(40),/Special/],
+  ['protected short SHA',tree=>tree.tree[0].sha=T.slice(1),/Special/],
+  ['missing required package lock',tree=>tree.tree=tree.tree.filter(item=>item.path!=='frontend/package-lock.json'),/Incomplete immutable protected/],
+  ['missing required projector',tree=>tree.tree=tree.tree.filter(item=>item.path!=='backend/app/scripts/export_native_annual_projection.py'),/Incomplete immutable protected/],
+  ['truncated tree',tree=>tree.truncated=true,/Incomplete immutable controller/],
+  ['missing completeness marker',tree=>delete tree.truncated,/Incomplete immutable controller/],
+  ['non-array tree',tree=>tree.tree={},/Incomplete immutable controller/],
+  ['mismatched tree SHA',tree=>tree.sha=S,/Incomplete immutable controller/],
+])test(`remote inventory rejects ${name}`,()=>{
+  const f=fixture();mutate(f.apiData[`repos/${repo}/git/trees/${T}?recursive=1`]);
+  assert.throws(()=>remoteProtectedCodeInventory(S,f.api),pattern);
+});
 test('approval is one exact immutable capture, not a threshold change',()=>{
   const f=fixture();assert.equal(parsePerformanceApproval(f.approval).captured_ui.sha,p.captured_ui.sha);assert.equal(verifyExceptionCode(f),true);
   for(const change of [v=>v.scope='all-ui',v=>v.future_ui=true,v=>v.captured_ui={...v.captured_ui,sha:S},v=>v.failures=v.failures.slice(1),v=>v.budgets={...v.budgets,p1_ready_ms:5000},v=>v.review.sha256=H,v=>v.activation_not_after='2026-11-01T00:00:00Z']){
