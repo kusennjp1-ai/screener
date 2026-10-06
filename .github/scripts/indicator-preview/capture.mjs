@@ -3,6 +3,7 @@ import { requireAdmittedPreview, loadPreviewPin } from './controls.mjs';
 requireAdmittedPreview(process.env);
 const admittedPin=await loadPreviewPin();
 import { loadPreviewBrowserTools } from './browser-tools.mjs';
+import { withPreviewViewport } from './viewport-context.mjs';
 import { resolve,extname,sep } from 'node:path';
 import { mkdir,readFile,writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -20,9 +21,8 @@ let browser;
 try{
  browser=await chromium.launch();
  for(const viewport of [{width:1440,height:900},{width:390,height:667},{width:360,height:568}]){
-  const page=await browser.newPage({viewport,reducedMotion:'reduce'});
+  await withPreviewViewport(browser,viewport,origin,async page=>{
   page.on('pageerror',error=>report.errors.push({viewport,message:error.message}));
-  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   await page.goto(origin);await page.getByRole('heading',{name:'52週新高値・新安値',exact:true}).waitFor();
   const capture=async(name,{table=false,source='real'}={})=>{
    if(table){const summaries=page.locator('.indicator-history-panel summary');if(await summaries.count())await summaries.first().click();}
@@ -41,7 +41,7 @@ try{
   await page.getByRole('heading',{name:'ベース段階の推移（自動推計）',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:resolve(output,'screenshots',`${viewport.width}x${viewport.height}-real-base-viewport.png`)});
   await page.getByRole('button',{name:'合成：境界条件',exact:true}).click();
   for(const [label,name] of [['Put/Call','put-call-gap'],['分配日','distribution-retirement-gap'],['接近・上抜け','entry-rearmed']]){await page.getByRole('button',{name:label,exact:true}).click();await capture(name,{table:true,source:'synthetic'});}
-  await page.close();
+  });
  }
  if(report.errors.length)report.failures.push('Browser runtime errors');
  const serious=report.screens.flatMap(screen=>screen.serious_violations);if(serious.length)report.failures.push('Serious accessibility violations');

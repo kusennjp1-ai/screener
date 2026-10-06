@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import IndicatorHistoryPanel from './IndicatorHistoryPanel';
 import { highLowHistory, INDICATOR_HISTORY_VERSION } from '../indicatorHistory';
 import { putCallHistory } from '../putCallHistory';
@@ -6,6 +8,8 @@ import { distributionHistory } from '../distributionHistory';
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール', ibd: 'IBD型' };
 const VIEWS = { highLow: '新高値・新安値', putCall: 'Put/Call', distribution: '分配日', entry: '接近・上抜け' };
 export default function MarketIndicatorHistories({ data, bookEvidence, expectedDate }) {
+  const theme = useTheme();
+  const linkColor = theme.palette.mode === 'dark' ? theme.palette.primary.light : theme.palette.primary.dark;
   const [view, setView] = useState('highLow'), [method, setMethod] = useState('minervini'), [approach, setApproach] = useState('3');
   const current = data?.version === INDICATOR_HISTORY_VERSION && data.as_of_date === expectedDate ? data : null;
   const highLow = current?.highLow || highLowHistory(bookEvidence, expectedDate);
@@ -23,6 +27,6 @@ export default function MarketIndicatorHistories({ data, bookEvidence, expectedD
         <p>現在の位置と、その日に新しく超えた銘柄数は別の観測です。未確認は0に含めません。下側の接近幅は、書籍のピボット上2〜3%という購入位置の説明とは別のアプリ設定です。</p>
       </IndicatorHistoryPanel>
     </>}
-    <p className="indicator-history-meta">銘柄ごとの「機関保有の四半期推移」と「ベース段階の推移」は、<a href="#/">銘柄を選択 → 履歴</a>で確認できます。公開集合の増減にはカバレッジと生存者バイアスがあります。</p>
+    <p className="indicator-history-meta">銘柄ごとの「機関保有の四半期推移」と「ベース段階の推移」は、<Link href="#/" underline="always" sx={{ color: linkColor, textDecorationColor: 'currentColor' }}>銘柄を選択 → 履歴</Link>で確認できます。公開集合の増減にはカバレッジと生存者バイアスがあります。</p>
   </section>;
 }

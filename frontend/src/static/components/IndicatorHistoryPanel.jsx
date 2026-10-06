@@ -1,8 +1,11 @@
 import './indicatorHistory.css';
+import { useTheme } from '@mui/material/styles';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 const display = value => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('ja-JP', { maximumFractionDigits: 3 }) : value == null ? '未確認' : String(value);
 const colors = ['var(--zone, #21956c)', 'var(--neg, #d26472)', 'var(--accent, #6087ee)', '#bd9633', '#986ebd'];
 export default function IndicatorHistoryPanel({ title, history, columns, extraColumns = [], expectedDate, children }) {
+  const theme = useTheme();
+  const axisTick = { fill: theme.palette.text.secondary };
   const data = history?.as_of_date === expectedDate ? history : null;
   const series = data?.series || [];
   return <section className="indicator-history-panel" aria-label={title}>
@@ -15,7 +18,7 @@ export default function IndicatorHistoryPanel({ title, history, columns, extraCo
         <div className="indicator-history-values">{columns.map(column => <div key={column.key}><small>{column.label}</small><strong>{display(series.at(-1)?.[column.key])}</strong></div>)}</div>
         <div style={{ height: 220, width: '100%', minWidth: 0 }}>
           <ResponsiveContainer width="100%" height="100%"><LineChart data={series} accessibilityLayer margin={{ top: 8, right: 12, left: -15, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="currentColor" opacity={.08}/><XAxis dataKey="date" minTickGap={30} tickFormatter={value => value.slice(5)}/><YAxis allowDecimals={data.id === 'put-call'}/><Tooltip/><Legend/>
+            <CartesianGrid vertical={false} stroke="currentColor" opacity={.08}/><XAxis tick={axisTick} dataKey="date" minTickGap={30} tickFormatter={value => value.slice(5)}/><YAxis tick={axisTick} allowDecimals={data.id === 'put-call'}/><Tooltip/><Legend/>
             {columns.map((column, index) => <Line key={column.key} dataKey={column.key} name={column.label} stroke={colors[index % colors.length]} type={data.id === 'base-count' ? 'stepAfter' : 'linear'} connectNulls={false} dot={series.length < 3} isAnimationActive={false}/>) }
           </LineChart></ResponsiveContainer>
         </div>

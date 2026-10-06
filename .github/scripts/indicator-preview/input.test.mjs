@@ -67,5 +67,40 @@ test('resolves the installed browser and accessibility APIs without launching a 
  assert.equal(AxeBuilder,require('@axe-core/playwright').AxeBuilder);
  assert.equal(typeof AxeBuilder,'function');
  assert.equal(typeof AxeBuilder.prototype.analyze,'function');
+ assert.equal(typeof AxeBuilder.prototype.include,'function');
+ assert.equal(typeof AxeBuilder.prototype.withTags,'function');
  // Deliberately do not call launch(), construct a browser, or open a page.
+});
+
+
+test('uses a new explicit guarded context per viewport and permits Axe-style extra pages without a browser launch',async()=>{
+ const {withPreviewViewport}=await import('./viewport-context.mjs');
+ const contexts=[],events=[];
+ const browser={newPage:()=>{throw Error('Convenience browser.newPage must not be used');},newContext:async options=>{
+  const context={options,pages:[],closed:false,route:async(pattern,handler)=>{assert.equal(pattern,'**/*');context.handler=handler;events.push('guard');},newPage:async()=>{
+   assert.equal(typeof context.handler,'function');assert.equal(context.closed,false);
+   const page={context:()=>context,close:async()=>{events.push('close-page');}};context.pages.push(page);events.push('new-page');return page;
+  },close:async()=>{context.closed=true;events.push('close-context');}};
+  contexts.push(context);return context;
+ }};
+ const viewports=[{width:1440,height:900},{width:390,height:667},{width:360,height:568}];
+ for(const viewport of viewports)await withPreviewViewport(browser,viewport,'http://127.0.0.1:4321',async page=>{
+  assert.deepEqual(page.context().options,{viewport,reducedMotion:'reduce'});
+  const extra=await page.context().newPage();await extra.close(); // The operation required by Axe.finishRun.
+  const routeResult=async url=>{let result;await page.context().handler({request:()=>({url:()=>url}),continue:async()=>{result='allow';},abort:async()=>{result='block';}});return result;};
+  assert.equal(await routeResult('http://127.0.0.1:4321/assets/app.js'),'allow');
+  for(const url of ['https://example.test/','http://127.0.0.1:4322/','file:///tmp/private','not a URL'])assert.equal(await routeResult(url),'block');
+ });
+ assert.equal(contexts.length,3);assert.ok(contexts.every(context=>context.pages.length===2&&context.closed));
+ assert.deepEqual(events,['guard','new-page','new-page','close-page','close-context','guard','new-page','new-page','close-page','close-context','guard','new-page','new-page','close-page','close-context']);
+});
+
+test('closes explicit contexts when routing, page creation or accessibility work fails',async()=>{
+ const {withPreviewViewport}=await import('./viewport-context.mjs');
+ for(const failure of ['route','page','axe']){
+  let closed=false;
+  const browser={newContext:async()=>({route:async()=>{if(failure==='route')throw Error(failure);},newPage:async()=>{if(failure==='page')throw Error(failure);return {};},close:async()=>{closed=true;}})};
+  await assert.rejects(withPreviewViewport(browser,{width:360,height:568},'http://127.0.0.1:4321',async()=>{throw Error('axe');}),new RegExp(failure));
+  assert.equal(closed,true);
+ }
 });

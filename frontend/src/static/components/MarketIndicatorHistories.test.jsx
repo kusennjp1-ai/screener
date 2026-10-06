@@ -1,11 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { ThemeProvider, createTheme, getContrastRatio } from '@mui/material/styles';
 import MarketIndicatorHistories from './MarketIndicatorHistories';
 import InstitutionalEvidence from './InstitutionalEvidence';
 import BaseCountEvidence from './BaseCountEvidence';
+import { researchTheme } from '../theme/tokens';
 import { INDICATOR_HISTORY_VERSION } from '../indicatorHistory';
 import { entryHistory, ENTRY_HISTORY_VERSION, ENTRY_UNIVERSE, ENTRY_METHODS } from '../entryHistory';
-vi.mock('recharts', () => ({ ResponsiveContainer: ({ children }) => <div>{children}</div>, LineChart: ({ children }) => <div>{children}</div>, CartesianGrid: () => null, Legend: () => null, Line: () => null, Tooltip: () => null, XAxis: () => null, YAxis: () => null }));
+vi.mock('recharts', () => ({ ResponsiveContainer: ({ children }) => <div>{children}</div>, LineChart: ({ children }) => <div>{children}</div>, CartesianGrid: () => null, Legend: () => null, Line: () => null, Tooltip: () => null, XAxis: ({tick}) => <span data-testid="history-x-axis" style={{color:tick?.fill}}/>, YAxis: ({tick}) => <span data-testid="history-y-axis" style={{color:tick?.fill}}/> }));
 const date = '2026-09-29';
 describe('market indicator history display', () => {
   it('shows high/low immediately with historical coverage and preserves unavailable provider states', () => {
@@ -39,4 +41,20 @@ describe('market indicator history display', () => {
     expect(screen.getByRole('heading', { name: 'ベース段階の推移（自動推計）' })).toBeInTheDocument();
     expect(screen.getByText(/観測開始前の段階は不明/)).toBeInTheDocument();
   });
+});
+
+it.each([['dark','default'],['light','default'],['dark','research'],['light','research']])('uses readable %s %s theme axis/link colors without changing observations', (mode,kind)=>{
+ const theme=kind==='research'?createTheme(createTheme({palette:{mode,primary:{main:'#1976d2'}}}),researchTheme(mode)):createTheme({palette:{mode}});
+ const evidence={version:'book-market-v1',as_of_date:date,series:[{date,newHighs:72,newLows:178,coverage:4484,expectedUniverseSize:5901}]};
+ const original=JSON.stringify(evidence);
+ render(<ThemeProvider theme={theme}><MarketIndicatorHistories expectedDate={date} bookEvidence={evidence}/></ThemeProvider>);
+ expect(screen.getByTestId('history-x-axis')).toHaveStyle({color:theme.palette.text.secondary});
+ expect(screen.getByTestId('history-y-axis')).toHaveStyle({color:theme.palette.text.secondary});
+ const linkColor=mode==='dark'?theme.palette.primary.light:theme.palette.primary.dark;
+ expect(screen.getByRole('link',{name:'銘柄を選択 → 履歴'})).toHaveStyle({color:linkColor});
+ expect(getContrastRatio(linkColor,theme.palette.background.paper)).toBeGreaterThanOrEqual(4.5);
+ if(kind==='research')expect(getContrastRatio(theme.palette.text.secondary,theme.palette.background.paper)).toBeGreaterThanOrEqual(4.5);
+ const table=screen.getByRole('table',{name:'52週新高値・新安値の履歴',hidden:true});
+ expect(table).toHaveTextContent('72');expect(table).toHaveTextContent('178');expect(table).toHaveTextContent('4,484 / 5,901');
+ expect(JSON.stringify(evidence)).toBe(original);
 });
