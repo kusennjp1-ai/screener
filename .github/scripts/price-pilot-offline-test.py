@@ -2,7 +2,10 @@
 from copy import deepcopy
 import importlib.util
 from pathlib import Path
+import shlex
+from types import SimpleNamespace
 import unittest
+from urllib.parse import urlsplit
 
 spec = importlib.util.spec_from_file_location("offline_check", Path(__file__).with_name("price-pilot-offline-check.py"))
 check = importlib.util.module_from_spec(spec)
@@ -74,6 +77,34 @@ class OfflineHarnessTests(unittest.TestCase):
         for interfaces in ([], ["eth0"], ["lo", "eth0"], ["lo", "wlan0"]):
             with self.subTest(interfaces=interfaces), self.assertRaises(ValueError):
                 check.assert_disconnected(interfaces)
+
+    def test_required_database_import_configuration_is_inert_and_exact(self):
+        env={'DATABASE_URL':check.OFFLINE_DATABASE_URL,'REDIS_ENABLED':'false'}
+        settings=SimpleNamespace(database_url=check.OFFLINE_DATABASE_URL,redis_enabled=False)
+        check.assert_inert_configuration(env,settings)
+        parsed=urlsplit(check.OFFLINE_DATABASE_URL)
+        self.assertIsNone(parsed.username)
+        self.assertIsNone(parsed.password)
+        self.assertIsNone(parsed.port)
+        self.assertEqual(parsed.hostname,'price-pilot-unused.invalid')
+        for bad in (None,'','postgresql://localhost/real','postgresql://user:password@db.example/real',
+                    'postgresql://user:password@price-pilot-unused.invalid/price_pilot_unused'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                check.assert_inert_configuration({**env,'DATABASE_URL':bad})
+        with self.assertRaises(ValueError):
+            check.assert_inert_configuration(env,SimpleNamespace(database_url='different',redis_enabled=False))
+        with self.assertRaises(ValueError):
+            check.assert_inert_configuration({**env,'REDIS_ENABLED':'true'})
+
+    def test_database_url_is_supplied_only_to_disconnected_test_container(self):
+        shell=Path(__file__).with_name('price-pilot-offline.sh').read_text()
+        before, test=shell.split('docker create --name "$test_name" --network none',1)
+        self.assertNotIn('DATABASE_URL',before)
+        command=test.split('# Inspect the actual launched configuration',1)[0]
+        self.assertIn('DATABASE_URL='+check.OFFLINE_DATABASE_URL,shlex.split(command))
+        self.assertEqual(shell.count('DATABASE_URL='),1)
+        dockerfile=Path(__file__).with_name('price-pilot-offline.Dockerfile').read_text()
+        self.assertNotIn('DATABASE_URL',dockerfile)
 
     def test_actual_container_network_mode_and_port_exposure_are_checked(self):
         records = [{"Name": f"test-{n}", "Id": str(n), "Image": "sha256:test",

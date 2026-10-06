@@ -35,6 +35,23 @@ server run IDs before testing. It sends no external connectivity probes.
 This kernel/container boundary also contains curl_cffi; Python socket patches
 would not be sufficient.
 
+Only the disconnected test container receives the synthetic import setting
+`DATABASE_URL=postgresql://price-pilot-unused.invalid/price_pilot_unused`.
+It contains no credentials and uses a reserved `.invalid` hostname. No database
+service is started or used. The runtime checker requires that exact value before
+importing the backend and confirms the resulting settings afterward; dependency
+builds and Redis containers do not receive it. The failed preview run 37522561704
+had already installed the full dependencies and passed `pip check`, but stopped
+at the mandatory Settings import before Redis/tests. This fixes that harness
+configuration failure without enabling any network or provider path.
+
+The import audit found no Settings fields without defaults and only one model
+validator, whose nonempty DATABASE_URL check was the missing requirement. The
+other validators accept the shipped defaults. `app.config.pipeline_config` and
+the market-queue/catalog imports define local data; rate-budget construction and
+database lookup remain lazy. No other required setting or import-time database
+connection was found in this tested import path.
+
 The offline job also runs the exact-run admission unit tests using synthetic history.
 It never consumes an approved capture admission or invokes a capture workflow.
 The integration suite checks independent-client concurrent atomic reservations,

@@ -19,6 +19,7 @@ BRANCH = "preview/four-symbol-price-pilot-offline"
 WORKFLOW_PATH = ".github/workflows/price-pilot-offline-preview.yml"
 PINS = {"yfinance": "0.2.66", "curl_cffi": "0.16.3", "exchange-calendars": "4.5.3"}
 SOCKETS = ("/control/redis.sock", "/isolated-control/redis.sock")
+OFFLINE_DATABASE_URL = "postgresql://price-pilot-unused.invalid/price_pilot_unused"
 
 
 def write_json(path, value):
@@ -78,6 +79,14 @@ def assert_disconnected(interfaces):
         raise ValueError("offline tests require only the loopback interface")
 
 
+def assert_inert_configuration(env, settings=None):
+    """Satisfy Settings import without credentials or an actual database target."""
+    if env.get('DATABASE_URL') != OFFLINE_DATABASE_URL or env.get('REDIS_ENABLED') != 'false':
+        raise ValueError('offline tests require the exact inert database URL and disabled application Redis')
+    if settings is not None and (settings.database_url != OFFLINE_DATABASE_URL or settings.redis_enabled is not False):
+        raise ValueError('imported application settings differ from the inert offline configuration')
+
+
 def inspect_containers(records):
     if len(records) != 3:
         raise ValueError("expected exactly one test and two isolated Redis containers")
@@ -122,6 +131,7 @@ def check(args):
             raise ValueError("required offline test admission is missing")
         interfaces = sorted(os.listdir("/sys/class/net"))
         assert_disconnected(interfaces)
+        assert_inert_configuration(os.environ)
         records = json.loads((artifacts / "containers.json").read_text())
         report["containers"] = inspect_containers(records)
         report["network_boundary"] = {"docker_network_mode": "none", "interfaces": interfaces,
@@ -144,8 +154,9 @@ def check(args):
         verify_vendor_sources(proposal)
         report["vendor_source_contract"] = "verified"
         from app.config import settings
-        if settings.redis_enabled is not False:
-            raise ValueError("the offline preview must leave production Redis activation disabled")
+        assert_inert_configuration(os.environ, settings)
+        report['application_configuration'] = {'database_target': 'synthetic_unused_invalid_hostname',
+                                               'database_service_started': False, 'application_redis_enabled': False}
         pending = json.loads((Path(args.root) / "docs/financial-source-evidence/four-symbol-price-pilot-admission-pending-2026-10-06.json").read_text())
         if pending.get("capture_approved") is not False:
             raise ValueError("the preview requires the non-capture pending admission")

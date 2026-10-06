@@ -82,6 +82,7 @@ docker create --name "$test_name" --network none \
   --env PYTHONUNBUFFERED=1 --env PYTHONDONTWRITEBYTECODE=1 \
   --env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
   --env LITELLM_LOCAL_MODEL_COST_MAP=true --env REDIS_ENABLED=false \
+  --env DATABASE_URL=postgresql://price-pilot-unused.invalid/price_pilot_unused \
   "$tag"
 # Inspect the actual launched configuration, not just a declared environment flag.
 docker inspect "$test_name" "$shared_name" "$isolated_name" > "$output/containers.json"

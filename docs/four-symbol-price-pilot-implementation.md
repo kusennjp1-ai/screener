@@ -323,14 +323,18 @@ wait limits, malformed/nonnumeric/nonfinite state and invalid intervals. Lua
 validates all inputs and existing budget values before any SET. A separate
 server test explicitly demonstrates that isolated Redis instances cannot prove
 cross-job global budgeting. Required integration skips are a CI failure.
-Eight additional portable harness/provenance tests check the exact GitHub
+Ten additional portable harness/provenance tests check the exact GitHub
 run/attempt/SHA/branch and the network-boundary validator.
 
 Portable checks and exact commands are in
 [the harness guide](../.github/scripts/price-pilot-offline-README.md). Locally the
-40 adapter/admission tests and eight harness tests pass; the 66 Redis cases only
-collect. **Full dependency/image resolution, Docker isolation and actual Redis
-Lua/concurrency execution remain pending the separately admitted CI preview.**
+40 adapter/admission tests passed, and the inert-configuration correction passes
+ten harness tests; the 66 Redis cases have only been collected locally. The first
+offline CI run installed the full dependencies and passed `pip check`, then
+stopped at the required DATABASE_URL import before Redis/tests. Only the
+disconnected test container now receives a credential-free `.invalid` database
+URL, checked before and after import. **Actual Redis Lua/concurrency execution
+and the complete corrected CI result remain pending.**
 No local Redis installation was performed and mocked Redis results are not
 reported as real Lua execution. Earlier ten pure history-integrity and 27
 calendar/close checks also passed; the broader database test limitation remains
