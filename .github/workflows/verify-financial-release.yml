@@ -1,0 +1,44 @@
+name: Verify Deployed Financial Release
+
+# Push this branch only after the owner observes the expected deployment succeed.
+# This independent check cannot publish or change provider/Pages state.
+on:
+  push:
+    branches: [preview/verify-financial-release-99]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verify-financial-release-99
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify exact live financial release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check verifier harness syntax and expected binding tests
+        run: |
+          node --check .github/scripts/verify-financial-release.mjs
+          node --check .github/scripts/verify-financial-release.test.mjs
+          node --test .github/scripts/verify-financial-release.test.mjs
+      - name: Verify latest deployment and all live approved UI bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/verify-financial-release.mjs "$RUNNER_TEMP/financial-live-verification.json"
+      - name: Retain bounded public verification metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-live-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-live-verification.json
+          retention-days: 7
+          if-no-files-found: error
