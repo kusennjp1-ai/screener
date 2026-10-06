@@ -5,7 +5,10 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {githubApi} from './publication-gate.mjs';
 
-const local = name => readFileSync(new URL(`../../contracts/${name}`,import.meta.url));
+const local = name => {
+  const path=`../../contracts/${name}`;
+  return readFileSync(new URL(path,import.meta.url));
+};
 const referenceBytes=local('financial_source_postcapture_reference_v1.json');
 const requestBytes=local('financial_source_postcapture_request_v1.json');
 const schemaBytes=local('financial_source_postcapture_receipt_v1.schema.json');
