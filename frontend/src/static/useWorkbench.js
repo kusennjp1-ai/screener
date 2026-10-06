@@ -12,12 +12,12 @@ export function useWorkbench(entry) {
   const query = useQuery({
     queryKey: ['workbench-summary', ref?.path, ref?.sha256, ref?.snapshot_id, asOf],
     enabled: Boolean(ref?.path), staleTime: Infinity, placeholderData: () => undefined,
-    queryFn: () => fetchStaticJson(ref.path, { sha256: ref.sha256, worker: summaryRef ? true : 'workbench-summary' }),
+    queryFn: () => fetchStaticJson(ref.path, { sha256: ref.sha256, worker: summaryRef ? true : 'workbench-summary', ...(entry?.publication && { publication: entry.publication }) }),
     select,
   });
   // React Query may retain the last selected value when select rejects a new
   // response. A failed identity check must not expose that preceding result.
-  return query.isError ? { ...query, data: undefined } : query;
+  return { ...query, publication: entry?.publication, ...(query.isError && { data: undefined }) };
 }
 
 export function useWorkbenchDetails(summaryQuery, enabled) {
@@ -27,7 +27,7 @@ export function useWorkbenchDetails(summaryQuery, enabled) {
     queryKey: ['workbench-details', ref?.path, ref?.sha256, ref?.snapshot_id, summary?.as_of],
     enabled: Boolean(enabled && !summaryQuery.isError && ref?.path),
     staleTime: Infinity, placeholderData: () => undefined,
-    queryFn: () => fetchStaticJson(ref.path, { sha256: ref.sha256, worker: 'workbench' }),
+    queryFn: () => fetchStaticJson(ref.path, { sha256: ref.sha256, worker: 'workbench', ...(summaryQuery.publication && { publication: summaryQuery.publication }) }),
     select,
   });
   // An invalid/new overview can never leave the preceding day's details visible.

@@ -2,16 +2,7 @@ import { prepareResearchBundle } from './researchPreprocess.js';
 import { researchPackets, workbenchPackets } from './researchWorkerPackets.js';
 import { summarizeWorkbench } from './workbenchSummary.js';
 
-async function read(url, sha256) {
-  const response = await fetch(url, { cache: /-[a-f0-9]{16}\.json$/.test(url) ? 'default' : 'no-cache', headers: { Accept: 'application/json' } });
-  if (!response.ok) throw Error(`データ取得に失敗しました（${response.status}）`);
-  const raw = await response.text();
-  if (sha256) {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-    if ([...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('') !== sha256) throw Error('Static asset integrity mismatch');
-  }
-  return JSON.parse(raw);
-}
+import { readStaticPayload } from './staticPublication.js';
 
 // A synchronous postMessage loop can queue the entire decoded publication
 // before the main thread reads its first packet. Keep one packet in flight so
@@ -35,9 +26,10 @@ self.onmessage = async ({ data }) => {
       sendPackets(researchPackets(prepareResearchBundle(data.payloads,data.date,data.evaluation)));
       return;
     }
-    const index = await read(data.url, data.sha256);
+    const read = (path, sha256) => readStaticPayload(path, { publication: data.publication, sha256 });
+    const index = await read(data.path, data.sha256);
     const result = data.operation === 'research'
-      ? prepareResearchBundle([index, ...await Promise.all((index.chunks || []).map(chunk => read(new URL(chunk.path, data.baseUrl).href)))], data.date, data.evaluation)
+      ? prepareResearchBundle([index, ...await Promise.all((index.chunks || []).map(chunk => read(chunk.path, chunk.sha256)))], data.date, data.evaluation)
       : index;
     if(data.operation==='research') sendPackets(researchPackets(result));
     else if(data.operation==='workbench') sendPackets(workbenchPackets(result));

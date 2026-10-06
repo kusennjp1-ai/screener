@@ -1,0 +1,10 @@
+{
+  "schema_version": "unapproved-financial-lifecycle-capture-v1",
+  "capture": {
+    "artifact_id": 11391167234,
+    "archive_bytes": 370036157,
+    "archive_sha256": "5f2f6ef6d842c2841fb45e89f54154f2d29db70dacc194f70483f8c2bd1729b8",
+    "ui_sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "ui_tree": "1c0219a170dcbdeb1af539e4cf7a04018251ca02"
+  }
+}

@@ -1,3 +1,4 @@
+import { publicationQueryIdentity } from './staticPublication';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability';
 import { projectFinancialRow, mergeFinancialDetail } from './financialCurrent';
 import { useFinancialClock } from './useFinancialClock';
@@ -54,7 +55,7 @@ function StaticChartViewerModal({
   chartIndex,
   navigationSymbols = null,
   researchRows = null,
-  generation,
+  generation, publication,
   method, date, market, now: suppliedNow, quote,
 }) {
   const queryClient = useQueryClient();
@@ -115,8 +116,8 @@ function StaticChartViewerModal({
     isError,
   } = useQuery({
     placeholderData: () => undefined,
-    queryKey: [...staticChartKeys.payload(currentSymbol, currentEntry?.path), ...(generation ? [generation] : [])],
-    queryFn: () => fetchStaticChartPayload(currentEntry.path),
+    queryKey: [...staticChartKeys.payload(currentSymbol, currentEntry?.path), ...(generation ? [generation] : []), ...(publication ? [publicationQueryIdentity(publication)] : [])],
+    queryFn: () => fetchStaticChartPayload(currentEntry.path, { generation, publication }),
     enabled: open && Boolean(currentEntry?.path),
     staleTime: Infinity,
     gcTime: Infinity,
@@ -133,8 +134,8 @@ function StaticChartViewerModal({
         return;
       }
       queryClient.prefetchQuery({
-        queryKey: [...staticChartKeys.payload(entry.symbol, entry.path), ...(generation ? [generation] : [])],
-        queryFn: () => fetchStaticChartPayload(entry.path),
+        queryKey: [...staticChartKeys.payload(entry.symbol, entry.path), ...(generation ? [generation] : []), ...(publication ? [publicationQueryIdentity(publication)] : [])],
+        queryFn: () => fetchStaticChartPayload(entry.path, { generation, publication }),
         staleTime: Infinity,
         gcTime: Infinity,
       });
@@ -168,7 +169,7 @@ function StaticChartViewerModal({
     return () => {
       timeouts.forEach(clearTimeout);
     };
-  }, [currentIndex, entryBySymbol, generation, open, queryClient, symbols]);
+  }, [currentIndex, entryBySymbol, generation, publication, open, queryClient, symbols]);
 
   useEffect(() => {
     if (!open) {
@@ -202,7 +203,7 @@ function StaticChartViewerModal({
     enabled:Boolean(open && researchRow?.research_detail_path),
     staleTime:Infinity, placeholderData:()=>undefined,
     queryFn:async()=>{
-      const detail=await fetchStaticJson(researchRow.research_detail_path);
+      const detail=await fetchStaticJson(researchRow.research_detail_path, { generation, publication });
       if(detail.symbol!==currentSymbol || (!expectedDate || detail.as_of_date!==expectedDate)) throw Error('Detail identity mismatch');
       return { value: detail, symbol: currentSymbol, date: expectedDate, generation, path: researchRow.research_detail_path };
     },

@@ -1,3 +1,4 @@
+vi.mock('./staticPublication', async importOriginal => ({ ...await importOriginal(), resolveStaticPublication: async ({ publication, generation } = {}) => publication || { mode: 'legacy', baseURL: new URL('/', location.href).href, generation } }));
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';

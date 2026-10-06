@@ -109,6 +109,62 @@ for(const validate of [validateCandidateRecord,parseFinancialActivationCandidate
         self.retain()
         self.assertTrue(self.output.is_file())
 
+    def packed_fixture(self):
+        # This fixture isolates archive authority/race handling. The adapter's
+        # independent contracts verify the real compressed logical data.
+        preview = {"schema": "static-json-transport-preview-v1", "publication_authority": "none",
+                   "ui_sha": self.receipt["candidate_ui"]["sha"], "ui_digest": self.receipt["candidate_ui"]["digest"],
+                   "data_manifest_sha256": self.hash(self.files["corrected/static-data/manifest.json"]),
+                   "transport": {"fixture": True}}
+        self.files["corrected/publication.json"] = json.dumps(preview).encode()
+        self.files["transport.json"] = b'{"fixture":"transport record"}'
+        for name in ("corrected/publication.json", "transport.json"):
+            (self.root / name).write_bytes(self.files[name])
+        physical = {name.removeprefix("corrected/"): self.hash(data) for name, data in self.files.items() if name.startswith("corrected/")}
+        return {"schema": "verified-candidate-transport-v1",
+                "logical_data_inventory_sha256": self.receipt["bundles"]["corrected_data_sha256"],
+                "ui_inventory_sha256": self.receipt["candidate_ui"]["digest"],
+                "physical_inventory_sha256": diagnostic.digest(physical),
+                "preview_publication_sha256": self.hash(self.files["corrected/publication.json"])}
+
+    def test_packed_preview_retains_exact_unapproved_descriptor_and_separate_inventories(self):
+        verified = self.packed_fixture()
+        with patch.object(diagnostic, "verify_candidate_transport", return_value=verified) as check:
+            self.retain()
+        check.assert_called_once_with(self.root)
+        with tarfile.open(self.output) as archive:
+            metadata = json.load(archive.extractfile("UNAPPROVED.json"))
+            self.assertEqual(metadata["transport_verification"], verified)
+            self.assertEqual(archive.extractfile("review-only/corrected/publication.json").read(), self.files["corrected/publication.json"])
+            self.assertEqual(archive.extractfile("review-only/transport.json").read(), self.files["transport.json"])
+        self.assertFalse(metadata["activation_eligible"])
+
+    def test_packed_preview_cannot_admit_authority_or_skip_failed_verification(self):
+        self.packed_fixture()
+        path = self.root / "corrected/publication.json"
+        original = json.loads(path.read_bytes())
+        for change in ({"schema": 1}, {"publication_authority": "approved"}, {"approval": {"type": "gates"}}):
+            with self.subTest(change=change):
+                path.write_text(json.dumps({**original, **change}))
+                with self.assertRaises(ValueError):
+                    self.retain()
+                self.assert_no_output()
+        path.write_bytes(self.files["corrected/publication.json"])
+        with patch.object(diagnostic, "verify_candidate_transport", side_effect=ValueError("Corrupt compressed member")):
+            with self.assertRaisesRegex(ValueError, "Corrupt compressed"):
+                self.retain()
+        self.assert_no_output()
+
+    def test_packed_bytes_changed_after_verification_leave_no_archive(self):
+        verified = self.packed_fixture()
+        def mutate(_):
+            (self.root / "corrected/index.html").write_bytes(b"mutated after verification")
+            return verified
+        with patch.object(diagnostic, "verify_candidate_transport", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "changed"):
+                self.retain()
+        self.assert_no_output()
+
     def test_preparation_and_run_identity_fail_closed(self):
         for key, value in (("preparation_outcome", "failure"), ("candidate", "false"), ("run_id", "0"),
                            ("run_attempt", "latest"), ("head_sha", "main"), ("repository", "other/repo")):

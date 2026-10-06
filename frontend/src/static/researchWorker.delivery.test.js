@@ -52,16 +52,16 @@ it('applies the same backpressure to full workbench details without dropping met
   const items = Array.from({ length: 701 }, (_, index) => ({ symbol: `S${index}`, state: 'incomparable', changes: [], precise: index / 7 }));
   const workbench = { as_of: '2026-09-30', snapshot_id: 'publication-one', history: { previous_as_of: null },
     changes: { minervini: { counts: { incomparable: 701 }, items }, ibd: { counts: { incomparable: 701 }, items } } };
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(workbench) })));
-  await self.onmessage({ data: { operation: 'workbench', url: 'https://example.test/workbench.json' } });
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => workbench })));
+  await self.onmessage({ data: { operation: 'workbench', path: 'workbench.json', publication: { mode: 'legacy', baseURL: 'https://example.test/' } } });
   expect(messages).toHaveLength(1);
   expect(messages[0].packet.kind).toBe('workbench-start');
   expect(await receivePublication()).toEqual(workbench);
 });
 
 it('reports a deferred generator failure rather than continuing a partial publication', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => JSON.stringify({ changes: { ibd: { items: null } } }) })));
-  await self.onmessage({ data: { operation: 'workbench', url: 'https://example.test/workbench.json' } });
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ changes: { ibd: { items: null } } }) })));
+  await self.onmessage({ data: { operation: 'workbench', path: 'workbench.json', publication: { mode: 'legacy', baseURL: 'https://example.test/' } } });
   expect(messages).toHaveLength(1);
   await self.onmessage({ data: { operation: 'next-packet' } });
   expect(messages[1]).toEqual({ error: 'Invalid workbench change records' });

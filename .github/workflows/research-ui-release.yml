@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       ui_only:
-        description: 'Reuse verified evidence; new UI still requires both quality gates'
+        description: 'Reuse verified evidence; ordinary new UI requires both quality gates'
         type: boolean
         default: false
       financial_correction:
@@ -49,6 +49,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Resolve the exact versioned exception controls
+        id: exception_controls
+        run: node .github/scripts/financial-performance-exception.mjs controls
+      - name: Restore the exact exception capture Git objects
+        if: steps.exception_controls.outputs.pinned_capture_shas != ''
+        env:
+          CAPTURE_SHAS: ${{ steps.exception_controls.outputs.pinned_capture_shas }}
+        run: for capture_sha in $CAPTURE_SHAS; do git fetch --no-tags origin "$capture_sha"; done
       - uses: actions/setup-python@v5
         if: hashFiles('.github/financial-release-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
         with:
@@ -190,6 +198,9 @@ jobs:
           path: release/frontend/dist
           retention-days: 90
           if-no-files-found: error
+      - name: Enforce final GitHub Pages payload and TAR limits
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
+        run: python3 .github/scripts/check-pages-payload.py release/frontend/dist
       - uses: actions/upload-pages-artifact@v4
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
         with:
@@ -201,6 +212,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs recheck
+      # The performance exception additionally needs its separate hash-bound
+      # release-intent record. A certificate or pin alone never enables it.
       # Correction activation needs a separately reviewed, hash-bound promotion
       # request after durable operator backup. No boolean can bypass that step.
       - name: Deploy to GitHub Pages

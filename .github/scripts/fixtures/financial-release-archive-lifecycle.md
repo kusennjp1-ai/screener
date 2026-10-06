@@ -1,7 +1,8 @@
 # Retained-archive lifecycle integration
 
 This opt-in test uses the original reviewed source, certificate, predecessor and
-captured diagnostic ZIPs. It preserves the full 5,901-row acquisition base and
+captured diagnostic ZIPs. Both raw v1 and packed v2 captures are supported. It
+preserves the full 5,901-row acquisition base and
 replays the current baseline with the captured production code. It does not
 replace the production trust registry or fetch provider data.
 
@@ -21,21 +22,25 @@ accepted release artifacts.
   captured commit and exact tree. The helper checks out that commit before
   exercising the publisher; changing the surrounding test branch cannot change
   the captured controller.
+- Packed captures require the controller's single-pass
+  `verifyCandidateTransport(..., {restore})` interface. Never patch a retained
+  captured checkout to add it; take a new capture after integration.
 - Reserve at least 16 GiB free scratch space after materializing the original
   inputs. The helper streams diagnostic extraction. It exercises production
   sealing with its uncompressed TAR, then gzip-wraps those exact TAR bytes for
   the offline transport. The report records each original TAR size and hash.
-  Production packing is unchanged; its larger transport disk usage is not
-  represented by the compressed fixture. Production activation restore still
-  makes two full bundle copies.
+  For a packed capture, the TAR contains the original packed corrected tree and
+  `transport.json`; its v2 record seals that file's exact hash. Outer gzip is only
+  a scratch-space optimization and is distinct from the production lossless
+  transport. Authenticated logical trees also need space during verification.
 - Give the workflow only `contents: read` and `actions: read`. There is no Pages
   permission, provider credential, deployment step or publication trigger.
 
 Create an input JSON file with the schema in
 `financial-release-archive-input.example.json`, using absolute local paths and a
-new scratch directory. The example pins the October 5 diagnostic from run 37282323021 and
+new scratch directory. The example pins the reviewed October 5 diagnostic and
 all three original ZIP hashes; do not silently substitute another artifact.
-The previous diagnostic from run 37263438505 captures commit `e253d22762c1dd79eb4b35851f94dd142903e628`
+That original diagnostic captures commit `e253d22762c1dd79eb4b35851f94dd142903e628`
 and tree `351f5e3ea64606f1e28df284a840bd0e56856069`. Run
 [37269230373](https://github.com/kusennjp1-ai/screener/actions/runs/37269230373)
 verified its complete input inventory and baseline, then reproduced the selector's
@@ -51,98 +56,139 @@ materialization belongs to the workflow; the test never downloads these files.
 python3 -m pip install -r .github/scripts/financial-release-projection-requirements.txt
 git cat-file -e e253d22762c1dd79eb4b35851f94dd142903e628^{tree}
 FINANCIAL_RELEASE_ARCHIVE_INPUT="$RUNNER_TEMP/financial-release-input.json" \
-  python3 .github/scripts/financial-lifecycle-watchdog.py \
-    --timeout-seconds 4500 \
-    --allocation-reason 'Test-only allocation: full retained-input run 37274346665 completed in 59m29s; UI performance budgets and validators are unchanged.' \
-    --job-clock "$RUNNER_TEMP/financial-release-job-clock.json" \
-    --job-timeout-seconds 5400 \
-    --upload-reserve-seconds 600 \
-    --minimum-runtime-seconds 3600 \
-    --report-directory "$RUNNER_TEMP/financial-release-archive-lifecycle" \
-    -- node --test --test-concurrency=1 .github/scripts/financial-release-archive-lifecycle.test.mjs
+  node --test --test-concurrency=1 .github/scripts/financial-release-archive-lifecycle.test.mjs
 ```
 
-The watchdog defaults to 30 minutes. The dedicated rehearsal explicitly selects
-75 minutes because full retained-input run `37274346665` completed in 59m29s:
-activation passed, then carry failed its financial-identity assertion. The old
-Node test timer did not interrupt synchronous work at 30 minutes. This measured
-duration justifies the separate test-runtime allocation; every UI performance
-budget, source check, trust rule and production assertion remains unchanged.
-The chosen limit and measured reason are retained in `watchdog.json`. The
-supervisor passes the same allocation to Node's cooperative test timer; the
-external process remains responsible for actual deadline enforcement.
+The diagnostic runner keeps its existing external 75-minute maximum and
+90-minute CI job bound. `FINANCIAL_RELEASE_ARCHIVE_WATCHDOG_SECONDS` aligns the
+cooperative Node test timer with the supervisor's effective allocation and may
+not exceed 4,500 seconds; without the supervisor it retains the 1,800-second
+default. Do not raise either bound to make packed replay pass. Use the existing
+monotonic supervisor, early job clock, remaining-budget cap and upload reserve
+from the dedicated diagnostic workflow. Its supervisor records phase/command
+starts before synchronous work, bounded failure output, monotonic durations and
+stationary-phase heartbeats. These controls do not alter financial clocks.
+For example:
 
-The first workflow step records a monotonic job clock before checkout, package
-setup and input downloads. At test startup the supervisor caps the requested
-75 minutes by the remaining 90-minute job budget minus an explicit 10-minute
-artifact-upload reserve. If preparation leaves less than 60 useful test minutes
-(rounded above the measured 59m29s rehearsal), it writes an
-`insufficient_job_budget` record and exits 125 without launching the test.
-The early clock, preparation elapsed time, requested/effective limits and reserve
-are retained with the diagnostics. Do not recreate that clock immediately before
-the test; doing so would erase preparation time from the budget.
+```sh
+FINANCIAL_RELEASE_ARCHIVE_INPUT="$RUNNER_TEMP/financial-release-input.json" \
+  python3 .github/scripts/financial-lifecycle-watchdog.py \
+  --timeout-seconds 4500 \
+  --allocation-reason 'Retained packed-input rehearsal; existing runtime limits unchanged.' \
+  --job-clock "$RUNNER_TEMP/financial-release-job-clock.json" \
+  --job-timeout-seconds 5400 --upload-reserve-seconds 600 \
+  --minimum-runtime-seconds 3600 \
+  --report-directory "$RUNNER_TEMP/financial-release-archive-lifecycle" \
+  -- node --test --test-concurrency=1 .github/scripts/financial-release-archive-lifecycle.test.mjs
+```
 
-The external watchdog enforces that whole-test allocation using a monotonic
-clock, even while Node is blocked in synchronous work. It
-creates a separate process session and stops only that test's process group,
-then stops and reaps its adopted descendants, including detached sessions.
-After a normal leader has been reaped, cleanup never signals its old numeric
-process group; only still-owned adopted descendants authorize cleanup.
-Ordinary exit codes are preserved; timeout is exit
-124. The diagnostic step has a 77-minute backup limit inside the unchanged
-90-minute job. The remaining-budget cap, rather than that backup alone, reserves
-time for the following `if: always()` evidence upload.
-This does not expand any validator, source policy or financial evaluation clock.
+The diagnostic workflow is deliberately unbound: the checked-in
+`financial-release-archive-capture.json` has `capture: null`. Before publishing a
+rehearsal branch, replace it with the independently verified diagnostic
+`artifact_id`, `archive_bytes`, `archive_sha256`, `ui_sha` and `ui_tree`. The guard
+rejects missing or malformed bindings before dependencies or downloads. No real
+artifact ID or captured revision is inferred from the running Design job.
+
+The workflow explicitly fetches that exact captured SHA, verifies its tree and
+then places both identities in the input manifest for comparison with the
+actual preview receipt. `fetch-depth: 0` alone does not guarantee the presence
+of a pull-request merge object. Read-only permissions and
+`persist-credentials: false` remain in place. The public repository uses plain
+`git fetch --no-tags origin "$CAPTURED_SHA"`; artifact API reads retain the existing
+read-only job token.
+
+Create the job clock before checkout, dependency setup and materialization. The
+report directory must equal `directory` in the input JSON. Archive hashes must
+come from separately verified retained inputs. A new packed diagnostic needs its
+own artifact ID, ZIP hash, literal captured SHA/tree and protected-source
+inventory; keep the reviewed source/certificate/predecessor hashes unchanged.
+The historical example is deliberately not silently rebound to a new capture.
+
+For a bounded input preflight, use a separate new scratch directory and run:
+
+```sh
+node --input-type=module - "$RUNNER_TEMP/financial-release-input.json" <<'JS'
+import {runArchiveLifecycle} from './.github/scripts/fixtures/financial-release-archive-lifecycle.mjs';
+await runArchiveLifecycle(process.argv[2], {preflightOnly:true});
+JS
+```
+
+This verifies the four ZIP hashes, source/certificate/predecessor bindings,
+captured checkout/protected code, physical transport, original logical UI/data
+inventory and logical price observations, then stops before baseline replay or
+synthetic activation. It records `outcome: "preflight-only"`. A passing preflight
+cannot substitute for activation/carry completion. Use another new directory for
+the full run.
+
+Packed input preflight performs one authenticated full decode, checks physical
+fingerprints before and after, then removes its logical scratch tree. Activation
+and final carry each get one separate authenticated logical tree for fixture
+assertions; the activation tree is moved directly into synthetic next-price
+preparation. There is no cross-stage verification cache. Production CLI rechecks
+remain unchanged. Measure these costs on retained inputs before admitting a full
+run; their time counts toward the same outer deadline.
 Without `FINANCIAL_RELEASE_ARCHIVE_INPUT`, this integration is explicitly skipped.
 The fast synthetic carry regression runs separately with:
 
 ```sh
 node --test .github/scripts/financial-release-lifecycle.test.mjs
-node --test .github/scripts/financial-lifecycle-watchdog.test.mjs
 ```
 
 ## What executes
 
-1. Verify every outer input hash and the diagnostic's corrected UI/data inventory.
+1. Verify every outer input hash and the diagnostic's transport seals, original
+   logical UI/data inventory and unchanged logical price observations. Raw
+   candidates keep v1 records; packed candidates use v2 plus `transport_sha256`.
 2. Recreate and hash-check the exact captured baseline from the actual predecessor.
 3. Run successful production sealing for original/current synthetic Design
    artifacts with unchanged protected code, real preview/projection/source bytes
    and explicit local-only pins, then compress the sealed TAR transport.
 4. Invoke the production activation `plan`, `restore`, `compose`, pre-upload
-   `recheck`, pre-deploy `recheck`, and normal `livePublication` reader.
+   `recheck`, pre-deploy `recheck`, and normal `livePublication` reader. Authenticate
+   the resulting packed publication before applying logical financial assertions;
+   keep the physical publication as the simulated live endpoint.
 5. Release only generated candidate staging. Preserve original inputs.
 6. Prepare an explicitly synthetic next-price feed for the full current universe
    by appending an observation at each existing chart's unchanged final price.
-   Prior bars and original source receipts are preserved.
+   The market date `2026-10-05` and evaluation clock exactly 24 hours after the
+   captured evaluation are artificial fixture inputs. This is not a provider
+   fetch or evidence that any real later market observation occurred. Prior bars
+   and original source receipts are preserved. The fixture also advances only
+   `financial-history.json.as_of_date`, its containing analysis-date header,
+   before the ordinary export; all nested history values and source timestamps
+   remain unchanged. This preserves the strict production metadata comparison.
 7. Invoke the production advancing plan/restore/prepare-carry/export/history/
    compose/recheck/recheck/live-reader flow against the just-activated lineage.
-8. Check the original source projection/base/lineage, next NVDA price date and
-   retained historical snapshots in the carried publication.
+8. Authenticate final carried logical bytes and check the original source
+   projection/base/lineage, unchanged source receipt timestamps and proof tuples,
+   advanced NVDA and every canonical target chart date, full target symbol universe
+   and retained historical snapshots. Only the carry's declared evaluation clock
+   advances; source and proof clocks are not refreshed.
 
-The scratch directory retains `report.json`, phase logs, `trace.jsonl`,
-`last-failure.json` and `watchdog.json`. Phase/command starts are saved before
-blocking work; ends include actual elapsed durations and appear in CI stdout.
-The external supervisor emits a bounded heartbeat every 30 seconds with elapsed
-time, the last phase/command and whether new phase/command evidence appeared.
-These heartbeat observations are also retained in `watchdog.json`; a stationary
-phase is not described as progress merely because time passed.
-The watchdog's separate timeout record identifies the last phase/command and
-elapsed time without replacing the existing partial report, failure or trace.
-Command arguments and environments are omitted from timing logs; failure output
-is bounded. Publish only these diagnostics if needed, under
+The scratch directory retains `report.json`, phase logs, `trace.jsonl` and
+`last-failure.json` on failure. Publish only these diagnostics if needed, under
 an explicitly **unapproved test report** artifact name. A skipped, incomplete or
-failed run must never be reported as a successful activation integration.
+failed run must never be reported as a successful activation integration. A
+complete report has `outcome: "activation-and-synthetic-next-price-carry-passed"`.
+Even that outcome grants no real CI/Design approval, performance exception,
+activation intent, publication permission or deployment authority.
 
-The current example is bound to diagnostic artifact `11333869601`, SHA256
-`2df75f7c8e8f0b43b4ea36ddc5c79531c97407d67593cdcb75e6127aa2dce0f9`,
-which captures `34ecbf507a4270f796078d669c21c373c0d1279a` / tree
-`9331c7c06b54dc2ad54fabff3d6503f3b24a673b`. Its real Design run failed
-performance limits; this is a fresh controller reproduction input, not an
-approved release. The new helper run must verify these captured bytes before
-claiming the startup fix is exercised.
+## Reconciled successful-run fixes
 
-Run [37274346665](https://github.com/kusennjp1-ai/screener/actions/runs/37274346665)
-completed initial simulated activation but rejected the following carry at a
-BITU chart identity mismatch. The new captured exporter preserves inherited
-chart scope during admitted carry. The prior failed result is retained; a new
-full lifecycle pass is not inferred from the compact red/green regressions.
+The history-header repair and watchdog were recovered from the exact source of
+successful retained-input run 37321769815, commit
+[`f661299`](https://github.com/kusennjp1-ai/screener/commit/f661299ec14b2a115b8e77984bf560784bcfaf7b).
+The bounded history regression first reproduces the stale-header compose failure,
+then exercises the repaired fixture through compose and both rechecks, including
+rejection of changed source clocks, removed-symbol history and protected derived
+metadata. The watchdog tests include host-uptime-independent clock fixtures and
+the invalid pre-boot-clock rejection. Packed lifecycle/controller selection
+options remain available alongside those historical repairs.
+
+```sh
+node --test --test-concurrency=1 \
+  .github/scripts/financial-carry-history-date.test.mjs \
+  .github/scripts/financial-lifecycle-watchdog.test.mjs \
+  .github/scripts/static-transport-carry.test.mjs \
+  .github/scripts/financial-release-archive-lifecycle.test.mjs
+```

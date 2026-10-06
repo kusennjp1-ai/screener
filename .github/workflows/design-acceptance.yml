@@ -60,6 +60,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: node .github/scripts/financial-release-activation.mjs design-prepare
+      # Transport-capable candidates are already packed and verified by
+      # design-prepare. The browser, diagnostic archive and seal all use that
+      # same corrected directory. The old baseline remains its raw format.
       - name: Restore checked input and record the comparison basis
         env:
           GH_TOKEN: ${{ github.token }}
@@ -108,7 +111,9 @@ jobs:
               source="$GITHUB_WORKSPACE/frontend"
             fi
             if [ "$target" = current ] && [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
-              # Measure, seal and publish these exact bytes. No post-test build.
+              # Measure and seal these exact UI/payload bytes. Publication may
+              # add only separately verified financial release metadata.
+              # There is no post-test UI build or source-data regeneration.
               ln -s "$FINANCIAL_CANDIDATE_DIR/corrected" "$source/dist"
               continue
             fi
@@ -119,7 +124,14 @@ jobs:
             fi
             mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
             (cd "$source" && npx vite build)
-            ln -s "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+            if [ "$target" = current ] && [ -f "$source/dist/static-transport-capability.json" ]; then
+              # The new decoder must be measured with its actual physical
+              # representation. The old comparison UI remains raw.
+              mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+              node .github/scripts/design-transport.mjs "$source/dist" "$RUNNER_TEMP/design-input-provenance.json"
+            else
+              ln -s "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+            fi
           done
           (cd frontend && node tools/build-radar-benchmark.mjs)
       - name: Measure all routes, screenshots, accessibility and CPU 4x

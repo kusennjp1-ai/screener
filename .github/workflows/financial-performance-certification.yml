@@ -1,0 +1,69 @@
+name: Financial Performance Certification
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: financial-performance-certification
+  cancel-in-progress: false
+jobs:
+  certify:
+    name: Certify exact financial performance exception
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve the exact versioned exception controls
+        id: controls
+        run: node .github/scripts/financial-performance-exception.mjs controls
+      - uses: actions/setup-python@v5
+        if: steps.controls.outputs.pending == 'true'
+        with:
+          python-version: '3.11'
+      - name: Restore the original captured Git object
+        if: steps.controls.outputs.pending == 'true'
+        env:
+          CAPTURE_SHA: ${{ steps.controls.outputs.capture_sha }}
+        run: git fetch --no-tags origin "$CAPTURE_SHA"
+      - name: Install isolated offline projection dependencies
+        if: steps.controls.outputs.pending == 'true'
+        run: |
+          python -m venv "$RUNNER_TEMP/financial-replay-runtime"
+          "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
+          echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
+      - name: Verify isolated offline projection runtime
+        if: steps.controls.outputs.pending == 'true'
+        env:
+          PYTHONPATH: backend
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: python -m unittest tests.unit.test_native_annual_projection.TestNativeAnnualProjection.test_new_policy_binds_source_without_changing_originals_or_quarterly_scalars
+      - name: Verify exact approval and immutable capture
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-performance-exception.mjs prepare
+      - name: Recheck financial proofs and seal exact exception candidate
+        if: steps.prepare.outputs.candidate == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-performance-exception.mjs seal
+      - name: Retain exact exception candidate and unchanged failed Design evidence
+        if: steps.prepare.outputs.candidate == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-performance-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-performance-certification/candidate.tar
+          retention-days: 14
+          if-no-files-found: error

@@ -10,6 +10,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+from financial_diagnostic_transport import preview_publication, verify_candidate_transport
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -58,7 +59,9 @@ def inventory(root, limits):
         name = path.relative_to(root).as_posix()
         require(re.fullmatch(r"[A-Za-z0-9._/-]+", name) and
                 all(part not in ("", ".", "..") for part in name.split("/")), "Unsafe diagnostic path")
-        require(path.name not in AUTHORITY_FILES, "Authority file is not a diagnostic input")
+        require(path.name not in AUTHORITY_FILES or
+                name == "corrected/publication.json" and preview_publication(root) is not None,
+                "Authority file is not a diagnostic input")
         info = path.lstat()
         require(stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode), "Linked or special diagnostic input")
         require(not stat.S_ISREG(info.st_mode) or info.st_nlink == 1, "Hard-linked diagnostic input")
@@ -73,6 +76,8 @@ def inventory(root, limits):
 
     for member in MEMBERS:
         visit(root / member)
+    if preview_publication(root) is not None:
+        visit(root / "transport.json")
     require(stat.S_ISDIR(result["corrected"].st_mode) and stat.S_ISDIR(result["projection"].st_mode),
             "Corrected build and projection must be directories")
     for member in MEMBERS[2:]:
@@ -114,12 +119,15 @@ def retain(root, output, context, limits):
     plain_directory(output.parent)
     require(root not in output.parents and not output.exists() and not output.is_symlink(), "Unsafe diagnostic output")
     before = inventory(root, limits)
+    require(preview_publication(root) is not None or not (root / "transport.json").exists(),
+            "Transport diagnostic lacks its preview bootstrap")
     require(before["preview-receipt.json"].st_size <= 4 * CHUNK, "Preview receipt exceeds bound")
     receipt_bytes = (root / "preview-receipt.json").read_bytes()
     receipt = json.loads(receipt_bytes)
     require(receipt["schema_version"] == "financial-candidate-preview-v2" and
             receipt["kind"] == "unpublished_financial_candidate" and
             receipt["publication_authority"] == "none", "Diagnostic requires an unpublished certified preview")
+    transport = verify_candidate_transport(root)
     entries = {}
     temporary = None
     try:
@@ -151,8 +159,13 @@ def retain(root, output, context, limits):
                     require(entries["preview-receipt.json"]["sha256"] == hashlib.sha256(receipt_bytes).hexdigest(), "Preview receipt changed")
                     corrected = {name.removeprefix("corrected/"): entry["sha256"] for name, entry in entries.items() if name.startswith("corrected/")}
                     is_data = lambda name: name.startswith("static-data/") or name in DATA_FILES
-                    require(digest({name: value for name, value in corrected.items() if is_data(name)}) == receipt["bundles"]["corrected_data_sha256"] and
-                            digest({name: value for name, value in corrected.items() if not is_data(name)}) == receipt["candidate_ui"]["digest"], "Corrected build changed from original preview")
+                    if transport is None:
+                        require(digest({name: value for name, value in corrected.items() if is_data(name)}) == receipt["bundles"]["corrected_data_sha256"] and
+                                digest({name: value for name, value in corrected.items() if not is_data(name)}) == receipt["candidate_ui"]["digest"], "Corrected build changed from original preview")
+                    else:
+                        require(digest(corrected) == transport["physical_inventory_sha256"] and
+                                corrected["publication.json"] == transport["preview_publication_sha256"],
+                                "Packed diagnostic changed after logical verification")
                     require("index.html" in corrected and "static-data/manifest.json" in corrected, "Incomplete corrected build")
                     for projection_hash in (receipt["financial"]["projection_sha256"], receipt["destination_projection"]["derivation"]["source_projection_sha256"]):
                         require(sum(name.startswith("projection/") and item["sha256"] == projection_hash for name, item in entries.items()) == 1,
@@ -174,6 +187,7 @@ def retain(root, output, context, limits):
                         "projection_sha256": receipt["financial"]["projection_sha256"],
                         "corrected_inventory_sha256": digest(corrected), "inventory_sha256": digest(entries),
                         "files": entries,
+                        **({"transport_verification": transport} if transport is not None else {}),
                     }
                     data = canonical(metadata)
                     member = tarfile.TarInfo("UNAPPROVED.json")

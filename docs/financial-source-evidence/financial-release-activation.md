@@ -114,3 +114,10 @@ belong in repository requests, public receipts or CI logs. The control-only pin
 commit allows the exact retained bytes to be tested again without changing their
 receipt or projection. It does not replace that backup requirement or any normal
 gate, and does not allow same-UI/same-price ordinary publication.
+
+## Separately approved one-capture performance exception
+
+The ordinary CI + Design path above is unchanged. The optional, inactive-by-default
+[one-capture exception](financial-performance-exception.md) keeps the failed Design
+run and original diagnostic truthful and requires separate approval, successful
+artifact-only certification, an exact pin, and an explicit release intent.

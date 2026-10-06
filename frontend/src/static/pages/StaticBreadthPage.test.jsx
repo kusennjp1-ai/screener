@@ -1,3 +1,4 @@
+import { prepareLegacyStaticFetch } from '../../test/legacyStaticFetch';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,7 @@ vi.mock('../../components/Charts/BreadthChart', () => ({
 vi.mock('../useWorkbench',()=>({useWorkbench:()=>({data:{sectors:{groups:[]}}})}));
 
 const renderPage = (initialEntry = '/breadth') => {
+  prepareLegacyStaticFetch(globalThis.fetch);
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
