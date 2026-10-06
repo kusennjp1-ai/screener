@@ -53,3 +53,19 @@ test('accepts the exact 766121-byte deployed #99 receipt within a bounded 1 MiB 
  assert.throws(()=>parsePinnedPublication(changed,pin),/digest mismatch/);
  assert.throws(()=>parsePinnedPublication(Buffer.alloc(PUBLICATION_BYTE_LIMIT+1),pin),/1 MiB cap/);
 });
+
+
+test('resolves the installed browser and accessibility APIs without launching a browser', async()=>{
+ const {createRequire}=await import('node:module');
+ const require=createRequire(new URL('../../../frontend/package.json',import.meta.url));
+ const lock=JSON.parse(await readFile(new URL('../../../frontend/package-lock.json',import.meta.url)));
+ assert.equal(require('@playwright/test/package.json').version,lock.packages['node_modules/@playwright/test'].version);
+ const {loadPreviewBrowserTools}=await import('./browser-tools.mjs');
+ const {chromium,AxeBuilder}=loadPreviewBrowserTools();
+ assert.equal(chromium,require('@playwright/test').chromium);
+ assert.equal(typeof chromium.launch,'function');
+ assert.equal(AxeBuilder,require('@axe-core/playwright').AxeBuilder);
+ assert.equal(typeof AxeBuilder,'function');
+ assert.equal(typeof AxeBuilder.prototype.analyze,'function');
+ // Deliberately do not call launch(), construct a browser, or open a page.
+});

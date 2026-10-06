@@ -2,14 +2,11 @@
 import { requireAdmittedPreview, loadPreviewPin } from './controls.mjs';
 requireAdmittedPreview(process.env);
 const admittedPin=await loadPreviewPin();
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { loadPreviewBrowserTools } from './browser-tools.mjs';
 import { resolve,extname,sep } from 'node:path';
 import { mkdir,readFile,writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-const require=createRequire(resolve('frontend/package.json'));
-const {chromium}=await import(pathToFileURL(require.resolve('@playwright/test')));
-const {default:AxeBuilder}=await import(pathToFileURL(require.resolve('@axe-core/playwright')));
+const {chromium,AxeBuilder}=loadPreviewBrowserTools();
 const output=resolve(process.env.INDICATOR_PREVIEW_OUTPUT||'frontend/test-results/indicator-preview'),site=resolve(output,'site');
 await mkdir(resolve(output,'screenshots'),{recursive:true});
 const provenance=JSON.parse(await readFile(resolve(output,'input-provenance.json'),'utf8'));
