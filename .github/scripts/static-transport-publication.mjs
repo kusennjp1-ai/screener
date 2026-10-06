@@ -4,6 +4,10 @@ import {createHash} from 'node:crypto';
 import {existsSync,lstatSync,readFileSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {mkdtempSync} from 'node:fs';
+import {dirname} from 'node:path';
+import {AUDIT_TRANSPORT_PREFIX,assertLogicalPublicationBudget,financialAuditRestoreBudget,prepareFinancialAuditStorage,validateFinancialAuditTransport,verifyFinancialAuditStorage} from './financial-audit-transport.mjs';
+import {PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
 
 export const TRANSPORT_PUBLICATION_SCHEMA='static-json-transport-publication-v1';
 export const TRANSPORT_PREVIEW_SCHEMA='static-json-transport-preview-v1';
@@ -62,6 +66,8 @@ export function assertTransportDeclaration(root,publication) {
   if(declared)validateTransportDescriptor(publication.transport,publication);
   if(stored!==Boolean(declared))throw Error('Packed transport metadata is missing or undeclared');
   if(declared&&!transportCapable(root))throw Error('Packed data requires the exact approved decoder UI');
+  if(existsSync(join(root,AUDIT_TRANSPORT_PREFIX))!==Boolean(publication?.financial_audit_transport))throw Error('Financial audit transport metadata is missing or undeclared');
+  if(publication?.financial_audit_transport)validateFinancialAuditTransport(publication.financial_audit_transport,publication);
   return Boolean(declared);
 }
 
@@ -79,15 +85,21 @@ export async function verifyTransportPublication({root,frontendRoot,publication,
   if(!assertTransportDeclaration(root,publication))return null;
   const receiptPath=join(root,'publication.json'),receiptBytes=readFileSync(receiptPath);
   if(JSON.stringify(JSON.parse(receiptBytes))!==JSON.stringify(publication))throw Error('Packed publication bootstrap differs from pinned receipt');
+  const restoreBudget=financialAuditRestoreBudget({root,publication,restore});
   const {verify}=await implementation(frontendRoot,'verify');
-  const checked=await verify({packed:root,expectedRoot:publication.transport.root,...(restore?{restore}:{})});
+  let checked=await verify({packed:root,expectedRoot:publication.transport.root,...(restore?{restore}:{})});
+  if(publication.financial_audit_transport){
+    const storage=transportDescriptor(checked,{uiSha:publication.ui_sha,uiDigest:publication.ui_digest});
+    if(storage.logical_data_inventory_sha256!==publication.financial_audit_transport.storage_data_inventory_sha256)throw Error('Financial audit intermediate storage inventory changed');
+    checked=await verifyFinancialAuditStorage({root,frontendRoot,publication,outer:checked,restore});
+  }
   const actual=transportDescriptor(checked,{uiSha:publication.ui_sha,uiDigest:publication.ui_digest});
   if(JSON.stringify(actual)!==JSON.stringify(publication.transport))throw Error('Transport logical or complete physical inventory changed');
   if(digest(hashes(Object.fromEntries(Object.entries(checked.logicalInventory).filter(([path])=>!isData(path)))))!==publication.ui_digest)throw Error('Transport UI inventory differs from approved decoder');
   if(checksum(readFileSync(join(root,'static-data/manifest.json')))!==publication.data_manifest_sha256)throw Error('Transport raw manifest changed');
   if(checksum(readFileSync(receiptPath))!==checksum(receiptBytes))throw Error('Packed publication changed during verification');
   if(restore)writeFileSync(join(restore,'publication.json'),receiptBytes);
-  return checked;
+  return {...checked,restoreBudget};
 }
 
 // The returned root is a fresh verified original tree. Callers must remove it
@@ -99,7 +111,7 @@ export async function canonicalPublication({root,frontendRoot,publication,restor
   catch(error){rmSync(restore,{recursive:true,force:true});throw error;}
 }
 
-export async function packPublication({root,frontendRoot,publication,bindings,preserveLogical}) {
+export async function packPublication({root,frontendRoot,publication,bindings,preserveLogical,compressFinancialAudit=false}) {
   if(!transportCapable(root))throw Error('Packing requires a captured decoder-capable UI');
   if(existsSync(join(root,'static-data/_transport'))||Object.hasOwn(publication,'transport'))throw Error('Only an original logical tree can be packed');
   const output=`${root}.packed`,original=preserveLogical||`${root}.logical`;
@@ -109,17 +121,35 @@ export async function packPublication({root,frontendRoot,publication,bindings,pr
   const bound={...bindings,manifestSha256:publication.data_manifest_sha256,uiInventorySha256:publication.ui_digest,
     financialGeneration:publication.financial_generation??bindings.financialGeneration??null,
     financialLineageSha256:publication.financial_lineage_sha256??bindings.financialLineageSha256??null,appCommit:publication.ui_sha};
+  if(typeof compressFinancialAudit!=='boolean'||publication.financial_audit_transport)throw Error('Invalid financial audit codec request');
+  let staging;
   try{
-    const packed=await pack({source:root,output,bindings:bound});
-    const checked=await verify({packed:output,expectedRoot:packed.expectedRoot,source:root});
+    let source=root,audit;
+    if(compressFinancialAudit){
+      staging=mkdtempSync(join(dirname(root),'.financial-audit-storage-'));source=join(staging,'storage');
+      audit=await prepareFinancialAuditStorage({source:root,storage:source,frontendRoot,publication,bindings:bound});
+    }
+    const packed=await pack({source,output,bindings:bound});
+    let checked=await verify({packed:output,expectedRoot:packed.expectedRoot,source});
+    if(audit){
+      const storage=transportDescriptor(checked,{uiSha:publication.ui_sha,uiDigest:publication.ui_digest});
+      const candidate={...publication,transport:storage,financial_audit_transport:{...audit,storage_data_inventory_sha256:storage.logical_data_inventory_sha256}};
+      checked=await verifyFinancialAuditStorage({root:output,frontendRoot,publication:candidate,outer:checked});
+      audit=candidate.financial_audit_transport;
+    }
     const descriptor=transportDescriptor(checked,{uiSha:publication.ui_sha,uiDigest:publication.ui_digest});
     validateTransportDescriptor(descriptor,publication);
+    if(audit)publication.financial_audit_transport=audit;
     publication.transport=descriptor;
-    writeFileSync(join(output,'publication.json'),JSON.stringify(publication));
+    const receipt=JSON.stringify(publication),receiptBytes=Buffer.byteLength(receipt);
+    if(receiptBytes>PUBLICATION_METADATA_BYTES)throw Error('Publication metadata exceeds the existing browser byte limit');
+    assertLogicalPublicationBudget(checked.logicalBytes+receiptBytes,checked.logicalFiles+1);
+    writeFileSync(join(output,'publication.json'),receipt);
     renameSync(root,original);renameSync(output,root);
     if(!preserveLogical)rmSync(original,{recursive:true,force:true});
     return descriptor;
   }catch(error){if(!existsSync(root)&&existsSync(original))renameSync(original,root);rmSync(output,{recursive:true,force:true});throw error;}
+  finally{if(staging)rmSync(staging,{recursive:true,force:true});}
 }
 
 export function previewPublication({uiSha,uiDigest,manifestSha256}) {
@@ -136,7 +166,10 @@ export async function verifyCapturedTransportAssets({candidateRoot,root,frontend
   if(!before||!after)throw Error('Captured packed candidate cannot switch transport representations');
   if(!Array.isArray(allowedAdditions)||allowedAdditions.some(path=>!/^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release)-[a-f0-9]{64}\.json$/.test(path)))throw Error('Invalid packed activation audit additions');
   const originals=hashes(before.logicalInventory),final=hashes(after.logicalInventory),allowed=new Set(allowedAdditions);
-  for(const path of Object.keys(final))if(!Object.hasOwn(originals,path)&&allowed.has(path))delete final[path];
+  for(const path of Object.keys(final))if(!Object.hasOwn(originals,path)&&allowed.has(path)){
+    if(!path.endsWith(`-${final[path]}.json`))throw Error('Packed activation audit addition is not hash-bound');
+    delete final[path];
+  }
   if(digest(originals)!==digest(final))throw Error('Final packed activation changed captured original logical files');
   const encoded=files=>hashes(Object.fromEntries(Object.entries(files).filter(([path])=>path.startsWith('static-data/_transport/gzip/'))));
   if(digest(encoded(before.physicalInventory))!==digest(encoded(after.physicalInventory)))throw Error('Final packed activation changed captured encoded payload bytes');

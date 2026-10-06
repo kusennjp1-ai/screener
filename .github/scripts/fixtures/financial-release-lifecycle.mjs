@@ -87,7 +87,7 @@ const RealDate=Date;globalThis.Date=class extends RealDate{constructor(...args){
 globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathname.slice(base.pathname.length);
  if(url.origin!==base.origin||!url.pathname.startsWith(base.pathname)||path.includes('..')||options.redirect!=='error')throw Error('Unexpected fixture fetch');
  appendFileSync(process.env.RELEASE_CLI_TRACE,JSON.stringify({pages:path})+'\\n');
- const bytes=readFileSync(join(config.liveRoot,path));return {ok:true,status:200,arrayBuffer:async()=>bytes};};`);
+ const bytes=readFileSync(join(config.liveRoot,path));return new Response(bytes);};`);
   write(join(root,'event.json'),{inputs:{}});
   let now=sourceTime,releaseRoot=null,releaseId=null;
   const save=()=>write(configPath,config);

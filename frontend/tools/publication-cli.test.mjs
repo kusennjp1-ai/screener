@@ -220,6 +220,7 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   const scripts = join(root, '.github/scripts');
   cpSync(dirname(cli), scripts, { recursive: true });
   cpSync(join(project, 'contracts'), join(root, 'contracts'), { recursive: true });
+  cpSync(join(project, 'frontend/src/static/transport'), join(root, 'frontend/src/static/transport'), { recursive: true });
   const pinPath = join(scripts, 'approved-ui-bootstrap.json');
   write(pinPath, jsonBytes({
     site_url: siteUrl, repository, ui_sha: uiSha, ui_files: approvedHashes,

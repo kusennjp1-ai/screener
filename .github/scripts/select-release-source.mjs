@@ -1,3 +1,4 @@
+import {financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
 import {isPerformanceException, isPackedCandidate, selectExceptionVersion, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -206,7 +207,7 @@ async function recheck() {
   if(state.activation&&!state.activation.exception&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
   const live = await livePublication({ repository: repository() });
   if (live.identity !== state.live.identity) throw Error('Live UI or data changed; discard this superseded publication');
-  const physical=resolve('release/frontend/dist'),receipt = validateReceipt(JSON.parse(readFileSync(join(physical,'publication.json'),'utf8')));
+  const physical=resolve('release/frontend/dist'),receipt = validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json'))));
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
   try {
@@ -292,6 +293,8 @@ async function compose() {
     const prepared=await prepareFinancialReleaseReceipt(state,dist,receipt);
     receipt.financial_release=prepared.reference;receipt.financial_lineage_sha256=prepared.receipt.lineage_sha256;
     receipt.financial_generation=prepared.receipt.financial_generation;receipt.data_inventory_sha256=inventoryDigest(dataInventory(dist));
+    receipt.financial_audit_files=financialAuditInventory(dist);
+    if(state.live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(state.live),receipt.financial_audit_files);
     state.financialPrepared=prepared;writeFileSync(statePath(),JSON.stringify(state));
   }
   if (state.decision.migration && dataInventoryDigest(dist) !== state.migrationDataDigest) throw Error('Metadata migration changed approved data bytes');
@@ -299,11 +302,13 @@ async function compose() {
   // discovers this capability in its retained approved UI, never the controller.
   if(!state.correction&&transportCapable(dist)){
     if(state.activation&&!isPackedCandidate(state.activation.record))throw Error('Packed activation requires a newly captured packed candidate');
-    await packPublication({root:dist,frontendRoot:resolve('release/frontend'),publication:receipt,bindings:{
+    await packPublication({root:dist,frontendRoot:resolve('release/frontend'),publication:receipt,compressFinancialAudit:Boolean(receipt.financial_audit_files),bindings:{
       sourceCommit:state.controllerSha,appCommit:state.sourceSha,candidateId:state.activation?.record.transport_sha256??sha256(JSON.stringify({artifact:state.source.artifact.digest,run:state.source.runId,attempt:state.source.attempt,manifest:state.source.manifestHash}))}});
   }else assertTransportDeclaration(dist,receipt);
   validateReceipt(receipt);
   writeFileSync(join(dist, 'publication.json'), JSON.stringify(receipt));
+  // Audit receipts and their metadata are included in the final physical/TAR guard.
+  if(!state.correction)execFileSync('python3',[fileURLToPath(new URL('./check-pages-payload.py',import.meta.url)),dist],{stdio:'inherit'});
 }
 
 async function restoreCorrection(state) {
@@ -419,8 +424,10 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
     generation:assessed.carry.financial_generation,evaluatedAt:assessed.carry.financial_evaluated_at,ui:{approved_sha:state.sourceSha,captured_sha:state.sourceSha===state.live.uiSha?previous.ui.captured_sha:state.sourceSha,digest:publication.ui_digest,approval:publication.approval,checks:consumerChecks},priceInput});
 }
 async function verifyPreparedFinancialRelease(state,live,dist=resolve('release/frontend/dist')) {
-  const publication=JSON.parse(readFileSync(join(dist,'publication.json'),'utf8'));
+  const publication=parsePublicationReceipt(readFileSync(join(dist,'publication.json')));
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
+  if(!publication.financial_audit_files)throw Error('Prepared financial publication lost its complete audit inventory');
+  if(live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(live),publication.financial_audit_files);
   if(isPerformanceException(publication.approval))verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
   if(receipt.previous_publication_identity!==live.identity)throw Error('Financial release predecessor changed');
   const checks=financialConsumerChecks(state.sourceSha,receipt.ui.digest,receipt.ui.approval);

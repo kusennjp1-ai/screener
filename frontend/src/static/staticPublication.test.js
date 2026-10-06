@@ -221,3 +221,14 @@ it('changes legacy cache identity when the full manifest changes outside the unc
   expect(api.publicationQueryIdentity(first)).not.toBe(api.publicationQueryIdentity(next));
   expect(first.mode).toBe('legacy'); expect(next.mode).toBe('legacy');
 });
+
+// Optional publication audit metadata is opaque to the unchanged approved UI.
+it.each([false,true])('reads %s packed production metadata with retained financial audit references',async packed=>{
+  const source=manifest(),metadata=packed?receipt(source,true):{schema:1,data_manifest_sha256:hash(json(source))};
+  const digest='9'.repeat(64),path=`static-data/financial-corrections/release-${digest}.json`;
+  metadata.financial_release={schema_version:'financial-release-receipt-v1',path,sha256:digest};
+  metadata.financial_audit_files={[path]:digest};
+  const fetcher=serve({'static-data/manifest.json':source,'publication.json':metadata});
+  expect(await api.loadStaticManifest()).toEqual(source);
+  expect(fetcher).toHaveBeenCalledTimes(2);expect(transport.create).not.toHaveBeenCalled();
+});

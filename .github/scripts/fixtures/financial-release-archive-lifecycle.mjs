@@ -153,7 +153,7 @@ const config=JSON.parse(readFileSync(process.env.RELEASE_ARCHIVE_TRANSPORT)),bas
 globalThis.Date=class extends RealDate{constructor(...args){super(...(args.length?args:[process.env.RELEASE_ARCHIVE_NOW]));}static now(){return RealDate.parse(process.env.RELEASE_ARCHIVE_NOW);}};
 globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathname.slice(base.pathname.length);
 if(url.origin!==base.origin||!url.pathname.startsWith(base.pathname)||path.includes('..')||options.redirect!=='error')throw Error('Unexpected offline Pages read');
-appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\\n');const bytes=readFileSync(join(config.liveRoot,path));return {ok:true,status:200,arrayBuffer:async()=>bytes};};`);
+appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({pages:path})+'\\n');const bytes=readFileSync(join(config.liveRoot,path));return new Response(bytes);};`);
   const env={PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:join(directory,'runner'),RELEASE_ARCHIVE_TRANSPORT:configPath,RELEASE_ARCHIVE_TRACE:join(directory,'trace.jsonl'),
     RELEASE_ARCHIVE_NOW:preview.financial.evaluated_at,NODE_OPTIONS:`--import=${preload}`,LITELLM_LOCAL_MODEL_COST_MAP:'true',
     GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_EVENT_PATH:join(directory,'event.json'),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'88003',GITHUB_RUN_ATTEMPT:'1'};

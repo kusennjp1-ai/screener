@@ -32,8 +32,36 @@
   },
   "transport_sha256": "93c5e3e5afbd62200dc38f977255625a96492624ee4aacf3bfb0fbc222eaa4e5",
   "captured_code_sha256": "59f2aefe53cc1099604212562c11133253cdd40018b702095cec29a68b1e86ba",
-  "controller_code_sha256": "8b7ee19a07422ac69137762d0d63da1d792be3afd523805bc7e235d57e9175c9",
+  "controller_code_sha256": "ffd74d3e7912b597221cd85f042fe6075478b18f8c84d53cc657e17d46252d6d",
   "controller_changes": {
+    ".github/scripts/financial-audit-history.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "cacafa92949f8d286f54659d09e4404933858128"
+      }
+    },
+    ".github/scripts/financial-audit-history.test.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "5b549b34d217bd92a16d47278bfc3229f8c7add6"
+      }
+    },
+    ".github/scripts/financial-audit-transport.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "04dddc082baa640dbe71b535bb518c66fad18811"
+      }
+    },
+    ".github/scripts/financial-audit-transport.test.mjs": {
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "sha": "48774fa899ff6966fe58638821b150e979e59e0c"
+      }
+    },
     ".github/scripts/financial-performance-exception-v2.test.mjs": {
       "before": {
         "mode": "100644",
@@ -41,7 +69,7 @@
       },
       "after": {
         "mode": "100644",
-        "sha": "03ba6305cfaa56cc6ccc7f09be0c6f910b68b771"
+        "sha": "0f9f13937e4ddf6314648f50f07a6be0ea1d8223"
       }
     },
     ".github/scripts/financial-performance-exception.mjs": {
@@ -64,6 +92,126 @@
         "sha": "0a6b60f9fceb912c6545137731b0a7cb2debee08"
       }
     },
+    ".github/scripts/financial-performance-policy.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "a201b384f086caf6ecf980c01afda5b4dd304c65"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "715e2dc77c45b8fc3e817972c490bebb736a0757"
+      }
+    },
+    ".github/scripts/financial-release-activation.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "19aa3d7ef0a64f212ad1a20eed7af0fde546df2c"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "7cb1bde8fc72ab023786c59c806836b5fa289c2b"
+      }
+    },
+    ".github/scripts/financial-release-activation.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "058b85ee17732852f046ea94653f362b94b460d4"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "5730468d7febe41ced26c7fcd2470cbdbd37b213"
+      }
+    },
+    ".github/scripts/financial-release-lifecycle.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "6892b0f12eb92db0053da830df8310c1285643ef"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "382004ae811d561c5d02e39774e262889f8d22c0"
+      }
+    },
+    ".github/scripts/fixtures/financial-release-archive-lifecycle.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "bc2cfad260c7c2ebbf9dcb9403c55f923462e0be"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "fac42e05f2183995c8b4a2ea60f2896143a8da5c"
+      }
+    },
+    ".github/scripts/fixtures/financial-release-lifecycle.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "d0ea09374da28405e3b7e4d99d66942312454324"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "460729d5272547c426795ca016b7e8050d33b2a3"
+      }
+    },
+    ".github/scripts/publication-state.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "fe0832aa51c0425d4dde9a1c113067bbeda7531a"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "2bcc0e2d8efc52126be495c4850be8bd7c136d20"
+      }
+    },
+    ".github/scripts/select-release-source.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "8014f7ef32c8ed89634373def2004e1b17f24747"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "9ea84081898ee6fde67218a77d5ce344b7ae3387"
+      }
+    },
+    ".github/scripts/static-transport-carry.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "88e8e6a3206d14be55cf9a863da03de6547689a0"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "221e6d85309a40272cc1612f691899b61e9b81d6"
+      }
+    },
+    ".github/scripts/static-transport-publication.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "c7f54191b98c363da08f2caf5a112ea1f797e067"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "4022a176143e107649d75237266536251b3d017e"
+      }
+    },
+    ".github/scripts/static-transport-publication.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "c33b208c917a54ab287c64ebd6168da0759399e1"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "06c16911c373c8db6a0f213b85fec4a254d50b91"
+      }
+    },
+    ".github/workflows/ci.yml": {
+      "before": {
+        "mode": "100644",
+        "sha": "42cca80b123632868cfb4f878f7953530bf7e8c3"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "c8007ffa0445e5306fbd69085950c8690fd7701e"
+      }
+    },
     "contracts/financial_performance_exception_v2.json": {
       "before": {
         "mode": "100644",
@@ -72,6 +220,46 @@
       "after": {
         "mode": "100644",
         "sha": "7045f3b14ed35bf15a0309e8ed8267ae3b18b274"
+      }
+    },
+    "frontend/src/static/staticPublication.test.js": {
+      "before": {
+        "mode": "100644",
+        "sha": "673be28795d279f9ee14da3ca37e16fc870b9713"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "daad9bf01b8d1abe2ec835eb2a3462002de8fc97"
+      }
+    },
+    "frontend/tools/production-bootstrap-diagnostic.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "96a93663f3c290eb68006cee686c51fe35a60815"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "a020b95f6005c2a15a7ca130c0e7d3db3ad7646f"
+      }
+    },
+    "frontend/tools/production-bootstrap-diagnostic.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "50f5d301c24545c4342230c0b356ff724285f2d7"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "a94b3a9b093acaca9961baaa4b3f967d9a774339"
+      }
+    },
+    "frontend/tools/publication-cli.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "072c38aa2d54f1c2f5a105582f7cc942223a437f"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "f051bf6ed70fdc740b2d42675d028d7f80b9a858"
       }
     }
   }

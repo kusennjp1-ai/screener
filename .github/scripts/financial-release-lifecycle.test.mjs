@@ -1,3 +1,4 @@
+import {financialAuditInventory,assertFinancialAuditPreserved} from './financial-audit-history.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync} from 'node:fs';
@@ -18,7 +19,7 @@ function readDeployed(fixture){
 }
 const research=dist=>{const manifest=read(join(dist,'static-data/manifest.json'));return decodeResearchIndex(read(join(dist,'static-data',manifest.markets.US.assets.research.path)));};
 
-test('strict carry lifecycle restores the published source and preserves it through two advancing releases', {timeout:120000},()=>{
+test('strict carry lifecycle restores the published source and preserves it through three advancing releases', {timeout:120000},()=>{
   const fixture=lifecycleFixture();
   try{
     fixture.seed();
@@ -32,7 +33,9 @@ test('strict carry lifecycle restores the published source and preserves it thro
     for(const [index,target]of [
       {id:40,date:'2026-10-05',price:120,time:'2026-10-05T12:00:00.000Z'},
       {id:50,date:'2026-10-06',price:130,time:'2026-10-06T12:00:00.000Z'},
+      {id:60,date:'2026-10-07',price:140,time:'2026-10-07T12:00:00.000Z'},
     ].entries()){
+      const previousAudit=financialAuditInventory(fixture.liveRoot);
       const release=fixture.advance(target);
       release.command('plan');
       assert.match(readFileSync(release.output,'utf8'),/publish=true\n/);
@@ -61,6 +64,9 @@ test('strict carry lifecycle restores the published source and preserves it thro
       release.command('compose');
       const publication=read(join(release.dist,'publication.json'));
       const receipt=verifyFinancialReleaseAssets(release.dist,publication.financial_release,publication);
+      assertFinancialAuditPreserved(previousAudit,publication.financial_audit_files);
+      assert.deepEqual(financialAuditInventory(release.dist),publication.financial_audit_files);
+      assert.deepEqual(read(join(release.dist,initial.receipt.financial_release.path)),initial.financialRelease);
       assert.equal(receipt.mode,'carry');assert.equal(receipt.candidate,null);
       assert.deepEqual(receipt.lineage,initial.financialRelease.lineage);
       assert.deepEqual(receipt.source_projection,initial.financialRelease.source_projection);
@@ -79,7 +85,7 @@ test('strict carry lifecycle restores the published source and preserves it thro
       assert.deepEqual(readFileSync(join(release.dist,'static-data/candidate-history/retained-history.json')),historyBytes);
       const history=read(join(release.dist,'static-data/candidate-history/index.json'));
       assert.deepEqual(history.snapshots.slice(0,previousHistory.snapshots.length),previousHistory.snapshots);
-      assert.deepEqual(history.snapshots.map(item=>item.as_of),['2026-10-02','2026-10-05','2026-10-06'].slice(0,index+2));
+      assert.deepEqual(history.snapshots.map(item=>item.as_of),['2026-10-02','2026-10-05','2026-10-06','2026-10-07'].slice(0,index+2));
       release.command('recheck'); // Immediately before upload.
 
       // A mutation between the two workflow checkpoints must be rejected.

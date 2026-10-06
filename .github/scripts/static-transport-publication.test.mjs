@@ -95,7 +95,7 @@ test('transport descriptor is closed and a packed candidate requires a new v2 ca
 test('final receipt metadata may change while every captured logical and encoded original stays exact',async t=>{
   const f=fixture(t);await f.pack();
   const final=join(f.temp,'final');cpSync(join(f.temp,'original'),final,{recursive:true});
-  const addition=`static-data/financial-corrections/release-${H}.json`;write(final,addition,'{"mode":"activation"}');
+  const additionBytes='{"mode":"activation"}',addition=`static-data/financial-corrections/release-${sha256(additionBytes)}.json`;write(final,addition,additionBytes);
   const publication=previewPublication({uiSha:S,uiDigest:f.publication.ui_digest,manifestSha256:f.publication.data_manifest_sha256});
   await packPublication({root:final,frontendRoot:frontend,publication,bindings:{sourceCommit:C,appCommit:S,candidateId:'b'.repeat(64)}});
   assert.notEqual(publication.transport.root.generation,f.publication.transport.root.generation);

@@ -1,3 +1,5 @@
+import {assertFinancialAuditDirectory,verifyFinancialAuditFile,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,FINANCIAL_AUDIT_MAX_BYTES,FINANCIAL_AUDIT_MAX_FILE_BYTES} from './financial-audit-history.mjs';
+import {compressedAuditFiles,financialAuditReader} from './financial-audit-transport.mjs';
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,previewPublication,validateTransportPreview,verifyTransportPublication,assertTransportDeclaration} from './static-transport-publication.mjs';
 import {isPerformanceException, isExceptionCandidate, isPackedCandidate, exceptionPolicyFor, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation} from './financial-performance-exception.mjs';
 // Publication authority requires current-main CI and immutable tested artifacts,
@@ -486,6 +488,10 @@ export function verifyFinancialReleaseAssets(root,reference,publication=null) {
   const receipt=validateFinancialReleaseReceipt(JSON.parse(bytes));
   for(const ref of [receipt.source_projection,receipt.source_base,receipt.evaluation_projection])if(sha256(readFileSync(join(root,ref.path)))!==ref.sha256)throw Error('Financial lineage asset changed');
   if(inventoryDigest(dataInventory(root,[reference.path]))!==receipt.data_inventory_sha256)throw Error('Financial release inventory changed');
+  if(publication?.financial_audit_files){
+    requiredFinancialAuditFiles({receipt:publication,financialRelease:receipt});
+    equal(publication.financial_audit_files,financialAuditInventory(root),'complete publication audit inventory');
+  }
   if(publication&&(publication.financial_generation!==receipt.financial_generation||publication.financial_lineage_sha256!==receipt.lineage_sha256||publication.ui_sha!==receipt.ui.approved_sha||publication.ui_digest!==receipt.ui.digest||publication.data_inventory_sha256!==inventoryDigest(dataInventory(root))
     ||(isPerformanceException(publication.approval)||isPerformanceException(receipt.ui.approval))&&digest(publication.approval)!==digest(receipt.ui.approval)))throw Error('Publication and financial release disagree');
   return receipt;
@@ -503,18 +509,42 @@ export async function restorePublishedFinancialSource(live,root,fetcher=fetch) {
   // These immutable source bytes remain served by the current publication after
   // its operational Actions artifact expires. Every byte is still hash-bound
   // to the verified live receipt; no provider or certificate clock is renewed.
-  const refs=[reference,receipt.source_projection,receipt.source_base,receipt.evaluation_projection];
+  const required=requiredFinancialAuditFiles(live);
+  financialAuditInventory(root);
+  let total=0;
+  const compressed=live.receipt.financial_audit_transport?compressedAuditFiles(live.receipt):{};
+  const reader=live.receipt.financial_audit_transport?await financialAuditReader({publication:live.receipt,fetcher}):null;
+  const refs=Object.entries(required).map(([path,sha256])=>({path,sha256}));
+  try{
   for(const ref of refs){
     if(!safePath(ref.path)||!hash(ref.sha256))throw Error('Unsafe live financial reference');
+    let bytes;
+    if(Object.hasOwn(compressed,ref.path)){
+      bytes=await reader.read(ref.path,ref.sha256);total+=bytes.length;
+    }else{
     const url=new URL(ref.path,bootstrap.site_url);url.searchParams.set('publication_check',String(Date.now()));
     const response=await fetcher(url,{cache:'no-store',headers:{'Cache-Control':'no-cache'},redirect:'error'});
     if(!response.ok)throw Error(`Cannot restore active financial lineage: ${response.status}`);
-    const bytes=Buffer.from(await response.arrayBuffer());
+    const chunks=[];let fileBytes=0;
+    if(response.body){
+      for await(const chunk of response.body){total+=chunk.length;fileBytes+=chunk.length;if(total>FINANCIAL_AUDIT_MAX_BYTES||fileBytes>FINANCIAL_AUDIT_MAX_FILE_BYTES)throw Error('Financial audit exceeds bounded archive size');chunks.push(chunk);}
+    }else{const chunk=Buffer.from(await response.arrayBuffer());total+=chunk.length;fileBytes+=chunk.length;chunks.push(chunk);}
+    if(fileBytes>FINANCIAL_AUDIT_MAX_FILE_BYTES)throw Error('Financial audit exceeds existing decoded transport cap');
+    bytes=Buffer.concat(chunks);
+    }
+    if(total>FINANCIAL_AUDIT_MAX_BYTES)throw Error('Financial audit exceeds bounded archive size');
     if(sha256(bytes)!==ref.sha256)throw Error('Live financial source bytes disagree with the approved lineage');
-    const path=join(root,ref.path);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);
+    const path=join(root,ref.path);mkdirSync(dirname(path),{recursive:true});
+    assertFinancialAuditDirectory(root);
+    // A retry can reuse already verified bytes; never overwrite an existing
+    // file, follow a destination link or replace an earlier audit receipt.
+    if(existsSync(path))verifyFinancialAuditFile(root,ref.path,ref.sha256);
+    else writeFileSync(path,bytes,{flag:'wx'});
   }
   equal(read(join(root,reference.path)),receipt,'restored live financial receipt');
+  assertFinancialAuditPreserved(required,financialAuditInventory(root));
   return root;
+  }finally{reader?.dispose();}
 }
 
 async function runCommand(command) {

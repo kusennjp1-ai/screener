@@ -1,3 +1,4 @@
+import {validateFinancialAuditFiles,requiredFinancialAuditFiles,parsePublicationReceipt,PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
 import {isPerformanceException, packedExceptionType, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -7,6 +8,7 @@ import { githubApi, sameRepository, workflowPath } from './publication-gate.mjs'
 import bootstrapData from './approved-ui-bootstrap.json' with { type: 'json' };
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
 import {validateTransportDescriptor} from './static-transport-publication.mjs';
+import {validateFinancialAuditTransport} from './financial-audit-transport.mjs';
 
 export const bootstrap = bootstrapData;
 function approvedPriceObservations() {
@@ -93,6 +95,7 @@ export function compareData(candidate, published) {
 
 const positive = value => Number.isSafeInteger(value) && value > 0;
 export function validateReceipt(receipt) {
+  if(Buffer.byteLength(JSON.stringify(receipt))>PUBLICATION_METADATA_BYTES)throw Error('Publication metadata exceeds the existing browser byte limit');
   const prices = comparePriceObservations(receipt?.price_observations, receipt?.known_price_dates);
   if (prices.regressions.length || priceObservationDigest(prices.knownDates) !== priceObservationDigest(receipt.known_price_dates)) throw Error('Invalid retained price observation ledger');
   const universe = receipt?.verification_universe;
@@ -120,7 +123,9 @@ export function validateReceipt(receipt) {
       || !/^[a-f0-9]{64}$/.test(ref.sha256 || '') || ref.path !== `static-data/financial-corrections/receipt-${ref.sha256}.json`
       || !/^[a-f0-9]{64}$/.test(receipt.financial_generation || '') || !/^[a-f0-9]{64}$/.test(receipt.data_inventory_sha256 || '')) throw Error('Invalid publication financial correction reference');
   }
+  if(receipt.financial_audit_files!==undefined){validateFinancialAuditFiles(receipt.financial_audit_files);if(!receipt.financial_release||receipt.financial_audit_files[receipt.financial_release.path]!==receipt.financial_release.sha256)throw Error('Financial audit inventory lost the active release');}
   if(Object.hasOwn(receipt,'transport'))validateTransportDescriptor(receipt.transport,receipt);
+  if(Object.hasOwn(receipt,'financial_audit_transport'))validateFinancialAuditTransport(receipt.financial_audit_transport,receipt);
   return receipt;
 }
 
@@ -194,7 +199,7 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   const manifestBytes = await read('static-data/manifest.json');
   const manifest = JSON.parse(manifestBytes);
   if (!dataChronology(manifest)) throw Error('Invalid live data chronology');
-  const receipt = receiptBytes ? validateReceipt(JSON.parse(receiptBytes)) : null;
+  const receipt = receiptBytes ? validateReceipt(parsePublicationReceipt(receiptBytes)) : null;
   const anchor = deploymentAnchor(receipt || { run_id: bootstrap.approved_run_id, run_attempt: bootstrap.approved_attempt }, repository, api);
   const latest = latestDeployment(repository, api, anchor);
   let financialCorrection = null, financialRelease = null;
@@ -222,6 +227,7 @@ export async function livePublication({ repository = bootstrap.repository, fetch
       if(sha256(bytes)!==reference.sha256)throw Error('Live financial release receipt hash mismatch');
       const {validateFinancialReleaseReceipt}=await import('./financial-release-activation.mjs');
       financialRelease=validateFinancialReleaseReceipt(JSON.parse(bytes));
+      requiredFinancialAuditFiles({receipt,financialRelease});
       if(isPerformanceException(receipt.approval))verifyExceptionFinancialScope(financialRelease,verifiedApproval);
       if(financialRelease.financial_generation!==receipt.financial_generation||financialRelease.lineage_sha256!==receipt.financial_lineage_sha256
         ||financialRelease.ui.approved_sha!==receipt.ui_sha||financialRelease.ui.digest!==receipt.ui_digest
