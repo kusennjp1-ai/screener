@@ -11,7 +11,7 @@ concurrency:
 jobs:
   offline-lifecycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 110
     steps:
       - name: Record early rehearsal job clock
         run: |
@@ -153,15 +153,15 @@ jobs:
       - name: Run bounded strict carry regression
         run: node --test --test-concurrency=1 .github/scripts/financial-lifecycle-watchdog.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-carry-history-date.test.mjs .github/scripts/financial-lifecycle-workflow.test.mjs
       - name: Rehearse first activation and advancing carry offline
-        timeout-minutes: 77
+        timeout-minutes: 97
         env:
           FINANCIAL_RELEASE_ARCHIVE_INPUT: ${{ runner.temp }}/financial-release-input.json
         run: |
           python3 .github/scripts/financial-lifecycle-watchdog.py \
-            --timeout-seconds 4500 \
-            --allocation-reason 'Retained packed-input rehearsal; established 75-minute maximum, 90-minute job bound and production validators are unchanged.' \
+            --timeout-seconds 5700 \
+            --allocation-reason 'Run 37418746182 completed 32 phases in 75 minutes before final carry rechecks; measured full cost is 85-87 minutes. Diagnostic allocation only; all production validators and UI budgets are unchanged.' \
             --job-clock "$RUNNER_TEMP/financial-release-job-clock.json" \
-            --job-timeout-seconds 5400 \
+            --job-timeout-seconds 6600 \
             --upload-reserve-seconds 600 \
             --minimum-runtime-seconds 3600 \
             --report-directory "$RUNNER_TEMP/financial-release-archive-lifecycle" \

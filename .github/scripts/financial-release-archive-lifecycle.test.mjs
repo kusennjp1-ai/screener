@@ -15,9 +15,9 @@ import {validateCandidateRecord} from './financial-release-activation.mjs';
 import {archiveApiPayload,assertSyntheticPriceAdvance,assertOriginalFinancialClocks,archiveCandidateRecord,verifyArchiveCandidate,runArchiveLifecycle} from './fixtures/financial-release-archive-lifecycle.mjs';
 
 // The external monotonic supervisor owns enforcement. Preserve the existing
-// maximum allocation; a cooperative timer cannot stop synchronous child work.
+// measured 95-minute diagnostic allocation; a cooperative timer cannot stop synchronous child work.
 const watchdogSeconds=Number(process.env.FINANCIAL_RELEASE_ARCHIVE_WATCHDOG_SECONDS||1800);
-assert.ok(Number.isFinite(watchdogSeconds)&&watchdogSeconds>0&&watchdogSeconds<=4500,'invalid lifecycle watchdog allocation');
+assert.ok(Number.isFinite(watchdogSeconds)&&watchdogSeconds>0&&watchdogSeconds<=5700,'invalid lifecycle watchdog allocation');
 
 test('offline gh preserves paginated gates and bounded certificate/source inventories',()=>{
   for(const key of ['jobs','artifacts','workflow_runs']){

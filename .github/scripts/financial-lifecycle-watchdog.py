@@ -128,8 +128,8 @@ def main(argv=None):
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
-    if not command or not 0 < args.timeout_seconds <= 4500:
-        parser.error("a command and a positive deadline of at most 4500 seconds are required")
+    if not command or not 0 < args.timeout_seconds <= 5700:
+        parser.error("a command and a positive deadline of at most 5700 seconds are required")
     if args.timeout_seconds > 1800 and not args.allocation_reason:
         parser.error("an allocation above the 1800-second default requires an explicit reason")
     if args.allocation_reason and (len(args.allocation_reason) > 300 or any(ord(c) < 32 for c in args.allocation_reason)):

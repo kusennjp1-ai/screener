@@ -11,7 +11,7 @@ const diagnostics=new URL('./fixtures/financial-release-lifecycle-diagnostics.mj
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const gone=pid=>{try{process.kill(pid,0);return false;}catch(error){if(error.code==='ESRCH')return true;throw error;}};
 
-function fixture(code,{timeout=2,allocationReason=null,heartbeat=30,preparedSeconds=null,clockOrigin=5000}={}){
+function fixture(code,{timeout=2,allocationReason=null,heartbeat=30,preparedSeconds=null,clockOrigin=5000,jobSeconds=5400}={}){
   const root=mkdtempSync(join(tmpdir(),'lifecycle-watchdog-')),report=join(root,'report');
   const budgetArgs=[];
   let pythonEntry=[watchdog];
@@ -27,7 +27,7 @@ real_monotonic=time.monotonic;real_start=real_monotonic();origin=float(sys.argv[
 module.time.monotonic=lambda:origin+(real_monotonic()-real_start)
 sys.exit(module.main(sys.argv[3:]))`;
     pythonEntry=['-c',driver,watchdog,String(clockOrigin)];
-    budgetArgs.push('--job-clock',clockPath,'--job-timeout-seconds','5400','--upload-reserve-seconds','600','--minimum-runtime-seconds','3600');
+    budgetArgs.push('--job-clock',clockPath,'--job-timeout-seconds',String(jobSeconds),'--upload-reserve-seconds','600','--minimum-runtime-seconds','3600');
   }
   const prefix=`import {mkdirSync,writeFileSync} from 'node:fs';
     import {createLifecycleDiagnostics} from ${JSON.stringify(diagnostics)};
@@ -99,6 +99,27 @@ test('exhausted remaining job budget records refusal without launching the expen
     assert.equal(guard.status,'insufficient_job_budget');assert.equal(guard.child_launched,false);assert.equal(guard.child_exit_code,null);
     assert.equal(existsSync(join(f.root,'launched')),false);assert.equal(existsSync(join(f.report,'report.json')),false);
     assert.ok(guard.timeout_seconds<3600);assert.match(guard.reason,/test was not launched/);
+  }finally{f.cleanup();}
+});
+
+for(const [preparedSeconds,expected]of [[120,5700],[900,5100]])test(`measured 95-minute allocation preserves the 110-minute job reserve after ${preparedSeconds}s preparation`,()=>{
+  const f=fixture(`progress.beginPhase('measured packed allocation');progress.checkpoint('measured packed allocation');progress.complete();`,
+    {timeout:5700,allocationReason:'Retained 75-minute timeout; measured complete cost is 85-87 minutes.',preparedSeconds,jobSeconds:6600});
+  try{
+    const result=f.run();assert.ifError(result.error);assert.equal(result.status,0,result.stderr);
+    const guard=read(join(f.report,'watchdog.json'));
+    assert.equal(guard.requested_timeout_seconds,5700);assert.ok(guard.timeout_seconds<=expected&&guard.timeout_seconds>expected-2);
+    assert.equal(guard.job_budget.upload_reserve_seconds,600);assert.equal(guard.job_budget.job_timeout_seconds,6600);
+    assert.ok(guard.timeout_seconds+guard.job_budget.preparation_elapsed_seconds+600<=6600.01);
+    assert.equal(guard.status,'completed');assert.equal(guard.partial_execution,false);
+  }finally{f.cleanup();}
+});
+
+test('allocations beyond the reviewed 95-minute bound reject before child launch',()=>{
+  const f=fixture(`writeFileSync(root+'/launched','must not happen');`,{timeout:5701,allocationReason:'Out-of-contract allocation.'});
+  try{
+    const result=f.run();assert.ifError(result.error);assert.notEqual(result.status,0);assert.match(result.stderr,/at most 5700 seconds/);
+    assert.equal(existsSync(join(f.root,'launched')),false);
   }finally{f.cleanup();}
 });
 

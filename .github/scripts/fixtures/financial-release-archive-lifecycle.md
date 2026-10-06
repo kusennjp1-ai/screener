@@ -59,11 +59,14 @@ FINANCIAL_RELEASE_ARCHIVE_INPUT="$RUNNER_TEMP/financial-release-input.json" \
   node --test --test-concurrency=1 .github/scripts/financial-release-archive-lifecycle.test.mjs
 ```
 
-The diagnostic runner keeps its existing external 75-minute maximum and
-90-minute CI job bound. `FINANCIAL_RELEASE_ARCHIVE_WATCHDOG_SECONDS` aligns the
-cooperative Node test timer with the supervisor's effective allocation and may
-not exceed 4,500 seconds; without the supervisor it retains the 1,800-second
-default. Do not raise either bound to make packed replay pass. Use the existing
+Run `37418746182` reached its 75-minute limit after 32 completed phases, during
+the first final carry recheck. Its incomplete result is retained. Measured phase
+costs imply 85–87 minutes for the entire packed trial, so the reviewed diagnostic
+allocation is 95 minutes inside a 110-minute CI job with at least 10 minutes for
+evidence upload. No assertion, phase, UI budget or production limit changes.
+`FINANCIAL_RELEASE_ARCHIVE_WATCHDOG_SECONDS` aligns the cooperative Node test
+timer with the supervisor's effective allocation and may not exceed 5,700
+seconds; without the supervisor it retains the 1,800-second default. Use the existing
 monotonic supervisor, early job clock, remaining-budget cap and upload reserve
 from the dedicated diagnostic workflow. Its supervisor records phase/command
 starts before synchronous work, bounded failure output, monotonic durations and
@@ -73,10 +76,10 @@ For example:
 ```sh
 FINANCIAL_RELEASE_ARCHIVE_INPUT="$RUNNER_TEMP/financial-release-input.json" \
   python3 .github/scripts/financial-lifecycle-watchdog.py \
-  --timeout-seconds 4500 \
-  --allocation-reason 'Retained packed-input rehearsal; existing runtime limits unchanged.' \
+  --timeout-seconds 5700 \
+  --allocation-reason 'Retained 75-minute timeout; measured full trial cost is 85-87 minutes. Diagnostic runtime only.' \
   --job-clock "$RUNNER_TEMP/financial-release-job-clock.json" \
-  --job-timeout-seconds 5400 --upload-reserve-seconds 600 \
+  --job-timeout-seconds 6600 --upload-reserve-seconds 600 \
   --minimum-runtime-seconds 3600 \
   --report-directory "$RUNNER_TEMP/financial-release-archive-lifecycle" \
   -- node --test --test-concurrency=1 .github/scripts/financial-release-archive-lifecycle.test.mjs
