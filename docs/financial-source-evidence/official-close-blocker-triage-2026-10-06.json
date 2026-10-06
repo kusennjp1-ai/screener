@@ -1,0 +1,359 @@
+{
+  "schema_version": "official-close-blocker-triage-v1",
+  "target_price_session": "2026-10-05",
+  "research_window_started_at": "2026-10-06T16:28:18Z",
+  "research_window_completed_at": "2026-10-06T16:36:16Z",
+  "status": "read_only_review_proposals_not_activated",
+  "source_policy": "Official exchange, issuer, regulator and depositary sources only; no price-provider acquisition.",
+  "counts": {
+    "blocked_symbols": 14,
+    "retired_original_issues": 9,
+    "continuing_ticker_transition": 1,
+    "continuing_otc_transition": 1,
+    "continuing_primary_exchange_transition": 3
+  },
+  "boundaries": {
+    "retired_issues": "Candidate dated retirement only; retain historical/audit data and require owner-reviewed cohort transition.",
+    "continuing_issues": "Never drop because venue/ticker mapping changes. Provider omission versus ingress rejection remains unproven.",
+    "future_fetch": "If separately approved, target Oct5 completed daily bars only, exclude Oct6 intraday bars, keep actual Oct6 retrieval time and separate financial knowledge clock."
+  },
+  "records": [
+    {
+      "symbols": [
+        "LBRDA",
+        "LBRDK"
+      ],
+      "issuer": "Liberty Broadband Corporation",
+      "instrument_classes": [
+        "Class A common stock",
+        "Class C common stock"
+      ],
+      "identifiers": {
+        "LBRDA": {
+          "cusip": "530307107"
+        },
+        "LBRDK": {
+          "cusip": "530307305"
+        }
+      },
+      "classification": "completed_merger_original_issues_ceased",
+      "source_published": "2026-08-17",
+      "last_trading_session": "2026-08-19",
+      "effective_closed": "2026-08-20 before open",
+      "suspension_effective": "2026-08-21",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-577",
+        "https://corporate.charter.com/newsroom/charter-and-cox-communications-complete-transaction"
+      ],
+      "proposal": "Review dated retirement of the two original issues; keep historical records and do not synthesize CHTR prices from merger consideration.",
+      "retained_data_issue": "LBRDA retained last bar is 2026-08-21, later than official last trading session; quarantine that discrepancy."
+    },
+    {
+      "symbols": [
+        "EA"
+      ],
+      "issuer": "Electronic Arts Inc.",
+      "instrument_classes": [
+        "Common stock"
+      ],
+      "identifiers": {
+        "EA": {
+          "cusip": "285512109",
+          "cik": "0000712515"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-07-31",
+      "last_trading_session": "2026-08-04",
+      "effective_closed": "2026-08-04 after close",
+      "suspension_effective": "2026-08-05",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-545",
+        "https://www.sec.gov/Archives/edgar/data/712515/000071251526000130/xslF345X06/form4.xml"
+      ],
+      "proposal": "Review dated retirement; no Oct5 EA close acquisition."
+    },
+    {
+      "symbols": [
+        "APGE"
+      ],
+      "issuer": "Apogee Therapeutics, Inc.",
+      "instrument_classes": [
+        "Common stock"
+      ],
+      "identifiers": {
+        "APGE": {
+          "cusip": "03770N101",
+          "cik": "0001974640"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-08-26",
+      "last_trading_session": "2026-09-02",
+      "effective_closed": "2026-09-03 before open",
+      "suspension_effective": "2026-09-04",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-607",
+        "https://www.sec.gov/Archives/edgar/data/1974640/000119312526341289/apge-20260630.htm"
+      ],
+      "proposal": "Review dated retirement based on updated closed exchange notice; distinguish unrelated APOG."
+    },
+    {
+      "symbols": [
+        "CRNX"
+      ],
+      "issuer": "Crinetics Pharmaceuticals, Inc.",
+      "instrument_classes": [
+        "Common stock"
+      ],
+      "identifiers": {
+        "CRNX": {
+          "cusip": "22663K107",
+          "cik": "0001658247"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-08-31",
+      "last_trading_session": "2026-08-31",
+      "effective_closed": "2026-09-01 before open",
+      "suspension_effective": "2026-09-02",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-628",
+        "https://vrtx.gcs-web.com/news-releases/news-release-details/vertex-completes-acquisition-crinetics-pharmaceuticals-and",
+        "https://www.sec.gov/Archives/edgar/data/1658247/000165824726000053/crnx-20260630.htm"
+      ],
+      "proposal": "Review dated retirement; do not substitute VRTX prices."
+    },
+    {
+      "symbols": [
+        "KALV"
+      ],
+      "issuer": "KalVista Pharmaceuticals, Inc.",
+      "instrument_classes": [
+        "Common stock, par value $0.001"
+      ],
+      "identifiers": {
+        "KALV": {
+          "cusip": "483497103",
+          "cik": "0001348911"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-06-05",
+      "last_trading_session": "2026-06-10",
+      "effective_closed": "2026-06-11 before open",
+      "suspension_effective": "2026-06-12",
+      "sources": [
+        "https://nasdaqtrader.com/TraderNews.aspx?id=ECA2026-390",
+        "https://www.sec.gov/Archives/edgar/data/1348911/000114036126024949/ny20075902x2_8k.htm"
+      ],
+      "proposal": "Review dated retirement; distinguish June11 trading cessation from June12 formal suspension."
+    },
+    {
+      "symbols": [
+        "NUVL"
+      ],
+      "issuer": "Nuvalent, Inc.",
+      "instrument_classes": [
+        "Class A common stock"
+      ],
+      "identifiers": {
+        "NUVL": {
+          "cusip": "670703107",
+          "cik": "0001861560"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-07-13",
+      "last_trading_session": "2026-07-14",
+      "effective_closed": "2026-07-15 before open",
+      "suspension_effective": "2026-07-16",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-493",
+        "https://www.sec.gov/Archives/edgar/data/1861560/000119312526304126/d52896d8k.htm"
+      ],
+      "proposal": "Review dated retirement; do not substitute GSK."
+    },
+    {
+      "symbols": [
+        "TWO"
+      ],
+      "issuer": "Two Harbors Investment Corp.",
+      "instrument_classes": [
+        "Common stock, par value $0.01"
+      ],
+      "identifiers": {
+        "TWO": {
+          "cik": "0001465740",
+          "sec_file_number": "001-34506"
+        }
+      },
+      "classification": "completed_cash_merger_original_common_ceased",
+      "source_published": "2026-08-25",
+      "last_trading_session": null,
+      "effective_closed": "2026-08-25",
+      "suspension_requested": "2026-08-25 before open",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1465740/000110465926100622/tm2621794d1_8k.htm"
+      ],
+      "proposal": "Review dated retirement of common stock only. Filing confirms cancellation and pre-open trading suspension request; do not apply to separately identified preferred stock or notes."
+    },
+    {
+      "symbols": [
+        "WBS"
+      ],
+      "issuer": "Webster Financial Corporation",
+      "instrument_classes": [
+        "Common stock, par value $0.01"
+      ],
+      "identifiers": {
+        "WBS": {
+          "cik": "0000801337",
+          "sec_file_number": "001-31486"
+        }
+      },
+      "classification": "completed_acquisition_original_common_ceased",
+      "source_published": "2026-08-20",
+      "last_trading_session": null,
+      "effective_closed": "2026-08-20 00:01-00:04 America/New_York",
+      "suspension_requested": "2026-08-20 before open",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/801337/000119312526357758/d919931d8k.htm",
+        "https://www.santander.com/en/press-room/press-releases/2026/08/santander-expands-us-presence-with-completion-of-webster-acquisition"
+      ],
+      "proposal": "Review dated retirement of WBS common; do not splice Santander ADS/cash consideration into historical prices."
+    },
+    {
+      "symbols": [
+        "EQR"
+      ],
+      "issuer": "Equity Residential, now Vivmark Residential",
+      "instrument_classes": [
+        "Common shares of beneficial interest, par value $0.01"
+      ],
+      "identifiers": {
+        "EQR": {
+          "cik": "0000906107",
+          "sec_file_number": "1-12252"
+        }
+      },
+      "classification": "continuing_issue_ticker_name_transition",
+      "source_published": "2026-08-17",
+      "old_symbol": "EQR",
+      "new_symbol": "VMRK",
+      "effective_transition": "2026-08-18",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/906107/000114036126033377/ef20080318_8k.htm",
+        "https://www.sec.gov/Archives/edgar/data/915912/000110465926097833/tm2623381d1_ex99-1.htm"
+      ],
+      "proposal": "Review dated EQR-to-VMRK identity continuity. SEC states common shares continue on NYSE and old certificates remain valid. Preserve history; proposed targeted Oct5 VMRK fetch only after mapping review."
+    },
+    {
+      "symbols": [
+        "AXIA"
+      ],
+      "issuer": "AXIA Energia S.A., formerly Centrais Eletricas Brasileiras S.A. - Eletrobras",
+      "instrument_classes": [
+        "Common ADS/ADR, 1 ordinary share to 1 DR"
+      ],
+      "identifiers": {
+        "AXIA": {
+          "cusip": "15234Q207",
+          "isin": "US15234Q2075",
+          "cik": "0001439124"
+        }
+      },
+      "classification": "continuing_ADR_transferred_to_OTC_changed_ticker",
+      "source_published": "2026-08-05 issuer notice; Citi milestone page undated",
+      "old_symbol": "AXIA",
+      "new_symbol": "AXIAY",
+      "last_nyse_session": "2026-08-06",
+      "effective_transition": "2026-08-07",
+      "sources": [
+        "https://www.rad.cvm.gov.br/ENETCONSULTA/frmDownloadDocumento.aspx?CodigoInstituicao=1&Tela=99&descTipo=IPE&numProtocolo=1552549&numSequencia=1077255&numVersao=1",
+        "https://depositaryreceipts.citi.com/adr/guides/pgm_d.aspx?cusip=15234Q207&pageId=16&subpageID=104&typeDisplay=A"
+      ],
+      "proposal": "Review dated exit from listed-exchange universe; ADR continues OTC, so not globally nontrading. No AXIA3 Brazilian ordinary or AXIA preferred substitution. OTC fetch needs explicit scope review."
+    },
+    {
+      "symbols": [
+        "ET"
+      ],
+      "issuer": "Energy Transfer LP",
+      "instrument_classes": [
+        "Common units representing limited partner interests"
+      ],
+      "identifiers": {
+        "ET": {
+          "cik": "0001276187"
+        }
+      },
+      "classification": "continuing_issue_primary_exchange_transition",
+      "source_published": "2026-09-10 filing; 2026-09-28 exchange notice; 2026-10-05 launch",
+      "old_exchange": "XNYS",
+      "new_exchange": "TXSE",
+      "effective_transition": "2026-10-05",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1276187/000127618726000044/et-20260903.htm",
+        "https://www.txse.com/alerts/652b41de-926f-45fd-bd08-e42b054c73ef",
+        "https://www.txse.com/press/texas-stock-exchange-celebrates-move-of-energy-transfer-partnership-s-primary-listings",
+        "https://www.txse.com/regulations/id-codes"
+      ],
+      "proposal": "Keep required. Review dated venue/MIC mapping and provider coverage before one bounded Oct5 ET request. Do not confuse ET common with ET-PRI."
+    },
+    {
+      "symbols": [
+        "SUN"
+      ],
+      "issuer": "Sunoco LP",
+      "instrument_classes": [
+        "Common units representing limited partner interests"
+      ],
+      "identifiers": {
+        "SUN": {
+          "cik": "0001552275",
+          "cusip": "86765K109"
+        }
+      },
+      "classification": "continuing_issue_primary_exchange_transition",
+      "source_published": "2026-09-10 filing; 2026-10-05 exchange launch",
+      "old_exchange": "XNYS",
+      "new_exchange": "TXSE",
+      "effective_transition": "2026-10-05",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1552275/000155227526000075/sun-20260903.htm",
+        "https://www.txse.com/press/texas-stock-exchange-celebrates-move-of-energy-transfer-partnership-s-primary-listings",
+        "https://www.sec.gov/files/investment/13flist2026q1.pdf",
+        "https://www.txse.com/regulations/id-codes"
+      ],
+      "proposal": "Keep required. Review dated venue/MIC mapping and coverage before one bounded Oct5 SUN request. Do not substitute SunocoCorp SUNC."
+    },
+    {
+      "symbols": [
+        "DDS"
+      ],
+      "issuer": "Dillard's, Inc.",
+      "instrument_classes": [
+        "Class A common stock, par value $0.01"
+      ],
+      "identifiers": {
+        "DDS": {
+          "cik": "0000028917",
+          "sec_file_number": "1-6140"
+        }
+      },
+      "classification": "continuing_issue_registered_primary_exchange_transition",
+      "source_published": "2026-09-18 announcement; 2026-09-28 registration and exchange notice",
+      "old_exchange": "XNYS",
+      "new_exchange": "TXSE",
+      "effective_transition": "2026-10-05 scheduled",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/28917/000110465926108945/tm2625597d1_ex99-1.htm",
+        "https://www.sec.gov/Archives/edgar/data/28917/000110465926111370/tm2626135d1_8a12b.htm",
+        "https://www.txse.com/alerts/adbdaf8a-27af-4643-9e6a-c0655cf92561",
+        "https://www.txse.com/regulations/id-codes"
+      ],
+      "proposal": "Keep required; official registration and notice support venue migration, not nontrading exclusion. Confirm effective mapping/current instrument before bounded Oct5 DDS fetch. Do not substitute DDT trust preferred."
+    }
+  ]
+}

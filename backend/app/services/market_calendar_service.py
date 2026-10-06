@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -138,6 +138,26 @@ class MarketCalendarService:
         if schedule.empty:
             raise ValueError(f"No previous session available before {session.date().isoformat()}")
         return pd.Timestamp(schedule.index[-1])
+
+    def session_close(self, market: str, session: date, *, mic: str | None = None) -> datetime | None:
+        """Return the exchange's actual UTC close, or None on a non-session.
+
+        Calendar failures remain errors. A weekday or fixed 16:00 fallback
+        cannot establish a close deadline, especially on holidays/early closes.
+        """
+        calendar = self._get_calendar(market, mic=mic)
+        if not self._is_session(calendar, pd.Timestamp(session)):
+            return None
+        schedule = self._schedule_for_range(calendar, start_day=session, end_day=session)
+        if len(schedule) != 1:
+            raise ValueError(f"Expected exactly one exchange session for {session}")
+        row = schedule.iloc[0]
+        close = pd.Timestamp(row["close"] if "close" in row.index else row["market_close"])
+        if pd.isna(close):
+            raise ValueError(f"Missing exchange close for {session}")
+        if close.tzinfo is None:
+            close = close.tz_localize("UTC")
+        return close.to_pydatetime().astimezone(timezone.utc)
 
     @staticmethod
     def _is_calendar_bounds_error(exc: Exception) -> bool:

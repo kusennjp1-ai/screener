@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable, Iterable
+from urllib.parse import quote
 
 import requests
 
@@ -100,6 +103,8 @@ class GitHubReleaseSyncService:
         github_token: str | None = None,
         request_timeout_seconds: int = 60,
         output_dir: str | Path | None = None,
+        manifest_git_ref: str | None = None,
+        manifest_expected_sha256: str | None = None,
     ) -> dict[str, Any]:
         """Download the latest bundle referenced by ``manifest_asset_name``."""
         if str(source_mode or "").strip().lower() == "live_only":
@@ -139,28 +144,51 @@ class GitHubReleaseSyncService:
             ),
             None,
         )
-        if manifest_asset is None:
+        if manifest_git_ref is not None:
+            if manifest_git_ref != "data/daily-price-pointers" or manifest_asset_name != "daily-price-latest-us.json":
+                return self._result("invalid_manifest", error="Unsupported Git price pointer destination")
+            try:
+                response = self._session.get(
+                    f"{self._api_base}/repos/{repository_full_name}/contents/{manifest_asset_name}?ref={quote(manifest_git_ref, safe='')}",
+                    headers=self._headers(github_token=github_token), timeout=request_timeout_seconds,
+                )
+                if getattr(response, "status_code", 200) != 200:
+                    return self._result("invalid_manifest", error="Reviewed Git price pointer is unavailable; no legacy fallback")
+                pointer = response.json()
+                if pointer.get("type") != "file" or pointer.get("encoding") != "base64":
+                    raise ValueError("Invalid Git price pointer object")
+                pointer_bytes = base64.b64decode(pointer["content"])
+                if manifest_expected_sha256 and hashlib.sha256(pointer_bytes).hexdigest() != manifest_expected_sha256:
+                    raise ValueError("Git price pointer changed after predecessor capture")
+                blob_sha = hashlib.sha1(f"blob {len(pointer_bytes)}\0".encode() + pointer_bytes).hexdigest()
+                if blob_sha != pointer.get("sha"):
+                    raise ValueError("Git price pointer content SHA mismatch")
+                manifest_payload = json.loads(pointer_bytes)
+            except (KeyError, TypeError, ValueError, requests.RequestException) as exc:
+                return self._result("invalid_manifest", error=str(exc))
+        elif manifest_asset is None:
             return self._result(
                 "missing_manifest",
                 reason=f"Manifest asset {manifest_asset_name!r} is not present on release {release_tag!r}",
             )
 
         manifest_url = str(
-            manifest_asset.get("browser_download_url") or manifest_asset.get("url") or ""
+            (manifest_asset or {}).get("browser_download_url") or (manifest_asset or {}).get("url") or ""
         ).strip()
-        if not manifest_url:
+        if not manifest_url and manifest_git_ref is None:
             return self._result(
                 "missing_manifest",
                 reason=f"Manifest asset {manifest_asset_name!r} has no download URL",
             )
 
         try:
-            manifest_bytes = self._download_bytes(
-                manifest_url,
-                github_token=github_token,
-                request_timeout_seconds=request_timeout_seconds,
-            )
-            manifest_payload = json.loads(manifest_bytes.decode("utf-8"))
+            if manifest_git_ref is None:
+                manifest_bytes = self._download_bytes(
+                    manifest_url,
+                    github_token=github_token,
+                    request_timeout_seconds=request_timeout_seconds,
+                )
+                manifest_payload = json.loads(manifest_bytes.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             return self._result("invalid_manifest", error=str(exc))
         except requests.RequestException as exc:
@@ -304,8 +332,6 @@ class GitHubReleaseSyncService:
         output_root.mkdir(parents=True, exist_ok=True)
         bundle_path = output_root / str(bundle_asset_name)
         bundle_path.write_bytes(bundle_bytes)
-
-        import hashlib
 
         expected_sha = str(manifest.get("sha256") or "").strip()
         digest = hashlib.sha256(bundle_bytes).hexdigest()

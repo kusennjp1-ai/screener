@@ -1,0 +1,7 @@
+{
+  "schema_version": "daily-price-promotion-rollout-v1",
+  "enabled": false,
+  "pointer_ref": "data/daily-price-pointers",
+  "pointer_path": "daily-price-latest-us.json",
+  "reason": "Owner review and a verified predecessor/cohort bootstrap are required before activation."
+}

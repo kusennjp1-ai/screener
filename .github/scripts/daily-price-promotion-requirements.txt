@@ -1,0 +1,4 @@
+# Minimal offline NYSE calendar validation runtime, no provider SDK.
+pandas==2.2.0
+numpy==1.26.3
+exchange-calendars==4.5.3
