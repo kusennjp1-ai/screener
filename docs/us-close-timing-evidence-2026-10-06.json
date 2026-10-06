@@ -1,0 +1,2315 @@
+{
+  "retrieved_at": "2026-10-06T15:24:31Z",
+  "stats": {
+    "sample": 25,
+    "runsWithJobs": 21,
+    "cancelledBeforeStart": 4,
+    "queue_p95_s": 834,
+    "successRuntime_p95_s": 10157,
+    "successRuntime_samples": 6
+  },
+  "sample": [
+    {
+      "run": {
+        "id": 37407740745,
+        "created_at": "2026-10-06T03:10:38Z",
+        "updated_at": "2026-10-06T05:09:20Z",
+        "conclusion": "success"
+      },
+      "jobs": [
+        {
+          "id": 112092411304,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-06T03:24:32Z",
+          "completed_at": "2026-10-06T03:24:36Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112092411488,
+          "name": "select-markets",
+          "started_at": "2026-10-06T03:24:32Z",
+          "completed_at": "2026-10-06T03:24:34Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112092436702,
+          "name": "build-market (US)",
+          "started_at": "2026-10-06T03:24:38Z",
+          "completed_at": "2026-10-06T04:48:56Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112113043288,
+          "name": "combine-and-build",
+          "started_at": "2026-10-06T04:48:59Z",
+          "completed_at": "2026-10-06T05:09:19Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 37399803339,
+        "created_at": "2026-10-06T01:33:52Z",
+        "updated_at": "2026-10-06T02:28:21Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 112066787187,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-06T01:43:49Z",
+          "completed_at": "2026-10-06T01:43:53Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112066787403,
+          "name": "select-markets",
+          "started_at": "2026-10-06T01:43:49Z",
+          "completed_at": "2026-10-06T01:43:52Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112066812887,
+          "name": "build-market (US)",
+          "started_at": "2026-10-06T01:43:55Z",
+          "completed_at": "2026-10-06T02:16:30Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112075207429,
+          "name": "combine-and-build",
+          "started_at": "2026-10-06T02:16:32Z",
+          "completed_at": "2026-10-06T02:28:20Z",
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 37398782975,
+        "created_at": "2026-10-06T01:21:56Z",
+        "updated_at": "2026-10-06T01:33:53Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": []
+    },
+    {
+      "run": {
+        "id": 37398296126,
+        "created_at": "2026-10-06T01:16:08Z",
+        "updated_at": "2026-10-06T03:24:30Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 112059425484,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-06T01:16:11Z",
+          "completed_at": "2026-10-06T01:16:13Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112059425780,
+          "name": "select-markets",
+          "started_at": "2026-10-06T01:16:11Z",
+          "completed_at": "2026-10-06T01:16:15Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112059455027,
+          "name": "build-market (US)",
+          "started_at": "2026-10-06T01:16:17Z",
+          "completed_at": "2026-10-06T03:11:44Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 112089239704,
+          "name": "combine-and-build",
+          "started_at": "2026-10-06T03:11:47Z",
+          "completed_at": "2026-10-06T03:24:29Z",
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 37398243579,
+        "created_at": "2026-10-06T01:15:31Z",
+        "updated_at": "2026-10-06T01:43:47Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 112059253550,
+          "name": "select-markets",
+          "started_at": "2026-10-06T01:15:33Z",
+          "completed_at": "2026-10-06T01:15:35Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112059253891,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-06T01:15:33Z",
+          "completed_at": "2026-10-06T01:15:37Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 112059281135,
+          "name": "build-market (US)",
+          "started_at": "2026-10-06T01:15:39Z",
+          "completed_at": "2026-10-06T01:23:26Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 112061381833,
+          "name": "combine-and-build",
+          "started_at": "2026-10-06T01:23:29Z",
+          "completed_at": "2026-10-06T01:43:46Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36945178905,
+        "created_at": "2026-10-02T00:16:45Z",
+        "updated_at": "2026-10-02T01:07:23Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 110650490634,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-02T00:35:25Z",
+          "completed_at": "2026-10-02T00:35:29Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110650490978,
+          "name": "select-markets",
+          "started_at": "2026-10-02T00:35:23Z",
+          "completed_at": "2026-10-02T00:35:26Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110650532183,
+          "name": "build-market (US)",
+          "started_at": "2026-10-02T00:35:32Z",
+          "completed_at": "2026-10-02T00:58:09Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110656344751,
+          "name": "combine-and-build",
+          "started_at": "2026-10-02T00:58:11Z",
+          "completed_at": "2026-10-02T01:07:22Z",
+          "conclusion": "failure"
+        },
+        {
+          "id": 110658745523,
+          "name": "deploy",
+          "started_at": "2026-10-02T01:07:23Z",
+          "completed_at": "2026-10-02T01:07:22Z",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36943839296,
+        "created_at": "2026-10-02T00:01:12Z",
+        "updated_at": "2026-10-02T00:35:21Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 110644545906,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-02T00:13:09Z",
+          "completed_at": "2026-10-02T00:13:13Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110644546065,
+          "name": "select-markets",
+          "started_at": "2026-10-02T00:13:09Z",
+          "completed_at": "2026-10-02T00:13:12Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110644569984,
+          "name": "build-market (US)",
+          "started_at": "2026-10-02T00:13:15Z",
+          "completed_at": "2026-10-02T00:16:51Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 110645572101,
+          "name": "combine-and-build",
+          "started_at": "2026-10-02T00:16:54Z",
+          "completed_at": "2026-10-02T00:35:08Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110650431484,
+          "name": "deploy",
+          "started_at": "2026-10-02T00:35:11Z",
+          "completed_at": "2026-10-02T00:35:20Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36942978736,
+        "created_at": "2026-10-01T23:51:08Z",
+        "updated_at": "2026-10-02T01:57:08Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 110638537125,
+          "name": "select-markets",
+          "started_at": "2026-10-01T23:51:10Z",
+          "completed_at": "2026-10-01T23:51:13Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110638537412,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-01T23:51:11Z",
+          "completed_at": "2026-10-01T23:51:16Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110638574341,
+          "name": "build-market (US)",
+          "started_at": "2026-10-01T23:51:18Z",
+          "completed_at": "2026-10-02T01:48:21Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110668815173,
+          "name": "combine-and-build",
+          "started_at": "2026-10-02T01:48:25Z",
+          "completed_at": "2026-10-02T01:57:07Z",
+          "conclusion": "failure"
+        },
+        {
+          "id": 110670842975,
+          "name": "deploy",
+          "started_at": "2026-10-02T01:57:07Z",
+          "completed_at": "2026-10-02T01:57:07Z",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36942906084,
+        "created_at": "2026-10-01T23:50:19Z",
+        "updated_at": "2026-10-02T00:13:07Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 110638307380,
+          "name": "select-markets",
+          "started_at": "2026-10-01T23:50:22Z",
+          "completed_at": "2026-10-01T23:50:24Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110638307683,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-01T23:50:22Z",
+          "completed_at": "2026-10-01T23:50:25Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110638334904,
+          "name": "build-market (US)",
+          "started_at": "2026-10-01T23:50:27Z",
+          "completed_at": "2026-10-02T00:01:28Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 110641318819,
+          "name": "combine-and-build",
+          "started_at": "2026-10-02T00:01:30Z",
+          "completed_at": "2026-10-02T00:12:37Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110644413795,
+          "name": "deploy",
+          "started_at": "2026-10-02T00:12:41Z",
+          "completed_at": "2026-10-02T00:13:06Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36795015462,
+        "created_at": "2026-10-01T00:12:43Z",
+        "updated_at": "2026-10-01T00:47:25Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 110158793995,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-10-01T00:21:47Z",
+          "completed_at": "2026-10-01T00:21:52Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110158794246,
+          "name": "select-markets",
+          "started_at": "2026-10-01T00:21:47Z",
+          "completed_at": "2026-10-01T00:21:50Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110158826622,
+          "name": "build-market (US)",
+          "started_at": "2026-10-01T00:21:54Z",
+          "completed_at": "2026-10-01T00:41:00Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110163838781,
+          "name": "combine-and-build",
+          "started_at": "2026-10-01T00:41:02Z",
+          "completed_at": "2026-10-01T00:47:24Z",
+          "conclusion": "failure"
+        },
+        {
+          "id": 110165498492,
+          "name": "deploy",
+          "started_at": "2026-10-01T00:47:25Z",
+          "completed_at": "2026-10-01T00:47:24Z",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36794187159,
+        "created_at": "2026-10-01T00:03:01Z",
+        "updated_at": "2026-10-01T00:12:44Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": []
+    },
+    {
+      "run": {
+        "id": 36792477121,
+        "created_at": "2026-09-30T23:42:36Z",
+        "updated_at": "2026-10-01T01:52:11Z",
+        "conclusion": "success"
+      },
+      "jobs": [
+        {
+          "id": 110148334021,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-30T23:42:39Z",
+          "completed_at": "2026-09-30T23:42:43Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110148334261,
+          "name": "select-markets",
+          "started_at": "2026-09-30T23:42:39Z",
+          "completed_at": "2026-09-30T23:42:41Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110148363455,
+          "name": "build-market (US)",
+          "started_at": "2026-09-30T23:42:45Z",
+          "completed_at": "2026-10-01T01:40:22Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110178823874,
+          "name": "combine-and-build",
+          "started_at": "2026-10-01T01:40:26Z",
+          "completed_at": "2026-10-01T01:51:55Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110181608153,
+          "name": "deploy",
+          "started_at": "2026-10-01T01:51:59Z",
+          "completed_at": "2026-10-01T01:52:10Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36792135095,
+        "created_at": "2026-09-30T23:38:37Z",
+        "updated_at": "2026-10-01T00:21:45Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 110147252142,
+          "name": "select-markets",
+          "started_at": "2026-09-30T23:38:40Z",
+          "completed_at": "2026-09-30T23:38:42Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110147252287,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-30T23:38:40Z",
+          "completed_at": "2026-09-30T23:38:47Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110147296571,
+          "name": "build-market (US)",
+          "started_at": "2026-09-30T23:38:49Z",
+          "completed_at": "2026-10-01T00:04:08Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 110154015668,
+          "name": "combine-and-build",
+          "started_at": "2026-10-01T00:04:11Z",
+          "completed_at": "2026-10-01T00:21:07Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 110158623984,
+          "name": "deploy",
+          "started_at": "2026-10-01T00:21:11Z",
+          "completed_at": "2026-10-01T00:21:44Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36658840282,
+        "created_at": "2026-09-30T02:13:29Z",
+        "updated_at": "2026-09-30T05:05:57Z",
+        "conclusion": "success"
+      },
+      "jobs": [
+        {
+          "id": 109709645794,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-30T02:16:40Z",
+          "completed_at": "2026-09-30T02:16:44Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109709645914,
+          "name": "select-markets",
+          "started_at": "2026-09-30T02:16:40Z",
+          "completed_at": "2026-09-30T02:16:44Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109709667699,
+          "name": "build-market (US)",
+          "started_at": "2026-09-30T02:16:46Z",
+          "completed_at": "2026-09-30T04:51:42Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109745027859,
+          "name": "combine-and-build",
+          "started_at": "2026-09-30T04:51:45Z",
+          "completed_at": "2026-09-30T05:05:43Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109748279910,
+          "name": "deploy",
+          "started_at": "2026-09-30T05:05:47Z",
+          "completed_at": "2026-09-30T05:05:56Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36647989265,
+        "created_at": "2026-09-29T23:58:54Z",
+        "updated_at": "2026-09-30T00:36:08Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 109677406283,
+          "name": "select-markets",
+          "started_at": "2026-09-30T00:06:28Z",
+          "completed_at": "2026-09-30T00:06:32Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109677406591,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-30T00:06:28Z",
+          "completed_at": "2026-09-30T00:06:31Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109677435120,
+          "name": "build-market (US)",
+          "started_at": "2026-09-30T00:06:34Z",
+          "completed_at": "2026-09-30T00:25:44Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109682570649,
+          "name": "combine-and-build",
+          "started_at": "2026-09-30T00:25:47Z",
+          "completed_at": "2026-09-30T00:36:07Z",
+          "conclusion": "failure"
+        },
+        {
+          "id": 109685252996,
+          "name": "deploy",
+          "started_at": "2026-09-30T00:36:08Z",
+          "completed_at": "2026-09-30T00:36:07Z",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36647443766,
+        "created_at": "2026-09-29T23:52:12Z",
+        "updated_at": "2026-09-29T23:58:55Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": []
+    },
+    {
+      "run": {
+        "id": 36646351033,
+        "created_at": "2026-09-29T23:39:20Z",
+        "updated_at": "2026-09-30T02:16:39Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 109670119198,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-29T23:39:24Z",
+          "completed_at": "2026-09-29T23:39:27Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109670119387,
+          "name": "select-markets",
+          "started_at": "2026-09-29T23:39:23Z",
+          "completed_at": "2026-09-29T23:39:25Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109670150325,
+          "name": "build-market (US)",
+          "started_at": "2026-09-29T23:39:30Z",
+          "completed_at": "2026-09-30T02:01:26Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109705996612,
+          "name": "combine-and-build",
+          "started_at": "2026-09-30T02:01:29Z",
+          "completed_at": "2026-09-30T02:16:26Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109709597773,
+          "name": "deploy",
+          "started_at": "2026-09-30T02:16:30Z",
+          "completed_at": "2026-09-30T02:16:38Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36646151547,
+        "created_at": "2026-09-29T23:37:00Z",
+        "updated_at": "2026-09-30T00:06:26Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 109669477907,
+          "name": "select-markets",
+          "started_at": "2026-09-29T23:37:03Z",
+          "completed_at": "2026-09-29T23:37:05Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109669478163,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-29T23:37:03Z",
+          "completed_at": "2026-09-29T23:37:06Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109669503343,
+          "name": "build-market (US)",
+          "started_at": "2026-09-29T23:37:08Z",
+          "completed_at": "2026-09-29T23:53:41Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 109673974123,
+          "name": "combine-and-build",
+          "started_at": "2026-09-29T23:53:43Z",
+          "completed_at": "2026-09-30T00:06:12Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109677342979,
+          "name": "deploy",
+          "started_at": "2026-09-30T00:06:16Z",
+          "completed_at": "2026-09-30T00:06:25Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36513515747,
+        "created_at": "2026-09-29T02:38:09Z",
+        "updated_at": "2026-09-29T05:16:35Z",
+        "conclusion": "success"
+      },
+      "jobs": [
+        {
+          "id": 109230654340,
+          "name": "select-markets",
+          "started_at": "2026-09-29T02:38:11Z",
+          "completed_at": "2026-09-29T02:38:14Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109230654549,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-29T02:38:12Z",
+          "completed_at": "2026-09-29T02:38:16Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109230682895,
+          "name": "build-market (US)",
+          "started_at": "2026-09-29T02:38:18Z",
+          "completed_at": "2026-09-29T05:00:47Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109263429215,
+          "name": "combine-and-build",
+          "started_at": "2026-09-29T05:00:50Z",
+          "completed_at": "2026-09-29T05:16:22Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109267178559,
+          "name": "deploy",
+          "started_at": "2026-09-29T05:16:25Z",
+          "completed_at": "2026-09-29T05:16:34Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36504134978,
+        "created_at": "2026-09-29T00:39:11Z",
+        "updated_at": "2026-09-29T01:22:43Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 109204251538,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-29T00:50:56Z",
+          "completed_at": "2026-09-29T00:51:00Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109204251853,
+          "name": "select-markets",
+          "started_at": "2026-09-29T00:49:48Z",
+          "completed_at": "2026-09-29T00:49:51Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109204564397,
+          "name": "build-market (US)",
+          "started_at": "2026-09-29T00:51:07Z",
+          "completed_at": "2026-09-29T01:10:55Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109209513523,
+          "name": "combine-and-build",
+          "started_at": "2026-09-29T01:10:58Z",
+          "completed_at": "2026-09-29T01:22:42Z",
+          "conclusion": "failure"
+        },
+        {
+          "id": 109212456330,
+          "name": "deploy",
+          "started_at": "2026-09-29T01:22:42Z",
+          "completed_at": "2026-09-29T01:22:42Z",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36503248640,
+        "created_at": "2026-09-29T00:28:15Z",
+        "updated_at": "2026-09-29T00:39:12Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": []
+    },
+    {
+      "run": {
+        "id": 36502555178,
+        "created_at": "2026-09-29T00:19:56Z",
+        "updated_at": "2026-09-29T01:32:21Z",
+        "conclusion": "failure"
+      },
+      "jobs": [
+        {
+          "id": 109196545195,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-29T00:19:58Z",
+          "completed_at": "2026-09-29T00:20:02Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109196545610,
+          "name": "select-markets",
+          "started_at": "2026-09-29T00:19:59Z",
+          "completed_at": "2026-09-29T00:20:03Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109196572996,
+          "name": "build-market (US)",
+          "started_at": "2026-09-29T00:20:05Z",
+          "completed_at": "2026-09-29T01:25:51Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109213234970,
+          "name": "combine-and-build",
+          "started_at": "2026-09-29T01:25:54Z",
+          "completed_at": "2026-09-29T01:32:20Z",
+          "conclusion": "failure"
+        },
+        {
+          "id": 109214852045,
+          "name": "deploy",
+          "started_at": "2026-09-29T01:32:21Z",
+          "completed_at": "2026-09-29T01:32:20Z",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36502476873,
+        "created_at": "2026-09-29T00:18:59Z",
+        "updated_at": "2026-09-29T00:49:46Z",
+        "conclusion": "cancelled"
+      },
+      "jobs": [
+        {
+          "id": 109196291207,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-29T00:19:02Z",
+          "completed_at": "2026-09-29T00:19:06Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109196291636,
+          "name": "select-markets",
+          "started_at": "2026-09-29T00:19:02Z",
+          "completed_at": "2026-09-29T00:19:07Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109196325714,
+          "name": "build-market (US)",
+          "started_at": "2026-09-29T00:19:09Z",
+          "completed_at": "2026-09-29T00:28:31Z",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 109198824602,
+          "name": "combine-and-build",
+          "started_at": "2026-09-29T00:28:33Z",
+          "completed_at": "2026-09-29T00:49:09Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 109204096336,
+          "name": "deploy",
+          "started_at": "2026-09-29T00:49:13Z",
+          "completed_at": "2026-09-29T00:49:45Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36286091720,
+        "created_at": "2026-09-27T01:37:23Z",
+        "updated_at": "2026-09-27T03:50:29Z",
+        "conclusion": "success"
+      },
+      "jobs": [
+        {
+          "id": 108527036202,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-27T01:37:26Z",
+          "completed_at": "2026-09-27T01:37:32Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108527036302,
+          "name": "select-markets",
+          "started_at": "2026-09-27T01:37:26Z",
+          "completed_at": "2026-09-27T01:37:31Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108527057499,
+          "name": "build-market (US)",
+          "started_at": "2026-09-27T01:37:34Z",
+          "completed_at": "2026-09-27T03:44:37Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108544564429,
+          "name": "combine-and-build",
+          "started_at": "2026-09-27T03:44:39Z",
+          "completed_at": "2026-09-27T03:50:13Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108545315895,
+          "name": "deploy",
+          "started_at": "2026-09-27T03:50:17Z",
+          "completed_at": "2026-09-27T03:50:28Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 36277167686,
+        "created_at": "2026-09-26T22:42:56Z",
+        "updated_at": "2026-09-27T01:13:36Z",
+        "conclusion": "success"
+      },
+      "jobs": [
+        {
+          "id": 108502051188,
+          "name": "select-markets",
+          "started_at": "2026-09-26T22:42:59Z",
+          "completed_at": "2026-09-26T22:43:02Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108502051269,
+          "name": "ensure_daily_price_release",
+          "started_at": "2026-09-26T22:42:58Z",
+          "completed_at": "2026-09-26T22:43:02Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108502068891,
+          "name": "build-market (US)",
+          "started_at": "2026-09-26T22:43:04Z",
+          "completed_at": "2026-09-27T01:06:37Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108522642934,
+          "name": "combine-and-build",
+          "started_at": "2026-09-27T01:06:40Z",
+          "completed_at": "2026-09-27T01:13:21Z",
+          "conclusion": "success"
+        },
+        {
+          "id": 108523595476,
+          "name": "deploy",
+          "started_at": "2026-09-27T01:13:25Z",
+          "completed_at": "2026-09-27T01:13:35Z",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "critical_runs": [
+    {
+      "id": 37456692717,
+      "jobs": [
+        {
+          "id": 112314516098,
+          "run_id": 37456692717,
+          "workflow_name": "Research UI Release",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37456692717",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaJneCgg",
+          "head_sha": "8a490df5b0a873637781a8e4e5351cece9313f37",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112314516098",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37456692717/job/112314516098",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T14:11:33Z",
+          "started_at": "2026-10-06T14:11:36Z",
+          "completed_at": "2026-10-06T15:06:02Z",
+          "name": "publish",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T14:11:37Z",
+              "completed_at": "2026-10-06T14:11:40Z"
+            },
+            {
+              "name": "Resolve current main under the publication lock",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T14:11:40Z",
+              "completed_at": "2026-10-06T14:11:41Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T14:11:41Z",
+              "completed_at": "2026-10-06T14:11:44Z"
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-06T14:11:44Z",
+              "completed_at": "2026-10-06T14:11:49Z"
+            },
+            {
+              "name": "Resolve the exact versioned exception controls",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-06T14:11:49Z",
+              "completed_at": "2026-10-06T14:11:49Z"
+            },
+            {
+              "name": "Restore the exact exception capture Git objects",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-06T14:11:49Z",
+              "completed_at": "2026-10-06T14:11:49Z"
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-06T14:11:49Z",
+              "completed_at": "2026-10-06T14:11:49Z"
+            },
+            {
+              "name": "Install offline statement projection dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-06T14:11:49Z",
+              "completed_at": "2026-10-06T14:12:09Z"
+            },
+            {
+              "name": "Verify isolated offline native projection runtime",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-06T14:12:09Z",
+              "completed_at": "2026-10-06T14:12:10Z"
+            },
+            {
+              "name": "Verify live provenance, UI gates and non-regressing data",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-06T14:12:10Z",
+              "completed_at": "2026-10-06T14:24:57Z"
+            },
+            {
+              "name": "Checkout the exact verified UI source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-06T14:24:57Z",
+              "completed_at": "2026-10-06T14:25:00Z"
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-06T14:25:00Z",
+              "completed_at": "2026-10-06T14:25:01Z"
+            },
+            {
+              "name": "Restore the exact selected data artifact",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-06T14:25:01Z",
+              "completed_at": "2026-10-06T14:25:34Z"
+            },
+            {
+              "name": "Run npm ci --no-audit --no-fund",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-06T14:25:34Z",
+              "completed_at": "2026-10-06T14:25:44Z"
+            },
+            {
+              "name": "Verify research rules and 100 synthetic task profiles",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15,
+              "started_at": "2026-10-06T14:25:44Z",
+              "completed_at": "2026-10-06T14:27:10Z"
+            },
+            {
+              "name": "Cache public SEC archives and security mappings",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 16,
+              "started_at": "2026-10-06T14:27:10Z",
+              "completed_at": "2026-10-06T14:27:10Z"
+            },
+            {
+              "name": "Prepare independently verifiable book evidence",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 17,
+              "started_at": "2026-10-06T14:27:10Z",
+              "completed_at": "2026-10-06T14:27:10Z"
+            },
+            {
+              "name": "Prepare workbench using verified published evidence",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 18,
+              "started_at": "2026-10-06T14:27:10Z",
+              "completed_at": "2026-10-06T14:27:10Z"
+            },
+            {
+              "name": "Carry the active financial source onto the new price target",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 19,
+              "started_at": "2026-10-06T14:27:10Z",
+              "completed_at": "2026-10-06T14:27:10Z"
+            },
+            {
+              "name": "Build with daily selection export",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20,
+              "started_at": "2026-10-06T14:27:10Z",
+              "completed_at": "2026-10-06T14:28:09Z"
+            },
+            {
+              "name": "Preserve approved UI bytes or record verified new UI",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21,
+              "started_at": "2026-10-06T14:28:09Z",
+              "completed_at": "2026-10-06T14:39:39Z"
+            },
+            {
+              "name": "Preserve correction source and predecessor audit material",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 22,
+              "started_at": "2026-10-06T14:39:39Z",
+              "completed_at": "2026-10-06T14:39:39Z"
+            },
+            {
+              "name": "Preserve retained-universe verification diagnostics",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 23,
+              "started_at": "2026-10-06T14:39:39Z",
+              "completed_at": "2026-10-06T14:39:40Z"
+            },
+            {
+              "name": "Recheck live identity, main and final data before uploading",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 24,
+              "started_at": "2026-10-06T14:39:40Z",
+              "completed_at": "2026-10-06T14:52:23Z"
+            },
+            {
+              "name": "Retain reviewed financial correction candidate",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 25,
+              "started_at": "2026-10-06T14:52:23Z",
+              "completed_at": "2026-10-06T14:52:23Z"
+            },
+            {
+              "name": "Enforce final GitHub Pages payload and TAR limits",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 26,
+              "started_at": "2026-10-06T14:52:23Z",
+              "completed_at": "2026-10-06T14:52:24Z"
+            },
+            {
+              "name": "Run actions/upload-pages-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 27,
+              "started_at": "2026-10-06T14:52:24Z",
+              "completed_at": "2026-10-06T14:52:42Z"
+            },
+            {
+              "name": "Reject a superseded release immediately before deployment",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28,
+              "started_at": "2026-10-06T14:52:42Z",
+              "completed_at": "2026-10-06T15:05:26Z"
+            },
+            {
+              "name": "Deploy to GitHub Pages",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 29,
+              "started_at": "2026-10-06T15:05:26Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 54,
+              "started_at": "2026-10-06T15:05:55Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            },
+            {
+              "name": "Post Checkout the exact verified UI source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 55,
+              "started_at": "2026-10-06T15:05:55Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 56,
+              "started_at": "2026-10-06T15:05:55Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 57,
+              "started_at": "2026-10-06T15:05:55Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 58,
+              "started_at": "2026-10-06T15:05:55Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 59,
+              "started_at": "2026-10-06T15:05:55Z",
+              "completed_at": "2026-10-06T15:05:55Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112314516098",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003915,
+          "runner_name": "GitHub Actions 1000003915",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        }
+      ]
+    },
+    {
+      "id": 37399803339,
+      "jobs": [
+        {
+          "id": 112066787187,
+          "run_id": 37399803339,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37399803339",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaF7N3cw",
+          "head_sha": "eeb602502c1966a1cb2d15ba8a963f44474336ac",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112066787187",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37399803339/job/112066787187",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T01:43:47Z",
+          "started_at": "2026-10-06T01:43:49Z",
+          "completed_at": "2026-10-06T01:43:53Z",
+          "name": "ensure_daily_price_release",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T01:43:50Z",
+              "completed_at": "2026-10-06T01:43:50Z"
+            },
+            {
+              "name": "Ensure daily price release exists",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T01:43:50Z",
+              "completed_at": "2026-10-06T01:43:50Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T01:43:50Z",
+              "completed_at": "2026-10-06T01:43:50Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112066787187",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003807,
+          "runner_name": "GitHub Actions 1000003807",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        },
+        {
+          "id": 112066787403,
+          "run_id": 37399803339,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37399803339",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaF7N4Sw",
+          "head_sha": "eeb602502c1966a1cb2d15ba8a963f44474336ac",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112066787403",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37399803339/job/112066787403",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T01:43:47Z",
+          "started_at": "2026-10-06T01:43:49Z",
+          "completed_at": "2026-10-06T01:43:52Z",
+          "name": "select-markets",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T01:43:50Z",
+              "completed_at": "2026-10-06T01:43:50Z"
+            },
+            {
+              "name": "Run ASIA='[\"HK\",\"IN\",\"JP\",\"KR\",\"TW\",\"CN\",\"SG\",\"MY\",\"AU\"]'",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T01:43:50Z",
+              "completed_at": "2026-10-06T01:43:50Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T01:43:50Z",
+              "completed_at": "2026-10-06T01:43:50Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112066787403",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003808,
+          "runner_name": "GitHub Actions 1000003808",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        },
+        {
+          "id": 112066812887,
+          "run_id": 37399803339,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37399803339",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaF7Pb1w",
+          "head_sha": "eeb602502c1966a1cb2d15ba8a963f44474336ac",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112066812887",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37399803339/job/112066812887",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T01:43:53Z",
+          "started_at": "2026-10-06T01:43:55Z",
+          "completed_at": "2026-10-06T02:16:30Z",
+          "name": "build-market (US)",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T01:43:56Z",
+              "completed_at": "2026-10-06T01:43:57Z"
+            },
+            {
+              "name": "Initialize containers",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T01:43:57Z",
+              "completed_at": "2026-10-06T01:44:22Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T01:44:22Z",
+              "completed_at": "2026-10-06T01:44:25Z"
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-06T01:44:25Z",
+              "completed_at": "2026-10-06T01:44:55Z"
+            },
+            {
+              "name": "Install backend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-06T01:44:55Z",
+              "completed_at": "2026-10-06T01:46:59Z"
+            },
+            {
+              "name": "Select weekly reference manifest",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-06T01:46:59Z",
+              "completed_at": "2026-10-06T01:47:01Z"
+            },
+            {
+              "name": "Download weekly reference bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-06T01:47:01Z",
+              "completed_at": "2026-10-06T01:47:02Z"
+            },
+            {
+              "name": "Import weekly reference bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-06T01:47:02Z",
+              "completed_at": "2026-10-06T01:48:53Z"
+            },
+            {
+              "name": "Load tracked IBD industry seed",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-06T01:48:53Z",
+              "completed_at": "2026-10-06T01:49:04Z"
+            },
+            {
+              "name": "Apply IBD classification (fills gaps beyond the CSV seed)",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-06T01:49:04Z",
+              "completed_at": "2026-10-06T01:49:15Z"
+            },
+            {
+              "name": "Seed daily price bundle from GitHub",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-06T01:49:15Z",
+              "completed_at": "2026-10-06T01:52:56Z"
+            },
+            {
+              "name": "Seed feature run bundle from GitHub (fast mode)",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-06T01:52:56Z",
+              "completed_at": "2026-10-06T01:53:44Z"
+            },
+            {
+              "name": "Export market static data bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-06T01:53:44Z",
+              "completed_at": "2026-10-06T02:14:15Z"
+            },
+            {
+              "name": "Measure IBD-50 overlap (US)",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 14,
+              "started_at": "2026-10-06T02:14:15Z",
+              "completed_at": "2026-10-06T02:14:15Z"
+            },
+            {
+              "name": "Diagnose IBD-50 reference (US)",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 15,
+              "started_at": "2026-10-06T02:14:15Z",
+              "completed_at": "2026-10-06T02:14:15Z"
+            },
+            {
+              "name": "Upload market diagnostics",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16,
+              "started_at": "2026-10-06T02:14:15Z",
+              "completed_at": "2026-10-06T02:14:16Z"
+            },
+            {
+              "name": "Build daily price bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17,
+              "started_at": "2026-10-06T02:14:16Z",
+              "completed_at": "2026-10-06T02:16:10Z"
+            },
+            {
+              "name": "Upload daily price assets",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 18,
+              "started_at": "2026-10-06T02:16:10Z",
+              "completed_at": "2026-10-06T02:16:15Z"
+            },
+            {
+              "name": "Upload feature run bundle (full mode)",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 19,
+              "started_at": "2026-10-06T02:16:15Z",
+              "completed_at": "2026-10-06T02:16:15Z"
+            },
+            {
+              "name": "Upload market artifact",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20,
+              "started_at": "2026-10-06T02:16:15Z",
+              "completed_at": "2026-10-06T02:16:27Z"
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 38,
+              "started_at": "2026-10-06T02:16:27Z",
+              "completed_at": "2026-10-06T02:16:27Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 39,
+              "started_at": "2026-10-06T02:16:27Z",
+              "completed_at": "2026-10-06T02:16:27Z"
+            },
+            {
+              "name": "Stop containers",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 40,
+              "started_at": "2026-10-06T02:16:27Z",
+              "completed_at": "2026-10-06T02:16:28Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 41,
+              "started_at": "2026-10-06T02:16:28Z",
+              "completed_at": "2026-10-06T02:16:28Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112066812887",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003810,
+          "runner_name": "GitHub Actions 1000003810",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        },
+        {
+          "id": 112075207429,
+          "run_id": 37399803339,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37399803339",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaGDPzBQ",
+          "head_sha": "eeb602502c1966a1cb2d15ba8a963f44474336ac",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112075207429",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37399803339/job/112075207429",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-10-06T02:16:30Z",
+          "started_at": "2026-10-06T02:16:32Z",
+          "completed_at": "2026-10-06T02:28:20Z",
+          "name": "combine-and-build",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T02:16:33Z",
+              "completed_at": "2026-10-06T02:16:36Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T02:16:36Z",
+              "completed_at": "2026-10-06T02:16:39Z"
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T02:16:39Z",
+              "completed_at": "2026-10-06T02:17:08Z"
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-06T02:17:08Z",
+              "completed_at": "2026-10-06T02:17:14Z"
+            },
+            {
+              "name": "Install backend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-06T02:17:14Z",
+              "completed_at": "2026-10-06T02:19:04Z"
+            },
+            {
+              "name": "Install frontend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-06T02:19:04Z",
+              "completed_at": "2026-10-06T02:19:29Z"
+            },
+            {
+              "name": "Download current market artifacts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-06T02:19:29Z",
+              "completed_at": "2026-10-06T02:19:34Z"
+            },
+            {
+              "name": "Download per-market fallback artifacts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-06T02:19:34Z",
+              "completed_at": "2026-10-06T02:22:04Z"
+            },
+            {
+              "name": "Validate market artifacts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-06T02:22:04Z",
+              "completed_at": "2026-10-06T02:22:04Z"
+            },
+            {
+              "name": "Combine static data bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-06T02:22:04Z",
+              "completed_at": "2026-10-06T02:22:14Z"
+            },
+            {
+              "name": "Cache public SEC archives and security mappings",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-06T02:22:14Z",
+              "completed_at": "2026-10-06T02:22:15Z"
+            },
+            {
+              "name": "Build static frontend",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 12,
+              "started_at": "2026-10-06T02:22:15Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Upload verified data export",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 13,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Record exact export attempt and dated evidence",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 14,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Preserve dated export provenance for release selection",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 15,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Post Cache public SEC archives and security mappings",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 27,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 28,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 29,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:17Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 30,
+              "started_at": "2026-10-06T02:28:17Z",
+              "completed_at": "2026-10-06T02:28:18Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 31,
+              "started_at": "2026-10-06T02:28:18Z",
+              "completed_at": "2026-10-06T02:28:18Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112075207429",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003821,
+          "runner_name": "GitHub Actions 1000003821",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        }
+      ]
+    },
+    {
+      "id": 37407740745,
+      "jobs": [
+        {
+          "id": 112092411304,
+          "run_id": 37407740745,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37407740745",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaGTp1qA",
+          "head_sha": "d6cd685fbe197deb5f83a12026de5d764f6d6f7f",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112092411304",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37407740745/job/112092411304",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T03:24:30Z",
+          "started_at": "2026-10-06T03:24:32Z",
+          "completed_at": "2026-10-06T03:24:36Z",
+          "name": "ensure_daily_price_release",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T03:24:32Z",
+              "completed_at": "2026-10-06T03:24:32Z"
+            },
+            {
+              "name": "Ensure daily price release exists",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T03:24:32Z",
+              "completed_at": "2026-10-06T03:24:35Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T03:24:35Z",
+              "completed_at": "2026-10-06T03:24:35Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112092411304",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003825,
+          "runner_name": "GitHub Actions 1000003825",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        },
+        {
+          "id": 112092411488,
+          "run_id": 37407740745,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37407740745",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaGTp2YA",
+          "head_sha": "d6cd685fbe197deb5f83a12026de5d764f6d6f7f",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112092411488",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37407740745/job/112092411488",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T03:24:30Z",
+          "started_at": "2026-10-06T03:24:32Z",
+          "completed_at": "2026-10-06T03:24:34Z",
+          "name": "select-markets",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T03:24:32Z",
+              "completed_at": "2026-10-06T03:24:32Z"
+            },
+            {
+              "name": "Run ASIA='[\"HK\",\"IN\",\"JP\",\"KR\",\"TW\",\"CN\",\"SG\",\"MY\",\"AU\"]'",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T03:24:32Z",
+              "completed_at": "2026-10-06T03:24:33Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T03:24:33Z",
+              "completed_at": "2026-10-06T03:24:33Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112092411488",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003826,
+          "runner_name": "GitHub Actions 1000003826",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        },
+        {
+          "id": 112092436702,
+          "run_id": 37407740745,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37407740745",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaGTrY3g",
+          "head_sha": "d6cd685fbe197deb5f83a12026de5d764f6d6f7f",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112092436702",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37407740745/job/112092436702",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T03:24:36Z",
+          "started_at": "2026-10-06T03:24:38Z",
+          "completed_at": "2026-10-06T04:48:56Z",
+          "name": "build-market (US)",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T03:24:38Z",
+              "completed_at": "2026-10-06T03:24:40Z"
+            },
+            {
+              "name": "Initialize containers",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T03:24:40Z",
+              "completed_at": "2026-10-06T03:25:05Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T03:25:05Z",
+              "completed_at": "2026-10-06T03:25:08Z"
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-06T03:25:08Z",
+              "completed_at": "2026-10-06T03:25:38Z"
+            },
+            {
+              "name": "Install backend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-06T03:25:38Z",
+              "completed_at": "2026-10-06T03:27:15Z"
+            },
+            {
+              "name": "Select weekly reference manifest",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-06T03:27:15Z",
+              "completed_at": "2026-10-06T03:27:16Z"
+            },
+            {
+              "name": "Download weekly reference bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-06T03:27:16Z",
+              "completed_at": "2026-10-06T03:27:17Z"
+            },
+            {
+              "name": "Import weekly reference bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-06T03:27:17Z",
+              "completed_at": "2026-10-06T03:28:33Z"
+            },
+            {
+              "name": "Load tracked IBD industry seed",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-06T03:28:33Z",
+              "completed_at": "2026-10-06T03:28:41Z"
+            },
+            {
+              "name": "Apply IBD classification (fills gaps beyond the CSV seed)",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-06T03:28:41Z",
+              "completed_at": "2026-10-06T03:28:51Z"
+            },
+            {
+              "name": "Seed daily price bundle from GitHub",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-06T03:28:51Z",
+              "completed_at": "2026-10-06T03:31:14Z"
+            },
+            {
+              "name": "Seed feature run bundle from GitHub (fast mode)",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 12,
+              "started_at": "2026-10-06T03:31:14Z",
+              "completed_at": "2026-10-06T03:31:14Z"
+            },
+            {
+              "name": "Export market static data bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-06T03:31:14Z",
+              "completed_at": "2026-10-06T04:45:05Z"
+            },
+            {
+              "name": "Measure IBD-50 overlap (US)",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-06T04:45:05Z",
+              "completed_at": "2026-10-06T04:45:24Z"
+            },
+            {
+              "name": "Diagnose IBD-50 reference (US)",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15,
+              "started_at": "2026-10-06T04:45:24Z",
+              "completed_at": "2026-10-06T04:45:44Z"
+            },
+            {
+              "name": "Upload market diagnostics",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16,
+              "started_at": "2026-10-06T04:45:44Z",
+              "completed_at": "2026-10-06T04:45:44Z"
+            },
+            {
+              "name": "Build daily price bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17,
+              "started_at": "2026-10-06T04:45:44Z",
+              "completed_at": "2026-10-06T04:47:54Z"
+            },
+            {
+              "name": "Upload daily price assets",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 18,
+              "started_at": "2026-10-06T04:47:54Z",
+              "completed_at": "2026-10-06T04:48:00Z"
+            },
+            {
+              "name": "Upload feature run bundle (full mode)",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 19,
+              "started_at": "2026-10-06T04:48:00Z",
+              "completed_at": "2026-10-06T04:48:41Z"
+            },
+            {
+              "name": "Upload market artifact",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20,
+              "started_at": "2026-10-06T04:48:41Z",
+              "completed_at": "2026-10-06T04:48:52Z"
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 38,
+              "started_at": "2026-10-06T04:48:52Z",
+              "completed_at": "2026-10-06T04:48:52Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 39,
+              "started_at": "2026-10-06T04:48:52Z",
+              "completed_at": "2026-10-06T04:48:53Z"
+            },
+            {
+              "name": "Stop containers",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 40,
+              "started_at": "2026-10-06T04:48:53Z",
+              "completed_at": "2026-10-06T04:48:53Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 41,
+              "started_at": "2026-10-06T04:48:53Z",
+              "completed_at": "2026-10-06T04:48:53Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112092436702",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003828,
+          "runner_name": "GitHub Actions 1000003828",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        },
+        {
+          "id": 112113043288,
+          "run_id": 37407740745,
+          "workflow_name": "Static Site",
+          "head_branch": "main",
+          "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/37407740745",
+          "run_attempt": 1,
+          "node_id": "CR_kwDOR8Ja988AAAAaGnVHWA",
+          "head_sha": "d6cd685fbe197deb5f83a12026de5d764f6d6f7f",
+          "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/112113043288",
+          "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/37407740745/job/112113043288",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-06T04:48:56Z",
+          "started_at": "2026-10-06T04:48:59Z",
+          "completed_at": "2026-10-06T05:09:19Z",
+          "name": "combine-and-build",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-06T04:49:00Z",
+              "completed_at": "2026-10-06T04:49:02Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-06T04:49:02Z",
+              "completed_at": "2026-10-06T04:49:10Z"
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-06T04:49:10Z",
+              "completed_at": "2026-10-06T04:49:35Z"
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-06T04:49:35Z",
+              "completed_at": "2026-10-06T04:49:38Z"
+            },
+            {
+              "name": "Install backend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-06T04:49:38Z",
+              "completed_at": "2026-10-06T04:51:25Z"
+            },
+            {
+              "name": "Install frontend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-06T04:51:25Z",
+              "completed_at": "2026-10-06T04:51:53Z"
+            },
+            {
+              "name": "Download current market artifacts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-06T04:51:53Z",
+              "completed_at": "2026-10-06T04:51:59Z"
+            },
+            {
+              "name": "Download per-market fallback artifacts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-06T04:51:59Z",
+              "completed_at": "2026-10-06T04:54:09Z"
+            },
+            {
+              "name": "Validate market artifacts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-06T04:54:09Z",
+              "completed_at": "2026-10-06T04:54:09Z"
+            },
+            {
+              "name": "Combine static data bundle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-06T04:54:09Z",
+              "completed_at": "2026-10-06T04:54:22Z"
+            },
+            {
+              "name": "Cache public SEC archives and security mappings",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-06T04:54:22Z",
+              "completed_at": "2026-10-06T04:54:23Z"
+            },
+            {
+              "name": "Build static frontend",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-06T04:54:23Z",
+              "completed_at": "2026-10-06T05:08:32Z"
+            },
+            {
+              "name": "Upload verified data export",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-06T05:08:32Z",
+              "completed_at": "2026-10-06T05:09:07Z"
+            },
+            {
+              "name": "Record exact export attempt and dated evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-06T05:09:07Z",
+              "completed_at": "2026-10-06T05:09:13Z"
+            },
+            {
+              "name": "Preserve dated export provenance for release selection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15,
+              "started_at": "2026-10-06T05:09:13Z",
+              "completed_at": "2026-10-06T05:09:15Z"
+            },
+            {
+              "name": "Post Cache public SEC archives and security mappings",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 27,
+              "started_at": "2026-10-06T05:09:15Z",
+              "completed_at": "2026-10-06T05:09:16Z"
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28,
+              "started_at": "2026-10-06T05:09:16Z",
+              "completed_at": "2026-10-06T05:09:16Z"
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 29,
+              "started_at": "2026-10-06T05:09:16Z",
+              "completed_at": "2026-10-06T05:09:16Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 30,
+              "started_at": "2026-10-06T05:09:16Z",
+              "completed_at": "2026-10-06T05:09:16Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 31,
+              "started_at": "2026-10-06T05:09:16Z",
+              "completed_at": "2026-10-06T05:09:16Z"
+            }
+          ],
+          "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/112113043288",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "runner_id": 1000003834,
+          "runner_name": "GitHub Actions 1000003834",
+          "runner_group_id": 0,
+          "runner_group_name": "GitHub Actions"
+        }
+      ]
+    }
+  ]
+}

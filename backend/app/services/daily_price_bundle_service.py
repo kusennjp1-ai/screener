@@ -306,6 +306,8 @@ class DailyPriceBundleService:
 
         source_revision = f"daily_prices_{bundle_market.lower()}:{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         coverage_summary = {
+            "require_complete": bool(require_complete),
+            "symbol_scope": "active_market" if selected_symbols is None else "selected_symbols",
             "symbol_universe_count": len(all_symbols),
             "covered_symbol_count": covered_symbol_count,
             "symbol_coverage": round(symbol_coverage, 6),
@@ -498,6 +500,9 @@ class DailyPriceBundleService:
             github_token=settings.github_data_token,
             request_timeout_seconds=settings.github_data_timeout_seconds,
             output_dir=download_dir,
+            **({"manifest_git_ref": settings.github_daily_price_pointer_ref,
+                "manifest_expected_sha256": settings.github_daily_price_pointer_expected_sha256 or None}
+               if normalized_market == "US" and settings.github_daily_price_pointer_ref else {}),
         )
         sync_result["source"] = "github"
         sync_result["market"] = normalized_market

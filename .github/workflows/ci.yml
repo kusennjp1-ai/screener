@@ -54,6 +54,22 @@ jobs:
           LITELLM_LOCAL_MODEL_COST_MAP: 'true'
         run: python -m pytest tests/unit/test_authoritative_price_history.py tests/unit/test_benchmark_cache_service.py tests/unit/infra/test_stock_data_provider.py tests/unit/scanners/test_data_prep_cached_only.py tests/unit/test_market_regime_scan_wiring.py tests/unit/test_price_history_integrity.py tests/unit/test_cache_refresh_unification.py tests/unit/test_price_cache_warmup_store.py tests/unit/test_yahoo_batch_ingestion.py tests/unit/test_rate_budget_policy.py -q
 
+      - name: US close timing and source promotion regression
+        working-directory: backend
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: >-
+          python -m pytest
+          tests/unit/test_market_calendar_service.py
+          tests/unit/test_market_calendar_service_engine.py
+          tests/unit/test_close_price_contract.py
+          tests/unit/test_daily_price_artifact_provenance.py
+          tests/unit/test_daily_price_promotion_guard.py
+          tests/unit/test_github_release_sync_service.py
+          tests/unit/test_source_promotion_workflow_paths.py
+          tests/unit/test_staged_daily_price_source.py
+          -q
+
       - name: Financial-source evidence regression
         working-directory: backend
         env:
@@ -162,6 +178,9 @@ jobs:
 
       - name: Final GitHub Pages payload guard contracts
         run: python3 -m unittest discover -s .github/scripts -p test_check_pages_payload.py
+
+      - name: US source promotion downstream input contracts
+        run: node --test .github/scripts/export-source-promotion-inputs.test.mjs
 
       - name: Lossless transport and publication boundary contracts
         run: node --test --test-concurrency=2 frontend/tools/static-transport/contracts.node.mjs frontend/tools/static-transport/browser-harness.node.mjs .github/scripts/financial-audit-transport.test.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs .github/scripts/design-transport.test.mjs

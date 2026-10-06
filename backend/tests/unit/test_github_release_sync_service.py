@@ -1,9 +1,52 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 
 from app.services.github_release_sync_service import GitHubReleaseSyncService
+
+
+def test_reviewed_git_pointer_reads_hash_named_bundle_and_never_legacy_pointer(tmp_path):
+    bundle = b'immutable verified source'
+    manifest = {'schema_version': 'daily-price-manifest-v1', 'source_revision': 'source:2',
+                'bundle_asset_name': 'daily-price-us-20261005-hash.json.gz', 'sha256': hashlib.sha256(bundle).hexdigest()}
+    raw = json.dumps(manifest).encode()
+    endpoint = 'https://api.github.com/repos/owner/repo/contents/daily-price-latest-us.json?ref=data%2Fdaily-price-pointers'
+    session = _FakeSession({
+        'https://api.github.com/repos/owner/repo/releases/tags/daily-price-data': _FakeResponse(json_data={'assets': [
+            {'name': 'daily-price-latest-us.json', 'browser_download_url': 'https://example.test/legacy-must-not-read'},
+            {'name': manifest['bundle_asset_name'], 'browser_download_url': 'https://example.test/immutable'}]}),
+        endpoint: _FakeResponse(json_data={'type': 'file', 'encoding': 'base64', 'content': base64.b64encode(raw).decode(),
+            'sha': hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest()}),
+        'https://example.test/immutable': _FakeResponse(content=bundle),
+    })
+    result = GitHubReleaseSyncService(session=session).fetch_latest_bundle(repository_full_name='owner/repo',
+        release_tag='daily-price-data', manifest_asset_name='daily-price-latest-us.json',
+        manifest_git_ref='data/daily-price-pointers', output_dir=tmp_path)
+    assert result['status'] == 'success'
+    assert result['manifest'] == manifest
+    assert 'https://example.test/legacy-must-not-read' not in session.calls
+    changed = GitHubReleaseSyncService(session=session).fetch_latest_bundle(repository_full_name='owner/repo',
+        release_tag='daily-price-data', manifest_asset_name='daily-price-latest-us.json',
+        manifest_git_ref='data/daily-price-pointers', manifest_expected_sha256='0' * 64, output_dir=tmp_path)
+    assert changed['status'] == 'invalid_manifest'
+    assert 'changed after predecessor capture' in changed['error']
+    assert session.calls.count('https://example.test/immutable') == 1
+
+
+def test_missing_git_pointer_never_falls_back_to_unreviewed_legacy(tmp_path):
+    endpoint = 'https://api.github.com/repos/owner/repo/contents/daily-price-latest-us.json?ref=data%2Fdaily-price-pointers'
+    session = _FakeSession({
+        'https://api.github.com/repos/owner/repo/releases/tags/daily-price-data': _FakeResponse(json_data={'assets': [
+            {'name': 'daily-price-latest-us.json', 'browser_download_url': 'https://example.test/legacy'}]}),
+        endpoint: _FakeResponse(status_code=404),
+    })
+    result = GitHubReleaseSyncService(session=session).fetch_latest_bundle(repository_full_name='owner/repo',
+        release_tag='daily-price-data', manifest_asset_name='daily-price-latest-us.json',
+        manifest_git_ref='data/daily-price-pointers', output_dir=tmp_path)
+    assert result['status'] == 'invalid_manifest'
+    assert len(session.calls) == 2
 
 
 class _FakeResponse:

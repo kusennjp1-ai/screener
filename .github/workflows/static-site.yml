@@ -60,7 +60,21 @@ jobs:
     outputs:
       markets: ${{ steps.pick.outputs.markets }}
       mode: ${{ steps.pick.outputs.mode }}
+      source_promotion: ${{ steps.source-policy.outputs.enabled }}
     steps:
+      - uses: actions/checkout@v4
+      - id: source-policy
+        run: |
+          python - <<'PY'
+          import json, os
+          policy = json.load(open('.github/daily-price-promotion.json'))
+          assert policy['schema_version'] == 'daily-price-promotion-rollout-v1'
+          assert type(policy['enabled']) is bool
+          assert policy['pointer_ref'] == 'data/daily-price-pointers'
+          assert policy['pointer_path'] == 'daily-price-latest-us.json'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"enabled={str(policy['enabled']).lower()}\n")
+          PY
       # Resolve which markets this run builds. The schedule that fired
       # (github.event.schedule) selects the group; manual dispatch uses the
       # market_group input. The combine job back-fills every market that is NOT
@@ -119,6 +133,11 @@ jobs:
   build-market:
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     needs: [select-markets, ensure_daily_price_release]
+    outputs:
+      produced_candidate: ${{ steps.candidate-produced.outputs.produced }}
+      source_candidate_id: ${{ matrix.market == 'US' && steps.source-candidate.outputs.artifact-id || '' }}
+      source_candidate_digest: ${{ matrix.market == 'US' && steps.source-candidate.outputs.artifact-digest || '' }}
+      source_producer_attempt: ${{ steps.source-candidate-record.outputs.producer_attempt }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -158,6 +177,23 @@ jobs:
 
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
+
+      - name: Capture reviewed US source predecessor before collection
+        if: ${{ matrix.market == 'US' && needs.select-markets.outputs.source_promotion == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd backend
+          python -m app.scripts.stage_daily_price_source capture \
+            --repository "${{ github.repository }}" \
+            --capture /tmp/daily-price-promotion/previous.json
+          echo 'GITHUB_DAILY_PRICE_POINTER_REF=data/daily-price-pointers' >> "$GITHUB_ENV"
+          python - <<'PY'
+          import json, os
+          value = json.load(open('/tmp/daily-price-promotion/previous.json'))['manifest_sha256']
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'GITHUB_DAILY_PRICE_POINTER_EXPECTED_SHA256={value}\n')
+          PY
 
       - name: Select weekly reference manifest
         env:
@@ -303,6 +339,9 @@ jobs:
       - name: Seed daily price bundle from GitHub
         env:
           GITHUB_DATA_TOKEN: ${{ github.token }}
+          # The pointer and bundle must use the same repository as the captured
+          # predecessor; the backend's legacy default points at the upstream fork.
+          GITHUB_DATA_REPOSITORY: ${{ matrix.market == 'US' && needs.select-markets.outputs.source_promotion == 'true' && github.repository || 'xang1234/stock-screener' }}
         run: |
           cd backend
           python -m app.scripts.sync_daily_price_bundle_from_github \
@@ -418,27 +457,64 @@ jobs:
           if-no-files-found: ignore
 
       - name: Build daily price bundle
-        if: ${{ steps.export-market.outputs.has_artifact == 'true' }}
+        if: ${{ steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode == 'full' }}
         run: |
           cd backend
+          COVERAGE_ARGS=()
+          if [ "${{ matrix.market }}" = US ] && [ "${{ needs.select-markets.outputs.source_promotion }}" = true ]; then
+            COVERAGE_FLOOR=$(python - <<'PY'
+          import json, math
+          previous = json.load(open('/tmp/daily-price-promotion/previous.json'))['manifest']
+          floor = previous.get('min_symbol_coverage')
+          if floor is None and previous.get('require_complete') is True:
+              floor = 1.0
+          assert type(floor) in (int, float) and math.isfinite(floor) and 0 < floor <= 1
+          assert previous.get('allow_stale_complete') is False
+          assert previous.get('required_cohort') and previous.get('required_cohort_sha256')
+          print(floor)
+          PY
+            )
+            COVERAGE_ARGS=(--require-complete --min-symbol-coverage "$COVERAGE_FLOOR")
+          fi
           python -m app.scripts.build_daily_price_bundle \
             --market "${{ matrix.market }}" \
-            --output-dir /tmp/daily-price
+            --output-dir /tmp/daily-price "${COVERAGE_ARGS[@]}"
 
-      - name: Upload daily price assets
-        if: ${{ steps.export-market.outputs.has_artifact == 'true' }}
+      # Collection output is a candidate only. The source pointer is updated by
+      # the serialized final job after downstream date/price/cohort validation.
+      - name: Record the actual US candidate producer attempt
+        id: source-candidate-record
+        if: ${{ matrix.market == 'US' && steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode == 'full' }}
+        run: |
+          cd backend
+          python -m app.scripts.daily_price_artifact_provenance record --role candidate \
+            --root /tmp --record /tmp/daily-price-promotion/producer.json
+      - name: Preserve daily source candidate and exact predecessor
+        id: source-candidate
+        if: ${{ steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode == 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-source-candidate-${{ matrix.market }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/daily-price
+            /tmp/daily-price-promotion
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record that a US source candidate was actually produced
+        id: candidate-produced
+        if: ${{ matrix.market == 'US' && steps.source-candidate.outputs.artifact-id != '' }}
+        run: echo 'produced=true' >> "$GITHUB_OUTPUT"
+
+      - name: Preserve existing non-US source publication behavior
+        if: ${{ matrix.market != 'US' && steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode == 'full' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           MARKET_LOWER="$(echo "${{ matrix.market }}" | tr '[:upper:]' '[:lower:]')"
-          BUNDLE_PATH="$(find /tmp/daily-price -maxdepth 1 -name "daily-price-${MARKET_LOWER}-*.json.gz" | head -n 1)"
+          BUNDLE_PATH="$(find /tmp/daily-price -maxdepth 1 -name "daily-price-${MARKET_LOWER}-*.json.gz" -print -quit)"
           MANIFEST_PATH="/tmp/daily-price/daily-price-latest-${MARKET_LOWER}.json"
-
-          if [ -z "$BUNDLE_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
-            echo "Missing daily price bundle outputs" >&2
-            exit 1
-          fi
-
+          test -n "$BUNDLE_PATH" && test -f "$MANIFEST_PATH"
           gh release upload daily-price-data "$BUNDLE_PATH" --clobber
           gh release upload daily-price-data "$MANIFEST_PATH" --clobber
 
@@ -476,6 +552,10 @@ jobs:
   combine-and-build:
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
     needs: build-market
+    outputs:
+      downstream_artifact_id: ${{ steps.source-downstream.outputs.artifact-id }}
+      downstream_artifact_digest: ${{ steps.source-downstream.outputs.artifact-digest }}
+      downstream_producer_attempt: ${{ steps.source-downstream-record.outputs.producer_attempt }}
     runs-on: ubuntu-latest
     env:
       REDIS_ENABLED: "false"
@@ -852,6 +932,27 @@ jobs:
           npm run build
           node tools/check-data-quality.mjs
 
+      - name: Bind downstream close observations after both quality gates
+        run: node .github/scripts/export-source-promotion-inputs.mjs frontend/dist/static-data /tmp/daily-source-downstream.json
+
+      - name: Record the actual downstream producer attempt
+        id: source-downstream-record
+        run: |
+          cd backend
+          python -m app.scripts.daily_price_artifact_provenance record --role downstream \
+            --root /tmp --paths daily-source-downstream.json --record /tmp/daily-source-downstream-producer.json
+
+      - name: Retain downstream source-promotion inputs
+        id: source-downstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-source-downstream-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/daily-source-downstream.json
+            /tmp/daily-source-downstream-producer.json
+          if-no-files-found: error
+          retention-days: 7
+
       # Preserve fresh exports while the UI release gates are pending or failing.
       # Research UI Release rebuilds this data using the exact verified main SHA.
       - name: Upload verified data export
@@ -869,5 +970,64 @@ jobs:
         with:
           name: static-site-data-manifest-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/export-provenance/source.json
+          retention-days: 7
+          if-no-files-found: error
+
+  promote-daily-source:
+    needs: [select-markets, build-market, combine-and-build]
+    if: ${{ needs.select-markets.outputs.source_promotion == 'true' && contains(fromJSON(needs.select-markets.outputs.markets), 'US') && needs.select-markets.outputs.mode == 'full' && needs.build-market.result == 'success' && needs.build-market.outputs.produced_candidate == 'true' && needs.build-market.outputs.source_candidate_id != '' && needs.combine-and-build.result == 'success' && needs.combine-and-build.outputs.downstream_artifact_id != '' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: daily-price-source-promotion-us
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r .github/scripts/daily-price-promotion-requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.build-market.outputs.source_candidate_id }}
+          path: /tmp/source-candidate
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.combine-and-build.outputs.downstream_artifact_id }}
+          path: /tmp/source-downstream
+          merge-multiple: true
+      - name: Verify immutable IDs and the original producer attempts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd backend
+          python -m app.scripts.daily_price_artifact_provenance verify --role candidate \
+            --root /tmp/source-candidate --record /tmp/source-candidate/daily-price-promotion/producer.json \
+            --artifact-id '${{ needs.build-market.outputs.source_candidate_id }}' \
+            --artifact-digest '${{ needs.build-market.outputs.source_candidate_digest }}' \
+            --producer-attempt '${{ needs.build-market.outputs.source_producer_attempt }}'
+          python -m app.scripts.daily_price_artifact_provenance verify --role downstream \
+            --root /tmp/source-downstream --record /tmp/source-downstream/daily-source-downstream-producer.json \
+            --artifact-id '${{ needs.combine-and-build.outputs.downstream_artifact_id }}' \
+            --artifact-digest '${{ needs.combine-and-build.outputs.downstream_artifact_digest }}' \
+            --producer-attempt '${{ needs.combine-and-build.outputs.downstream_producer_attempt }}'
+      - name: Promote immutable source with conditional predecessor update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd backend
+          python -m app.scripts.stage_daily_price_source publish \
+            --repository "${{ github.repository }}" \
+            --controller-sha "$GITHUB_SHA" --controller-ref "$GITHUB_REF" \
+            --capture /tmp/source-candidate/daily-price-promotion/previous.json \
+            --bundle "$(find /tmp/source-candidate/daily-price -maxdepth 1 -name 'daily-price-us-*.json.gz' -print -quit)" \
+            --manifest /tmp/source-candidate/daily-price/daily-price-latest-us.json \
+            --downstream /tmp/source-downstream/daily-source-downstream.json \
+            --completion-receipt /tmp/source-promotion-completion.json
+      - name: Preserve actual verified source completion time
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-source-completion-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/source-promotion-completion.json
           retention-days: 7
           if-no-files-found: error

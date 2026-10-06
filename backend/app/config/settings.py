@@ -544,6 +544,9 @@ class Settings(BaseSettings):
     github_weekly_reference_release_tag: str = "weekly-reference-data"
     github_weekly_reference_max_age_days: int = 8
     github_daily_price_release_tag: str = "daily-price-data"
+    # Empty preserves the legacy reader until reviewed pointer bootstrap.
+    github_daily_price_pointer_ref: str = ""
+    github_daily_price_pointer_expected_sha256: str = ""
     github_daily_price_max_age_days: int = 4
     github_daily_price_redis_warm_symbols: int = 50
 

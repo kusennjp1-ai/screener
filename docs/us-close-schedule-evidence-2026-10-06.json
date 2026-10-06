@@ -1,0 +1,38 @@
+[
+  {
+    "job_id": 112059253550,
+    "schedule": "4 16 * * 1-5",
+    "source": "https://github.com/kusennjp1-ai/screener/actions/runs/37398243579/job/112059253550",
+    "evidence_lines": [
+      "2026-10-06T01:15:34.4257499Z   SCHEDULE: 4 16 * * 1-5",
+      "2026-10-06T01:15:34.4495939Z Building markets: [\"US\"] (mode: prices_only)"
+    ]
+  },
+  {
+    "job_id": 112059425780,
+    "schedule": "10 16 * * 1-6",
+    "source": "https://github.com/kusennjp1-ai/screener/actions/runs/37398296126/job/112059425780",
+    "evidence_lines": [
+      "2026-10-06T01:16:12.7687761Z   SCHEDULE: 10 16 * * 1-6",
+      "2026-10-06T01:16:12.7974454Z Building markets: [\"US\"] (mode: full)"
+    ]
+  },
+  {
+    "job_id": 112066787403,
+    "schedule": "58 16 * * 1-5",
+    "source": "https://github.com/kusennjp1-ai/screener/actions/runs/37399803339/job/112066787403",
+    "evidence_lines": [
+      "2026-10-06T01:43:50.3134572Z   SCHEDULE: 58 16 * * 1-5",
+      "2026-10-06T01:43:50.3310890Z Building markets: [\"US\"] (mode: prices_only)"
+    ]
+  },
+  {
+    "job_id": 112092411488,
+    "schedule": "30 23 * * 1-6",
+    "source": "https://github.com/kusennjp1-ai/screener/actions/runs/37407740745/job/112092411488",
+    "evidence_lines": [
+      "2026-10-06T03:24:33.0246070Z   SCHEDULE: 30 23 * * 1-6",
+      "2026-10-06T03:24:33.0465908Z Building markets: [\"US\"] (mode: full)"
+    ]
+  }
+]
