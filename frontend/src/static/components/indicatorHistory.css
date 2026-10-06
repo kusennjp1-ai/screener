@@ -3,7 +3,7 @@
 .market-indicator-histories p, .indicator-history-panel p { font-size: 13px; line-height: 1.7; }
 .indicator-history-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .indicator-history-switch button, .indicator-history-switch select { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border, #aaa); border-radius: 8px; color: inherit; background: transparent; font: inherit; }
-.indicator-history-switch button[aria-pressed="true"] { background: var(--accent, #446ecc); color: #fff; }
+.indicator-history-switch button[aria-pressed="true"] { background: var(--accent, #446ecc); color: var(--accent-ink, #fff); }
 .indicator-history-switch select option { color: #222; background: #fff; }
 .indicator-history-values { display: flex; flex-wrap: wrap; gap: 24px; margin: 16px 0; }
 .indicator-history-values small, .indicator-history-values strong { display: block; }
@@ -13,3 +13,5 @@
 .indicator-history-panel summary { cursor: pointer; min-height: 44px; padding-top: 12px; }
 .indicator-history-panel table { min-width: 480px; font-size: 12px; }
 .indicator-history-panel th, .indicator-history-panel td { padding: 8px; text-align: left; white-space: nowrap; }
+.indicator-history-scroll { width: 100%; max-width: 100%; min-width: 0; max-height: 360px; overflow: auto; }
+.indicator-history-scroll:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: -2px; }

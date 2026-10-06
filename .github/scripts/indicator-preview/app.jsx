@@ -8,7 +8,11 @@ import CandidateBoard from '../src/static/components/CandidateBoard';
 import { staticChartKeys } from '../src/static/chartClient';
 import { assess } from '../src/static/researchEngine';
 import { modelMarket } from '../src/static/portfolioPlan';
+import { researchTheme, themeCss } from '../src/static/theme/tokens';
 import '../src/static/research.css';
+import '../src/static/theme/foundation.css';
+import '../src/static/theme/motion.css';
+import '../src/static/workbench.css';
 import '../src/static/market.css';
 import data from './preview-data.json';
 import './preview.css';
@@ -16,7 +20,7 @@ import './preview.css';
 const query = new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false,refetchOnMount:false}}});
 for(const chart of data.charts) query.setQueryData([...staticChartKeys.payload(chart.symbol,`preview-${chart.symbol}.json`),'isolated-preview'],chart);
 function App(){
- const [surface,setSurface]=useState('market'),[symbol,setSymbol]=useState('TSM');
+ const [surface,setSurface]=useState('market'),[symbol,setSymbol]=useState('TSM'),[candidateView,setCandidateView]=useState('list');
  const row=data.rows.find(item=>item.symbol===symbol),market=modelMarket(data.rows);
  const ranked=data.rows.map(row=>({row,assessment:assess(row,'minervini',data.now)}));
  return <main className="research-workbench indicator-preview" data-theme="dark">
@@ -25,10 +29,12 @@ function App(){
   {surface==='market'&&<div className="market-workbench"><MarketIndicatorHistories data={data.histories} expectedDate={data.date}/></div>}
   {surface==='synthetic'&&<div className="market-workbench"><MarketIndicatorHistories key="synthetic" data={data.synthetic} expectedDate={data.synthetic.as_of_date}/></div>}
   {surface==='stock'&&<><label className="preview-selector">実データの銘柄 <select aria-label="実データの銘柄" value={symbol} onChange={event=>setSymbol(event.target.value)}>{data.rows.map(item=><option key={item.symbol}>{item.symbol}</option>)}</select></label>
-   <CandidateBoard ranked={ranked} method="minervini" selectedSymbol={symbol} onSelect={setSymbol} date={data.date} now={data.now} market={market} view="list" compareOnly/>
+   <div className="research-grid"><CandidateBoard ranked={ranked} method="minervini" selectedSymbol={symbol} onSelect={setSymbol} date={data.date} now={data.now} market={market} view={candidateView} onView={setCandidateView}/>
    <ResearchDetail key={symbol} selected={row} method="minervini" date={data.date} now={data.now} market={market} chartEntry={{path:`preview-${symbol}.json`}} version="isolated-preview" onExpand={()=>{}} watch={[]} onWatch={()=>{}} liveStatus="検証用・日次のみ" personal={{}} onConnect={()=>{}} onDisconnect={()=>{}} onVerificationToggle={()=>{}} detail={{isSuccess:true}}/>
+   </div>
   </>}
   <footer className="preview-banner"><p>入力識別子 {data.provenance.publication_sha256}</p><p>実データの接近・買い範囲はこの6銘柄だけの集計です。実データの新規上抜け履歴は未取得。合成例の件数と混ぜません。</p></footer>
  </main>;
 }
-createRoot(document.getElementById('root')).render(<ThemeProvider theme={createTheme({palette:{mode:'dark'}})}><CssBaseline/><QueryClientProvider client={query}><App/></QueryClientProvider></ThemeProvider>);
+document.documentElement.dataset.theme='dark';
+createRoot(document.getElementById('root')).render(<ThemeProvider theme={createTheme(researchTheme('dark'))}><CssBaseline/><style>{themeCss}</style><div className="leader-shell" data-theme="dark"><QueryClientProvider client={query}><App/></QueryClientProvider></div></ThemeProvider>);

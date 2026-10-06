@@ -1,7 +1,8 @@
 # Indicator-history artifact preview admission plan
 
-Status: local implementation and harness only. No remote push,
-provider acquisition or deployment has been performed for this preview.
+Status: owner-run artifact previews are in review. This worker prepares local
+commits; the owner owns remote admission. No provider acquisition or deployment
+is part of this preview.
 
 ## Proposed isolated branch job
 
@@ -41,6 +42,9 @@ The wrapper renders `MarketIndicatorHistories`, `CandidateBoard` and
 component receive the exact verified sample data through its existing React Query
 cache. This isolates visual rendering; it is not a full production bootstrap or
 publication-admission test.
+The wrapper imports the same research, foundation, motion and workbench style
+order and research theme as `StaticLayout`. The candidate list and stock detail
+use the production grid, so sticky positioning stays inside its intended column.
 
 Viewports: 1440×900, 390×667 and 360×568. Each viewport captures:
 
@@ -56,6 +60,11 @@ The job produces 27 full-page captures plus three short viewport base-history
 captures. It checks runtime errors, page overflow, error overlays and serious
 accessibility violations. Real and synthetic screenshots use distinct filenames,
 banners and data scopes. Synthetic observations never appear in the real series.
+Expanded history tables must be reachable from their disclosure with Tab and
+scroll with arrow keys on each overflowing axis. The report records those checks,
+offending overflow elements, and full Axe node selectors/HTML/check data. No Axe
+rules or severity thresholds are excluded. Chart tooltips and legend labels use
+the active theme's text and background colors.
 
 Real samples are NVDA, AMD, AAPL, AVGO, TSM and PLTR from the hash-bound source.
 The market high/low series retains its original published-chart universe; current

@@ -104,3 +104,38 @@ test('closes explicit contexts when routing, page creation or accessibility work
   assert.equal(closed,true);
  }
 });
+
+test('preserves actionable Axe selectors, HTML and contrast evidence without relaxing severity',async()=>{
+ const {seriousAccessibilityViolations}=await import('./diagnostics.mjs');
+ const node={target:['.history a'],html:'<a href="https://www.sec.gov/13f">SEC 13F</a>',failureSummary:'Contrast is below 4.5',any:[{id:'color-contrast',message:'Insufficient contrast',data:{contrastRatio:2.1,expectedContrastRatio:'4.5:1'}}],all:[],none:[]};
+ const result=seriousAccessibilityViolations([{id:'color-contrast',impact:'serious',help:'Readable text',nodes:[node]},{id:'minor',impact:'moderate',nodes:[node]},{id:'critical',impact:'critical',nodes:[]}]);
+ assert.equal(result.length,2);assert.equal(result[0].nodes,1);
+ assert.deepEqual(result[0].node_details[0],{target:node.target,html:node.html,failure_summary:node.failureSummary,checks:[{group:'any',...node.any[0]}]});
+});
+
+test('the isolated preview imports the production layout style order and research theme',async()=>{
+ const production=await readFile(new URL('../../../frontend/src/static/StaticLayout.jsx',import.meta.url),'utf8');
+ const preview=await readFile(new URL('./app.jsx',import.meta.url),'utf8');
+ const styles=[...production.matchAll(/import '\.\/(.*?)\.css';/g)].map(match=>`${match[1]}.css`);
+ assert.ok(styles.length>=4);
+ const positions=styles.map(style=>preview.indexOf(`import '../src/static/${style}';`));
+ assert.ok(positions.every((position,index)=>position>=0&&(!index||position>positions[index-1])));
+ assert.match(preview,/createTheme\(researchTheme\('dark'\)\)/);
+ assert.match(preview,/<style>\{themeCss\}<\/style>/);
+ assert.match(preview,/className="leader-shell" data-theme="dark"/);
+ assert.match(preview,/className="research-grid"/);
+ assert.doesNotMatch(preview,/compareOnly/);
+});
+
+test('keyboard scrolling checks both axes, reports evidence, resets position and rejects inaccessible tables without a browser',async()=>{
+ const {checkHistoryKeyboardScrolling}=await import('./diagnostics.mjs');
+ const nodes=[{label:'Wide and tall table',tabIndex:0,scrollWidth:600,clientWidth:300,scrollHeight:600,clientHeight:360},{label:'Fits',tabIndex:0,scrollWidth:300,clientWidth:300,scrollHeight:100,clientHeight:100}];
+ let focused;
+ for(const node of nodes)Object.assign(node,{ownerDocument:{get activeElement(){return focused;}},scrollLeft:0,scrollTop:0,getAttribute:()=>node.label,scrollTo:(x,y)=>{node.scrollLeft=x;node.scrollTop=y;},blur:()=>{focused=null;}});
+ const page={locator:()=>({count:async()=>nodes.length,nth:index=>({locator:()=>({count:async()=>index===0?1:0,focus:async()=>{focused='summary';},press:async key=>{assert.equal(key,'Tab');assert.equal(focused,'summary');focused=nodes[index];}}),evaluate:async fn=>fn(nodes[index]),focus:async()=>{focused=nodes[index];},elementHandle:async()=>nodes[index],press:async key=>{assert.equal(focused,nodes[index]);nodes[index][key==='ArrowRight'?'scrollLeft':'scrollTop']=40;}})}),waitForFunction:async(fn,args)=>{assert.equal(fn(args),true);}};
+ const results=await checkHistoryKeyboardScrolling(page);
+ assert.deepEqual(results[0],{label:nodes[0].label,tabIndex:0,horizontal:true,vertical:true,reached_by_tab:true,horizontal_keyboard_moved:true,vertical_keyboard_moved:true});
+ assert.deepEqual(results[1],{label:nodes[1].label,tabIndex:0,horizontal:false,vertical:false});
+ assert.equal(nodes[0].scrollLeft,0);assert.equal(nodes[0].scrollTop,0);assert.equal(focused,null);
+ nodes[0].tabIndex=-1;await assert.rejects(checkHistoryKeyboardScrolling(page),/not keyboard focusable/);
+});

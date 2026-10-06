@@ -4,6 +4,7 @@ requireAdmittedPreview(process.env);
 const admittedPin=await loadPreviewPin();
 import { loadPreviewBrowserTools } from './browser-tools.mjs';
 import { withPreviewViewport } from './viewport-context.mjs';
+import { checkHistoryKeyboardScrolling, inspectPreviewGeometry, seriousAccessibilityViolations } from './diagnostics.mjs';
 import { resolve,extname,sep } from 'node:path';
 import { mkdir,readFile,writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -26,11 +27,14 @@ try{
   await page.goto(origin);await page.getByRole('heading',{name:'52週新高値・新安値',exact:true}).waitFor();
   const capture=async(name,{table=false,source='real'}={})=>{
    if(table){const summaries=page.locator('.indicator-history-panel summary');if(await summaries.count())await summaries.first().click();}
-   const geometry=await page.evaluate(()=>({width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,overflow:document.documentElement.scrollWidth>innerWidth+1,overlays:document.querySelectorAll('vite-error-overlay').length,headings:[...document.querySelectorAll('h1,h2,h3')].map(node=>node.textContent),origin:document.querySelector('.preview-origin')?.textContent}));
+   let keyboardScrolling=[];
+   try{keyboardScrolling=await checkHistoryKeyboardScrolling(page);}catch(error){report.failures.push(`${name}: ${error.message}`);}
+   const geometry=await page.evaluate(inspectPreviewGeometry);
    const file=`${viewport.width}x${viewport.height}-${source}-${name}.png`;
+   await page.mouse.move(0,0);
    await page.screenshot({path:resolve(output,'screenshots',file),fullPage:true});
    const accessibility=await new AxeBuilder({page}).include('main').withTags(['wcag2a','wcag2aa']).analyze();
-   report.screens.push({file,viewport,source,geometry,serious_violations:accessibility.violations.filter(item=>['critical','serious'].includes(item.impact)).map(item=>({id:item.id,impact:item.impact,nodes:item.nodes.length,help:item.help}))});
+   report.screens.push({file,viewport,source,geometry,keyboard_scrolling:keyboardScrolling,serious_violations:seriousAccessibilityViolations(accessibility.violations)});
    if(geometry.overflow||geometry.overlays)report.failures.push(`${file}: overflow or error overlay`);
   };
   await capture('high-low',{table:true});
