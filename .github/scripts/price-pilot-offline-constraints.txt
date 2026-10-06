@@ -1,0 +1,4 @@
+# Reviewed four-symbol replay runtime. These do not grant capture permission.
+yfinance==0.2.66
+curl_cffi==0.16.3
+exchange-calendars==4.5.3

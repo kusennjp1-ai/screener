@@ -1,0 +1,401 @@
+{
+  "kind": "synthetic_only_never_provider_evidence",
+  "responses": {
+    "ET": {
+      "chart": {
+        "error": null,
+        "result": [
+          {
+            "meta": {
+              "symbol": "ET",
+              "currency": "USD",
+              "exchangeTimezoneName": "America/New_York",
+              "exchangeName": "TXSE",
+              "instrumentType": "EQUITY",
+              "longName": "Energy Transfer LP",
+              "shortName": "Energy Transfer LP",
+              "firstTradeDate": 946684800,
+              "regularMarketTime": 1791300000,
+              "regularMarketPrice": 110,
+              "priceHint": 2,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "2y"
+              ],
+              "currentTradingPeriod": {
+                "regular": {
+                  "timezone": "EDT",
+                  "gmtoffset": -14400,
+                  "start": 1791293400,
+                  "end": 1791316800
+                }
+              },
+              "dataGranularity": "1d"
+            },
+            "timestamp": [
+              1790688600,
+              1790775000,
+              1790861400,
+              1790947800,
+              1791207000
+            ],
+            "indicators": {
+              "quote": [
+                {
+                  "open": [
+                    100,
+                    100,
+                    100,
+                    100,
+                    100
+                  ],
+                  "high": [
+                    102,
+                    102,
+                    102,
+                    102,
+                    102
+                  ],
+                  "low": [
+                    99,
+                    99,
+                    99,
+                    99,
+                    99
+                  ],
+                  "close": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ],
+                  "volume": [
+                    1000,
+                    1000,
+                    1000,
+                    1000,
+                    1000
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ]
+                }
+              ]
+            },
+            "events": {}
+          }
+        ]
+      }
+    },
+    "SUN": {
+      "chart": {
+        "error": null,
+        "result": [
+          {
+            "meta": {
+              "symbol": "SUN",
+              "currency": "USD",
+              "exchangeTimezoneName": "America/New_York",
+              "exchangeName": "TXSE",
+              "instrumentType": "EQUITY",
+              "longName": "Sunoco LP",
+              "shortName": "Sunoco LP",
+              "firstTradeDate": 946684800,
+              "regularMarketTime": 1791300000,
+              "regularMarketPrice": 110,
+              "priceHint": 2,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "2y"
+              ],
+              "currentTradingPeriod": {
+                "regular": {
+                  "timezone": "EDT",
+                  "gmtoffset": -14400,
+                  "start": 1791293400,
+                  "end": 1791316800
+                }
+              },
+              "dataGranularity": "1d"
+            },
+            "timestamp": [
+              1790688600,
+              1790775000,
+              1790861400,
+              1790947800,
+              1791207000
+            ],
+            "indicators": {
+              "quote": [
+                {
+                  "open": [
+                    100,
+                    100,
+                    100,
+                    100,
+                    100
+                  ],
+                  "high": [
+                    102,
+                    102,
+                    102,
+                    102,
+                    102
+                  ],
+                  "low": [
+                    99,
+                    99,
+                    99,
+                    99,
+                    99
+                  ],
+                  "close": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ],
+                  "volume": [
+                    1000,
+                    1000,
+                    1000,
+                    1000,
+                    1000
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ]
+                }
+              ]
+            },
+            "events": {}
+          }
+        ]
+      }
+    },
+    "DDS": {
+      "chart": {
+        "error": null,
+        "result": [
+          {
+            "meta": {
+              "symbol": "DDS",
+              "currency": "USD",
+              "exchangeTimezoneName": "America/New_York",
+              "exchangeName": "TXSE",
+              "instrumentType": "EQUITY",
+              "longName": "Dillard's, Inc.",
+              "shortName": "Dillard's, Inc.",
+              "firstTradeDate": 946684800,
+              "regularMarketTime": 1791300000,
+              "regularMarketPrice": 110,
+              "priceHint": 2,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "2y"
+              ],
+              "currentTradingPeriod": {
+                "regular": {
+                  "timezone": "EDT",
+                  "gmtoffset": -14400,
+                  "start": 1791293400,
+                  "end": 1791316800
+                }
+              },
+              "dataGranularity": "1d"
+            },
+            "timestamp": [
+              1790688600,
+              1790775000,
+              1790861400,
+              1790947800,
+              1791207000
+            ],
+            "indicators": {
+              "quote": [
+                {
+                  "open": [
+                    100,
+                    100,
+                    100,
+                    100,
+                    100
+                  ],
+                  "high": [
+                    102,
+                    102,
+                    102,
+                    102,
+                    102
+                  ],
+                  "low": [
+                    99,
+                    99,
+                    99,
+                    99,
+                    99
+                  ],
+                  "close": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ],
+                  "volume": [
+                    1000,
+                    1000,
+                    1000,
+                    1000,
+                    1000
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ]
+                }
+              ]
+            },
+            "events": {}
+          }
+        ]
+      }
+    },
+    "VMRK": {
+      "chart": {
+        "error": null,
+        "result": [
+          {
+            "meta": {
+              "symbol": "VMRK",
+              "currency": "USD",
+              "exchangeTimezoneName": "America/New_York",
+              "exchangeName": "NYQ",
+              "instrumentType": "EQUITY",
+              "longName": "Vivmark Residential",
+              "shortName": "Vivmark Residential",
+              "firstTradeDate": 946684800,
+              "regularMarketTime": 1791300000,
+              "regularMarketPrice": 110,
+              "priceHint": 2,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "2y"
+              ],
+              "currentTradingPeriod": {
+                "regular": {
+                  "timezone": "EDT",
+                  "gmtoffset": -14400,
+                  "start": 1791293400,
+                  "end": 1791316800
+                }
+              },
+              "dataGranularity": "1d"
+            },
+            "timestamp": [
+              1790688600,
+              1790775000,
+              1790861400,
+              1790947800,
+              1791207000
+            ],
+            "indicators": {
+              "quote": [
+                {
+                  "open": [
+                    100,
+                    100,
+                    100,
+                    100,
+                    100
+                  ],
+                  "high": [
+                    102,
+                    102,
+                    102,
+                    102,
+                    102
+                  ],
+                  "low": [
+                    99,
+                    99,
+                    99,
+                    99,
+                    99
+                  ],
+                  "close": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ],
+                  "volume": [
+                    1000,
+                    1000,
+                    1000,
+                    1000,
+                    1000
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    101,
+                    101,
+                    101,
+                    101,
+                    101
+                  ]
+                }
+              ]
+            },
+            "events": {}
+          }
+        ]
+      }
+    }
+  }
+}

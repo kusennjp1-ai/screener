@@ -1,0 +1,49 @@
+name: Four-symbol Price Pilot Offline Preview
+
+# LOCAL PROPOSAL ONLY: adding this file is not permission to push or dispatch.
+# The exact review branch push exists because a new workflow may not yet be
+# discoverable through workflow_dispatch on the default branch.
+on:
+  push:
+    branches: [preview/four-symbol-price-pilot-offline]
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact 40-character commit SHA on the review-only branch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: price-pilot-offline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-preview:
+    if: github.ref == 'refs/heads/preview/four-symbol-price-pilot-offline' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Build full runtime and verify disconnected synthetic and Redis paths
+        env:
+          PRICE_PILOT_EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/price-pilot-offline-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -p "$output"
+          bash .github/scripts/price-pilot-offline.sh 2>&1 | tee "$output/harness.log"
+      - name: Retain exact offline preview evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: price-pilot-offline-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/price-pilot-offline-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 14

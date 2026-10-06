@@ -1,0 +1,516 @@
+{
+  "schema_version": "four-symbol-price-recovery-proposal-v1",
+  "status": "prepared_only_no_execution_authority",
+  "acquisition_enabled": false,
+  "implementation_status": "transport_caps_capture_and_bounded_adapter_not_implemented",
+  "inspected_repository_commit": "7cb60f3805516078bb524f2903851857a4cbf0c7",
+  "target_price_session": "2026-10-05",
+  "price_as_of_date": "2026-10-05",
+  "planned_capture_utc_date": "2026-10-06",
+  "observed_at": null,
+  "captured_at_rule": "Use actual per-response UTC clock; never backdate. If execution moves beyond Oct6, revise this proposal before starting.",
+  "deadline_status": "late_catch_up_not_evidence_of_close_plus_one_hour",
+  "financial_knowledge_clock": "preserve separate original receipts; no new financial acquisition or identity reassignment",
+  "provider": {
+    "name": "Yahoo Finance via yfinance",
+    "pinned_version": "0.2.66",
+    "public_method": "yf.download",
+    "existing_path": "StaticDailyPriceRefreshService -> BulkDataFetcher -> PriceProviderPlanExecutor -> yfinance",
+    "existing_http_session": "unchanged existing curl_cffi session; no proxy/user-agent/credential/endpoint strategy switch"
+  },
+  "common_download_options": {
+    "interval": "1d",
+    "group_by": "ticker",
+    "threads": false,
+    "progress": false,
+    "auto_adjust": false,
+    "back_adjust": false,
+    "repair": false,
+    "actions": true,
+    "prepost": false,
+    "rounding": false,
+    "keepna": true,
+    "ignore_tz": false,
+    "timeout": 10
+  },
+  "groups": [
+    {
+      "symbols": [
+        "ET",
+        "SUN",
+        "DDS"
+      ],
+      "start_inclusive": {
+        "local": "2026-09-29T00:00:00-04:00",
+        "utc": "2026-09-29T04:00:00+00:00",
+        "unix_seconds": 1790654400
+      },
+      "end_exclusive": {
+        "local": "2026-10-06T00:00:00-04:00",
+        "utc": "2026-10-06T04:00:00+00:00",
+        "unix_seconds": 1791259200
+      },
+      "reason": "Four prior completed sessions overlap; append Oct5 only after matching history basis."
+    },
+    {
+      "symbols": [
+        "VMRK"
+      ],
+      "start_inclusive": {
+        "local": "2024-10-06T00:00:00-04:00",
+        "utc": "2024-10-06T04:00:00+00:00",
+        "unix_seconds": 1728187200
+      },
+      "end_exclusive": {
+        "local": "2026-10-06T00:00:00-04:00",
+        "utc": "2026-10-06T04:00:00+00:00",
+        "unix_seconds": 1791259200
+      },
+      "reason": "No retained EQR chart to join; request at most two years directly for officially continuing VMRK."
+    }
+  ],
+  "request_budget": {
+    "download_calls_max": 2,
+    "history_chart_requests_max": 4,
+    "timezone_metadata_chart_requests_max": 4,
+    "ordinary_cookie_crumb_requests_max": 2,
+    "all_http_requests_max": 10,
+    "redirects_max": 0,
+    "concurrent_http_requests_max": 1,
+    "outer_retry_attempts": 0,
+    "auth_strategy_retries": 0,
+    "fallback_providers": [],
+    "additional_full_history_requests": 0,
+    "whole_pilot_wall_clock_seconds_max": 300,
+    "rate_rule": "Before every transport request use existing aggregate and US rate/circuit controls; never faster than the existing effective limit or one request/second. Stop if controls are unavailable or open.",
+    "count_rule": "Enforce at session transport before network. Disable automatic redirects; one counted call is at most one request. Cache hits do not acquire a new observation clock.",
+    "stop_rule": "Latch stop on 401/403/429, unexpected redirect/endpoint, new auth flow, timeout, exhausted budget, or unverified capture. No subsequent provider calls or alternate cookie/proxy strategy."
+  },
+  "identity_transitions": [
+    {
+      "protected_prior_symbol": "ET",
+      "proposed_provider_symbol": "ET",
+      "market": "US",
+      "currency": "USD",
+      "timezone": "America/New_York",
+      "issuer": "Energy Transfer LP",
+      "instrument_classes": [
+        "Common units representing limited partner interests"
+      ],
+      "official_identifiers": {
+        "cik": "0001276187"
+      },
+      "official_sources": [
+        "https://www.sec.gov/Archives/edgar/data/1276187/000127618726000044/et-20260903.htm",
+        "https://www.txse.com/alerts/652b41de-926f-45fd-bd08-e42b054c73ef",
+        "https://www.txse.com/press/texas-stock-exchange-celebrates-move-of-energy-transfer-partnership-s-primary-listings",
+        "https://www.txse.com/regulations/id-codes"
+      ],
+      "effective_transition": "2026-10-05",
+      "prior_mic": "XNYS",
+      "target_mic": "TXSE",
+      "mapping_status": "proposal_not_applied",
+      "provider_identity_status": "not_acquired_or_verified",
+      "join_status": "blocked_until_reviewed_identity_and_observed_overlap",
+      "retained_chart_sha256": "060e1a8a82bb3368f050716cbd8c974a79662261879d00b19cb2757ae2e6c3f6",
+      "retained_bars": 309,
+      "retained_first_session": "2025-07-14",
+      "retained_last_session": "2026-10-02",
+      "history_action": "four_overlap_sessions_plus_target_top_up"
+    },
+    {
+      "protected_prior_symbol": "SUN",
+      "proposed_provider_symbol": "SUN",
+      "market": "US",
+      "currency": "USD",
+      "timezone": "America/New_York",
+      "issuer": "Sunoco LP",
+      "instrument_classes": [
+        "Common units representing limited partner interests"
+      ],
+      "official_identifiers": {
+        "cik": "0001552275",
+        "cusip": "86765K109"
+      },
+      "official_sources": [
+        "https://www.sec.gov/Archives/edgar/data/1552275/000155227526000075/sun-20260903.htm",
+        "https://www.txse.com/press/texas-stock-exchange-celebrates-move-of-energy-transfer-partnership-s-primary-listings",
+        "https://www.sec.gov/files/investment/13flist2026q1.pdf",
+        "https://www.txse.com/regulations/id-codes"
+      ],
+      "effective_transition": "2026-10-05",
+      "prior_mic": "XNYS",
+      "target_mic": "TXSE",
+      "mapping_status": "proposal_not_applied",
+      "provider_identity_status": "not_acquired_or_verified",
+      "join_status": "blocked_until_reviewed_identity_and_observed_overlap",
+      "retained_chart_sha256": "e02d89977bceb0ffbf19b0d1e74b1a2e6cc501fef6b8e729c8dfa0893e8257db",
+      "retained_bars": 309,
+      "retained_first_session": "2025-07-14",
+      "retained_last_session": "2026-10-02",
+      "history_action": "four_overlap_sessions_plus_target_top_up"
+    },
+    {
+      "protected_prior_symbol": "DDS",
+      "proposed_provider_symbol": "DDS",
+      "market": "US",
+      "currency": "USD",
+      "timezone": "America/New_York",
+      "issuer": "Dillard's, Inc.",
+      "instrument_classes": [
+        "Class A common stock, par value $0.01"
+      ],
+      "official_identifiers": {
+        "cik": "0000028917",
+        "sec_file_number": "1-6140"
+      },
+      "official_sources": [
+        "https://www.sec.gov/Archives/edgar/data/28917/000110465926108945/tm2625597d1_ex99-1.htm",
+        "https://www.sec.gov/Archives/edgar/data/28917/000110465926111370/tm2626135d1_8a12b.htm",
+        "https://www.txse.com/alerts/adbdaf8a-27af-4643-9e6a-c0655cf92561",
+        "https://www.txse.com/regulations/id-codes"
+      ],
+      "effective_transition": "2026-10-05 scheduled",
+      "prior_mic": "XNYS",
+      "target_mic": "TXSE",
+      "mapping_status": "proposal_not_applied",
+      "provider_identity_status": "not_acquired_or_verified",
+      "join_status": "blocked_until_reviewed_identity_and_observed_overlap",
+      "retained_chart_sha256": "6314ad01fdf46aa13ba13c2c38a98674c9f8866d50f9683670ce55b5c2ccda12",
+      "retained_bars": 309,
+      "retained_first_session": "2025-07-14",
+      "retained_last_session": "2026-10-02",
+      "history_action": "four_overlap_sessions_plus_target_top_up"
+    },
+    {
+      "protected_prior_symbol": "EQR",
+      "proposed_provider_symbol": "VMRK",
+      "market": "US",
+      "currency": "USD",
+      "timezone": "America/New_York",
+      "issuer": "Equity Residential, now Vivmark Residential",
+      "instrument_classes": [
+        "Common shares of beneficial interest, par value $0.01"
+      ],
+      "official_identifiers": {
+        "cik": "0000906107",
+        "sec_file_number": "1-12252"
+      },
+      "official_sources": [
+        "https://www.sec.gov/Archives/edgar/data/906107/000114036126033377/ef20080318_8k.htm",
+        "https://www.sec.gov/Archives/edgar/data/915912/000110465926097833/tm2623381d1_ex99-1.htm"
+      ],
+      "effective_transition": "2026-08-18",
+      "prior_mic": "XNYS",
+      "target_mic": "XNYS",
+      "mapping_status": "proposal_not_applied",
+      "provider_identity_status": "not_acquired_or_verified",
+      "join_status": "blocked_until_reviewed_identity_and_observed_overlap",
+      "retained_chart_sha256": null,
+      "retained_bars": 0,
+      "retained_first_session": null,
+      "retained_last_session": null,
+      "history_action": "bounded_two_year_provider_history_no_scalar_splice"
+    }
+  ],
+  "retired_original_issues_outside_pilot": [
+    {
+      "symbols": [
+        "LBRDA",
+        "LBRDK"
+      ],
+      "issuer": "Liberty Broadband Corporation",
+      "instrument_classes": [
+        "Class A common stock",
+        "Class C common stock"
+      ],
+      "identifiers": {
+        "LBRDA": {
+          "cusip": "530307107"
+        },
+        "LBRDK": {
+          "cusip": "530307305"
+        }
+      },
+      "classification": "completed_merger_original_issues_ceased",
+      "source_published": "2026-08-17",
+      "last_trading_session": "2026-08-19",
+      "effective_closed": "2026-08-20 before open",
+      "suspension_effective": "2026-08-21",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-577",
+        "https://corporate.charter.com/newsroom/charter-and-cox-communications-complete-transaction"
+      ],
+      "proposal": "Review dated retirement of the two original issues; keep historical records and do not synthesize CHTR prices from merger consideration.",
+      "retained_data_issue": "LBRDA retained last bar is 2026-08-21, later than official last trading session; quarantine that discrepancy."
+    },
+    {
+      "symbols": [
+        "EA"
+      ],
+      "issuer": "Electronic Arts Inc.",
+      "instrument_classes": [
+        "Common stock"
+      ],
+      "identifiers": {
+        "EA": {
+          "cusip": "285512109",
+          "cik": "0000712515"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-07-31",
+      "last_trading_session": "2026-08-04",
+      "effective_closed": "2026-08-04 after close",
+      "suspension_effective": "2026-08-05",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-545",
+        "https://www.sec.gov/Archives/edgar/data/712515/000071251526000130/xslF345X06/form4.xml"
+      ],
+      "proposal": "Review dated retirement; no Oct5 EA close acquisition."
+    },
+    {
+      "symbols": [
+        "APGE"
+      ],
+      "issuer": "Apogee Therapeutics, Inc.",
+      "instrument_classes": [
+        "Common stock"
+      ],
+      "identifiers": {
+        "APGE": {
+          "cusip": "03770N101",
+          "cik": "0001974640"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-08-26",
+      "last_trading_session": "2026-09-02",
+      "effective_closed": "2026-09-03 before open",
+      "suspension_effective": "2026-09-04",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-607",
+        "https://www.sec.gov/Archives/edgar/data/1974640/000119312526341289/apge-20260630.htm"
+      ],
+      "proposal": "Review dated retirement based on updated closed exchange notice; distinguish unrelated APOG."
+    },
+    {
+      "symbols": [
+        "CRNX"
+      ],
+      "issuer": "Crinetics Pharmaceuticals, Inc.",
+      "instrument_classes": [
+        "Common stock"
+      ],
+      "identifiers": {
+        "CRNX": {
+          "cusip": "22663K107",
+          "cik": "0001658247"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-08-31",
+      "last_trading_session": "2026-08-31",
+      "effective_closed": "2026-09-01 before open",
+      "suspension_effective": "2026-09-02",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-628",
+        "https://vrtx.gcs-web.com/news-releases/news-release-details/vertex-completes-acquisition-crinetics-pharmaceuticals-and",
+        "https://www.sec.gov/Archives/edgar/data/1658247/000165824726000053/crnx-20260630.htm"
+      ],
+      "proposal": "Review dated retirement; do not substitute VRTX prices."
+    },
+    {
+      "symbols": [
+        "KALV"
+      ],
+      "issuer": "KalVista Pharmaceuticals, Inc.",
+      "instrument_classes": [
+        "Common stock, par value $0.001"
+      ],
+      "identifiers": {
+        "KALV": {
+          "cusip": "483497103",
+          "cik": "0001348911"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-06-05",
+      "last_trading_session": "2026-06-10",
+      "effective_closed": "2026-06-11 before open",
+      "suspension_effective": "2026-06-12",
+      "sources": [
+        "https://nasdaqtrader.com/TraderNews.aspx?id=ECA2026-390",
+        "https://www.sec.gov/Archives/edgar/data/1348911/000114036126024949/ny20075902x2_8k.htm"
+      ],
+      "proposal": "Review dated retirement; distinguish June11 trading cessation from June12 formal suspension."
+    },
+    {
+      "symbols": [
+        "NUVL"
+      ],
+      "issuer": "Nuvalent, Inc.",
+      "instrument_classes": [
+        "Class A common stock"
+      ],
+      "identifiers": {
+        "NUVL": {
+          "cusip": "670703107",
+          "cik": "0001861560"
+        }
+      },
+      "classification": "completed_cash_acquisition_original_issue_ceased",
+      "source_published": "2026-07-13",
+      "last_trading_session": "2026-07-14",
+      "effective_closed": "2026-07-15 before open",
+      "suspension_effective": "2026-07-16",
+      "sources": [
+        "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-493",
+        "https://www.sec.gov/Archives/edgar/data/1861560/000119312526304126/d52896d8k.htm"
+      ],
+      "proposal": "Review dated retirement; do not substitute GSK."
+    },
+    {
+      "symbols": [
+        "TWO"
+      ],
+      "issuer": "Two Harbors Investment Corp.",
+      "instrument_classes": [
+        "Common stock, par value $0.01"
+      ],
+      "identifiers": {
+        "TWO": {
+          "cik": "0001465740",
+          "sec_file_number": "001-34506"
+        }
+      },
+      "classification": "completed_cash_merger_original_common_ceased",
+      "source_published": "2026-08-25",
+      "last_trading_session": null,
+      "effective_closed": "2026-08-25",
+      "suspension_requested": "2026-08-25 before open",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1465740/000110465926100622/tm2621794d1_8k.htm"
+      ],
+      "proposal": "Review dated retirement of common stock only. Filing confirms cancellation and pre-open trading suspension request; do not apply to separately identified preferred stock or notes."
+    },
+    {
+      "symbols": [
+        "WBS"
+      ],
+      "issuer": "Webster Financial Corporation",
+      "instrument_classes": [
+        "Common stock, par value $0.01"
+      ],
+      "identifiers": {
+        "WBS": {
+          "cik": "0000801337",
+          "sec_file_number": "001-31486"
+        }
+      },
+      "classification": "completed_acquisition_original_common_ceased",
+      "source_published": "2026-08-20",
+      "last_trading_session": null,
+      "effective_closed": "2026-08-20 00:01-00:04 America/New_York",
+      "suspension_requested": "2026-08-20 before open",
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/801337/000119312526357758/d919931d8k.htm",
+        "https://www.santander.com/en/press-room/press-releases/2026/08/santander-expands-us-presence-with-completion-of-webster-acquisition"
+      ],
+      "proposal": "Review dated retirement of WBS common; do not splice Santander ADS/cash consideration into historical prices."
+    }
+  ],
+  "otc_transition_outside_pilot": {
+    "symbols": [
+      "AXIA"
+    ],
+    "issuer": "AXIA Energia S.A., formerly Centrais Eletricas Brasileiras S.A. - Eletrobras",
+    "instrument_classes": [
+      "Common ADS/ADR, 1 ordinary share to 1 DR"
+    ],
+    "identifiers": {
+      "AXIA": {
+        "cusip": "15234Q207",
+        "isin": "US15234Q2075",
+        "cik": "0001439124"
+      }
+    },
+    "classification": "continuing_ADR_transferred_to_OTC_changed_ticker",
+    "source_published": "2026-08-05 issuer notice; Citi milestone page undated",
+    "old_symbol": "AXIA",
+    "new_symbol": "AXIAY",
+    "last_nyse_session": "2026-08-06",
+    "effective_transition": "2026-08-07",
+    "sources": [
+      "https://www.rad.cvm.gov.br/ENETCONSULTA/frmDownloadDocumento.aspx?CodigoInstituicao=1&Tela=99&descTipo=IPE&numProtocolo=1552549&numSequencia=1077255&numVersao=1",
+      "https://depositaryreceipts.citi.com/adr/guides/pgm_d.aspx?cusip=15234Q207&pageId=16&subpageID=104&typeDisplay=A"
+    ],
+    "proposal": "Review dated exit from listed-exchange universe; ADR continues OTC, so not globally nontrading. No AXIA3 Brazilian ordinary or AXIA preferred substitution. OTC fetch needs explicit scope review."
+  },
+  "raw_proof": {
+    "mode": "append_only_content_addressed_local_capture_before_normalization",
+    "max_chart_response_bytes": 8388608,
+    "max_total_chart_payload_bytes": 33554432,
+    "filename_template": "raw/yahoo-chart-{symbol}-{payload_sha256}.json",
+    "metadata_receipt_fields": [
+      "role",
+      "provider_symbol",
+      "sanitized_origin_path",
+      "allowlisted_query_parameters",
+      "status_code",
+      "request_started_at",
+      "response_completed_at",
+      "body_sha256",
+      "body_bytes",
+      "vendor_version",
+      "controller_commit",
+      "identity_transition_manifest_sha256"
+    ],
+    "never_persist": [
+      "cookies",
+      "crumb",
+      "authorization_headers",
+      "bootstrap_response_bodies"
+    ],
+    "immutable_existing_name_rule": "Exclusive create or verify identical bytes; never overwrite. Full rehash before replay.",
+    "timezone_discovery_rule": "Yahoo may return current intraday data in its range=1d timezone probe. Preserve response as metadata-only; admit no bar or quote from it. No discovery metadata regularMarketPrice enters prices.",
+    "unknown_cached_response_rule": "Reject as fresh proof if no original matching transport receipt exists; do not relabel cached bytes as newly observed."
+  },
+  "admission_checks": [
+    "Exact reviewed official issuer/security/class transition; ticker alone never authorizes a join.",
+    "Capture/provider meta symbol, name, instrument class, venue, currency and timezone must agree with the reviewed mapping; missing or conflicting identity stays quarantined. Unknown TXSE provider alias is not coerced to NYSE.",
+    "Use timestamp-derived America/New_York session dates from bounded history payload only. Reject any candidate bar later than Oct5, duplicate/non-session dates, invalid OHLCV, missing Oct5 close, or unexpected response symbols.",
+    "Compare all four overlap sessions against each of the three retained chart hashes; enforce existing close tolerance and coherent-history guard. Changed historical adjustment basis blocks and proposes a separate full-history request; never fabricate adjustment factors.",
+    "VMRK provider history is independent until identity is proven; no EQR scalar splice. Fewer than252 sessions means technical conditions unknown while a verified Oct5 close may remain valid.",
+    "Before any publication, apply a separately reviewed dated cohort transition so prior ET/SUN/DDS/EQR remain represented exactly once; retain history and original aliases, then recompute metrics, charts and selection with old/new cohort, asof, source-price and financial-continuity checks."
+  ],
+  "pre_acquisition_blockers": [
+    "Owner review of this exact four-symbol/request envelope.",
+    "Implement and offline-test bounded start/end adapter, restrictive transport meter/stop latch and immutable raw chart capture.",
+    "Review dated TXSE mapping and EQR->VMRK continuity; bind official documents and class identifiers to the manifest. Current production identity resolver has no TXSE alias or dated continuity model.",
+    "Inspect actual runtime rate/circuit state and use same approved provider environment; no credential/service activation."
+  ],
+  "evidence": {
+    "official_triage_sha256": "908df97c48862e93fe30fdfaaf0868840ed681a8b3a0663ea830adcc5ed34067",
+    "prior_release_zip_sha256": "1ab2594be91d3bbc8716481c730a9afdf22eb4ca554fcd5d02770b92252de4eb",
+    "retained_final_export_sha256": "6b1b0942a2ef90165b2c0635c55da04af925aae8e7a579cfec7f6414eb0f435d",
+    "prior_rows_sha256": "703e309f085f62633442635cedbffb70d7cca41d9315b6066bc62096b9515647",
+    "source_file_sha256": {
+      "backend/app/services/bulk_data_fetcher.py": "a40d7b8f7e06c84c3cfae84669dd0b208d295ee3c84eaf31365dd143b76d5055",
+      "backend/app/services/static_daily_price_refresh_service.py": "026603d6c7abd1255de6dc5ca4cf75ea8ed2597402de81893c021821ed90a6a7",
+      "backend/app/services/financial_source_capture.py": "edf0b8a7e78884cdd7356c613b6d9543b4fbadd807d966c5c4dcd4ae1d6d82fa",
+      "backend/app/services/cache/price_history_integrity.py": "076e29356959010758bda9d44cbbb8332304e1f74e2ea8977131467c898f10a0",
+      "backend/app/services/rate_budget_policy.py": "013e7a912e0b2d51d086467efcdd8acad42a403475bd785b0e72d24d49be4e42",
+      "backend/app/services/security_master_service.py": "8417cbd3a8a38a8f3ba1e59eea7f155549fb5005b813d402d2ecb9fc933c987f",
+      "backend/app/domain/markets/catalog.py": "f40cfc0ff7787bb8861d0b1acaa5995250fc0c09ffe389409178f162784c7a0a",
+      "backend/app/domain/markets/mic_aliases.py": "d9bc971224bd99c87e77b4a42804b1308e7b83798ff5cc5dc03c4ac66ba12467",
+      "backend/app/domain/providers/data_plan.py": "783a53ed1231a5b90fbdb65b78186aa7574a33ac55e3a6eb5827d405dd76b7e2"
+    },
+    "inspected_vendor_file_sha256": {
+      "multi.py": "e80bd1cdcfb8fae1fabfeab346fa8084e3ce7f8ea501ea52eeb8ba4a151571c9",
+      "base.py": "beb2b7020a99a75bf9bf960e57efc76bbd634ae998e926034e9eb3e84671dba0",
+      "data.py": "9524cded3e57db2198fce9c54db64dc654e456a19d9ccf028f29434b732405d5",
+      "scrapers/history.py": "c7eee0df3fe8ee6d8473f8acf2a0239f3c7f1a005959919968f5a8bac579d85b"
+    }
+  }
+}
