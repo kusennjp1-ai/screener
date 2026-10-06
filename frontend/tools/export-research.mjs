@@ -4,6 +4,9 @@ import { applicabilityUniverse } from '../src/static/instrumentApplicability.js'
 import { loadFinancialCorrection, correctionMetadata, CORRECTION_METADATA_FIELDS, overlayFinancialCorrection, overlayFinancialChart, rewriteCorrectionChartAliases, writeCorrectionHistory } from './financial-correction-overlay.mjs';
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, financialNextExpiry } from '../src/static/financialCurrent.js';
 import { filterStaticScanRows, sortStaticScanRows } from '../src/static/scanClient.js';
+import { institutionalHolderHistory } from '../src/static/institutionalHistory.js';
+import { baseCountHistory } from '../src/static/baseCountHistory.js';
+import { exportIndicatorHistory, entryPriceHistoryBasis } from './export-indicator-history.mjs';
 import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -65,6 +68,7 @@ try { benchmark = await read('book-benchmark.json'); } catch (error) { if (error
 if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.payload?.benchmark_symbol || 'SPY', as_of_date: scan.as_of_date, bars: breadth?.payload?.benchmark_overlay || breadth?.payload?.spy_overlay || [] };
 try { financials = await read('book-financials.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const marketCharts = [];
+const entryPriceBasis = {};
 const availableCharts = new Set();
 let rows = new Map();
 for (const row of merged) {
@@ -77,6 +81,7 @@ for (const row of merged) {
   }
   const evidence = institutional?.as_of_date === scan.as_of_date ? institutional.results?.[row.symbol] : null;
   row.institutional_evidence = evidence ? {...evidence,observations:evidence.observations.map(({filings,...observation})=>{void filings;return observation;})} : null;
+  row.institutional_holder_history = institutionalHolderHistory(row.institutional_evidence,row.symbol,scan.as_of_date);
   row.institutional_sponsors_increasing = institutionalGrowth(row.institutional_evidence,row.symbol,scan.as_of_date).increasing;
   let chart = null;
   if (paths.has(row.symbol)) {
@@ -106,7 +111,11 @@ for (const row of merged) {
     delete technical.rs.points;
     for (const key of ['sixWeeks', 'thirteenWeeks']) delete technical.rs[key].points;
   }
+  if (audit.valid) entryPriceBasis[row.symbol] = entryPriceHistoryBasis(chart, scan.as_of_date);
   if (audit.valid) marketCharts.push({ symbol: row.symbol, as_of_date: scan.as_of_date, bars: chart.bars });
+  const baseHistory = baseCountHistory(audit.valid ? chart : null, row.symbol, scan.as_of_date, (benchmark?.bars || []).map(bar => bar.date));
+  row.base_count_summary = {version:baseHistory.version,as_of_date:scan.as_of_date,count:baseHistory.count,origin_known:baseHistory.originKnown,complete:baseHistory.complete};
+  row.base_count_history = baseHistory;
   const shape = audit.valid ? buildBookAnnotations(chart.bars) : null;
   const recent = audit.valid ? chart.bars.slice(-51,-1) : [];
   const averageVolume = recent.length === 50 ? recent.reduce((sum,b)=>sum+b.volume,0)/50 : null;
@@ -127,6 +136,7 @@ if (breadth) {
   if (breadth.payload?.current?.date === scan.as_of_date) {
     breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
     breadth.payload.book_market_evidence = buildBookMarketEvidence({ charts: marketCharts, asOfDate: scan.as_of_date, benchmark, expectedUniverseSize: rows.size, lookbackSessions: 60 });
+    breadth.payload.indicator_histories = await exportIndicatorHistory({root,rows:[...rows.values()],entry,manifest,benchmark,bookEvidence:breadth.payload.book_market_evidence,priceHistoryBasis:entryPriceBasis,now:evaluatedAt});
     await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
   }
 }
@@ -153,9 +163,9 @@ for (const [symbol, row] of rows) {
     row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;
     paths.set(symbol,row.chart_path);currentCharts.add(row.chart_path);
   }
-  const { book_diagnostics, book_technical_evidence, book_financials, research_detail_path: previousDetailPath, ...compact } = row;
+  const { book_diagnostics, book_technical_evidence, book_financials, base_count_history, institutional_holder_history, research_detail_path: previousDetailPath, ...compact } = row;
   void previousDetailPath;
-  const detail = {...compact, symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials};
+  const detail = {...compact, symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials, base_count_history, institutional_holder_history};
   const content = JSON.stringify(detail);
   const hash = createHash('sha256').update(content).digest('hex').slice(0,16);
   const path = `research-details/${encodeURIComponent(symbol)}-${hash}.json`;
@@ -176,7 +186,7 @@ const chartIndexPath=`charts-index-${chartIndexHash}.json`;
 await writeFile(resolve(root,chartIndexPath),chartIndexContent);
 entry.assets.charts={...entry.assets.charts,...correctionMeta,path:chartIndexPath};
 scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
-const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
+const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence base_count_summary setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
 const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1',as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
   // Full provenance and detector reasons remain in the content-addressed detail.

@@ -1,4 +1,5 @@
 // Run once at the final build, after optional data enrichments finish.
+import { recordIndicatorObservation } from './export-indicator-history.mjs';
 import { readFile,writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -25,3 +26,5 @@ if(!catalog.snapshots.some(s=>s.as_of===workbench.as_of)) catalog.snapshots.push
 catalog.snapshots=catalog.snapshots.sort((a,b)=>a.as_of.localeCompare(b.as_of)).slice(-HISTORY_RETENTION_SESSIONS);
 await writeFile(resolve(root,'candidate-history/index.json'),JSON.stringify(catalog));
 console.log(`Candidate history: ${catalog.snapshots.length} recorded session(s)`);
+
+await recordIndicatorObservation(root,manifest.markets.US.assets.indicator_history);

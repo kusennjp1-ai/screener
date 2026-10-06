@@ -1,3 +1,4 @@
+import { currentBaseCount } from '../baseCountHistory';
 import { instrumentApplicability, instrumentApplicabilityLabel } from '../instrumentApplicability';
 import { Box, Typography } from '@mui/material';
 import { entryPlan } from '../researchEngine';
@@ -16,6 +17,7 @@ export default function ChartDecisionSummary({row, date, market, method = 'miner
     <Box sx={{display:'flex',flexWrap:'wrap',gap:'8px 24px',fontSize:14,fontVariantNumeric:'tabular-nums'}}>
       <strong>{row.symbol} · {money(plan.price)}</strong>
       <span>{plan.state}{['買いゾーン内','ピボット待ち','買いゾーン超過'].includes(plan.state) ? '（価格位置）' : ''}</span>
+      {currentBaseCount(row,date) != null && <span title="観測範囲内のアプリ独自推計。購入条件には加算しません">推計ベース {currentBaseCount(row,date)}</span>}
       <span>共通ピボット <strong>{money(plan.pivot)}</strong></span>
       <span>アプリ買い上限 <strong>{money(plan.upper)}</strong> {plan.zone ? `（${plan.zone}%）` : ''}</span>
     </Box>

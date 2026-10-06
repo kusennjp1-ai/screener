@@ -27,6 +27,7 @@ import BreadthGroupAttribution from '../components/BreadthGroupAttribution';
 import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 import MarketPulse from '../components/MarketPulse';
 import BookMarketEvidence from '../components/BookMarketEvidence';
+import MarketIndicatorHistories from '../components/MarketIndicatorHistories';
 import BookBreakoutJournal from '../components/BookBreakoutJournal';
 import { breadthSummary, recentBreadth } from '../breadthSummary';
 import '../market.css';
@@ -122,6 +123,7 @@ function StaticBreadthPage() {
       {selectedTab === 0 && !unavailable && (
         <>
           <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange} />
+          {marketEntry.market === 'US' && <MarketIndicatorHistories data={payload.indicator_histories} bookEvidence={payload.book_market_evidence} expectedDate={marketEntry.as_of_date || current.date} />}
           {marketEntry.market === 'US' && payload.book_market_evidence && <details className="market-disclosure"><summary>市場判断の根拠 — 新高値・先導株・出来高</summary><BookMarketEvidence evidence={payload.book_market_evidence} expectedDate={marketEntry.as_of_date} /></details>}
           {marketEntry.market === 'US' && <details className="market-disclosure"><summary>ブレイク後の成績を記録する</summary><BookBreakoutJournal /></details>}
           {marketEntry.market === 'US' && !mismatch && payload.book_leadership?.date === current.date && <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>

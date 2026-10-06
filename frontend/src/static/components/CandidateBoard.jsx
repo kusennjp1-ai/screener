@@ -1,3 +1,4 @@
+import { currentBaseCount } from '../baseCountHistory';
 import CandidateCharts from './CandidateCharts';
 import PositionMeter from './PositionMeter';
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +24,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
   if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
  }}>
-  <span className="candidate-name"><span className="candidate-name-header"><strong className="mono">{r.symbol}</strong><span className="candidate-daily-check" data-ready={readiness?.ready||undefined} title={dailyDetail}>{dailyLabel}{readiness?.ready?' ✓':''}</span></span><small title={r.company_name}>{r.company_name||'企業名未配信'}</small></span>
+  <span className="candidate-name"><span className="candidate-name-header"><strong className="mono">{r.symbol}</strong><span className="candidate-daily-check" data-ready={readiness?.ready||undefined} title={dailyDetail}>{dailyLabel}{readiness?.ready?' ✓':''}</span></span><small title={r.company_name}>{r.company_name||'企業名未配信'}{currentBaseCount(r) != null ? ` · 推計ベース${currentBaseCount(r)}` : ''}</small></span>
   <span className="candidate-position"><PositionMeter plan={p}/><span className={`candidate-state ${['zone','wait','ext'].includes(key)?'ordinary':''}`} style={{color:`var(--${tone})`}}>{glyph} {label}</span></span>
   <span className="candidate-distance mono" style={{color:`var(--${tone})`}}>{signed(p.distance)}</span>
   <span className="candidate-rs mono"><span className="mobile-caption">RS </span>{Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'—'}</span>

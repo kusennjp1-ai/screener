@@ -1,5 +1,7 @@
 """Restore only prior published observations; never reconstruct historical passes."""
 import hashlib
+import io
+from datetime import date
 import gzip
 import json
 from pathlib import Path
@@ -111,9 +113,91 @@ def restore_performance_history():
     print(f"Restored completed observations for {len(catalog['cohorts'])} published cohorts")
 
 
+INDICATOR_VERSION = 'canonical-entry-observations-v1'
+
+
+def indicator_references(catalog):
+    if catalog.get('version') != INDICATOR_VERSION or not isinstance(catalog.get('snapshots'), list) or len(catalog['snapshots']) > 126:
+        raise ValueError('Invalid published indicator catalog')
+    references = {}
+    for ref in catalog['snapshots']:
+        day = ref.get('as_of', '')
+        try:
+            valid = date.fromisoformat(day).isoformat() == day
+        except (ValueError, TypeError):
+            valid = False
+        if not valid or ref.get('version') != INDICATOR_VERSION or not re.fullmatch(r'indicator-history/\d{4}-\d{2}-\d{2}-[a-f0-9]{16}\.json\.gz', ref.get('path', '')) or not ref['path'].startswith('indicator-history/' + day + '-') or not re.fullmatch(r'[a-f0-9]{64}', ref.get('sha256', '')) or not ref['path'].endswith('-' + ref['sha256'][:16] + '.json.gz') or day in references:
+            raise ValueError('Unexpected or duplicate indicator reference')
+        references[day] = ref
+    return references
+
+
+def indicator_payload(ref, raw):
+    if len(raw) > 64 * 1024 * 1024 or hashlib.sha256(raw).hexdigest() != ref['sha256']:
+        raise ValueError('Published indicator failed integrity validation')
+    with gzip.GzipFile(fileobj=io.BytesIO(raw)) as compressed:
+        content = compressed.read(128 * 1024 * 1024 + 1)
+    if len(content) > 128 * 1024 * 1024:
+        raise ValueError('Published indicator exceeds decoded limit')
+    value = json.loads(content)
+    if value.get('version') != INDICATOR_VERSION or value.get('as_of') != ref['as_of'] or not isinstance(value.get('records'), list):
+        raise ValueError('Published indicator identity mismatch')
+    return value
+
+
+def restore_indicator_history():
+    directory = ROOT / 'indicator-history'
+    index = directory / 'index.json'
+    existing = indicator_references(json.loads(index.read_bytes())) if index.exists() else {}
+    try:
+        with urlopen(BASE + 'indicator-history/index.json', timeout=30) as response:
+            catalog_bytes = response.read(1024 * 1024 + 1)
+    except HTTPError as error:
+        if error.code != 404:
+            raise
+        if existing:
+            raise ValueError('Published indicator catalog is missing; refusing to erase existing observations') from error
+        directory.mkdir(parents=True, exist_ok=True)
+        if not index.exists():
+            index.write_text(json.dumps({'version': INDICATOR_VERSION, 'snapshots': []}), encoding='utf-8')
+        print('First release: no published indicator observations yet')
+        return
+    if len(catalog_bytes) > 1024 * 1024:
+        raise ValueError('Published indicator catalog exceeds limit')
+    catalog = json.loads(catalog_bytes)
+    remote = indicator_references(catalog)
+    oldest = min(remote, default='')
+    for day, previous in existing.items():
+        if day in remote and previous != remote[day]:
+            raise ValueError('Published indicator changed the first same-date observation')
+        if day not in remote and not (len(remote) == 126 and day < oldest):
+            raise ValueError('Published indicator catalog lost an existing observation')
+    for day, ref in remote.items():
+        destination = ROOT / ref['path']
+        if day in existing and destination.exists():
+            raw = destination.read_bytes()
+        else:
+            with urlopen(BASE + ref['path'], timeout=60) as response:
+                raw = response.read(64 * 1024 * 1024 + 1)
+        indicator_payload(ref, raw)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            indicator_payload(ref, destination.read_bytes())
+        else:
+            destination.write_bytes(raw)
+    directory.mkdir(parents=True, exist_ok=True)
+    # Keep the published catalog's exact bytes, and expose it only after every
+    # referenced immutable observation has passed hash/date/version validation.
+    temporary = index.with_suffix('.tmp')
+    temporary.write_bytes(catalog_bytes)
+    temporary.replace(index)
+    print(f"Restored {len(remote)} published indicator snapshots")
+
+
 def main():
     restore_selection_history()
     restore_performance_history()
+    restore_indicator_history()
 
 if __name__ == '__main__':
     main()

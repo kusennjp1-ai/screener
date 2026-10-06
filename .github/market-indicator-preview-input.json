@@ -1,0 +1,13 @@
+{
+  "schema": "market-indicator-preview-input-v1",
+  "repository": "kusennjp1-ai/screener",
+  "branch": "preview/market-indicator-histories",
+  "base_url": "https://kusennjp1-ai.github.io/screener/",
+  "publication_sha256": "0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a",
+  "source_release": {
+    "number": 99,
+    "run_id": 37456692717,
+    "run_attempt": 1
+  },
+  "publication_authority": "none"
+}

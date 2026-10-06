@@ -107,3 +107,6 @@ backend/tests/load/baselines/current_run.json
 dump.rdb
 frontend/public/portfolio-model.json
 frontend/public/qualification-audit.json
+
+# Generated component preview entry; artifact output is already in test-results.
+frontend/.indicator-preview/

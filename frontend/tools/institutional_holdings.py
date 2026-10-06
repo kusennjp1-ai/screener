@@ -99,3 +99,24 @@ def aggregate_archives(paths, cutoff, periods):
         result[cusip] = {**issuer, "observations": observations}
     return {"publication_cutoff": cutoff, "periods": sorted(periods), "securities": result,
             "reports_selected": len(selected), "incomplete_manager_periods": len(incomplete)}
+
+
+def retain_reported_history(current, previous):
+    """Keep older observations with their own cutoff and exact CUSIP/class identity.
+
+    Current observations remain authoritative for the existing latest-two rule.
+    Missing current periods never borrow an older observation for that rule.
+    """
+    for cusip, value in current.get("securities", {}).items():
+        observations = [dict(o, publication_cutoff=current["publication_cutoff"])
+                        for o in value["observations"]]
+        old = previous.get("securities", {}).get(cusip)
+        compatible = old and old.get("class") == value.get("class") and old.get("name") == value.get("name")
+        earliest = min(current.get("periods", []), default="")
+        retained = []
+        if compatible:
+            for observation in old.get("history", old.get("observations", [])):
+                if observation["period"] < earliest:
+                    retained.append(dict(observation, publication_cutoff=observation.get("publication_cutoff", previous.get("publication_cutoff"))))
+        value["history"] = sorted(retained + observations, key=lambda o: o["period"])
+    return current

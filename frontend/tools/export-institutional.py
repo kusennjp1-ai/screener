@@ -14,7 +14,7 @@ import re
 import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
-from institutional_holdings import aggregate_archives
+from institutional_holdings import aggregate_archives, retain_reported_history
 
 REPO = Path(__file__).resolve().parents[2]
 SEED = REPO / "data/institutional/sec13f.json.gz"
@@ -100,6 +100,29 @@ def map_securities(securities, cache, limit):
         time.sleep(max(0,2.5-(time.monotonic()-request_started)))
 
 
+def project_security_evidence(symbol, cusip, value, periods, cutoff, retrieved_at, refresh, as_of):
+    """History may be long; qualification is the exact latest requested pair.
+
+    Never substitute an older available quarter when the latest requested
+    report is absent. The existing two-point validator must see incompleteness.
+    """
+    history = value.get("history", value["observations"])
+    requested = sorted(set(periods))[-2:]
+    by_period = {observation["period"]: observation for observation in value["observations"]}
+    if len(by_period) != len(value["observations"]):
+        raise ValueError("Duplicate institutional reporting period")
+    observations = [by_period[period] for period in requested if period in by_period]
+    status = "available" if len(requested) == 2 and len(observations) == 2 and cutoff <= as_of and (date.fromisoformat(as_of) - date.fromisoformat(observations[-1]["period"])).days <= 180 else "incomplete"
+    return {"symbol": symbol, "cusip": cusip, "status": status, "unit": "13f_reporting_manager_cik",
+            "source": "SEC Form 13F / OpenFIGI", "source_url": INDEX,
+            "publication_cutoff": cutoff, "retrieved_at": retrieved_at, "refresh": refresh,
+            "share_class": value.get("class"), "requested_periods": requested,
+            "history": [{**{k: v for k, v in observation.items() if k != "filings"}, "publication_cutoff": observation.get("publication_cutoff", cutoff)} for observation in history],
+            "observations": [{k: v for k, v in observation.items() if k != "filings"} for observation in observations],
+            "manager_delta": observations[-1]["manager_count"] - observations[0]["manager_count"] if len(observations) == 2 else None,
+            "scope": "公開13F報告運用会社（CIK単位）。ファンド数・親会社グループ数ではありません。非報告・非公開保有と集計期限後の提出は含みません。"}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archives", nargs="*")
@@ -152,9 +175,9 @@ def main():
         except Exception as error:
             refresh = {**refresh, "status": "unavailable", "reason": f"{type(error).__name__}: {error}"}
     if archives:
-        if not args.cutoff or not args.periods or len(args.periods) != 2:
-            raise ValueError("Two reporting periods and publication cutoff are required")
-        aggregate = aggregate_archives(archives, args.cutoff, args.periods)
+        if not args.cutoff or not args.periods or len(args.periods) < 2:
+            raise ValueError("At least two reporting periods and publication cutoff are required")
+        aggregate = retain_reported_history(aggregate_archives(archives, args.cutoff, args.periods), seed)
         seed = {**aggregate, "mapping": seed.get("mapping", {}),
                 "retrieved_at": datetime.now(timezone.utc).isoformat(),
                 "archives": [{"file": Path(p).name, "sha256": hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in archives]}
@@ -179,14 +202,8 @@ def main():
         if len(entries) != 1:
             continue  # Corporate actions / class ambiguity require review.
         cusip, value = entries[0]
-        observations = value["observations"]
-        status = "available" if len(observations) == 2 and seed["publication_cutoff"] <= as_of and (date.fromisoformat(as_of) - date.fromisoformat(observations[-1]["period"])).days <= 180 else "incomplete"
-        results[symbol] = {"symbol": symbol, "cusip": cusip, "status": status, "unit": "13f_reporting_manager_cik",
-                           "source": "SEC Form 13F / OpenFIGI", "source_url": INDEX,
-                           "publication_cutoff": seed["publication_cutoff"], "retrieved_at": seed["retrieved_at"], "refresh":refresh,
-                           "observations": [{k:v for k,v in observation.items() if k!='filings'} for observation in observations],
-                           "manager_delta": observations[-1]["manager_count"] - observations[0]["manager_count"] if len(observations) == 2 else None,
-                           "scope": "公開13F報告運用会社（CIK単位）。ファンド数・親会社グループ数ではありません。非報告・非公開保有と集計期限後の提出は含みません。"}
+        results[symbol] = project_security_evidence(symbol, cusip, value, seed.get("periods", []),
+                                                   seed["publication_cutoff"], seed["retrieved_at"], refresh, as_of)
     output = {"as_of_date": as_of, "refresh": refresh, "publication_cutoff": seed.get("publication_cutoff"), "results": results}
     (ROOT / "institutional-holdings.json").write_text(json.dumps(output, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"SEC institutional evidence: {len(results)} mapped securities, cutoff {seed.get('publication_cutoff')}", flush=True)

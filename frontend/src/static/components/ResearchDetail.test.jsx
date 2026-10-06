@@ -44,7 +44,7 @@ it('keeps financial evidence inside the existing financial tab and retains the c
  expect(header.nextElementSibling).toBe(screen.getByTestId('research-chart'));
  expect(screen.getByTestId('research-chart').nextElementSibling).toContainElement(screen.getByText('アプリ設定と書籍の確認範囲'));
  expect(screen.queryByRole('region',{name:'財務の判定根拠'})).not.toBeInTheDocument();
- expect(screen.getAllByRole('tab').map(tab=>tab.textContent)).toEqual(['判定根拠','購入条件','財務・機関','書籍検証','メモ']);
+ expect(screen.getAllByRole('tab').map(tab=>tab.textContent)).toEqual(['判定根拠','購入条件','財務・機関','履歴','書籍検証','メモ']);
  fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
  expect(onVerificationToggle).toHaveBeenCalledWith(row.symbol);
  expect(screen.getByRole('region',{name:'財務の判定根拠'})).toHaveTextContent('未配信');
@@ -110,4 +110,16 @@ it('shows both failed and unknown counts while keeping purchase readiness separa
  expect(screen.getByRole('heading',{name:'購入条件 2/7 · 未達 1 · 未確認 4 · 未接続'})).toBeInTheDocument();
  expect(screen.getByRole('tabpanel')).toHaveTextContent('選択中の手法とは別に、ミネルヴィニとIBD型の両方を確認');
  expect(within(screen.getByRole('tabpanel')).getAllByRole('listitem')).toHaveLength(7);
+});
+
+it('loads the dedicated history tab and hides it until the matching detail arrives', () => {
+ const onVerificationToggle=vi.fn();
+ const selected={...row,research_detail_path:'research-details/current.json'};
+ const {rerender}=render(<ResearchDetail {...props} selected={selected} onVerificationToggle={onVerificationToggle} detail={{isLoading:true}}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'履歴',exact:true}));
+ expect(onVerificationToggle).toHaveBeenCalledWith(row.symbol);
+ expect(screen.queryByRole('heading',{name:'ベース段階の推移（自動推計）'})).not.toBeInTheDocument();
+ rerender(<ResearchDetail {...props} selected={selected} onVerificationToggle={onVerificationToggle} detail={{isSuccess:true}}/>);
+ expect(screen.getByRole('heading',{name:'ベース段階の推移（自動推計）'})).toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'四半期の保有報告会社数'})).toBeInTheDocument();
 });

@@ -1,0 +1,47 @@
+name: Market Indicator Preview (Artifacts Only)
+on:
+  push:
+    branches: [preview/market-indicator-histories]
+permissions:
+  contents: read
+concurrency:
+  group: market-indicator-preview-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/preview/market-indicator-histories'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      INDICATOR_PREVIEW_OUTPUT: frontend/test-results/indicator-preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Check exact branch/event/repository and checked-in source pin
+        run: node --test .github/scripts/indicator-preview/input.test.mjs
+      - name: Read only the pinned published packed input and prepare separate real/synthetic cases
+        run: node .github/scripts/indicator-preview/prepare.mjs
+      - name: Build actual components in an isolated preview with no publication authority
+        run: node .github/scripts/indicator-preview/build.mjs
+      - name: Install browser only inside this CI job
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Capture 1440 desktop and 390/360 short mobile surfaces including 360x568
+        run: node .github/scripts/indicator-preview/capture.mjs
+      - name: Preserve review artifacts even if a browser or geometry check fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-indicator-preview-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results/indicator-preview/
+          retention-days: 14
+          if-no-files-found: error

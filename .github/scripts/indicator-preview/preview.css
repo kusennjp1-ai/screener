@@ -1,0 +1,11 @@
+.indicator-preview { max-width: 1200px; margin: 0 auto; padding: 16px; --surface: #171b23; --border: #343b49; --text-3: #a8b0bf; --zone: #51bb9a; --neg: #ee8192; --accent: #496cbd; }
+.preview-banner { padding: 16px; border: 1px solid #536079; border-radius: 12px; margin-bottom: 16px; }
+.preview-banner h1 { font-size: 22px; margin: 0 0 8px; }
+.preview-banner p { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.preview-origin { border-left: 3px solid #8ab4f8; padding-left: 10px; }
+.preview-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.preview-nav button, .preview-selector select { min-height: 44px; padding: 8px 12px; color: inherit; background: #222b3b; border: 1px solid #65728b; border-radius: 8px; }
+.preview-nav button[aria-pressed=true] { border-color: #9bc0ff; background: #294676; }
+.preview-selector { display: block; margin: 12px 0; }
+.indicator-preview .research-detail { margin: 16px 0; }
+.indicator-preview footer { margin-top: 20px; }

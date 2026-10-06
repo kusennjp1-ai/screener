@@ -150,7 +150,7 @@ describe('versioned CSV selection outcome', () => {
     const ranked = rankCandidates([input], 'oneil', { now });
     const before = structuredClone(ranked);
     const { header, rows: [record] } = records(researchCsv(ranked, 'oneil', date, now));
-    expect(header).toEqual(['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version']);
+    expect(header).toEqual(['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'base_count_estimate', 'base_count_version', 'base_count_origin_known']);
     expect(record).toMatchObject({ method_status: state, qualified: String(passed === 8), passed: String(passed), total: '8',
       failed_count: String(failed), unknown_count: String(unknown), unknown: String(unknown),
       method_status_version: 'research-method-status-v2-logical-and', rs_estimate: '95', daily_price: '100', pivot: '99' });

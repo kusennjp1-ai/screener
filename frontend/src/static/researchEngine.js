@@ -1,3 +1,4 @@
+import { currentBaseCount } from './baseCountHistory.js';
 import { ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability.js';
 import { projectFinancialRow, currentFinancialHistory } from './financialCurrent.js';
@@ -31,11 +32,11 @@ export function researchCsv(ranked, method, date, now = Date.now()) {
     if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version'];
+  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'base_count_estimate', 'base_count_version', 'base_count_origin_known'];
   const lines = ranked.map(({row})=>({row,assessment:assess(row,method,now)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
     a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication', a.method_status || (a.failed ? 'fail' : a.unknown ? 'unknown' : 'pass'), a.applicability_reason || '', instrumentApplicability(r).version,
     currentFinancialHistory(r.financial_history, r.symbol, date, now, r).annual.length ? r.financial_history.annual_currency || r.financial_history.currency : '',
-    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION]);
+    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION, currentBaseCount(r,date), r.base_count_summary?.version || '', r.base_count_summary?.origin_known ?? null]);
   return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
 }
 // The feature store exports positive % BELOW the high; the legacy technical
