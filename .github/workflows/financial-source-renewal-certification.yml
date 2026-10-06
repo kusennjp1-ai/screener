@@ -1,0 +1,111 @@
+name: Financial Source Renewal Certification
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: financial-source-renewal-certification
+  cancel-in-progress: false
+jobs:
+  certify:
+    name: Certify same-UI same-price financial source renewal
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' && github.event.action == 'completed' &&
+        github.run_attempt == 1 && github.event.workflow_run.run_attempt == 1 &&
+        github.event.workflow_run.name == 'CI' && github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.status == 'completed' && github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_sha == github.sha &&
+        github.event.workflow_run.repository.full_name == github.repository &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.repository.id == github.repository_id &&
+        github.event.workflow_run.head_repository.id == github.repository_id))
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve the exact committed renewal request
+        id: controls
+        run: node .github/scripts/financial-source-renewal-certification.mjs controls
+      - name: Admit exact successful main CI renewal
+        timeout-minutes: 5
+        if: steps.controls.outputs.certify == 'true' && github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-source-renewal-certification.mjs admit
+      - uses: actions/setup-python@v5
+        if: steps.controls.outputs.certify == 'true'
+        with:
+          python-version: '3.11'
+      - name: Retain the exact approved consumer Git object
+        if: steps.controls.outputs.certify == 'true'
+        env:
+          APPROVED_UI_SHA: ${{ steps.controls.outputs.ui_sha }}
+        run: git fetch --no-tags origin "$APPROVED_UI_SHA"
+      - name: Install the locked compiler and offline projection runtime
+        if: steps.controls.outputs.certify == 'true'
+        run: |
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+          python -m venv "$RUNNER_TEMP/financial-replay-runtime"
+          "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
+          echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
+      - name: Verify exact predecessor and immutable original authority
+        id: prepare
+        if: steps.controls.outputs.certify == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-source-renewal-certification.mjs prepare
+      - name: Replay certified source and journal-bound receipt delta
+        if: steps.controls.outputs.certify == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-source-renewal-certification.mjs verify-source
+      - name: Verify same UI, prices, history and all financial surfaces
+        if: steps.controls.outputs.certify == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-source-renewal-certification.mjs verify-surfaces
+      - name: Verify full logical and physical payload bounds
+        if: steps.controls.outputs.certify == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-source-renewal-certification.mjs verify-bounds
+      - name: Seal the exact renewed candidate
+        if: steps.controls.outputs.certify == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-source-renewal-certification.mjs seal
+      - name: Retain complete original archives and sealed renewal candidate
+        if: steps.controls.outputs.certify == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-source-renewal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-source-renewal-certification/candidate.tar
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+      - name: Retain automatic quota observations independently of source proof
+        if: steps.controls.outputs.certify == 'true' && github.event_name == 'workflow_run' && always()
+        # The guarded command already retains this operational observation in
+        # the job log. Optional audit storage cannot invalidate sealed authority.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-quota-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-renewal-quota
+          retention-days: 14
+          if-no-files-found: ignore

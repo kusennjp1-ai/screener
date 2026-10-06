@@ -1,4 +1,23 @@
 import { execFileSync } from 'node:child_process';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createImmutableGitApi } from './immutable-github-api.mjs';
+
+const invocationApi = new AsyncLocalStorage();
+
+export function withInvocationImmutableGitApi(repository, work) {
+  const api = createImmutableGitApi((endpoint, paginate) => invocationApi.run(undefined, () => githubApi(endpoint, paginate)), repository);
+  return invocationApi.run(api, () => {
+    try {
+      const result = work();
+      if (result && typeof result.then === 'function') return Promise.resolve(result).finally(() => api.dispose());
+      api.dispose();
+      return result;
+    } catch (error) {
+      api.dispose();
+      throw error;
+    }
+  });
+}
 
 export const gateWorkflows = ['ci.yml', 'design-acceptance.yml'];
 export const sameRepository = (run, repository) => run?.repository?.full_name === repository
@@ -28,6 +47,8 @@ export function publicationDecision({ eventName, event, sha, currentSha, runs = 
 }
 
 export function githubApi(endpoint, paginate = false) {
+  const scopedApi = invocationApi.getStore();
+  if (scopedApi) return scopedApi(endpoint, paginate);
   return JSON.parse(execFileSync('gh', ['api', ...(paginate ? ['--paginate', '--slurp'] : []), endpoint], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
 }
 
