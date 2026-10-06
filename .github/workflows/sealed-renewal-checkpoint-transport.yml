@@ -1,0 +1,98 @@
+name: Sealed Renewal Checkpoint Transport
+on:
+  push:
+    branches: [diagnostic/sealed-renewal-checkpoint-transport-20261006]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: sealed-renewal-checkpoint-transport-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  transport:
+    name: TRANSPORT ONLY - exact retained diagnostic seal checkpoint ZIP
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/diagnostic/sealed-renewal-checkpoint-transport-20261006'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check bounded transport offline
+        run: python -m unittest discover -s .github/scripts -p test_sealed_renewal_checkpoint_transport.py -v
+      - name: Authenticate and split the exact original artifact ZIP
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/sealed-renewal-checkpoint-transport.py prepare --directory "$RUNNER_TEMP/sealed-renewal-checkpoint-transport"
+      - name: Retain original ZIP bytes - part 1 of 5
+        id: part1
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-renewal-checkpoint-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-001
+          path: ${{ runner.temp }}/sealed-renewal-checkpoint-transport/part-001.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 2 of 5
+        id: part2
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-renewal-checkpoint-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-002
+          path: ${{ runner.temp }}/sealed-renewal-checkpoint-transport/part-002.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 3 of 5
+        id: part3
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-renewal-checkpoint-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-003
+          path: ${{ runner.temp }}/sealed-renewal-checkpoint-transport/part-003.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 4 of 5
+        id: part4
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-renewal-checkpoint-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-004
+          path: ${{ runner.temp }}/sealed-renewal-checkpoint-transport/part-004.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 5 of 5
+        id: part5
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-renewal-checkpoint-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-005
+          path: ${{ runner.temp }}/sealed-renewal-checkpoint-transport/part-005.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Bind returned artifact IDs and ZIP digests in transport manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART_1_ID: ${{ steps.part1.outputs.artifact-id }}
+          PART_1_DIGEST: ${{ steps.part1.outputs.artifact-digest }}
+          PART_2_ID: ${{ steps.part2.outputs.artifact-id }}
+          PART_2_DIGEST: ${{ steps.part2.outputs.artifact-digest }}
+          PART_3_ID: ${{ steps.part3.outputs.artifact-id }}
+          PART_3_DIGEST: ${{ steps.part3.outputs.artifact-digest }}
+          PART_4_ID: ${{ steps.part4.outputs.artifact-id }}
+          PART_4_DIGEST: ${{ steps.part4.outputs.artifact-digest }}
+          PART_5_ID: ${{ steps.part5.outputs.artifact-id }}
+          PART_5_DIGEST: ${{ steps.part5.outputs.artifact-digest }}
+        run: python .github/scripts/sealed-renewal-checkpoint-transport.py finalize --directory "$RUNNER_TEMP/sealed-renewal-checkpoint-transport"
+      - name: Retain TRANSPORT ONLY manifest
+        id: manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-renewal-checkpoint-transport-${{ github.run_id }}-${{ github.run_attempt }}-manifest
+          path: ${{ runner.temp }}/sealed-renewal-checkpoint-transport/transport-manifest.json
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
