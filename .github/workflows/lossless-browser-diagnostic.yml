@@ -1,0 +1,88 @@
+name: Lossless Transport Browser Diagnostic
+on:
+  push:
+    branches: [diagnostic/lossless-transport-browser-20261006]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: lossless-transport-browser-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  browser-contract:
+    name: READ ONLY - lossless decoder browser evidence
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/diagnostic/lossless-transport-browser-20261006'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/lossless-playwright
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Create small diagnostic result directory
+        run: mkdir "$RUNNER_TEMP/lossless-browser-results"
+      - name: Record exact diagnostic source and runtime
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/lossless-browser-results/diagnostic-commit.txt"
+          git status --porcelain > "$RUNNER_TEMP/lossless-browser-results/checkout-status.txt"
+          sha256sum frontend/package-lock.json experiments/lossless-static-data/*.mjs .github/scripts/lossless-browser-artifact.py .github/workflows/lossless-browser-diagnostic.yml > "$RUNNER_TEMP/lossless-browser-results/source-sha256.txt"
+          node -p 'JSON.stringify(process.versions,null,2)' > "$RUNNER_TEMP/lossless-browser-results/node-runtime.json"
+          python --version > "$RUNNER_TEMP/lossless-browser-results/python-runtime.txt"
+      - name: Run offline artifact and transport contracts
+        run: |
+          python -m unittest discover -s .github/scripts -p test_lossless_browser_artifact.py -v > "$RUNNER_TEMP/lossless-browser-results/artifact-helper-tests.txt" 2>&1
+          node --test --test-concurrency=2 experiments/lossless-static-data/transport.test.mjs > "$RUNNER_TEMP/lossless-browser-results/node-contract-tests.txt" 2>&1
+      - name: Install existing locked frontend packages without lifecycle scripts
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund > "$RUNNER_TEMP/lossless-browser-results/npm-install.txt" 2>&1
+      - name: Install official locked Playwright Chromium and dependencies
+        working-directory: frontend
+        timeout-minutes: 5
+        run: npx --no-install playwright install --with-deps chromium > "$RUNNER_TEMP/lossless-browser-results/playwright-install.txt" 2>&1
+      - name: Authenticate exact artifact and extract corrected files only
+        timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python .github/scripts/lossless-browser-artifact.py prepare --directory "$RUNNER_TEMP/lossless-browser-input" > "$RUNNER_TEMP/lossless-browser-results/intake-output.json" 2> "$RUNNER_TEMP/lossless-browser-results/intake-stderr.txt"
+          cp "$RUNNER_TEMP/lossless-browser-input/intake-receipt.json" "$RUNNER_TEMP/lossless-browser-results/intake-receipt.json"
+      - name: Pack unchanged source with prototype and enforce physical byte limit
+        timeout-minutes: 3
+        run: |
+          node experiments/lossless-static-data/pack.mjs "$RUNNER_TEMP/lossless-browser-input/corrected" "$RUNNER_TEMP/lossless-browser-packed" > "$RUNNER_TEMP/lossless-browser-results/pack-receipt.json" 2> "$RUNNER_TEMP/lossless-browser-results/pack-progress.txt"
+      - name: Run Chromium page and Worker contracts with actual candidate samples
+        timeout-minutes: 3
+        run: |
+          node experiments/lossless-static-data/browser-contract.mjs "$GITHUB_WORKSPACE/frontend/node_modules/playwright/index.mjs" "$RUNNER_TEMP/lossless-browser-packed" > "$RUNNER_TEMP/lossless-browser-results/browser-results.json" 2> "$RUNNER_TEMP/lossless-browser-results/browser-stderr.txt"
+      - name: Bound ordinary result artifact before upload
+        if: always()
+        id: evidence
+        run: |
+          python - <<'PYCODE'
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'lossless-browser-results'
+          allowed = {'diagnostic-commit.txt', 'checkout-status.txt', 'source-sha256.txt', 'node-runtime.json', 'python-runtime.txt', 'artifact-helper-tests.txt', 'node-contract-tests.txt', 'npm-install.txt', 'playwright-install.txt', 'intake-output.json', 'intake-stderr.txt', 'intake-receipt.json', 'pack-receipt.json', 'pack-progress.txt', 'browser-results.json', 'browser-stderr.txt'}
+          files = list(root.iterdir())
+          assert files and all(p.name in allowed and p.is_file() and not p.is_symlink() and p.stat().st_size <= 8 * 1024 * 1024 for p in files), 'Unexpected or oversized diagnostic evidence'
+          assert sum(p.stat().st_size for p in files) <= 32 * 1024 * 1024, 'Diagnostic evidence exceeds 32 MiB'
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf8') as output:
+              output.write('safe=true\n')
+          PYCODE
+      - name: Retain small ordinary diagnostic evidence only
+        if: always() && steps.evidence.outputs.safe == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lossless-transport-browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lossless-browser-results/
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 6
