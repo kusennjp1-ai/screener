@@ -62,7 +62,8 @@ export function exceptionPolicyForVersion(version,{allowDisabled=false}={}) {
       '.github/scripts/financial-audit-transport.mjs','.github/scripts/financial-audit-transport.test.mjs',
       '.github/scripts/financial-release-activation.test.mjs','.github/scripts/financial-release-lifecycle.test.mjs',
       '.github/scripts/static-transport-publication.mjs','.github/scripts/static-transport-publication.test.mjs','.github/scripts/static-transport-carry.test.mjs',
-      'frontend/src/static/staticPublication.test.js','frontend/tools/production-bootstrap-diagnostic.mjs','frontend/tools/production-bootstrap-diagnostic.test.mjs']};
+      'frontend/src/static/staticPublication.test.js','frontend/tools/production-bootstrap-diagnostic.mjs','frontend/tools/production-bootstrap-diagnostic.test.mjs',
+      'frontend/tools/publication-cli.test.mjs']};
 }
 export function exceptionPolicyFor(value) {
   for(const version of exceptionVersions){const p=profile(version);if(value?.type===p.type||[p.approval_schema,p.candidate_schema,p.pin_schema,p.intent_schema].includes(value?.schema_version))return exceptionPolicyForVersion(version);}

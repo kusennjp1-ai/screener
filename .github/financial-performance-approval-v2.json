@@ -32,7 +32,7 @@
   },
   "transport_sha256": "93c5e3e5afbd62200dc38f977255625a96492624ee4aacf3bfb0fbc222eaa4e5",
   "captured_code_sha256": "59f2aefe53cc1099604212562c11133253cdd40018b702095cec29a68b1e86ba",
-  "controller_code_sha256": "45d20d5256395ad7b3bbc8dee879c792a32af5373aac100266ba143a370bb5be",
+  "controller_code_sha256": "ffd74d3e7912b597221cd85f042fe6075478b18f8c84d53cc657e17d46252d6d",
   "controller_changes": {
     ".github/scripts/financial-audit-history.mjs": {
       "before": null,
@@ -99,7 +99,7 @@
       },
       "after": {
         "mode": "100644",
-        "sha": "5f6020b21d73e48396752b5129d719d4eda8343e"
+        "sha": "715e2dc77c45b8fc3e817972c490bebb736a0757"
       }
     },
     ".github/scripts/financial-release-activation.mjs": {
@@ -250,6 +250,16 @@
       "after": {
         "mode": "100644",
         "sha": "a94b3a9b093acaca9961baaa4b3f967d9a774339"
+      }
+    },
+    "frontend/tools/publication-cli.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "sha": "072c38aa2d54f1c2f5a105582f7cc942223a437f"
+      },
+      "after": {
+        "mode": "100644",
+        "sha": "f051bf6ed70fdc740b2d42675d028d7f80b9a858"
       }
     }
   }
