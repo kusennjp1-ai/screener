@@ -16,7 +16,6 @@ jobs:
     timeout-minutes: 20
     env:
       CI: 'true'
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/lossless-playwright
     steps:
       - uses: actions/checkout@v4
         with:
