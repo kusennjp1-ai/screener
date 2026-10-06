@@ -193,6 +193,9 @@ jobs:
           path: release/frontend/dist
           retention-days: 90
           if-no-files-found: error
+      - name: Enforce final GitHub Pages payload and TAR limits
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
+        run: python3 .github/scripts/check-pages-payload.py release/frontend/dist
       - uses: actions/upload-pages-artifact@v4
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
         with:
