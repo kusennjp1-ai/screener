@@ -56,12 +56,20 @@ Viewports: 1440×900, 390×667 and 360×568. Each viewport captures:
 6. A separate, conspicuously labeled synthetic panel for PCR zero-denominator gaps,
    distribution expiry/missing volume, and below/above-pivot crossing rearming.
 
-The job produces 27 full-page captures plus three short viewport base-history
-captures. It checks runtime errors, page overflow, error overlays and serious
+The job preserves 27 full-page captures and adds candidate-list and base-history
+viewport captures at all three sizes. Candidate viewports are taken before history
+scrolling, with continuation images when needed to show every real sample row.
+Geometry, content-visibility paint eligibility and row hit tests are recorded;
+the application keeps its normal `content-visibility: auto` behavior. The base
+heading is anchored 12px from the top. If count, plot and date axis cannot fit,
+a second viewport shows them together without changing the layout or chrome.
+It checks runtime errors, page overflow, error overlays and serious
 accessibility violations. Real and synthetic screenshots use distinct filenames,
 banners and data scopes. Synthetic observations never appear in the real series.
 Expanded history tables must be reachable from their disclosure with Tab and
-scroll with arrow keys on each overflowing axis. The report records those checks,
+scroll with arrow keys on each overflowing axis. Afterward, instant scrolling must
+restore both axes to zero for three consecutive animation frames before capture.
+The report records those checks,
 offending overflow elements, and full Axe node selectors/HTML/check data. No Axe
 rules or severity thresholds are excluded. Chart tooltips and legend labels use
 the active theme's text and background colors.

@@ -34,6 +34,20 @@ export function inspectPreviewGeometry() {
     origin: document.querySelector('.preview-origin')?.textContent };
 }
 
+export async function restoreHistoryScroll(node) {
+  const view = node.ownerDocument.defaultView, deadline = view.performance.now() + 2000;
+  const reset = () => node.scrollTo({ left: 0, top: 0, behavior: 'instant' });
+  node.blur();reset();
+  let stableFrames = 0;
+  while (stableFrames < 3 && view.performance.now() < deadline) {
+    await new Promise(resolve => view.requestAnimationFrame(resolve));
+    if (node.scrollLeft === 0 && node.scrollTop === 0) stableFrames++;
+    else { stableFrames = 0;reset(); }
+  }
+  if (stableFrames < 3) throw Error('History scroll did not settle at its first row and column');
+  return { left: node.scrollLeft, top: node.scrollTop, stable_frames: stableFrames };
+}
+
 export async function checkHistoryKeyboardScrolling(page) {
   const results = [], regions = page.locator('.indicator-history-scroll:visible');
   for (let index = 0; index < await regions.count(); index++) {
@@ -53,7 +67,7 @@ export async function checkHistoryKeyboardScrolling(page) {
       await page.waitForFunction(({ node, property }) => node[property] > 0, { node: await region.elementHandle(), property }, { timeout: 2000 });
       result[`${axis}_keyboard_moved`] = true;
     }
-    await region.evaluate(node => { node.scrollTo(0, 0); node.blur(); });
+    result.restored = await region.evaluate(restoreHistoryScroll);
     results.push(result);
   }
   return results;
