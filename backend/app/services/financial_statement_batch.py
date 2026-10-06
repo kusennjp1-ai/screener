@@ -527,12 +527,26 @@ def source_diagnostics(acquisitions, proof, history_diagnostics):
     return {"fields": details, "annual_history": history_diagnostics["reasons"]["annual"]}
 
 
+def _check_retention(guard, stage, stop):
+    if guard is None or stop["reason"] is not None:
+        return
+    from .statement_retention_budget import RetentionBudgetExceeded
+    try:
+        guard.check(stage)
+    except RetentionBudgetExceeded as exc:
+        stop["reason"] = {"kind": "acquisition_budget_stop", "budget": "retention",
+                          "completed_at": timestamp(utc_now()), "reservation": exc.report}
+
+
 def make_session(requests, capture, out, events, stop, active, budget):
     """The reviewed pilot's fail-stop session, with sanitized disk receipts."""
     class FailStopSession(requests.Session):
         def request(self, method, url, *request_args, **kwargs):
             if stop["reason"] is not None:
                 raise ProviderStopped("Provider work already stopped")
+            _check_retention(budget.get("retention_guard"), "transport", stop)
+            if stop["reason"] is not None:
+                raise ProviderStopped("Retention exhausted before transport")
             remaining = budget["deadline"] - time.monotonic()
             exhausted = "wall_time" if remaining <= 0 else "transport_requests" if len(events) >= budget["max_transport_requests"] else None
             if exhausted:
@@ -597,13 +611,18 @@ def make_session(requests, capture, out, events, stop, active, budget):
 
 def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=None, dry_run=False,
             acquisition_budget_seconds=DEFAULT_ACQUISITION_BUDGET_SECONDS,
-            max_statement_getter_calls=MAX_BATCH * 2, max_transport_requests=DEFAULT_MAX_TRANSPORT_REQUESTS):
+            max_statement_getter_calls=MAX_BATCH * 2, max_transport_requests=DEFAULT_MAX_TRANSPORT_REQUESTS,
+            retention_guard=None):
     validate_plan(plan, base_bytes)
     if (not finite(acquisition_budget_seconds) or not 0 < acquisition_budget_seconds <= 24 * 3600
             or type(max_statement_getter_calls) is not int or not 1 <= max_statement_getter_calls <= MAX_BATCH * 2
             or type(max_transport_requests) is not int or not 1 <= max_transport_requests <= 10000):
         raise InvalidPlan("Acquisition budgets must be explicit positive bounded values")
-    budget = {"deadline": time.monotonic() + acquisition_budget_seconds, "max_transport_requests": max_transport_requests}
+    deadline = time.monotonic() + acquisition_budget_seconds
+    if retention_guard is not None:
+        retention_guard.check("initial")
+    budget = {"deadline": deadline, "max_transport_requests": max_transport_requests,
+              "retention_guard": retention_guard}
     started = utc_now()
     if clock(plan["evaluation_time"]) > started:
         raise InvalidPlan("Plan evaluation is in the future")
@@ -679,9 +698,10 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
                     attribute_results[attribute] = {"status": "not_selected"}
                     continue
                 if stop["reason"] is None:
+                    _check_retention(retention_guard, "getter", stop)
                     exhausted = ("wall_time" if time.monotonic() >= budget["deadline"] else
                                  "statement_getters" if provider_getters >= max_statement_getter_calls else None)
-                    if exhausted:
+                    if exhausted and stop["reason"] is None:
                         stop["reason"] = {"kind": "acquisition_budget_stop", "budget": exhausted,
                                           "completed_at": timestamp(utc_now())}
                 if stop["reason"] is not None:
@@ -756,6 +776,8 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
             result = {"symbol": symbol, "market": "US", "source_data_as_of": plan["source_data_as_of"],
                       "evaluation_time": timestamp(utc_now()), "attributes": attribute_results,
                       "source_publication_date": None, "point_in_time": False}
+            _check_retention(retention_guard, "result", stop)
+            bounded_empty = retention_guard is not None and stop["reason"] is not None and not acquisitions
             try:
                 growth = growth_fn(frames.get("quarterly_income_stmt"), market="US", include_source_context=True)
                 eps = EPSRatingService().calculate_eps_rating_data(frames.get("income_stmt"), frames.get("quarterly_income_stmt"), include_source_context=True)
@@ -764,6 +786,10 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
                 capture.attach_evidence(payload, capture.statement_evidence(payload, source_context, contexts), symbol=symbol, market="US")
                 validate(payload["financial_source_evidence"])
                 envelope_file = f"envelopes/{symbol}.json"
+                if bounded_empty:
+                    from .statement_retention_budget import STOPPED_PROJECTION_LIMIT, RetentionIntegrityError
+                    if len(_json_bytes(payload)) > STOPPED_PROJECTION_LIMIT:
+                        raise RetentionIntegrityError("Stopped empty envelope exceeds its reservation")
                 envelope_sha = write_json(out / envelope_file, payload)
                 evaluated = clock(result["evaluation_time"])
                 proof = proof_fn(payload, now=evaluated, as_of_date=plan["source_data_as_of"], market="US")
@@ -786,8 +812,16 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
                 counts["annual_growth_nonpositive_base"] += annual_reason == "nonpositive_comparison_base"
                 counts["annual_history_complete"] += annual_reason in {"available", "nonpositive_comparison_base"}
             except Exception as exc:
+                if bounded_empty:
+                    from .statement_retention_budget import RetentionIntegrityError
+                    if isinstance(exc, RetentionIntegrityError):
+                        raise
                 result.update(status="normalization_failed", error_type=type(exc).__name__, raw_acquisitions_preserved=True)
                 processing_failed = True
+            if bounded_empty:
+                from .statement_retention_budget import STOPPED_PROJECTION_LIMIT, RetentionIntegrityError
+                if len(_json_bytes(result)) > STOPPED_PROJECTION_LIMIT:
+                    raise RetentionIntegrityError("Stopped empty result exceeds its reservation")
             result_file = f"results/{symbol}.json"
             result_index[symbol] = {"file": result_file, "sha256": write_json(out / result_file, result), "status": result["status"]}
             statuses[symbol] = result["status"]

@@ -1,0 +1,31 @@
+{
+  "applicable_count": 1891,
+  "collector_plan_sha256": "ba26d363ccc5d4b6623db9ba3388bc6de25e1bd1f77f411b8feeb0a3b4f45485",
+  "dispatch_not_after": "2026-10-07T10:21:54.945Z",
+  "dispatch_not_before": "2026-10-06T11:34:38.925Z",
+  "execution_enabled": false,
+  "expected_run_number": null,
+  "first_attempt_only": true,
+  "full_cohort_count": 1894,
+  "input_source": {
+    "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+    "archive_manifest_sha256": "f49657581a65a88a7cdbb920e6650295e5406f3d9da162f4636614951f2fefaa",
+    "artifact_id": 11307162746,
+    "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-8",
+    "artifact_sha256": "c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb",
+    "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580",
+    "head_sha": "4b27798b9b04528737938bb5844a8d86a704c58d",
+    "repository": "kusennjp1-ai/screener",
+    "run_attempt": 8,
+    "run_id": 37203329163,
+    "workflow": ".github/workflows/financial-statement-recovery.yml"
+  },
+  "queue_guard_sha256": "db45ba1737755601308caea50cb5030ebaff32427fa3484d1cec6557bc218679",
+  "queue_sha256": "342c1e4a993f0da892ad4affc87197fc7b67f2df3e87485da44ec8d95abb2788",
+  "request_id": "original-37203329163-attempt-8-first-200-20261006",
+  "required_valid_through": "2026-10-07T23:34:38.925Z",
+  "review_sha256": "9ab65a7afb2033297b0f286a64de7ad1650fdb64ac9bd77f2def672ac4ed05a0",
+  "schema_version": "financial-statement-bounded-refresh-admission-v1",
+  "selected_cache_sha256": "b5e97d773cbb3feede46d83a8103654379426e60ef4d591f5e4ccb1066ea2f17",
+  "selection_count": 200
+}

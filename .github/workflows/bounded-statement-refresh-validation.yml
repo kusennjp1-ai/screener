@@ -1,0 +1,80 @@
+name: Bounded Statement Refresh Validation
+
+on:
+  push:
+    branches: [preview/bounded-statement-refresh-ci]
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: bounded-statement-refresh-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-retained-source:
+    if: github.repository == 'kusennjp1-ai/screener'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Start the unchanged bounded job clock
+        id: budget-clock
+        run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify exact target runtimes and disabled admission
+        run: |
+          mkdir -p "$RUNNER_TEMP/refresh-ci-reports"
+          python -c 'import sys; assert sys.version_info[:2] == (3,11); print(sys.version)' | tee "$RUNNER_TEMP/refresh-ci-reports/python-version.txt"
+          node -e 'if (process.versions.node.split(".")[0] !== "22") throw Error("Node22 required"); console.log(process.version)' | tee "$RUNNER_TEMP/refresh-ci-reports/node-version.txt"
+          node --input-type=module -e 'import {pinnedReview} from "./.github/scripts/restore-bounded-refresh-ci-source.mjs"; pinnedReview()'
+      - name: Install the existing pinned statement test dependencies
+        run: >-
+          python -m pip install
+          yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0 pytest==8.3.5
+      - name: Run the 234 Python and 22 Node source regressions offline
+        run: |
+          node --test --test-concurrency=2 .github/scripts/prepare-statement-cohort.test.mjs .github/scripts/restore-statement-source.test.mjs | tee "$RUNNER_TEMP/refresh-ci-reports/source-node-tests.log"
+          python -m pytest --noconftest -p no:cacheprovider backend/tests/unit/test_financial_statement_batch.py backend/tests/unit/test_statement_refresh_planning.py backend/tests/unit/test_statement_refresh_collection.py backend/tests/unit/test_statement_artifact_archive.py backend/tests/unit/test_quarterly_eps_pair_selection.py backend/tests/unit/test_bounded_statement_refresh_bridge.py backend/tests/unit/test_statement_retention_budget.py -q --junitxml="$RUNNER_TEMP/refresh-ci-reports/source-python-tests.xml" | tee "$RUNNER_TEMP/refresh-ci-reports/source-python-tests.log"
+      - name: Test the isolated CI reader and acquisition deny guards
+        run: |
+          node --test --test-concurrency=2 .github/scripts/restore-bounded-refresh-ci-source.test.mjs | tee "$RUNNER_TEMP/refresh-ci-reports/ci-reader-tests.log"
+          python -m pytest --noconftest -p no:cacheprovider backend/tests/unit/test_bounded_refresh_ci_validation.py -q | tee "$RUNNER_TEMP/refresh-ci-reports/ci-deny-tests.log"
+      - name: Read the one reviewed historical GitHub artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/restore-bounded-refresh-ci-source.mjs "$RUNNER_TEMP/refresh-ci-restored" "$RUNNER_TEMP/refresh-ci-reports"
+      - name: Replay exact retained inputs with acquisition routes denied
+        run: >-
+          python .github/scripts/validate-bounded-refresh-ci.py
+          --restored "$RUNNER_TEMP/refresh-ci-restored"
+          --work "$RUNNER_TEMP/refresh-ci-work"
+          --reports "$RUNNER_TEMP/refresh-ci-reports"
+          --job-started-at '${{ steps.budget-clock.outputs.started_at }}'
+      - name: Retain test reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounded-refresh-validation-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/refresh-ci-reports/
+          retention-days: 14
+          if-no-files-found: error
+
+# This exact review branch is outside the source and publication push triggers.
+# No source outputs, credentials, Pages artifacts or production admission are uploaded.
