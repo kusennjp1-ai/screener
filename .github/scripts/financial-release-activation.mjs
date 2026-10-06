@@ -1,5 +1,5 @@
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,previewPublication,validateTransportPreview,verifyTransportPublication,assertTransportDeclaration} from './static-transport-publication.mjs';
-import {exceptionType, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation, performanceExceptionPolicy} from './financial-performance-exception.mjs';
+import {isPerformanceException, isExceptionCandidate, isPackedCandidate, exceptionPolicyFor, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation} from './financial-performance-exception.mjs';
 // Publication authority requires current-main CI and immutable tested artifacts,
 // through strict Design gates or the separate exact performance exception.
 // A preview or source certificate alone never grants that authority.
@@ -79,7 +79,7 @@ export function completeInventory(root) {
   }};walk(root);return files;
 }
 export function validateCandidateRecord(record) {
-  if(record?.schema_version==='financial-performance-candidate-v1')return validateExceptionCandidate(record);
+  if(isExceptionCandidate(record))return validateExceptionCandidate(record);
   const packed=record?.schema_version==='financial-release-candidate-v2';
   exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256',...(packed?['transport_sha256']:[])],'candidate record');
   exact(record.producer,['repository','workflow','head_sha','run_id','run_attempt'],'producer');
@@ -268,14 +268,15 @@ export async function prepareCandidateTransport(root=process.cwd(),candidate=pro
   return transport;
 }
 
-export async function verifyCandidateTransport(root,candidate,record=null) {
+export async function verifyCandidateTransport(root,candidate,record=null,{restore}={}) {
   const corrected=join(candidate,'corrected'),path=join(candidate,'transport.json');
   if(!existsSync(path)){
     assertTransportDeclaration(corrected,null);
-    if(record?.schema_version==='financial-release-candidate-v2'||existsSync(join(corrected,'publication.json')))throw Error('Missing candidate transport seal');
+    if(isPackedCandidate(record)||existsSync(join(corrected,'publication.json')))throw Error('Missing candidate transport seal');
     return null;
   }
-  if(record&&record.schema_version!=='financial-release-candidate-v2')throw Error('Packed candidate requires its own v2 capture; old acceptance cannot be reused');
+  if(record&&!isPackedCandidate(record))throw Error('Packed candidate requires its own v2 capture; old acceptance cannot be reused');
+  if(isExceptionCandidate(record))validateExceptionCandidate(record);
   const bytes=readFileSync(path),transport=JSON.parse(bytes);
   exact(transport,['schema_version','preview_receipt_sha256','bootstrap_sha256','corrected'],'candidate transport');
   const {validatePreviewReceipt}=await import('./financial-candidate-preview.mjs');
@@ -287,6 +288,7 @@ export async function verifyCandidateTransport(root,candidate,record=null) {
     ||publication.ui_sha!==preview.candidate_ui.sha||publication.ui_digest!==preview.candidate_ui.digest
     ||transport.corrected.logical_data_inventory_sha256!==preview.bundles.corrected_data_sha256)throw Error('Candidate transport capture binding changed');
   equal(transport.corrected,publication.transport,'candidate bootstrap transport');
+  if(restore){const logicalRoot=await canonicalPublication({root:corrected,frontendRoot:join(root,'frontend'),publication,restore});return {transport,publication,logicalRoot};}
   await verifyTransportPublication({root:corrected,frontendRoot:join(root,'frontend'),publication});
   return {transport,publication};
 }
@@ -438,7 +440,7 @@ export function validateFinancialReleaseReceipt(value) {
   validateAssetReference(value.evaluation_projection,value.mode==='activation'?'source-projection':'carry-projection');
   if(value.source_projection.sha256!==value.lineage.source_projection_sha256)throw Error('Financial source projection changed lineage');
   exact(value.ui,['approved_sha','captured_sha','digest','approval','checks'],'UI');
-  const exception=value.ui.approval?.type===exceptionType;
+  const exception=isPerformanceException(value.ui.approval),performanceExceptionPolicy=exception?exceptionPolicyFor(value.ui.approval):null;
   if(exception){
     parseExceptionUiApproval(value.ui.approval);
     if(value.ui.approved_sha!==performanceExceptionPolicy.captured_ui.sha||value.ui.captured_sha!==value.ui.approved_sha||value.ui.digest!==performanceExceptionPolicy.captured_ui.digest)throw Error('Invalid exact financial exception UI');
@@ -485,7 +487,7 @@ export function verifyFinancialReleaseAssets(root,reference,publication=null) {
   for(const ref of [receipt.source_projection,receipt.source_base,receipt.evaluation_projection])if(sha256(readFileSync(join(root,ref.path)))!==ref.sha256)throw Error('Financial lineage asset changed');
   if(inventoryDigest(dataInventory(root,[reference.path]))!==receipt.data_inventory_sha256)throw Error('Financial release inventory changed');
   if(publication&&(publication.financial_generation!==receipt.financial_generation||publication.financial_lineage_sha256!==receipt.lineage_sha256||publication.ui_sha!==receipt.ui.approved_sha||publication.ui_digest!==receipt.ui.digest||publication.data_inventory_sha256!==inventoryDigest(dataInventory(root))
-    ||(publication.approval?.type===exceptionType||receipt.ui.approval?.type===exceptionType)&&digest(publication.approval)!==digest(receipt.ui.approval)))throw Error('Publication and financial release disagree');
+    ||(isPerformanceException(publication.approval)||isPerformanceException(receipt.ui.approval))&&digest(publication.approval)!==digest(receipt.ui.approval)))throw Error('Publication and financial release disagree');
   return receipt;
 }
 export function assertFinancialLineageContinuity(live,candidate) {

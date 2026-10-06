@@ -173,6 +173,31 @@ it('warns about old analysis even when publication was just regenerated', async 
   await screen.findByRole('button', { name: /^LEAD の分析を表示/  });
   expect(screen.getByText(/更新日時と価格の基準日は別です/)).toBeInTheDocument();
 });
+it('retains one visible date caution when mobile selection replaces the overview with detail', async () => {
+  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+  data.date='2000-01-03';
+  mount();
+  const row=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+  expect(screen.getByRole('alert',{name:'分析データの鮮度'}).closest('.research-hero')).not.toBeNull();
+  fireEvent.click(row);
+  expect(screen.getAllByRole('alert',{name:'分析データの鮮度'})).toHaveLength(1);
+  const warning=screen.getByRole('alert',{name:'分析データの鮮度'});
+  expect(warning.closest('.research-hero')).toBeNull();
+  expect(warning).toHaveTextContent('分析基準日 2000-01-03');
+  expect(warning).toHaveTextContent('更新日時と価格の基準日は別です。');
+  act(()=>window.dispatchEvent(new Event('research:back')));
+  expect(screen.getAllByRole('alert',{name:'分析データの鮮度'})).toHaveLength(1);
+  expect(screen.getByRole('alert',{name:'分析データの鮮度'}).closest('.research-hero')).not.toBeNull();
+});
+it('keeps the full date caution in the comparison heading', async () => {
+  data.date='2000-01-03';
+  data.rows=[];
+  render(<QueryClientProvider client={client}><HashRouter><ResearchPage compareOnly/></HashRouter></QueryClientProvider>);
+  const warning=await screen.findByRole('alert',{name:'分析データの鮮度'});
+  expect(warning.closest('.comparison-page-heading')).not.toBeNull();
+  expect(warning).toHaveTextContent('分析基準日 2000-01-03');
+  expect(warning).toHaveTextContent('更新日時と価格の基準日は別です。');
+});
 it('keeps search focus while narrowing results in the filter drawer', async () => {
   mount();
   await screen.findByRole('button', {name:/^LEAD の分析を表示/});
@@ -196,9 +221,10 @@ it('opens detailed verification from its tab and returns filter focus to the can
   expect(screen.getByRole('tab',{name:'書籍検証'})).toHaveAttribute('aria-selected','true');
   expect(screen.getByRole('tabpanel')).toHaveAccessibleName('書籍検証');
   openFilters();
+  const searchInput=screen.getByLabelText('銘柄・企業名を検索');
   fireEvent.click(screen.getByRole('button',{name:'候補を確認する →'}));
   await waitFor(()=>expect(screen.getByRole('region',{name:'対象銘柄',exact:true})).toHaveFocus());
-  expect(screen.queryByLabelText('銘柄・企業名を検索')).not.toHaveFocus();
+  expect(searchInput).not.toHaveFocus();
 });
 
 it('preserves canonical entry prices and unknown conditions while switching detail tabs by keyboard', async () => {

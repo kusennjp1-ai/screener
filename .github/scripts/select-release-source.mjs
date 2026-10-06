@@ -1,4 +1,4 @@
-import {exceptionType, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
+import {isPerformanceException, isPackedCandidate, selectExceptionVersion, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -150,7 +150,7 @@ async function plan(design = false) {
   let activation=null;
   if(releaseRequest&&!alreadyActive){
     const pin=readFinancialActivationCandidate();
-    const exceptionPin=readExceptionPin(),exceptionIntent=readExceptionReleaseIntent();
+    const exceptionVersion=selectExceptionVersion(),exceptionPin=readExceptionPin(process.cwd(),exceptionVersion),exceptionIntent=readExceptionReleaseIntent(process.cwd(),exceptionVersion);
     if(financialReleasePolicy.activation_enabled&&exceptionPin&&exceptionIntent){
       if(event.inputs?.ui_only===true||event.inputs?.ui_only==='true')throw Error('Exception activation requires ui_only=false');
       activation=await selectExceptionActivation({live,request:releaseRequest,mainSha:sha});
@@ -186,7 +186,7 @@ async function plan(design = false) {
   const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
   const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(correction ? { correction } : {}),...(activation?{activation}:{}),
     ...(!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
-  if(state.carry&&live.approval?.type===exceptionType)state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
+  if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
   if (design && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN=${source.runId}\n`);
   output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(state.carry?{carry:true}:{}) });
@@ -222,7 +222,7 @@ async function recheck() {
   if (!state.correction && !state.activation && !state.decision.migration && state.sourceSha === live.uiSha
     && compareData(finalManifest, live.manifest) !== 'advance' && !progress.advances) throw Error('No observed data advance remains after preparation');
   if (state.correction) await verifyPreparedCorrection(state, live,logical);
-  if(state.carry&&live.approval?.type===exceptionType&&digest(verifyCorrectionChecks(repository(),state.controllerSha))!==digest(state.carry.controllerChecks))throw Error('Exception carry controller CI changed');
+  if(state.carry&&isPerformanceException(live.approval)&&digest(verifyCorrectionChecks(repository(),state.controllerSha))!==digest(state.carry.controllerChecks))throw Error('Exception carry controller CI changed');
   if(state.activation||state.carry)await verifyPreparedFinancialRelease(state,live,logical);
   if(live.financialRelease&&!state.activation&&!state.carry)throw Error('Ordinary release lost required financial carry');
   if (receipt.ui_sha !== state.sourceSha || receipt.ui_digest !== inventoryDigest(uiInventory('release/frontend/dist'))
@@ -298,7 +298,7 @@ async function compose() {
   // The final logical tree is complete before encoding. A data-only release
   // discovers this capability in its retained approved UI, never the controller.
   if(!state.correction&&transportCapable(dist)){
-    if(state.activation&&state.activation.record.schema_version!=='financial-release-candidate-v2')throw Error('Packed activation requires a newly captured packed candidate');
+    if(state.activation&&!isPackedCandidate(state.activation.record))throw Error('Packed activation requires a newly captured packed candidate');
     await packPublication({root:dist,frontendRoot:resolve('release/frontend'),publication:receipt,bindings:{
       sourceCommit:state.controllerSha,appCommit:state.sourceSha,candidateId:state.activation?.record.transport_sha256??sha256(JSON.stringify({artifact:state.source.artifact.digest,run:state.source.runId,attempt:state.source.attempt,manifest:state.source.manifestHash}))}});
   }else assertTransportDeclaration(dist,receipt);
@@ -346,7 +346,7 @@ async function restoreCorrection(state) {
 
 async function restoreActivation(state) {
   const physical=join(state.activation.candidate,'corrected'),restore=join(scratch(),'activation-logical');rmSync(restore,{recursive:true,force:true});
-  const publication=state.activation.record.schema_version==='financial-release-candidate-v2'?JSON.parse(readFileSync(join(physical,'publication.json'),'utf8')):null;
+  const publication=isPackedCandidate(state.activation.record)?JSON.parse(readFileSync(join(physical,'publication.json'),'utf8')):null;
   const prepared=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication,restore});
   try {
   for(const destination of [resolve('release/frontend/dist'),resolve('release/frontend/public')]){
@@ -396,7 +396,7 @@ async function carryAssessment(state,root) {
   return {carry,compatibility,equality};
 }
 function financialConsumerChecks(uiSha,uiDigest,approval){
-  if(approval?.type===exceptionType)return verifyPerformanceUiApproval({ui_sha:uiSha,ui_digest:uiDigest,approval},repository()).checks;
+  if(isPerformanceException(approval))return verifyPerformanceUiApproval({ui_sha:uiSha,ui_digest:uiDigest,approval},repository()).checks;
   return verifyCorrectionConsumerChecks({uiSha,approval},repository());
 }
 async function prepareFinancialReleaseReceipt(state,dist,publication) {
@@ -421,14 +421,14 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
 async function verifyPreparedFinancialRelease(state,live,dist=resolve('release/frontend/dist')) {
   const publication=JSON.parse(readFileSync(join(dist,'publication.json'),'utf8'));
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
-  if(publication.approval?.type===exceptionType)verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
+  if(isPerformanceException(publication.approval))verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
   if(receipt.previous_publication_identity!==live.identity)throw Error('Financial release predecessor changed');
   const checks=financialConsumerChecks(state.sourceSha,receipt.ui.digest,receipt.ui.approval);
   if(digest(checks)!==digest(receipt.ui.checks))throw Error('Financial release consumer checks changed');
   if(state.activation){
     await verifyActivationCandidate(state.activation,live);
     const candidatePhysical=join(state.activation.candidate,'corrected'),restore=join(scratch(),'activation-recheck-logical');rmSync(restore,{recursive:true,force:true});
-    const candidatePublication=state.activation.record.schema_version==='financial-release-candidate-v2'?JSON.parse(readFileSync(join(candidatePhysical,'publication.json'),'utf8')):null;
+    const candidatePublication=isPackedCandidate(state.activation.record)?JSON.parse(readFileSync(join(candidatePhysical,'publication.json'),'utf8')):null;
     const original=await canonicalPublication({root:candidatePhysical,frontendRoot:resolve('release/frontend'),publication:candidatePublication,restore});
     try {
       const candidate=dataInventory(original),actual=dataInventory(dist,state.financialPrepared.added.filter(path=>!Object.hasOwn(candidate,path)));

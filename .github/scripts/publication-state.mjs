@@ -1,4 +1,4 @@
-import {exceptionType, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
+import {isPerformanceException, packedExceptionType, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -163,7 +163,11 @@ export function latestDeployment(repository, api = githubApi, anchor = null) {
 
 export function verifyApproval(receipt, repository, api = githubApi) {
   const approval = receipt.approval;
-  if(approval?.type===exceptionType){if(!receipt.financial_release)throw Error('Exception publication requires financial lineage');return verifyPerformanceUiApproval(receipt,repository,api);}
+  if(isPerformanceException(approval)){
+    if(!receipt.financial_release)throw Error('Exception publication requires financial lineage');
+    if(approval.type===packedExceptionType&&!receipt.transport)throw Error('Packed exception publication requires its captured transport representation');
+    return verifyPerformanceUiApproval(receipt,repository,api);
+  }
   if (approval?.type === 'bootstrap' && approval.sha === bootstrap.ui_sha && receipt.ui_sha === bootstrap.ui_sha && receipt.ui_digest === inventoryDigest(bootstrap.ui_files)) return;
   if (approval?.type !== 'gates' || approval.sha !== receipt.ui_sha || approval.runs?.length !== 2) throw Error('Unapproved live UI');
   for (const file of ['ci.yml', 'design-acceptance.yml']) {
@@ -218,10 +222,10 @@ export async function livePublication({ repository = bootstrap.repository, fetch
       if(sha256(bytes)!==reference.sha256)throw Error('Live financial release receipt hash mismatch');
       const {validateFinancialReleaseReceipt}=await import('./financial-release-activation.mjs');
       financialRelease=validateFinancialReleaseReceipt(JSON.parse(bytes));
-      if(receipt.approval?.type===exceptionType)verifyExceptionFinancialScope(financialRelease,verifiedApproval);
+      if(isPerformanceException(receipt.approval))verifyExceptionFinancialScope(financialRelease,verifiedApproval);
       if(financialRelease.financial_generation!==receipt.financial_generation||financialRelease.lineage_sha256!==receipt.financial_lineage_sha256
         ||financialRelease.ui.approved_sha!==receipt.ui_sha||financialRelease.ui.digest!==receipt.ui_digest
-        ||(receipt.approval?.type===exceptionType||financialRelease.ui.approval?.type===exceptionType)&&JSON.stringify(financialRelease.ui.approval)!==JSON.stringify(receipt.approval))throw Error('Live financial release and publication disagree');
+        ||(isPerformanceException(receipt.approval)||isPerformanceException(financialRelease.ui.approval))&&JSON.stringify(financialRelease.ui.approval)!==JSON.stringify(receipt.approval))throw Error('Live financial release and publication disagree');
     }
   } else if (latest.headSha !== bootstrap.ui_sha) throw Error('Legacy Pages is no longer the approved a9 UI');
   const uiFiles = receipt?.ui_files || bootstrap.ui_files;

@@ -46,12 +46,17 @@ jobs:
         with:
           ref: ${{ steps.main.outputs.sha }}
           fetch-depth: 0
-      - name: Restore the exact exception capture Git object
-        if: hashFiles('.github/financial-performance-candidate.json') != ''
-        run: git fetch --no-tags origin 34ecbf507a4270f796078d669c21c373c0d1279a
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Resolve the exact versioned exception controls
+        id: exception_controls
+        run: node .github/scripts/financial-performance-exception.mjs controls
+      - name: Restore the exact exception capture Git objects
+        if: steps.exception_controls.outputs.pinned_capture_shas != ''
+        env:
+          CAPTURE_SHAS: ${{ steps.exception_controls.outputs.pinned_capture_shas }}
+        run: for capture_sha in $CAPTURE_SHAS; do git fetch --no-tags origin "$capture_sha"; done
       - uses: actions/setup-python@v5
         if: hashFiles('.github/financial-release-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
         with:

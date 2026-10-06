@@ -13,7 +13,7 @@ function ChangesContents({workbench, ...props}) {
  const query = useWorkbenchDetails(workbench, true);
  return <DailyChanges {...props} query={query}/>;
 }
-export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSelect,onInspect,onInspectChanged=onInspect,onBrowse,workbench,method,availableSymbols,loading=false}) {
+export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSelect,onInspect,onInspectChanged=onInspect,onBrowse,workbench,method,availableSymbols,loading=false,freshnessNotice=null}) {
  const small=useMediaQuery('(max-width:700px)');
  const [collapsed,setCollapsed]=useState(()=>{try{return localStorage.getItem('research-hero-collapsed')==='true';}catch{return false;}});
  const [changesOpen,setChangesOpen]=useState(false);
@@ -21,7 +21,7 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const counts=useMemo(()=>({qualified:ranked.filter(x=>x.assessment.qualified).length,zone:ranked.filter(x=>x.assessment.qualified&&entryPosition(x.row,null,'minervini').state==='買いゾーン内').length,verified:ranked.filter(x=>x.row.technical_audit?.valid===true).length}),[ranked]);
  const toggle=()=>{setCollapsed(!collapsed);try{localStorage.setItem('research-hero-collapsed',String(!collapsed));}catch{/* Default remains usable when storage is disabled. */}};
  const changes=dailyChangePresentation(workbench,method);
- return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}`} aria-label="今日の概況">
+ return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}${freshnessNotice?' has-freshness':''}`} aria-label="今日の概況">
   <div className="hero-copy"><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
    <h1><span className="overview-compact-scope">ミネルヴィニ</span>{loading?'データを読み込み中。':counts.qualified?`選定候補は ${counts.qualified.toLocaleString()} 銘柄。`:'選定候補はありません。'}</h1>
    <p className="hero-subtitle">候補を選び、買い位置と日次の購入条件を確認。</p>
@@ -34,9 +34,11 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
     <p className="overview-market-state"><span>{plan.market.label.replace('（独自判定）','')} · 新規上限 {loading?'—':Math.round(plan.allocationCap*100)}%</span><span>日足検証 {loading||!ranked.length?'—':`${(counts.verified/ranked.length*100).toFixed(small?0:1)}%`}</span></p>
     {!loading && universe.verified_fund_exclusions.length > 0 && <p className="overview-universe" data-universe-version={universe.version}>価格・流動性対象 {universe.price_liquidity_count.toLocaleString()}件 · 企業財務判定の対象 {universe.financial_applicable_count.toLocaleString()}件（確認済みファンド {universe.verified_fund_exclusions.map(item=>item.symbol).join("・")} は対象外）</p>}
    </div><a href="#/breadth?tab=sectors">業種の追い風を見る →</a></div>
+   {collapsed&&!small&&freshnessNotice}
    <div className="hero-actions"><PortfolioDecision compact rows={rows} date={date} plan={plan} onInspect={onInspect} onBrowse={onBrowse} renderTrigger={({openPlan,label})=><button onClick={openPlan} aria-haspopup="dialog" aria-label={label}><span className="desktop-plan-label">{label}</span><span className="mobile-plan-label">配分</span></button>}/>
    <button className="changes-trigger" aria-label="候補の日次変化" aria-haspopup="dialog" aria-expanded={changesOpen} onClick={()=>setChangesOpen(true)}><span className="changes-desktop">{changes.label}</span><span className="changes-mobile">変化</span></button></div>
   </div>
+  {(!collapsed||small)&&freshnessNotice}
   {(!collapsed||small)&&<SetupRadar ranked={ranked} selectedSymbol={selectedSymbol} onSelect={onSelect} small={small}/>}
   <button className="hero-toggle" aria-expanded={!collapsed} aria-label={collapsed?'概況を展開':'概況をたたむ'} onClick={toggle}>{collapsed?'⌄':'⌃'}</button>
   <Drawer anchor="right" open={changesOpen} onClose={()=>setChangesOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'daily-changes-title',sx:{width:{xs:'100%',sm:520},p:3}}}>

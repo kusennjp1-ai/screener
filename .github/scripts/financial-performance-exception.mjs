@@ -9,9 +9,10 @@ import releasePolicy from '../../contracts/financial_release_v1.json' with {type
 import {githubApi,sameRepository,workflowPath} from './publication-gate.mjs';
 import {dataFiles,downloadArtifact,inventoryDigest,livePublication,sha256,safePath} from './publication-state.mjs';
 import {contract,dataInventory,digest,verifyCorrectionChecks} from './financial-correction.mjs';
+import {exceptionType,packedExceptionType,exceptionPolicyFor,exceptionPolicyForVersion,exceptionVersions,isPerformanceException,isExceptionCandidate,isPackedCandidate} from './financial-performance-policy.mjs';
 
 export {policy as performanceExceptionPolicy};
-export const exceptionType='performance-exception-v1';
+export {exceptionType,packedExceptionType,exceptionPolicyFor,isPerformanceException,isExceptionCandidate,isPackedCandidate};
 const hash=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const sha=v=>typeof v==='string'&&/^[a-f0-9]{40}$/.test(v);
 const positive=v=>Number.isSafeInteger(v)&&v>0;
@@ -25,14 +26,16 @@ const stamp=v=>typeof v==='string'&&Number.isFinite(Date.parse(v));
 const blob=v=>v===null||v&&Object.keys(v).sort().join(',')==='mode,sha'&&['100644','100755'].includes(v.mode)&&sha(v.sha);
 
 export function parsePerformanceApproval(value,{activation=false,now=Date.now()}={}) {
-  exact(value,['schema_version','scope','approved_at','activation_not_after','captured_ui','request_sha256','preview_receipt_sha256','projection_sha256','report_sha256','review','failures','budgets','captured_code_sha256','controller_code_sha256','controller_changes'],'approval');
-  if(value.schema_version!=='financial-performance-approval-v1'||value.scope!=='one-captured-financial-repair'
+  const policy=exceptionPolicyFor(value),packed=policy.version===2;
+  exact(value,['schema_version','scope','approved_at','activation_not_after','captured_ui','request_sha256','preview_receipt_sha256','projection_sha256','report_sha256','review','failures','budgets','captured_code_sha256','controller_code_sha256','controller_changes',...(packed?['transport_sha256']:[])],'approval');
+  if(value.schema_version!==policy.approval_schema||value.scope!=='one-captured-financial-repair'
     ||!stamp(value.approved_at)||!stamp(value.activation_not_after)||Date.parse(value.approved_at)>now
     ||Date.parse(value.activation_not_after)<=Date.parse(value.approved_at)
-    ||Date.parse(value.activation_not_after)>Date.parse('2026-10-07T10:46:54.945Z')
+    ||Date.parse(value.activation_not_after)>Date.parse(packed?policy.activation_not_after:'2026-10-07T10:46:54.945Z')
     ||activation&&now>=Date.parse(value.activation_not_after))throw Error('Missing or expired exact performance approval');
   equal(value.captured_ui,policy.captured_ui,'capture');equal(value.failures,policy.failures,'unaltered failures');equal(value.budgets,policy.budgets,'unchanged budgets');
   if(!['request_sha256','preview_receipt_sha256','projection_sha256','captured_code_sha256','controller_code_sha256'].every(k=>hash(value[k]))||value.report_sha256!==policy.report_sha256)throw Error('Invalid performance approval bindings');
+  if(packed&&value.transport_sha256!==policy.transport_sha256)throw Error('Packed performance approval transport changed');
   exact(value.review,['path','sha256'],'review');
   if(!safePath(value.review.path)||!/^docs\/design-review\/[A-Za-z0-9.-]+\.json$/.test(value.review.path)||value.review.sha256!==policy.review_sha256)throw Error('Performance approval lacks the exact nonperformance review');
   if(!value.controller_changes||Array.isArray(value.controller_changes)||!Object.keys(value.controller_changes).length)throw Error('Missing explicit controller change inventory');
@@ -42,11 +45,13 @@ export function parsePerformanceApproval(value,{activation=false,now=Date.now()}
   }
   return value;
 }
-export function readPerformanceApproval(root=process.cwd(),options) {
+export function readPerformanceApproval(root=process.cwd(),options={}) {
+  const policy=exceptionPolicyForVersion(options.version??1,{allowDisabled:true});
   const path=join(root,policy.approval_path);let stat;
   try{stat=lstatSync(path);}catch(e){if(e.code==='ENOENT')return null;throw e;}
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>32768)throw Error('Invalid performance approval file');
-  return parsePerformanceApproval(read(path),options);
+  const value=parsePerformanceApproval(read(path),options);
+  if(value.schema_version!==policy.approval_schema)throw Error('Performance approval is in the wrong versioned control path');return value;
 }
 export function verifyExceptionCode({approval,captured,current}) {
   parsePerformanceApproval(approval);
@@ -60,23 +65,27 @@ export function verifyExceptionCode({approval,captured,current}) {
   return true;
 }
 export function validateExceptionCandidate(record) {
-  exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256','approval_sha256','controller_code_sha256'],'candidate');
+  const policy=exceptionPolicyFor(record),packed=policy.version===2;
+  exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256','approval_sha256','controller_code_sha256',...(packed?['transport_sha256']:[])],'candidate');
   exact(record.producer,['repository','workflow','head_sha','run_id','run_attempt'],'producer');
-  if(record.schema_version!=='financial-performance-candidate-v1'||record.producer.repository!==repo||record.producer.workflow!==policy.workflow
+  if(record.schema_version!==policy.candidate_schema||record.producer.repository!==repo||record.producer.workflow!==policy.workflow
     ||!sha(record.producer.head_sha)||!positive(record.producer.run_id)||!positive(record.producer.run_attempt)
     ||!['request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256','approval_sha256','controller_code_sha256'].every(k=>hash(record[k])))throw Error('Invalid exception candidate');
+  if(packed&&record.transport_sha256!==policy.transport_sha256)throw Error('Packed exception candidate transport changed');
   equal(record.captured_ui,policy.captured_ui,'sealed capture');return record;
 }
 export function parseExceptionPin(pin) {
+  const policy=exceptionPolicyFor(pin);
   exact(pin,['schema_version','repository','workflow','head_sha','run_id','run_attempt','job_id','artifact_id','artifact_name','artifact_sha256','candidate_record_sha256','projection_sha256','preview_receipt_sha256','approval_sha256'],'candidate pin');
-  if(pin.schema_version!=='financial-performance-candidate-pin-v1'||pin.repository!==repo||pin.workflow!==policy.workflow||!sha(pin.head_sha)
+  if(pin.schema_version!==policy.pin_schema||pin.repository!==repo||pin.workflow!==policy.workflow||!sha(pin.head_sha)
     ||!['run_id','run_attempt','job_id','artifact_id'].every(k=>positive(pin[k]))||pin.artifact_name!==`financial-performance-candidate-${pin.run_id}-${pin.run_attempt}`
     ||!['artifact_sha256','candidate_record_sha256','projection_sha256','preview_receipt_sha256','approval_sha256'].every(k=>hash(pin[k])))throw Error('Invalid exact exception pin');return pin;
 }
 export function parseExceptionUiApproval(value) {
+  const policy=exceptionPolicyFor(value);
   exact(value,['type','sha','ui_digest','controller_sha','approval_sha256','certificate'],'UI approval');
   parseExceptionPin(value.certificate);
-  if(value.type!==exceptionType||value.sha!==policy.captured_ui.sha||value.ui_digest!==policy.captured_ui.digest
+  if(value.type!==policy.type||value.certificate.schema_version!==policy.pin_schema||value.sha!==policy.captured_ui.sha||value.ui_digest!==policy.captured_ui.digest
     ||value.controller_sha!==value.certificate.head_sha||value.approval_sha256!==value.certificate.approval_sha256)throw Error('Invalid exception UI identity');return value;
 }
 function attempt(reference,api) {
@@ -92,7 +101,7 @@ function passedJobs(run,jobs,names){return names.map(name=>{
   if(matches.length!==1||!positive(matches[0].id)||matches[0].run_id!==run.id||matches[0].head_sha!==run.head_sha||matches[0].status!=='completed'||matches[0].conclusion!=='success')throw Error('Exception required job failed or changed');
   return jobIdentity(matches[0],run,name);
 });}
-export function verifyOriginalExceptionCapture(api=githubApi) {
+export function verifyOriginalExceptionCapture(api=githubApi,policy=exceptionPolicyForVersion(1)) {
   const ci=attempt({run_id:policy.ci_run_id,run_attempt:policy.capture_attempt},api),design=attempt({run_id:policy.design_run_id,run_attempt:policy.capture_attempt},api);
   validRun(ci.run,policy.ci_run_id,policy.capture_attempt,workflowPath('ci.yml'),policy.capture_head_sha,'pull_request','success');
   validRun(design.run,policy.design_run_id,policy.capture_attempt,workflowPath('design-acceptance.yml'),policy.capture_head_sha,'pull_request','failure');
@@ -111,6 +120,7 @@ export function verifyOriginalExceptionCapture(api=githubApi) {
   return {ci,design,checks};
 }
 export function verifyExceptionCertificate(pin,api=githubApi,{artifact=false,now=Date.now()}={}) {
+  const policy=exceptionPolicyFor(pin);
   parseExceptionPin(pin);const evidence=attempt(pin,api),{run,jobs}=evidence;
   validRun(run,pin.run_id,pin.run_attempt,policy.workflow,pin.head_sha,'workflow_run','success');
   if(run.head_branch!=='main')throw Error('Exception certificate must be main-only');
@@ -149,18 +159,21 @@ export function remoteProtectedCodeInventory(revision,api=githubApi) {
   return files;
 }
 export function verifyImmutableExceptionController(approval,revision,api=githubApi){
+  const policy=exceptionPolicyFor(approval);
   return verifyExceptionCode({approval,captured:remoteProtectedCodeInventory(policy.captured_ui.sha,api),current:remoteProtectedCodeInventory(revision,api)});
 }
 export function verifyPerformanceUiApproval(receipt,repository=repo,api=githubApi) {
   if(repository!==repo)throw Error('Wrong exception repository');
   const ui=receipt.approval;parseExceptionUiApproval(ui);
+  const policy=exceptionPolicyFor(ui);
   if(receipt.ui_sha!==ui.sha||receipt.ui_digest!==ui.ui_digest)throw Error('Exception approval cannot authorize different UI bytes');
   const content=api(`repos/${repo}/contents/${policy.approval_path}?ref=${ui.controller_sha}`);
   if(content.type!=='file'||content.encoding!=='base64'||typeof content.content!=='string'||content.size>32768)throw Error('Missing immutable exception approval');
   const bytes=Buffer.from(content.content,'base64');if(bytes.length!==content.size||sha256(bytes)!==ui.approval_sha256)throw Error('Immutable exception approval changed');
   const approval=parsePerformanceApproval(JSON.parse(bytes)); // Historical UI approval does not expire with activation/source evidence.
+  if(approval.schema_version!==policy.approval_schema)throw Error('Immutable exception approval version changed');
   verifyImmutableExceptionController(approval,ui.controller_sha,api);
-  const original=verifyOriginalExceptionCapture(api),certificate=verifyExceptionCertificate(ui.certificate,api);
+  const original=verifyOriginalExceptionCapture(api,policy),certificate=verifyExceptionCertificate(ui.certificate,api);
   const source=api(`repos/${repo}/contents/${releasePolicy.request_path}?ref=${ui.controller_sha}`);
   if(source.type!=='file'||source.encoding!=='base64'||typeof source.content!=='string'||source.size>16384)throw Error('Missing immutable exception financial request');
   const requestBytes=Buffer.from(source.content,'base64'),request=JSON.parse(requestBytes);
@@ -170,7 +183,7 @@ export function verifyPerformanceUiApproval(receipt,repository=repo,api=githubAp
   return {approval,request,checks:[...original.checks,...certificate.checks]};
 }
 export function verifyExceptionFinancialScope(financial,verified){
-  if(!financial||financial.ui?.approval?.type!==exceptionType)throw Error('Exception requires its financial release lineage');
+  if(!financial||!isPerformanceException(financial.ui?.approval)||exceptionPolicyFor(financial.ui.approval).version!==exceptionPolicyFor(verified.approval).version)throw Error('Exception requires its financial release lineage');
   if(financial.source_projection?.sha256!==verified.approval.projection_sha256)throw Error('Exception original financial projection changed');
   equal(financial.lineage?.source,verified.request.correction.source,'original financial source');
   equal(financial.lineage?.certificate,verified.request.source_validation.certificate,'original financial certificate');
@@ -179,6 +192,7 @@ export function verifyExceptionFinancialScope(financial,verified){
 }
 export function validateExceptionChecks(ui,checks) {
   parseExceptionUiApproval(ui);
+  const policy=exceptionPolicyFor(ui);
   if(!Array.isArray(checks)||checks.length!==contract.required_ci_jobs.length+1)throw Error('Missing exception consumer checks');
   for(const check of checks)exact(check,['workflow','run_id','run_attempt','job_id','name','head_sha','conclusion'],'consumer check');
   for(const name of [...contract.required_ci_jobs,policy.job]){
@@ -190,14 +204,17 @@ export function validateExceptionChecks(ui,checks) {
 }
 export function verifyPerformanceReview({approval,reportBytes,reviewBytes,screenshots}) {
   parsePerformanceApproval(approval,{activation:true});
+  const policy=exceptionPolicyFor(approval);
   if(sha256(reportBytes)!==policy.report_sha256||sha256(reviewBytes)!==policy.review_sha256)throw Error('Exact nonperformance report/review bytes changed');
-  return validatePerformanceReviewContent({report:JSON.parse(reportBytes),review:JSON.parse(reviewBytes),screenshots});
+  return validatePerformanceReviewContent({report:JSON.parse(reportBytes),review:JSON.parse(reviewBytes),screenshots},policy);
 }
-export function validatePerformanceReviewContent({report,review,screenshots}) {
+export function validatePerformanceReviewContent({report,review,screenshots},policy=exceptionPolicyForVersion(1)) {
   if(report.commit!==policy.captured_ui.sha||review.observed_commit!==report.commit||review.captured_tree!==policy.captured_ui.tree||review.report_json_sha256!==policy.report_sha256
     ||review.performance_exception_approved!==false||review.release_approved!==false||review.objective_nonperformance_failure_count!==0)throw Error('Historical review was changed or relabeled');
   equal(report.failures,policy.failures,'all original failures');equal(review.objective_failures,report.failures,'review failures');
-  if(report.screens?.length!==134||review.screens?.length!==134||new Set(report.screens.map(s=>s.key)).size!==134||new Set(review.screens.map(s=>s.key)).size!==134)throw Error('Incomplete exact screenshot coverage');
+  const count=policy.screenshot_keys?.length??134;
+  if(report.screens?.length!==count||review.screens?.length!==count||new Set(report.screens.map(s=>s.key)).size!==count||new Set(review.screens.map(s=>s.key)).size!==count)throw Error('Incomplete exact screenshot coverage');
+  if(policy.version===2)equal(report.screens.map(s=>s.key).sort(),[...policy.screenshot_keys].sort(),'exact packed screenshot coverage');
   for(const screen of report.screens){
     const rated=review.screens.find(s=>s.key===screen.key);
     if(!rated||rated.screenshot!==screen.screenshot||!safePath(screen.screenshot)||!hash(rated.sha256)||screenshots[screen.screenshot]!==rated.sha256)throw Error('Reviewed screenshot bytes changed');
@@ -208,17 +225,37 @@ export function validatePerformanceReviewContent({report,review,screenshots}) {
   return {report_sha256:policy.report_sha256,review_sha256:policy.review_sha256,screenshots_sha256:digest(screenshots),failure_count:report.failures.length};
 }
 
-export function readExceptionPin(root=process.cwd()) {
+export function readExceptionPin(root=process.cwd(),version=1) {
+  const policy=exceptionPolicyForVersion(version,{allowDisabled:true});
   const path=join(root,policy.pin_path);let stat;try{stat=lstatSync(path);}catch(e){if(e.code==='ENOENT')return null;throw e;}
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw Error('Invalid exception pin file');
-  return parseExceptionPin(read(path));
+  const value=parseExceptionPin(read(path));if(value.schema_version!==policy.pin_schema)throw Error('Exception pin is in the wrong versioned control path');return value;
 }
-export function readExceptionReleaseIntent(root=process.cwd()) {
+export function readExceptionReleaseIntent(root=process.cwd(),version=1) {
+  const policy=exceptionPolicyForVersion(version,{allowDisabled:true});
   const path=join(root,policy.release_intent_path);let stat;try{stat=lstatSync(path);}catch(e){if(e.code==='ENOENT')return null;throw e;}
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw Error('Invalid exception release intent file');
   const value=read(path);exact(value,['schema_version','approval_sha256','candidate_record_sha256','previous_publication_identity'],'release intent');
-  if(value.schema_version!=='financial-performance-release-intent-v1'||!hash(value.approval_sha256)||!hash(value.candidate_record_sha256)
+  exceptionPolicyFor(value);
+  if(value.schema_version!==policy.intent_schema||!hash(value.approval_sha256)||!hash(value.candidate_record_sha256)
     ||!/^\d+\/\d+\/[a-f0-9]{64}\/[a-f0-9]{64}$/.test(value.previous_publication_identity))throw Error('Invalid exact exception release intent');return value;
+}
+// The retained v1 pin cannot suppress a separately approved packed capture.
+// Publication remains explicit, and two intents are always ambiguous.
+export function selectExceptionVersion(root=process.cwd(),{certification=false}={}) {
+  const controls=exceptionVersions.map(version=>({version,approval:readPerformanceApproval(root,{version}),pin:readExceptionPin(root,version),intent:readExceptionReleaseIntent(root,version)}));
+  for(const control of controls)if(!control.approval&&(control.pin||control.intent))throw Error('Exception controls have no approval');
+  const intents=controls.filter(c=>c.intent);
+  if(intents.length>1)throw Error('Multiple performance exception release intents are forbidden');
+  if(certification){const pending=controls.filter(c=>c.approval&&!c.pin);if(pending.length>1)throw Error('Multiple unpinned performance exception approvals are forbidden');if(pending.length)return pending[0].version;}
+  return intents[0]?.version??controls.filter(c=>c.approval).at(-1)?.version??1;
+}
+export function exceptionWorkflowControls(root=process.cwd()) {
+  const version=selectExceptionVersion(root,{certification:true}),approval=readPerformanceApproval(root,{version}),pin=readExceptionPin(root,version);
+  const captures=exceptionVersions.filter(v=>readExceptionPin(root,v)).map(v=>exceptionPolicyForVersion(v).captured_ui.sha);
+  const result={pending:Boolean(approval&&!pin),capture_sha:approval&&!pin?approval.captured_ui.sha:'',pinned_capture_shas:[...new Set(captures)].join(' ')};
+  if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,Object.entries(result).map(([key,value])=>`${key}=${value}\n`).join(''));
+  return result;
 }
 function assertCurrent(root,api=githubApi){
   const revision=git(root,['rev-parse','HEAD']);
@@ -232,12 +269,12 @@ function downloadZip(reference,path){
   }
   if(execFileSync('sha256sum',[path],{encoding:'utf8'}).split(' ')[0]!==reference.sha256)throw Error('Immutable exception input ZIP changed');
 }
-export function verifyRetainedDesignArchive(path){
+export function verifyRetainedDesignArchive(path,policy=exceptionPolicyForVersion(1)){
   const stat=lstatSync(path);
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size<=0||stat.size>8589934592
     ||execFileSync('sha256sum',[path],{encoding:'utf8'}).split(' ')[0]!==policy.design_artifact.sha256)throw Error('Retained original Design ZIP changed');
 }
-function captureArtifacts(original,api=githubApi){
+function captureArtifacts(original,api=githubApi,policy=exceptionPolicyForVersion(1)){
   const artifacts=api(`repos/${repo}/actions/runs/${policy.design_run_id}/artifacts?per_page=100`,true).flatMap(p=>p.artifacts);
   const job=original.design.jobs.find(j=>j.id===policy.design_job_id);
   for(const expected of [policy.diagnostic,policy.design_artifact]){
@@ -250,16 +287,16 @@ function captureArtifacts(original,api=githubApi){
 }
 export async function prepareExceptionCertification(root=process.cwd(),api=githubApi){
   const started=performance.now(),phase=name=>console.log(JSON.stringify({phase:name,elapsed_ms:Math.round(performance.now()-started)}));
-  const approval=readPerformanceApproval(root);
+  const version=selectExceptionVersion(root,{certification:true}),policy=exceptionPolicyForVersion(version),approval=readPerformanceApproval(root,{version});
   if(!approval){
-    if(readExceptionPin(root)||readExceptionReleaseIntent(root))throw Error('Exception controls have no approval');if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'candidate=false\n');return null;}
+    if(readExceptionPin(root,version)||readExceptionReleaseIntent(root,version))throw Error('Exception controls have no approval');if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'candidate=false\n');return null;}
   const revision=assertCurrent(root,api),event=read(process.env.GITHUB_EVENT_PATH);
   if(process.env.GITHUB_SHA!==revision)throw Error('Certifier workflow head differs from the current checkout');
   if(process.env.GITHUB_EVENT_NAME!=='workflow_run'||!sameRepository(event.workflow_run,repo)||event.workflow_run.head_sha!==revision||event.workflow_run.path!==workflowPath('ci.yml')
     ||event.workflow_run.head_branch!=='main'||event.workflow_run.event!=='push'||event.workflow_run.status!=='completed'||event.workflow_run.conclusion!=='success')throw Error('Exception certification needs exact current-main successful CI completion');
   const checks=verifyCorrectionChecks(repo,revision,api);
   if(checks.some(c=>c.run_id!==event.workflow_run.id||c.run_attempt!==event.workflow_run.run_attempt))throw Error('Stale CI completion cannot certify an exception');
-  const approvalBytes=readFileSync(join(root,policy.approval_path)),pin=readExceptionPin(root);
+  const approvalBytes=readFileSync(join(root,policy.approval_path)),pin=readExceptionPin(root,version);
   if(pin){if(pin.approval_sha256!==sha256(approvalBytes))throw Error('Existing exception pin belongs to a different approval');if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'candidate=false\n');return null;}
   parsePerformanceApproval(approval,{activation:true});
   const {protectedCodeInventory,readFinancialReleaseRequest}=await import('./financial-release-activation.mjs');
@@ -268,7 +305,7 @@ export async function prepareExceptionCertification(root=process.cwd(),api=githu
   if(prior.some(r=>sameRepository(r,repo)&&r.head_sha===revision&&r.path===policy.workflow&&r.head_branch==='main'&&r.event==='workflow_run'&&r.status==='completed'&&r.conclusion==='success')){
     if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'candidate=false\n');return null;
   }
-  const original=verifyOriginalExceptionCapture(api);captureArtifacts(original,api);
+  const original=verifyOriginalExceptionCapture(api,policy);captureArtifacts(original,api,policy);
   const request=readFinancialReleaseRequest(root);
   if(!request||digest(request)!==approval.request_sha256)throw Error('Exception release request changed');
   const live=await livePublication({api});
@@ -282,11 +319,12 @@ export async function prepareExceptionCertification(root=process.cwd(),api=githu
   execFileSync('python3',[extractor,'diagnostic',join(inputs,'diagnostic.zip'),candidate],{stdio:'pipe'});
   execFileSync('python3',[extractor,'design',join(inputs,'design.zip'),join(candidate,'design-evidence')],{stdio:'pipe'});
   cpSync(join(inputs,'design.zip'),join(candidate,'design-evidence/original-design-artifact.zip'));
-  verifyRetainedDesignArchive(join(candidate,'design-evidence/original-design-artifact.zip'));
+  verifyRetainedDesignArchive(join(candidate,'design-evidence/original-design-artifact.zip'),policy);
   const metadata=read(join(candidate,'diagnostic-metadata.json'));
   equal(metadata.captured_ui,policy.captured_ui,'diagnostic capture');
   equal(metadata.producer,{repository:repo,head_sha:policy.captured_ui.sha,run_id:String(policy.design_run_id),run_attempt:String(policy.capture_attempt)},'diagnostic executed producer');
   if(metadata.workflow!==workflowPath('design-acceptance.yml')||metadata.design_status!=='failure'||metadata.preview_receipt_sha256!==approval.preview_receipt_sha256||metadata.projection_sha256!==approval.projection_sha256)throw Error('Original diagnostic metadata changed');
+  if(version===2&&sha256(readFileSync(join(candidate,'transport.json')))!==approval.transport_sha256)throw Error('Original packed diagnostic transport changed');
   if(sha256(readFileSync(join(candidate,'design-evidence/design-input-provenance.json')))!==approval.preview_receipt_sha256)throw Error('Design measured different financial input');
   cpSync(join(root,approval.review.path),join(candidate,'review.json'));
   const review=verifyPerformanceReview({approval,reportBytes:readFileSync(join(candidate,'design-evidence/report.json')),reviewBytes:readFileSync(join(candidate,'review.json')),screenshots:read(join(candidate,'design-evidence/screenshots.json'))});
@@ -305,15 +343,17 @@ export async function prepareExceptionCertification(root=process.cwd(),api=githu
   const {extractCandidateTar}=await import('./financial-release-activation.mjs');
   extractCandidateTar(join(candidate,'original-predecessor/artifact.tar'),join(candidate,'predecessor'));rmSync(join(candidate,'original-predecessor/artifact.tar'));
   const preview=read(join(candidate,'preview-receipt.json')),frontend=join(capturedRoot,'frontend'),publicRoot=join(frontend,'public');
+  const {canonicalPublication,removeCanonical}=await import('./static-transport-publication.mjs');
+  const priorPhysical=join(candidate,'predecessor'),priorLogical=version===2?await canonicalPublication({root:priorPhysical,frontendRoot:frontend,publication:live.receipt,restore:join(candidate,'reconstructed-predecessor')}):priorPhysical;
   rmSync(join(publicRoot,'static-data'),{recursive:true,force:true});mkdirSync(publicRoot,{recursive:true});
-  cpSync(join(candidate,'predecessor/static-data'),join(publicRoot,'static-data'),{recursive:true});
-  for(const file of dataFiles)cpSync(join(candidate,'predecessor',file),join(publicRoot,file));
+  try{cpSync(join(priorLogical,'static-data'),join(publicRoot,'static-data'),{recursive:true});
+  for(const file of dataFiles)cpSync(join(priorLogical,file),join(publicRoot,file));}finally{removeCanonical(priorPhysical,priorLogical);}
   phase('reconstruct exact original baseline');
   execFileSync(process.execPath,['tools/export-research.mjs'],{cwd:frontend,stdio:'pipe',env:{...process.env,FINANCIAL_EVALUATED_AT:preview.financial.evaluated_at}});
   const baseline=join(candidate,'baseline');mkdirSync(baseline);renameSync(join(publicRoot,'static-data'),join(baseline,'static-data'));
   for(const file of dataFiles)renameSync(join(publicRoot,file),join(baseline,file));
   if(inventoryDigest(dataInventory(baseline))!==preview.bundles.baseline_data_sha256)throw Error('Reconstructed original baseline changed');
-  write(join(out,'state.json'),{candidate,capturedRoot,request,controllerSha:revision,checks,approval_sha256:sha256(approvalBytes),live});
+  write(join(out,'state.json'),{candidate,capturedRoot,request,controllerSha:revision,checks,approval_sha256:sha256(approvalBytes),live,...(version===2?{exception_version:version}:{})});
   rmSync(inputs,{recursive:true,force:true});
   phase('baseline hash and original inputs verified');
   if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,`candidate=true\npath=${out}\n`);
@@ -322,33 +362,41 @@ export async function prepareExceptionCertification(root=process.cwd(),api=githu
 export async function sealExceptionCertification(root=process.cwd(),api=githubApi){
   const started=performance.now(),phase=name=>console.log(JSON.stringify({phase:name,elapsed_ms:Math.round(performance.now()-started)}));
   const out=join(process.env.RUNNER_TEMP||'/tmp','financial-performance-certification'),state=read(join(out,'state.json')),candidate=state.candidate;
+  const version=state.exception_version??1,policy=exceptionPolicyForVersion(version);
   if(assertCurrent(root,api)!==state.controllerSha)throw Error('Certification controller changed');
-  const approval=readPerformanceApproval(root,{activation:true});
+  const approval=readPerformanceApproval(root,{activation:true,version});
   if(sha256(readFileSync(join(root,policy.approval_path)))!==state.approval_sha256)throw Error('Certification approval changed');
   equal(verifyCorrectionChecks(repo,state.controllerSha,api),state.checks,'controller CI');
   const {completeInventory,protectedCodeInventory,verifyCandidatePayload}=await import('./financial-release-activation.mjs');
   verifyExceptionCode({approval,captured:protectedCodeInventory(root,policy.captured_ui.sha),current:protectedCodeInventory(root,state.controllerSha)});
   const live=await livePublication({api});if(live.identity!==state.live.identity)throw Error('Certification predecessor changed');
-  verifyOriginalExceptionCapture(api);
-  const record=validateExceptionCandidate({schema_version:'financial-performance-candidate-v1',producer:{repository:repo,workflow:policy.workflow,head_sha:state.controllerSha,run_id:Number(process.env.GITHUB_RUN_ID),run_attempt:Number(process.env.GITHUB_RUN_ATTEMPT)},
+  verifyOriginalExceptionCapture(api,policy);
+  const record=validateExceptionCandidate({schema_version:policy.candidate_schema,...(version===2?{transport_sha256:sha256(readFileSync(join(candidate,'transport.json')))}:{}),producer:{repository:repo,workflow:policy.workflow,head_sha:state.controllerSha,run_id:Number(process.env.GITHUB_RUN_ID),run_attempt:Number(process.env.GITHUB_RUN_ATTEMPT)},
     captured_ui:policy.captured_ui,request_sha256:approval.request_sha256,preview_receipt_sha256:approval.preview_receipt_sha256,
     corrected_inventory_sha256:inventoryDigest(completeInventory(join(candidate,'corrected'))),protected_code_sha256:approval.captured_code_sha256,
     approval_sha256:state.approval_sha256,controller_code_sha256:approval.controller_code_sha256});
-  verifyRetainedDesignArchive(join(candidate,'design-evidence/original-design-artifact.zip'));
+  verifyRetainedDesignArchive(join(candidate,'design-evidence/original-design-artifact.zip'),policy);
   phase('recheck complete financial, predecessor, expiry and price proofs');
   const checked=await verifyCandidatePayload({candidate,request:state.request,record},live,state.capturedRoot,api);
   if(checked.receipt.financial.projection_sha256!==approval.projection_sha256)throw Error('Exception projection changed');
   phase('financial proofs passed; preserve exact tested bytes');
   write(join(candidate,'candidate.json'),record);
-  const members=['candidate.json','release-request.json','protected-code.json','preview-receipt.json','verification.json','request.json','evidence.json','target-base.json','projection','corrected','baseline','original-source','original-certification','original-predecessor','performance-approval.json','controller-code.json','diagnostic-metadata.json','design-evidence','review.json','nonperformance-verification.json'];
-  for(const member of members){const path=join(candidate,member),stat=lstatSync(path);if(stat.isDirectory())completeInventory(path);else if(!stat.isFile()||stat.isSymbolicLink())throw Error('Special exception audit file');}
   phase('archive certified candidate');
-  execFileSync('tar',['-cf',join(out,'candidate.tar'),'-C',candidate,...members],{stdio:'pipe'});
+  await archiveExceptionCandidate(candidate,join(out,'candidate.tar'),record);
   phase('artifact ready; no publication performed');
   return record;
 }
+export async function archiveExceptionCandidate(candidate,archive,record){
+  validateExceptionCandidate(record);
+  const {completeInventory}=await import('./financial-release-activation.mjs');
+  const members=['candidate.json','release-request.json','protected-code.json','preview-receipt.json','verification.json','request.json','evidence.json','target-base.json','projection','corrected','baseline','original-source','original-certification','original-predecessor','performance-approval.json','controller-code.json','diagnostic-metadata.json','design-evidence','review.json','nonperformance-verification.json'];
+  if(isPackedCandidate(record))members.push('transport.json');
+  for(const member of members){const path=join(candidate,member),stat=lstatSync(path);if(stat.isDirectory())completeInventory(path);else if(!stat.isFile()||stat.isSymbolicLink())throw Error('Special exception audit file');}
+  if(isPackedCandidate(record)&&sha256(readFileSync(join(candidate,'transport.json')))!==record.transport_sha256)throw Error('Packed exception archive transport changed');
+  execFileSync('tar',['-cf',archive,'-C',candidate,...members],{stdio:'pipe'});
+}
 export async function selectExceptionActivation({live,request,mainSha,root=process.cwd(),api=githubApi,directory=join(process.env.RUNNER_TEMP||'/tmp','verified-publication/exception')}){
-  const approval=readPerformanceApproval(root,{activation:true}),pin=readExceptionPin(root),intent=readExceptionReleaseIntent(root);
+  const version=selectExceptionVersion(root),policy=exceptionPolicyForVersion(version),approval=readPerformanceApproval(root,{activation:true,version}),pin=readExceptionPin(root,version),intent=readExceptionReleaseIntent(root,version);
   if(!releasePolicy.activation_enabled)throw Error('Financial activation is disabled');
   if(!approval||!pin||!intent)throw Error('Exact exception activation is not enabled');
   const approvalBytes=readFileSync(join(root,policy.approval_path));
@@ -362,7 +410,7 @@ export async function selectExceptionActivation({live,request,mainSha,root=proce
   const recordBytes=readFileSync(join(candidate,'candidate.json')),record=validateExceptionCandidate(JSON.parse(recordBytes));
   if(sha256(recordBytes)!==pin.candidate_record_sha256||record.approval_sha256!==pin.approval_sha256||record.preview_receipt_sha256!==pin.preview_receipt_sha256||pin.projection_sha256!==approval.projection_sha256)throw Error('Exception candidate pin changed');
   equal(record.producer,{repository:repo,workflow:policy.workflow,head_sha:pin.head_sha,run_id:pin.run_id,run_attempt:pin.run_attempt},'certificate producer');
-  const uiApproval={type:exceptionType,sha:policy.captured_ui.sha,ui_digest:policy.captured_ui.digest,controller_sha:pin.head_sha,approval_sha256:pin.approval_sha256,certificate:pin};
+  const uiApproval={type:policy.type,sha:policy.captured_ui.sha,ui_digest:policy.captured_ui.digest,controller_sha:pin.head_sha,approval_sha256:pin.approval_sha256,certificate:pin};
   const consumer=verifyPerformanceUiApproval({ui_sha:policy.captured_ui.sha,ui_digest:policy.captured_ui.digest,approval:uiApproval},repo,api);
   const capturedRoot=join(directory,'captured-source');execFileSync('git',['clone','--shared','--no-checkout',root,capturedRoot],{stdio:'pipe'});git(capturedRoot,['checkout','--detach',policy.captured_ui.sha]);
   const reference={repository:repo,workflow:policy.workflow,head_sha:pin.head_sha,run_id:pin.run_id,run_attempt:pin.run_attempt,job_id:pin.job_id,artifact_id:pin.artifact_id,artifact_name:pin.artifact_name,artifact_sha256:pin.artifact_sha256,candidate_receipt_sha256:pin.preview_receipt_sha256,record_sha256:pin.candidate_record_sha256};
@@ -370,7 +418,9 @@ export async function selectExceptionActivation({live,request,mainSha,root=proce
   await verifyExceptionActivation(state,live,root,api);return state;
 }
 export async function verifyExceptionActivation(state,live,root=process.cwd(),api=githubApi){
-  const approval=readPerformanceApproval(root,{activation:true}),pin=readExceptionPin(root),intent=readExceptionReleaseIntent(root);
+  const policy=exceptionPolicyFor(state.record),version=policy.version;
+  if(selectExceptionVersion(root)!==version)throw Error('Active performance exception version changed');
+  const approval=readPerformanceApproval(root,{activation:true,version}),pin=readExceptionPin(root,version),intent=readExceptionReleaseIntent(root,version);
   if(!releasePolicy.activation_enabled)throw Error('Financial activation is disabled');
   if(!approval||!pin||!intent||intent.previous_publication_identity!==live.identity||intent.approval_sha256!==state.pin.approval_sha256||intent.candidate_record_sha256!==state.pin.candidate_record_sha256)throw Error('Exception activation intent changed');
   equal(pin,state.pin,'active pin');equal(read(join(state.candidate,'candidate.json')),state.record,'sealed record');
@@ -386,7 +436,7 @@ export async function verifyExceptionActivation(state,live,root=process.cwd(),ap
   equal(verifyCorrectionChecks(repo,state.mainSha,api),state.checks,'activation controller checks');
   const consumer=verifyPerformanceUiApproval({ui_sha:policy.captured_ui.sha,ui_digest:policy.captured_ui.digest,approval:state.approval},repo,api);
   equal(consumer.checks,state.consumerChecks,'activation consumer checks');
-  verifyRetainedDesignArchive(join(state.candidate,'design-evidence/original-design-artifact.zip'));
+  verifyRetainedDesignArchive(join(state.candidate,'design-evidence/original-design-artifact.zip'),policy);
   verifyPerformanceReview({approval,reportBytes:readFileSync(join(state.candidate,'design-evidence/report.json')),reviewBytes:readFileSync(join(state.candidate,'review.json')),screenshots:read(join(state.candidate,'design-evidence/screenshots.json'))});
   return verifyCandidatePayload(state,live,state.capturedRoot,api);
 }
@@ -394,6 +444,6 @@ export async function verifyExceptionActivation(state,live,root=process.cwd(),ap
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   let completed=false;process.once('beforeExit',()=>{if(!completed){console.error('Performance certification did not complete');process.exitCode=1;}});
   const command=process.argv[2];
-  Promise.resolve().then(()=>command==='prepare'?prepareExceptionCertification():command==='seal'?sealExceptionCertification():Promise.reject(Error('Expected prepare or seal')))
+  Promise.resolve().then(()=>command==='prepare'?prepareExceptionCertification():command==='seal'?sealExceptionCertification():command==='controls'?exceptionWorkflowControls():Promise.reject(Error('Expected prepare, seal or controls')))
     .then(()=>{completed=true;},error=>{completed=true;console.error(error.stack||error);process.exitCode=1;});
 }

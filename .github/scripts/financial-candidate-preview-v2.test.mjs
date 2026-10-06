@@ -117,6 +117,11 @@ test('new packed financial candidate seals an explicit no-authority preview with
   assert.equal(prepared.corrected.root.bindings.candidateId,sha256(originalPreview));
   const verified=await verifyCandidateTransport(controllerRoot,root,{schema_version:'financial-release-candidate-v2',transport_sha256:sha256(readFileSync(join(root,'transport.json')))});
   assert.equal(verified.publication.publication_authority,'none');assert.throws(()=>validateReceipt(verified.publication));
+  const restored=join(root,'verified-logical'),decoded=await verifyCandidateTransport(controllerRoot,root,null,{restore:restored});
+  assert.equal(decoded.logicalRoot,restored);
+  assert.equal(inventoryDigest(dataInventory(restored)),preview.bundles.corrected_data_sha256);
+  assert.deepEqual(readFileSync(join(restored,'static-data/markets/us/charts/OWNED.json')),readFileSync(join(root,'corrected-logical/static-data/markets/us/charts/OWNED.json')));
+  await assert.rejects(()=>verifyCandidateTransport(controllerRoot,root,null,{restore:restored}),/destination must be new/);
   await assert.rejects(()=>verifyCandidateTransport(controllerRoot,root,{schema_version:'financial-release-candidate-v1'}),/own v2 capture/);
   await assert.rejects(()=>prepareCandidateTransport(controllerRoot,root),/exactly once/);
   const cli=spawnSync(process.execPath,[join(controllerRoot,'.github/scripts/financial-release-activation.mjs'),'verify-candidate-transport',root],{cwd:controllerRoot,encoding:'utf8',timeout:15000});
@@ -126,4 +131,5 @@ test('new packed financial candidate seals an explicit no-authority preview with
   assert.equal(report.logical_data_inventory_sha256,preview.bundles.corrected_data_sha256);
   write(join(root,'transport.json'),JSON.stringify({...prepared,bootstrap_sha256:H}));
   await assert.rejects(()=>verifyCandidateTransport(controllerRoot,root),/capture binding changed/);
+  await assert.rejects(()=>verifyCandidateTransport(controllerRoot,root,null,{restore:join(root,'rejected-logical')}),/capture binding changed/);
 });

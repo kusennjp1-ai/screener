@@ -2,6 +2,7 @@ import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import ResearchHero from './ResearchHero';
+import ResearchFreshnessNotice from './ResearchFreshnessNotice';
 import { readFileSync } from 'node:fs';
 import registry from '../../../contracts/financial_instrument_applicability_v1.json';
 import { CHANGE_LABELS } from '../candidateHistory';
@@ -24,6 +25,19 @@ it('persists the compact hero choice across mounts and restores its content',()=
  fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
  expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
  expect(localStorage.getItem('research-hero-collapsed')).toBe('false');
+});
+it('keeps the complete freshness caution through collapsing and expanding the overview',()=>{
+ render(<ResearchHero {...props} freshnessNotice={<ResearchFreshnessNotice date="2000-01-03" freshness={{state:'old',days:9773}}/>}/>);
+ const expectCaution=()=>{
+  expect(screen.getAllByRole('alert',{name:'分析データの鮮度'})).toHaveLength(1);
+  expect(screen.getByRole('alert')).toHaveTextContent('2000-01-03（米国東部で9773暦日前）');
+  expect(screen.getByRole('alert')).toHaveTextContent('更新日時と価格の基準日は別です。');
+ };
+ expectCaution();
+ fireEvent.click(screen.getByRole('button',{name:'概況をたたむ'}));
+ expectCaution();
+ fireEvent.click(screen.getByRole('button',{name:'概況を展開'}));
+ expectCaution();
 });
 it('keeps collapse usable when storage reads and writes are denied',()=>{
  vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new DOMException('Denied','SecurityError');});
