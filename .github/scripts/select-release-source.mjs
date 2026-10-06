@@ -495,6 +495,11 @@ function exportMetadata() {
     artifact_name: `static-site-data-${runId}-${attempt}`, manifest_json: bytes.toString('utf8'), manifest_sha256: sha256(bytes) }));
 }
 async function runCommand(command) {
+  // Temporary publication-wide hold while the hosted payload exceeds Pages' 1 GB limit.
+  // Replace this hold only with a tested physical-payload gate; collection/design remain available.
+  const capacityHold = 'Pages publication paused: resolve the documented 1 GB hosted-site limit';
+  if (command === 'plan') { output({ publish: false }); console.log(capacityHold); return; }
+  if (command === 'recheck') throw Error(capacityHold);
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); materialize(readState().source, resolve('frontend/public')); }
   else if (command === 'restore') { const state = readState(); if(state.activation)restoreActivation(state);else{materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
