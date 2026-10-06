@@ -9,8 +9,8 @@ const names = { minervini: 'ミネルヴィニ', minervini2: 'ミネルヴィニ
 export default function CandidatePerformance({ entry }) {
   const [open, setOpen] = useState(false), [method, setMethod] = useState('minervini'), [cohort, setCohort] = useState('all');
   const ref = entry?.assets?.candidate_performance;
-  const query = useQuery({ queryKey: ['candidate-performance', ref?.path], enabled: open && Boolean(ref?.path), staleTime: Infinity,
-    queryFn: async () => { const data = await fetchStaticJson(ref.path, { sha256: ref.sha256, worker: true }); if (data.as_of !== entry.as_of_date) throw Error('Performance date mismatch'); return data; } });
+  const query = useQuery({ queryKey: ['candidate-performance', ref?.path, ref?.sha256, entry?.as_of_date], enabled: open && Boolean(ref?.path), staleTime: Infinity, placeholderData: () => undefined,
+    queryFn: async () => { const data = await fetchStaticJson(ref.path, { sha256: ref.sha256, worker: true, ...(entry?.publication && { publication: entry.publication }) }); if (data.as_of !== entry.as_of_date) throw Error('Performance date mismatch'); return data; } });
   const data = query.data, summary = cohort === 'all' ? data?.summary?.[method] : data?.cohorts.find(item => item.as_of === cohort)?.methods?.[method];
   return <Box component="details" className="research-performance" onToggle={event => setOpen(event.currentTarget.open)} sx={{ mt: 2, border: '1px solid', borderColor: 'divider', borderRadius: '16px', p: 2, '& > summary': { cursor: 'pointer', minHeight: 44, fontSize: 14, fontWeight: 700 }, '& select': { minHeight: 44, maxWidth: '100%', bgcolor: 'background.paper', color: 'text.primary', border: '1px solid', borderColor: 'divider', borderRadius: '8px', fontSize: 13, p: 1 } }}>
     <summary>過去の通過銘柄を検証する · 5 / 20 / 60営業日</summary>

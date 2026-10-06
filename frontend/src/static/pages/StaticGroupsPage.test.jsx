@@ -1,3 +1,4 @@
+import { prepareLegacyStaticFetch } from '../../test/legacyStaticFetch';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 import StaticGroupsPage from './StaticGroupsPage';
 
 const renderPage = () => {
+  prepareLegacyStaticFetch(globalThis.fetch);
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {

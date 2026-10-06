@@ -1,3 +1,4 @@
+import { prepareLegacyStaticFetch } from './test/legacyStaticFetch';
 import { render, screen, waitFor, cleanup, act, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -300,6 +301,7 @@ const renderStaticAppAtHash = async (hash) => {
   vi.stubEnv('VITE_STATIC_SITE', 'true');
   vi.resetModules();
   installFetchMock();
+  prepareLegacyStaticFetch(globalThis.fetch);
   const { default: App } = await import('./App');
   await act(async () => {
     window.location.hash = hash;
@@ -352,7 +354,7 @@ describe('App static mode', () => {
     expect(requestedUrls.length).toBeGreaterThan(0);
     // Every static-mode request must be a supported static source, never /api
     // or the retired historical performance asset.
-    const isStaticSource = (url) => url.includes('/static-data/') || url.includes('ibd-reference.json');
+    const isStaticSource = (url) => url.includes('/static-data/') || url.endsWith('/publication.json') || url.includes('ibd-reference.json');
     expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
   }, 30000);
 

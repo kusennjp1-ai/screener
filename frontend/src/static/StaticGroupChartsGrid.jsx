@@ -1,3 +1,4 @@
+import { publicationQueryIdentity } from './staticPublication';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -40,11 +41,12 @@ function StatBadge({ value, label, bgcolor }) {
   );
 }
 
-function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
+function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication }) {
   const { data: payload, isLoading, isError } = useQuery({
-    queryKey: staticChartKeys.payload(symbol, entry?.path),
-    queryFn: () => fetchStaticChartPayload(entry.path),
+    queryKey: [...staticChartKeys.payload(symbol, entry?.path), ...(publication ? [publicationQueryIdentity(publication)] : [])],
+    queryFn: () => fetchStaticChartPayload(entry.path, { publication }),
     enabled: Boolean(entry?.path),
+    placeholderData: () => undefined,
     staleTime: Infinity,
     gcTime: Infinity,
   });
@@ -188,7 +190,7 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect }) {
  * @param {string[]} props.symbols - Constituent ticker symbols
  * @param {Object|null} props.chartIndex - Static chart index `{ symbols: [{ symbol, path }, ...] }`
  */
-function StaticGroupChartsGrid({ symbols = [], chartIndex = null }) {
+function StaticGroupChartsGrid({ symbols = [], chartIndex = null, publication }) {
   const [selectedSymbol, setSelectedSymbol] = useState(null);
 
   const entryBySymbol = useMemo(() => {
@@ -271,6 +273,7 @@ function StaticGroupChartsGrid({ symbols = [], chartIndex = null }) {
               <StaticGroupChartCard
                 symbol={sym}
                 entry={entry}
+                publication={publication}
                 isSelected={selectedSymbol === sym}
                 onSelect={setSelectedSymbol}
               />

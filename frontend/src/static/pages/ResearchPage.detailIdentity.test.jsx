@@ -65,7 +65,7 @@ it('withholds same-symbol/same-date financial detail during a publication replac
   expect(continuity()).toHaveAttribute('data-source', expect.stringContaining('old source'));
 
   publish('new');view.rerender(tree());
-  await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'new')));
+  await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'new'), { generation: 'new', publication: undefined }));
   expect(continuity()).toHaveAttribute('data-state', 'unknown');
   expect(continuity()).not.toHaveAttribute('data-source', expect.stringContaining('old source'));
   await act(async () => newer.resolve(response('A', 'new source')));
@@ -77,10 +77,10 @@ it('ignores delayed A and B responses after A → B → A moves to a new generat
   const oldA = pending(), oldB = pending(), newA = pending();
   data.fetch.mockImplementation(request => ({ [path('A', 'old')]: oldA.promise, [path('B', 'old')]: oldB.promise, [path('A', 'new')]: newA.promise })[request]);
   const view = render(tree());
-  select('A');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'old')));
-  select('B');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('B', 'old')));
+  select('A');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'old'), { generation: 'old', publication: undefined }));
+  select('B');load();await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('B', 'old'), { generation: 'old', publication: undefined }));
   publish('new');select('A');load();view.rerender(tree());
-  await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'new')));
+  await waitFor(() => expect(data.fetch).toHaveBeenCalledWith(path('A', 'new'), { generation: 'new', publication: undefined }));
   await act(async () => { oldA.resolve(response('A', 'late old A')); oldB.resolve(response('B', 'late old B')); });
   expect(screen.getByRole('heading', { name: 'A' })).toBeInTheDocument();
   expect(continuity()).toHaveAttribute('data-state', 'unknown');

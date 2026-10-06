@@ -8,9 +8,10 @@ import stat
 import sys
 import tarfile
 import zipfile
+from financial_diagnostic_transport import preview_publication, verify_candidate_transport
 
 MEMBERS = {'corrected', 'projection', 'preview-receipt.json', 'release-request.json',
-           'protected-code.json', 'verification.json', 'request.json', 'evidence.json', 'target-base.json'}
+           'protected-code.json', 'verification.json', 'request.json', 'evidence.json', 'target-base.json', 'transport.json'}
 AUTHORITY = {'candidate.json', 'captured-candidate.json', 'activation-candidate.json', 'publication.json'}
 MAX_BYTES = 8589934592
 MAX_FILES = 200000
@@ -68,7 +69,11 @@ def extract_diagnostic(zip_path, destination, maximum_bytes=MAX_BYTES, maximum_f
                     continue
                 require(name.startswith('review-only/'), 'Unexpected diagnostic root')
                 relative = name[len('review-only/'):]
-                require(relative.split('/')[0] in MEMBERS and Path(relative).name not in AUTHORITY, 'Unexpected diagnostic payload')
+                require(relative.split('/')[0] in MEMBERS and
+                        (Path(relative).name not in AUTHORITY or relative == 'corrected/publication.json'),
+                        'Unexpected diagnostic payload')
+                if relative.split('/')[0] not in ('corrected', 'projection'):
+                    require('/' not in relative and member.isfile(), 'Diagnostic record must be a top-level file')
                 path = destination / relative
                 if member.isdir():
                     path.mkdir(parents=True, exist_ok=True)
@@ -77,10 +82,21 @@ def extract_diagnostic(zip_path, destination, maximum_bytes=MAX_BYTES, maximum_f
                     with t.extractfile(member) as source:
                         files[relative] = hashed_copy(source, path, member.size)
                     require(files[relative]['bytes'] == member.size, 'Truncated diagnostic member')
+                    if relative == 'corrected/publication.json':
+                        preview_publication(destination)
         nested.unlink()
     require(metadata is not None and metadata.get('files') == files, 'Diagnostic inventory differs from original metadata')
     require(metadata.get('status') == 'UNAPPROVED' and metadata.get('publication_authority') == 'none' and metadata.get('design_accepted') is False and metadata.get('activation_eligible') is False, 'Diagnostic claims authority')
     require(metadata.get('producer') == sidecar.get('producer') and metadata.get('preview_receipt_sha256') == sidecar.get('preview_receipt_sha256'), 'Diagnostic sidecar disagreement')
+    transport = verify_candidate_transport(destination)
+    if transport is not None:
+        require(metadata.get('transport_verification') == transport, 'Diagnostic transport verification changed')
+        corrected = {name.removeprefix('corrected/'): value['sha256'] for name, value in files.items() if name.startswith('corrected/')}
+        digest = hashlib.sha256(json.dumps(corrected, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        require(digest == transport['physical_inventory_sha256'], 'Diagnostic physical inventory changed')
+    else:
+        require('transport_verification' not in metadata and 'transport.json' not in files,
+                'Transport diagnostic lacks its preview bootstrap')
     return metadata
 
 def read_design(zip_path, destination):

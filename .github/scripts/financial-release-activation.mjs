@@ -1,3 +1,4 @@
+import {canonicalPublication,removeCanonical,transportCapable,packPublication,previewPublication,validateTransportPreview,verifyTransportPublication,assertTransportDeclaration} from './static-transport-publication.mjs';
 import {exceptionType, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation, performanceExceptionPolicy} from './financial-performance-exception.mjs';
 // Publication authority requires current-main CI and immutable tested artifacts,
 // through strict Design gates or the separate exact performance exception.
@@ -79,10 +80,11 @@ export function completeInventory(root) {
 }
 export function validateCandidateRecord(record) {
   if(record?.schema_version==='financial-performance-candidate-v1')return validateExceptionCandidate(record);
-  exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256'],'candidate record');
+  const packed=record?.schema_version==='financial-release-candidate-v2';
+  exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256',...(packed?['transport_sha256']:[])],'candidate record');
   exact(record.producer,['repository','workflow','head_sha','run_id','run_attempt'],'producer');
   exact(record.captured_ui,['sha','tree','digest'],'captured UI');
-  if(record.schema_version!=='financial-release-candidate-v1'||record.producer.repository!==bootstrap.repository||record.producer.workflow!==policy.candidate_workflow
+  if(!['financial-release-candidate-v1','financial-release-candidate-v2'].includes(record.schema_version)||packed&&!hash(record.transport_sha256)||record.producer.repository!==bootstrap.repository||record.producer.workflow!==policy.candidate_workflow
     ||!sha(record.producer.head_sha)||!positive(record.producer.run_id)||!positive(record.producer.run_attempt)||!sha(record.captured_ui.sha)||!sha(record.captured_ui.tree)
     ||!['request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256'].every(key=>hash(record[key]))||!hash(record.captured_ui.digest))throw Error('Invalid financial candidate identity');
   return record;
@@ -206,6 +208,7 @@ export async function prepareDesignCandidate(root=process.cwd()) {
     predecessorZip:join(inputs,'predecessor/artifact.zip'),sourceZip:join(inputs,'source.zip'),certificateZip:join(inputs,'certificate.zip'),output:join(out,'prepared'),python:process.env.FINANCIAL_REPLAY_PYTHON||process.env.FINANCIAL_CORRECTION_PYTHON||'python3'});
   write(join(out,'prepared/release-request.json'),request);
   write(join(out,'prepared/protected-code.json'),protectedCodeInventory(root,revision));
+  await prepareCandidateTransport(root,join(out,'prepared'));
   rmSync(inputs,{recursive:true,force:true});
   rmSync(join(out,'prepared/candidate-source'),{recursive:true,force:true});
   rmSync(join(out,'prepared/candidate-source.tar'),{force:true});
@@ -243,15 +246,61 @@ export function restorePinnedCandidateArchive({pin,evidence,directory,candidate}
   return record;
 }
 
+function candidateTransportLineage(receipt) {
+  if(receipt.schema_version!==CERTIFIED_PREVIEW_SCHEMA)throw Error('Packed financial capture requires a certified preview');
+  return sourceLineage({source:receipt.source,certificate:receipt.source_validation.certificate.reference,sourceProjectionSha256:receipt.financial.projection_sha256,
+    receiptInventorySha256:receipt.financial.receipt_inventory_sha256,projectionPolicy:receipt.destination_projection.policy}).id;
+}
+
+export async function prepareCandidateTransport(root=process.cwd(),candidate=process.env.FINANCIAL_CANDIDATE_DIR) {
+  if(!candidate)throw Error('Missing candidate transport directory');
+  const corrected=join(candidate,'corrected');
+  if(!transportCapable(corrected))return null;
+  if(existsSync(join(candidate,'transport.json'))||existsSync(join(corrected,'publication.json')))throw Error('Candidate transport must be prepared exactly once before capture');
+  const {validatePreviewReceipt}=await import('./financial-candidate-preview.mjs');
+  const bytes=readFileSync(join(candidate,'preview-receipt.json')),receipt=validatePreviewReceipt(JSON.parse(bytes));
+  if(inventoryDigest(dataInventory(corrected))!==receipt.bundles.corrected_data_sha256||inventoryDigest(uiInventory(corrected))!==receipt.candidate_ui.digest)throw Error('Candidate logical bytes changed before packing');
+  const publication=previewPublication({uiSha:receipt.candidate_ui.sha,uiDigest:receipt.candidate_ui.digest,manifestSha256:sha256(readFileSync(join(corrected,'static-data/manifest.json')))});
+  const descriptor=await packPublication({root:corrected,frontendRoot:join(root,'frontend'),publication,preserveLogical:join(candidate,'corrected-logical'),bindings:{
+    sourceCommit:receipt.controller.sha,appCommit:receipt.candidate_ui.sha,candidateId:sha256(bytes),financialGeneration:receipt.financial.generation,financialLineageSha256:candidateTransportLineage(receipt)}});
+  const transport={schema_version:'financial-candidate-transport-v1',preview_receipt_sha256:sha256(bytes),bootstrap_sha256:sha256(readFileSync(join(corrected,'publication.json'))),corrected:descriptor};
+  write(join(candidate,'transport.json'),transport);
+  return transport;
+}
+
+export async function verifyCandidateTransport(root,candidate,record=null) {
+  const corrected=join(candidate,'corrected'),path=join(candidate,'transport.json');
+  if(!existsSync(path)){
+    assertTransportDeclaration(corrected,null);
+    if(record?.schema_version==='financial-release-candidate-v2'||existsSync(join(corrected,'publication.json')))throw Error('Missing candidate transport seal');
+    return null;
+  }
+  if(record&&record.schema_version!=='financial-release-candidate-v2')throw Error('Packed candidate requires its own v2 capture; old acceptance cannot be reused');
+  const bytes=readFileSync(path),transport=JSON.parse(bytes);
+  exact(transport,['schema_version','preview_receipt_sha256','bootstrap_sha256','corrected'],'candidate transport');
+  const {validatePreviewReceipt}=await import('./financial-candidate-preview.mjs');
+  const previewBytes=readFileSync(join(candidate,'preview-receipt.json')),preview=validatePreviewReceipt(JSON.parse(previewBytes));
+  const bootstrapBytes=readFileSync(join(corrected,'publication.json')),publication=validateTransportPreview(JSON.parse(bootstrapBytes));
+  if(transport.schema_version!=='financial-candidate-transport-v1'||transport.preview_receipt_sha256!==sha256(previewBytes)||transport.bootstrap_sha256!==sha256(bootstrapBytes)
+    ||record&&record.transport_sha256!==sha256(bytes)||transport.corrected.root.bindings.candidateId!==sha256(previewBytes)
+    ||transport.corrected.root.bindings.financialGeneration!==preview.financial.generation||transport.corrected.root.bindings.financialLineageSha256!==candidateTransportLineage(preview)||transport.corrected.root.bindings.sourceCommit!==preview.controller.sha
+    ||publication.ui_sha!==preview.candidate_ui.sha||publication.ui_digest!==preview.candidate_ui.digest
+    ||transport.corrected.logical_data_inventory_sha256!==preview.bundles.corrected_data_sha256)throw Error('Candidate transport capture binding changed');
+  equal(transport.corrected,publication.transport,'candidate bootstrap transport');
+  await verifyTransportPublication({root:corrected,frontendRoot:join(root,'frontend'),publication});
+  return {transport,publication};
+}
+
 export async function sealDesignCandidate(root=process.cwd(),candidate=process.env.FINANCIAL_CANDIDATE_DIR) {
   if(!candidate)throw Error('Missing tested candidate directory');
   const testedSha=git(root,['rev-parse','HEAD']);
   if(process.env.GITHUB_SHA!==testedSha)throw Error('Design producer must be the actual tested checkout');
   const {validatePreviewReceipt}=await import('./financial-candidate-preview.mjs');
   const receiptBytes=readFileSync(join(candidate,'preview-receipt.json')),receipt=validatePreviewReceipt(JSON.parse(receiptBytes));
-  if(receipt.schema_version!==CERTIFIED_PREVIEW_SCHEMA||existsSync(join(candidate,'corrected/publication.json')))throw Error('Only an unpublished certified candidate can be sealed');
-  if(inventoryDigest(dataInventory(join(candidate,'corrected')))!==receipt.bundles.corrected_data_sha256||inventoryDigest(uiInventory(join(candidate,'corrected')))!==receipt.candidate_ui.digest)throw Error('Design testing changed candidate bytes');
-  const record=validateCandidateRecord({schema_version:'financial-release-candidate-v1',producer:{repository:bootstrap.repository,workflow:policy.candidate_workflow,head_sha:testedSha,run_id:Number(process.env.GITHUB_RUN_ID),run_attempt:Number(process.env.GITHUB_RUN_ATTEMPT)},captured_ui:receipt.candidate_ui,
+  const packed=await verifyCandidateTransport(root,candidate);
+  if(receipt.schema_version!==CERTIFIED_PREVIEW_SCHEMA)throw Error('Only an unpublished certified candidate can be sealed');
+  if((!packed&&inventoryDigest(dataInventory(join(candidate,'corrected')))!==receipt.bundles.corrected_data_sha256)||inventoryDigest(uiInventory(join(candidate,'corrected')))!==receipt.candidate_ui.digest)throw Error('Design testing changed candidate bytes');
+  const record=validateCandidateRecord({schema_version:packed?'financial-release-candidate-v2':'financial-release-candidate-v1',...(packed?{transport_sha256:sha256(readFileSync(join(candidate,'transport.json')))}:{}),producer:{repository:bootstrap.repository,workflow:policy.candidate_workflow,head_sha:testedSha,run_id:Number(process.env.GITHUB_RUN_ID),run_attempt:Number(process.env.GITHUB_RUN_ATTEMPT)},captured_ui:receipt.candidate_ui,
     request_sha256:digest(read(join(candidate,'release-request.json'))),preview_receipt_sha256:sha256(receiptBytes),corrected_inventory_sha256:inventoryDigest(completeInventory(join(candidate,'corrected'))),protected_code_sha256:digest(protectedCodeInventory(root,receipt.candidate_ui.sha))});
   equal(read(join(candidate,'protected-code.json')),protectedCodeInventory(root,receipt.candidate_ui.sha),'captured protected source');
   equal(read(join(candidate,'protected-code.json')),protectedCodeInventory(root,testedSha),'tested protected source');
@@ -262,6 +311,7 @@ export async function sealDesignCandidate(root=process.cwd(),candidate=process.e
   const archive=join(dirname(candidate),'candidate.tar');
   const members=['candidate.json','release-request.json','protected-code.json','preview-receipt.json','verification.json','request.json','evidence.json','target-base.json','projection','corrected','baseline','original-source','original-certification','original-predecessor'];
   if(pin)members.push('captured-candidate.json','activation-candidate.json');
+  if(packed)members.push('transport.json');
   // Validate before tar: never follow symlinks or archive arbitrary extra paths.
   for(const member of members){const path=join(candidate,member);if(lstatSync(path).isDirectory())completeInventory(path);else if(!lstatSync(path).isFile())throw Error('Special candidate audit file');}
   execFileSync('tar',['-cf',archive,'-C',candidate,...members],{stdio:'pipe'});
@@ -325,19 +375,24 @@ export async function verifyCandidatePayload(state,live,root,api) {
   if(sha256(readFileSync(join(candidate,'verification.json')))!==receipt.verification_sha256||sha256(readFileSync(join(candidate,'evidence.json')))!==receipt.source_evidence_sha256)throw Error('Activation evidence changed');
   equal(receipt.source,request.correction.source,'preview source');
   equal(receipt.source_validation.certificate.reference,request.source_validation.certificate,'preview certificate');
-  if(inventoryDigest(completeInventory(join(candidate,'corrected')))!==record.corrected_inventory_sha256||inventoryDigest(dataInventory(join(candidate,'corrected')))!==receipt.bundles.corrected_data_sha256
-    ||inventoryDigest(dataInventory(join(candidate,'baseline')))!==receipt.bundles.baseline_data_sha256||inventoryDigest(uiInventory(join(candidate,'corrected')))!==receipt.candidate_ui.digest)throw Error('Tested candidate bytes changed');
+  const packed=await verifyCandidateTransport(root,candidate,record),physical=join(candidate,'corrected'),restored=join(candidate,'replayed-corrected');
+  rmSync(restored,{recursive:true,force:true});
+  const corrected=await canonicalPublication({root:physical,frontendRoot:join(root,'frontend'),publication:packed?.publication,restore:restored});
+  let priorLogical=null,priorPhysical=null;
+  try {
+  if(inventoryDigest(completeInventory(physical))!==record.corrected_inventory_sha256||inventoryDigest(dataInventory(corrected))!==receipt.bundles.corrected_data_sha256
+    ||inventoryDigest(dataInventory(join(candidate,'baseline')))!==receipt.bundles.baseline_data_sha256||inventoryDigest(uiInventory(corrected))!==receipt.candidate_ui.digest)throw Error('Tested candidate bytes changed');
   const certified=verifyCorrectionSource(request.correction.source,api,{reference:request.source_validation.certificate,certificateZipPath:join(candidate,'original-certification/artifact.zip')});
   equal(certified.certification,receipt.source_validation.certificate,'current source certification');
   const sourceRoot=restoreCorrectionSource(request.correction.source,join(candidate,'original-source'),certified);
   const evidence=read(join(candidate,'evidence.json')),prior=join(candidate,'predecessor');
   if(!existsSync(prior)){mkdirSync(prior,{recursive:true});const zipdir=join(candidate,'original-predecessor');downloadArtifact(evidence.predecessor_artifact,zipdir,bootstrap.repository);extractCandidateTar(join(zipdir,'artifact.tar'),prior);rmSync(join(zipdir,'artifact.tar'));}
   verifyExistingPredecessor(join(candidate,'original-predecessor/artifact.zip'),prior,evidence.predecessor_artifact);
-  verifyPredecessor(prior,live,evidence.predecessor_artifact,live.identity);
+  const predecessor=await verifyPredecessor(prior,live,evidence.predecessor_artifact,live.identity,join(root,'frontend'));priorPhysical=prior;priorLogical=predecessor.logicalRoot;
   const frontend=join(root,'frontend');
   const {compareCandidateBaselineData}=await import('./financial-candidate-baseline.mjs');
   // Finish the full compiler proof before retaining the large native projection.
-  const baseline=await compareCandidateBaselineData(prior,join(candidate,'baseline'),frontend);
+  const baseline=await compareCandidateBaselineData(priorLogical,join(candidate,'baseline'),frontend);
   const target=join(candidate,'target-base.json'),source=request.correction.source;
   const replay=JSON.parse(execFileSync(process.env.FINANCIAL_REPLAY_PYTHON||process.env.FINANCIAL_CORRECTION_PYTHON||'python3',[join(root,NATIVE_PROJECTOR_PATH),'--archive',join(sourceRoot,'archive'),'--archive-sha256',source.archive_manifest_sha256,
     '--base',join(sourceRoot,'base.json'),'--cohort',join(sourceRoot,'cohort.json'),'--cohort-sha256',source.cohort_sha256,'--target-base',target,'--target-base-sha256',sha256(readFileSync(target)),
@@ -345,15 +400,16 @@ export async function verifyCandidatePayload(state,live,root,api) {
   if(replay.projection_sha256!==receipt.financial.projection_sha256)throw Error('Candidate financial projection is not independently reproducible');
   const projection=read(replay.projection_path);
   if(live.financialRelease&&projection.receipt_inventory_sha256===live.financialRelease.lineage.receipt_inventory_sha256)throw Error('Activation has no new independently sourced receipt inventory');
-  const correction=comparePreviewDataIsolated(join(candidate,'baseline'),join(candidate,'corrected'),frontend,projection,{evaluatedAt:receipt.financial.evaluated_at});
+  const correction=comparePreviewDataIsolated(join(candidate,'baseline'),corrected,frontend,projection,{evaluatedAt:receipt.financial.evaluated_at});
   const consumer=await verifyConsumerCapability(frontend);
-  const compatibility=await consumer.verifyCorrectionCompatibility({root:join(candidate,'corrected/static-data'),projection,evaluatedAt:Date.now()});
+  const compatibility=await consumer.verifyCorrectionCompatibility({root:join(corrected,'static-data'),projection,evaluatedAt:Date.now()});
   const verification=read(join(candidate,'verification.json'));
   equal(baseline,verification.baseline_equality,'baseline semantic proof');equal(correction,verification.correction_equality,'financial-only proof');equal(compatibility,verification.compatibility,'consumer compatibility');
-  const manifest=read(join(candidate,'corrected/static-data/manifest.json'));
-  if(priceObservationDigest(extractPriceObservations({dataRoot:join(candidate,'corrected/static-data'),manifest}))!==priceObservationDigest(live.priceObservations))throw Error('Activation changed original price observations');
+  const manifest=read(join(corrected,'static-data/manifest.json'));
+  if(priceObservationDigest(extractPriceObservations({dataRoot:join(corrected,'static-data'),manifest}))!==priceObservationDigest(live.priceObservations))throw Error('Activation changed original price observations');
   state.projectionPath=replay.projection_path;state.previewReceipt=receipt;
   return {projection,receipt};
+  }finally{removeCanonical(physical,corrected);if(priorLogical)removeCanonical(priorPhysical,priorLogical);}
 }
 
 export function sourceLineage({source,certificate,sourceProjectionSha256,receiptInventorySha256,projectionPolicy}) {
@@ -462,6 +518,12 @@ export async function restorePublishedFinancialSource(live,root,fetcher=fetch) {
 async function runCommand(command) {
   if(command==='design-prepare')await prepareDesignCandidate();
   else if(command==='design-seal')await sealDesignCandidate();
+  else if(command==='design-transport')await prepareCandidateTransport(process.cwd(),process.argv[3]||process.env.FINANCIAL_CANDIDATE_DIR);
+  else if(command==='verify-candidate-transport'){
+    const candidate=process.argv[3]||process.env.FINANCIAL_CANDIDATE_DIR,result=await verifyCandidateTransport(process.cwd(),candidate);
+    console.log(JSON.stringify(result?{schema:'verified-candidate-transport-v1',logical_data_inventory_sha256:result.transport.corrected.logical_data_inventory_sha256,
+      ui_inventory_sha256:result.publication.ui_digest,physical_inventory_sha256:inventoryDigest(completeInventory(join(candidate,'corrected'))),preview_publication_sha256:result.transport.bootstrap_sha256}:null));
+  }
   else throw Error('Expected design-prepare or design-seal');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

@@ -1,3 +1,4 @@
+import { publicationQueryIdentity } from '../staticPublication';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -138,12 +139,13 @@ function StaticGroupsPage() {
     [manifestQuery.data, selectedMarket],
   );
   const groupsQuery = useQuery({
-    queryKey: ['staticGroups', marketEntry.pages?.groups?.path],
-    queryFn: () => fetchStaticJson(marketEntry.pages.groups.path),
+    queryKey: ['staticGroups', marketEntry.pages?.groups?.path, publicationQueryIdentity(marketEntry.publication)],
+    placeholderData: () => undefined,
+    queryFn: () => fetchStaticJson(marketEntry.pages.groups.path, { publication: marketEntry.publication }),
     enabled: Boolean(marketEntry.pages?.groups?.path),
     staleTime: Infinity,
   });
-  const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
+  const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path, true, marketEntry.publication);
   const rrgQuery = useStaticGroupsRRG(marketEntry);
   const rrgAvailable = Boolean(marketEntry.assets?.groups_rrg?.path);
   // グループ詳細モーダルと表示モードはURLと同期し、戻る/進むで操作を巻き戻せるようにする
@@ -247,6 +249,7 @@ function StaticGroupsPage() {
         group={selectedGroup}
         detail={selectedGroup ? groupDetails[selectedGroup] : null}
         chartIndex={chartIndexQuery.data}
+        publication={marketEntry.publication}
         open={!!selectedGroup}
         onClose={() => setSelectedGroup(null)}
       />

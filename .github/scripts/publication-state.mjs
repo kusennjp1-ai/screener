@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { githubApi, sameRepository, workflowPath } from './publication-gate.mjs';
 import bootstrapData from './approved-ui-bootstrap.json' with { type: 'json' };
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
+import {validateTransportDescriptor} from './static-transport-publication.mjs';
 
 export const bootstrap = bootstrapData;
 function approvedPriceObservations() {
@@ -113,12 +114,13 @@ export function validateReceipt(receipt) {
     if(receipt.financial_correction!==undefined||!ref||Object.keys(ref).sort().join(',')!=='path,schema_version,sha256'||ref.schema_version!=='financial-release-receipt-v1'
       ||!/^[a-f0-9]{64}$/.test(ref.sha256||'')||ref.path!==`static-data/financial-corrections/release-${ref.sha256}.json`
       ||!['financial_generation','financial_lineage_sha256','data_inventory_sha256'].every(key=>/^[a-f0-9]{64}$/.test(receipt[key]||'')))throw Error('Invalid publication financial release reference');
-  } else if (receipt.financial_correction !== undefined || receipt.financial_generation !== undefined || receipt.data_inventory_sha256 !== undefined || receipt.financial_lineage_sha256 !== undefined) {
+  } else if (receipt.financial_correction !== undefined || receipt.financial_generation !== undefined || (!Object.hasOwn(receipt,'transport')&&receipt.data_inventory_sha256 !== undefined) || receipt.financial_lineage_sha256 !== undefined) {
     const ref = receipt.financial_correction;
     if (!ref || Object.keys(ref).sort().join(',') !== 'path,schema_version,sha256' || ref.schema_version !== 'financial-correction-v1'
       || !/^[a-f0-9]{64}$/.test(ref.sha256 || '') || ref.path !== `static-data/financial-corrections/receipt-${ref.sha256}.json`
       || !/^[a-f0-9]{64}$/.test(receipt.financial_generation || '') || !/^[a-f0-9]{64}$/.test(receipt.data_inventory_sha256 || '')) throw Error('Invalid publication financial correction reference');
   }
+  if(Object.hasOwn(receipt,'transport'))validateTransportDescriptor(receipt.transport,receipt);
   return receipt;
 }
 
@@ -195,6 +197,12 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   if (receipt) {
     if (receipt.run_id !== latest.runId || receipt.run_attempt !== latest.attempt) throw Error('Pages has not converged to its latest successful deployment');
     if (receipt.data_manifest_sha256 !== sha256(manifestBytes) || receipt.verification_universe.as_of_date !== manifest.markets.US?.as_of_date) throw Error('Live receipt and data disagree');
+    if(receipt.transport){
+      const ref=receipt.transport.root,bytes=await read(ref.path);
+      if(bytes.length!==ref.bytes||sha256(bytes)!==ref.sha256)throw Error('Live packed root hash/size mismatch');
+      const root=JSON.parse(bytes);
+      if(root.generation!==ref.generation||JSON.stringify(root.bindings)!==JSON.stringify(ref.bindings))throw Error('Live packed generation binding changed');
+    }
     const verifiedApproval=verifyApproval(receipt, repository, api);
     if (receipt.financial_correction) {
       const reference = receipt.financial_correction, bytes = await read(reference.path);

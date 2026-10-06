@@ -1,3 +1,4 @@
+import { publicationQueryIdentity } from '../staticPublication';
 import ConnectionStatus from '../components/ConnectionStatus';
 import SectorStrength from '../components/SectorStrength';
 import { formatPublished } from '../researchPresentation';
@@ -43,8 +44,8 @@ function StaticBreadthPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTab = searchParams.get('tab') === 'sectors' ? 2 : searchParams.get('tab') === 'groups' ? 1 : 0;
   const breadthQuery = useQuery({
-    queryKey: ['staticBreadth', marketEntry.pages?.breadth?.path, manifestQuery.data?.generated_at],
-    queryFn: () => fetchStaticJson(marketEntry.pages.breadth.path),
+    queryKey: ['staticBreadth', marketEntry.pages?.breadth?.path, manifestQuery.data?.generated_at, publicationQueryIdentity(marketEntry.publication)],
+    queryFn: () => fetchStaticJson(marketEntry.pages.breadth.path, { publication: marketEntry.publication }),
     enabled: selectedTab !== 2 && Boolean(marketEntry.pages?.breadth?.path),
     staleTime: 60000,
     placeholderData: () => undefined,

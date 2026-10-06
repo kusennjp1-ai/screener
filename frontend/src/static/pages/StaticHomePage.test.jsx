@@ -427,8 +427,8 @@ describe('StaticHomePage', () => {
     expect(screen.getAllByText('時価総額').length).toBeGreaterThan(0);
     expect(within(topSection).getByText('$500.0M')).toBeInTheDocument();
     expect(within(topSection).queryByText('HK$3.9T')).not.toBeInTheDocument();
-    expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/manifest.json');
-    expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/chunks/chunk-0001.json');
+    expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/manifest.json', { publication: undefined });
+    expect(fetchStaticJson).toHaveBeenCalledWith('markets/us/scan/chunks/chunk-0001.json', { publication: undefined, sha256: undefined });
     expect(screen.queryByText('SUMMARYONLY')).not.toBeInTheDocument();
 
     const user = userEvent.setup();

@@ -13,7 +13,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
   const small = useMediaQuery('(max-width: 700px)');
   const query = useQuery({
     queryKey: [...staticChartKeys.payload(symbol, entry?.path), generation],
-    queryFn: () => fetchStaticChartPayload(entry.path),
+    queryFn: () => fetchStaticChartPayload(entry.path, { generation }),
     enabled: Boolean(entry?.path), staleTime: 60000,
     placeholderData: () => undefined,
     select: payload => requireChartIdentity(payload, symbol, date),

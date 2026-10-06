@@ -1,3 +1,4 @@
+import { publicationQueryIdentity } from '../staticPublication';
 import { projectFinancialRow } from '../financialCurrent';
 import { useFinancialClock } from '../useFinancialClock';
 import { modelMarket } from '../portfolioPlan';
@@ -63,22 +64,22 @@ function StaticHomePage() {
     [manifestQuery.data, selectedMarket],
   );
   const homeQuery = useQuery({
-    queryKey: ['staticHome', marketEntry.pages?.home?.path, generation],
+    queryKey: ['staticHome', marketEntry.pages?.home?.path, generation, publicationQueryIdentity(marketEntry.publication)],
     placeholderData: () => undefined,
-    queryFn: () => fetchStaticJson(marketEntry.pages.home.path),
+    queryFn: () => fetchStaticJson(marketEntry.pages.home.path, { publication: marketEntry.publication }),
     enabled: Boolean(marketEntry.pages?.home?.path),
     staleTime: Infinity,
   });
   const scanBundleQuery = useQuery({
-    queryKey: ['staticHomeScanRows', marketEntry.pages?.scan?.path, generation],
+    queryKey: ['staticHomeScanRows', marketEntry.pages?.scan?.path, generation, publicationQueryIdentity(marketEntry.publication)],
     placeholderData: () => undefined,
     queryFn: async () => {
-      const scanManifest = await fetchStaticJson(marketEntry.pages.scan.path);
+      const scanManifest = await fetchStaticJson(marketEntry.pages.scan.path, { publication: marketEntry.publication });
       const rowsBySymbol = new Map(
         (scanManifest.initial_rows || []).map((row) => [row.symbol, row])
       );
       const chunkPayloads = await Promise.all(
-        (scanManifest.chunks || []).map((chunk) => fetchStaticJson(chunk.path))
+        (scanManifest.chunks || []).map((chunk) => fetchStaticJson(chunk.path, { publication: marketEntry.publication, sha256: chunk.sha256 }))
       );
       chunkPayloads.forEach((payload) => {
         (payload.rows || []).forEach((row) => {
@@ -96,7 +97,7 @@ function StaticHomePage() {
     staleTime: Infinity,
     gcTime: Infinity,
   });
-  const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path);
+  const chartIndexQuery = useStaticChartIndex(marketEntry.assets?.charts?.path, true, marketEntry.publication);
   // チャートモーダルはURL（?chart=銘柄）と同期させる。
   // モーダルを開くと履歴が1つ積まれるため、ブラウザ/アプリの「戻る」で自然に閉じる。
   const [searchParams, setSearchParams] = useSearchParams();
@@ -473,6 +474,7 @@ function StaticHomePage() {
 
       <StaticChartViewerModal
         generation={generation}
+        publication={marketEntry.publication}
         now={now}
         date={marketEntry.as_of_date}
         open={chartModalOpen}

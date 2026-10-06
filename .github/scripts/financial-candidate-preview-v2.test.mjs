@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,mkdtempSync,chmodSync,rmSync} from 'node:fs';
-import {join} from 'node:path';
+import {readFileSync,writeFileSync,mkdtempSync,mkdirSync,chmodSync,rmSync} from 'node:fs';
+import {join,dirname} from 'node:path';
+import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
-import {contract,digest,validateCorrectionReceipt} from './financial-correction.mjs';
-import {sha256,validateReceipt} from './publication-state.mjs';
+import {contract,digest,validateCorrectionReceipt,dataInventory} from './financial-correction.mjs';
+import {sha256,validateReceipt,uiInventory,inventoryDigest} from './publication-state.mjs';
 import {parsePreviewRequest,validatePreviewReceipt,previewBuildEnvironment} from './financial-candidate-preview.mjs';
 import {CERTIFIED_PREVIEW_SCHEMA,CERTIFIED_SOURCE_GUARD,NATIVE_PROJECTOR,NATIVE_PROJECTOR_PATH,verifyRecordedCertifiedSource,certifiedSourceDescriptor,nativeDestinationDescriptor} from './financial-candidate-preview-v2.mjs';
 import {certifiedSourceFixture} from './fixtures/certified-source-preview.mjs';
@@ -100,4 +101,29 @@ test('v2 receipt retains cumulative failures and remains invalid for both releas
     v=>v.destination_projection.derivation.source_projection_sha256='e'.repeat(64),v=>v.destination_projection.projector='arbitrary',v=>v.financial.receipt_inventory_sha256='f'.repeat(64),v=>v.source_outcome.reported_cycle.published=true]) {
     const changed=structuredClone(value);mutate(changed);assert.throws(()=>validatePreviewReceipt(changed));
   }
+});
+
+
+test('new packed financial candidate seals an explicit no-authority preview with its own exact source and UI binding',async t=>{
+  const {prepareCandidateTransport,verifyCandidateTransport,completeInventory}=await import('./financial-release-activation.mjs');
+  const root=mkdtempSync(join(tmpdir(),'packed-financial-candidate-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const corrected=join(root,'corrected'),write=(path,bytes)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);};
+  for(const [path,bytes]of [['index.html','captured decoder UI'],['sw.js','captured worker'],['static-data/manifest.json','{"as_of_date":"2026-10-02"}'],['static-data/markets/us/charts/OWNED.json',' {"bars":[{"date":"2026-10-02","close":17}],"optional":null}\n'],['static-transport-capability.json',readFileSync(join(controllerRoot,'frontend/public/static-transport-capability.json'))]])write(join(corrected,path),bytes);
+  const preview=receipt();preview.candidate_ui.digest=inventoryDigest(uiInventory(corrected));preview.bundles.corrected_data_sha256=inventoryDigest(dataInventory(corrected));
+  validatePreviewReceipt(preview);write(join(root,'preview-receipt.json'),JSON.stringify(preview));
+  const originalPreview=readFileSync(join(root,'preview-receipt.json')),prepared=await prepareCandidateTransport(controllerRoot,root);
+  assert.deepEqual(readFileSync(join(root,'preview-receipt.json')),originalPreview,'packing cannot refresh any proof/evaluation clock');
+  assert.equal(prepared.corrected.root.bindings.financialGeneration,preview.financial.generation);
+  assert.equal(prepared.corrected.root.bindings.candidateId,sha256(originalPreview));
+  const verified=await verifyCandidateTransport(controllerRoot,root,{schema_version:'financial-release-candidate-v2',transport_sha256:sha256(readFileSync(join(root,'transport.json')))});
+  assert.equal(verified.publication.publication_authority,'none');assert.throws(()=>validateReceipt(verified.publication));
+  await assert.rejects(()=>verifyCandidateTransport(controllerRoot,root,{schema_version:'financial-release-candidate-v1'}),/own v2 capture/);
+  await assert.rejects(()=>prepareCandidateTransport(controllerRoot,root),/exactly once/);
+  const cli=spawnSync(process.execPath,[join(controllerRoot,'.github/scripts/financial-release-activation.mjs'),'verify-candidate-transport',root],{cwd:controllerRoot,encoding:'utf8',timeout:15000});
+  assert.equal(cli.status,0,cli.stderr);const report=JSON.parse(cli.stdout);
+  assert.deepEqual(Object.keys(report).sort(),['schema','logical_data_inventory_sha256','ui_inventory_sha256','physical_inventory_sha256','preview_publication_sha256'].sort());
+  assert.equal(report.physical_inventory_sha256,inventoryDigest(completeInventory(corrected)));
+  assert.equal(report.logical_data_inventory_sha256,preview.bundles.corrected_data_sha256);
+  write(join(root,'transport.json'),JSON.stringify({...prepared,bootstrap_sha256:H}));
+  await assert.rejects(()=>verifyCandidateTransport(controllerRoot,root),/capture binding changed/);
 });

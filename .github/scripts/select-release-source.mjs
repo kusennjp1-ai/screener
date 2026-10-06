@@ -11,6 +11,7 @@ import { assertPriceObservationBounds, comparePriceObservations, extractPriceObs
 import { bootstrap, compareData, dataFiles, dataInventoryDigest, downloadArtifact, inventoryDigest, isData, livePublication, sha256, uiInventory, validateReceipt, safePath } from './publication-state.mjs';
 import { financialReleasePolicy, readFinancialReleaseRequest, readFinancialActivationCandidate, selectActivationCandidate, verifyActivationCandidate, sourceLineage, writeFinancialReleaseReceipt, verifyFinancialReleaseAssets, assertFinancialLineageContinuity, restorePublishedFinancialSource } from './financial-release-activation.mjs';
 import {verifyCarriedBundle} from './financial-generation-carry-controller.mjs';
+import {canonicalPublication,removeCanonical,transportCapable,packPublication,assertTransportDeclaration,verifyCapturedTransportAssets} from './static-transport-publication.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -82,14 +83,26 @@ with tarfile.open(sys.argv[1]) as t:
 `, archive], { stdio: 'pipe' });
   if (sha256(archiveMember(archive, 'static-data/manifest.json')) !== source.manifestHash) throw Error('Archive and dated manifest disagree');
 }
-function materialize(source, destination, migration = false) {
+async function materialize(source, destination, migration = false,frontendRoot=resolve('release/frontend')) {
   const directory = downloadArtifact(source.artifact, artifactDirectory(source.artifact), repository());
   const archive = join(directory, 'artifact.tar');
   verifyArchive(source, archive);
   if (source.receiptHash && sha256(archiveMember(archive, 'publication.json')) !== source.receiptHash) throw Error('Archive and live publication receipt disagree');
   rmSync(join(destination, 'static-data'), { recursive: true, force: true });
   mkdirSync(destination, { recursive: true });
-  execFileSync('tar', ['-xf', archive, '-C', destination, './static-data'], { stdio: 'pipe' });
+  if(source.publication?.transport){
+    const physical=join(directory,'packed-predecessor'),logical=join(directory,'logical-predecessor');
+    rmSync(physical,{recursive:true,force:true});rmSync(logical,{recursive:true,force:true});mkdirSync(physical);
+    try{
+      execFileSync('tar',['-xf',archive,'-C',physical],{stdio:'pipe'});
+      await canonicalPublication({root:physical,frontendRoot,publication:source.publication,restore:logical});
+      cpSync(join(logical,'static-data'),join(destination,'static-data'),{recursive:true});
+      for(const file of dataFiles)cpSync(join(logical,file),join(destination,file));
+    }finally{rmSync(physical,{recursive:true,force:true});rmSync(logical,{recursive:true,force:true});}
+  }else{
+    execFileSync('tar', ['-xf', archive, '-C', destination, './static-data'], { stdio: 'pipe' });
+    assertTransportDeclaration(destination,source.publication);
+  }
   const observations = extractPriceObservations({ dataRoot: join(destination, 'static-data'), manifest: source.manifest });
   assertPriceObservationBounds(observations, source.artifact.created_at);
   if (priceObservationDigest(observations) !== source.priceObservationsDigest) throw Error('Archive price observations disagree with its exact attempt metadata');
@@ -107,7 +120,7 @@ function publishedSource(live, pages) {
       || Date.parse(artifact.created_at) > live.latest.started || !Number.isFinite(live.latest.jobStarted) || !Number.isFinite(live.latest.started)) {
       throw Error('Published artifact does not belong to its successful deployment attempt');
     }
-    return { artifact, runId: live.receipt.run_id, attempt: live.receipt.run_attempt, manifest: live.manifest, manifestHash: live.manifestHash, priceObservations: live.priceObservations, priceObservationsDigest: priceObservationDigest(live.priceObservations), receiptHash: live.receiptHash };
+    return { artifact, runId: live.receipt.run_id, attempt: live.receipt.run_attempt, manifest: live.manifest, manifestHash: live.manifestHash, priceObservations: live.priceObservations, priceObservationsDigest: priceObservationDigest(live.priceObservations), receiptHash: live.receiptHash, publication:live.receipt };
   }
   if (!live.legacyArtifact) throw Error('Legacy approved input expired; a checked advancing export is required');
   return { artifact: live.legacyArtifact, runId: live.latest.runId, attempt: live.latest.attempt, manifest: live.manifest, manifestHash: live.manifestHash, priceObservations: live.priceObservations, priceObservationsDigest: priceObservationDigest(live.priceObservations) };
@@ -193,11 +206,14 @@ async function recheck() {
   if(state.activation&&!state.activation.exception&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
   const live = await livePublication({ repository: repository() });
   if (live.identity !== state.live.identity) throw Error('Live UI or data changed; discard this superseded publication');
-  const finalManifest = JSON.parse(readFileSync('release/frontend/dist/static-data/manifest.json', 'utf8'));
+  const physical=resolve('release/frontend/dist'),receipt = validateReceipt(JSON.parse(readFileSync(join(physical,'publication.json'),'utf8')));
+  const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
+  const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
+  try {
+  const finalManifest = JSON.parse(readFileSync(join(logical,'static-data/manifest.json'), 'utf8'));
   if (['regression', 'unknown'].includes(compareData(finalManifest, live.manifest))
     || ['regression', 'unknown'].includes(compareData(finalManifest, state.source.manifest))) throw Error('Final data would regress a published or selected market');
-  const receipt = validateReceipt(JSON.parse(readFileSync('release/frontend/dist/publication.json', 'utf8')));
-  const observed = extractPriceObservations({ dataRoot: resolve('release/frontend/dist/static-data'), manifest: finalManifest });
+  const observed = extractPriceObservations({ dataRoot: join(logical,'static-data'), manifest: finalManifest });
   assertPriceObservationBounds(observed, state.source.artifact.created_at);
   const progress = comparePriceObservations(observed, live.knownPriceDates);
   if (priceObservationDigest(receipt.known_price_dates) !== priceObservationDigest(progress.knownDates)) throw Error('Final retained price ledger differs from the proven publication history');
@@ -205,15 +221,16 @@ async function recheck() {
     || comparePriceObservations(observed, state.source.priceObservations).regressions.length) throw Error('Final price observations regress or disagree with the receipt');
   if (!state.correction && !state.activation && !state.decision.migration && state.sourceSha === live.uiSha
     && compareData(finalManifest, live.manifest) !== 'advance' && !progress.advances) throw Error('No observed data advance remains after preparation');
-  if (state.correction) await verifyPreparedCorrection(state, live);
+  if (state.correction) await verifyPreparedCorrection(state, live,logical);
   if(state.carry&&live.approval?.type===exceptionType&&digest(verifyCorrectionChecks(repository(),state.controllerSha))!==digest(state.carry.controllerChecks))throw Error('Exception carry controller CI changed');
-  if(state.activation||state.carry)await verifyPreparedFinancialRelease(state,live);
+  if(state.activation||state.carry)await verifyPreparedFinancialRelease(state,live,logical);
   if(live.financialRelease&&!state.activation&&!state.carry)throw Error('Ordinary release lost required financial carry');
   if (receipt.ui_sha !== state.sourceSha || receipt.ui_digest !== inventoryDigest(uiInventory('release/frontend/dist'))
     || (state.decision.mode === 'data' && receipt.ui_digest !== live.uiDigest)
     || receipt.data_manifest_sha256 !== sha256(readFileSync('release/frontend/dist/static-data/manifest.json'))) {
     throw Error('Final UI/data bytes differ from the approved publication plan');
   }
+  }finally{removeCanonical(physical,logical);}
 }
 async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
   const manifest = JSON.parse(readFileSync(join(dataRoot, 'manifest.json'), 'utf8'));
@@ -278,6 +295,13 @@ async function compose() {
     state.financialPrepared=prepared;writeFileSync(statePath(),JSON.stringify(state));
   }
   if (state.decision.migration && dataInventoryDigest(dist) !== state.migrationDataDigest) throw Error('Metadata migration changed approved data bytes');
+  // The final logical tree is complete before encoding. A data-only release
+  // discovers this capability in its retained approved UI, never the controller.
+  if(!state.correction&&transportCapable(dist)){
+    if(state.activation&&state.activation.record.schema_version!=='financial-release-candidate-v2')throw Error('Packed activation requires a newly captured packed candidate');
+    await packPublication({root:dist,frontendRoot:resolve('release/frontend'),publication:receipt,bindings:{
+      sourceCommit:state.controllerSha,appCommit:state.sourceSha,candidateId:state.activation?.record.transport_sha256??sha256(JSON.stringify({artifact:state.source.artifact.digest,run:state.source.runId,attempt:state.source.attempt,manifest:state.source.manifestHash}))}});
+  }else assertTransportDeclaration(dist,receipt);
   validateReceipt(receipt);
   writeFileSync(join(dist, 'publication.json'), JSON.stringify(receipt));
 }
@@ -320,12 +344,16 @@ async function restoreCorrection(state) {
     `FINANCIAL_CORRECTION_PROJECTION=${projection.projection_path}\nFINANCIAL_CORRECTION_SHA256=${projection.projection_sha256}\nFINANCIAL_EVALUATED_AT=${state.correction.evaluatedAt}\nFINANCIAL_CORRECTION_TARGET_IDENTITY=${state.live.identity}\nFINANCIAL_CORRECTION_TARGET_BASE_SHA256=${state.correction.targetBaseSha256}\n`);
 }
 
-function restoreActivation(state) {
-  const prepared=join(state.activation.candidate,'corrected');
+async function restoreActivation(state) {
+  const physical=join(state.activation.candidate,'corrected'),restore=join(scratch(),'activation-logical');rmSync(restore,{recursive:true,force:true});
+  const publication=state.activation.record.schema_version==='financial-release-candidate-v2'?JSON.parse(readFileSync(join(physical,'publication.json'),'utf8')):null;
+  const prepared=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication,restore});
+  try {
   for(const destination of [resolve('release/frontend/dist'),resolve('release/frontend/public')]){
     if(destination.endsWith('/dist'))rmSync(destination,{recursive:true,force:true});
-    mkdirSync(destination,{recursive:true});cpSync(prepared,destination,{recursive:true});
+    mkdirSync(destination,{recursive:true});cpSync(prepared,destination,{recursive:true});rmSync(join(destination,'publication.json'),{force:true});
   }
+  }finally{removeCanonical(physical,prepared);}
 }
 async function restoreCarrySources(state) {
   const root=join(scratch(),'carry-source');
@@ -390,8 +418,8 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
     sourceProjectionBytes:readFileSync(join(state.carry.sourceRoot,previous.source_projection.path)),sourceBaseBytes:readFileSync(join(state.carry.sourceRoot,previous.source_base.path)),evaluationBytes:readFileSync(state.carry.projectionPath),
     generation:assessed.carry.financial_generation,evaluatedAt:assessed.carry.financial_evaluated_at,ui:{approved_sha:state.sourceSha,captured_sha:state.sourceSha===state.live.uiSha?previous.ui.captured_sha:state.sourceSha,digest:publication.ui_digest,approval:publication.approval,checks:consumerChecks},priceInput});
 }
-async function verifyPreparedFinancialRelease(state,live) {
-  const dist=resolve('release/frontend/dist'),publication=JSON.parse(readFileSync(join(dist,'publication.json'),'utf8'));
+async function verifyPreparedFinancialRelease(state,live,dist=resolve('release/frontend/dist')) {
+  const publication=JSON.parse(readFileSync(join(dist,'publication.json'),'utf8'));
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
   if(publication.approval?.type===exceptionType)verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
   if(receipt.previous_publication_identity!==live.identity)throw Error('Financial release predecessor changed');
@@ -399,10 +427,15 @@ async function verifyPreparedFinancialRelease(state,live) {
   if(digest(checks)!==digest(receipt.ui.checks))throw Error('Financial release consumer checks changed');
   if(state.activation){
     await verifyActivationCandidate(state.activation,live);
-    const candidate=dataInventory(join(state.activation.candidate,'corrected'));
-    const actual=dataInventory(dist,state.financialPrepared.added.filter(path=>!Object.hasOwn(candidate,path)));
-    if(inventoryDigest(actual)!==inventoryDigest(candidate))throw Error('Activation changed tested candidate data');
+    const candidatePhysical=join(state.activation.candidate,'corrected'),restore=join(scratch(),'activation-recheck-logical');rmSync(restore,{recursive:true,force:true});
+    const candidatePublication=state.activation.record.schema_version==='financial-release-candidate-v2'?JSON.parse(readFileSync(join(candidatePhysical,'publication.json'),'utf8')):null;
+    const original=await canonicalPublication({root:candidatePhysical,frontendRoot:resolve('release/frontend'),publication:candidatePublication,restore});
+    try {
+      const candidate=dataInventory(original),actual=dataInventory(dist,state.financialPrepared.added.filter(path=>!Object.hasOwn(candidate,path)));
+      if(inventoryDigest(actual)!==inventoryDigest(candidate))throw Error('Activation changed tested candidate data');
+    }finally{removeCanonical(candidatePhysical,original);}
     if(inventoryDigest(uiInventory(dist))!==state.activation.record.captured_ui.digest)throw Error('Activation changed tested candidate UI');
+    if(candidatePublication)await verifyCapturedTransportAssets({candidateRoot:candidatePhysical,root:resolve('release/frontend/dist'),frontendRoot:resolve('release/frontend'),candidatePublication,publication,allowedAdditions:state.financialPrepared.added});
   }else{
     assertFinancialLineageContinuity(live,receipt);
     const assessed=await carryAssessment(state,dist);
@@ -461,7 +494,7 @@ async function prepareCorrectionReceipt(state,dist) {
   writeFileSync(statePath(),JSON.stringify(state));
   return {receipt,reference:{schema_version:contract.schema_version,path,sha256:hash}};
 }
-async function verifyPreparedCorrection(state,live) {
+async function verifyPreparedCorrection(state,live,dist=resolve('release/frontend/dist')) {
   if(live.identity!==state.correction.intent.previous_publication_identity)throw Error('Correction predecessor was superseded');
   const checks=verifyCorrectionChecks(repository(),state.controllerSha);
   if(digest(checks)!==digest(state.correction.checks))throw Error('Correction controller check identity changed');
@@ -472,7 +505,7 @@ async function verifyPreparedCorrection(state,live) {
   for(const [name,key]of [['archive/manifest.json','archive_manifest_sha256'],['base.json','acquisition_base_sha256'],['cohort.json','cohort_sha256']])if(sha256(readFileSync(join(state.correction.sourceRoot,name)))!==source[key])throw Error('Retained correction source binding changed');
   const verified=verifyCorrectionSource(source);
   if(digest(verified)!==digest(state.correction.sourceVerification))throw Error('Correction source attempt changed');
-  const dist=resolve('release/frontend/dist'),reference=state.correction.prepared;
+  const reference=state.correction.prepared;
   const bytes=readFileSync(join(dist,reference.path));
   if(sha256(bytes)!==reference.sha256)throw Error('Correction receipt changed after composition');
   const receipt=validateCorrectionReceipt(JSON.parse(bytes));
@@ -501,8 +534,8 @@ function exportMetadata() {
 }
 async function runCommand(command) {
   if (command === 'plan') await plan();
-  else if (command === 'design') { await plan(true); materialize(readState().source, resolve('frontend/public')); }
-  else if (command === 'restore') { const state = readState(); if(state.activation)restoreActivation(state);else{materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
+  else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
+  else if (command === 'restore') { const state = readState(); if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
   else if(command==='prepare-carry')await prepareCarry();
   else if (command === 'compose') await compose();
   else if (command === 'check-design-data') await verifyCoverage(resolve('frontend'), resolve('frontend/public/static-data'), readState().live.verificationUniverse.required_symbols);

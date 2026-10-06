@@ -67,7 +67,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [watch, setWatch] = useState(() => {
     try { const value = JSON.parse(localStorage.getItem('research-watch') || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; }
   });
-  const bundle = useResearchBundle(researchPath, entry.as_of_date, version);
+  const bundle = useResearchBundle(researchPath, entry.as_of_date, version, entry.publication);
   const reference = useQuery({ queryKey: ['researchReference', version], queryFn: async () => {
     const response = await fetch(`${import.meta.env.BASE_URL}ibd-reference.json`, { cache: 'no-cache' });
     return response.ok ? response.json() : null;
@@ -89,7 +89,7 @@ export default function ResearchPage({compareOnly=false}) {
     enabled:Boolean(selectedSummary?.research_detail_path && verificationSymbol === selectedSummary.symbol), staleTime:Infinity, placeholderData:()=>undefined,
     queryFn:async ({queryKey}) => {
       const [,symbol,path,date,generation] = queryKey;
-      const value = await fetchStaticJson(path);
+      const value = await fetchStaticJson(path, { generation, publication: entry.publication });
       if (value.symbol !== symbol || value.as_of_date !== date) throw Error('Detail identity mismatch');
       return {value,symbol,date,generation,path};
     }});
@@ -130,7 +130,7 @@ export default function ResearchPage({compareOnly=false}) {
     return () => cancelAnimationFrame(frame);
   }, [selected?.symbol, location.key, location.pathname, location.search]);
   const embeddedCharts = useMemo(() => rows.some(r=>Object.hasOwn(r,'chart_path')) ? {symbols:rows.filter(r=>r.chart_path).map(r=>({symbol:r.symbol,path:r.chart_path}))} : null, [rows]);
-  const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts);
+  const fetchedIndex = useStaticChartIndex(entry.assets?.charts?.path, Boolean(bundle.data) && !embeddedCharts, entry.publication);
   const index = {data:embeddedCharts || fetchedIndex.data};
   const chartEntry = index.data?.symbols?.find(r => r.symbol === selected?.symbol);
   const endpoint = import.meta.env.VITE_RESEARCH_QUOTE_URL;
@@ -266,6 +266,6 @@ export default function ResearchPage({compareOnly=false}) {
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>}
-    {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
+    {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} publication={entry.publication} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
   </Box>;
 }

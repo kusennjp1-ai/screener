@@ -1,3 +1,4 @@
+vi.mock('../staticPublication', async importOriginal => ({ ...await importOriginal(), resolveStaticPublication: async ({ publication, generation } = {}) => publication || { mode: 'legacy', baseURL: new URL('/', location.href).href, generation } }));
 import { act, fireEvent, render, screen, cleanup, waitFor, within, configure } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter } from 'react-router-dom';
