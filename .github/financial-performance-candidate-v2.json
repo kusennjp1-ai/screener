@@ -1,0 +1,16 @@
+{
+  "schema_version": "financial-performance-candidate-pin-v2",
+  "repository": "kusennjp1-ai/screener",
+  "workflow": ".github/workflows/financial-performance-certification.yml",
+  "head_sha": "5098a762f640d8d477594cbe337cf12baf5866a5",
+  "run_id": 37445347016,
+  "run_attempt": 1,
+  "job_id": 112208692939,
+  "artifact_id": 11404350877,
+  "artifact_name": "financial-performance-candidate-37445347016-1",
+  "artifact_sha256": "05bfb0f4406ebc617ca69faa8e3e33a98862b1df8e783c4ec6a2dcb6c5f912ca",
+  "candidate_record_sha256": "1067a1af6c8db2fac4f7807399a7a2a73255828251448edbbbc5949142615cf2",
+  "projection_sha256": "a93042a6f6ad40c9bbf0f518bf5580d1a1a014e2fc70380569edcde76c965b9a",
+  "preview_receipt_sha256": "cf7aa99e329b3c5b9178ccbdbcfe3ea957e3ab89380e00d0cc4325bda2a13f4c",
+  "approval_sha256": "dc3ba294bc4f03ceb6fe70a92f55ea9d349a8658decd6989648f050f39017dea"
+}
