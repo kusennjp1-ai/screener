@@ -6,7 +6,8 @@ import {fileURLToPath} from 'node:url';
 import {assertCorrectionProgress,dataInventory,digest,verifyConsumerCapability} from './financial-correction.mjs';
 import {inventoryDigest,sha256} from './publication-state.mjs';
 import {comparisonHeapArguments} from './financial-preview-comparison.mjs';
-import {CERTIFIED_PREVIEW_SCHEMA,certifiedSourceDescriptor,nativeDestinationDescriptor} from './financial-candidate-preview-v2.mjs';
+import {certifiedSourceDescriptor,nativeDestinationDescriptor} from './financial-candidate-preview-v2.mjs';
+import {POSTCAPTURE_PREVIEW_SCHEMA,isCertifiedPreviewSchema,postcaptureSourceDescriptor} from './financial-candidate-preview-postcapture.mjs';
 const schema='financial-preview-source-phase-v1',worker=fileURLToPath(import.meta.url);
 const exact=(value,keys)=>{if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join('|')!==[...keys].sort().join('|'))throw Error('Invalid closed preview source phase');};
 export function validateSourcePhase(input){
@@ -28,12 +29,12 @@ export async function executeSourcePhase(input){
   let result;
   if(input.kind==='projection_metadata'){
     const {parsePreviewRequest,sourceOutcome}=await import('./financial-candidate-preview.mjs');
-    const request=parsePreviewRequest(input.request),certified=request.schema_version===CERTIFIED_PREVIEW_SCHEMA;
+    const request=parsePreviewRequest(input.request),certified=isCertifiedPreviewSchema(request.schema_version);
     if(input.projection_result.projection_path!==input.projection_path||input.projection_result.projection_sha256!==input.projection_sha256
       || certified&&input.projection_result.source_projection_sha256!==projection.derivation?.source_projection_sha256)throw Error('Native preview source-projection result mismatch');
     assertCorrectionProgress(projection,input.previous_financial_generation);
     const sourceStatus=sourceOutcome(request,input.source_evidence,input.source_files,projection,input.certification);
-    const selected=certified?{source_validation:certifiedSourceDescriptor(input.certification,sourceStatus),
+    const selected=certified?{source_validation:(request.schema_version===POSTCAPTURE_PREVIEW_SCHEMA?postcaptureSourceDescriptor:certifiedSourceDescriptor)(input.certification,sourceStatus),
       destination_projection:nativeDestinationDescriptor(projection,input.projection_sha256,input.controller_root,readFileSync(input.projection_result.source_projection_path))}:{};
     result={sourceStatus,selected,comparison:{financial_generation:projection.financial_generation,symbols:Object.fromEntries(Object.keys(projection.symbols||{}).map(symbol=>[symbol,{}]))},
       financial:{generation:projection.financial_generation,projection_sha256:input.projection_sha256,receipt_inventory_sha256:projection.receipt_inventory_sha256,

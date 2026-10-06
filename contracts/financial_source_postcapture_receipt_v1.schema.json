@@ -1,0 +1,566 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "financial-source-postcapture-validation-v1",
+  "title": "Exact retained artifact validation receipt with no admission authority",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "financial-source-postcapture-validation-v1"
+    },
+    "kind": {
+      "const": "captured_source_integrity_validation"
+    },
+    "result": {
+      "const": "validated_retained_artifact"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": {
+        "repository": "kusennjp1-ai/screener",
+        "workflow": ".github/workflows/financial-statement-recovery.yml",
+        "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+        "run_id": 37478731832,
+        "run_attempt": 1,
+        "artifact_id": 11420873789,
+        "artifact_name": "financial-statement-recovery-4715b218cc25720d1d3be455930554e1e6282136-1",
+        "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+        "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+        "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+        "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
+      }
+    },
+    "producer_execution": {
+      "const": {
+        "producer_run_conclusion": "failure",
+        "producer_job_conclusion": "failure",
+        "producer_job_id": 112320966070,
+        "producer_cycle_exit_code": 0,
+        "producer_batch_exit_code": 0,
+        "failed_step_number": 10,
+        "original_final_guard_result": "failed",
+        "original_outcomes_retained": true
+      }
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "code_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "tree_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "request_canonical_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "request_schema_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "receipt_schema_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "code_manifest_path": {
+          "const": "validation-code-manifest.json"
+        },
+        "code_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "frozen_validator": {
+          "const": {
+            "inventory_path": "frozen-inventory.json",
+            "inventory_sha256": "205d6caa389734d40301afd0f1e9f5d3ab939560a5e3a6d56e8352bde19153b0",
+            "reviewed_commit": "16145829c9f06a51a5404a4044229b32b638c3c6",
+            "reviewed_tree": "16accf63ff4caef0da2adae8f4f9bbe46c913886",
+            "policy_sha256": "9c8de1e4d17b737f85db68fb9a031e24649134651b0cb01689a2f64e41c50114",
+            "files": 40
+          }
+        },
+        "source_api_evidence_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "api_evidence_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "producer_job_log_sha256": {
+          "const": "867c61fa0e36c39a335056d81a940b9581d0672d988610f105d8cac632c24d7e"
+        },
+        "validator_api_snapshot": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "run_attempt": {
+              "const": 1
+            },
+            "job_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "in_progress"
+            },
+            "authentication": {
+              "const": "provided_api_snapshot_requires_independent_authentication"
+            },
+            "successful_run_attested": {
+              "const": false
+            }
+          },
+          "required": [
+            "run_id",
+            "run_attempt",
+            "job_id",
+            "status",
+            "authentication",
+            "successful_run_attested"
+          ],
+          "additionalProperties": false
+        },
+        "dependencies": {
+          "const": {
+            "yfinance": "0.2.66",
+            "pandas": "2.2.0",
+            "numpy": "1.26.3",
+            "curl_cffi": "0.16.3",
+            "requests": "2.31.0",
+            "jsonschema": "4.23.0"
+          }
+        }
+      },
+      "required": [
+        "code_sha",
+        "tree_sha",
+        "request_sha256",
+        "request_canonical_sha256",
+        "request_schema_sha256",
+        "receipt_schema_sha256",
+        "code_manifest_path",
+        "code_manifest_sha256",
+        "frozen_validator",
+        "source_api_evidence_sha256",
+        "api_evidence_sha256",
+        "producer_job_log_sha256",
+        "validator_api_snapshot",
+        "dependencies"
+      ],
+      "additionalProperties": false
+    },
+    "artifact_inventory": {
+      "const": {
+        "path": "captured-inventory.json",
+        "sha256": "798f02f9027e9bd58f94cc0554f2ba3f8da604aa5107c3725aed3550cb33e018",
+        "files": 10055,
+        "expanded_bytes": 227789637
+      }
+    },
+    "original_retention": {
+      "const": {
+        "baseline": {
+          "manifest_sha256": "f49657581a65a88a7cdbb920e6650295e5406f3d9da162f4636614951f2fefaa",
+          "counts": {
+            "objects": 7613,
+            "receipts": 3754,
+            "attempts": 3782,
+            "batches": 10,
+            "current": 3754
+          },
+          "snapshot_sha256": [
+            "3bf57c6d035c3866ac2eaa26721491f8c6505e281e43b7b78378f5a66bc8b5c2",
+            "549b6133d431d72f1d35999238261db382aa8fee1fb10a5771e8ba41b60ef85b",
+            "590ba7019ac52dcdaf2199daef21b94b07d9af29db71148f29adb062f722e701",
+            "6041fc9851dcd37f787ad8c7bdcd08b2bce1cae364fe1e34a084803bf33f6c9b",
+            "6f88fae3e44b51dff51b3f3abac1018223884bb76ada656fecc1144c0b9f6b3a",
+            "9f20ce4bc78b3a5adc259e178308f88198096e05bbf36092e1b6fdc2b50e47ad",
+            "acab51b819ef3edb2bfd19649fa8559d9a65c65efb90d5eaf0a0ab9d013c8e58",
+            "dd3cf173a714ccc81d6add7d12038da135a8172d58de334a50c0c4b19a060fa5",
+            "edef38487d3ed9f813836a30a8c9973b0e562194b1a2ca5b834e37714dbdda6a",
+            "edf36baffde153ef6a2f6f1a173ee9b50eadac5df6a29f186aac153564200ab1",
+            "f49657581a65a88a7cdbb920e6650295e5406f3d9da162f4636614951f2fefaa",
+            "fd561808f19bf8750835a0a2d03f5c0b03069a8e56fc5ee9d450b292ea182a54"
+          ]
+        },
+        "archive_counts": {
+          "objects": 8417,
+          "receipts": 4154,
+          "attempts": 4182,
+          "batches": 11,
+          "current": 3754
+        },
+        "all_original_entries_retained": true,
+        "all_original_objects_verified": true,
+        "all_original_snapshots_verified": true
+      }
+    },
+    "refresh": {
+      "const": {
+        "selected_symbols": 200,
+        "successful_getters": 400,
+        "transport_events": 408,
+        "new_receipts": 400,
+        "new_receipt_ids_sha256": "fbebffd2812c45487c30992a9095de5771182f2e3bc6468cc0e9aa3cb27ed412",
+        "new_receipt_inventory_sha256": "ca75c0b316bc1fe0b56b50b97a5f04cb4f2985318484c0d388b01c09b922d8cb",
+        "unchanged_current_slots": 3354,
+        "unchanged_current_sha256": "2cbfdb687c9347435b51b2f4b6698b37f36b30c43c4c9f2f4eb86291198ba75e",
+        "archive_counts": {
+          "objects": 8417,
+          "receipts": 4154,
+          "attempts": 4182,
+          "batches": 11,
+          "current": 3754
+        },
+        "new_receipt_inventory_path": "fresh-receipts.json"
+      }
+    },
+    "projection": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^projections/[a-f0-9]{64}\\.json$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "schema_version": {
+          "const": "financial-source-certified-projection-v1"
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "eps_growth_yy": {
+              "type": "object",
+              "properties": {
+                "ordinary": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonpositive": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_limited": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "ordinary",
+                "nonpositive",
+                "source_limited",
+                "unknown"
+              ],
+              "additionalProperties": false
+            },
+            "sales_growth_yy": {
+              "type": "object",
+              "properties": {
+                "ordinary": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonpositive": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_limited": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "ordinary",
+                "nonpositive",
+                "source_limited",
+                "unknown"
+              ],
+              "additionalProperties": false
+            },
+            "annual_history": {
+              "type": "object",
+              "properties": {
+                "ordinary": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonpositive": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_limited": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unknown": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "ordinary",
+                "nonpositive",
+                "source_limited",
+                "unknown"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "eps_growth_yy",
+            "sales_growth_yy",
+            "annual_history"
+          ],
+          "additionalProperties": false
+        },
+        "source_timestamp_bounds": {
+          "type": "object",
+          "properties": {
+            "earliest": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "latest": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "earliest",
+            "latest"
+          ],
+          "additionalProperties": false
+        },
+        "cohort_count": {
+          "const": 1894
+        },
+        "receipt_inventory_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retained_receipts": {
+          "const": 4154
+        },
+        "source_data_as_of": {
+          "const": "2026-10-02"
+        },
+        "knowledge_basis": {
+          "const": "current_observation_at_source_capture"
+        },
+        "point_in_time": {
+          "const": false
+        },
+        "source_publication_date": {
+          "const": null
+        },
+        "qualification_authority": {
+          "const": false
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "schema_version",
+        "counts",
+        "source_timestamp_bounds",
+        "cohort_count",
+        "receipt_inventory_sha256",
+        "retained_receipts",
+        "source_data_as_of",
+        "knowledge_basis",
+        "point_in_time",
+        "source_publication_date",
+        "qualification_authority"
+      ],
+      "additionalProperties": false
+    },
+    "retained_failures": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "const": "retained-failures.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "count": {
+          "const": 34
+        },
+        "categories": {
+          "const": {
+            "ordinary_empty_statement": 34
+          }
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "count",
+        "categories"
+      ],
+      "additionalProperties": false
+    },
+    "reviewed_projector_migrations": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "const": "reviewed-projector-migrations.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "count": {
+          "const": 3
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "count"
+      ],
+      "additionalProperties": false
+    },
+    "diagnosis": {
+      "const": {
+        "classification": "reproduced_postcapture_archive_lock_boundary",
+        "evidence_sha256": {
+          "lock-path-reproduction.json": "24f3a5aa43b46cca8b5ba3e4cd30f5f8f1686e1b670cd441054dde858a8a5393",
+          "actual-data-lock-repair-final-replay.json": "80e78ee79160a0cf7b10bc9403bf8e670e84dc7387919e21d62b504b272a5c9b"
+        },
+        "reviewed_lock_repair": {
+          "commit": "86477a5991867a82fc6baf5726a1bb7406ceb417",
+          "tree": "e32612080965fe7b6d8bb37f034010456408f9b6",
+          "parent_tree": "311974ac309e994c01b246dcaa95f11ab16545d3",
+          "files": {
+            "backend/app/services/statement_artifact_archive.py": {
+              "sha256": "b359f8e464a04bff72e458a0eac799cedf154fb3756472e328d478ec60ef3703",
+              "git_blob_sha": "9c412dece8911cf87d17293902a4f56e41f80cc6",
+              "bytes": 44659,
+              "original_producer_tree_sha256": "da335c5e315da99405473d4eff5ff43098310541e4e89898467f3814aae9b3fe",
+              "unchanged_from_original_producer_tree": false
+            },
+            ".github/scripts/run-statement-recovery-cycle.py": {
+              "sha256": "2e8793e05d452408730588da5e2402e51ba8e11b735019a5aaee16e71941785a",
+              "git_blob_sha": "e0f86c7b48ef338c09a051ce14b67d735bc0b245",
+              "bytes": 12771,
+              "original_producer_tree_sha256": "2ffceb9b9f98f77857a404d75d7196062b4ba99b1949ed1b4c65d2acc7ef5b44",
+              "unchanged_from_original_producer_tree": false
+            },
+            "backend/app/services/statement_retention_budget.py": {
+              "sha256": "590b1cdcab11bb43d8d0c626689776ce91afae178134dd7912354d54e9f48439",
+              "git_blob_sha": "34b8753174320505527e459031ed5f85a063dc8c",
+              "bytes": 18993,
+              "original_producer_tree_sha256": "590b1cdcab11bb43d8d0c626689776ce91afae178134dd7912354d54e9f48439",
+              "unchanged_from_original_producer_tree": true
+            }
+          },
+          "purpose": "reproduced_boundary_attribution_only; no_historical_outcome_rewrite"
+        },
+        "integrity_scope": "exact_retained_uploaded_artifact_bytes",
+        "failed_runtime_inode_captured": false,
+        "failed_runtime_inventory_complete_attested": false,
+        "original_final_guard_pass_attested": false
+      }
+    },
+    "frozen_v1_certification": {
+      "const": {
+        "result": "rejected",
+        "reason": "Producer conclusion must retain actual cycle failure"
+      }
+    },
+    "authority": {
+      "const": {
+        "publication": false,
+        "qualification": false,
+        "provider_work": false,
+        "source_admission": false,
+        "github_job_success": false
+      }
+    },
+    "published": {
+      "const": false
+    },
+    "offline_boundary": {
+      "type": "object",
+      "properties": {
+        "self_test_passed": {
+          "const": true
+        },
+        "acquisition_attempts": {
+          "const": []
+        },
+        "dependency_bootstrap_denials": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "socket.__new__",
+              "socket.socket"
+            ]
+          },
+          "maxItems": 1
+        }
+      },
+      "required": [
+        "self_test_passed",
+        "acquisition_attempts",
+        "dependency_bootstrap_denials"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "result",
+    "evaluated_at",
+    "source",
+    "producer_execution",
+    "validation",
+    "artifact_inventory",
+    "original_retention",
+    "refresh",
+    "projection",
+    "retained_failures",
+    "reviewed_projector_migrations",
+    "diagnosis",
+    "frozen_v1_certification",
+    "authority",
+    "published",
+    "offline_boundary"
+  ],
+  "additionalProperties": false
+}

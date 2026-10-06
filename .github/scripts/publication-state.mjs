@@ -8,7 +8,7 @@ import { githubApi, sameRepository, workflowPath } from './publication-gate.mjs'
 import bootstrapData from './approved-ui-bootstrap.json' with { type: 'json' };
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
 import {validateTransportDescriptor} from './static-transport-publication.mjs';
-import {validateFinancialAuditTransport} from './financial-audit-transport.mjs';
+import {compressedAuditFiles,financialAuditReader,validateFinancialAuditTransport} from './financial-audit-transport.mjs';
 
 export const bootstrap = bootstrapData;
 function approvedPriceObservations() {
@@ -114,7 +114,7 @@ export function validateReceipt(receipt) {
     || receipt.ui_digest !== inventoryDigest(receipt.ui_files)) throw Error('Invalid or truncated live publication receipt');
   if (receipt.financial_release !== undefined) {
     const ref=receipt.financial_release;
-    if(receipt.financial_correction!==undefined||!ref||Object.keys(ref).sort().join(',')!=='path,schema_version,sha256'||ref.schema_version!=='financial-release-receipt-v1'
+    if(receipt.financial_correction!==undefined||!ref||Object.keys(ref).sort().join(',')!=='path,schema_version,sha256'||!['financial-release-receipt-v1','financial-release-receipt-v2'].includes(ref.schema_version)
       ||!/^[a-f0-9]{64}$/.test(ref.sha256||'')||ref.path!==`static-data/financial-corrections/release-${ref.sha256}.json`
       ||!['financial_generation','financial_lineage_sha256','data_inventory_sha256'].every(key=>/^[a-f0-9]{64}$/.test(receipt[key]||'')))throw Error('Invalid publication financial release reference');
   } else if (receipt.financial_correction !== undefined || receipt.financial_generation !== undefined || (!Object.hasOwn(receipt,'transport')&&receipt.data_inventory_sha256 !== undefined) || receipt.financial_lineage_sha256 !== undefined) {
@@ -202,7 +202,7 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   const receipt = receiptBytes ? validateReceipt(parsePublicationReceipt(receiptBytes)) : null;
   const anchor = deploymentAnchor(receipt || { run_id: bootstrap.approved_run_id, run_attempt: bootstrap.approved_attempt }, repository, api);
   const latest = latestDeployment(repository, api, anchor);
-  let financialCorrection = null, financialRelease = null;
+  let financialCorrection = null, financialRelease = null, financialOrigin = null;
   if (receipt) {
     if (receipt.run_id !== latest.runId || receipt.run_attempt !== latest.attempt) throw Error('Pages has not converged to its latest successful deployment');
     if (receipt.data_manifest_sha256 !== sha256(manifestBytes) || receipt.verification_universe.as_of_date !== manifest.markets.US?.as_of_date) throw Error('Live receipt and data disagree');
@@ -227,8 +227,26 @@ export async function livePublication({ repository = bootstrap.repository, fetch
       if(sha256(bytes)!==reference.sha256)throw Error('Live financial release receipt hash mismatch');
       const {validateFinancialReleaseReceipt}=await import('./financial-release-activation.mjs');
       financialRelease=validateFinancialReleaseReceipt(JSON.parse(bytes));
-      requiredFinancialAuditFiles({receipt,financialRelease});
-      if(isPerformanceException(receipt.approval))verifyExceptionFinancialScope(financialRelease,verifiedApproval);
+      const retainedAudit=requiredFinancialAuditFiles({receipt,financialRelease});
+      if(financialRelease.schema_version!==reference.schema_version)throw Error('Live financial reference version changed');
+      if(financialRelease.renewal){
+        const {verifyPublishedRenewal}=await import('./financial-source-renewal.mjs');
+        const compressed=receipt.financial_audit_transport?compressedAuditFiles(receipt):{};
+        const auditReader=receipt.financial_audit_transport?await financialAuditReader({publication:receipt,fetcher}):null;
+        let renewed;
+        try{
+          renewed=await verifyPublishedRenewal(financialRelease,{readAsset:async path=>{
+            const hash=retainedAudit[path];if(!hash)throw Error('Live renewal requested an undeclared retained audit asset');
+            // A declared compressed asset has exactly one authenticated source.
+            // Decode failures never fall back to a raw URL or another receipt.
+            const bytes=Object.hasOwn(compressed,path)?await auditReader.read(path,hash):await read(path);
+            if(sha256(bytes)!==hash)throw Error('Live retained audit bytes changed');
+            return bytes;
+          },api,verifiedApproval:isPerformanceException(receipt.approval)?verifiedApproval:undefined});
+        }finally{auditReader?.dispose();}
+        financialOrigin=renewed.origin;
+        if(financialRelease.mode==='renewal'&&receipt.controller_sha!==renewed.transitions.at(-1).publisher.head_sha)throw Error('Live renewal publication controller differs from its sealed current-main authority');
+      }else if(isPerformanceException(receipt.approval))verifyExceptionFinancialScope(financialRelease,verifiedApproval);
       if(financialRelease.financial_generation!==receipt.financial_generation||financialRelease.lineage_sha256!==receipt.financial_lineage_sha256
         ||financialRelease.ui.approved_sha!==receipt.ui_sha||financialRelease.ui.digest!==receipt.ui_digest
         ||(isPerformanceException(receipt.approval)||isPerformanceException(financialRelease.ui.approval))&&JSON.stringify(financialRelease.ui.approval)!==JSON.stringify(receipt.approval))throw Error('Live financial release and publication disagree');
@@ -255,7 +273,7 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   const finalDeployment = latestDeployment(repository, api, latest);
   if (latest.runId !== finalDeployment.runId || latest.attempt !== finalDeployment.attempt) throw Error('A new deployment completed while reading Pages');
   return { identity: `${latest.runId}/${latest.attempt}/${sha256(receiptBytes || '')}/${sha256(manifestBytes)}`, latest,
-    receipt, financialCorrection, financialRelease, legacyArtifact: legacy?.artifact || null, priceObservations, knownPriceDates, manifest, manifestHash: sha256(manifestBytes), uiSha: receipt?.ui_sha || bootstrap.ui_sha,
+    receipt, financialCorrection, financialRelease, ...(financialOrigin?{financialOrigin}:{}), legacyArtifact: legacy?.artifact || null, priceObservations, knownPriceDates, manifest, manifestHash: sha256(manifestBytes), uiSha: receipt?.ui_sha || bootstrap.ui_sha,
     verificationUniverse: receipt?.verification_universe || bootstrap.verification_universe, receiptHash: sha256(receiptBytes || ''), uiFiles, uiDigest: inventoryDigest(uiFiles), approval: receipt?.approval || { type: 'bootstrap', sha: bootstrap.ui_sha } };
 }
 

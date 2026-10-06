@@ -160,11 +160,12 @@ export function removeCanonical(root,canonical) {if(canonical!==root)rmSync(cano
 
 // Appending the release audit creates new root/shard metadata. It must never
 // re-encode captured original members differently or add arbitrary logical data.
-export async function verifyCapturedTransportAssets({candidateRoot,root,frontendRoot,candidatePublication,publication,allowedAdditions=[]}) {
+async function verifyCapturedAssets({candidateRoot,root,frontendRoot,candidatePublication,publication,allowedAdditions=[]},renewal=false) {
   const before=await verifyTransportPublication({root:candidateRoot,frontendRoot,publication:candidatePublication});
   const after=await verifyTransportPublication({root,frontendRoot,publication});
   if(!before||!after)throw Error('Captured packed candidate cannot switch transport representations');
-  if(!Array.isArray(allowedAdditions)||allowedAdditions.some(path=>!/^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release)-[a-f0-9]{64}\.json$/.test(path)))throw Error('Invalid packed activation audit additions');
+  const additionPattern=renewal?/^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release|renewal)-[a-f0-9]{64}\.json$/:/^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release)-[a-f0-9]{64}\.json$/;
+  if(!Array.isArray(allowedAdditions)||allowedAdditions.some(path=>!additionPattern.test(path)))throw Error('Invalid packed activation audit additions');
   const originals=hashes(before.logicalInventory),final=hashes(after.logicalInventory),allowed=new Set(allowedAdditions);
   for(const path of Object.keys(final))if(!Object.hasOwn(originals,path)&&allowed.has(path)){
     if(!path.endsWith(`-${final[path]}.json`))throw Error('Packed activation audit addition is not hash-bound');
@@ -175,3 +176,7 @@ export async function verifyCapturedTransportAssets({candidateRoot,root,frontend
   if(digest(encoded(before.physicalInventory))!==digest(encoded(after.physicalInventory)))throw Error('Final packed activation changed captured encoded payload bytes');
   return {logical_inventory_sha256:digest(originals),encoded_payload_inventory_sha256:digest(encoded(before.physicalInventory))};
 }
+
+export const verifyCapturedTransportAssets=options=>verifyCapturedAssets(options);
+// Independent renewal scope; original activation additions remain closed.
+export const verifyRenewalTransportAssets=options=>verifyCapturedAssets(options,true);
