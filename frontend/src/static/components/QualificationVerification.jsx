@@ -17,7 +17,7 @@ export default function QualificationVerification({ row, entry, date, generation
   const query = useQuery({ queryKey: ['independentVerification', row.symbol, entry?.path, date, generation, method],
     enabled: false, retry: false, placeholderData: () => undefined,
     queryFn: async () => {
-      const [payload, benchmark] = await Promise.all([fetchStaticChartPayload(entry.path), fetchStaticJson('book-benchmark.json').catch(() => null)]);
+      const [payload, benchmark] = await Promise.all([fetchStaticChartPayload(entry.path, { generation }), fetchStaticJson('book-benchmark.json').catch(() => null)]);
       const audit = auditDailyBars(row, payload, date);
       return { audit, bookDiagnostics: diagnoseBookChart(row, payload, date), bookTechnical: buildBookTechnicalEvidence(row, payload, date, { benchmark }), assessment: assess({ ...row, technical_audit: audit }, method, Date.now()) };
     } });
@@ -43,7 +43,7 @@ export default function QualificationVerification({ row, entry, date, generation
     </Alert>}
     {method.startsWith('minervini') && <SepaReview method={method} row={row} bookFinancialOpen={bookFinancialOpen} date={date} now={now} />}
     {!method.startsWith('minervini') && <BookFinancialReview row={row} expanded={bookFinancialOpen} date={date} now={now} />}
-    {method.startsWith('minervini') && <BookPatternReview key={`${row.symbol}-${date}`} row={row} entry={entry} date={date} />}
-    {method.startsWith('minervini') && <BookExitEvidence key={`exit-${row.symbol}-${date}`} row={row} entry={entry} date={date} />}
+    {method.startsWith('minervini') && <BookPatternReview key={`${row.symbol}-${date}`} row={row} entry={entry} date={date} generation={generation} />}
+    {method.startsWith('minervini') && <BookExitEvidence key={`exit-${row.symbol}-${date}`} row={row} entry={entry} date={date} generation={generation} />}
   </section>;
 }

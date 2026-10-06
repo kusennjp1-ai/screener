@@ -10,7 +10,7 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {lifecycleFixture,read,sourceTime} from './financial-release-lifecycle.mjs';
 import {contract,dataInventory,digest} from '../financial-correction.mjs';
-import {bootstrap,inventoryDigest,sha256} from '../publication-state.mjs';
+import {bootstrap,inventoryDigest,sha256,uiInventory} from '../publication-state.mjs';
 
 const repoRoot=fileURLToPath(new URL('../../../',import.meta.url));
 const controllerSha='b'.repeat(40),capturedSha='d'.repeat(40),capturedTree='e'.repeat(40),controllerTree='f'.repeat(40);
@@ -18,7 +18,9 @@ const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSy
 const gitBlob=bytes=>createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const content=bytes=>({type:'file',encoding:'base64',size:bytes.length,content:bytes.toString('base64')});
 
-export async function performanceLifecycleFixture(){
+export async function performanceLifecycleFixture({packedTransport=false,exceptionVersion=1}={}){
+  if(![1,2].includes(exceptionVersion))throw Error('Unsupported fixture exception version');
+  if(exceptionVersion===2&&!packedTransport)throw Error('Packed exception fixture requires packed transport');
   const codeRoot=mkdtempSync(join(tmpdir(),'financial-performance-controller-'));
   const fixture=lifecycleFixture({controllerPath:join(codeRoot,'.github/scripts/select-release-source.mjs')});
   try{
@@ -29,9 +31,30 @@ export async function performanceLifecycleFixture(){
     symlinkSync(join(repoRoot,'frontend'),join(codeRoot,'frontend'));
     const publicationPath=join(fixture.liveRoot,'publication.json'),publication=read(publicationPath);
     const originalReceipt=read(join(fixture.liveRoot,publication.financial_release.path));
-    const policyPath=join(codeRoot,'contracts/financial_performance_exception_v1.json'),policy=read(policyPath);
-    policy.captured_ui={sha:capturedSha,tree:capturedTree,digest:publication.ui_digest};
-    write(policyPath,policy);
+    if(packedTransport){
+      cpSync(join(repoRoot,'frontend/public/static-transport-capability.json'),join(fixture.liveRoot,'static-transport-capability.json'));
+      publication.ui_files=uiInventory(fixture.liveRoot);publication.ui_digest=inventoryDigest(publication.ui_files);
+    }
+    const legacyPolicyPath=join(codeRoot,'contracts/financial_performance_exception_v1.json'),legacyPolicy=read(legacyPolicyPath);
+    const capturedUi={sha:capturedSha,tree:capturedTree,digest:publication.ui_digest};
+    let policy;
+    if(exceptionVersion===1){
+      policy=legacyPolicy;policy.captured_ui=capturedUi;write(legacyPolicyPath,policy);
+    }else{
+      // An enabled policy exists only inside this disposable offline fixture.
+      // These identities describe no real approval, capture, or artifact.
+      const capture={...Object.fromEntries(['failures','budgets','design_steps'].map(key=>[key,legacyPolicy[key]])),
+        captured_ui:capturedUi,capture_head_sha:'1'.repeat(40),capture_base_sha:'2'.repeat(40),ci_run_id:60,design_run_id:61,design_job_id:610,capture_attempt:1,
+        diagnostic:{id:160,name:'unapproved-financial-diagnostic-61-1',sha256:sha256('synthetic packed diagnostic'),bytes:1},
+        design_artifact:{id:161,name:`design-acceptance-${capturedSha}`,sha256:sha256('synthetic packed Design archive')},
+        report_sha256:sha256('synthetic packed report'),review_sha256:sha256('synthetic packed review'),
+        capture_ci_jobs:legacyPolicy.capture_ci_jobs.map((job,index)=>({...job,id:600+index})),
+        activation_not_after:'2026-10-07T10:46:54.945Z',screenshot_keys:['synthetic-packed-desktop','synthetic-packed-mobile'],
+        transport_sha256:sha256('synthetic packed preview transport')};
+      write(join(codeRoot,'contracts/financial_performance_exception_v2.json'),{schema_version:'financial-performance-exception-policy-v2',enabled:true,capture});
+      const policies=await import(pathToFileURL(join(codeRoot,'.github/scripts/financial-performance-policy.mjs')).href);
+      policy=policies.exceptionPolicyForVersion(2);
+    }
 
     // Describe all protected files in this fixture snapshot with their actual
     // Git blob hashes. The synthetic prior revision differs in one explicitly
@@ -51,15 +74,16 @@ export async function performanceLifecycleFixture(){
       previous_publication_identity:originalReceipt.previous_publication_identity,source:originalReceipt.lineage.source},
       source_validation:{guard:'certified_source_artifact_v1',certificate:originalReceipt.lineage.certificate},
       destination_projection:{projector:'native_annual_destination_v1',policy:'financial-correction-native-annual-v1'}};
-    const approval={schema_version:'financial-performance-approval-v1',scope:'one-captured-financial-repair',approved_at:'2026-10-04T11:00:00.000Z',activation_not_after:'2026-10-07T10:46:54.945Z',
+    const approval={schema_version:`financial-performance-approval-v${exceptionVersion}`,scope:'one-captured-financial-repair',approved_at:'2026-10-04T11:00:00.000Z',activation_not_after:'2026-10-07T10:46:54.945Z',
       captured_ui:policy.captured_ui,request_sha256:digest(request),preview_receipt_sha256:sha256('synthetic preview receipt'),projection_sha256:sha256(fixture.original.bytes),report_sha256:policy.report_sha256,
       review:{path:'docs/design-review/synthetic-lifecycle-review.json',sha256:policy.review_sha256},failures:policy.failures,budgets:policy.budgets,
+      ...(exceptionVersion===2?{transport_sha256:policy.transport_sha256}:{}),
       captured_code_sha256:digest(captured),controller_code_sha256:digest(current),controller_changes:{[changedPath]:{before:captured[changedPath],after:current[changedPath]}}};
     const approvalBytes=Buffer.from(JSON.stringify(approval));
-    const pin={schema_version:'financial-performance-candidate-pin-v1',repository:bootstrap.repository,workflow:policy.workflow,head_sha:controllerSha,
+    const pin={schema_version:`financial-performance-candidate-pin-v${exceptionVersion}`,repository:bootstrap.repository,workflow:policy.workflow,head_sha:controllerSha,
       run_id:80,run_attempt:1,job_id:800,artifact_id:180,artifact_name:'financial-performance-candidate-80-1',artifact_sha256:sha256('synthetic expired certificate artifact'),
       candidate_record_sha256:sha256('synthetic sealed candidate'),projection_sha256:approval.projection_sha256,preview_receipt_sha256:approval.preview_receipt_sha256,approval_sha256:sha256(approvalBytes)};
-    const ui={type:'performance-exception-v1',sha:capturedSha,ui_digest:publication.ui_digest,controller_sha:controllerSha,approval_sha256:pin.approval_sha256,certificate:pin};
+    const ui={type:`performance-exception-v${exceptionVersion}`,sha:capturedSha,ui_digest:publication.ui_digest,controller_sha:controllerSha,approval_sha256:pin.approval_sha256,certificate:pin};
     const api=fixture.config.api,prefix=`repos/${bootstrap.repository}`;
     const register=(id,head,path,event,conclusion,jobs)=>{
       const run={id,run_attempt:1,head_sha:head,path,event,head_branch:event==='pull_request'?'synthetic-fixture':'main',status:'completed',conclusion,
@@ -90,7 +114,15 @@ export async function performanceLifecycleFixture(){
       candidate:{repository:pin.repository,workflow:pin.workflow,head_sha:pin.head_sha,run_id:pin.run_id,run_attempt:pin.run_attempt,job_id:pin.job_id,
         artifact_id:pin.artifact_id,artifact_name:pin.artifact_name,artifact_sha256:pin.artifact_sha256,candidate_receipt_sha256:pin.preview_receipt_sha256,record_sha256:pin.candidate_record_sha256}});
     Object.assign(publication,{ui_sha:capturedSha,approval:ui,financial_release:prepared.reference,data_inventory_sha256:inventoryDigest(dataInventory(fixture.liveRoot))});
-    write(publicationPath,publication);fixture.save();
+    write(publicationPath,publication);
+    if(packedTransport){
+      // Pack only after replacing the synthetic seed's ordinary gate receipt,
+      // so the transport binds the exact exception UI and financial audit.
+      const {packPublication}=await import(pathToFileURL(join(codeRoot,'.github/scripts/static-transport-publication.mjs')).href);
+      await packPublication({root:fixture.liveRoot,frontendRoot:join(repoRoot,'frontend'),publication,
+        bindings:{sourceCommit:controllerSha,appCommit:capturedSha,candidateId:approval.preview_receipt_sha256}});
+    }
+    fixture.save();
     return {...fixture,codeRoot,policy,approval,pin,request,ui,captured,current,activation,exception,approvalEndpoint,requestEndpoint,
       controllerRun,controllerJobs:api[`${prefix}/actions/runs/90/attempts/1/jobs?per_page=100`][0].jobs,
       get liveRoot(){return fixture.liveRoot;},

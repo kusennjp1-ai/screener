@@ -38,7 +38,7 @@ import StaticGroupChartsGrid from './StaticGroupChartsGrid';
 
 const CHARTS_TOP_N_GROUPS = 50;
 
-function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClose }) {
+function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClose, publication }) {
   const financialNow = useFinancialClock(detail?.stocks);
   const stocks = useMemo(() => (detail?.stocks || []).map(stock => projectFinancialRow(stock, { now: financialNow, asOfDate: detail?.as_of_date || chartIndex?.as_of_date, market: detail?.market })), [detail, chartIndex?.as_of_date, financialNow]);
   const [activeTab, setActiveTab] = useState('overview');
@@ -121,7 +121,7 @@ function StaticGroupDetailModal({ group, detail, chartIndex = null, open, onClos
             </Tabs>
 
             {activeTab === 'charts' && chartsEnabled ? (
-              <StaticGroupChartsGrid symbols={chartSymbols} chartIndex={chartIndex} />
+              <StaticGroupChartsGrid symbols={chartSymbols} chartIndex={chartIndex} publication={publication} />
             ) : (
               <Box>
             {/* Current Stats */}

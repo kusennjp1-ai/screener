@@ -6,6 +6,7 @@ import { assess, researchCsv } from '../src/static/researchEngine.js';
 import { entryReadiness } from '../src/static/entryReadiness.js';
 import { modelMarket } from '../src/static/portfolioPlan.js';
 import { scrollFinancialViewport } from './financial-viewport-geometry.mjs';
+import { createDesignAssetObserver } from './design-static-assets.mjs';
 
 // Selected from the receipt-replayed 2026-10-04 native annual projection:
 // NVDA: ordinary USD; FUTU: HKD annualDilutedEPS receipt; AAOI: negative
@@ -134,15 +135,12 @@ async function inspectFinancialRows(panel, expected, check, key) {
 export async function verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl }) {
   if (!financialDesignScreens(viewport, theme).length) return;
   const staticUrl = path => new URL(`static-data/${path}`, currentUrl).href;
-  const get = async path => {
-    const response = await page.request.get(staticUrl(path));
-    requireValue(response.ok(), `${path}: HTTP ${response.status()}`);
-    return response.json();
-  };
   report.financial_cases ||= [];
+  let assets;
   try {
-    const manifest = await get('manifest.json'), entry = manifest.markets?.US || manifest;
-    const data = decodeResearchIndex(await get(entry.assets.research.path));
+    assets = await createDesignAssetObserver({ baseURL: currentUrl });
+    const manifest = assets.manifest, entry = manifest.markets?.US || manifest;
+    const data = decodeResearchIndex(await assets.readJson(entry.assets.research.path));
     const date = entry.as_of_date, generation = manifest.research_generation || manifest.generated_at;
     for (const item of FINANCIAL_DESIGN_CASES) {
       const key = `financial-${item.symbol}/${viewport.width}/${theme}`;
@@ -153,11 +151,13 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const summary = data.rows.find(row => row.symbol === item.symbol);
         requireValue(summary?.research_detail_path, `${item.symbol}: published detail path missing`);
         await page.goto(`${currentUrl}#/?method=oneil&symbol=${encodeURIComponent(item.symbol)}`);
-        const [loadedManifest] = await Promise.all([
+        const [loadedManifest, , loadedPublication] = await Promise.all([
           page.waitForResponse(response => response.url() === staticUrl('manifest.json') && response.ok()),
           page.waitForResponse(response => response.url() === staticUrl(entry.assets.research.path) && response.ok()),
+          assets.packed ? page.waitForResponse(response => response.url() === new URL('publication.json', currentUrl).href) : null,
           page.reload(),
         ]);
+        await assets.assertBrowserBootstrap(loadedManifest, loadedPublication);
         const browserManifest = await loadedManifest.json();
         requireValue((browserManifest.research_generation || browserManifest.generated_at) === generation &&
           (browserManifest.markets?.US || browserManifest).assets.research.path === entry.assets.research.path,
@@ -165,11 +165,8 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         await page.waitForFunction(symbol => document.querySelector('.symbol-title h2')?.textContent.trim() === symbol, item.symbol);
         const financialTab = page.getByRole('tab', { name: '財務・機関', exact: true });
         await ready(financialTab);
-        const [loadedDetail] = await Promise.all([
-          page.waitForResponse(response => response.url() === staticUrl(summary.research_detail_path) && response.ok()),
-          financialTab.click(),
-        ]);
-        const detail = await loadedDetail.json();
+        const { value: detail, observation } = await assets.observeJson(page, summary.research_detail_path, () => financialTab.click());
+        record.loaded_detail_transport = observation;
         requireValue(detail.symbol === item.symbol && detail.as_of_date === date, 'Browser detail symbol/date mismatch');
         requireValue(detail.financial_current?.t === summary.financial_current?.t && Number.isFinite(detail.financial_current?.t),
           'Browser detail and research financial generations do not match');
@@ -278,4 +275,5 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
       }
     }
   } catch (error) { check(false, `financial/${viewport.width}/${theme}: published case setup failed: ${error.message}`); }
+  finally { assets?.dispose(); }
 }

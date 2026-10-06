@@ -21,7 +21,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
     observer.observe(ref.current); return () => observer.disconnect();
   }, []);
   const query = useQuery({ queryKey: [...staticChartKeys.payload(row.symbol, row.chart_path), generation], enabled: visible && !paused && Boolean(row.chart_path), staleTime: Infinity,
-    queryFn: async () => { const data = await fetchStaticChartPayload(row.chart_path); if (data.symbol !== row.symbol || data.as_of_date !== date) throw Error('Chart snapshot mismatch'); return data; } });
+    queryFn: async () => { const data = await fetchStaticChartPayload(row.chart_path, { generation }); if (data.symbol !== row.symbol || data.as_of_date !== date) throw Error('Chart snapshot mismatch'); return data; } });
   const invalidIdentity = query.data && (query.data.symbol !== row.symbol || query.data.as_of_date !== date);
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
   const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);

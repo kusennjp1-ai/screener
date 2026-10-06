@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('intake', Path(__file__).with_name('restore-financial-diagnostic.py'))
 intake = importlib.util.module_from_spec(spec)
@@ -54,7 +55,7 @@ class TestDiagnosticIntake(unittest.TestCase):
         self.assertFalse((self.root / 'out/diagnostic.tar.gz').exists())
 
     def test_rejects_traversal_duplicate_authority_and_symlink(self):
-        for name in ('review-only/../escape', '/absolute', 'review-only/corrected/index.html', 'review-only/candidate.json', 'review-only/corrected/publication.json'):
+        for name in ('review-only/../escape', '/absolute', 'review-only/corrected/index.html', 'review-only/candidate.json', 'review-only/corrected/publication.json', 'review-only/transport.json/nested'):
             with self.subTest(name=name):
                 m = tarfile.TarInfo(name)
                 with self.assertRaises(ValueError):
@@ -91,6 +92,49 @@ class TestDiagnosticIntake(unittest.TestCase):
         out = self.root / 'design'
         self.assertEqual(intake.read_design(path, out), {'one.png': hashlib.sha256(b'pixels').hexdigest()})
         self.assertFalse((out / 'one.png').exists())
+
+    def test_only_preview_publication_has_a_narrow_authority_exception(self):
+        from financial_diagnostic_transport import preview_publication
+        root = self.root / 'preview'
+        (root / 'corrected').mkdir(parents=True)
+        path = root / 'corrected/publication.json'
+        valid = {'schema': 'static-json-transport-preview-v1', 'publication_authority': 'none',
+                 'ui_sha': 'a' * 40, 'ui_digest': 'b' * 64,
+                 'data_manifest_sha256': 'c' * 64, 'transport': {'fixture': True}}
+        path.write_text(json.dumps(valid))
+        self.assertEqual(preview_publication(root), valid)
+        for change in ({'schema': 1}, {'approval': {}}, {'publication_authority': 'approved'}, {'transport': None}):
+            path.write_text(json.dumps({**valid, **change}))
+            with self.assertRaises(ValueError):
+                preview_publication(root)
+
+    def test_transport_proof_subprocess_is_required_and_bound_to_original_receipt(self):
+        import financial_diagnostic_transport as transport
+        root = self.root / 'proof'
+        (root / 'corrected').mkdir(parents=True)
+        preview = {'schema': 'static-json-transport-preview-v1', 'publication_authority': 'none',
+                   'ui_sha': 'a' * 40, 'ui_digest': 'b' * 64,
+                   'data_manifest_sha256': 'c' * 64, 'transport': {'fixture': True}}
+        raw = json.dumps(preview).encode()
+        (root / 'corrected/publication.json').write_bytes(raw)
+        (root / 'preview-receipt.json').write_text(json.dumps({'candidate_ui': {'sha': 'a' * 40, 'digest': 'b' * 64},
+                                                            'bundles': {'corrected_data_sha256': 'd' * 64}}))
+        verified = {'schema': 'verified-candidate-transport-v1', 'logical_data_inventory_sha256': 'd' * 64,
+                    'ui_inventory_sha256': 'b' * 64, 'physical_inventory_sha256': 'e' * 64,
+                    'preview_publication_sha256': hashlib.sha256(raw).hexdigest()}
+        from types import SimpleNamespace
+        with patch.object(transport.subprocess, 'run', return_value=SimpleNamespace(stdout=json.dumps(verified))) as run:
+            self.assertEqual(transport.verify_candidate_transport(root), verified)
+        self.assertTrue(run.call_args.kwargs['check'])
+        self.assertEqual(run.call_args.kwargs['timeout'], 600)
+        self.assertIn('verify-candidate-transport', run.call_args.args[0])
+        for field in ('logical_data_inventory_sha256', 'ui_inventory_sha256', 'preview_publication_sha256'):
+            with patch.object(transport.subprocess, 'run', return_value=SimpleNamespace(stdout=json.dumps({**verified, field: 'f' * 64}))):
+                with self.assertRaisesRegex(ValueError, 'differs'):
+                    transport.verify_candidate_transport(root)
+        with patch.object(transport.subprocess, 'run', side_effect=RuntimeError('verifier failed')):
+            with self.assertRaisesRegex(RuntimeError, 'verifier failed'):
+                transport.verify_candidate_transport(root)
 
 if __name__ == '__main__':
     unittest.main()

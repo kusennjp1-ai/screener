@@ -1,3 +1,4 @@
+import {canonicalPublication,removeCanonical} from './static-transport-publication.mjs';
 // LOCAL, OFFLINE REVIEW ONLY. This command neither authorizes publication nor
 // calls GitHub, providers, Pages, npm lifecycle hooks or a release controller.
 import { execFileSync } from 'node:child_process';
@@ -127,7 +128,7 @@ export function verifyCertifiedPreviewCycle(source,files,certification) {
     published:cycle.published,retained_receipts:cycle.retained_receipts,retained_symbols:cycle.retained_symbols};
 }
 
-export function verifyPredecessor(root, live, artifact, expectedIdentity) {
+export async function verifyPredecessor(root, live, artifact, expectedIdentity,frontendRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../frontend')) {
   const receiptPath = join(root, 'publication.json');
   const receiptBytes = existsSync(receiptPath) ? readFileSync(receiptPath) : Buffer.from('');
   const receipt = receiptBytes.length ? validateReceipt(JSON.parse(receiptBytes)) : null;
@@ -142,12 +143,17 @@ export function verifyPredecessor(root, live, artifact, expectedIdentity) {
     || !Number.isFinite(Date.parse(artifact.created_at)) || !Number.isFinite(live.latest?.jobStarted) || !Number.isFinite(live.latest?.started)
     || Date.parse(artifact.created_at) < live.latest.jobStarted || Date.parse(artifact.created_at) > live.latest.started) throw Error('Preview predecessor identity mismatch');
   if (inventoryDigest(uiInventory(root)) !== live.uiDigest || (receipt && (receipt.ui_digest !== live.uiDigest || receipt.ui_sha !== live.uiSha))) throw Error('Predecessor UI bytes mismatch');
-  const inventory = inventoryDigest(dataInventory(root));
+  const restored=`${root}.canonical`;rmSync(restored,{recursive:true,force:true});
+  const logical=await canonicalPublication({root,frontendRoot,publication:receipt,restore:restored});
+  try {
+  const inventory = inventoryDigest(dataInventory(logical));
   if (receipt?.data_inventory_sha256 && receipt.data_inventory_sha256 !== inventory) throw Error('Predecessor data inventory mismatch');
-  const observations = extractPriceObservations({ dataRoot: join(root, 'static-data'), manifest: JSON.parse(manifestBytes) });
+  const observations = extractPriceObservations({ dataRoot: join(logical, 'static-data'), manifest: JSON.parse(manifestBytes) });
   if (priceObservationDigest(observations) !== priceObservationDigest(receipt?.price_observations ?? live.priceObservations)) throw Error('Predecessor price observations mismatch');
-  return { identity, ui_sha: live.uiSha, ui_digest: live.uiDigest, artifact_id: artifact.id,
+  const verified={ identity, ui_sha: live.uiSha, ui_digest: live.uiDigest, artifact_id: artifact.id,
     artifact_sha256: artifact.digest.slice(7), data_inventory_sha256: inventory, price_observations_sha256: priceObservationDigest(observations) };
+  Object.defineProperty(verified,'logicalRoot',{value:logical});return verified;
+  }catch(error){removeCanonical(root,logical);throw error;}
 }
 
 function copyData(source, destination) {
@@ -276,7 +282,8 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
     mkdirSync(predecessor);
     execFileSync('tar', ['-xf', join(predecessorArchive, 'artifact.tar'), '-C', predecessor], { stdio: 'pipe' });
   }
-  const prior = verifyPredecessor(predecessor, live, artifact, request.correction.previous_publication_identity);
+  const prior = await verifyPredecessor(predecessor, live, artifact, request.correction.previous_publication_identity);
+  const logicalPredecessor=prior.logicalRoot;
   // Keep the exact original ZIP. Its redundant unpacked TAR is unnecessary
   // after verification and would cost another full predecessor-sized copy.
   rmSync(join(predecessorArchive, 'artifact.tar'), { force: true });
@@ -293,13 +300,13 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
   await verifyConsumerCapability(frontend);
   symlinkSync(resolve(candidateRoot, 'frontend/node_modules'), join(frontend, 'node_modules'), 'dir');
   const publicRoot = join(frontend, 'public'); mkdirSync(publicRoot, { recursive: true });
-  copyData(predecessor, publicRoot);
+  copyData(logicalPredecessor, publicRoot);
   const baseline = join(output, 'baseline');
   build(frontend, baseline, evaluatedAt);
   const baselineCoverage = await coverage(baseline, frontend, live);
   // Finish the complete baseline proof before retaining either large native
   // projection or another decoded copy of the target research universe.
-  const baselineEquality = await compareCandidateBaselineData(predecessor, baseline, frontend, {auditDirectory:join(output,'verification-phases','baseline')});
+  const baselineEquality = await compareCandidateBaselineData(logicalPredecessor, baseline, frontend, {auditDirectory:join(output,'verification-phases','baseline')});
   const target = join(output, 'target-base.json');
   await writeTargetBase(baseline,frontend,target);
   const source = request.correction.source;
@@ -329,7 +336,7 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
   const equality = comparePreviewDataIsolated(baseline, corrected, frontend, comparison, {evaluatedAt,auditDirectory:join(output,'verification-phases','correction')});
   const uiDigest = inventoryDigest(uiInventory(corrected));
   if (uiDigest !== inventoryDigest(uiInventory(baseline))) throw Error('Baseline and corrected candidate UI bytes differ');
-  if (inventoryDigest(dataInventory(predecessor)) !== prior.data_inventory_sha256 || inventoryDigest(uiInventory(predecessor)) !== prior.ui_digest) throw Error('Predecessor input changed during preview');
+  if (inventoryDigest(dataInventory(logicalPredecessor)) !== prior.data_inventory_sha256 || inventoryDigest(uiInventory(predecessor)) !== prior.ui_digest) throw Error('Predecessor input changed during preview');
   const report = { source_outcome: sourceStatus, baseline_equality: baselineEquality, correction_equality: equality, baseline_coverage: baselineCoverage, corrected_coverage: correctedCoverage, compatibility };
   write(join(output, 'verification.json'), report);
   const receipt = { schema_version: request.schema_version, ...selected, kind: 'unpublished_financial_candidate', publication_authority: 'none',
@@ -342,6 +349,7 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
   write(join(output, 'preview-receipt.json'), receipt);
   writeFileSync(join(output, 'UNPUBLISHED.txt'), 'LOCAL REVIEW ONLY. This artifact is not public and grants no publication authority. No CI, Design Acceptance, live-state or durable-backup approval is implied.\n');
   rmSync(join(frontend, 'node_modules'));
+  removeCanonical(predecessor,logicalPredecessor);
   // No publication.json is ever generated. The receipt lives outside both
   // bundles and can never pass validateReceipt/validateCorrectionReceipt.
   return { output, receipt_sha256: sha256(readFileSync(join(output, 'preview-receipt.json'))), receipt };

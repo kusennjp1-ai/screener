@@ -29,7 +29,7 @@ export default function SectorStrength({entry}) {
   const [highlight,setHighlight]=useState(null);
   const isMobile=useMediaQuery('(max-width:700px)');
   const manifest=useStaticManifest();
-  const bundle=useResearchBundle(entry?.assets?.research?.path,entry?.as_of_date,manifest.data?.research_generation || manifest.data?.generated_at);
+  const bundle=useResearchBundle(entry?.assets?.research?.path,entry?.as_of_date,manifest.data?.research_generation || manifest.data?.generated_at,entry?.publication);
   const publishedSectors=query.data?.sectors;
   const sectors=useMemo(()=>{
     if(!publishedSectors)return null;

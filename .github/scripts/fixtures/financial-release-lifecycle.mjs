@@ -58,7 +58,7 @@ function bars(date,price) {
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
-export function lifecycleFixture({controllerPath=controller}={}) {
+export function lifecycleFixture({controllerPath=controller,packedTransport=false}={}) {
   const root=mkdtempSync(join(tmpdir(),'financial-release-lifecycle-')),certificate=certifiedSourceFixture();
   const configPath=join(root,'remote.json'),preload=join(root,'transport.mjs'),bin=join(root,'bin');mkdirSync(bin);
   const config={api:{},zips:{},liveRoot:null},api=config.api,prefix=`repos/${repository}`;
@@ -134,6 +134,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     // Record the established first observation before testing subsequent days.
     success(invoke(join(root,'seed/frontend/tools/record-candidate-history.mjs'),[],join(root,'seed/frontend')),'seed daily history');
     write(join(publicRoot,'index.html'),'<!doctype html><title>Offline approved UI</title>');write(join(publicRoot,'sw.js'),'// offline approved worker\n');
+    if(packedTransport)cpSync(join(repoRoot,'frontend/public/static-transport-capability.json'),join(publicRoot,'static-transport-capability.json'));
     const manifestBytes=readFileSync(join(publicRoot,'static-data/manifest.json')),manifest=JSON.parse(manifestBytes);
     const observed=extractPriceObservations({dataRoot:join(publicRoot,'static-data'),manifest}),known=comparePriceObservations(observed,bootstrap.approved_price_observations).knownDates;
     const ui=uiInventory(publicRoot),prepared=writeFinancialReleaseReceipt({dist:publicRoot,mode:'activation',previousIdentity:original.value.bindings.target_publication_identity,lineage,
@@ -143,6 +144,12 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     write(join(publicRoot,'publication.json'),validateReceipt({schema:1,run_id:30,run_attempt:1,artifact_name:'github-pages-30-1',controller_sha:sha,ui_sha:sha,ui_files:ui,ui_digest:inventoryDigest(ui),approval,
       data_manifest_sha256:sha256(manifestBytes),price_observations:observed,known_price_dates:known,verification_universe:{as_of_date:sourceDate,required_symbols:['OWNED'],minimum_target:0.9,total:1,verified:1},
       financial_release:prepared.reference,financial_generation:prepared.receipt.financial_generation,financial_lineage_sha256:lineage.id,data_inventory_sha256:inventoryDigest(dataInventory(publicRoot))}));
+    if(packedTransport){
+      const adapter=join(repoRoot,'.github/scripts/static-transport-publication.mjs');
+      success(invoke('--input-type=module',['-e',`import {readFileSync} from 'node:fs';import {packPublication} from ${JSON.stringify(adapter)};
+        const root=${JSON.stringify(publicRoot)},publication=JSON.parse(readFileSync(root+'/publication.json'));
+        await packPublication({root,frontendRoot:${JSON.stringify(join(repoRoot,'frontend'))},publication,bindings:{sourceCommit:${JSON.stringify(sha)},appCommit:${JSON.stringify(sha)},candidateId:${JSON.stringify(hash)}}});`],root),'pack approved fixture seed');
+    }
     return deploy(publicRoot,30);
   }
   function advance({id,date,price,time}){

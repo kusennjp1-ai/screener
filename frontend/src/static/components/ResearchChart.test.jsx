@@ -20,7 +20,7 @@ describe('inline chart integration', () => {
     expect(await screen.findByTestId('chart')).toHaveTextContent('AAA:1:99');
     view.update({ entry: { path: 'b.json' }, symbol: 'BBB', generation: '1', row:{current_price:100,se_pivot_price:99} });
     await waitFor(() => expect(screen.getByTestId('chart')).toHaveTextContent('BBB:1:99'));
-    expect(fetchPayload).toHaveBeenCalledWith('b.json');
+    expect(fetchPayload).toHaveBeenCalledWith('b.json', { generation: '1' });
   });
   it('refetches unchanged paths when the generation changes', async () => {
     fetchPayload.mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});

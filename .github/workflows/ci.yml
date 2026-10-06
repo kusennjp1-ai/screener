@@ -158,16 +158,33 @@ jobs:
           python3 -m pip install -r .github/scripts/financial-correction-certification-requirements.txt
           python3 -m unittest discover -s .github/scripts -p "test_retain_financial_diagnostic.py"
           python3 -m unittest discover -s .github/scripts -p test_restore_financial_diagnostic.py
-          node --test --test-concurrency=2 .github/scripts/financial-performance-exception.test.mjs .github/scripts/financial-performance-lifecycle.test.mjs .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
+          node --test --test-concurrency=2 .github/scripts/financial-performance-exception.test.mjs .github/scripts/financial-performance-exception-v2.test.mjs .github/scripts/financial-performance-lifecycle.test.mjs .github/scripts/financial-performance-packed-carry.test.mjs .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
 
       - name: Final GitHub Pages payload guard contracts
         run: python3 -m unittest discover -s .github/scripts -p test_check_pages_payload.py
+
+      - name: Lossless transport and publication boundary contracts
+        run: node --test --test-concurrency=2 frontend/tools/static-transport/contracts.node.mjs frontend/tools/static-transport/browser-harness.node.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs .github/scripts/design-transport.test.mjs
 
       - name: Test
         run: cd frontend && npm run test:run
 
       - name: Install Playwright browser
         run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Verify lossless transport in a browser page and worker
+        id: transport_browser
+        working-directory: frontend
+        run: node tools/static-transport/browser-contract.mjs --report test-results/static-transport-browser-report.json
+
+      - name: Preserve lossless browser contract evidence
+        if: always() && steps.transport_browser.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-transport-browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend/test-results/static-transport-browser-report.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Smoke test
         run: cd frontend && npm run test:smoke
