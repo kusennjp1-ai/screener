@@ -1,27 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {performanceLifecycleFixture} from './fixtures/financial-performance-lifecycle.mjs';
 import {validatePackedExceptionPolicy,exceptionPolicyForVersion} from './financial-performance-policy.mjs';
-import {parsePerformanceApproval,readExceptionPin,selectExceptionVersion,exceptionWorkflowControls} from './financial-performance-exception.mjs';
+import {readPerformanceApproval,readExceptionPin,readExceptionReleaseIntent,selectExceptionVersion,exceptionWorkflowControls} from './financial-performance-exception.mjs';
 import {sha256} from './publication-state.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url)),H='9'.repeat(64),S='9'.repeat(40);
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,JSON.stringify(value));};
 
-test('the unbound packed policy grants no authority and preserves legacy controls',t=>{
-  assert.deepEqual(read(join(root,'contracts/financial_performance_exception_v2.json')),{schema_version:'financial-performance-exception-policy-v2',enabled:false,capture:null});
-  assert.throws(()=>exceptionPolicyForVersion(2),/no reviewed capture/);
-  assert.throws(()=>parsePerformanceApproval({schema_version:'financial-performance-approval-v2'}),/no reviewed capture/);
-  assert.equal(selectExceptionVersion(root),1);
-  assert.equal(exceptionWorkflowControls(root).pending,false);
-  assert.equal(readExceptionPin(root).schema_version,'financial-performance-candidate-pin-v1');
+test('the isolated unbound packed policy grants no authority and preserves legacy controls',async t=>{
   const scratch=mkdtempSync(join(tmpdir(),'disabled-packed-control-'));t.after(()=>rmSync(scratch,{recursive:true,force:true}));
+  // Exercise the real modules with a disabled on-disk fixture policy. Binding
+  // the one production capture must never remove this fail-closed coverage or
+  // introduce a runtime argument/environment override for policy authority.
+  for(const directory of ['.github/scripts','contracts'])cpSync(join(root,directory),join(scratch,directory),{recursive:true});
+  symlinkSync(join(root,'frontend'),join(scratch,'frontend'));
+  for(const name of ['financial-performance-approval.json','financial-performance-candidate.json'])cpSync(join(root,'.github',name),join(scratch,'.github',name));
+  const disabled={schema_version:'financial-performance-exception-policy-v2',enabled:false,capture:null};
+  write(join(scratch,'contracts/financial_performance_exception_v2.json'),disabled);
+  const policy=await import(pathToFileURL(join(scratch,'.github/scripts/financial-performance-policy.mjs')).href);
+  const x=await import(pathToFileURL(join(scratch,'.github/scripts/financial-performance-exception.mjs')).href);
+  assert.deepEqual(policy.validatePackedExceptionPolicy(disabled),disabled);
+  assert.throws(()=>policy.exceptionPolicyForVersion(2),/no reviewed capture/);
+  assert.throws(()=>x.parsePerformanceApproval({schema_version:'financial-performance-approval-v2'}),/no reviewed capture/);
+  assert.equal(x.selectExceptionVersion(scratch),1);
+  assert.equal(x.exceptionWorkflowControls(scratch).pending,false);
+  assert.equal(x.readExceptionPin(scratch).schema_version,'financial-performance-candidate-pin-v1');
   write(join(scratch,'.github/financial-performance-approval-v2.json'),{schema_version:'financial-performance-approval-v2'});
-  assert.throws(()=>selectExceptionVersion(scratch),/no reviewed capture/);
+  assert.throws(()=>x.selectExceptionVersion(scratch),/no reviewed capture/);
+});
+
+test('the reviewed packed capture preserves failed evidence and needs its own certification',t=>{
+  const policy=exceptionPolicyForVersion(2),approval=readPerformanceApproval(root,{version:2});
+  assert.equal(policy.captured_ui.sha,'1e1943e1d5f78a738a05baa69eb9f2e8508e32ac');
+  assert.deepEqual(approval.captured_ui,policy.captured_ui);
+  const bytes=readFileSync(join(root,approval.review.path)),review=JSON.parse(bytes);
+  assert.equal(sha256(bytes),policy.review_sha256);
+  assert.equal(review.observed_commit,policy.captured_ui.sha);
+  assert.equal(review.captured_tree,policy.captured_ui.tree);
+  assert.deepEqual(review.screens.map(s=>s.key).sort(),[...policy.screenshot_keys].sort());
+  assert.deepEqual(review.objective_failures,policy.failures);
+  assert.equal(review.performance_exception_approved,false);
+  assert.equal(review.release_approved,false);
+  const controls=mkdtempSync(join(tmpdir(),'reviewed-packed-control-'));t.after(()=>rmSync(controls,{recursive:true,force:true}));
+  for(const name of ['financial-performance-approval.json','financial-performance-candidate.json','financial-performance-approval-v2.json'])write(join(controls,'.github',name),read(join(root,'.github',name)));
+  assert.equal(selectExceptionVersion(controls,{certification:true}),2);
+  assert.deepEqual(exceptionWorkflowControls(controls),{pending:true,capture_sha:policy.captured_ui.sha,pinned_capture_shas:exceptionPolicyForVersion(1).captured_ui.sha});
+  assert.equal(readExceptionPin(controls,2),null);
+  assert.equal(readExceptionReleaseIntent(controls,2),null);
 });
 
 test('packed exception binding, controls and archive boundaries remain exact',{timeout:120000},async t=>{

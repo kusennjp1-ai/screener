@@ -1,5 +1,251 @@
 {
   "schema_version": "financial-performance-exception-policy-v2",
-  "enabled": false,
-  "capture": null
+  "enabled": true,
+  "capture": {
+    "captured_ui": {
+      "sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+      "tree": "1c0219a170dcbdeb1af539e4cf7a04018251ca02",
+      "digest": "72fd791b42a691e286279cada721207a812d13b13233e814d0c2cfde73571788"
+    },
+    "capture_head_sha": "6f2b9035f59bfc8224ef774db968241a3bdea55f",
+    "capture_base_sha": "d6cd685fbe197deb5f83a12026de5d764f6d6f7f",
+    "ci_run_id": 37415915786,
+    "design_run_id": 37415915777,
+    "design_job_id": 112114367969,
+    "capture_attempt": 1,
+    "diagnostic": {
+      "id": 11391167234,
+      "name": "unapproved-financial-diagnostic-37415915777-1",
+      "sha256": "5f2f6ef6d842c2841fb45e89f54154f2d29db70dacc194f70483f8c2bd1729b8",
+      "bytes": 370036157
+    },
+    "design_artifact": {
+      "id": 11391333253,
+      "name": "design-acceptance-1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+      "sha256": "4f53c65b52640edd2324eaacc114622ca4605dc3e65fb25a9ad02685bdfde081"
+    },
+    "report_sha256": "229763f913b471200c5a71ba2b1c0dfa819ba0d8bee51b85f5fca9c9adb91ec8",
+    "review_sha256": "3724d07f2652b482ee58ff35d75736168887279f858d44947b082bd29523beac",
+    "failures": [
+      "1440: D9 first paint opportunity 58.4ms > 50ms",
+      "1440: D9 run 1: first frame 58.4000000001397ms (limit 50ms)",
+      "390: D9 first paint opportunity 51.1ms > 50ms",
+      "390: D9 run 1: first frame 51.10000000009313ms (limit 50ms)"
+    ],
+    "budgets": {
+      "p1_ready_ms": 3500,
+      "p1_switch_ms": 400,
+      "p1_long_task_ms": 200,
+      "q1_ready_ms": 4200,
+      "q1_switch_ms": 480,
+      "radar_ms": 50
+    },
+    "capture_ci_jobs": [
+      {
+        "name": "Backend Quality Gates",
+        "id": 112114368488,
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend",
+        "id": 112114368459,
+        "conclusion": "success"
+      },
+      {
+        "name": "Static Browser Regression",
+        "id": 112114368241,
+        "conclusion": "success"
+      },
+      {
+        "name": "Assistant Compose Smoke",
+        "id": 112114368449,
+        "conclusion": "success"
+      },
+      {
+        "name": "Publish Docker Images",
+        "id": 112116559225,
+        "conclusion": "skipped"
+      }
+    ],
+    "design_steps": [
+      {
+        "name": "Prepare the certified financial candidate",
+        "conclusion": "success"
+      },
+      {
+        "name": "Restore checked input and record the comparison basis",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build both production versions without duplicating the large data tree",
+        "conclusion": "success"
+      },
+      {
+        "name": "Measure all routes, screenshots, accessibility and CPU 4x",
+        "conclusion": "failure"
+      },
+      {
+        "name": "Require reviewed screenshots and four design scores of at least 8.0",
+        "conclusion": "failure"
+      },
+      {
+        "name": "Package UNAPPROVED financial diagnostics after unsuccessful Design",
+        "conclusion": "success"
+      },
+      {
+        "name": "Retain UNAPPROVED financial diagnostics for review only",
+        "conclusion": "success"
+      },
+      {
+        "name": "Seal the exact tested financial candidate",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Retain the exact tested financial candidate",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Preserve all results even when a budget fails",
+        "conclusion": "success"
+      }
+    ],
+    "activation_not_after": "2026-10-07T10:46:54.945Z",
+    "screenshot_keys": [
+      "home/1440/dark",
+      "near-pass/1440/dark",
+      "compact/1440/dark",
+      "detail/1440/dark",
+      "chart/1440/dark",
+      "portfolio/1440/dark",
+      "comparison/1440/dark",
+      "comparison-near-pass/1440/dark",
+      "market/1440/dark",
+      "breadth/1440/dark",
+      "scan/1440/dark",
+      "case-MSM-inline/1440/dark",
+      "case-MSM-inline-annotations/1440/dark",
+      "case-MSM-expanded/1440/dark",
+      "case-MSM-expanded-annotations/1440/dark",
+      "case-MSM-expanded-short/1440/dark",
+      "case-ADI-inline/1440/dark",
+      "case-ADI-inline-annotations/1440/dark",
+      "case-ADI-expanded/1440/dark",
+      "case-ADI-expanded-annotations/1440/dark",
+      "case-ADI-expanded-short/1440/dark",
+      "case-TGTX-inline/1440/dark",
+      "case-TGTX-inline-annotations/1440/dark",
+      "case-TGTX-expanded/1440/dark",
+      "case-TGTX-expanded-annotations/1440/dark",
+      "case-TGTX-expanded-short/1440/dark",
+      "financial-NVDA-evidence/1440/dark",
+      "financial-NVDA-annual-viewport/1440/dark",
+      "financial-NVDA-selection/1440/dark",
+      "financial-NVDA-purchase/1440/dark",
+      "financial-FUTU-evidence/1440/dark",
+      "financial-FUTU-annual-viewport/1440/dark",
+      "financial-FUTU-history/1440/dark",
+      "financial-AAOI-evidence/1440/dark",
+      "financial-AAOI-annual-viewport/1440/dark",
+      "financial-ALH-evidence/1440/dark",
+      "financial-ALH-annual-viewport/1440/dark",
+      "financial-ALH-history/1440/dark",
+      "financial-AVT-evidence/1440/dark",
+      "financial-AVT-annual-viewport/1440/dark",
+      "daily-observations/1440/dark",
+      "daily-watchlist/1440/dark",
+      "home/1440/light",
+      "near-pass/1440/light",
+      "compact/1440/light",
+      "detail/1440/light",
+      "chart/1440/light",
+      "portfolio/1440/light",
+      "comparison/1440/light",
+      "comparison-near-pass/1440/light",
+      "market/1440/light",
+      "breadth/1440/light",
+      "scan/1440/light",
+      "case-MSM-inline/1440/light",
+      "case-MSM-inline-annotations/1440/light",
+      "case-MSM-expanded/1440/light",
+      "case-MSM-expanded-annotations/1440/light",
+      "case-MSM-expanded-short/1440/light",
+      "case-ADI-inline/1440/light",
+      "case-ADI-inline-annotations/1440/light",
+      "case-ADI-expanded/1440/light",
+      "case-ADI-expanded-annotations/1440/light",
+      "case-ADI-expanded-short/1440/light",
+      "case-TGTX-inline/1440/light",
+      "case-TGTX-inline-annotations/1440/light",
+      "case-TGTX-expanded/1440/light",
+      "case-TGTX-expanded-annotations/1440/light",
+      "case-TGTX-expanded-short/1440/light",
+      "home/390/dark",
+      "near-pass/390/dark",
+      "detail/390/dark",
+      "chart/390/dark",
+      "portfolio/390/dark",
+      "comparison/390/dark",
+      "comparison-near-pass/390/dark",
+      "market/390/dark",
+      "breadth/390/dark",
+      "scan/390/dark",
+      "case-MSM-inline/390/dark",
+      "case-MSM-inline-annotations/390/dark",
+      "case-MSM-expanded/390/dark",
+      "case-MSM-expanded-annotations/390/dark",
+      "case-MSM-expanded-short/390/dark",
+      "case-ADI-inline/390/dark",
+      "case-ADI-inline-annotations/390/dark",
+      "case-ADI-expanded/390/dark",
+      "case-ADI-expanded-annotations/390/dark",
+      "case-ADI-expanded-short/390/dark",
+      "case-TGTX-inline/390/dark",
+      "case-TGTX-inline-annotations/390/dark",
+      "case-TGTX-expanded/390/dark",
+      "case-TGTX-expanded-annotations/390/dark",
+      "case-TGTX-expanded-short/390/dark",
+      "home/390/light",
+      "near-pass/390/light",
+      "detail/390/light",
+      "chart/390/light",
+      "portfolio/390/light",
+      "comparison/390/light",
+      "comparison-near-pass/390/light",
+      "market/390/light",
+      "breadth/390/light",
+      "scan/390/light",
+      "case-MSM-inline/390/light",
+      "case-MSM-inline-annotations/390/light",
+      "case-MSM-expanded/390/light",
+      "case-MSM-expanded-annotations/390/light",
+      "case-MSM-expanded-short/390/light",
+      "case-ADI-inline/390/light",
+      "case-ADI-inline-annotations/390/light",
+      "case-ADI-expanded/390/light",
+      "case-ADI-expanded-annotations/390/light",
+      "case-ADI-expanded-short/390/light",
+      "case-TGTX-inline/390/light",
+      "case-TGTX-inline-annotations/390/light",
+      "case-TGTX-expanded/390/light",
+      "case-TGTX-expanded-annotations/390/light",
+      "case-TGTX-expanded-short/390/light",
+      "financial-NVDA-evidence/390/light",
+      "financial-NVDA-annual-viewport/390/light",
+      "financial-NVDA-selection/390/light",
+      "financial-NVDA-purchase/390/light",
+      "financial-FUTU-evidence/390/light",
+      "financial-FUTU-annual-viewport/390/light",
+      "financial-FUTU-history/390/light",
+      "financial-AAOI-evidence/390/light",
+      "financial-AAOI-annual-viewport/390/light",
+      "financial-ALH-evidence/390/light",
+      "financial-ALH-annual-viewport/390/light",
+      "financial-ALH-history/390/light",
+      "financial-AVT-evidence/390/light",
+      "financial-AVT-annual-viewport/390/light",
+      "daily-observations/390/light",
+      "daily-watchlist/390/light"
+    ],
+    "transport_sha256": "93c5e3e5afbd62200dc38f977255625a96492624ee4aacf3bfb0fbc222eaa4e5"
+  }
 }

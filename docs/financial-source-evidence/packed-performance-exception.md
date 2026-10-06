@@ -1,9 +1,25 @@
 # One new packed financial capture
 
-The packed exception mechanism ships disabled. Its v2 policy has `enabled: false`
-and `capture: null`; there are no v2 approval, candidate pin, or release-intent
-records. This state cannot certify, activate, or authorize a packed publication.
-The original v1 policy and its historical approval semantics remain unchanged.
+The v2 policy and approval bind exactly the packed capture
+`1e1943e1d5f78a738a05baa69eb9f2e8508e32ac`, executed by failed Design run
+`37415915777`, attempt 1. Its independent nonperformance review covers all 134
+original screenshots. The policy retains all four original D9 timing failures
+and all strict budgets. The original report and review still record failure,
+`performance_exception_approved: false`, and `release_approved: false`.
+
+The approval's `approved_at: 2026-10-05T22:19:12Z` records the user's acceptance
+of the current financial repair's display speed. It does not claim that the user
+reviewed this later capture. The independent screenshot review was completed on
+October 6 and is retained byte-for-byte at
+[`2026-10-06-pr75-packed-nonperformance-1e1943e1.json`](../design-review/2026-10-06-pr75-packed-nonperformance-1e1943e1.json).
+The activation deadline remains `2026-10-07T10:46:54.945Z`, the earliest original
+source expiry; this acceptance does not extend any source clock.
+
+This binding contains no v2 candidate pin or release-intent record. It enables
+artifact-only certification after the required controller checks; it grants no
+publication authority. The original v1 policy, approval, and pin remain exact.
+The disabled-policy path is still tested using an isolated on-disk fixture,
+without any runtime authority override.
 
 An enabled v2 policy must describe exactly one newly reviewed packed capture:
 its executed Git commit/tree/UI digest, PR head/base and CI/failed Design attempts
