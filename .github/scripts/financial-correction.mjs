@@ -143,10 +143,11 @@ export function verifyCorrectionConsumerChecks(live, repository, api=githubApi) 
   return checks;
 }
 
-export function restoreCorrectionSource(source, directory, verified) {
+export function restoreCorrectionSource(source, directory, verified, {offline=false}={}) {
   const root = resolve(directory); mkdirSync(root, {recursive:true});
   const zip = join(root, 'source.zip');
   if (!existsSync(zip)) {
+    if(offline)throw Error('Offline source verification requires its retained original ZIP');
     const fd = openSync(zip, 'wx');
     try { execFileSync('gh', ['api', `repos/${source.repository}/actions/artifacts/${source.artifact_id}/zip`], {stdio:['ignore',fd,'pipe']}); }
     finally { closeSync(fd); }

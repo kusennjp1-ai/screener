@@ -1,0 +1,314 @@
+{
+  "schema_version": "postcapture-pages-rehearsal-v1",
+  "publication_authority": false,
+  "provider_work": false,
+  "repository": "kusennjp1-ai/screener",
+  "repository_id": 1203919607,
+  "caller": {
+    "branch": "preview/financial-postcapture-pages-rehearsal",
+    "workflow": ".github/workflows/financial-postcapture-pages-rehearsal.yml",
+    "job": "Rehearse exact postcapture Pages renewal",
+    "event": "push",
+    "attempt": 1,
+    "first_parent": "1356148aecb8dc03b01fda103d2dd416cce05db6",
+    "base_tree": "b39d5283d77c85cba454add980ea3c2c472232be"
+  },
+  "inputs": {
+    "pages": {
+      "run_id": 37456692717,
+      "run_attempt": 1,
+      "run_number": 99,
+      "head_sha": "8a490df5b0a873637781a8e4e5351cece9313f37",
+      "tree_sha": "00a8eaa6b14b977f31f24ac9f708872c2dbe5ee9",
+      "branch": "main",
+      "workflow": ".github/workflows/research-ui-release.yml",
+      "workflow_id": 364666954,
+      "event": "workflow_run",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 112314516098,
+          "name": "publish",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_id": 11421722413,
+      "artifact_name": "github-pages-37456692717-1",
+      "zip_bytes": 363691194,
+      "artifact_sha256": "1ab2594be91d3bbc8716481c730a9afdf22eb4ca554fcd5d02770b92252de4eb",
+      "expanded_files": 20120,
+      "expanded_bytes": 693289931,
+      "layout_sha256": "94fa2e9b69319c867d549495a2a3a4b1d69fc83575874c6112820f79faa478b9"
+    },
+    "old-source": {
+      "run_id": 37203329163,
+      "run_attempt": 8,
+      "run_number": 3,
+      "head_sha": "4b27798b9b04528737938bb5844a8d86a704c58d",
+      "tree_sha": "5e4167e7ccd1ec636cdb09631dd178ffa84f1ceb",
+      "branch": "improve/mandatory-financial-source-recovery",
+      "workflow": ".github/workflows/financial-statement-recovery.yml",
+      "workflow_id": 374552819,
+      "event": "push",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111462885432,
+          "name": "statement-recovery",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_id": 11307162746,
+      "artifact_name": "financial-statement-recovery-4b27798b9b04528737938bb5844a8d86a704c58d-8",
+      "zip_bytes": 27524165,
+      "artifact_sha256": "c4b07d50e357fb556fda62c419f0d549a1a7e62fd62dccd3a501d4d563939dbb",
+      "expanded_files": 8191,
+      "expanded_bytes": 186602177,
+      "layout_sha256": "fda79f0979e9a450c083c07c2d815d86afb98d234bbe1630d9f518f8ee4b8b3a"
+    },
+    "old-cert": {
+      "run_id": 37212616278,
+      "run_attempt": 1,
+      "run_number": 2,
+      "head_sha": "2a8f31dac1192850ea690392273f006ed58a396f",
+      "tree_sha": "16accf63ff4caef0da2adae8f4f9bbe46c913886",
+      "branch": "preview/financial-source-certification",
+      "workflow": ".github/workflows/financial-source-certification.yml",
+      "workflow_id": 374652440,
+      "event": "push",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111466684170,
+          "name": "certify-source-artifacts",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_id": 11307009412,
+      "artifact_name": "financial-source-certification-2a8f31dac1192850ea690392273f006ed58a396f-1",
+      "zip_bytes": 3152346,
+      "artifact_sha256": "fbe0e5e2a8a683596acaa6a133c8e642215fde0e4f332449cc635feec3a11958",
+      "expanded_files": 5,
+      "expanded_bytes": 35829618,
+      "layout_sha256": "f8d7f8b10d95b7dfda087cc884520512c450de7f0f56c551b52faea3b6cd8530"
+    },
+    "failed-source": {
+      "run_id": 37478731832,
+      "run_attempt": 1,
+      "run_number": 4,
+      "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+      "tree_sha": "311974ac309e994c01b246dcaa95f11ab16545d3",
+      "branch": "improve/mandatory-financial-source-recovery",
+      "workflow": ".github/workflows/financial-statement-recovery.yml",
+      "workflow_id": 374552819,
+      "event": "push",
+      "conclusion": "failure",
+      "jobs": [
+        {
+          "id": 112320966070,
+          "name": "statement-recovery",
+          "conclusion": "failure"
+        }
+      ],
+      "artifact_id": 11420873789,
+      "artifact_name": "financial-statement-recovery-4715b218cc25720d1d3be455930554e1e6282136-1",
+      "zip_bytes": 33424519,
+      "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+      "expanded_files": 10055,
+      "expanded_bytes": 227789637,
+      "layout_sha256": "13aca56765855343bac52ef71da6575588d33c51cd92cb1ec9ee402c1cc26177"
+    },
+    "companion": {
+      "run_id": 37495003542,
+      "run_attempt": 1,
+      "run_number": 2,
+      "head_sha": "28e298ee21ea275629a94e7066ac8835b7654182",
+      "tree_sha": "d8c6ec97ece68b519acbe97f1e81bbf816ad3a30",
+      "branch": "preview/financial-source-postcapture-validation",
+      "workflow": ".github/workflows/financial-source-postcapture-validation.yml",
+      "workflow_id": 376600527,
+      "event": "push",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 112377172824,
+          "name": "validate-captured-source",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_id": 11426862690,
+      "artifact_name": "financial-source-postcapture-validation-28e298ee21ea275629a94e7066ac8835b7654182-1",
+      "zip_bytes": 4079616,
+      "artifact_sha256": "f63ecbe50b61b49666abdfaa6bf2f30605a7ddb31af82d8a2e20da3ca1859d23",
+      "expanded_files": 20,
+      "expanded_bytes": 41173471,
+      "layout_sha256": "daeb6c569845956410d8f822c8ef8c1dfe821ddff8d5f6bc9a4e9858badc3340"
+    }
+  },
+  "storage": {
+    "zip_bytes": 431871840,
+    "pages_physical_bytes": 693289931,
+    "logical_bytes": 2034508208,
+    "source_expanded_bytes": 491394903,
+    "reserve_bytes": 2147483648,
+    "formula": "Z + 2*P + 5*L + 2*S + R + 2GiB",
+    "runtime_usage": "Measured allocated bytes for checkout and installed Python/Node dependency roots; no guessed constant"
+  },
+  "publication": {
+    "bytes": 766121,
+    "sha256": "0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a",
+    "ui_sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "ui_digest": "72fd791b42a691e286279cada721207a812d13b13233e814d0c2cfde73571788"
+  },
+  "failure_boundary": {
+    "step_number": 10,
+    "step_name": "Continue one bounded source batch from original receipts"
+  },
+  "supplementary_endpoints": [
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37445347016/attempts/1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37445347016/attempts/1/jobs?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37445347016/attempts/1/jobs?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37445347016/artifacts?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37445347016/artifacts?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/git/commits/5098a762f640d8d477594cbe337cf12baf5866a5",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/git/trees/d71ae65ce59f382e164bebcd6f5a270e379f983b?recursive=1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37444327430/attempts/1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37444327430/attempts/1/jobs?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37444327430/attempts/1/jobs?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/git/commits/1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/git/commits/2a8f31dac1192850ea690392273f006ed58a396f",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/git/trees/1c0219a170dcbdeb1af539e4cf7a04018251ca02?recursive=1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/git/trees/16accf63ff4caef0da2adae8f4f9bbe46c913886?recursive=1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915786/attempts/1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915786/attempts/1/jobs?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915786/attempts/1/jobs?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915777/attempts/1",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915777/attempts/1/jobs?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915777/attempts/1/jobs?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915777/artifacts?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37415915777/artifacts?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37178754997/artifacts?per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs/37178754997/artifacts?per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs?branch=main&event=push&head_sha=5098a762f640d8d477594cbe337cf12baf5866a5&per_page=100",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/runs?branch=main&event=push&head_sha=5098a762f640d8d477594cbe337cf12baf5866a5&per_page=100",
+      "paginate": true
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/contents/.github/financial-performance-approval-v2.json?ref=5098a762f640d8d477594cbe337cf12baf5866a5",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/contents/.github/financial-release-request.json?ref=5098a762f640d8d477594cbe337cf12baf5866a5",
+      "paginate": false
+    },
+    {
+      "endpoint": "repos/kusennjp1-ai/screener/actions/artifacts?per_page=100",
+      "paginate": true
+    }
+  ],
+  "git_objects": {
+    "8a490df5b0a873637781a8e4e5351cece9313f37": "00a8eaa6b14b977f31f24ac9f708872c2dbe5ee9",
+    "4b27798b9b04528737938bb5844a8d86a704c58d": "5e4167e7ccd1ec636cdb09631dd178ffa84f1ceb",
+    "2a8f31dac1192850ea690392273f006ed58a396f": "16accf63ff4caef0da2adae8f4f9bbe46c913886",
+    "4715b218cc25720d1d3be455930554e1e6282136": "311974ac309e994c01b246dcaa95f11ab16545d3",
+    "28e298ee21ea275629a94e7066ac8835b7654182": "d8c6ec97ece68b519acbe97f1e81bbf816ad3a30",
+    "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac": "1c0219a170dcbdeb1af539e4cf7a04018251ca02",
+    "5098a762f640d8d477594cbe337cf12baf5866a5": "d71ae65ce59f382e164bebcd6f5a270e379f983b"
+  },
+  "preserved_controls": {
+    ".github/financial-performance-candidate-v2.json": "7e73949f1eefa54c8b9dcd623c47e7aef050b646aa5dce98fc87796c1d018cc5",
+    ".github/financial-performance-release-v2.json": "32b5dc0bac39c593dadb580044bbb983d9e409971f796e25154b9aacbf8c3300",
+    ".github/financial-release-request.json": "d6dea1fd567c58569b0816e100310fa55b96189594894b20212d151401c62882",
+    ".github/daily-price-promotion.json": "dff3481940c9f69c33fb4cc098fe9f7be0604c0ad36edf5882b04ca4fc23b5f0",
+    ".github/scripts/audit-retained-close-cohort.mjs": "d4af63475f3c92a1e32c906cd463f3f13dbb4aafe8efb3fd231186e0ea767d6f",
+    ".github/scripts/audit-retained-close-cohort.py": "a0b3de70201123a6ccfec393bec04944f3b6e70759f18f59fffa873f0809667d",
+    ".github/scripts/daily-price-promotion-requirements.txt": "9a2d10c784aef5eaf92bb5369414c45d0090cc759c5bdba672bd07db4188b0cf",
+    ".github/scripts/export-source-promotion-inputs.mjs": "9f0ee16927c86933bd43c4ec59f13ae9e009e62b999d5ac73f1f8414ddd104da",
+    ".github/workflows/static-site.yml": "cec52c9286bf6e775c7e767d760febb1fd1966276a8f8cb52c52579295f06616",
+    "backend/app/config/settings.py": "2232a8b9d911ef1098939ffd51691ca3028fa8a654027a7fb356622144f574b3",
+    "backend/app/scripts/daily_price_artifact_provenance.py": "47a09215f55a462ef95aea09fd5e588770c52deea0548e08ab69729b95455cb3",
+    "backend/app/scripts/inspect_us_close_session.py": "2f6f2ae19258be12fb1650276f3ef4d797bcd909c0058da33449766d5f3ead6e",
+    "backend/app/scripts/publish_daily_price_bundle.py": "e81c13ec4be71bab2cdb3ab25b1abb87f952b0dbcf48df7f76aab928075975bd",
+    "backend/app/scripts/stage_daily_price_source.py": "9803142def4ec9c958ade2da6384a6fb9bd034fe5f4409fea9f459bd7cf5dc51",
+    "backend/app/services/close_price_contract.py": "c45a617c5870bacd99c6e5b6aa4917bc787f50f1f625c3f630713480592aecae",
+    "backend/app/services/daily_price_bundle_service.py": "055ed3806543d62ec84cdd9172efafdb2b3a6df87d59d412e40784a4564d9043",
+    "backend/app/services/github_release_sync_service.py": "438bef0d1ddb8a9b316bfb00da416e390f877e5920a749aeb53c006e55a31cb7",
+    "backend/app/services/market_calendar_service.py": "6a4b453278a6dcb002d5a20b547e5f5538d0455bf5eddcc9b627f51a08e655ff"
+  }
+}

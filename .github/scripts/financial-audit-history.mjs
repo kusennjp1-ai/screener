@@ -5,7 +5,7 @@ import {closeSync,constants,existsSync,fstatSync,lstatSync,openSync,readSync,rea
 import {join} from 'node:path';
 import policy from '../../contracts/financial_release_v1.json' with {type:'json'};
 
-const assetPattern=/^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release)-([a-f0-9]{64})\.json$/;
+const assetPattern=/^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release|renewal)-([a-f0-9]{64})\.json$/;
 export const FINANCIAL_AUDIT_METADATA_BYTES=1024*1024;
 export const PUBLICATION_METADATA_BYTES=4*1024*1024;
 // Logical recovery uses the existing decoded archive budget. The independent
@@ -85,7 +85,8 @@ export function requiredFinancialAuditFiles(live){
   // carry cannot establish which earlier receipts existed; never invent them.
   if(declared===undefined&&receipt.mode!=='activation')throw Error('Cannot establish financial audit history from an unindexed carry');
   const files=declared===undefined?{}:{...validateFinancialAuditFiles(declared)};
-  for(const ref of [live.receipt.financial_release,receipt.source_projection,receipt.source_base,receipt.evaluation_projection]){
+  for(const ref of [live.receipt.financial_release,receipt.source_projection,receipt.source_base,receipt.evaluation_projection,
+    ...(receipt.renewal?[receipt.renewal.origin,...receipt.renewal.transitions]:[])]){
     if(!ref||declared!==undefined&&files[ref.path]!==ref.sha256)throw Error('Financial audit inventory omits active source authority');
     if(files[ref.path]&&files[ref.path]!==ref.sha256)throw Error('Live financial audit reference changed');
     files[ref.path]=ref.sha256;
