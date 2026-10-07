@@ -17,6 +17,7 @@ spec = importlib.util.spec_from_file_location("pages_payload", SCRIPT)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 REPO = SCRIPT.parents[2]
+SOURCE_UPLOAD_PATH = "${{ steps.build-frontend.outputs.site_dir || 'frontend/dist' }}"
 
 
 class PagesPayloadTests(unittest.TestCase):
@@ -291,9 +292,41 @@ class WorkflowScopeTests(unittest.TestCase):
                 if workflow.name == "static-site.yml":
                     # This is source material for a later rebuild, never a
                     # deployed Pages artifact. Preserve its own archive bounds.
-                    self.assertEqual(input_field(step, "path"), "frontend/dist")
+                    self.assertEqual(input_field(step, "path"), SOURCE_UPLOAD_PATH)
                     self.assertEqual(input_field(step, "name"), "static-site-data-${{ github.run_id }}-${{ github.run_attempt }}")
                     self.assertNotIn("actions/deploy-pages@", text)
+                    builds = [(i, s) for i, s in enumerate(steps)
+                              if field(s, "id") == "build-frontend"]
+                    self.assertEqual(len(builds), 1)
+                    build_index, build = builds[0]
+                    self.assertEqual(field(build, "name"), "Build static frontend")
+                    self.assertEqual(input_field(build, "PRICE_REPAIR"),
+                                     "${{ needs.select-markets.outputs.repair }}")
+                    branches = re.search(r'if \[ "\$PRICE_REPAIR" = "true" \]; then\n'
+                                         r'(.*?)\n          else\n(.*?)\n          fi', build, re.S)
+                    self.assertIsNotNone(branches)
+                    self.assertEqual(branches.group(1).strip(),
+                                     'node .github/scripts/retained-price-source-admission.mjs produce '
+                                     '--output "$RUNNER_TEMP/retained-price-source" '
+                                     '--job-start "$RUNNER_TEMP/retained-price-source-job-start"')
+                    self.assertIn('            cd frontend\n', branches.group(2))
+                    self.assertIn('            npm run build\n', branches.group(2))
+                    verifiers = [(i, s) for i, s in enumerate(steps)
+                                 if field(s, "name") == "Verify finite retained-price repair"]
+                    self.assertEqual(len(verifiers), 1)
+                    verify_index, verification = verifiers[0]
+                    self.assertLess(build_index, verify_index)
+                    self.assertLess(verify_index, index)
+                    self.assertEqual(field(verification, "if"), "needs.select-markets.outputs.repair == 'true'")
+                    self.assertEqual(field(verification, "run"),
+                                     'node .github/scripts/retained-price-source-admission.mjs verify-produced '
+                                     '--output "$RUNNER_TEMP/retained-price-source"')
+                    # Default success() makes a build or verification failure
+                    # block upload; an always() override must never bypass it.
+                    self.assertIsNone(field(build, "if"))
+                    self.assertIsNone(field(step, "if"))
+                    self.assertNotIn("continue-on-error:", build + verification + step)
+                    self.assertNotIn("working-directory:", build + verification + step)
                     continue
                 self.assertEqual(workflow.name, "research-ui-release.yml")
                 self.assertEqual(input_field(step, "path"), "release/frontend/dist")
@@ -311,12 +344,55 @@ class WorkflowScopeTests(unittest.TestCase):
             self.assertEqual(found, len(re.findall(r"uses:\s*['\"]?actions/upload-pages-artifact@", text)))
             self.assertEqual(found_deploys, len(re.findall(r"uses:\s*['\"]?actions/deploy-pages@", text)))
         self.assertEqual(sorted(uploads), [("research-ui-release.yml", "release/frontend/dist"),
-                                           ("static-site.yml", "frontend/dist")])
+                                           ("static-site.yml", SOURCE_UPLOAD_PATH)])
         self.assertEqual(deploys, [("research-ui-release.yml",
                                    "github-pages-${{ github.run_id }}-${{ github.run_attempt }}",
                                    "steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'")])
         ci = (REPO / ".github/workflows/ci.yml").read_text()
         self.assertIn("python3 -m unittest discover -s .github/scripts -p test_check_pages_payload.py", ci)
+
+    def assert_static_mutation_rejected(self, original, changed):
+        self.assertNotEqual(changed, original, "Mutation must change the actual workflow")
+        static = REPO / ".github/workflows/static-site.yml"
+        read_text = Path.read_text
+
+        def mutated_read(path, *args, **kwargs):
+            return changed if path == static else read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", mutated_read):
+            with self.assertRaises(AssertionError):
+                self.test_every_final_pages_upload_is_guarded_and_intermediate_is_separate()
+
+    def test_source_upload_rejects_arbitrary_paths_and_unowned_build_outputs(self):
+        text = (REPO / ".github/workflows/static-site.yml").read_text()
+        for path in ("frontend/dist", "/tmp/unreviewed", "${{ inputs.path }}",
+                     "${{ steps.unverified.outputs.site_dir || 'frontend/dist' }}",
+                     "${{ steps.build-frontend.outputs.site_dir || 'arbitrary/dist' }}"):
+            with self.subTest(path=path):
+                self.assert_static_mutation_rejected(text, text.replace(SOURCE_UPLOAD_PATH, path, 1))
+        for before, after in (("id: build-frontend", "id: unrelated-build"),
+                              ('produce --output "$RUNNER_TEMP/retained-price-source"',
+                               'produce --output "$RUNNER_TEMP/arbitrary-source"')):
+            with self.subTest(owner=after):
+                self.assert_static_mutation_rejected(text, text.replace(before, after, 1))
+
+    def test_source_upload_rejects_missing_failed_or_late_finite_verification(self):
+        text = (REPO / ".github/workflows/static-site.yml").read_text()
+        verification = re.search(r'(?m)^      - name: Verify finite retained-price repair\n'
+                                 r'[\s\S]*?(?=^      - )', text).group(0)
+        upload = re.search(r'(?m)^      - name: Upload verified data export\n'
+                          r'[\s\S]*?(?=^      - )', text).group(0)
+        mutations = {
+            "missing": text.replace(verification, "", 1),
+            "wrong condition": text.replace(verification, verification.replace("== 'true'", "!= 'true'"), 1),
+            "unchecked command": text.replace(verification, verification.replace("run: node", "run: echo node"), 1),
+            "ignored failure": text.replace(verification, verification.replace("        env:", "        continue-on-error: true\n        env:"), 1),
+            "upload after failure": text.replace(upload, upload.replace("        id:", "        if: always()\n        id:"), 1),
+            "late verification": text.replace(verification, "", 1).replace(upload, upload + verification, 1),
+        }
+        for reason, changed in mutations.items():
+            with self.subTest(reason=reason):
+                self.assert_static_mutation_rejected(text, changed)
 
 
 if __name__ == "__main__":
