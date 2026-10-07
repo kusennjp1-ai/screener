@@ -1,0 +1,117 @@
+name: Independent Actual Renewal Candidate Validation
+on:
+  push:
+    branches: [diagnostic/financial-renewal-actual-validation-20261007]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: financial-renewal-actual-candidate-validation
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/diagnostic/financial-renewal-actual-validation-20261007'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NODE_OPTIONS: --max-old-space-size=3072
+      PYTHONDONTWRITEBYTECODE: '1'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+      REVIEWED_SOURCE_BINDING: >-
+        {"schema_version":"financial-renewal-diagnostic-source-v1","repository":"kusennjp1-ai/screener","repository_id":1203919607,"head_sha":"22548890d0fe161edf7be3943b1775c4f293d0d9","tree":"8245b42cdff76c1fe51c652227a0eb8d6809cf63","request_raw_sha256":"9d2300d07c9b741969ef08119ba4bbef8e1c9f342b5a8c1bb684b5145d02b6bf","registry_raw_sha256":"9784d4484c8116e9e742972d07c58f6376312759f98ae5c070a05beacc910d24","workflow":".github/workflows/financial-source-renewal-certification.yml","workflow_name":"Financial Source Renewal Certification","workflow_id":376994471,"run_id":37581569719,"run_attempt":1,"event":"workflow_run","head_branch":"main","job_name":"Certify same-UI same-price financial source renewal","job_id":112662209888,"job_completed_at":"2026-10-07T07:09:49Z","artifact_id":11466780160,"artifact_name":"financial-source-renewal-37581569719-1","size_in_bytes":4478177532,"sha256":"2b8d069257fb72685600639503e86245084f158bac9252127f42567114a92ac4","artifact_created_at":"2026-10-07T07:09:42Z"}
+    steps:
+      - name: Reject unbound preparation before checkout and stamp original job clock
+        id: binding
+        timeout-minutes: 1
+        run: |
+          python3 - <<'PY'
+          import datetime,json,os,re,time
+          from pathlib import Path
+          b=json.loads(os.environ['REVIEWED_SOURCE_BINDING'])
+          for key in ('workflow_id','job_id','artifact_id','size_in_bytes'):
+              assert type(b[key]) is int and b[key]>0, 'Unbound '+key
+          assert b['size_in_bytes']<=8*1024**3
+          assert re.fullmatch('[a-f0-9]{64}',b['sha256'] or '')
+          for key in ('job_completed_at','artifact_created_at'):
+              assert isinstance(b[key],str) and datetime.datetime.fromisoformat(b[key].replace('Z','+00:00')).tzinfo is not None
+          value={'schema_version':'financial-renewal-validation-job-start-v1','epoch_seconds':time.time(),'monotonic_seconds':time.monotonic(),'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),'job':{name:os.environ.get(name,'') for name in ('GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','GITHUB_JOB')}}
+          path=Path(os.environ['RUNNER_TEMP'])/'financial-renewal-validation-start.json'
+          fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o400)
+          with os.fdopen(fd,'w') as sink:
+              json.dump(value,sink,sort_keys=True,allow_nan=False);sink.write('\n');sink.flush();os.fsync(sink.fileno())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('bound=true\n')
+          PY
+      - uses: actions/checkout@v4
+        timeout-minutes: 2
+        with:
+          ref: ${{ github.sha }}
+          path: diagnostic
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        timeout-minutes: 2
+        with:
+          ref: 22548890d0fe161edf7be3943b1775c4f293d0d9
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        timeout-minutes: 2
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        timeout-minutes: 2
+        with:
+          python-version: '3.11'
+      - name: Verify reviewed binding and install locked offline runtime within original setup budget
+        timeout-minutes: 8
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          import {validateBinding} from './diagnostic/.github/scripts/financial-renewal-actual-candidate-validation.mjs';
+          const b=JSON.parse(readFileSync('diagnostic/.github/scripts/financial-renewal-actual-candidate-binding.json'));
+          validateBinding(b);assert.deepEqual(b,JSON.parse(process.env.REVIEWED_SOURCE_BINDING));
+          JS
+          exec python3 diagnostic/.github/scripts/financial-renewal-validation-supervisor.py \
+            --job-start "$RUNNER_TEMP/financial-renewal-validation-start.json" \
+            --reports "$RUNNER_TEMP/financial-renewal-validation-reports" \
+            --phase setup \
+            --wrapper "$GITHUB_WORKSPACE/diagnostic/.github/scripts/financial-renewal-actual-candidate-validation.mjs" \
+            --root "$GITHUB_WORKSPACE/source" \
+            --candidate "$RUNNER_TEMP/financial-renewal-validation/candidate"
+      - name: Authenticate actual archive and measure safe extraction storage
+        timeout-minutes: 13
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINANCIAL_REPLAY_PYTHON: ${{ runner.temp }}/financial-renewal-validation-python/bin/python
+        run: |
+          exec python3 diagnostic/.github/scripts/financial-renewal-validation-supervisor.py \
+            --job-start "$RUNNER_TEMP/financial-renewal-validation-start.json" \
+            --reports "$RUNNER_TEMP/financial-renewal-validation-reports" \
+            --phase retrieval \
+            --wrapper "$GITHUB_WORKSPACE/diagnostic/.github/scripts/financial-renewal-actual-candidate-validation.mjs" \
+            --root "$GITHUB_WORKSPACE/source" \
+            --candidate "$RUNNER_TEMP/financial-renewal-validation/candidate"
+      - name: Independently replay original sealed candidate through unchanged A validators
+        timeout-minutes: 36
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINANCIAL_REPLAY_PYTHON: ${{ runner.temp }}/financial-renewal-validation-python/bin/python
+        run: |
+          exec python3 diagnostic/.github/scripts/financial-renewal-validation-supervisor.py \
+            --job-start "$RUNNER_TEMP/financial-renewal-validation-start.json" \
+            --reports "$RUNNER_TEMP/financial-renewal-validation-reports" \
+            --phase verification \
+            --wrapper "$GITHUB_WORKSPACE/diagnostic/.github/scripts/financial-renewal-actual-candidate-validation.mjs" \
+            --root "$GITHUB_WORKSPACE/source" \
+            --candidate "$RUNNER_TEMP/financial-renewal-validation/candidate"
+      - name: Retain bounded independent diagnostic reports only
+        if: always() && steps.binding.outputs.bound == 'true'
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-independent-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-renewal-validation-reports/
+          retention-days: 14
+          if-no-files-found: warn
+          compression-level: 6
