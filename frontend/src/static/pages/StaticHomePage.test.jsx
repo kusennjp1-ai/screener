@@ -417,6 +417,26 @@ describe('StaticHomePage', () => {
     }));
   });
 
+  it('does not display retained DXY history as a current quote under the newer home clock', async () => {
+    const retainedHistory = [{ date: '2026-10-01', close: 101.02 }, { date: '2026-10-02', close: 101.93 }];
+    homePayload.freshness.prices_generated_at = '2026-10-07T04:07:35Z';
+    homePayload.freshness.scan_as_of_date = '2026-10-06';
+    homePayload.key_markets = [
+      { symbol: 'TVC:DXY', display_name: 'US Dollar Index', currency: 'USD', latest_close: null, change_1d: null,
+        latest_date: '2026-10-02', history: retainedHistory,
+        retained_price_history: { status: 'stale_reference_only', observation_date: '2026-10-02', target_as_of_date: '2026-10-06' } },
+      { symbol: 'CURRENT', display_name: 'Current market', currency: 'USD', latest_close: 205, change_1d: 2.5,
+        latest_date: '2026-10-06', history: [{ date: '2026-10-05', close: 200 }, { date: '2026-10-06', close: 205 }] },
+    ];
+    renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
+    expect(await screen.findByText('CURRENT')).toBeInTheDocument();
+    expect(screen.queryByText('TVC:DXY')).not.toBeInTheDocument();
+    expect(screen.queryByText('US Dollar Index')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('101.93');
+    expect(priceSparklineSpy.mock.calls.some(([props]) => props.data?.includes(101.93))).toBe(false);
+    expect(homePayload.key_markets[0].history).toEqual(retainedHistory);
+  });
+
   it('keeps the independent technical-reference market-cap filter and chart navigation aligned', async () => {
     renderWithProviders(<MemoryRouter><StaticHomePage /></MemoryRouter>);
 

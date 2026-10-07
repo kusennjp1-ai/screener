@@ -1,0 +1,138 @@
+{
+  "schema_version": "retained-price-recovery-review-inputs-v1",
+  "publication_authority": false,
+  "mode": "offline_exact_inputs_only",
+  "reviewed_main": "1356148aecb8dc03b01fda103d2dd416cce05db6",
+  "target_price_session": "2026-10-05",
+  "current_session_when_reviewed": "2026-10-06",
+  "catch_up_only": true,
+  "scoped_extraction_receipts": {
+    "prior_metadata": "3da94cb5482b207def6b269e9f58f851084de2025eda1c94bd1ded7bef011597",
+    "candidate_metadata": "ea33056389306a4befe8c5c7d6828b37b62585ded7271e28e12affa3e4db88af",
+    "prior_history": "f405b945acc0aa08a84ff0f6eb7176763616e9a2c3c70dd64f15bfcc1efb5514"
+  },
+  "prior": {
+    "run_id": 37456692717,
+    "run_attempt": 1,
+    "artifact_id": 11421722413,
+    "head_sha": "8a490df5b0a873637781a8e4e5351cece9313f37",
+    "bytes": 363691194,
+    "sha256": "1ab2594be91d3bbc8716481c730a9afdf22eb4ca554fcd5d02770b92252de4eb",
+    "publication_sha256": "0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a",
+    "manifest_sha256": "ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+    "research_path": "static-data/research-index-76ff161f3b55ac1b.json",
+    "research_sha256": "76ff161f3b55ac1b9a60683982ec11ff4610a1265f31318668d9cf8eec59b03e",
+    "chart_index_path": "static-data/charts-index-f447668786ed02f2.json",
+    "required_symbol_count": 1895,
+    "actual_price_series": 8746,
+    "known_price_series": 8749
+  },
+  "candidate": {
+    "run_id": 37407740745,
+    "run_attempt": 1,
+    "artifact_id": 11391282396,
+    "artifact_name": "static-site-data-37407740745-1",
+    "head_sha": "d6cd685fbe197deb5f83a12026de5d764f6d6f7f",
+    "event": "schedule",
+    "status": "completed",
+    "conclusion": "success",
+    "completed_at": "2026-10-06T05:09:20Z",
+    "build_job_id": 112092436702,
+    "combine_job_id": 112113043288,
+    "bytes": 306686108,
+    "sha256": "6b1b0942a2ef90165b2c0635c55da04af925aae8e7a579cfec7f6414eb0f435d",
+    "manifest_sha256": "429f7c612e104cc547884151459ba941d4af871b619b13a552d98df47ecfe0f6",
+    "research_path": "static-data/research-index-7ec75c35de765ccc.json",
+    "research_sha256": "7ec75c35de765ccc9e9befeadba30fa8058c5d79f4470281175cef312d2760cb",
+    "chart_index_path": "static-data/charts-index-703c4376689ec849.json",
+    "price_observations_sha256": "266559831ac2783c7f8a51cc597216ca87748cfc94e28a676f24a63a0a38cf57",
+    "companion_artifact_id": 11391587354,
+    "companion_bytes": 30243,
+    "companion_sha256": "a78e9bdf99f9252c11a9ae917df12e37d26e04d0b8f6b233287d13074b98d6c3",
+    "retained_source_json_sha256": "5b86b20e312e02c027742ef2605e93f53f67db101d2a0e08caa9d0eddc13f32c",
+    "companion_fresh_download_verified": true
+  },
+  "expected_recovery": {
+    "prior_public_rows": 5901,
+    "candidate_public_rows": 5901,
+    "required_union": 1904,
+    "conservative_verified": 1850,
+    "minimum_verification_ratio": 0.9,
+    "actual_recoverable_histories": 60,
+    "chart_index_only_histories": 10,
+    "ledger_only_absences": [
+      "DHY",
+      "FSEA",
+      "GBTG"
+    ],
+    "known_regression": {
+      "symbol": "LPSN",
+      "prior": "2026-09-04",
+      "candidate": "2026-07-16"
+    },
+    "restored_research_rows": 50,
+    "quarantined_research_rows": 1,
+    "total_unknown_rows": 51
+  },
+  "constraints": {
+    "providers": "denied",
+    "remote_writes": "denied",
+    "main_changes": "denied",
+    "new_source_promotion": "denied",
+    "existing_gates": "unchanged",
+    "new_verified_artifact_requires_separate_plan": true,
+    "scoped_extraction_is_not_full_site_validation": true,
+    "publication_requires_new_repair_provenance_and_all_existing_guards": true
+  },
+  "quarantine_adjustments": [
+    {
+      "symbol": "EQR",
+      "reason": "undated_price_without_chart",
+      "observation_date": null,
+      "prior_row_sha256": "ef9ad88c6d0e78735c271f1b34934655c79749b067e5f0d9a7019b08cb8aa660",
+      "candidate_row_sha256": "77d43717ad3ac0d3ab5389718e9a7ee84a6bb84a12876ed0a1850b534076af81",
+      "source_rows": {
+        "prior": {
+          "as_of_date": "2026-10-02",
+          "current_price": 63.65999984741211,
+          "adv_usd": 196594975,
+          "chart_path": null,
+          "technical_audit": {
+            "version": "ohlcv-v1",
+            "symbol": "EQR",
+            "as_of_date": "2026-10-02",
+            "bars": 0,
+            "errors": [
+              "日足データ未配信",
+              "252営業日分の日足が不足",
+              "最終日足が分析日と不一致",
+              "スキャン価格と日足終値が不一致"
+            ],
+            "valid": false,
+            "values": {}
+          }
+        },
+        "candidate": {
+          "as_of_date": "2026-10-05",
+          "current_price": 63.65999984741211,
+          "adv_usd": 196594975,
+          "chart_path": null,
+          "technical_audit": {
+            "version": "ohlcv-v1",
+            "symbol": "EQR",
+            "as_of_date": "2026-10-05",
+            "bars": 0,
+            "errors": [
+              "日足データ未配信",
+              "252営業日分の日足が不足",
+              "最終日足が分析日と不一致",
+              "スキャン価格と日足終値が不一致"
+            ],
+            "valid": false,
+            "values": {}
+          }
+        }
+      }
+    }
+  ]
+}
