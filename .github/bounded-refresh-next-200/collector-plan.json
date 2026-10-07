@@ -1,0 +1,4109 @@
+{
+  "batch_allowlist": [
+    "ADP",
+    "AEHR",
+    "AFRM",
+    "AIT",
+    "ALH",
+    "AMBQ",
+    "ANDG",
+    "APLD",
+    "ARXS",
+    "AVEX",
+    "AVT",
+    "BBNX",
+    "BBVA",
+    "BBWI",
+    "BBY",
+    "BC",
+    "BCC",
+    "BCE",
+    "BCO",
+    "BCPC",
+    "BCS",
+    "BDC",
+    "BDX",
+    "BE",
+    "BEAM",
+    "BEKE",
+    "BELFA",
+    "BELFB",
+    "BEN",
+    "BEP",
+    "BEPC",
+    "BETA",
+    "BF-B",
+    "BFAM",
+    "BFH",
+    "BG",
+    "BGC",
+    "BH",
+    "BHE",
+    "BHF",
+    "BHP",
+    "BHVN",
+    "BIDU",
+    "BIIB",
+    "BILI",
+    "BILL",
+    "BIO",
+    "BIP",
+    "BIPC",
+    "BIRK",
+    "BJ",
+    "BJRI",
+    "BKD",
+    "BKH",
+    "BKNG",
+    "BKR",
+    "BKSY",
+    "BKU",
+    "BKV",
+    "BL",
+    "BLBD",
+    "BLDR",
+    "BLFS",
+    "BLK",
+    "BLKB",
+    "BLLN",
+    "BLSH",
+    "BLTE",
+    "BLZE",
+    "BMA",
+    "BMI",
+    "BMO",
+    "BMRN",
+    "BMY",
+    "BN",
+    "BNL",
+    "BNS",
+    "BNTX",
+    "BNY",
+    "BOH",
+    "BOKF",
+    "BOOT",
+    "BOX",
+    "BP",
+    "BPOP",
+    "BR",
+    "BRC",
+    "BRKR",
+    "BRO",
+    "BROS",
+    "BRUN",
+    "BRX",
+    "BRZE",
+    "BSX",
+    "BSY",
+    "BTDR",
+    "BTI",
+    "BTSG",
+    "BTU",
+    "BUD",
+    "BURL",
+    "BUSE",
+    "BVN",
+    "BWA",
+    "BWIN",
+    "BWXT",
+    "BX",
+    "BXDC",
+    "BXMT",
+    "BXP",
+    "BXSL",
+    "BYD",
+    "BZ",
+    "BZH",
+    "C",
+    "CACC",
+    "CACI",
+    "CAE",
+    "CAG",
+    "CAH",
+    "CAI",
+    "CAKE",
+    "CALM",
+    "CALX",
+    "CAMT",
+    "CARG",
+    "CARR",
+    "CART",
+    "CASY",
+    "CAT",
+    "CATY",
+    "CAVA",
+    "CB",
+    "CBRE",
+    "CBRL",
+    "CBRS",
+    "CBSH",
+    "CBT",
+    "CBZ",
+    "CC",
+    "CCEP",
+    "CCI",
+    "CCJ",
+    "CCK",
+    "CCL",
+    "CDE",
+    "CDNA",
+    "CDNL",
+    "CDNS",
+    "CDP",
+    "CDW",
+    "CE",
+    "CECO",
+    "CEF",
+    "CEG",
+    "CELH",
+    "CENX",
+    "CEVA",
+    "CF",
+    "CFG",
+    "CFR",
+    "CG",
+    "CGAU",
+    "CGNX",
+    "CGON",
+    "CHD",
+    "CHDN",
+    "CHE",
+    "CHEF",
+    "CHH",
+    "CHKP",
+    "CHRD",
+    "CHRW",
+    "CHTR",
+    "CHWY",
+    "CHYM",
+    "CI",
+    "CIB",
+    "CIEN",
+    "CIFR",
+    "CIGI",
+    "CINF",
+    "CL",
+    "CLBK",
+    "CLBT",
+    "CLDX",
+    "CLF",
+    "CLH",
+    "CLMT",
+    "CLS",
+    "CLSK",
+    "CLX",
+    "CLYM",
+    "CM",
+    "CMC",
+    "CMCSA",
+    "CME",
+    "CMG",
+    "CMI",
+    "CMS"
+  ],
+  "evaluation_time": "2026-10-07T02:25:13.000Z",
+  "required_valid_through": "2026-10-08T14:25:13.000Z",
+  "schema_version": "financial-statement-batch-plan-v1",
+  "selected": [
+    {
+      "symbol": "ADP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "AEHR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "AFRM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "AIT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "ALH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "AMBQ",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "ANDG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "APLD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "ARXS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "AVEX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "AVT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BBNX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BBVA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BBWI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BBY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BCC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BCE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BCO",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BCPC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BCS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BDC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BDX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BEAM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BEKE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BELFA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BELFB",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BEN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BEP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BEPC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BETA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BF-B",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BFAM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BFH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BGC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BHE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BHF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BHP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BHVN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BIDU",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BIIB",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BILI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BILL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BIO",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BIP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BIPC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BIRK",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BJ",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BJRI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKNG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKSY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKU",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BKV",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLBD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLDR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLFS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLK",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLKB",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLLN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLSH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLTE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BLZE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BMA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BMI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BMO",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BMRN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BMY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BNL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BNS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BNTX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BNY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BOH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BOKF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BOOT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BOX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BPOP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BRC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BRKR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BRO",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BROS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BRUN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BRX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BRZE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BSX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BSY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BTDR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BTI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BTSG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BTU",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BUD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BURL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BUSE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BVN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BWA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BWIN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BWXT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BXDC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BXMT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BXP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BXSL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BYD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BZ",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "BZH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "C",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CACC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CACI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAKE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CALM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CALX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAMT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CARG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CARR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CART",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CASY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CATY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CAVA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CB",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CBRE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CBRL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CBRS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CBSH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CBT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CBZ",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CCEP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CCI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CCJ",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CCK",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CCL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CDE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CDNA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CDNL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CDNS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CDP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CDW",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CECO",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CEF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CEG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CELH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CENX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CEVA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CFG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CFR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CGAU",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CGNX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CGON",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHDN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHE",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHEF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHKP",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHRD",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHRW",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHTR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHWY",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CHYM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CIB",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CIEN",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CIFR",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CIGI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CINF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CL",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLBK",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLBT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLDX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLF",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLH",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLMT",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLSK",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLX",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CLYM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CM",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CMC",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CMCSA",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CME",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CMG",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CMI",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    },
+    {
+      "symbol": "CMS",
+      "attributes": [
+        "quarterly_income_stmt",
+        "income_stmt"
+      ],
+      "targets": [
+        "annual_history"
+      ]
+    }
+  ],
+  "source_data_as_of": "2026-10-02",
+  "verified_us_cohort": {
+    "base_artifact_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+    "symbols": [
+      "DV",
+      "BIIB",
+      "NVDA",
+      "ROK",
+      "APLE",
+      "CON",
+      "MSGE",
+      "PEB",
+      "DRH",
+      "NEOG",
+      "BP",
+      "GCT",
+      "PBR-A",
+      "APH",
+      "IOT",
+      "KN",
+      "SHO",
+      "IRDM",
+      "MOG-A",
+      "PBR",
+      "WCC",
+      "LGND",
+      "NEO",
+      "VSXY",
+      "AMN",
+      "ZIM",
+      "BGC",
+      "BRKR",
+      "BE",
+      "NTCT",
+      "TXN",
+      "WOR",
+      "NDSN",
+      "TSM",
+      "TTC",
+      "XNCR",
+      "SIMO",
+      "TECK",
+      "BHE",
+      "JOYY",
+      "AME",
+      "ZETA",
+      "NTNX",
+      "TEVA",
+      "LIND",
+      "NBIS",
+      "NVT",
+      "PANW",
+      "MSM",
+      "HNGE",
+      "CGNX",
+      "ALNT",
+      "HPQ",
+      "TSEM",
+      "ITGR",
+      "CLH",
+      "SAFT",
+      "SNOW",
+      "BZH",
+      "ATKR",
+      "JCI",
+      "LXP",
+      "WST",
+      "HZO",
+      "TENB",
+      "BWIN",
+      "SU",
+      "IESC",
+      "IHG",
+      "XOM",
+      "SHEL",
+      "EXPD",
+      "ZBRA",
+      "NHC",
+      "DE",
+      "IMAX",
+      "ARX",
+      "AMG",
+      "GSAT",
+      "BOX",
+      "CVX",
+      "AYA",
+      "RGA",
+      "SPNT",
+      "BLFS",
+      "IEX",
+      "E",
+      "CSCO",
+      "VOD",
+      "ABBV",
+      "RAL",
+      "NSIT",
+      "MSGS",
+      "LPG",
+      "EXEL",
+      "PK",
+      "QLYS",
+      "CRL",
+      "ANET",
+      "NEU",
+      "CVLT",
+      "AAMI",
+      "BATRK",
+      "CRGY",
+      "GH",
+      "MEOH",
+      "MATX",
+      "SBLK",
+      "APA",
+      "NUTX",
+      "RVMD",
+      "TX",
+      "TALO",
+      "SM",
+      "GRDN",
+      "DVN",
+      "PLXS",
+      "PAYC",
+      "BNS",
+      "PARR",
+      "EQNR",
+      "SCCO",
+      "MGNI",
+      "COKE",
+      "GEO",
+      "OSCR",
+      "FEIM",
+      "STNG",
+      "HTFL",
+      "INGM",
+      "FIGS",
+      "KB",
+      "MFG",
+      "HELP",
+      "SITM",
+      "CLBK",
+      "AIT",
+      "ETN",
+      "CVE",
+      "TGTX",
+      "HALO",
+      "DELL",
+      "HAE",
+      "FROG",
+      "CAKE",
+      "MRK",
+      "SN",
+      "DXPE",
+      "GTES",
+      "INTC",
+      "TGT",
+      "WT",
+      "CNH",
+      "TRGP",
+      "SLDE",
+      "BIO",
+      "FCX",
+      "CBRL",
+      "HUM",
+      "URI",
+      "PSNL",
+      "WTS",
+      "LB",
+      "DAL",
+      "HBM",
+      "MANH",
+      "SKM",
+      "DGII",
+      "ETON",
+      "NOVT",
+      "RXO",
+      "P",
+      "VTRS",
+      "DDOG",
+      "AAPL",
+      "MTRN",
+      "NPO",
+      "XMTR",
+      "ASX",
+      "UMC",
+      "AMRX",
+      "SNX",
+      "ONTO",
+      "AVT",
+      "GILD",
+      "RS",
+      "DK",
+      "PLPC",
+      "LRCX",
+      "FTNT",
+      "RNG",
+      "NTAP",
+      "DIOD",
+      "LFUS",
+      "S",
+      "SANM",
+      "NET",
+      "AMD",
+      "MU",
+      "ASML",
+      "LITE",
+      "PRCH",
+      "ADPT",
+      "BBY",
+      "VCTR",
+      "ARW",
+      "ENTG",
+      "FFIV",
+      "ABSI",
+      "QRVO",
+      "ABCL",
+      "HPE",
+      "KEYS",
+      "TER",
+      "SWKS",
+      "MRVL",
+      "ROG",
+      "BAND",
+      "TBBB",
+      "TWLO",
+      "ILMN",
+      "NTRA",
+      "PSX",
+      "IBRX",
+      "CLMT",
+      "IOVA",
+      "TXG",
+      "MXL",
+      "TWST",
+      "CDNA",
+      "COHU",
+      "PLSE",
+      "PBF",
+      "SMTC",
+      "ECO",
+      "OKTA",
+      "CRWD",
+      "MPC",
+      "VLO",
+      "DINO",
+      "SDGR",
+      "CVI",
+      "INSW",
+      "FRO",
+      "CHEF",
+      "FIVN",
+      "TNK",
+      "TRMD",
+      "RBRK",
+      "DHT",
+      "PDFS",
+      "RVTY",
+      "AVAH",
+      "CXW",
+      "DT",
+      "SNDK",
+      "AEHR",
+      "VICR",
+      "SYRE",
+      "DOCN",
+      "FORM",
+      "PENG",
+      "VIAV",
+      "TEAM",
+      "RLAY",
+      "DFTX",
+      "FSLY",
+      "ARM",
+      "AMBQ",
+      "ALAB",
+      "ELVN",
+      "URGN",
+      "ATRC",
+      "AMPL",
+      "COHR",
+      "AMAT",
+      "MAN",
+      "LFST",
+      "ACMR",
+      "KNSA",
+      "MTSI",
+      "OUST",
+      "GTLB",
+      "EWTX",
+      "TVTX",
+      "ECPG",
+      "FTRE",
+      "VSAT",
+      "PTEN",
+      "PD",
+      "ACVA",
+      "SMCI",
+      "BJRI",
+      "PACS",
+      "ERO",
+      "ESTC",
+      "AVTR",
+      "FLEX",
+      "ATI",
+      "PTGX",
+      "WTTR",
+      "AUGO",
+      "ROIV",
+      "CGAU",
+      "ANF",
+      "CBZ",
+      "OII",
+      "DAVE",
+      "GKOS",
+      "FIX",
+      "ACLS",
+      "VAC",
+      "NRIX",
+      "LSCC",
+      "SYNA",
+      "CNC",
+      "SEI",
+      "NIQ",
+      "DCO",
+      "DAR",
+      "ARCB",
+      "EC",
+      "CRDO",
+      "WHD",
+      "NUE",
+      "PR",
+      "CIB",
+      "ADI",
+      "BTSG",
+      "YPF",
+      "EAT",
+      "LNTH",
+      "HP",
+      "UFPT",
+      "CAI",
+      "VIRT",
+      "PI",
+      "WKC",
+      "MPWR",
+      "ROKU",
+      "PBI",
+      "VEEV",
+      "LTH",
+      "TDW",
+      "CNK",
+      "KYMR",
+      "THC",
+      "RGEN",
+      "A",
+      "BELFB",
+      "CNQ",
+      "PWR",
+      "TIGO",
+      "IQV",
+      "CAMT",
+      "DOCU",
+      "CLS",
+      "MUFG",
+      "BFH",
+      "STLD",
+      "ZD",
+      "OVV",
+      "DXCM",
+      "JAZZ",
+      "STT",
+      "XP",
+      "SUN",
+      "CHRD",
+      "NVAX",
+      "CPAY",
+      "ARMK",
+      "DJCO",
+      "RPRX",
+      "SXT",
+      "TMO",
+      "FRSH",
+      "JXN",
+      "BHP",
+      "PLTR",
+      "DBX",
+      "WBD",
+      "CAT",
+      "BEN",
+      "SSRM",
+      "KMX",
+      "WAB",
+      "MSFT",
+      "SHOO",
+      "HRMY",
+      "COP",
+      "FSM",
+      "SMFG",
+      "AGM",
+      "ACHC",
+      "WAT",
+      "KNTK",
+      "RELY",
+      "CROX",
+      "SAIL",
+      "KRYS",
+      "WSFS",
+      "FIVE",
+      "VOYA",
+      "TKR",
+      "PAG",
+      "GEF",
+      "PAGP",
+      "ABNB",
+      "CNO",
+      "ING",
+      "RHI",
+      "DGX",
+      "ASH",
+      "DNOW",
+      "IVZ",
+      "GMAB",
+      "GRMN",
+      "ROST",
+      "GEV",
+      "EMR",
+      "FLYW",
+      "SEIC",
+      "TPC",
+      "AMGN",
+      "OXY",
+      "PAA",
+      "SAIC",
+      "ADM",
+      "TD",
+      "SIG",
+      "AVNT",
+      "TRV",
+      "SNDR",
+      "ST",
+      "MD",
+      "RHP",
+      "BBVA",
+      "WSM",
+      "MFC",
+      "FTDR",
+      "CACI",
+      "PFG",
+      "EMBJ",
+      "GFF",
+      "MTCH",
+      "FBP",
+      "ZLAB",
+      "NSP",
+      "PLUS",
+      "CRBG",
+      "IBKR",
+      "EOG",
+      "SLF",
+      "CHE",
+      "EQH",
+      "SWK",
+      "MET",
+      "JHX",
+      "MUR",
+      "URBN",
+      "WLY",
+      "NIC",
+      "CSX",
+      "LTC",
+      "W",
+      "BNY",
+      "KSPI",
+      "BAP",
+      "BAX",
+      "AVPT",
+      "BUSE",
+      "HST",
+      "ONC",
+      "MGA",
+      "LNG",
+      "IFF",
+      "INCY",
+      "ETSY",
+      "IPAR",
+      "TAL",
+      "KO",
+      "PSMT",
+      "CM",
+      "CATY",
+      "ABM",
+      "LIVN",
+      "NTRS",
+      "HSBC",
+      "SBH",
+      "THG",
+      "UBSI",
+      "BMO",
+      "JNJ",
+      "MCHP",
+      "GWW",
+      "SXI",
+      "BMY",
+      "SJM",
+      "OMDA",
+      "CNI",
+      "SFNC",
+      "WELL",
+      "LLY",
+      "VRSN",
+      "ITT",
+      "BPOP",
+      "CFR",
+      "RY",
+      "PM",
+      "WEX",
+      "CAH",
+      "USFD",
+      "ZM",
+      "RNR",
+      "FAST",
+      "LAUR",
+      "WRBY",
+      "AXTI",
+      "SLS",
+      "ATEX",
+      "ORKA",
+      "BLZE",
+      "STX",
+      "AMLX",
+      "VSH",
+      "FCEL",
+      "HUT",
+      "KLIC",
+      "VECO",
+      "STM",
+      "WOLF",
+      "AZTA",
+      "U",
+      "APPN",
+      "ELF",
+      "KLAC",
+      "CEVA",
+      "GTX",
+      "HURN",
+      "IMVT",
+      "CHYM",
+      "PVLA",
+      "TEM",
+      "MT",
+      "FTI",
+      "CGON",
+      "VIST",
+      "INVX",
+      "KALU",
+      "AEIS",
+      "EZPW",
+      "IMO",
+      "TNET",
+      "TS",
+      "SONO",
+      "ENS",
+      "KEX",
+      "CRM",
+      "DXYZ",
+      "SOLV",
+      "KNX",
+      "SDRL",
+      "ESI",
+      "NEM",
+      "HNI",
+      "FA",
+      "TTE",
+      "META",
+      "DDS",
+      "SLB",
+      "WDAY",
+      "BDX",
+      "SHOP",
+      "WPM",
+      "JBHT",
+      "EQIX",
+      "SPB",
+      "CF",
+      "KWR",
+      "ICUI",
+      "GO",
+      "NOV",
+      "BWA",
+      "MTD",
+      "UNF",
+      "MMSI",
+      "ET",
+      "MKTX",
+      "FCFS",
+      "QCOM",
+      "LH",
+      "FDX",
+      "MHK",
+      "ALSN",
+      "RIO",
+      "MCK",
+      "FANG",
+      "ALRM",
+      "ALKS",
+      "EHC",
+      "PRGO",
+      "CSW",
+      "LECO",
+      "RCUS",
+      "MAC",
+      "ARGX",
+      "HSIC",
+      "FFBC",
+      "MAR",
+      "IDYA",
+      "HTO",
+      "SKY",
+      "PH",
+      "PFE",
+      "ESQ",
+      "SAN",
+      "ELV",
+      "EBAY",
+      "TAK",
+      "FULT",
+      "ENR",
+      "CR",
+      "HWC",
+      "NATL",
+      "EWBC",
+      "SKWD",
+      "OPLN",
+      "VCYT",
+      "KURA",
+      "PGNY",
+      "UNH",
+      "HIW",
+      "VCEL",
+      "MCY",
+      "UTHR",
+      "XYZ",
+      "TT",
+      "UBS",
+      "HOG",
+      "CART",
+      "COLD",
+      "CUZ",
+      "SLG",
+      "TREX",
+      "MOH",
+      "AFRM",
+      "CVSA",
+      "ACIW",
+      "CLYM",
+      "AAOI",
+      "ICHR",
+      "WDC",
+      "TNGX",
+      "VPG",
+      "DNTH",
+      "TTMI",
+      "CIEN",
+      "NESR",
+      "NOK",
+      "NTSK",
+      "GLW",
+      "ANAB",
+      "MKSI",
+      "VIA",
+      "ON",
+      "POWL",
+      "BLTE",
+      "VG",
+      "AMKR",
+      "STRL",
+      "GPRE",
+      "SPHR",
+      "RPD",
+      "SVM",
+      "AXGN",
+      "SEZL",
+      "SPSC",
+      "ARIS",
+      "ANDE",
+      "RIOT",
+      "INSP",
+      "INTA",
+      "KSS",
+      "PCTY",
+      "IAG",
+      "ATEN",
+      "BBNX",
+      "ETHE",
+      "EGO",
+      "GNRC",
+      "MLI",
+      "NOG",
+      "DVA",
+      "CECO",
+      "ECG",
+      "WK",
+      "OUT",
+      "XPO",
+      "ZS",
+      "GOOGL",
+      "EME",
+      "IRM",
+      "AZZ",
+      "GLBE",
+      "UNP",
+      "HMC",
+      "MEDP",
+      "M",
+      "AMZN",
+      "CVBF",
+      "AIZ",
+      "INDV",
+      "NTR",
+      "IDCC",
+      "EXLS",
+      "R",
+      "UNM",
+      "MUSA",
+      "PRK",
+      "FLR",
+      "NWSA",
+      "VRTX",
+      "SOBO",
+      "SHC",
+      "WES",
+      "FNV",
+      "OKE",
+      "GL",
+      "KDP",
+      "TARS",
+      "MDB",
+      "VVX",
+      "AWR",
+      "GME",
+      "MNST",
+      "QGEN",
+      "WSBC",
+      "HXL",
+      "EXPE",
+      "EBC",
+      "C",
+      "ADP",
+      "V",
+      "MSI",
+      "NWS",
+      "ONB",
+      "DHR",
+      "ASB",
+      "LOGI",
+      "BANR",
+      "STRC",
+      "CDNS",
+      "BJ",
+      "NSC",
+      "EG",
+      "PKG",
+      "CCEP",
+      "CVCO",
+      "JPM",
+      "HRB",
+      "GPN",
+      "TOWN",
+      "HCI",
+      "NICE",
+      "SIRI",
+      "LYV",
+      "J",
+      "GPC",
+      "CACC",
+      "CFG",
+      "UAL",
+      "GRPN",
+      "VLY",
+      "ZION",
+      "GHC",
+      "PPLI",
+      "WTRG",
+      "BH",
+      "CBSH",
+      "AFG",
+      "TROW",
+      "RACE",
+      "CBT",
+      "BHVN",
+      "FSS",
+      "UCTT",
+      "NBR",
+      "ALM",
+      "MSTR",
+      "BELFA",
+      "VAL",
+      "NE",
+      "ADEA",
+      "JBL",
+      "VRT",
+      "RDW",
+      "ATRO",
+      "HRI",
+      "AU",
+      "LION",
+      "BITU",
+      "HAS",
+      "DAN",
+      "GBTC",
+      "AKAM",
+      "IMNM",
+      "HLIO",
+      "HCC",
+      "KMT",
+      "ALGM",
+      "SNPS",
+      "GFS",
+      "GOOG",
+      "RMBS",
+      "UNFI",
+      "EXTR",
+      "FLS",
+      "SAP",
+      "MTDR",
+      "CURB",
+      "GLNG",
+      "NOW",
+      "REGN",
+      "LSTR",
+      "PAY",
+      "PHVS",
+      "MSA",
+      "ENVA",
+      "IT",
+      "NVCR",
+      "HOOD",
+      "CP",
+      "PBA",
+      "WERN",
+      "PTRN",
+      "ARWR",
+      "NWG",
+      "GM",
+      "EDU",
+      "ADUS",
+      "TRVI",
+      "CNS",
+      "VZ",
+      "HLT",
+      "PFS",
+      "KFY",
+      "RKLB",
+      "BG",
+      "LAMR",
+      "PLAB",
+      "APPF",
+      "BUD",
+      "CTAS",
+      "UGI",
+      "ESE",
+      "EPD",
+      "DLR",
+      "AHR",
+      "SSB",
+      "CDP",
+      "PRU",
+      "CUBI",
+      "VOYG",
+      "DOC",
+      "DD",
+      "UMBF",
+      "USB",
+      "NXPI",
+      "BCPC",
+      "FCNCA",
+      "INDB",
+      "AXTA",
+      "RDNT",
+      "MPLX",
+      "TTEK",
+      "HASI",
+      "OTTR",
+      "LNC",
+      "RNST",
+      "TDY",
+      "SBCF",
+      "SBUX",
+      "CHD",
+      "MS",
+      "LUV",
+      "TRNO",
+      "VIK",
+      "FMX",
+      "SONY",
+      "HESM",
+      "FDS",
+      "DRI",
+      "RBC",
+      "MA",
+      "EGP",
+      "AUB",
+      "VTR",
+      "BIP",
+      "EPR",
+      "CLDX",
+      "HOMB",
+      "DSGX",
+      "CB",
+      "AER",
+      "CPA",
+      "FHI",
+      "CVS",
+      "FR",
+      "MTB",
+      "DNLI",
+      "FITB",
+      "CRWV",
+      "BOKF",
+      "LLYVK",
+      "HUBB",
+      "BRC",
+      "ICLR",
+      "SFBS",
+      "SW",
+      "ABCB",
+      "DLTR",
+      "AXSM",
+      "CCK",
+      "CRS",
+      "ALL",
+      "SPG",
+      "DUOL",
+      "ITW",
+      "PRGS",
+      "FELE",
+      "OSW",
+      "NVMI",
+      "OHI",
+      "PRI",
+      "COLB",
+      "MDLZ",
+      "GDDY",
+      "BMRN",
+      "FNB",
+      "PNC",
+      "SBRA",
+      "WTFC",
+      "FFIN",
+      "EW",
+      "IONQ",
+      "ESTA",
+      "CWT",
+      "PRM",
+      "IBOC",
+      "GS",
+      "SNA",
+      "SMA",
+      "SIGI",
+      "CL",
+      "ESS",
+      "PLMR",
+      "BAC",
+      "TFX",
+      "BALL",
+      "BILL",
+      "HQY",
+      "QSR",
+      "APD",
+      "FRT",
+      "NMIH",
+      "CDW",
+      "MAS",
+      "GFL",
+      "SKT",
+      "RTX",
+      "ASND",
+      "AFL",
+      "L",
+      "AMBA",
+      "AWK",
+      "FAF",
+      "SON",
+      "NVST",
+      "MHO",
+      "KVUE",
+      "CUBE",
+      "BNL",
+      "RF",
+      "PSA",
+      "OZK",
+      "TOST",
+      "VNO",
+      "DLO",
+      "ACGL",
+      "AIR",
+      "MTG",
+      "CRSP",
+      "D",
+      "PCAR",
+      "GE",
+      "TEX",
+      "KEY",
+      "CINF",
+      "OMC",
+      "FWONK",
+      "GRND",
+      "GD",
+      "IIPR",
+      "WAFD",
+      "WAY",
+      "HIMS",
+      "SGHC",
+      "NTLA",
+      "BTDR",
+      "FLY",
+      "GOLD",
+      "HYMC",
+      "KGS",
+      "LYB",
+      "CLSK",
+      "POWI",
+      "ACN",
+      "RGLD",
+      "EL",
+      "BKR",
+      "CSTM",
+      "SII",
+      "MYRG",
+      "SSNC",
+      "VMI",
+      "NWE",
+      "BRUN",
+      "TFII",
+      "TDC",
+      "LGN",
+      "TEL",
+      "COCO",
+      "MMM",
+      "PYPL",
+      "WMB",
+      "PATH",
+      "HAL",
+      "BKH",
+      "EXPO",
+      "NDAQ",
+      "ALLE",
+      "ARQT",
+      "WULF",
+      "DOW",
+      "KMI",
+      "AGCO",
+      "BLK",
+      "CNR",
+      "AI",
+      "BNTX",
+      "UI",
+      "ESLT",
+      "MO",
+      "FIBK",
+      "AMP",
+      "LEA",
+      "REXR",
+      "AESI",
+      "PNFP",
+      "RL",
+      "MTN",
+      "CPK",
+      "LPTH",
+      "HMY",
+      "ODFL",
+      "ECL",
+      "FTV",
+      "BCC",
+      "AGYS",
+      "HTGC",
+      "WTM",
+      "COLM",
+      "BLSH",
+      "VNOM",
+      "VALE",
+      "PECO",
+      "RRC",
+      "HWM",
+      "SCHW",
+      "VLTO",
+      "HON",
+      "NJR",
+      "DB",
+      "RJF",
+      "SQM",
+      "AMCR",
+      "YETI",
+      "SAIA",
+      "CHH",
+      "AM",
+      "LBRT",
+      "EVRG",
+      "PLD",
+      "SYY",
+      "COST",
+      "SSD",
+      "PGY",
+      "TCBI",
+      "AX",
+      "QTWO",
+      "PNW",
+      "WFRD",
+      "KIM",
+      "WRB",
+      "SWX",
+      "PB",
+      "LIN",
+      "MARA",
+      "AROC",
+      "MOD",
+      "TRP",
+      "CXT",
+      "OGE",
+      "WWD",
+      "FTS",
+      "IVT",
+      "FHN",
+      "H",
+      "BCS",
+      "ED",
+      "ASO",
+      "CI",
+      "BRZE",
+      "ETR",
+      "NVS",
+      "KRG",
+      "SCI",
+      "STRA",
+      "ZBH",
+      "EMN",
+      "JLL",
+      "RSG",
+      "CMI",
+      "NBIX",
+      "EXR",
+      "ESNT",
+      "CNA",
+      "YOU",
+      "BRX",
+      "DASH",
+      "AEP",
+      "TFC",
+      "HHH",
+      "REG",
+      "SMMT",
+      "IDA",
+      "CTRE",
+      "ATR",
+      "MRCY",
+      "EMA",
+      "PFGC",
+      "CYTK",
+      "FHB",
+      "HR",
+      "AMH",
+      "DOCS",
+      "GRBK",
+      "WPC",
+      "NNN",
+      "BOH",
+      "PGR",
+      "PRMB",
+      "DTM",
+      "GWRE",
+      "AEE",
+      "OC",
+      "PRDO",
+      "INVH",
+      "PRG",
+      "RDN",
+      "NTST",
+      "BKSY",
+      "LINE",
+      "LUNR",
+      "ENB",
+      "BKD",
+      "O",
+      "AEVA",
+      "MIRM",
+      "LASR",
+      "AGX",
+      "SAH",
+      "WYFI",
+      "CENX",
+      "PENN",
+      "CC",
+      "TYRA",
+      "PRKS",
+      "PL",
+      "CLF",
+      "AEM",
+      "BVN",
+      "AG",
+      "FRPT",
+      "ULTA",
+      "HL",
+      "BLKB",
+      "B",
+      "BEKE",
+      "GAP",
+      "FOX",
+      "FOXA",
+      "DG",
+      "TNDM",
+      "IREN",
+      "DEO",
+      "LAD",
+      "APG",
+      "T",
+      "DCI",
+      "ZWS",
+      "DLB",
+      "LPLA",
+      "CRC",
+      "AVY",
+      "ICE",
+      "CRAI",
+      "KT",
+      "CIFR",
+      "OLLI",
+      "BF-B",
+      "DIS",
+      "FN",
+      "WIX",
+      "MAIN",
+      "ARCC",
+      "CDE",
+      "SKYW",
+      "MORN",
+      "PG",
+      "GATX",
+      "MDT",
+      "PAAS",
+      "OSK",
+      "HCA",
+      "PTC",
+      "UL",
+      "BKU",
+      "STAG",
+      "CSL",
+      "MGY",
+      "DOV",
+      "SYF",
+      "FBK",
+      "ALV",
+      "AR",
+      "MDGL",
+      "DORM",
+      "ELAN",
+      "SHW",
+      "TOL",
+      "GVA",
+      "PPG",
+      "NGG",
+      "OMF",
+      "WTW",
+      "IBN",
+      "MDU",
+      "TPL",
+      "THRM",
+      "F",
+      "WFC",
+      "MRSH",
+      "UPS",
+      "KR",
+      "LYFT",
+      "DXC",
+      "HEI",
+      "PAYX",
+      "BLBD",
+      "BEP",
+      "CE",
+      "MSCI",
+      "CCL",
+      "REYN",
+      "HIG",
+      "ELS",
+      "AYI",
+      "PCOR",
+      "SF",
+      "TAC",
+      "APLD",
+      "PHM",
+      "NCNO",
+      "GSK",
+      "RRX",
+      "KRC",
+      "CMG",
+      "CASY",
+      "BXP",
+      "OGS",
+      "DUK",
+      "BAM",
+      "IPGP",
+      "COIN",
+      "FE",
+      "IE",
+      "HEI-A",
+      "CNP",
+      "STAA",
+      "MCO",
+      "BTI",
+      "ES",
+      "GBCI",
+      "NFG",
+      "TXRH",
+      "RYTM",
+      "CARR",
+      "RLI",
+      "ARE",
+      "AKR",
+      "KHC",
+      "AMX",
+      "XEL",
+      "NEE",
+      "LNT",
+      "AAON",
+      "ATO",
+      "CORZ",
+      "POR",
+      "PPL",
+      "ORI",
+      "ALGT",
+      "NYT",
+      "WEC",
+      "SO",
+      "FCPT",
+      "JD",
+      "IRON",
+      "CRUS",
+      "LEVI",
+      "TPR",
+      "GOLF",
+      "ENPH",
+      "GEN",
+      "ADC",
+      "EXC",
+      "BA",
+      "PHIN",
+      "NI",
+      "RDY",
+      "KMB",
+      "DTE",
+      "DRS",
+      "NN",
+      "VSEC",
+      "CMS",
+      "ATEC",
+      "KTB",
+      "SNDX",
+      "SRE",
+      "TRN",
+      "TTWO",
+      "CW",
+      "RSI",
+      "PINS",
+      "USAR",
+      "DYN",
+      "PEGA",
+      "GSHD",
+      "MNDY",
+      "CAVA",
+      "WLK",
+      "SNEX",
+      "SEDG",
+      "MGM",
+      "MTZ",
+      "XENE",
+      "MMYT",
+      "LINC",
+      "RBLX",
+      "CTSH",
+      "AVGO",
+      "CME",
+      "MAT",
+      "CMC",
+      "PVH",
+      "COR",
+      "OR",
+      "AEO",
+      "ENSG",
+      "FERG",
+      "GMED",
+      "CEF",
+      "UHS",
+      "GGG",
+      "SA",
+      "AMR",
+      "BXSL",
+      "RCL",
+      "BBIO",
+      "CHRW",
+      "TPG",
+      "LMT",
+      "LW",
+      "IR",
+      "EQX",
+      "TW",
+      "MUX",
+      "BANC",
+      "AWI",
+      "WAL",
+      "SR",
+      "WDFC",
+      "RMD",
+      "AMT",
+      "TRI",
+      "ORLY",
+      "COF",
+      "WMT",
+      "AIG",
+      "ALG",
+      "AAL",
+      "BURL",
+      "WMG",
+      "BZ",
+      "LTM",
+      "RPM",
+      "EQT",
+      "ITRI",
+      "VRDN",
+      "RELX",
+      "APO",
+      "STE",
+      "LOPE",
+      "GNTX",
+      "ARES",
+      "APAM",
+      "CRI",
+      "TDS",
+      "EPAM",
+      "WCN",
+      "BMA",
+      "WM",
+      "KGC",
+      "KAI",
+      "AXS",
+      "SLM",
+      "ABT",
+      "MELI",
+      "TNL",
+      "KNSL",
+      "OBDC",
+      "GFI",
+      "WH",
+      "HBAN",
+      "AJG",
+      "AVA",
+      "CCJ",
+      "AXP",
+      "BC",
+      "ROP",
+      "ZTO",
+      "SUI",
+      "CWST",
+      "TSLA",
+      "ALGN",
+      "HWKN",
+      "SPOT",
+      "INGR",
+      "TKO",
+      "VVV",
+      "DHI",
+      "ALLY",
+      "MKL",
+      "UDR",
+      "TMDX",
+      "CPT",
+      "RYAN",
+      "IRT",
+      "TJX",
+      "VKTX",
+      "SNY",
+      "VRTS",
+      "TXT",
+      "VFC",
+      "YUM",
+      "AA",
+      "NXT",
+      "KKR",
+      "LOAR",
+      "VC",
+      "TLN",
+      "BEAM",
+      "ISRG",
+      "HRL",
+      "SE",
+      "PJT",
+      "SYM",
+      "MAA",
+      "GLPI",
+      "NLY",
+      "BKNG",
+      "PEG",
+      "BX",
+      "SBAC",
+      "CARG",
+      "CNXC",
+      "SGRY",
+      "GGAL",
+      "LMAT",
+      "ACAD",
+      "TTAN",
+      "IP",
+      "AMSC",
+      "BRO",
+      "WSC",
+      "EIX",
+      "ULS",
+      "TRU",
+      "VERA",
+      "FTAI",
+      "SFD",
+      "DY",
+      "TBBK",
+      "RUSHA",
+      "SFM",
+      "AAP",
+      "LEGN",
+      "PCG",
+      "AXON",
+      "ALKT",
+      "FUN",
+      "UTI",
+      "BDC",
+      "HTHT",
+      "TM",
+      "G",
+      "VNT",
+      "BCO",
+      "FSK",
+      "BTU",
+      "JKHY",
+      "GIB",
+      "DOX",
+      "ATAT",
+      "NU",
+      "RCI",
+      "TRMB",
+      "GEHC",
+      "ADBE",
+      "AGI",
+      "BR",
+      "CEG",
+      "CNX",
+      "SEB",
+      "OPCH",
+      "MTH",
+      "BIPC",
+      "NTES",
+      "YUMC",
+      "ATMU",
+      "GXO",
+      "PPTA",
+      "RVLV",
+      "STEP",
+      "BAH",
+      "CBRE",
+      "PWP",
+      "TSN",
+      "CVNA",
+      "WMS",
+      "ANIP",
+      "PII",
+      "ALC",
+      "BSY",
+      "SUPN",
+      "UBER",
+      "BCE",
+      "CWEN",
+      "HLNE",
+      "SHAK",
+      "IDXX",
+      "MP",
+      "TYL",
+      "OMCL",
+      "BABA",
+      "PHG",
+      "CAE",
+      "TAP",
+      "AOS",
+      "ADSK",
+      "PEP",
+      "HSY",
+      "EXE",
+      "SPGI",
+      "UFPI",
+      "KBR",
+      "SRPT",
+      "MOS",
+      "PTCT",
+      "RYAAY",
+      "VST",
+      "NVR",
+      "PUK",
+      "STOK",
+      "EPRT",
+      "CAG",
+      "MWA",
+      "FUL",
+      "JEF",
+      "OTEX",
+      "HII",
+      "ORA",
+      "ALK",
+      "FSV",
+      "TDG",
+      "MC",
+      "AZN",
+      "NHI",
+      "BN",
+      "CNM",
+      "DX",
+      "AZO",
+      "MRP",
+      "JBS",
+      "EEFT",
+      "LDOS",
+      "ORCL",
+      "PIPR",
+      "SAM",
+      "GPOR",
+      "CWK",
+      "SPXC",
+      "PBH",
+      "DPZ",
+      "GLOB",
+      "LZB",
+      "LEN",
+      "FCN",
+      "OLED",
+      "CMCSA",
+      "ALB",
+      "INFY",
+      "FER",
+      "LPX",
+      "VMC",
+      "NXST",
+      "TMUS",
+      "PRVA",
+      "ROAD",
+      "HUBS",
+      "STZ",
+      "RRR",
+      "CHKP",
+      "BHF",
+      "OSIS",
+      "ERIE",
+      "PDI",
+      "THO",
+      "BKV",
+      "SNN",
+      "INSM",
+      "SYK",
+      "SLGN",
+      "AGO",
+      "EXP",
+      "NOC",
+      "RIVN",
+      "ABG",
+      "LKQ",
+      "CTRI",
+      "AN",
+      "RYN",
+      "FBIN",
+      "PPC",
+      "HD",
+      "ARR",
+      "ONON",
+      "HLI",
+      "VRSK",
+      "HAYW",
+      "STN",
+      "CHDN",
+      "FUTU",
+      "VICI",
+      "PAC",
+      "CCI",
+      "CG",
+      "OTIS",
+      "XYL",
+      "LAZ",
+      "IRTC",
+      "BMI",
+      "CPRT",
+      "CALM",
+      "VIPS",
+      "IBP",
+      "VERX",
+      "MKC",
+      "MLM",
+      "GDS",
+      "KBH",
+      "GIS",
+      "TSCO",
+      "MCD",
+      "BIRK",
+      "CPB",
+      "RDDT",
+      "FND",
+      "WSO",
+      "IBM",
+      "MMS",
+      "ASTS",
+      "COO",
+      "SMG",
+      "SOFI",
+      "CLX",
+      "NMRK",
+      "EVR",
+      "NVO",
+      "BYD",
+      "AS",
+      "LOW",
+      "BOOT",
+      "SGI",
+      "FNF",
+      "AON",
+      "WY",
+      "DECK",
+      "CIGI",
+      "LCII",
+      "FSLR",
+      "LHX",
+      "RBA",
+      "JBTM",
+      "HGV",
+      "HDB",
+      "BEPC",
+      "CALX",
+      "REZI",
+      "PDD",
+      "POST",
+      "KMPR",
+      "RH",
+      "KVYO",
+      "BBWI",
+      "MIR",
+      "HSAI",
+      "SITE",
+      "NFLX",
+      "QBTS",
+      "STWD",
+      "HUBG",
+      "BFAM",
+      "ACI",
+      "GIL",
+      "NCLH",
+      "BL",
+      "SARO",
+      "LIF",
+      "MZTI",
+      "TCOM",
+      "AMTM",
+      "CRH",
+      "GPI",
+      "CRK",
+      "EFX",
+      "UUUU",
+      "GPGI",
+      "INTU",
+      "OLN",
+      "CSIQ",
+      "EYE",
+      "WYNN",
+      "AMRZ",
+      "POOL",
+      "FISV",
+      "ACM",
+      "BWXT",
+      "BIDU",
+      "RKT",
+      "NAMS",
+      "BSX",
+      "LMND",
+      "HROW",
+      "ZTS",
+      "CELH",
+      "MIDD",
+      "LVS",
+      "LII",
+      "QXO",
+      "PATK",
+      "WINA",
+      "LI",
+      "ENOV",
+      "RTO",
+      "ESAB",
+      "CHWY",
+      "LEU",
+      "AVAV",
+      "PRCT",
+      "CLBT",
+      "BILI",
+      "CSGP",
+      "NNE",
+      "NKE",
+      "SBIT",
+      "FOUR",
+      "YELP",
+      "DKNG",
+      "BROS",
+      "PSN",
+      "KTOS",
+      "KNF",
+      "FIS",
+      "APTV",
+      "LULU",
+      "ZG",
+      "PODD",
+      "UPST",
+      "CPNG",
+      "DKS",
+      "NRG",
+      "TPB",
+      "PFSI",
+      "ALNY",
+      "Z",
+      "SRAD",
+      "BLDR",
+      "CHTR",
+      "PNR",
+      "PLNT",
+      "ROL",
+      "BXMT",
+      "COLL",
+      "WHR",
+      "OKLO",
+      "IONS",
+      "WING",
+      "RARE",
+      "FLUT",
+      "KRMN",
+      "PZZA",
+      "FICO",
+      "APP",
+      "TTD",
+      "ALH",
+      "ANDG",
+      "APGE",
+      "ARXS",
+      "AVEX",
+      "AXIA",
+      "BETA",
+      "BLLN",
+      "BOT",
+      "BXDC",
+      "CBRS",
+      "CDNL",
+      "CRNX",
+      "EA",
+      "EQPT",
+      "EQR",
+      "FPS",
+      "FRVO",
+      "HAWK",
+      "HMH",
+      "INFQ",
+      "JAN",
+      "KALV",
+      "LBRDA",
+      "LBRDK",
+      "LIFE",
+      "MAIR",
+      "MANE",
+      "MDA",
+      "MDLN",
+      "MICC",
+      "MWH",
+      "NAVN",
+      "NUVL",
+      "PS",
+      "Q",
+      "RVI",
+      "SHAZ",
+      "SOLS",
+      "SUNB",
+      "SUNC",
+      "SWMR",
+      "TWO",
+      "VGNT",
+      "VSNT",
+      "WBS",
+      "XE",
+      "YSWY",
+      "ACA",
+      "SLAB",
+      "OGN",
+      "RAMP",
+      "TECH",
+      "CZR",
+      "AES",
+      "PEN",
+      "TXNM"
+    ]
+  }
+}

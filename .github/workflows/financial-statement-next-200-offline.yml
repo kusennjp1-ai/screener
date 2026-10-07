@@ -1,0 +1,68 @@
+name: Recovered Next 200 Disabled Offline Checks
+on:
+  push:
+    branches: [prep/next200-recovered-offline-ci]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: next200-recovered-offline-ci-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: >-
+      github.ref == 'refs/heads/prep/next200-recovered-offline-ci' &&
+      github.run_attempt == 1 &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        timeout-minutes: 1
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        timeout-minutes: 1
+        with:
+          python-version: '3.11'
+      - name: Install reviewed offline test dependencies
+        timeout-minutes: 2
+        run: >-
+          python -m pip install yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0 pytest==8.3.5 jsonschema==4.23.0
+      - name: Verify recovered source and run only resolved offline checks
+        timeout-minutes: 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          host_namespace="$(readlink /proc/self/ns/net)"
+          python_bin="$(command -v python)"
+          sudo --preserve-env=PATH,HOME,PYTHONDONTWRITEBYTECODE \
+            timeout --signal=TERM --kill-after=5s 390s \
+            unshare --net --pid --fork --mount-proc --kill-child=SIGKILL -- \
+            "$python_bin" .github/scripts/check-next200-offline.py \
+            --output "$RUNNER_TEMP/next200-offline-evidence" \
+            --host-network-namespace "$host_namespace"
+      - name: Retain exact offline evidence
+        timeout-minutes: 2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next200-recovered-offline-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/next200-offline-evidence/source-manifest.json
+            ${{ runner.temp }}/next200-offline-evidence/results.json
+            ${{ runner.temp }}/next200-offline-evidence/python-tests.log
+            ${{ runner.temp }}/next200-offline-evidence/node-tests.log
+            ${{ runner.temp }}/next200-offline-evidence/artifact-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+# Reconstructed support requires fresh review. Unresolved dependencies fail closed.
+# Provider dispatch, restoration, authority changes and publication are prohibited.
+# Setup5 + test/cleanup7 + upload2 leaves one minute of overhead in the15-minute job.

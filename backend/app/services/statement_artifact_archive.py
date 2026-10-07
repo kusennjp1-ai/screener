@@ -285,7 +285,40 @@ def _write_immutable(path, raw_bytes):
         os.close(descriptor)
 
 
-def _commit(root, manifest, pending, expected_sha256):
+def _checked_writer_lock(path, descriptor):
+    """A lock is a stable empty control file, never retained source content."""
+    opened, current = os.fstat(descriptor), path.lstat()
+    if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or opened.st_size != 0
+            or not stat.S_ISREG(current.st_mode)
+            or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)):
+        raise InvalidArchive("Writer lock must be the same empty regular single-link file")
+
+
+def _open_writer_lock(root):
+    path = _safe(Path(root) / ".archive.lock")
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        _checked_writer_lock(path, descriptor)
+        return os.fdopen(descriptor, "r+b")
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def prepare_writer_lock(root):
+    """NEW repair: include the empty writer control in the initial retention view.
+
+    This does not acquire source or change a manifest. Existing locks retain
+    their inode and empty bytes; unsafe replacements are rejected.
+    """
+    root = _safe(root)
+    if not root.is_dir():
+        raise InvalidArchive("Writer lock requires an existing archive directory")
+    with _open_writer_lock(root):
+        pass
+
+
+def _commit(root, manifest, pending, expected_sha256, *, maximum_manifest_bytes=None):
     if (len(manifest["objects"]) > MAX_OBJECTS or len(manifest["receipts"]) > MAX_RECEIPTS
             or len(manifest["attempts"]) > MAX_ATTEMPTS
             or sum(item["bytes"] for item in manifest["objects"].values()) > MAX_TOTAL_BYTES):
@@ -293,11 +326,17 @@ def _commit(root, manifest, pending, expected_sha256):
     content = batch._json_bytes(manifest)
     if len(content) > MAX_MANIFEST_BYTES:
         raise InvalidArchive("Archive manifest size bound exceeded")
+    if maximum_manifest_bytes is not None:
+        if type(maximum_manifest_bytes) is not int or not 0 < maximum_manifest_bytes <= MAX_MANIFEST_BYTES:
+            raise InvalidArchive("Invalid bounded-visit manifest reservation")
+        if len(content) > maximum_manifest_bytes:
+            raise InvalidArchive("Bounded-visit manifest reservation exhausted; preserve the partial batch")
     root = _safe(root)
     root.mkdir(parents=True, exist_ok=True)
     lock_path = _safe(root / ".archive.lock")
-    with lock_path.open("a+b") as lock:
+    with _open_writer_lock(root) as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        _checked_writer_lock(lock_path, lock.fileno())
         target = _safe(root / "manifest.json")
         if expected_sha256 is None:
             if target.exists():
@@ -420,7 +459,7 @@ def _relative(root, relative):
 
 def merge_batch(root, expected_sha256, *, batch_dir, summary_sha256=None,
                 plan_sha256=None, attempts_sha256=None, cache_sha256=None,
-                base_bytes, cohort, now):
+                base_bytes, cohort, now, maximum_manifest_bytes=None):
     """Atomically retain a completed batch or explicitly trusted crash journal.
 
     Complete batches require their trusted summary SHA. Interrupted batches
@@ -535,7 +574,7 @@ def merge_batch(root, expected_sha256, *, batch_dir, summary_sha256=None,
         "summary_sha256": summary_sha256, "provider_stop": summary.get("provider_stop") if summary else None,
         "execution_stop": summary.get("execution_stop") if summary else None}
     manifest.update(binding=verify_base(base_bytes, cohort, now=now), committed_at=batch.timestamp(now))
-    return _commit(root, manifest, pending, expected_sha256)
+    return _commit(root, manifest, pending, expected_sha256, maximum_manifest_bytes=maximum_manifest_bytes)
 
 
 def _verified(context, contract):
