@@ -18,7 +18,7 @@ const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSy
 const gitBlob=bytes=>createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const content=bytes=>({type:'file',encoding:'base64',size:bytes.length,content:bytes.toString('base64')});
 
-export async function performanceLifecycleFixture({packedTransport=false,exceptionVersion=1}={}){
+export async function performanceLifecycleFixture({packedTransport=false,exceptionVersion=1,approvedHarnessChanges=false}={}){
   if(![1,2].includes(exceptionVersion))throw Error('Unsupported fixture exception version');
   if(exceptionVersion===2&&!packedTransport)throw Error('Packed exception fixture requires packed transport');
   const codeRoot=mkdtempSync(join(tmpdir(),'financial-performance-controller-'));
@@ -36,6 +36,11 @@ export async function performanceLifecycleFixture({packedTransport=false,excepti
       publication.ui_files=uiInventory(fixture.liveRoot);publication.ui_digest=inventoryDigest(publication.ui_files);
     }
     const legacyPolicyPath=join(codeRoot,'contracts/financial_performance_exception_v1.json'),legacyPolicy=read(legacyPolicyPath);
+    // Explicit test-only before blobs for four paths already permitted by the
+    // copied production v2 policy. The fixture does not extend that policy.
+    const harnessPaths=approvedHarnessChanges?['frontend/src/static/staticPublication.test.js','frontend/tools/production-bootstrap-diagnostic.mjs',
+      'frontend/tools/production-bootstrap-diagnostic.test.mjs','frontend/tools/publication-cli.test.mjs']:[];
+    if(approvedHarnessChanges&&exceptionVersion!==2)throw Error('Reviewed harness fixture requires a v2 origin');
     const capturedUi={sha:capturedSha,tree:capturedTree,digest:publication.ui_digest};
     let policy;
     if(exceptionVersion===1){
@@ -70,6 +75,7 @@ export async function performanceLifecycleFixture({packedTransport=false,excepti
     }
     const changedPath='.github/scripts/publication-state.mjs',captured=structuredClone(current);
     captured[changedPath]={...current[changedPath],sha:gitBlob(Buffer.concat([Buffer.from('// Synthetic prior controller fixture.\n'),readFileSync(join(codeRoot,changedPath))]))};
+    for(const path of harnessPaths)captured[path]={...current[path],sha:gitBlob(Buffer.concat([Buffer.from('// Synthetic prior reviewed harness.\n'),readFileSync(join(repoRoot,path))]))};
     const request={schema_version:'financial-release-request-v1',correction:{schema_version:contract.schema_version,kind:contract.kind,reason:contract.reason,
       previous_publication_identity:originalReceipt.previous_publication_identity,source:originalReceipt.lineage.source},
       source_validation:{guard:'certified_source_artifact_v1',certificate:originalReceipt.lineage.certificate},
@@ -78,7 +84,7 @@ export async function performanceLifecycleFixture({packedTransport=false,excepti
       captured_ui:policy.captured_ui,request_sha256:digest(request),preview_receipt_sha256:sha256('synthetic preview receipt'),projection_sha256:sha256(fixture.original.bytes),report_sha256:policy.report_sha256,
       review:{path:'docs/design-review/synthetic-lifecycle-review.json',sha256:policy.review_sha256},failures:policy.failures,budgets:policy.budgets,
       ...(exceptionVersion===2?{transport_sha256:policy.transport_sha256}:{}),
-      captured_code_sha256:digest(captured),controller_code_sha256:digest(current),controller_changes:{[changedPath]:{before:captured[changedPath],after:current[changedPath]}}};
+      captured_code_sha256:digest(captured),controller_code_sha256:digest(current),controller_changes:Object.fromEntries([changedPath,...harnessPaths].map(path=>[path,{before:captured[path],after:current[path]}]))};
     const approvalBytes=Buffer.from(JSON.stringify(approval));
     const pin={schema_version:`financial-performance-candidate-pin-v${exceptionVersion}`,repository:bootstrap.repository,workflow:policy.workflow,head_sha:controllerSha,
       run_id:80,run_attempt:1,job_id:800,artifact_id:180,artifact_name:'financial-performance-candidate-80-1',artifact_sha256:sha256('synthetic expired certificate artifact'),

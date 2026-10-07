@@ -71,4 +71,4 @@ export function exceptionPolicyFor(value) {
 }
 export const isPerformanceException=value=>[exceptionType,packedExceptionType].includes(value?.type);
 export const isExceptionCandidate=value=>exceptionVersions.some(v=>value?.schema_version===`financial-performance-candidate-v${v}`);
-export const isPackedCandidate=value=>['financial-release-candidate-v2',packedExceptionCandidateSchema].includes(value?.schema_version);
+export const isPackedCandidate=value=>['financial-release-candidate-v2',packedExceptionCandidateSchema,'financial-source-renewal-candidate-v1'].includes(value?.schema_version);

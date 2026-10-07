@@ -1,4 +1,6 @@
 import {financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
+import {selectRenewalControls,selectRenewalCandidate,verifyRenewalSelection,restoreRenewalCandidate,prepareRenewalReceipt,verifyPreparedRenewalRelease,checkFinalRenewalPayload} from './financial-source-renewal-publisher.mjs';
+import {verifyPublishedRenewal} from './financial-source-renewal.mjs';
 import {isPerformanceException, isPackedCandidate, selectExceptionVersion, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -131,9 +133,16 @@ function output(values) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(''));
 }
 
+export function isFinancialRequestActive(request,live){
+  if(!request||!live.financialRelease)return false;
+  const releases=[live.financialRelease,...(live.financialRelease.renewal&&live.financialOrigin?[live.financialOrigin]:[])];
+  return releases.some(receipt=>digest(receipt.lineage.source)===digest(request.correction.source)&&digest(receipt.lineage.certificate)===digest(request.source_validation.certificate));
+}
+
 async function plan(design = false) {
   mkdirSync(scratch(), { recursive: true });
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  const renewalControls=selectRenewalControls({input:event.inputs?.financial_source_renewal,design,correction:Boolean(event.inputs?.financial_correction),uiOnly:event.inputs?.ui_only});
   const sha = process.env.RELEASE_SHA;
   const intent = parseCorrectionIntent(event.inputs?.financial_correction);
   if (intent && (design || process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || event.inputs?.ui_only === true || event.inputs?.ui_only === 'true')) throw Error('Correction requires its exclusive typed manual mode');
@@ -144,10 +153,8 @@ async function plan(design = false) {
   rmSync(uiDirectory, { recursive: true, force: true });
   const live = await livePublication({ repository: repository(), downloadTo: uiDirectory });
   const pages = githubApi(`repos/${repository()}/actions/artifacts?per_page=100`, true);
-  const releaseRequest=!design&&!intent?readFinancialReleaseRequest():null;
-  const alreadyActive=releaseRequest&&live.financialRelease
-    &&digest(live.financialRelease.lineage.source)===digest(releaseRequest.correction.source)
-    &&digest(live.financialRelease.lineage.certificate)===digest(releaseRequest.source_validation.certificate);
+  const releaseRequest=!design&&!intent&&!renewalControls?readFinancialReleaseRequest():null;
+  const alreadyActive=isFinancialRequestActive(releaseRequest,live);
   let activation=null;
   if(releaseRequest&&!alreadyActive){
     const pin=readFinancialActivationCandidate();
@@ -166,10 +173,10 @@ async function plan(design = false) {
   }
   // Install durable provenance without refreshing any currently approved byte.
   // This cannot be blocked by a newly exported but degraded candidate bundle.
-  const migration = !intent && !activation && !design && !live.receipt && Boolean(live.legacyArtifact);
-  const fresh = migration || intent || activation ? null : chooseExport(live, pages, repository());
+  const migration = !renewalControls && !intent && !activation && !design && !live.receipt && Boolean(live.legacyArtifact);
+  const fresh = migration || intent || activation || renewalControls ? null : chooseExport(live, pages, repository());
   if (migration) { decision.mode = 'data'; decision.migration = true; }
-  const duplicate = !intent && !activation && !design && !migration && !fresh && (decision.mode === 'data' || live.uiSha === sha);
+  const duplicate = !renewalControls && !intent && !activation && !design && !migration && !fresh && (decision.mode === 'data' || live.uiSha === sha);
   if (duplicate) { output({ publish: false }); console.log('No advancing data or newly verified UI to publish.'); return; }
   let correction = null;
   if (intent) {
@@ -184,25 +191,29 @@ async function plan(design = false) {
     decision.mode = 'data';
   }
   const source = fresh || publishedSource(live, pages);
+  const renewal=renewalControls?await selectRenewalCandidate({live,controls:renewalControls,mainSha:sha,source}):null;
+  if(renewal){decision.mode='renewal';delete decision.approval;}
   const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
-  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(correction ? { correction } : {}),...(activation?{activation}:{}),
-    ...(!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
+  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
+    ...(!renewal&&!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
   if (design && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN=${source.runId}\n`);
-  output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(state.carry?{carry:true}:{}) });
+  output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(renewal?{renewal:true}:{}),...(state.carry?{carry:true}:{}) });
   console.log(`${decision.mode} publication uses UI ${sourceSha} and artifact ${source.artifact.id} (${fresh ? 'checked export' : 'verified live input'})`);
 }
 async function recheck() {
   const state = readState();
+  let verifiedRenewalProjection;
   // Queued runs can retain older workflow YAML while checking out current main.
   // Enforce the same physical payload bound through their existing recheck too.
   // Prepare-only correction archives are never deployed and keep their own bounds.
   if (!state.correction) execFileSync('python3', [fileURLToPath(new URL('./check-pages-payload.py', import.meta.url)),
     resolve('release/frontend/dist')], { stdio: 'inherit' });
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  if(state.renewal){const controls=selectRenewalControls({input:event.inputs?.financial_source_renewal,correction:Boolean(event.inputs?.financial_correction),uiOnly:event.inputs?.ui_only});if(!controls||digest(controls)!==digest({request:state.renewal.request,pin:state.renewal.pin,intent:state.renewal.intent}))throw Error('Renewal explicit dispatch intent changed before publication');}
   const gated=checkPublication(event, state.controllerSha, repository());
-  const decision = state.activation?gated:applyPendingCorrectionHold(gated, readPendingCorrection());
+  const decision = state.activation||state.renewal?gated:applyPendingCorrectionHold(gated, readPendingCorrection());
   if (!decision.publish || (state.decision.mode === 'ui' && decision.mode !== 'ui')) throw Error('Current-main publication gates changed');
   if(state.activation&&!state.activation.exception&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
   const live = await livePublication({ repository: repository() });
@@ -220,18 +231,19 @@ async function recheck() {
   if (priceObservationDigest(receipt.known_price_dates) !== priceObservationDigest(progress.knownDates)) throw Error('Final retained price ledger differs from the proven publication history');
   if (priceObservationDigest(observed) !== priceObservationDigest(receipt.price_observations) || progress.regressions.length
     || comparePriceObservations(observed, state.source.priceObservations).regressions.length) throw Error('Final price observations regress or disagree with the receipt');
-  if (!state.correction && !state.activation && !state.decision.migration && state.sourceSha === live.uiSha
+  if (!state.correction && !state.activation && !state.renewal && !state.decision.migration && state.sourceSha === live.uiSha
     && compareData(finalManifest, live.manifest) !== 'advance' && !progress.advances) throw Error('No observed data advance remains after preparation');
   if (state.correction) await verifyPreparedCorrection(state, live,logical);
   if(state.carry&&isPerformanceException(live.approval)&&digest(verifyCorrectionChecks(repository(),state.controllerSha))!==digest(state.carry.controllerChecks))throw Error('Exception carry controller CI changed');
-  if(state.activation||state.carry)await verifyPreparedFinancialRelease(state,live,logical);
-  if(live.financialRelease&&!state.activation&&!state.carry)throw Error('Ordinary release lost required financial carry');
+  if(state.activation||state.renewal||state.carry)verifiedRenewalProjection=await verifyPreparedFinancialRelease(state,live,logical);
+  if(live.financialRelease&&!state.activation&&!state.renewal&&!state.carry)throw Error('Ordinary release lost required financial carry');
   if (receipt.ui_sha !== state.sourceSha || receipt.ui_digest !== inventoryDigest(uiInventory('release/frontend/dist'))
-    || (state.decision.mode === 'data' && receipt.ui_digest !== live.uiDigest)
+    || (['data','renewal'].includes(state.decision.mode) && receipt.ui_digest !== live.uiDigest)
     || receipt.data_manifest_sha256 !== sha256(readFileSync('release/frontend/dist/static-data/manifest.json'))) {
     throw Error('Final UI/data bytes differ from the approved publication plan');
   }
   }finally{removeCanonical(physical,logical);}
+  if(state.renewal)await checkFinalRenewalPayload(physical,{request:state.renewal.request,projection:verifiedRenewalProjection,frontendRoot:resolve('frontend')});
 }
 async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
   const manifest = JSON.parse(readFileSync(join(dataRoot, 'manifest.json'), 'utf8'));
@@ -263,7 +275,7 @@ async function compose() {
     for (const file of dataFiles) cpSync(join('release/frontend/public', file), join(dist, file));
   }
   const coverage = await verifyCoverage(resolve('release/frontend'), join(dist, 'static-data'), state.live.verificationUniverse.required_symbols);
-  if (state.decision.mode === 'data') {
+  if (['data','renewal'].includes(state.decision.mode)) {
     for (const entry of readdirSync(dist)) if (entry !== 'static-data' && !isData(entry)) rmSync(join(dist, entry), { recursive: true, force: true });
     cpSync(state.uiDirectory, dist, { recursive: true });
     if (inventoryDigest(uiInventory(dist)) !== state.live.uiDigest) throw Error('Data-only release changed approved UI bytes');
@@ -276,6 +288,7 @@ async function compose() {
   console.log(`Actual price observations: ${Object.keys(observed).length}; absent known series ${prices.missing.length} (retained in the date ledger)`);
   const files = uiInventory(dist);
   const runId = Number(process.env.GITHUB_RUN_ID), attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+  if(state.renewal&&digest({as_of_date:coverage.as_of_date,required_symbols:coverage.requiredSymbols,minimum_target:coverage.minimum_target,total:coverage.total,verified:coverage.verified})!==digest(state.live.verificationUniverse))throw Error('Renewal changed the full verification universe');
   const receipt = { schema: 1, run_id: runId, run_attempt: attempt, artifact_name: `github-pages-${runId}-${attempt}`,
     controller_sha: state.controllerSha, ui_sha: state.sourceSha, ui_files: files, ui_digest: inventoryDigest(files),
     approval: ['ui','activation'].includes(state.decision.mode) ? state.decision.approval : state.live.approval,
@@ -289,7 +302,7 @@ async function compose() {
     receipt.financial_generation = prepared.receipt.financial.generation;
     receipt.data_inventory_sha256 = inventoryDigest(dataInventory(dist));
   }
-  if(state.activation||state.carry){
+  if(state.activation||state.renewal||state.carry){
     const prepared=await prepareFinancialReleaseReceipt(state,dist,receipt);
     receipt.financial_release=prepared.reference;receipt.financial_lineage_sha256=prepared.receipt.lineage_sha256;
     receipt.financial_generation=prepared.receipt.financial_generation;receipt.data_inventory_sha256=inventoryDigest(dataInventory(dist));
@@ -303,7 +316,7 @@ async function compose() {
   if(!state.correction&&transportCapable(dist)){
     if(state.activation&&!isPackedCandidate(state.activation.record))throw Error('Packed activation requires a newly captured packed candidate');
     await packPublication({root:dist,frontendRoot:resolve('release/frontend'),publication:receipt,compressFinancialAudit:Boolean(receipt.financial_audit_files),bindings:{
-      sourceCommit:state.controllerSha,appCommit:state.sourceSha,candidateId:state.activation?.record.transport_sha256??sha256(JSON.stringify({artifact:state.source.artifact.digest,run:state.source.runId,attempt:state.source.attempt,manifest:state.source.manifestHash}))}});
+      sourceCommit:state.controllerSha,appCommit:state.sourceSha,candidateId:state.renewal?.record.transport_sha256??state.activation?.record.transport_sha256??sha256(JSON.stringify({artifact:state.source.artifact.digest,run:state.source.runId,attempt:state.source.attempt,manifest:state.source.manifestHash}))}});
   }else assertTransportDeclaration(dist,receipt);
   validateReceipt(receipt);
   writeFileSync(join(dist, 'publication.json'), JSON.stringify(receipt));
@@ -407,6 +420,7 @@ function financialConsumerChecks(uiSha,uiDigest,approval){
 async function prepareFinancialReleaseReceipt(state,dist,publication) {
   const priceInput={artifact_id:state.source.artifact.id,artifact_sha256:state.source.artifact.digest.slice(7),manifest_sha256:state.source.manifestHash,
     price_observations_sha256:priceObservationDigest(publication.price_observations),known_price_dates_sha256:priceObservationDigest(publication.known_price_dates)};
+  if(state.renewal)return prepareRenewalReceipt(state.renewal,state.live,dist,priceInput);
   if(state.activation){
     const {projection,receipt}=await verifyActivationCandidate(state.activation,state.live);
     const original=state.activation.candidate;
@@ -421,18 +435,21 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
   const consumerChecks=financialConsumerChecks(state.sourceSha,publication.ui_digest,publication.approval);
   return writeFinancialReleaseReceipt({dist,mode:'carry',previousIdentity:state.live.identity,lineage:{id:previous.lineage_sha256,value:previous.lineage},
     sourceProjectionBytes:readFileSync(join(state.carry.sourceRoot,previous.source_projection.path)),sourceBaseBytes:readFileSync(join(state.carry.sourceRoot,previous.source_base.path)),evaluationBytes:readFileSync(state.carry.projectionPath),
-    generation:assessed.carry.financial_generation,evaluatedAt:assessed.carry.financial_evaluated_at,ui:{approved_sha:state.sourceSha,captured_sha:state.sourceSha===state.live.uiSha?previous.ui.captured_sha:state.sourceSha,digest:publication.ui_digest,approval:publication.approval,checks:consumerChecks},priceInput});
+    generation:assessed.carry.financial_generation,evaluatedAt:assessed.carry.financial_evaluated_at,ui:{approved_sha:state.sourceSha,captured_sha:state.sourceSha===state.live.uiSha?previous.ui.captured_sha:state.sourceSha,digest:publication.ui_digest,approval:publication.approval,checks:consumerChecks},priceInput,renewal:previous.renewal||null});
 }
 async function verifyPreparedFinancialRelease(state,live,dist=resolve('release/frontend/dist')) {
   const publication=parsePublicationReceipt(readFileSync(join(dist,'publication.json')));
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
   if(!publication.financial_audit_files)throw Error('Prepared financial publication lost its complete audit inventory');
   if(live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(live),publication.financial_audit_files);
-  if(isPerformanceException(publication.approval))verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
+  if(receipt.renewal)await verifyPublishedRenewal(receipt,{readAsset:path=>readFileSync(join(dist,path)),verifiedApproval:isPerformanceException(publication.approval)?verifyPerformanceUiApproval(publication,repository()):undefined});
+  else if(isPerformanceException(publication.approval))verifyExceptionFinancialScope(receipt,verifyPerformanceUiApproval(publication,repository()));
   if(receipt.previous_publication_identity!==live.identity)throw Error('Financial release predecessor changed');
   const checks=financialConsumerChecks(state.sourceSha,receipt.ui.digest,receipt.ui.approval);
   if(digest(checks)!==digest(receipt.ui.checks))throw Error('Financial release consumer checks changed');
-  if(state.activation){
+  if(state.renewal){
+    return verifyPreparedRenewalRelease(state.renewal,live,dist,publication,state.financialPrepared);
+  }else if(state.activation){
     await verifyActivationCandidate(state.activation,live);
     const candidatePhysical=join(state.activation.candidate,'corrected'),restore=join(scratch(),'activation-recheck-logical');rmSync(restore,{recursive:true,force:true});
     const candidatePublication=isPackedCandidate(state.activation.record)?JSON.parse(readFileSync(join(candidatePhysical,'publication.json'),'utf8')):null;
@@ -542,7 +559,7 @@ function exportMetadata() {
 async function runCommand(command) {
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
+  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
   else if(command==='prepare-carry')await prepareCarry();
   else if (command === 'compose') await compose();
   else if (command === 'check-design-data') await verifyCoverage(resolve('frontend'), resolve('frontend/public/static-data'), readState().live.verificationUniverse.required_symbols);

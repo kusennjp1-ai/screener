@@ -1,0 +1,23 @@
+{
+  "schema_version": "financial-source-renewal-policy-v1",
+  "publication_enabled": false,
+  "request_path": ".github/financial-source-renewal-request.json",
+  "pin_path": ".github/financial-source-renewal-candidate.json",
+  "intent_path": ".github/financial-source-renewal-release.json",
+  "workflow": ".github/workflows/financial-source-renewal-certification.yml",
+  "job": "Certify same-UI same-price financial source renewal",
+  "steps": [
+    "Verify exact predecessor and immutable original authority",
+    "Replay certified source and journal-bound receipt delta",
+    "Verify same UI, prices, history and all financial surfaces",
+    "Verify full logical and physical payload bounds",
+    "Seal the exact renewed candidate"
+  ],
+  "maximum_transitions": 32,
+  "maximum_new_receipts": 4096,
+  "maximum_current_receipts": 40000,
+  "maximum_control_bytes": 65536,
+  "maximum_proof_bytes": 16777216,
+  "reviewed_controllers": [],
+  "reviewed_consumer_transitions": []
+}

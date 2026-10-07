@@ -1,0 +1,105 @@
+{
+  "schema_version": "postcapture-pages-carry-continuation-v1",
+  "publication_authority": false,
+  "provider_work": false,
+  "caller": {
+    "branch": "preview/financial-postcapture-pages-carry",
+    "workflow": ".github/workflows/financial-postcapture-pages-carry.yml",
+    "job": "Continue exact retained postcapture carry",
+    "event": "push",
+    "attempt": 1,
+    "first_parent": "1356148aecb8dc03b01fda103d2dd416cce05db6",
+    "base_tree": "b39d5283d77c85cba454add980ea3c2c472232be",
+    "staged_jobs": {
+      "carry-continuation": "Continue exact retained postcapture carry"
+    }
+  },
+  "runtime": {
+    "commit": "fb22b5eee435715a62e90b79100bd8e47072eddd",
+    "tree": "72151036a02bcc7fb451de33489d99ae218ee845",
+    "protected_code_sha256": "aac9f9ce30d2213ad275bff0bfd9525d258fa8de7569d32a28ae39a7d3ae242e"
+  },
+  "checkpoint": {
+    "run_id": 37535997480,
+    "run_attempt": 1,
+    "head_sha": "fb22b5eee435715a62e90b79100bd8e47072eddd",
+    "tree_sha": "72151036a02bcc7fb451de33489d99ae218ee845",
+    "branch": "preview/financial-postcapture-pages-rehearsal",
+    "workflow": ".github/workflows/financial-postcapture-pages-rehearsal.yml",
+    "event": "push",
+    "conclusion": "failure",
+    "publish_job_name": "Publish exact retained postcapture renewal",
+    "artifact_id": 11451264138,
+    "artifact_name": "postcapture-publish-checkpoint-37535997480-1",
+    "zip_bytes": 411517550,
+    "artifact_sha256": "1416142b86cb919ad813c7ffba071c46fb1a4de70d4febbc02e04cdf410284f5",
+    "expanded_bytes": 411516886,
+    "expanded_files": 5,
+    "layout_sha256": "618aef120140b2463e1f024f75a48dc13bf7720a68e2ac06649446935afd379f",
+    "manifest_sha256": "103bc6a34fd6eeef3b1d49b06b644c0dcdc9bdaeca0a803087a0d24ee4c06ba9",
+    "files": {
+      "controller.bundle": {
+        "bytes": 5216051,
+        "sha256": "8cdcce78bbe703c0eeac22d1b67ff72b859a812aa90018d116f3162ce9317dd5"
+      },
+      "synthetic-api.json": {
+        "bytes": 13933,
+        "sha256": "b6b8679f7a1f50ac295cc6922167928eeb60d9fd982db66a4f74cafcec557a3c"
+      },
+      "request-target-base.json": {
+        "bytes": 18889702,
+        "sha256": "dcea67d81023b0f4ef18eeea5ef016da154bd95ef652115d7f4997b4a4081f1a"
+      },
+      "renewed-pages.zip": {
+        "bytes": 387394222,
+        "sha256": "bc65cab777473b97cab45d3b644db76703a8fa8b2297eb908e0ffbce14f80097"
+      }
+    },
+    "publish_job_id": 112533546887,
+    "workflow_id": 376693736,
+    "run_number": 4,
+    "jobs": [
+      {
+        "id": 112516917003,
+        "name": "Rehearse exact postcapture Pages renewal",
+        "conclusion": "success",
+        "started_at": "2026-10-06T21:44:34Z",
+        "completed_at": "2026-10-06T22:29:56Z",
+        "steps_sha256": "c36725a8a9f42f8e318cff836fd972b0bf6e439e87a7fd8a60ad15732ee7ded6"
+      },
+      {
+        "id": 112533546887,
+        "name": "Publish exact retained postcapture renewal",
+        "conclusion": "success",
+        "started_at": "2026-10-06T22:29:59Z",
+        "completed_at": "2026-10-06T23:53:13Z",
+        "steps_sha256": "4dbf4a7078cb55275b2bf9ca0f786d1aee86213095fc9de9c2811e0523bac08f"
+      },
+      {
+        "id": 112559722312,
+        "name": "Carry exact retained postcapture renewal",
+        "conclusion": "failure",
+        "started_at": "2026-10-06T23:53:15Z",
+        "completed_at": "2026-10-06T23:56:15Z",
+        "steps_sha256": "37d1a0efdaeaa0206f7a76b71e71aa534ee75af1a78866cd074a9b27bd179493"
+      }
+    ],
+    "failure_boundary": {
+      "job_id": 112559722312,
+      "step_number": 8,
+      "step_name": "Authenticate and restore only the five exact retained artifacts"
+    },
+    "successful_publish_steps": [
+      {
+        "number": 10,
+        "name": "Rehearse actual renewal publish without a network route"
+      },
+      {
+        "number": 12,
+        "name": "Retain the exact publish checkpoint bytes"
+      }
+    ],
+    "created_at": "2026-10-06T23:52:59Z",
+    "expires_at": "2026-10-20T23:52:55Z"
+  }
+}

@@ -1,0 +1,122 @@
+name: Financial Postcapture Pages Carry Continuation
+
+on:
+  push:
+    branches: [preview/financial-postcapture-pages-carry]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: financial-postcapture-pages-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  carry:
+    name: Continue exact retained postcapture carry
+    if: github.event_name == 'push' && github.ref == 'refs/heads/preview/financial-postcapture-pages-carry' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - name: Record the original job clock
+        working-directory: .
+        run: python3 -c 'import os,time;from pathlib import Path;Path(os.environ["RUNNER_TEMP"],"postcapture-pages-job-start").write_text(str(time.time()))'
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the literal retained runtime
+        uses: actions/checkout@v4
+        with:
+          ref: fb22b5eee435715a62e90b79100bd8e47072eddd
+          path: runtime
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install the locked offline compiler and test runtime
+        timeout-minutes: 8
+        run: |
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+          python -m venv "$RUNNER_TEMP/postcapture-pages-python"
+          "$RUNNER_TEMP/postcapture-pages-python/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt -r .github/scripts/daily-price-promotion-requirements.txt 'pytest==8.3.5' 'PyYAML==6.0.2'
+
+      - name: Verify the target-runtime admission boundaries
+        timeout-minutes: 5
+        env:
+          FINANCIAL_REPLAY_PYTHON: ${{ runner.temp }}/postcapture-pages-python/bin/python
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          "$FINANCIAL_REPLAY_PYTHON" -m pytest --noconftest --import-mode=importlib -p no:cacheprovider .github/scripts/verify-postcapture-correction-archive.test.py -q
+          "$FINANCIAL_REPLAY_PYTHON" -m unittest discover -s .github/scripts -p 'test_*postcapture*py'
+          PYTHONPATH=backend "$FINANCIAL_REPLAY_PYTHON" -m pytest --noconftest --import-mode=importlib -p no:cacheprovider backend/tests/unit/test_close_price_contract.py backend/tests/unit/test_daily_price_artifact_provenance.py backend/tests/unit/test_daily_price_promotion_guard.py backend/tests/unit/test_source_promotion_workflow_paths.py backend/tests/unit/test_staged_daily_price_source.py -q
+          node --test .github/scripts/export-source-promotion-inputs.test.mjs
+          node --test --test-concurrency=2 .github/scripts/postcapture-rehearsal-checkpoint.test.mjs .github/scripts/verify-postcapture-correction-source.test.mjs .github/scripts/financial-postcapture-renewal.test.mjs .github/scripts/financial-renewal-evaluation.test.mjs .github/scripts/financial-renewal-consumer-transition.test.mjs .github/scripts/financial-source-renewal.test.mjs .github/scripts/financial-source-renewal-certification.test.mjs .github/scripts/restore-postcapture-pages-rehearsal.test.mjs .github/scripts/postcapture-pages-rehearsal.test.mjs
+
+      - name: Verify the separate continuation harness boundaries
+        working-directory: harness
+        timeout-minutes: 2
+        env:
+          FINANCIAL_REPLAY_PYTHON: ${{ runner.temp }}/postcapture-pages-python/bin/python
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: node --test .github/scripts/restore-postcapture-pages-rehearsal.test.mjs .github/scripts/continue-postcapture-pages-carry.test.mjs
+
+      - name: Restore the five original inputs and exact retained publication checkpoint
+        working-directory: harness
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINANCIAL_REPLAY_PYTHON: ${{ runner.temp }}/postcapture-pages-python/bin/python
+        run: node .github/scripts/continue-postcapture-pages-carry.mjs restore "$RUNNER_TEMP/postcapture-pages-inputs" "$GITHUB_WORKSPACE/runtime"
+
+      - name: Rehearse actual renewal carry without a network route
+        timeout-minutes: 96
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node "$GITHUB_WORKSPACE/harness/.github/scripts/continue-postcapture-pages-carry.mjs" recheck "$RUNNER_TEMP/postcapture-pages-inputs" "$GITHUB_WORKSPACE/runtime"
+          parent_namespace=$(readlink /proc/self/ns/net)
+          sudo -n unshare --net --setuid="$(id -u)" --setgid="$(id -g)" -- env -i \
+            PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 \
+            "$RUNNER_TEMP/postcapture-pages-python/bin/python" .github/scripts/run-postcapture-pages-rehearsal.py \
+            --stage carry \
+            --checkpoint "$RUNNER_TEMP/postcapture-pages-inputs/retained-publication" \
+            --checkpoint-sha256 103bc6a34fd6eeef3b1d49b06b644c0dcdc9bdaeca0a803087a0d24ee4c06ba9 \
+            --inputs "$RUNNER_TEMP/postcapture-pages-inputs/inputs.json" \
+            --output "$RUNNER_TEMP/postcapture-pages-fixture" \
+            --reports "$RUNNER_TEMP/postcapture-pages-supervisor" \
+            --node-modules "$GITHUB_WORKSPACE/runtime/frontend/node_modules" \
+            --python "$RUNNER_TEMP/postcapture-pages-python/bin/python" \
+            --job-start "$RUNNER_TEMP/postcapture-pages-job-start" \
+            --parent-network-namespace "$parent_namespace"
+
+      - name: Preserve bounded diagnostic reports and verify unchanged controls
+        if: always()
+        timeout-minutes: 2
+        run: python3 "$GITHUB_WORKSPACE/harness/.github/scripts/collect-postcapture-pages-reports.py" "$RUNNER_TEMP" "$RUNNER_TEMP/postcapture-pages-reports"
+
+      - name: Upload diagnostic evidence only
+        if: always()
+        timeout-minutes: 8
+        uses: actions/upload-artifact@v4
+        with:
+          name: postcapture-pages-carry-continuation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/postcapture-pages-reports/
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 6
