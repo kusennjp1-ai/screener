@@ -9,12 +9,14 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {protectedCodeInventory} from './financial-release-activation.mjs';
 import {contract,dataInventory,digest} from './financial-correction.mjs';
 import {bootstrap,inventoryDigest,sha256,uiInventory} from './publication-state.mjs';
-import {renewalPolicy,consumerCodeInventory} from './financial-source-renewal.mjs';
+import {renewalPolicy,consumerCodeInventory,validateRenewalRegistry} from './financial-source-renewal.mjs';
+import {resetRenewalFixtureControls} from './fixtures/financial-renewal-policy.mjs';
 import {assertCertificationSourceTrustPreserved,renewalCandidateMembers,restorePriorRenewalSource,retainApprovedRenewalUi,verifyRenewalCertifierController,verifyRenewalCertificationBounds,verifySealedRenewalArchive} from './financial-source-renewal-certification.mjs';
 
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'../..');
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,value);};
 const fixture=()=>mkdtempSync(join(tmpdir(),'renewal-certification-'));
+const fixtureContracts=directory=>{cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});resetRenewalFixtureControls(directory);};
 function bundle(root,html){
   write(join(root,'index.html'),html);write(join(root,'sw.js'),`worker ${html}`);
   write(join(root,'assets/chunk.js'),`chunk ${html}`);write(join(root,'static-data/manifest.json'),'{}');
@@ -94,7 +96,7 @@ test('renewal certification enforces the actual 1,000,000,000-byte Pages bound s
 test('read-only certification workflow retains all original proofs and exposes no dispatch trust or publication switch',()=>{
   const workflow=readFileSync(join(root,renewalPolicy.workflow),'utf8');
   assert.match(workflow,/workflow_dispatch:/);assert.doesNotMatch(workflow,/\bschedule:|\bcron:|\binputs:|pages:\s*write|contents:\s*write|actions:\s*write|id-token:\s*write/);
-  assert.equal(renewalPolicy.publication_enabled,false);assert.deepEqual(renewalPolicy.reviewed_controllers,[]);
+  assert.equal(validateRenewalRegistry(renewalPolicy),renewalPolicy);
   for(const name of renewalPolicy.steps)assert.equal(workflow.split(`- name: ${name}\n`).length-1,1);
   for(const name of ['predecessor','original-source','original-certification','original-predecessor','original-previous-source','original-previous-certification','source-delta.json','history-inventory.json'])assert.ok(renewalCandidateMembers.includes(name));
   assert.match(workflow,/retention-days: 14/);assert.match(workflow,/compression-level: 0/);
@@ -126,7 +128,7 @@ test('automatic workflow keeps cheap controls ahead of admission, fetch, depende
 
 function automaticFixture(){
   const directory=fixture(),registryPath='contracts/financial_source_renewal_v1.json',repositoryId=1203919607;
-  cpSync(here,join(directory,'.github/scripts'),{recursive:true});cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});
+  cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
   cpSync(join(root,'.github/workflows'),join(directory,'.github/workflows'),{recursive:true});
   cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
   const git=(...args)=>execFileSync('git',['-C',directory,...args],{encoding:'utf8'}).trim();
@@ -269,7 +271,7 @@ test('certification controller records the exact successful CI attempt and rejec
 
 test('controls resolve committed request before fetching a missing captured UI Git object, while prepare remains closed',()=>{
   const directory=fixture();try{
-    cpSync(here,join(directory,'.github/scripts'),{recursive:true});cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});
+    cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
     cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
     const h='a'.repeat(64),s='b'.repeat(40),source=JSON.parse(readFileSync(join(root,'contracts/financial_source_certification_trust_v1.json'))).reviewed_requests[0].request.source;
     const previous=`1/1/${h}/${h}`,ref={schema_version:'financial-release-receipt-v1',path:`static-data/financial-corrections/release-${h}.json`,sha256:h};
@@ -303,7 +305,7 @@ test('controls resolve committed request before fetching a missing captured UI G
 
 test('surface and seal compatibility preflight authenticates retained origin and rejects changed code before large candidate replay',async()=>{
   const directory=fixture();try{
-    cpSync(here,join(directory,'.github/scripts'),{recursive:true});cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});
+    cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
     cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
     write(join(directory,'frontend/package-lock.json'),'{}');
     const projector='backend/app/scripts/export_native_annual_projection.py',originalProjector='# Original fixture projector\n';

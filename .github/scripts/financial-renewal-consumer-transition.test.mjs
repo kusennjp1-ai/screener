@@ -4,13 +4,14 @@ import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {digest} from './financial-correction.mjs';
 import {bootstrap,sha256} from './publication-state.mjs';
+import {disabledRenewalRegistry} from './fixtures/financial-renewal-policy.mjs';
 import {consumerCodeInventory,renewalControllerCodeInventory,renewalPolicy,renewalPolicyPath,
   reviewedMain135ConsumerTransition,validateRenewalRegistry,assertRenewalRegistryAppendOnly,verifyRenewalInitialCapturePolicy} from './financial-source-renewal.mjs';
 
 const prefix=`repos/${bootstrap.repository}`,certifier='a'.repeat(40),capturedTree='b'.repeat(40);
 const clone=structuredClone;
 const content=value=>{const bytes=Buffer.from(JSON.stringify(value));return {type:'file',encoding:'base64',size:bytes.length,content:bytes.toString('base64')};};
-const registry=entries=>({...clone(renewalPolicy),reviewed_consumer_transitions:entries});
+const registry=entries=>({...disabledRenewalRegistry(),reviewed_consumer_transitions:entries});
 const blob=bytes=>({mode:'100644',sha:createHash('sha1').update(`blob ${Buffer.byteLength(bytes)}\0`).update(bytes).digest('hex')});
 
 // GitHub identities and tree transport below are explicitly synthetic. The
@@ -37,8 +38,8 @@ function fixture(){
   return {entry,api,captured,reviewed,registryEndpoint,options,calls,verify:()=>verifyRenewalInitialCapturePolicy(options)};
 }
 
-test('reviewed main135 transition is finite, clone-only and disabled by the empty production registry',()=>{
-  assert.equal(renewalPolicy.publication_enabled,false);assert.deepEqual(renewalPolicy.reviewed_controllers,[]);assert.deepEqual(renewalPolicy.reviewed_consumer_transitions,[]);
+test('reviewed main135 transition is finite, clone-only and rejected by an explicitly empty registry',()=>{
+  assert.equal(validateRenewalRegistry(renewalPolicy),renewalPolicy);
   const entry=reviewedMain135ConsumerTransition();
   assert.equal(entry.reviewed_sha,'1356148aecb8dc03b01fda103d2dd416cce05db6');assert.equal(entry.reviewed_tree,'b39d5283d77c85cba454add980ea3c2c472232be');
   assert.equal(entry.captured_ui_sha,'1e1943e1d5f78a738a05baa69eb9f2e8508e32ac');assert.equal(Object.keys(entry.changes).length,9);

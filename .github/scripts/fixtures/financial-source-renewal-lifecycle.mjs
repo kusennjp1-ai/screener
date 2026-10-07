@@ -14,6 +14,7 @@ import {financialReleasePolicy,protectedCodeInventory} from '../financial-releas
 import {renewalPolicy,consumerCodeInventory,renewalControllerCodeInventory} from '../financial-source-renewal.mjs';
 import {extractPriceObservations,priceObservationDigest} from '../price-observations.mjs';
 import {archiveApiPayload,assertSyntheticPriceAdvance} from './financial-release-archive-lifecycle.mjs';
+import {resetRenewalFixtureControls} from './financial-renewal-policy.mjs';
 
 const ownRoot=fileURLToPath(new URL('../../../',import.meta.url));
 const repository=bootstrap.repository,prefix=`repos/${repository}`;
@@ -205,6 +206,7 @@ appendFileSync(process.env.RENEWAL_FIXTURE_TRACE,JSON.stringify({pages:path,invo
   const tar=join(root,'unchanged-production-code.tar');
   execFileSync('git',['-C',runtimeRoot,'archive','--format=tar','-o',tar,'HEAD','.github','contracts','frontend','backend/app','backend/tests/unit','data/ibd_reference','.gitignore']);
   execFileSync('tar',['-xf',tar,'-C',checkout]);rmSync(tar);
+  resetRenewalFixtureControls(checkout);
   assert.ok(existsSync(join(nodeModules,'vite/bin/vite.js')),'Install the repository frontend dependencies before this integration test');
   symlinkSync(resolve(nodeModules),join(checkout,'frontend/node_modules'));
   // Tests may be running before their files are committed; only test code is

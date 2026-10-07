@@ -24,10 +24,38 @@ def test_unsafe_member_names_fail(path):
     with pytest.raises(ValueError):reader.safe_name(path)
 
 
-def test_default_registry_remains_empty_and_rejects_every_receipt():
-    trust=reader.parse((reader.CONTRACTS/'financial_source_postcapture_trust_v1.json').read_bytes())
-    assert trust['reviewed_requests']==[]
+def test_explicit_empty_registry_rejects_every_receipt(tmp_path,monkeypatch):
+    (tmp_path/'financial_source_postcapture_trust_v1.json').write_text(json.dumps({'schema_version':'financial-source-postcapture-trust-v1','reviewed_requests':[]}))
+    monkeypatch.setattr(reader,'CONTRACTS',tmp_path)
     with pytest.raises(ValueError,match='not independently admitted'):reader.select_review('a'*64)
+
+
+def test_default_registry_selects_only_literal_finite_reviews():
+    trust=reader.parse((reader.CONTRACTS/'financial_source_postcapture_trust_v1.json').read_bytes())
+    assert set(trust)=={'schema_version','reviewed_requests'}
+    assert trust['schema_version']=='financial-source-postcapture-trust-v1'
+    assert isinstance(trust['reviewed_requests'],list) and len(trust['reviewed_requests'])<=32
+    contracts,hashes,raw=reader.load_contracts()
+    for review in trust['reviewed_requests']:
+        assert reader.select_review(review['reference']['receipt_sha256'])==review
+        reader.verify_review(review,contracts,hashes,raw)
+    receipts={review['reference']['receipt_sha256'] for review in trust['reviewed_requests']}
+    unknown=next(f'{value:064x}' for value in range(33) if f'{value:064x}' not in receipts)
+    with pytest.raises(ValueError,match='not independently admitted'):reader.select_review(unknown)
+
+
+@pytest.mark.parametrize('mutation',[
+    lambda trust:trust.update(schema_version='unknown'),
+    lambda trust:trust.update(allow_unreviewed=True),
+    lambda trust:trust.update(reviewed_requests={}),
+    lambda trust:trust.update(reviewed_requests=[{}]*33),
+    lambda trust:trust.update(reviewed_requests=[{'reference':{'receipt_sha256':'a'*64}}]*2),
+])
+def test_registry_schema_bounds_and_duplicate_admission_fail(tmp_path,monkeypatch,mutation):
+    trust={'schema_version':'financial-source-postcapture-trust-v1','reviewed_requests':[]};mutation(trust)
+    (tmp_path/'financial_source_postcapture_trust_v1.json').write_text(json.dumps(trust))
+    monkeypatch.setattr(reader,'CONTRACTS',tmp_path)
+    with pytest.raises(ValueError):reader.select_review('a'*64)
 
 
 def test_direct_review_requires_closed_fields_and_exact_receipt():

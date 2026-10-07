@@ -4,6 +4,7 @@ import {existsSync,readFileSync,rmSync,truncateSync,writeFileSync} from 'node:fs
 import {join} from 'node:path';
 import {bootstrap} from './publication-state.mjs';
 import {renewalPolicy} from './financial-source-renewal.mjs';
+import {disabledRenewalRegistry} from './fixtures/financial-renewal-policy.mjs';
 import {AUDIT_TRANSPORT_PREFIX} from './financial-audit-transport.mjs';
 import {renewalLifecycleFixture,buildSyntheticRenewalSources,seedGenuineSourcePublication,prepareGenuineRenewal,publishGenuineRenewal,carryGenuineRenewal,verifyNestedRenewalBytes,read,write} from './fixtures/financial-source-renewal-lifecycle.mjs';
 
@@ -116,7 +117,7 @@ test('real archive-backed compressed CLI renewal, next-price carry, second renew
   });
   await t.test('sealed registry bytes cannot be changed through historical API evidence',()=>{
     const endpoint=`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${first.a}`;
-    const registry={...renewalPolicy,publication_enabled:true,reviewed_controllers:[]},bytes=Buffer.from(JSON.stringify(registry));
+    const registry={...disabledRenewalRegistry(),publication_enabled:true},bytes=Buffer.from(JSON.stringify(registry));
     changedValue(f.api,endpoint,{type:'file',encoding:'base64',size:bytes.length,content:bytes.toString('base64')},()=>failed(f.command('plan',{allowFailure:true}),/registry/i));
   });
   const firstLive=publishGenuineRenewal(f,first,{beforeDeploy:({dist,state})=>{

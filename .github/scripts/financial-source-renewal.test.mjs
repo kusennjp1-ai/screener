@@ -17,6 +17,7 @@ import {bootstrap,sha256,inventoryDigest,uiInventory} from './publication-state.
 import {priceObservationDigest} from './price-observations.mjs';
 import {performanceLifecycleFixture} from './fixtures/financial-performance-lifecycle.mjs';
 import {lifecycleFixture,read} from './fixtures/financial-release-lifecycle.mjs';
+import {disabledRenewalRegistry} from './fixtures/financial-renewal-policy.mjs';
 import {createFinancialGenerationCarry} from '../../frontend/tools/financial-generation-carry.mjs';
 
 const repo=bootstrap.repository,prefix=`repos/${repo}`,H='a'.repeat(64),S='b'.repeat(40),C='c'.repeat(40),T='d'.repeat(40),CT='e'.repeat(40),P='f'.repeat(40),PT='1'.repeat(40);
@@ -38,7 +39,7 @@ function authority(transition,consumerTransition=null,{legacyRegistry=false}={})
     if(pair.before)captured[path]=pair.before;code[path]=pair.after;
   }
   transition.request.consumer_code_sha256=digest(consumerCodeInventory(captured));
-  const priorRegistry={...renewalPolicy,publication_enabled:false,reviewed_controllers:[],reviewed_consumer_transitions:consumerTransition?[consumerTransition]:[]};
+  const priorRegistry={...disabledRenewalRegistry(),reviewed_consumer_transitions:consumerTransition?[consumerTransition]:[]};
   if(legacyRegistry)delete priorRegistry.ci_admission;
   transition.record.registry_sha256=sha256(JSON.stringify(priorRegistry));
   const sourceChecks=contract.required_ci_jobs.map((name,index)=>({workflow:'.github/workflows/ci.yml',run_id:92,run_attempt:2,job_id:920+index,name,head_sha:S}));
@@ -155,9 +156,8 @@ test('prepared automatic authority cannot be requested for an old manual transit
   const f=fixture();try{await assert.rejects(()=>verifyPreparedAutomaticRenewal({mode:'renewal'},f.transition),/exact active producer/);}finally{f.cleanup();}
 });
 
-test('renewal controls are closed, distinct, and disabled in production entrypoints',()=>{
-  assert.equal(renewalPolicy.publication_enabled,false);assert.deepEqual(renewalPolicy.reviewed_controllers,[]);
-  assert.deepEqual(renewalPolicy.reviewed_consumer_transitions,[]);
+test('production renewal registry stays closed and legacy activation entrypoints reject ambient enable claims',()=>{
+  assert.equal(validateRenewalRegistry(renewalPolicy),renewalPolicy);
   const root=temp();try{
     assert.deepEqual(assertRenewalPublicationDisabled(root),{request:null,pin:null,intent:null});
     assert.throws(()=>assertRenewalPublicationDisabled(root,'anything'),/disabled/);
@@ -308,7 +308,12 @@ test('ordinary carry remains independent of removed current intent; renewal disp
     write(join(root,renewalPolicy.request_path),f.transition.request);write(join(root,renewalPolicy.pin_path),f.transition.pin);
     assert.equal(selectRenewalControls({root}),null);
     assert.throws(()=>selectRenewalControls({root,input:JSON.stringify(f.transition.intent),eventName:'workflow_dispatch'}),/complete committed request, pin and explicit intent/);
-    rmSync(join(root,renewalPolicy.request_path));rmSync(join(root,renewalPolicy.pin_path));
+    write(join(root,renewalPolicy.intent_path),f.transition.intent);
+    for(const registry of [disabledRenewalRegistry(),{...disabledRenewalRegistry(),publication_enabled:true}]){
+      write(join(root,'contracts/financial_source_renewal_v1.json'),registry);
+      assert.throws(()=>selectRenewalControls({root,input:JSON.stringify(f.transition.intent),eventName:'workflow_dispatch'}),/disabled: no exact reviewed controller authority/);
+    }
+    for(const key of ['request','pin','intent'])rmSync(join(root,renewalPolicy[`${key}_path`]));
     assert.equal(selectRenewalControls({root}),null);
   }finally{f.cleanup();rmSync(root,{recursive:true,force:true});}
 });
@@ -377,7 +382,7 @@ test('consumer policy metadata exclusion cannot change the original ordinary act
     const path='contracts/financial_performance_exception_v2.json',bytes=Buffer.from(JSON.stringify({schema_version:'financial-performance-exception-policy-v2',enabled:false,capture:null}));
     const content=value=>({type:'file',encoding:'base64',size:value.length,content:value.toString('base64')});
     const api={[`${prefix}/contents/${path}?ref=${S}`]:content(bytes),[`${prefix}/contents/${path}?ref=${C}`]:content(bytes),
-      [`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${C}`]:content(Buffer.from(JSON.stringify(renewalPolicy)))};
+      [`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${C}`]:content(Buffer.from(JSON.stringify(disabledRenewalRegistry())))};
     const options={request:f.transition.request,certificationSha:C,originBytes:readFileSync(join(f.root,f.transition.request.origin_release.path)),publishedCode:{[path]:{mode:'100644',sha:S}},api:endpoint=>api[endpoint]};
     verifyRenewalInitialCapturePolicy(options);
     const code={'frontend/tools/production-bootstrap-diagnostic.mjs':{mode:'100644',sha:S}};
@@ -395,7 +400,7 @@ test('v2 policy metadata is accepted only from its independently reverified orig
     const publication=read(join(f.liveRoot,'publication.json')),originBytes=readFileSync(join(f.liveRoot,publication.financial_release.path));
     const policyPath='contracts/financial_performance_exception_v2.json',policyBytes=readFileSync(join(f.codeRoot,policyPath)),certifier='2'.repeat(40);
     const api=f.config.api;api[`${prefix}/contents/${policyPath}?ref=${f.ui.controller_sha}`]=f.content(policyBytes);api[`${prefix}/contents/${policyPath}?ref=${certifier}`]=f.content(policyBytes);
-    api[`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${certifier}`]=f.content(Buffer.from(JSON.stringify(renewalPolicy)));
+    api[`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${certifier}`]=f.content(Buffer.from(JSON.stringify(disabledRenewalRegistry())));
     const helper=await import(pathToFileURL(join(f.codeRoot,'.github/scripts/financial-source-renewal.mjs')).href);
     const options={request:{ui:{sha:f.ui.sha},origin_release:publication.financial_release},certificationSha:certifier,originBytes,publishedCode:f.captured,api:endpoint=>{assert.ok(Object.hasOwn(api,endpoint),endpoint);return api[endpoint];}};
     helper.verifyRenewalInitialCapturePolicy(options);
@@ -412,7 +417,7 @@ test('renewal reuses only exact originally reviewed v2 harness pairs without exc
     const publication=read(join(f.liveRoot,'publication.json')),originBytes=readFileSync(join(f.liveRoot,publication.financial_release.path));
     const policyPath='contracts/financial_performance_exception_v2.json',policyBytes=readFileSync(join(f.codeRoot,policyPath)),certifier='2'.repeat(40),api=f.config.api;
     api[`${prefix}/contents/${policyPath}?ref=${f.ui.controller_sha}`]=f.content(policyBytes);api[`${prefix}/contents/${policyPath}?ref=${certifier}`]=f.content(policyBytes);
-    api[`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${certifier}`]=f.content(Buffer.from(JSON.stringify(renewalPolicy)));
+    api[`${prefix}/contents/contracts/financial_source_renewal_v1.json?ref=${certifier}`]=f.content(Buffer.from(JSON.stringify(disabledRenewalRegistry())));
     const helper=await import(pathToFileURL(join(f.codeRoot,'.github/scripts/financial-source-renewal.mjs')).href);
     const request={ui:{sha:f.ui.sha},origin_release:publication.financial_release,consumer_code_sha256:digest(consumerCodeInventory(f.captured))};
     const options={request,certificationSha:certifier,originBytes,api:endpoint=>{assert.ok(Object.hasOwn(api,endpoint),endpoint);return api[endpoint];}};

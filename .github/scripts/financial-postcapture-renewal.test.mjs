@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {parseCertifiedPreviewSelection} from './financial-candidate-preview-v2.mjs';
 import {parsePreviewRequest} from './financial-candidate-preview.mjs';
 import {parseFinancialReleaseRequest,sourceLineage,renewalSourceLineage} from './financial-release-activation.mjs';
-import {consumerCodeInventory,renewalControllerCodeInventory,renewalPolicy} from './financial-source-renewal.mjs';
+import {consumerCodeInventory,renewalControllerCodeInventory} from './financial-source-renewal.mjs';
 import {POSTCAPTURE_PREVIEW_SCHEMA,POSTCAPTURE_SOURCE_GUARD,POSTCAPTURE_RENEWAL_REQUEST,parseRenewalFinancialRequest,assertPostcaptureRequestDelta} from './financial-candidate-preview-postcapture.mjs';
 import {verifyPostcaptureCorrectionSource} from './verify-postcapture-correction-source.mjs';
 import request from '../../contracts/financial_source_postcapture_request_v1.json' with {type:'json'};
@@ -36,9 +36,21 @@ test('same reference cannot bypass the original v1 source-lineage constructor',(
     assert.throws(()=>renewalSourceLineage(changed),/finite original producer source|Invalid pinned financial correction source/);
   }
 });
-test('production source and renewal registries remain empty and cannot call an API',()=>{
-  assert.equal(renewalPolicy.publication_enabled,false);assert.deepEqual(renewalPolicy.reviewed_controllers,[]);assert.deepEqual(trust.reviewed_requests,[]);
-  let calls=0;assert.throws(()=>verifyPostcaptureCorrectionSource(request.source,{reference,certificateZipPath:'/missing'},()=>{calls++;throw Error('Unexpected API');}),/not independently admitted/);assert.equal(calls,0);
+test('explicitly empty source registry rejects even the actual companion before any API',()=>{
+  let calls=0;assert.throws(()=>verifyPostcaptureCorrectionSource(request.source,{reference,certificateZipPath:'/missing'},()=>{calls++;throw Error('Unexpected API');},[]),/not independently admitted/);assert.equal(calls,0);
+});
+test('production source registry admits only its literal finite entries before independent API verification',()=>{
+  assert.deepEqual(Object.keys(trust).sort(),['reviewed_requests','schema_version']);
+  assert.equal(trust.schema_version,'financial-source-postcapture-trust-v1');
+  assert.ok(Array.isArray(trust.reviewed_requests));assert.ok(trust.reviewed_requests.length<=32);
+  const stop=Error('Independent API verification is still required');
+  for(const entry of trust.reviewed_requests){
+    const calls=[];
+    assert.throws(()=>verifyPostcaptureCorrectionSource(entry.source,{reference:entry.reference,certificateZipPath:'/missing'},endpoint=>{calls.push(endpoint);throw stop;}),error=>error===stop);
+    assert.deepEqual(calls,[`repos/${entry.reference.repository}/actions/runs/${entry.reference.run_id}/attempts/${entry.reference.run_attempt}`]);
+  }
+  const unknown={...reference,receipt_sha256:Array.from({length:33},(_,i)=>i.toString(16).padStart(64,'0')).find(sum=>!trust.reviewed_requests.some(entry=>entry.reference.receipt_sha256===sum))};
+  let calls=0;assert.throws(()=>verifyPostcaptureCorrectionSource(request.source,{reference:unknown,certificateZipPath:'/missing'},()=>{calls++;throw Error('Unexpected API');}),/not independently admitted/);assert.equal(calls,0);
 });
 test('companion transition cannot change count, predecessor or fresh receipt identity',()=>{
   const delta={previous:{archive_manifest_sha256:request.baseline.manifest_sha256},current:{archive_manifest_sha256:request.source.archive_manifest_sha256},new_receipt_count:400,new_receipts:Array.from({length:400},(_,i)=>({receipt_sha256:i.toString(16).padStart(64,'0')}))};
