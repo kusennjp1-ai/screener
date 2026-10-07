@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {gunzipSync} from 'node:zlib';
 import {canonicalBytes,generationBody} from '../../frontend/src/static/transport/format.mjs';
 import {requiredGitDependencies} from './restore-postcapture-pages-rehearsal.mjs';
 import {ensurePinnedGitObjects, measureRuntimeUsage, verifyPreservedControls, inspectArchiveMetadata, measureLogicalMetadata, pinnedContract, requireStorageBudget, restoreRehearsalInputs,
@@ -242,7 +243,18 @@ test('runtime usage includes the selected venv prefix without resolving its exec
 });
 test('reviewed initial controls and disabled source policies are preserved', t => {
   const root=mkdtempSync(join(tmpdir(),'rehearsal-controls-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
-  for(const path of Object.keys(c.preserved_controls)){mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),execFileSync('git',['show',`HEAD:${path}`]));}
+  // The real rehearsal is pinned to its historical checkout. Ordinary main
+  // changes must not silently replace those recorded diagnostic control bytes.
+  const recorded=JSON.parse(gunzipSync(readFileSync(new URL('./fixtures/postcapture-historical-controls-v1.json.gz',import.meta.url)),{maxOutputLength:1024*1024}));
+  assert.equal(recorded.schema_version,'postcapture-historical-controls-fixture-v1');
+  assert.equal(recorded.source_commit,'448c188de584b77a09bea52f233f881c2b31eeb9');
+  assert.equal(recorded.source_tree,'2186101e92e1f71771936831cea0a40e410975f7');
+  assert.deepEqual(Object.keys(recorded.files).sort(),Object.keys(c.preserved_controls).sort());
+  for(const [path,expected]of Object.entries(c.preserved_controls)){
+    const bytes=Buffer.from(recorded.files[path],'base64');
+    assert.equal(bytes.toString('base64'),recorded.files[path]);assert.equal(sha256(bytes),expected);
+    mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),bytes);
+  }
   const renewal={publication_enabled:false,reviewed_controllers:[],reviewed_consumer_transitions:[]};
   mkdirSync(join(root,'contracts'));writeFileSync(join(root,'contracts/financial_source_renewal_v1.json'),JSON.stringify(renewal));
   writeFileSync(join(root,'contracts/financial_source_postcapture_trust_v1.json'),JSON.stringify({reviewed_requests:[]}));
@@ -252,7 +264,12 @@ test('reviewed initial controls and disabled source policies are preserved', t =
   writeFileSync(join(root,'contracts/financial_source_renewal_v1.json'),JSON.stringify(renewal));
   writeFileSync(join(root,'contracts/financial_source_postcapture_trust_v1.json'),JSON.stringify({reviewed_requests:[{}]}));
   assert.throws(()=>verifyPreservedControls(root),/trust is enabled/);
-  writeFileSync(join(root,Object.keys(c.preserved_controls)[0]),'{}');assert.throws(()=>verifyPreservedControls(root),/initial control changed/);
+  writeFileSync(join(root,'contracts/financial_source_postcapture_trust_v1.json'),JSON.stringify({reviewed_requests:[]}));
+  for(const path of Object.keys(c.preserved_controls)){
+    const original=readFileSync(join(root,path));writeFileSync(join(root,path),Buffer.concat([original,Buffer.from(' ')]));
+    assert.throws(()=>verifyPreservedControls(root),/initial control changed/);writeFileSync(join(root,path),original);
+  }
+  assert.equal(verifyPreservedControls(root).production_renewal_enabled,false);
 });
 function metadataFixture() {
   const metadata={},hash='1'.repeat(64),format='screener-static-transport-v1',pre='static-data/_financial-audit-transport/';
