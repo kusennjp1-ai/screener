@@ -151,10 +151,18 @@ function reviewFixture(){
  const screenshots={},screens=Array.from({length:134},(_,i)=>{const screenshot=`screen-${i}.png`;screenshots[screenshot]=H;return {key:`screen/${i}`,screenshot,metrics:{smallTargets:[],fontIssues:[],radiusIssues:[],asciiNegativeValues:[],horizontalOverflow:false},axe:[]};});
  return {screenshots,report:{commit:p.captured_ui.sha,failures:p.failures,screens},review:{observed_commit:p.captured_ui.sha,captured_tree:p.captured_ui.tree,report_json_sha256:p.report_sha256,performance_exception_approved:false,release_approved:false,objective_nonperformance_failure_count:0,objective_failures:p.failures,screens:screens.map(s=>({...s,sha256:H,scores:Object.fromEntries(['design','usability','originality','content'].map(k=>[k,{value:8,reason:'Explicit reviewed rationale'}]))}))}};
 }
-test('134-screen nonperformance validation preserves all eight failures and historical false flags',()=>{
+test('134-screen nonperformance validation preserves all eight failures and historical false flags',t=>{
+ // This case targets byte/visual evidence; keep its synthetic activation live
+ // without extending any production approval or relying on the CI wall clock.
+ t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-05T23:00:00Z')});
  const f=reviewFixture();assert.equal(validatePerformanceReviewContent(f).failure_count,8);
  for(const mutate of [v=>v.report.screens.pop(),v=>v.review.screens[1].key=v.review.screens[0].key,v=>v.review.screens[0].scores.design.value=7.9,v=>v.review.release_approved=true,v=>v.report.failures=[],v=>v.screenshots['screen-0.png']='b'.repeat(64),v=>v.report.screens[0].axe.push({}),v=>v.report.screens[0].metrics.horizontalOverflow=true]){const copy=clone(f);mutate(copy);assert.throws(()=>validatePerformanceReviewContent(copy));}
  assert.throws(()=>verifyPerformanceReview({approval:fixture().approval,reportBytes:Buffer.from(JSON.stringify(f.report)),reviewBytes:Buffer.from(JSON.stringify(f.review)),screenshots:f.screenshots}),/bytes changed/);
+});
+test('performance review still rejects expired approval before checking report bytes',t=>{
+ t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-07T12:00:00Z')});
+ const f=reviewFixture();
+ assert.throws(()=>verifyPerformanceReview({approval:fixture().approval,reportBytes:Buffer.from(JSON.stringify(f.report)),reviewBytes:Buffer.from(JSON.stringify(f.review)),screenshots:f.screenshots}),/expired exact performance approval/);
 });
 test('pin and UI approval contracts are closed; no ordinary gate accepts the failure',()=>{
  const f=fixture();parseExceptionPin(f.pin);parseExceptionUiApproval(f.ui);
