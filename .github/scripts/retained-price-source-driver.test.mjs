@@ -25,7 +25,7 @@ function fixture(t){
   const base=mkdtempSync(join(tmpdir(),'retained-driver-'));t.after(()=>rmSync(base,{recursive:true,force:true}));
   const root=join(base,'controller'),runnerTemp=join(base,'runtime');mkdirSync(root);mkdirSync(runnerTemp);
   const output=join(runnerTemp,'source'),jobStart=join(runnerTemp,'job-start');writeFileSync(jobStart,String(now/1000-300));
-  const request={enabled:true,approved_ui:{sha:G,tree:T,frontend_tree:G},predecessor:{identity:'prior/99'}};
+  const request={enabled:true,approved_ui:{sha:G,tree:T,frontend_tree:G},predecessor:{identity:'prior/99',run_id:99}};
   const raw=bytes(request),requestRecord={raw,value:request,sha256:sha(raw)};
   const execution={repository:repo,repository_id:repoId,event_name:'workflow_run',ref:'refs/heads/main',sha:G,workflow_sha:G,
     workflow_ref:`${repo}/.github/workflows/static-site.yml@refs/heads/main`,run_id:123,run_attempt:1};

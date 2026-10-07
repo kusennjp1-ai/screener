@@ -3,6 +3,8 @@ import {readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ROOT,readRepairRequest} from '../../.github/scripts/retained-price-source-admission.mjs';
+import {execFileSync} from 'node:child_process';
+import {createRetainedPriceLiveApi} from '../../.github/scripts/retained-price-live-inventory.mjs';
 import {ORIGINAL_RESPONSE_KEYS} from '../../.github/scripts/retained-price-source-driver.mjs';
 
 // Exercise both Node-only initializers through the actual frontend Vite/jsdom
@@ -12,6 +14,22 @@ describe('retained-price source imports under the frontend configuration',()=>{
   it('keeps the admission root and default request on the native filesystem',()=>{
     expect(ROOT).toBe(root);
     expect(readRepairRequest().raw).toEqual(readFileSync(join(root,'.github/retained-price-oct6-source.json')));
+  });
+  it('resolves and executes the native inventory child through the transformed adapter',()=>{
+    let called=0;
+    const api=createRetainedPriceLiveApi(()=>{throw Error('Unexpected generic API');},{requiredIds:[1,2],report:()=>{},
+      run:(command,args,options)=>{
+        called++;
+        expect(command).toBe(process.execPath);
+        expect(args[1]).toBe(join(root,'.github/scripts/retained-price-repository-inventory.mjs'));
+        expect(args[1]).not.toMatch(/^https?:/);
+        // Execute the exact production child without a token: it must report
+        // its closed protocol failure before any network request.
+        return execFileSync(command,args,{...options,env:{...process.env,GH_TOKEN:'',GITHUB_TOKEN:''}});
+      }});
+    expect(()=>api('repos/kusennjp1-ai/screener/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100',true))
+      .toThrow(/missing-actions-token/);
+    expect(called).toBe(1);
   });
   it('loads the lazy driver from the same original-input fixture',()=>{
     const pins=JSON.parse(readFileSync(join(root,'.github/scripts/fixtures/retained-price-recovery-oct6-inputs.json')));
