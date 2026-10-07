@@ -4,10 +4,17 @@ A provider workflow can start after any observation. No production admission
 may infer atomic exclusion from this guard; shared scheduling needs separate
 review. Unknown active workflows and uncertain/incomplete API data fail closed.
 """
+import importlib.util
+from pathlib import Path
 import re
 import time
 from datetime import timedelta
 from app.services import financial_statement_batch as batch
+
+_offline_spec = importlib.util.spec_from_file_location(
+    "next200_offline_price", Path(__file__).with_name("next200-offline-price.py"))
+offline_price = importlib.util.module_from_spec(_offline_spec)
+_offline_spec.loader.exec_module(offline_price)
 
 REPOSITORY = "kusennjp1-ai/screener"
 REPOSITORY_ID = 1203919607
@@ -70,10 +77,13 @@ def run_identity(run):
             run.get("repository", {}).get("id") == run.get("head_repository", {}).get("id") == REPOSITORY_ID and
             isinstance(run.get("head_sha"), str) and re.fullmatch(r"[a-f0-9]{40}", run["head_sha"]) and
             isinstance(run.get("head_branch"), str) and run["head_branch"], "Unverified provider run identity")
-    require(run.get("path") in KNOWN_EVENTS and run.get("event") in KNOWN_EVENTS[run["path"]],
+    require((run.get("path") in KNOWN_EVENTS and run.get("event") in KNOWN_EVENTS[run["path"]]) or
+            offline_price.candidate(run),
             "Unknown active workflow/event may acquire provider data")
     require(run.get("status") in ACTIVE_STATUSES and run.get("conclusion") is None,
             "Uncertain active provider run status")
+    if offline_price.candidate(run):
+        offline_price.require_identity(run)
 
 
 def jobs_for_run(api, run):
@@ -89,7 +99,7 @@ def jobs_for_run(api, run):
 
 
 def observe(api, current, *, job_started_at, now, monotonic=time.monotonic):
-    """Reject every concurrent active run, including an ordinary price run.
+    """Reject concurrent acquisition, except one immutable offline price route.
 
     Whole-run exclusion is deliberate: a queued job, future matrix child or
     Static Site combine step can still acquire even when one job has completed.
@@ -163,9 +173,14 @@ def observe(api, current, *, job_started_at, now, monotonic=time.monotonic):
     require(current["id"] in seen and all(seen[current["id"]].get(key) == current.get(key) for key in
             ("workflow_id", "run_number", "run_attempt", "head_sha", "head_branch", "path", "event", "status", "conclusion")),
             "Current run missing or changed in complete provider inventory")
+    offline_observations = []
     for run in seen.values():
         if run["id"] != current["id"]:
-            jobs_for_run(bounded, run)
+            other_jobs = jobs_for_run(bounded, run)
+            if offline_price.candidate(run):
+                offline_observations.append(offline_price.verify(
+                    bounded, run, other_jobs, now=now, complete=complete))
+                continue
             raise ValueError(f"Concurrent provider/acquisition workflow {run['path']} run {run['id']} is {run['status']}")
     return {"schema_version": "next200-provider-overlap-observation-v1", "active_run_count": len(seen),
             "current_job_id": jobs[0]["id"], "current_step_number": active_steps[0]["number"],
@@ -174,4 +189,5 @@ def observe(api, current, *, job_started_at, now, monotonic=time.monotonic):
             "platform_job_started_at": jobs[0]["started_at"], "run_started_at": current["run_started_at"],
             "job_clock_step_started_at": budget_clock["started_at"],
             "job_clock_step_completed_at": budget_clock["completed_at"],
+            "offline_price_observations": offline_observations,
             "isolation": "read_only_observation_not_shared_lock", "minimum_poll_interval_seconds": POLL_SECONDS}

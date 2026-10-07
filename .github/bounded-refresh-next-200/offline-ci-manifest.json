@@ -251,6 +251,22 @@
       "origin": "unchanged supporting input retained in Library ZIP",
       "sha256": "db45ba1737755601308caea50cb5030ebaff32427fa3484d1cec6557bc218679"
     },
+    ".github/bounded-refresh-next-200/catchup-control.json": {
+      "baseline_sha256": null,
+      "bytes": 558,
+      "git_blob_sha": "63c8040fdfcac482fae7e6398830a8c5b17a4fe7",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "3126d34f4fecb9ffe3726b806d791068fdc33f11b335125f875991bace4a8b4a",
+      "source_commit": null
+    },
+    ".github/bounded-refresh-next-200/catchup-seed-review.json": {
+      "baseline_sha256": null,
+      "bytes": 5100,
+      "git_blob_sha": "12f926bc9e9d4605e400fed4ed3510a168325e1f",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "ae7f4dd8fe42c9473eed60eb65bf14015e419553f050269d526db82982f9fb77",
+      "source_commit": null
+    },
     ".github/bounded-refresh-next-200/collector-plan.json": {
       "baseline_sha256": null,
       "bytes": 62923,
@@ -385,10 +401,10 @@
     },
     ".github/scripts/check-next200-offline.py": {
       "baseline_sha256": null,
-      "bytes": 9790,
-      "git_blob_sha": "178cf88bbc633a668deb5294346e58050cab556d",
-      "origin": "new reconstruction requiring independent review",
-      "sha256": "4c7d68c3c0f9e6fdd1bd8bd815a936a50ffa5a3e9d315d69d40eee1289c20931",
+      "bytes": 10330,
+      "git_blob_sha": "1c0becd8fbc10170d98bc8c22c50647208738177",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "ff3c807a32a6a2de4fc1ffd7fc9403079d81f97b41287dc27fd5a133b2435f52",
       "source_commit": null
     },
     ".github/scripts/check-next200-offline.test.py": {
@@ -1039,11 +1055,29 @@
       "sha256": "5ab05043e57983aae57946c46595eb1cef5b193dee524be44a34c9e2d34174e8",
       "source_commit": "22548890d0fe161edf7be3943b1775c4f293d0d9"
     },
+    ".github/scripts/next200-catchup-admission.py": {
+      "baseline_sha256": null,
+      "bytes": 12077,
+      "git_blob_sha": "a73aa1020aff4388fe8f82ed8b7d3d76cdc6ebd1",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "0ce19d9349eb04dbf121c34780c34cef287f11d8b8fc94d0d026dd30c26de268",
+      "source_commit": null
+    },
+    ".github/scripts/next200-offline-price.py": {
+      "baseline_sha256": null,
+      "bytes": 13139,
+      "git_blob_sha": "b813118e6a15bc694b1906d01854ae24d3049eea",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "67a0d2d4539090ddf9b6fc835cf2f81c7ec90c71bc41bc0780c226d5e648b530",
+      "source_commit": null
+    },
     ".github/scripts/next200-provider-overlap.py": {
       "baseline_sha256": null,
-      "bytes": 10755,
-      "origin": "authenticated Library ZIP",
-      "sha256": "a86874a203bd5254b877ea2574935afad7a4495761ff497e3714e10669680951"
+      "bytes": 11502,
+      "git_blob_sha": "51fa0fa9e2d9760dbdbf1a60d0a19812dc7a5197",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "f95eeddb617e9c179a4ff2920136db0ca2039ef8ab7c06f75837d296e5697d20",
+      "source_commit": null
     },
     ".github/scripts/pending-financial-correction.mjs": {
       "baseline_sha256": null,
@@ -1071,9 +1105,11 @@
     },
     ".github/scripts/prepare-postcapture-next-200.py": {
       "baseline_sha256": null,
-      "bytes": 31724,
-      "origin": "authenticated Library ZIP",
-      "sha256": "00a3a68160d3a4fd452657bf4b106ab89219be6736b2b2bb1d2557b1068a8765"
+      "bytes": 32794,
+      "git_blob_sha": "71c31208dc80204551e3a1faa3305bac97b4c294",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "086932a0d44734fc0c3218b90d96bac252f95a43545e6b5de1829d80c213f692",
+      "source_commit": null
     },
     ".github/scripts/prepare-statement-cohort.mjs": {
       "baseline_sha256": null,
@@ -1205,9 +1241,11 @@
     },
     ".github/scripts/run-postcapture-next-200.py": {
       "baseline_sha256": null,
-      "bytes": 37710,
-      "origin": "authenticated Library ZIP",
-      "sha256": "e9ed3d58b6c8b6a85e68d54ebda7f7d51963e1bcf6824ccc30ea6eb3f57b0eeb"
+      "bytes": 38495,
+      "git_blob_sha": "cd4743fc30321ea912e69e9a83d2e2b5c99e6b1f",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "acae29e94d335aee00b84d13dca023e725ca33823518ca441b2870e36ab2b214",
+      "source_commit": null
     },
     ".github/scripts/run-postcapture-pages-rehearsal.py": {
       "baseline_sha256": null,
@@ -13075,11 +13113,27 @@
       "sha256": "c49098b7432d3ac72b40dc5dcc950db8d2b855bd51cc0afd1e8e2e857d128ad4",
       "source_commit": "22548890d0fe161edf7be3943b1775c4f293d0d9"
     },
+    "backend/tests/unit/test_next200_catchup_admission.py": {
+      "baseline_sha256": null,
+      "bytes": 17192,
+      "git_blob_sha": "7c0e07a063e957931b9585382957063e73d484af",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "1095dc2bcd51bf40078d7ff7c7597292220a5107d753b6bb8f14c2853bb94632",
+      "source_commit": null
+    },
     "backend/tests/unit/test_next200_consumer_selection.py": {
       "baseline_sha256": null,
       "bytes": 6203,
       "origin": "authenticated Library ZIP",
       "sha256": "de06916d45509e09d9daf5ab1d67859b8c05aa935bb38a1e6ede49c5e7350297"
+    },
+    "backend/tests/unit/test_next200_offline_price_coordination.py": {
+      "baseline_sha256": null,
+      "bytes": 17234,
+      "git_blob_sha": "007462e536fc0adcb6e00b8a295909eb7633a5d5",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "070ce48a755d19b0084ae2d546f5a483bf1d489128c929e547047ca37cb1ff29",
+      "source_commit": null
     },
     "backend/tests/unit/test_official_market_universe_source_service.py": {
       "baseline_sha256": null,
@@ -13187,9 +13241,11 @@
     },
     "backend/tests/unit/test_postcapture_next_200_collector.py": {
       "baseline_sha256": null,
-      "bytes": 52586,
-      "origin": "authenticated Library ZIP",
-      "sha256": "e0bfb6f328aa54273583ce4747dfd4487b9d37925e9354f100557cb9fb7d8f31"
+      "bytes": 52815,
+      "git_blob_sha": "816d14174f793796b943631dbe5d1df174d684a3",
+      "origin": "new local disabled catch-up implementation requiring independent review",
+      "sha256": "6e32bf9ae73c0d6a3299474132190d879d79e84411fb62326a1e8a210bf3cbed",
+      "source_commit": null
     },
     "backend/tests/unit/test_postcapture_next_200_preparation.py": {
       "baseline_sha256": null,
@@ -31462,7 +31518,7 @@
   "lost_historical_patch_sha256": "9fa7ac46098a394f2ed35ce6237aa7feb6b07e382da2886cb5dcc9afbe95fd1b",
   "manifest_self_excluded": true,
   "provider_dispatch_permitted": false,
-  "reconstruction_status": "new implementation; independent review and target runtime CI pending",
+  "reconstruction_status": "new disabled catch-up implementation; independent review and target runtime CI pending",
   "retained_zip_sha256": "a8569adf8285a7e3ff37ec0df1307c5d1f8001d1545d21625b857039badf0fef",
   "schema_version": "next200-recovered-offline-v1",
   "target_python311_node22_ci": "not run",

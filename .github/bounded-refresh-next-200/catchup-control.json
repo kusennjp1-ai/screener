@@ -1,0 +1,27 @@
+{
+  "admission": null,
+  "execution_enabled": false,
+  "prior_dispositions": [
+    {
+      "attribute": "quarterly_income_stmt",
+      "decision": "pending",
+      "symbol": "BHP"
+    },
+    {
+      "attribute": "quarterly_income_stmt",
+      "decision": "pending",
+      "symbol": "BTI"
+    },
+    {
+      "attribute": "income_stmt",
+      "decision": "pending",
+      "symbol": "BXDC"
+    },
+    {
+      "attribute": "quarterly_income_stmt",
+      "decision": "pending",
+      "symbol": "CCEP"
+    }
+  ],
+  "schema_version": "next200-catchup-control-v1"
+}

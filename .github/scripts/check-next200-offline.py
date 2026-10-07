@@ -18,6 +18,8 @@ OUTPUTS = ("source-manifest.json", "results.json", "python-tests.log", "node-tes
 PYTHON_TESTS = [
     "backend/tests/unit/test_postcapture_next_200_preparation.py",
     "backend/tests/unit/test_postcapture_next_200_collector.py",
+    "backend/tests/unit/test_next200_catchup_admission.py",
+    "backend/tests/unit/test_next200_offline_price_coordination.py",
     "backend/tests/unit/test_next200_consumer_selection.py",
     "backend/tests/unit/test_financial_statement_batch.py",
     "backend/tests/unit/test_statement_refresh_planning.py",
@@ -80,6 +82,11 @@ def verify_sources(root=ROOT):
     require(len(value["missing_prior_decisions"]) == 4 and all(
         x["decision_state"] == "retry_decision_required" and x["retry_not_before"] is None
         for x in value["missing_prior_decisions"]), "Four unresolved decisions required")
+    catchup = json.loads((root / ".github/bounded-refresh-next-200/catchup-control.json").read_text())
+    require(catchup["execution_enabled"] is False and catchup["admission"] is None and
+            len(catchup["prior_dispositions"]) == 4 and all(
+                item["decision"] == "pending" for item in catchup["prior_dispositions"]),
+            "Catch-up admission must remain disabled and unassigned")
     return {"base_commit": manifest["base_commit"], "base_tree": manifest["base_tree"],
             "verified_files": checked, "unresolved_dependencies": manifest["unresolved_dependencies"]}
 

@@ -1,0 +1,120 @@
+{
+  "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+  "cache_by_deferred_symbols": {
+    "": {
+      "receipt_count": 396,
+      "selection_sha256": "6ff7b187241424a597ad0fd660d45579148421acf79959a06f0047f87046fc3e",
+      "sha256": "025cd5dec973bc4cdca3eb42c6cbe385548ddfb727a022db889a70f85b521f04"
+    },
+    "BHP": {
+      "receipt_count": 397,
+      "selection_sha256": "8e8e67a22aff7d23a84e5ad808dc6c31fec69e2d7c99bb8eb2fe4e6ce326ae70",
+      "sha256": "dc37e197a654dbec9d63737a3767690a51bd3f65c23c35ee8f29dadde00cfbba"
+    },
+    "BHP,BTI": {
+      "receipt_count": 398,
+      "selection_sha256": "3b942ae8effaab9ff4d1a937a2adfb602c3d7744cf35bca7d7ee88d7cac4b863",
+      "sha256": "86f7327d61df24d5683a22d80b66b625167b8ef35e71e1df6eef49b16ac40bdc"
+    },
+    "BHP,BTI,BXDC": {
+      "receipt_count": 399,
+      "selection_sha256": "7ff3b11c6a042ba31b47d4d2018c701708b389f071dcc4d60409ea38329a1d07",
+      "sha256": "4dd7f0ac3651bd190ddd739e565f3c68efa8f7b780d424c5aef200bc1f6ad4f6"
+    },
+    "BHP,BTI,BXDC,CCEP": {
+      "receipt_count": 400,
+      "selection_sha256": "96725a3c0e8d15a802e6e725495df58b1e43118134e9c26799744350e043d9f2",
+      "sha256": "9787d094ca8f52e8cc3b7212262054bad8c3eb9716664da3c70e349d93aaec6c"
+    },
+    "BHP,BTI,CCEP": {
+      "receipt_count": 399,
+      "selection_sha256": "cb6909e80ff629319b0f8e2ff6ae0a126a456b005e6af3000f3c99727afc17ee",
+      "sha256": "51db4054bea192a5016c45799c44f0f81d28e8a4912615b2065da37fd2d7962f"
+    },
+    "BHP,BXDC": {
+      "receipt_count": 398,
+      "selection_sha256": "2e11b79cce7dc5608639ed163fac130f55266bfe22280717c0c82272b8d6a0ab",
+      "sha256": "e5e6ccd87c9cd2105de69876a1c9103591f6934ff773060c1ac92f74bde6a577"
+    },
+    "BHP,BXDC,CCEP": {
+      "receipt_count": 399,
+      "selection_sha256": "1925a5f7dfb25ae8a4f77c740c0333188304d970599bf718aff9bf570f0afb27",
+      "sha256": "63006b8e36a5873072441c31ca00a51412bdfe19633c71983010526b4c197f01"
+    },
+    "BHP,CCEP": {
+      "receipt_count": 398,
+      "selection_sha256": "bb1d333787a7d14aff366030058394c7feaa6b33088d13b9e8f366b4fa85424f",
+      "sha256": "435848599ad6f3d35da2c64be4a8f8b7e54b7044b06ac6aeacfea3d258d8ea57"
+    },
+    "BTI": {
+      "receipt_count": 397,
+      "selection_sha256": "087e9b7cebbb0ded75864daa5b1467a82a096187c9de88f36c1280b476e3197f",
+      "sha256": "25939dd06bb0a86513d7f119282e45de1af9016610e465888e7fe8d30ec19de7"
+    },
+    "BTI,BXDC": {
+      "receipt_count": 398,
+      "selection_sha256": "f09eb0a6613bb47cb93e7fdc366287756a63458c7baa9f37ecfef31193e94f89",
+      "sha256": "f04b04ec1eb538f4dbdf5fd47394147ac48ac833013f2479da49e4cc01dd62c3"
+    },
+    "BTI,BXDC,CCEP": {
+      "receipt_count": 399,
+      "selection_sha256": "1641baa3870121e214584a166111333e8862a4b09997d87c83cd4f1d2d15d432",
+      "sha256": "223169268131515c33dbcc7960da11d25b24d43a1cf1b83fcd3983c7d3234da0"
+    },
+    "BTI,CCEP": {
+      "receipt_count": 398,
+      "selection_sha256": "89bd0f146a2aeef600dc9c6fce19771f1caf1292d85321540d98874144d2299d",
+      "sha256": "d6687dff14060afb38b4380b688edfda225657c23035526f3e56a3b90a3d0339"
+    },
+    "BXDC": {
+      "receipt_count": 397,
+      "selection_sha256": "e6aa65a1defa0198158227afb8cbd46aaf6ee1fc12f2f92f8daa67abeb919ad4",
+      "sha256": "b7a796b7c988d6b546c6207e319890087e6a4fda9b9b1c275af3c0f5f66fd4fd"
+    },
+    "BXDC,CCEP": {
+      "receipt_count": 398,
+      "selection_sha256": "a884b0a0cce66985cccfde24c2c8120df1f7c7228bdaa31fd568bedab8bfa5e6",
+      "sha256": "3f1843133e028b5a2de018b538407300737e04137509527335ae59475f17dd4c"
+    },
+    "CCEP": {
+      "receipt_count": 397,
+      "selection_sha256": "266d209e31da851843b740320fb09e7f35e86c2f5217027d8c1f284814cef155",
+      "sha256": "22dce0a8054ad8d3297326ab34bfe340f9af8306a381f9ac7f059d946897246a"
+    }
+  },
+  "failed_priors": [
+    {
+      "attribute": "quarterly_income_stmt",
+      "failed_acquisition_sha256": "1ea86251abe934b5dfecfde3fd5d8e360c63718bb1933dedcaa0204adbafda73",
+      "symbol": "BHP",
+      "transport_payload_sha256s": [
+        "75871e001988366a285ae14c3a74dcca2d330c11d5e0bf303c95e4f99f4e0352"
+      ]
+    },
+    {
+      "attribute": "quarterly_income_stmt",
+      "failed_acquisition_sha256": "bc12033b5ad624830fefea4f54ed6510234b98f0fd06a611318b5eee3adbbc46",
+      "symbol": "BTI",
+      "transport_payload_sha256s": [
+        "d05544b8711dae7d1699e5646f310e03acad462566a416c83828fba3aecd9fde"
+      ]
+    },
+    {
+      "attribute": "income_stmt",
+      "failed_acquisition_sha256": "b1222b44b99390e995b4175b58e60d23aa7cae113726620388b815eb0a56ae49",
+      "symbol": "BXDC",
+      "transport_payload_sha256s": [
+        "6ec1ca8b2fddd7435115a7eed0e218a75c2a842f2867cc64d9245dc5ed62cca6"
+      ]
+    },
+    {
+      "attribute": "quarterly_income_stmt",
+      "failed_acquisition_sha256": "17aea2037f667449b93f776be010828d2459cb92f7ea9f19838110c6b083afdd",
+      "symbol": "CCEP",
+      "transport_payload_sha256s": [
+        "416dc8e13db7f6535142a4d9920529ac56664df17ea1b70e235dec035a657010"
+      ]
+    }
+  ],
+  "schema_version": "next200-catchup-fixed-seed-v1"
+}

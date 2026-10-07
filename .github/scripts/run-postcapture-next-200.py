@@ -33,6 +33,7 @@ def module(name, filename):
 preparation = module("next200_preparation", "prepare-postcapture-next-200.py")
 original = module("next200_original_runner", "run-statement-recovery-cycle.py")
 overlap = module("next200_provider_overlap", "next200-provider-overlap.py")
+catchup = module("next200_catchup_admission", "next200-catchup-admission.py")
 barriers = original.bounded_bridge()
 require, closed, sha256 = preparation.require, preparation.closed, preparation.sha256
 ROOT = preparation.ROOT
@@ -46,7 +47,7 @@ HISTORICAL_HEADS = ["4715b218cc25720d1d3be455930554e1e6282136", "28e298ee21ea275
 
 
 def execution_identity(review):
-    return {
+    identity = {
         "schema_version": "postcapture-next-200-execution-v2",
         "request_id": review.admission["request_id"],
         "repository": REPOSITORY, "workflow": WORKFLOW, "branch": BRANCH, "event": "push",
@@ -71,9 +72,14 @@ def execution_identity(review):
         "dispatch_not_after": review.admission["dispatch_not_after"],
         "required_valid_through": review.plan["required_valid_through"],
     }
+    if isinstance(review, catchup.CatchupReview):
+        identity.update(catchup.execution_delta(review))
+    return identity
 
 
 def validate_execution(value, review, *, now, context):
+    if isinstance(review, catchup.CatchupReview):
+        catchup.validate_review(review, now=now)
     expected = execution_identity(review)
     closed(value, set(expected) | {"execution_enabled", "expected_run_number"}, "next execution")
     require(all(type(value[k]) is type(v) and batch._json_bytes(value[k]) == batch._json_bytes(v) for k, v in expected.items()),
@@ -84,6 +90,8 @@ def validate_execution(value, review, *, now, context):
         require(number is None, "Disabled execution must leave its workflow run number unassigned")
         raise ValueError("Next-200 execution is disabled pending separate one-shot approval")
     require(type(number) is int and number > 0, "One explicit positive workflow run number is required")
+    if isinstance(review, catchup.CatchupReview):
+        require(number == review.admission["expected_run_number"], "Catch-up workflow run differs from its fixed admission")
     require(context.get("GITHUB_RUN_NUMBER") == str(number), "Wrong one-shot workflow run number")
     require(context.get("GITHUB_RUN_ATTEMPT") == "1", "Only the first attempt is admitted")
     require(batch.clock(value["dispatch_not_before"]) <= now <= batch.clock(value["dispatch_not_after"]),
@@ -250,8 +258,14 @@ class _ExecutionClock:
 def preflight(job_started_at):
     admitted_tick = time.monotonic()
     now = batch.utc_now()
-    review = preparation.load_review(now=now)
-    execution, content = preparation.read_pinned(EXECUTION_PATH, EXECUTION_SHA256)
+    review = catchup.load_optional_review(now=now)
+    if review is None:
+        review = preparation.load_review(now=now)
+        execution, content = preparation.read_pinned(EXECUTION_PATH, EXECUTION_SHA256)
+    else:
+        execution = {**execution_identity(review), "execution_enabled": True,
+                     "expected_run_number": review.admission["expected_run_number"]}
+        content = batch._json_bytes(execution)
     context = dict(os.environ)
     validate_execution(execution, review, now=now, context=context)
     preparation.require_retry_decisions(review, expected_run_number=execution["expected_run_number"])

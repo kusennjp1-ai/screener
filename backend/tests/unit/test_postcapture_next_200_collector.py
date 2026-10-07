@@ -395,7 +395,11 @@ def test_every_supported_decision_preserves_original_failed_provenance(finite_cy
     decision['decision_state'] = state
     if state == 'retry_decision_required':
         decision.pop('reobservation')
-    # Both supported states validate the same retained failure before mutation.
+    elif state == 'deferred_for_this_visit':
+        decision.pop('reobservation')
+        decision['deferral'] = {key: scope[key] for key in ('request_id', 'expected_run_number')}
+        decision['deferral']['maximum_getter_calls'] = 0
+    # Every supported disposition validates the same retained failure.
     runner.validate_retained_work(f.review, f.current, now=NOW)
     if mutation == 'absent_attempt':
         f.current.manifest['attempts'].pop(decision['attempt_id'])

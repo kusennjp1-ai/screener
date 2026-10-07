@@ -190,7 +190,7 @@ def validate_consumer_queue(value, retained_queue, plan, request):
     return [row for row in rows if row["consumer_timer"] is not None and batch.clock(row["consumer_timer"]) <= through]
 
 
-MISSING_PRIOR_DECISION_STATES = frozenset({"retry_decision_required", "one_visit_reobservation_approved"})
+MISSING_PRIOR_DECISION_STATES = frozenset({"retry_decision_required", "one_visit_reobservation_approved", "deferred_for_this_visit"})
 MISSING_PRIOR_DECISION_KEYS = frozenset(MISSING_PRIORS[0])
 
 
@@ -204,7 +204,8 @@ def validate_retry_decision(decision):
             decision["decision_state"] in MISSING_PRIOR_DECISION_STATES,
             "Unsupported missing-prior decision state")
     approved = decision["decision_state"] == "one_visit_reobservation_approved"
-    closed(decision, MISSING_PRIOR_DECISION_KEYS | ({"reobservation"} if approved else set()), "missing-prior decision")
+    deferred = decision["decision_state"] == "deferred_for_this_visit"
+    closed(decision, MISSING_PRIOR_DECISION_KEYS | ({"reobservation"} if approved else {"deferral"} if deferred else set()), "missing-prior decision")
     require(decision["retry_not_before"] is None and decision["outcome"] == "failed" and
             decision["failure_kind"] == "empty_getter_result", "Original missing-prior failure or null cooldown changed")
     require(batch.canonical_symbol(decision["symbol"]) and decision["attribute"] in batch.ATTRIBUTES,
@@ -226,18 +227,30 @@ def validate_retry_decision(decision):
                 isinstance(scope["transport_payload_sha256s"], list) and scope["transport_payload_sha256s"] and
                 all(isinstance(x, str) and re.fullmatch(r"[a-f0-9]{64}", x) for x in scope["transport_payload_sha256s"]),
                 "Reobservation must bind the failed object and original transport hashes")
+    if deferred:
+        scope = decision["deferral"]
+        closed(scope, {"request_id", "expected_run_number", "maximum_getter_calls"}, "one-visit deferral")
+        require(isinstance(scope["request_id"], str) and scope["request_id"] and
+                type(scope["expected_run_number"]) is int and scope["expected_run_number"] > 0 and
+                type(scope["maximum_getter_calls"]) is int and scope["maximum_getter_calls"] == 0,
+                "Deferral must bind one request/run and authorize zero getters")
 
 
 def require_retry_decisions(review, *, expected_run_number=None):
     decisions = review.request["missing_prior_decisions"]
     for decision in decisions:
         validate_retry_decision(decision)
-    require(all(x["decision_state"] == "one_visit_reobservation_approved" for x in decisions),
+    allow_deferral = getattr(review, "mode", None) == "overdue_catchup"
+    allowed = {"one_visit_reobservation_approved", "deferred_for_this_visit"} if allow_deferral else {"one_visit_reobservation_approved"}
+    require(all(x["decision_state"] in allowed for x in decisions),
             "Exact missing-prior retry decisions are required before acquisition")
     require(len({(x["symbol"], x["attribute"]) for x in decisions}) == len(decisions),
             "Duplicate missing-prior decisions")
     for decision in decisions:
-        scope = decision["reobservation"]
+        deferred = decision["decision_state"] == "deferred_for_this_visit"
+        scope = decision["deferral" if deferred else "reobservation"]
+        if deferred:
+            require(decision["symbol"] not in review.plan["batch_allowlist"], "Deferred symbol remains selected")
         require(scope["request_id"] == review.admission["request_id"] and
                 type(expected_run_number) is int and scope["expected_run_number"] == expected_run_number,
                 "Missing-prior reobservation belongs to another request or run")
