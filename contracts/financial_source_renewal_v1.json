@@ -1,7 +1,14 @@
 {
   "schema_version": "financial-source-renewal-policy-v1",
   "publication_enabled": false,
-  "ci_admission": null,
+  "ci_admission": {
+    "phase": "certify",
+    "reviewed_commit": "c3e2efe4de7aa33132bcdb46157adefc0276633c",
+    "reviewed_tree": "88fdc09143e69969db40c0517627a97990e24d5e",
+    "controls": {
+      "request": "9d2300d07c9b741969ef08119ba4bbef8e1c9f342b5a8c1bb684b5145d02b6bf"
+    }
+  },
   "request_path": ".github/financial-source-renewal-request.json",
   "pin_path": ".github/financial-source-renewal-candidate.json",
   "intent_path": ".github/financial-source-renewal-release.json",
