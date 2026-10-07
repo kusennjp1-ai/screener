@@ -58,20 +58,41 @@ function commandFailure(error){
   return fault('unclassified-command-failure');
 }
 
-function response(raw){
+function observePage(raw,requestedRoute,pageNumber,expectedTotal){
+  const evidence={page_number:pageNumber,requested_route:requestedRoute,expected_total:expectedTotal,
+    observed_total:null,row_count:null,ids_sha256:null,body_bytes:null,body_sha256:null};
+  if(typeof raw!=='string')return {evidence};
+  const split=raw.search(/\r?\n\r?\n/);
+  if(split<0)return {evidence};
+  const body=raw.slice(split).replace(/^\r?\n\r?\n/,'');
+  evidence.body_bytes=Buffer.byteLength(body);evidence.body_sha256=hash(body);
+  const http=safeHttpFacts(raw);
+  if(http?.status!==200||http.ambiguous_headers)return {evidence};
+  let page,error;
+  try{page=JSON.parse(body);}catch(cause){error=cause;}
+  // Diagnostics copy bounded numeric facts and hashes, never arbitrary payload.
+  if(object(page)){
+    if(Number.isSafeInteger(page.total_count)&&page.total_count>=0)evidence.observed_total=page.total_count;
+    if(Array.isArray(page.workflow_runs)){
+      evidence.row_count=page.workflow_runs.length;
+      if(page.workflow_runs.length<=100)evidence.ids_sha256=hash(JSON.stringify(page.workflow_runs.map(run=>object(run)&&positive(run.id)?run.id:null)));
+    }
+  }
+  return {evidence,page,error};
+}
+
+function response(raw,observed){
   const split=raw.search(/\r?\n\r?\n/);
   requireValue(split>=0,'incomplete-http-headers');
   const header=raw.slice(0,split),status=/^HTTP\/\S+\s+(\d{3})(?:\s|$)/.exec(header);
   requireValue(status&&Number(status[1])===200,'http-or-security-denial');
   const links=header.split(/\r?\n/).slice(1).filter(line=>/^link:/i.test(line));
   requireValue(links.length<=1,'ambiguous-pagination-header');
-  const body=raw.slice(split).replace(/^\r?\n\r?\n/,'');
-  let page;
-  try{page=JSON.parse(body);}catch(error){
-    if(error instanceof SyntaxError&&/Unexpected end of JSON input|Unterminated string in JSON/i.test(error.message))throw fault('json-eof',true);
+  if(observed.error){
+    if(observed.error instanceof SyntaxError&&/Unexpected end of JSON input|Unterminated string in JSON/i.test(observed.error.message))throw fault('json-eof',true);
     throw fault('invalid-json');
   }
-  return {page,link:links[0]?.replace(/^link:\s*/i,'')??''};
+  return {page:observed.page,link:links[0]?.replace(/^link:\s*/i,'')??''};
 }
 
 function nextPage(link,endpoint,pageNumber,pageCount){
@@ -101,13 +122,12 @@ function nextPage(link,endpoint,pageNumber,pageCount){
   return next?next.url.pathname.slice(1)+next.url.search:null;
 }
 
-function validatePage(page,workflow,total,pageNumber,seen){
+function validatePage(page,workflow,pageNumber,seen){
   requireValue(object(page)&&Number.isSafeInteger(page.total_count)&&page.total_count>=0&&Array.isArray(page.workflow_runs),'invalid-inventory-schema');
   // A branch-filtered GitHub search exposes at most 1,000 results. Never call
   // a capped window complete, split the query, or silently drop older runs.
   requireValue(page.total_count<=LIVE_INVENTORY_LIMITS.runs,'github-search-cap');
-  requireValue(total===null||page.total_count===total,'changing-inventory-total');
-  total=page.total_count;
+  const total=page.total_count;
   requireValue(page.workflow_runs.length===Math.min(100,Math.max(0,total-(pageNumber-1)*100)),'incomplete-inventory');
   for(const run of page.workflow_runs){
     requireValue(object(run)&&positive(run.id)&&!seen.has(run.id),'invalid-or-duplicate-run');
@@ -130,7 +150,7 @@ export function createRetainedPriceLiveApi(api,{run=execFileSync,monotonic=()=>p
     const callId=randomUUID();
     for(let attempt=1;attempt<=LIVE_INVENTORY_LIMITS.attempts;attempt++){
       const start=monotonic(),attemptDeadline=start+Math.min(LIVE_INVENTORY_LIMITS.totalMs-usedMs,LIVE_INVENTORY_LIMITS.attemptMs);
-      const pages=[],seen=new Set(),stdoutHash=createHash('sha256');
+      const pages=[],pageEvidence=[],seen=new Set(),stdoutHash=createHash('sha256');
       let current=endpoint,total=null,stdoutBytes=0,pageNumber=0,failedStdout='',failedStderr='',exit=null,signal=null,http=null;
       try{
         while(current){
@@ -142,27 +162,32 @@ export function createRetainedPriceLiveApi(api,{run=execFileSync,monotonic=()=>p
             maxBuffer:LIVE_INVENTORY_LIMITS.bytes-stdoutBytes,timeout:remaining,killSignal:'SIGKILL'});}
           catch(error){
             failedStdout=error.stdout??'';failedStderr=error.stderr??'';
+            pageEvidence.push(observePage(failedStdout,current,pageNumber+1,total).evidence);
             http=safeHttpFacts(failedStdout);
             exit=Number.isInteger(error.status)?error.status:null;
             signal=['SIGKILL','SIGTERM','SIGINT','SIGHUP'].includes(error.signal)?error.signal:null;
             throw commandFailure(error);
           }
+          const observed=observePage(raw,current,pageNumber+1,total);pageEvidence.push(observed.evidence);
           requireValue(typeof raw==='string','invalid-command-output');
           exit=0;http=safeHttpFacts(raw);
           stdoutBytes+=Buffer.byteLength(raw);stdoutHash.update(raw);
           requireValue(stdoutBytes<=LIVE_INVENTORY_LIMITS.bytes,'byte-limit');
           requireValue(monotonic()<=attemptDeadline,'time-budget-exhausted');
           requireValue(!http?.ambiguous_headers,'ambiguous-http-headers');
-          const parsed=response(raw);pageNumber++;
-          total=validatePage(parsed.page,workflow,total,pageNumber,seen);
-          current=nextPage(parsed.link,endpoint,pageNumber,Math.max(1,Math.ceil(total/100)));
-          pages.push(parsed.page);
+          const parsed=response(raw,observed);pageNumber++;
+          const declaredTotal=validatePage(parsed.page,workflow,pageNumber,seen);
+          const next=nextPage(parsed.link,endpoint,pageNumber,Math.max(1,Math.ceil(declaredTotal/100)));
+          // Only isolated count drift is retryable after every page fact passes.
+          // Discard this entire enumeration; a retry starts from page one.
+          if(total!==null&&declaredTotal!==total)throw fault('changing-inventory-total',true);
+          total=declaredTotal;current=next;pages.push(parsed.page);
         }
         requireValue(seen.size===total,'incomplete-inventory');
         requireValue(monotonic()<=attemptDeadline,'time-budget-exhausted');
         const elapsed=Math.max(0,Math.ceil(monotonic()-start));usedMs+=elapsed;
         report({schema_version:'retained-price-live-inventory-read-v1',call_id:callId,endpoint,attempt,status:'complete',fresh_from_page:1,
-          elapsed_ms:elapsed,inventory_budget_used_ms:usedMs,pages:pages.length,total_count:total,http,
+          elapsed_ms:elapsed,inventory_budget_used_ms:usedMs,pages:pages.length,total_count:total,http,page_evidence:pageEvidence,
           stdout:{bytes:stdoutBytes,sha256:stdoutHash.digest('hex')},inventory_sha256:hash(JSON.stringify(pages))});
         return pages;
       }catch(error){
@@ -171,7 +196,7 @@ export function createRetainedPriceLiveApi(api,{run=execFileSync,monotonic=()=>p
         const elapsed=Math.max(0,Math.ceil(monotonic()-start));usedMs+=elapsed;
         const retry=failure.retryable===true&&attempt<LIVE_INVENTORY_LIMITS.attempts&&usedMs<LIVE_INVENTORY_LIMITS.totalMs;
         report({schema_version:'retained-price-live-inventory-read-v1',call_id:callId,endpoint,attempt,status:'failed',reason:failure.inventoryReason,
-          fresh_from_page:1,elapsed_ms:elapsed,inventory_budget_used_ms:usedMs,pages_received:pageNumber,exit_code:exit,signal,http,
+          fresh_from_page:1,elapsed_ms:elapsed,inventory_budget_used_ms:usedMs,pages_received:pageNumber,exit_code:exit,signal,http,page_evidence:pageEvidence,
           completed_stdout:{bytes:stdoutBytes,sha256:stdoutHash.digest('hex')},failed_stdout:facts(failedStdout),failed_stderr:facts(failedStderr),retry});
         if(!retry)throw fault(failure.inventoryReason);
       }
