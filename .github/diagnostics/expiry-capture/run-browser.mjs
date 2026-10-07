@@ -14,7 +14,7 @@ assert.ok(synthetic||process.env.DIAGNOSTIC_MODE==='published','Explicit diagnos
 const provenance=synthetic?JSON.parse(await readFile(join(out,'fixture-provenance.json'))):null;
 const report={schema:'expiry-capture-diagnostic-v1',publication_authority:false,mode:synthetic?'synthetic-three-row-overlapping-expiry-regression':'unchanged-published-data-current-clock',viewport:{width:390,height:844},screens:[],checks:[],errors:[],browser_executed_at:new Date().toISOString()};
 await mkdir(out,{recursive:true});
-const server=createServer(async(req,res)=>{try{const path=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\/screener\/?/,'');assert.ok(!path.split('/').includes('..'));const bytes=await readFile(join(dist,path||'index.html'));res.setHeader('content-type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml'})[extname(path)]||'application/octet-stream');res.end(bytes);}catch{res.statusCode=404;res.end('Not found');}});
+const server=createServer(async(req,res)=>{try{const path=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\/screener\/?/,'');assert.ok(!path.split('/').includes('..'));const file=join(dist,path||'index.html'),bytes=await readFile(file);res.setHeader('content-type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml'})[extname(file)]||'application/octet-stream');res.end(bytes);}catch{res.statusCode=404;res.end('Not found');}});
 await new Promise(done=>server.listen(0,'127.0.0.1',done));
 const base=`http://127.0.0.1:${server.address().port}/screener/`,browser=await chromium.launch({headless:true});
 let context,page,assets;
