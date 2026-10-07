@@ -1,0 +1,88 @@
+{
+  "local_commit": "8bb678517f8e32d9d9c0fcc1a7a8449ad6c21f47",
+  "remote_ref": "c3e2efe4",
+  "compared_via": "GitHub connector contents API blob SHA against local bytes",
+  "files": [
+    {
+      "path": "frontend/src/static/useResearchBundle.js",
+      "sha": "5787d4e3e1a8145b5ef1a77f89e779692b6af5f8",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/useResearchBundle.js",
+      "local_blob_sha1": "5787d4e3e1a8145b5ef1a77f89e779692b6af5f8",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/useFinancialClock.js",
+      "sha": "0b9d53a533460aa3349ce35230d153332e029237",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/useFinancialClock.js",
+      "local_blob_sha1": "0b9d53a533460aa3349ce35230d153332e029237",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/researchPreprocess.js",
+      "sha": "01fded0b9de31f711a92a5a3136c59840a09153a",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/researchPreprocess.js",
+      "local_blob_sha1": "01fded0b9de31f711a92a5a3136c59840a09153a",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/researchWorker.js",
+      "sha": "eb4620094cd8ebdea3df0c217234fdd003ddb467",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/researchWorker.js",
+      "local_blob_sha1": "eb4620094cd8ebdea3df0c217234fdd003ddb467",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/researchWorkerClient.js",
+      "sha": "0b2ced6f35df4fc07a0107344a003438c34fa0fc",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/researchWorkerClient.js",
+      "local_blob_sha1": "0b2ced6f35df4fc07a0107344a003438c34fa0fc",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/researchWorkerPackets.js",
+      "sha": "42acede9390e09271764affba80ae2da601d9223",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/researchWorkerPackets.js",
+      "local_blob_sha1": "42acede9390e09271764affba80ae2da601d9223",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/pages/ResearchPage.jsx",
+      "sha": "06ebd6b23cfcdce352879bd59d6ce4b8ea03b3ee",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/pages/ResearchPage.jsx",
+      "local_blob_sha1": "06ebd6b23cfcdce352879bd59d6ce4b8ea03b3ee",
+      "same": true
+    },
+    {
+      "path": "frontend/src/static/components/ResearchDetail.jsx",
+      "sha": "4a256e31880aa24822948ce93bff6677a4ba85e2",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/src/static/components/ResearchDetail.jsx",
+      "local_blob_sha1": "4a256e31880aa24822948ce93bff6677a4ba85e2",
+      "same": true
+    },
+    {
+      "path": "frontend/tools/financial-design-cases.mjs",
+      "sha": "1baf4527e5831e6adb7c67ecf5d76f8c4583446c",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/tools/financial-design-cases.mjs",
+      "local_blob_sha1": "1baf4527e5831e6adb7c67ecf5d76f8c4583446c",
+      "same": true
+    },
+    {
+      "path": "frontend/tools/financial-viewport-geometry.mjs",
+      "sha": "17a13c223c6f766a81e1e1dbe8acc1dcfb2e7cc2",
+      "error": false,
+      "link": "https://github.com/kusennjp1-ai/screener/blob/c3e2efe4/frontend/tools/financial-viewport-geometry.mjs",
+      "local_blob_sha1": "17a13c223c6f766a81e1e1dbe8acc1dcfb2e7cc2",
+      "same": true
+    }
+  ],
+  "remote_full_commit": "c3e2efe4de7aa33132bcdb46157adefc0276633c"
+}

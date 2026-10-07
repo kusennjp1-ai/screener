@@ -1,0 +1,105 @@
+# DRAFT FOR OWNER REVIEW ONLY. Do not publish the diagnostic branch before approval.
+# Place this file in .github/workflows/ on a SEPARATE diagnostic branch.
+# Place sibling diagnostic scripts in .github/diagnostics/expiry-capture/.
+name: Expiry Capture Diagnostic (artifact only)
+on:
+  push:
+    branches: [diagnostics/avt-expiry-capture-c3e2efe4]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: expiry-capture-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  diagnostic:
+    if: >-
+      github.repository == 'kusennjp1-ai/screener' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/diagnostics/avt-expiry-capture-c3e2efe4' &&
+      github.event.deleted == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: diagnostic
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: c3e2efe4de7aa33132bcdb46157adefc0276633c
+          path: production
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: production/frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: production/frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: production/frontend
+      - name: Verify unchanged reviewed production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C production rev-parse HEAD)" = c3e2efe4de7aa33132bcdb46157adefc0276633c
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          diagnostic=pathlib.Path('diagnostic/.github/diagnostics/expiry-capture')
+          root=pathlib.Path('production')
+          for row in json.loads((diagnostic/'source-equality.json').read_text())['files']:
+              data=(root/row['path']).read_bytes()
+              actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              assert actual == row['sha'], row['path']
+          PY
+          git -C production diff --exit-code
+      - name: Run only seven deterministic unit and capture-guard tests
+        env:
+          SCREENER_FRONTEND: ${{ github.workspace }}/production/frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$GITHUB_WORKSPACE/diagnostic/.github/diagnostics/expiry-capture"
+          ln -s "$GITHUB_WORKSPACE/production/frontend/node_modules" "$probe/node_modules"
+          mkdir -p "$RUNNER_TEMP/expiry-evidence"
+          node production/frontend/node_modules/vitest/vitest.mjs run --config "$probe/vitest.config.mjs" --maxWorkers=2 --reporter=json --outputFile="$RUNNER_TEMP/expiry-evidence/unit-results.json"
+      - name: Build unchanged production UI without export, renewal or provider calls
+        working-directory: production/frontend
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: '/screener/'
+          VITE_RESEARCH_QUOTE_URL: ''
+        run: npx vite build --outDir "$RUNNER_TEMP/expiry-ui"
+      - name: Capture only AVT-like mobile annual evidence across overlapping expiries
+        env:
+          SCREENER_FRONTEND: ${{ github.workspace }}/production/frontend
+          DIAGNOSTIC_DIST: ${{ runner.temp }}/expiry-ui
+          DIAGNOSTIC_OUTPUT: ${{ runner.temp }}/expiry-evidence
+          DIAGNOSTIC_MODE: synthetic
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$GITHUB_WORKSPACE/diagnostic/.github/diagnostics/expiry-capture"
+          node "$probe/make-fixture.mjs" "$DIAGNOSTIC_DIST" "$DIAGNOSTIC_OUTPUT"
+          node "$probe/run-browser.mjs"
+          git -C production diff --exit-code
+      - name: Read-only actual live AVT recovery, separate from the synthetic fixture
+        if: always()
+        env:
+          SCREENER_FRONTEND: ${{ github.workspace }}/production/frontend
+          LIVE_OUTPUT: ${{ runner.temp }}/expiry-evidence/live
+          VERIFIED_LIVE_BASE_URL: 'https://kusennjp1-ai.github.io/screener/'
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$GITHUB_WORKSPACE/diagnostic/.github/diagnostics/expiry-capture"
+          node "$probe/run-live.mjs"
+      - name: Retain diagnostics, including loading and failed attempts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expiry-capture-synthetic-and-LIVE-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/expiry-evidence/
+          retention-days: 7
+          if-no-files-found: error
