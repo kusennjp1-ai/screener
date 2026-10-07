@@ -1,13 +1,7 @@
 {
   "schema_version": "retained-price-oct6-source-v1",
-  "enabled": true,
-  "activation": {
-    "reviewed_parent_sha": "7de4a34fa2df4031cc81da9286d11f5c6f951583",
-    "reviewed_parent_tree": "82ab4ed9669ff69390584d6ef74ec2369f6df330",
-    "disabled_request_sha256": "f553693fddc9b3647d3b2060480a0ca42a2b2191f9bc231b02190301ed63f1ee",
-    "not_before": "2026-10-07T17:24:00Z",
-    "not_after": "2026-10-07T20:12:00Z"
-  },
+  "enabled": false,
+  "activation": null,
   "repository": "kusennjp1-ai/screener",
   "repository_id": 1203919607,
   "target_as_of_date": "2026-10-06",
