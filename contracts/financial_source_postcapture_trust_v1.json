@@ -1,4 +1,400 @@
 {
   "schema_version": "financial-source-postcapture-trust-v1",
-  "reviewed_requests": []
+  "reviewed_requests": [
+    {
+      "reference": {
+        "schema_version": "financial-source-postcapture-reference-v1",
+        "repository": "kusennjp1-ai/screener",
+        "workflow": ".github/workflows/financial-source-postcapture-validation.yml",
+        "head_sha": "28e298ee21ea275629a94e7066ac8835b7654182",
+        "run_id": 37495003542,
+        "run_attempt": 1,
+        "job_id": 112377172824,
+        "artifact_id": 11426862690,
+        "artifact_name": "financial-source-postcapture-validation-28e298ee21ea275629a94e7066ac8835b7654182-1",
+        "artifact_sha256": "f63ecbe50b61b49666abdfaa6bf2f30605a7ddb31af82d8a2e20da3ca1859d23",
+        "receipt_sha256": "f5e925de47bfe9dc5f00f28b179e6d4e124b24d2f793692390e08177e55f57d5"
+      },
+      "tree_sha": "d8c6ec97ece68b519acbe97f1e81bbf816ad3a30",
+      "source": {
+        "repository": "kusennjp1-ai/screener",
+        "workflow": ".github/workflows/financial-statement-recovery.yml",
+        "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+        "run_id": 37478731832,
+        "run_attempt": 1,
+        "artifact_id": 11420873789,
+        "artifact_name": "financial-statement-recovery-4715b218cc25720d1d3be455930554e1e6282136-1",
+        "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+        "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+        "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+        "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
+      },
+      "request": {
+        "path": ".github/financial-source-postcapture/request.json",
+        "raw_sha256": "d8f06454c41eda4cd7707cdd69a10236b34b690ccd0370fcdcf396d444758e43",
+        "canonical_sha256": "9cf986c241c4f8b2a42c4cac8cc667c08628aa5ed09d349ef231bbf19e193d2d",
+        "git_blob_sha": "7432f9fb9a1d4535ca463bf6a9dce08d92d6e945"
+      },
+      "code_manifest": {
+        ".github/financial-source-postcapture/captured-inventory.json": {
+          "sha256": "798f02f9027e9bd58f94cc0554f2ba3f8da604aa5107c3725aed3550cb33e018",
+          "git_blob_sha": "d27f53e16251f70edf86971a60af5f8c043d0d54",
+          "bytes": 1728329
+        },
+        ".github/financial-source-postcapture/diagnosis/actual-data-lock-repair-final-replay.json": {
+          "sha256": "80e78ee79160a0cf7b10bc9403bf8e670e84dc7387919e21d62b504b272a5c9b",
+          "git_blob_sha": "f39114a5072680d586668d50354a55ed37131009",
+          "bytes": 956
+        },
+        ".github/financial-source-postcapture/diagnosis/lock-path-reproduction.json": {
+          "sha256": "24f3a5aa43b46cca8b5ba3e4cd30f5f8f1686e1b670cd441054dde858a8a5393",
+          "git_blob_sha": "043473b676d4d87c9196ef67d0d69b5d9ed81e4a",
+          "bytes": 637
+        },
+        ".github/financial-source-postcapture/frozen-inventory.json": {
+          "sha256": "205d6caa389734d40301afd0f1e9f5d3ab939560a5e3a6d56e8352bde19153b0",
+          "git_blob_sha": "e19a0ec41233dfecf58d05a5c342bee058aea0f5",
+          "bytes": 9711
+        },
+        ".github/financial-source-postcapture/frozen/.github/scripts/prepare-statement-certification.mjs": {
+          "sha256": "481c4f3d1a065192d8ae7550e016931482a1b9d5fe0125309d7da2b5030d825b",
+          "git_blob_sha": "f1223b8264f54325ea87dc700994e143d4c5dd25",
+          "bytes": 4440
+        },
+        ".github/financial-source-postcapture/frozen/.github/workflows/financial-source-certification.yml": {
+          "sha256": "4fe99dc38944680378a9e8306f38e1ac53b2dd40e30c1020fd864b1ab16688e4",
+          "git_blob_sha": "7e58995d4f1ef715bf05ebfe0a4b6484b08e8e6d",
+          "bytes": 2782
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/__init__.py": {
+          "sha256": "89cada6d20bcd3d9d20c367142c1d4d1c5f033ef5e535280548ba1768c86d3de",
+          "git_blob_sha": "838b80fb6376de71ac0a30058d610cd6778e0c9a",
+          "bytes": 62
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/__init__.py": {
+          "sha256": "d15897e5ad24629303f3dfa2d22525aca42b33bbab457d88bd778863048e96c7",
+          "git_blob_sha": "347532d87689e4a301b243f3203aa889a76544be",
+          "bytes": 71
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/__init__.py": {
+          "sha256": "1e949e4f44dce2eb4286b516d2831d6db0ef0168dd818ba83bed2c493fb47ee9",
+          "git_blob_sha": "26185737b9a84c4777a3786fa04bf0a2b80cadca",
+          "bytes": 2221
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/catalog.py": {
+          "sha256": "f40cfc0ff7787bb8861d0b1acaa5995250fc0c09ffe389409178f162784c7a0a",
+          "git_blob_sha": "2ed8c01fca647bfbce471cecaf06ff3308a4459f",
+          "bytes": 17980
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/market.py": {
+          "sha256": "bfa8f3aeeb3a8080eb65da99ee1ac5228a6694bd06c75150ff50e15a72597240",
+          "git_blob_sha": "94cc5545abea16c46351f6d845df6b4ba039bf00",
+          "bytes": 1420
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/mic.py": {
+          "sha256": "53c2816c606b6f95065fd43c51767a3328220f63c2686070127a52d86f0c370c",
+          "git_blob_sha": "6dcba04e0fc4a46e3d7c3ff7002c3af44f67fdd9",
+          "bytes": 348
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/mic_aliases.py": {
+          "sha256": "d9bc971224bd99c87e77b4a42804b1308e7b83798ff5cc5dc03c4ac66ba12467",
+          "git_blob_sha": "1547a2de7d589c48b7b82a153861c15e58a34c3d",
+          "bytes": 5478
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/registry.py": {
+          "sha256": "fbcafb66c5b589f4287e8c665bc3fca0833dcc478d7d676c8b14c01cd1bb526f",
+          "git_blob_sha": "13765dffd090f6730ebe00c836032b10b9ac0cf0",
+          "bytes": 5576
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/markets/symbol_suffixes.py": {
+          "sha256": "ba2d7d906b884c4843e5fc09e9448721661a7a2c282c576e7e89fe37d2be4896",
+          "git_blob_sha": "b4486f2f946b01686cef010e156ae08ff117cc56",
+          "bytes": 6846
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/providers/__init__.py": {
+          "sha256": "ac56b242ac323382d75cca12506601f9164608e7aabedc11d289231bc28c43f5",
+          "git_blob_sha": "721b4350a1f2b48a809ae4a36a4dd24951b76041",
+          "bytes": 772
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/providers/data_plan.py": {
+          "sha256": "783a53ed1231a5b90fbdb65b78186aa7574a33ac55e3a6eb5827d405dd76b7e2",
+          "git_blob_sha": "45f43dbd8fa87f9f2870a3e043706da2d678a17d",
+          "bytes": 8634
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/universe/__init__.py": {
+          "sha256": "9836cab6af3198f45764aa0a4aa56810d95ec177960c852faad06a9f182b5a0d",
+          "git_blob_sha": "0f2300a511338808ef9a0d9ff7a2b93b1ff0b062",
+          "bytes": 1196
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/universe/definitions.py": {
+          "sha256": "e54c19dd9394e8badc8c8f9d0f24bca28b307399776572d7178c672b27e799d9",
+          "git_blob_sha": "0a3f7ee2530f4be00ce1105163b323497cf55110",
+          "bytes": 3675
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/universe/indexes.py": {
+          "sha256": "e894756438e9192458b49f4452dabef77ca85db5ebef0b4a386aee609d6aa991",
+          "git_blob_sha": "90b2516741bcb78ae090b3764164c77b5e02aa01",
+          "bytes": 5937
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/universe/ingestion.py": {
+          "sha256": "5982563224a5cc44ebf1535ba8b1b62a26c0d5d4a61047e42cb090b8892c7f84",
+          "git_blob_sha": "1c6f80b50e1235ec2d297524130e8529f56e0455",
+          "bytes": 18747
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/domain/universe/listing_tiers.py": {
+          "sha256": "621a00db984c11382f5f3ae52d58a137f24343990f9518bb3ac5a847d5d8c279",
+          "git_blob_sha": "974b8592588a2adb74aa207b155e591888e668b6",
+          "bytes": 5113
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/scripts/certify_statement_source.py": {
+          "sha256": "ff130af2464c693f2c1fe5913b190a0e61fbe2e73b3fc42d322afd82f7f3a328",
+          "git_blob_sha": "3eda0d618a7b3977a12f65d34d2ff63e2be853e1",
+          "bytes": 1210
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/__init__.py": {
+          "sha256": "fcfce939abf54761dbcdb422fc0226d88ae2c6fd971a1e32edb9842b5bf14edf",
+          "git_blob_sha": "e8e9fcbd236c5cceeea93bca5782099a654514af",
+          "bytes": 51
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/eps_rating_service.py": {
+          "sha256": "c6c44939ba6733c1bffd54b22435c89d7a545496036a69a54efe59660f909444",
+          "git_blob_sha": "4d60d16f04b3119b59e51d0f8f4b1da0f493ab32",
+          "bytes": 24240
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/field_capability_registry.py": {
+          "sha256": "f82f1d19ac04f5949bdd370fd1eacc9b577eae6480834fc95b361bffaf8e3e71",
+          "git_blob_sha": "663768c05ca2e1431af6bf7f4d1694138feefd44",
+          "bytes": 16517
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/financial_source_capture.py": {
+          "sha256": "edf0b8a7e78884cdd7356c613b6d9543b4fbadd807d966c5c4dcd4ae1d6d82fa",
+          "git_blob_sha": "3590f3ba1ed34b1f2e655d3b0c2a578a483cb510",
+          "bytes": 21234
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/financial_source_evidence.py": {
+          "sha256": "3814769b3fa3a06d471d5de42128abe97cd88089a3b19bf7509dea295d828f95",
+          "git_blob_sha": "b97fbea516a25f54e199f254c25a172c0e84c131",
+          "bytes": 32692
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/financial_statement_batch.py": {
+          "sha256": "21b0d9bdb0cb858ea6ea28ee52177d78c395761df6b27f8794f3296aa730010d",
+          "git_blob_sha": "773d8df6f42b648640722fee652ed72127d5260c",
+          "bytes": 49496
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/finviz_parser.py": {
+          "sha256": "bb9b2de583f0d1829705e6efc79386546d6a63a88470bd134763665a7d9e3547",
+          "git_blob_sha": "c30fa614229f5ce5848369f5ea8e71334865d565",
+          "bytes": 11423
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/fundamentals_completeness.py": {
+          "sha256": "de673fb9882d0db59357b28a86625386cca5ac91ff12e1acfbd4670a952c458e",
+          "git_blob_sha": "66182857ddb3e2ae8871e0ebb31606c736b20404",
+          "bytes": 11783
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/growth_cadence_service.py": {
+          "sha256": "751f45d72a9d09d3ae8b61eedc171794eaa434d4624367f127291bf4487b786e",
+          "git_blob_sha": "4129153a316859e511e7d0e3bc73b683b088f929",
+          "bytes": 15388
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/provider_routing_policy.py": {
+          "sha256": "96e8c00159030cd831e167aaafc79d278fb8a26372474188f4e9f81f968f8550",
+          "git_blob_sha": "f438f425e21703d2ae96ef009ac95ba44638c192",
+          "bytes": 6644
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/quarterly_eps_selection.py": {
+          "sha256": "4f734a5854b7a90aae2cb5de5019014901c3245a5d8aee538c80b35d10e67ad1",
+          "git_blob_sha": "9bf43a43c865538bb66cf7e19258e7f863573fb6",
+          "bytes": 1494
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/security_master_service.py": {
+          "sha256": "8417cbd3a8a38a8f3ba1e59eea7f155549fb5005b813d402d2ecb9fc933c987f",
+          "git_blob_sha": "44672d5f4623d6a525f54154a8a516606f72bcff",
+          "bytes": 6293
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/statement_artifact_archive.py": {
+          "sha256": "c784c2848eb968dffd3cddf9a0597fc0f15c2e8d6a1ef3184fb16bf7c3b3e18a",
+          "git_blob_sha": "b7c0fdd4acf9cd15293c3717af64693a1927a01f",
+          "bytes": 42112
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/statement_refresh_planning.py": {
+          "sha256": "1e5ecf69b3c436320ff885f85a72a7ef67ce390282f40f88769ebf3c4e4ed770",
+          "git_blob_sha": "0cbd4f3bf430ef3e24f5dcccc25d008f6cd235d9",
+          "bytes": 30573
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/statement_source_certification.py": {
+          "sha256": "42ed70a8d4b84af58c244dced6e27130e55fa871b979b2bfe996ccb8d2cecfc3",
+          "git_blob_sha": "38b679ee1d3afa9ed5e38e069f8366c56935c2af",
+          "bytes": 52023
+        },
+        ".github/financial-source-postcapture/frozen/backend/app/services/static_financial_evidence.py": {
+          "sha256": "7b195c2928ee398eef7ab469d2723bc2f9db13b2cdced32dc3c9bd84100303a6",
+          "git_blob_sha": "d5fdd07f86ad2b53921681abaf8adf7707388fd5",
+          "bytes": 18972
+        },
+        ".github/financial-source-postcapture/frozen/contracts/financial_source_certification_v1.json": {
+          "sha256": "d7a3ede506715f5347c02b48a3390cef54bb22442c737889ad4c0600cd2e1b2e",
+          "git_blob_sha": "82ecd083056d34d79fad1d877e21f857c52a3f2e",
+          "bytes": 1581
+        },
+        ".github/financial-source-postcapture/frozen/contracts/financial_source_certification_v1.schema.json": {
+          "sha256": "fe254c0f4b19d917ec1f6c4e4b40bd28dc10053dc23a65a2839d3122bdef4630",
+          "git_blob_sha": "a5f82969371c7370e1e82aaa17755f8b1850aa6e",
+          "bytes": 19538
+        },
+        ".github/financial-source-postcapture/frozen/contracts/financial_source_evidence_v1.json": {
+          "sha256": "6ff3013ed5f1bbd8e699c669d8662145bf2619d8cd4831fece9859f01b1dd1da",
+          "git_blob_sha": "87e2ba9d1fcc27546eba43803a32fdfffdee7275",
+          "bytes": 26193
+        },
+        ".github/financial-source-postcapture/frozen/contracts/financial_source_reviewed_migrations_v1.json": {
+          "sha256": "3b233a88311f6dc7492ec920ca256479524ff33839398980694149b559e31cdb",
+          "git_blob_sha": "fe36f674187c449d6d70a5e0edfee8914be6e4d3",
+          "bytes": 7171
+        },
+        ".github/financial-source-postcapture/frozen/contracts/static_financial_current_v1.json": {
+          "sha256": "28a190c808802c27effa99c9c70b3e9e9c546a7ba749e6e1d51a918cccb869a4",
+          "git_blob_sha": "679445c8dc264478130138c47e19d6c186d4271f",
+          "bytes": 5106
+        },
+        ".github/financial-source-postcapture/receipt.schema.json": {
+          "sha256": "095c34d4fb5d2d6c06b99f991ff58d5736238c802ce0883e93c8d8af02fdd5d5",
+          "git_blob_sha": "a4e534d66e025d700101a380b20bbb2802f2d4f1",
+          "bytes": 17560
+        },
+        ".github/financial-source-postcapture/request.json": {
+          "sha256": "d8f06454c41eda4cd7707cdd69a10236b34b690ccd0370fcdcf396d444758e43",
+          "git_blob_sha": "7432f9fb9a1d4535ca463bf6a9dce08d92d6e945",
+          "bytes": 6584
+        },
+        ".github/financial-source-postcapture/request.schema.json": {
+          "sha256": "2bdfa8d3618411d6c7b325de0b9d6d1cad6491a9f98c656eefd8727cd0716fbd",
+          "git_blob_sha": "e7952dd6ae9bfeaa6a55d33117f3be8457cfa01b",
+          "bytes": 7999
+        },
+        ".github/scripts/publication-gate.mjs": {
+          "sha256": "c92fd7e342472cb10db0cd25806dc4e78842ea9c7077bf2c1886cbef1c1b8787",
+          "git_blob_sha": "9e27251cfc121bfbafaa6fbfe7c44d3296fce783",
+          "bytes": 3364
+        },
+        ".github/scripts/restore-postcapture-source.mjs": {
+          "sha256": "bc9e80544a1e8d0eb7d2c5b001d35da4d7f8eb138b78b3cc8f3c82deac00456a",
+          "git_blob_sha": "f22b4fecc4bd32d5bb5fa790559acb9b54d4a549",
+          "bytes": 12400
+        },
+        ".github/scripts/restore-postcapture-source.test.mjs": {
+          "sha256": "b762ebf57773a194d2f101969af2ac68de5affedeb13517664412aed922cf74d",
+          "git_blob_sha": "b11f20a329dc60662e0a3fd87f21f6d9640d712c",
+          "bytes": 11791
+        },
+        ".github/scripts/validate-postcapture-source.py": {
+          "sha256": "1c3537fee07829de27d7c2d5f5b265df039c578f59cae59d274d175af041300e",
+          "git_blob_sha": "d43b0474280c9874d0e7f63a0d8d5ffdcc144c73",
+          "bytes": 36174
+        },
+        ".github/scripts/validate-postcapture-source.test.py": {
+          "sha256": "33e0d64cb6d580df06bfbe5a4a97b2a71322bb893e74b4ba3b2edbe0aa1eea29",
+          "git_blob_sha": "612909277e243c6500011e42729ae6f0ead9a374",
+          "bytes": 39319
+        },
+        ".github/workflows/financial-source-postcapture-validation.yml": {
+          "sha256": "44e4b7a0e12c3b4925a56328e05d881c7347b5f9dc1b85704f7c507641e14174",
+          "git_blob_sha": "dd2e0a4d6a90abc025f5481a16df1cdeda615ba9",
+          "bytes": 3468
+        }
+      },
+      "controller_contracts": {
+        "reference_sha256": "4f53959c4c5af052bc5b54fce859cccffeb600a56cfaa5c7520ce00bb3f25ea8",
+        "request_sha256": "d8f06454c41eda4cd7707cdd69a10236b34b690ccd0370fcdcf396d444758e43",
+        "receipt_schema_sha256": "095c34d4fb5d2d6c06b99f991ff58d5736238c802ce0883e93c8d8af02fdd5d5"
+      },
+      "artifact_layout": {
+        "companion_prefix": "postcapture-reports/companion/",
+        "files": {
+          "postcapture-reports/companion/captured-inventory.json": {
+            "bytes": 1728329,
+            "sha256": "798f02f9027e9bd58f94cc0554f2ba3f8da604aa5107c3725aed3550cb33e018"
+          },
+          "postcapture-reports/companion/fresh-receipts.json": {
+            "bytes": 143783,
+            "sha256": "ca75c0b316bc1fe0b56b50b97a5f04cb4f2985318484c0d388b01c09b922d8cb"
+          },
+          "postcapture-reports/companion/api-evidence.json": {
+            "bytes": 1602876,
+            "sha256": "de313fdaa3d27624196ae480af021d5ea786fef606d3e1755b47b7798d3c9f0e"
+          },
+          "postcapture-reports/companion/producer-job.log": {
+            "bytes": 47470,
+            "sha256": "867c61fa0e36c39a335056d81a940b9581d0672d988610f105d8cac632c24d7e"
+          },
+          "postcapture-reports/companion/projections/2c4d3e09a9aae818e8e6d2bb5e57e4aa13837776caa597aa3aa350377636087e.json": {
+            "bytes": 35921529,
+            "sha256": "2c4d3e09a9aae818e8e6d2bb5e57e4aa13837776caa597aa3aa350377636087e"
+          },
+          "postcapture-reports/companion/receipt.json": {
+            "bytes": 8220,
+            "sha256": "f5e925de47bfe9dc5f00f28b179e6d4e124b24d2f793692390e08177e55f57d5"
+          },
+          "postcapture-reports/companion/request.json": {
+            "bytes": 6584,
+            "sha256": "d8f06454c41eda4cd7707cdd69a10236b34b690ccd0370fcdcf396d444758e43"
+          },
+          "postcapture-reports/companion/retained-failures.json": {
+            "bytes": 13527,
+            "sha256": "893108a2054377d6ae353a59e2741a18c0a7da4fdf5e775489a2b7e00dcc74ce"
+          },
+          "postcapture-reports/companion/reviewed-projector-migrations.json": {
+            "bytes": 1663,
+            "sha256": "88412ec3ef26ee22e4b04d7a0fb05ae85fe5660ad254ca7d187df8d1cde572e4"
+          },
+          "postcapture-reports/companion/source-api-evidence.json": {
+            "bytes": 16912,
+            "sha256": "ac3f7af725763fa8934550f279ed8ca279827c9e9720c0f2b62d4087b596b03e"
+          },
+          "postcapture-reports/companion/validation-code-manifest.json": {
+            "bytes": 12305,
+            "sha256": "19028ffbf27ff7af4beca3cb0b0440e5c56ef667eb572a42928b4e27d4c432cf"
+          },
+          "postcapture-reports/companion-validation.log": {
+            "bytes": 232,
+            "sha256": "cdbc4e499e89093f0093fcae7b195e41dafc9628ab81d488fcd67e32090fa54f"
+          },
+          "postcapture-reports/node-version.txt": {
+            "bytes": 9,
+            "sha256": "33e26f35db6e57ce0c486ddc815fe966867e4f649e418eaf323f75f4720eb8e9"
+          },
+          "postcapture-reports/python-version.txt": {
+            "bytes": 51,
+            "sha256": "7c95f7d768d2fe5b26143cfd16388399a5a0d3f1dfb379dc5eed29d4a5d456ff"
+          },
+          "postcapture-reports/retrieval-tests.log": {
+            "bytes": 7737,
+            "sha256": "12197641d85851c887c70aaf3d3a95deb22310b6d3aa29a3bc28546899fc50e9"
+          },
+          "postcapture-reports/retrieval.log": {
+            "bytes": 239,
+            "sha256": "5c8b0656e16512ef9ffc658ae86e666ce7fb66001fcfc512fd6d41c5ba0da0b4"
+          },
+          "postcapture-reports/validation-tests.log": {
+            "bytes": 188,
+            "sha256": "082eaf217425e66b51a745b96f98767e56a1cd7f2e2592b2fa229e41c0a84490"
+          },
+          "postcapture-reports/validation-tests.xml": {
+            "bytes": 11471,
+            "sha256": "64726d96998d9804e92aa5f76d245d367c1eed841ebc4d3aef1cb5b3958be78e"
+          },
+          "postcapture-source/api-evidence.json": {
+            "bytes": 1602876,
+            "sha256": "de313fdaa3d27624196ae480af021d5ea786fef606d3e1755b47b7798d3c9f0e"
+          },
+          "postcapture-source/job.log": {
+            "bytes": 47470,
+            "sha256": "867c61fa0e36c39a335056d81a940b9581d0672d988610f105d8cac632c24d7e"
+          }
+        },
+        "directories": []
+      },
+      "captured_inventory_sha256": "798f02f9027e9bd58f94cc0554f2ba3f8da604aa5107c3725aed3550cb33e018",
+      "fresh_receipt_inventory_sha256": "ca75c0b316bc1fe0b56b50b97a5f04cb4f2985318484c0d388b01c09b922d8cb"
+    }
+  ]
 }
