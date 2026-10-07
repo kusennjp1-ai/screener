@@ -1,0 +1,8 @@
+{
+  "schema_version": "financial-source-renewal-intent-v1",
+  "kind": "same-ui-same-price-financial-source-renewal",
+  "request_sha256": "63c211e8283a3b38fe135c530ae398e12c7a3343dbecafa6f0db04711d3d6448",
+  "pin_sha256": "41f157d8a2951838ecadc9fff19429f2dd2f78cd926b6ccf16ae977520e417c7",
+  "previous_publication_identity": "37456692717/1/0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a/ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+  "not_after": "2026-10-07T11:30:00.000Z"
+}

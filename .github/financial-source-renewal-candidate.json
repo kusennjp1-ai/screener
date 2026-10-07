@@ -1,0 +1,14 @@
+{
+  "schema_version": "financial-source-renewal-pin-v1",
+  "repository": "kusennjp1-ai/screener",
+  "workflow": ".github/workflows/financial-source-renewal-certification.yml",
+  "head_sha": "22548890d0fe161edf7be3943b1775c4f293d0d9",
+  "run_id": 37581569719,
+  "run_attempt": 1,
+  "job_id": 112662209888,
+  "artifact_id": 11466780160,
+  "artifact_name": "financial-source-renewal-37581569719-1",
+  "artifact_sha256": "2b8d069257fb72685600639503e86245084f158bac9252127f42567114a92ac4",
+  "candidate_record_sha256": "9dc28209472837e80d326a3536a31f7d451776ff34b45a4b8aca0cf053ca55c8",
+  "request_sha256": "63c211e8283a3b38fe135c530ae398e12c7a3343dbecafa6f0db04711d3d6448"
+}
