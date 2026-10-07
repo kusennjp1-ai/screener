@@ -1,0 +1,452 @@
+name: Financial Renewal Candidate Transport
+on:
+  push:
+    branches: [diagnostic/financial-renewal-candidate-transport-20261007]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: financial-renewal-candidate-transport-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  transport:
+    name: TRANSPORT ONLY - exact real renewal candidate artifact ZIP
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/diagnostic/financial-renewal-candidate-transport-20261007'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check bounded transport offline
+        run: python -m unittest discover -s .github/scripts -p test_financial_renewal_candidate_transport.py -v
+      - name: Authenticate and split the exact original artifact ZIP
+        id: prepare
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/financial-renewal-candidate-transport.py prepare --directory "$RUNNER_TEMP/financial-renewal-candidate-transport"
+      - name: Retain original ZIP bytes - part 001
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 1 }}
+        id: part1
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-001
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-001.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 002
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 2 }}
+        id: part2
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-002
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-002.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 003
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 3 }}
+        id: part3
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-003
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-003.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 004
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 4 }}
+        id: part4
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-004
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-004.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 005
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 5 }}
+        id: part5
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-005
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-005.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 006
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 6 }}
+        id: part6
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-006
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-006.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 007
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 7 }}
+        id: part7
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-007
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-007.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 008
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 8 }}
+        id: part8
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-008
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-008.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 009
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 9 }}
+        id: part9
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-009
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-009.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 010
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 10 }}
+        id: part10
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-010
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-010.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 011
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 11 }}
+        id: part11
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-011
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-011.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 012
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 12 }}
+        id: part12
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-012
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-012.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 013
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 13 }}
+        id: part13
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-013
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-013.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 014
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 14 }}
+        id: part14
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-014
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-014.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 015
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 15 }}
+        id: part15
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-015
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-015.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 016
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 16 }}
+        id: part16
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-016
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-016.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 017
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 17 }}
+        id: part17
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-017
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-017.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 018
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 18 }}
+        id: part18
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-018
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-018.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 019
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 19 }}
+        id: part19
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-019
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-019.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 020
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 20 }}
+        id: part20
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-020
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-020.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 021
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 21 }}
+        id: part21
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-021
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-021.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 022
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 22 }}
+        id: part22
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-022
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-022.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 023
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 23 }}
+        id: part23
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-023
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-023.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 024
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 24 }}
+        id: part24
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-024
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-024.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 025
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 25 }}
+        id: part25
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-025
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-025.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 026
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 26 }}
+        id: part26
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-026
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-026.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 027
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 27 }}
+        id: part27
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-027
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-027.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 028
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 28 }}
+        id: part28
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-028
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-028.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 029
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 29 }}
+        id: part29
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-029
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-029.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 030
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 30 }}
+        id: part30
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-030
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-030.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 031
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 31 }}
+        id: part31
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-031
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-031.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 032
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 32 }}
+        id: part32
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-032
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-032.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 033
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 33 }}
+        id: part33
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-033
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-033.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain original ZIP bytes - part 034
+        if: ${{ fromJSON(steps.prepare.outputs.part_count) >= 34 }}
+        id: part34
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-part-034
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/part-034.bin
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Bind returned artifact IDs and ZIP digests in transport manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART_1_ID: ${{ steps.part1.outputs.artifact-id }}
+          PART_1_DIGEST: ${{ steps.part1.outputs.artifact-digest }}
+          PART_2_ID: ${{ steps.part2.outputs.artifact-id }}
+          PART_2_DIGEST: ${{ steps.part2.outputs.artifact-digest }}
+          PART_3_ID: ${{ steps.part3.outputs.artifact-id }}
+          PART_3_DIGEST: ${{ steps.part3.outputs.artifact-digest }}
+          PART_4_ID: ${{ steps.part4.outputs.artifact-id }}
+          PART_4_DIGEST: ${{ steps.part4.outputs.artifact-digest }}
+          PART_5_ID: ${{ steps.part5.outputs.artifact-id }}
+          PART_5_DIGEST: ${{ steps.part5.outputs.artifact-digest }}
+          PART_6_ID: ${{ steps.part6.outputs.artifact-id }}
+          PART_6_DIGEST: ${{ steps.part6.outputs.artifact-digest }}
+          PART_7_ID: ${{ steps.part7.outputs.artifact-id }}
+          PART_7_DIGEST: ${{ steps.part7.outputs.artifact-digest }}
+          PART_8_ID: ${{ steps.part8.outputs.artifact-id }}
+          PART_8_DIGEST: ${{ steps.part8.outputs.artifact-digest }}
+          PART_9_ID: ${{ steps.part9.outputs.artifact-id }}
+          PART_9_DIGEST: ${{ steps.part9.outputs.artifact-digest }}
+          PART_10_ID: ${{ steps.part10.outputs.artifact-id }}
+          PART_10_DIGEST: ${{ steps.part10.outputs.artifact-digest }}
+          PART_11_ID: ${{ steps.part11.outputs.artifact-id }}
+          PART_11_DIGEST: ${{ steps.part11.outputs.artifact-digest }}
+          PART_12_ID: ${{ steps.part12.outputs.artifact-id }}
+          PART_12_DIGEST: ${{ steps.part12.outputs.artifact-digest }}
+          PART_13_ID: ${{ steps.part13.outputs.artifact-id }}
+          PART_13_DIGEST: ${{ steps.part13.outputs.artifact-digest }}
+          PART_14_ID: ${{ steps.part14.outputs.artifact-id }}
+          PART_14_DIGEST: ${{ steps.part14.outputs.artifact-digest }}
+          PART_15_ID: ${{ steps.part15.outputs.artifact-id }}
+          PART_15_DIGEST: ${{ steps.part15.outputs.artifact-digest }}
+          PART_16_ID: ${{ steps.part16.outputs.artifact-id }}
+          PART_16_DIGEST: ${{ steps.part16.outputs.artifact-digest }}
+          PART_17_ID: ${{ steps.part17.outputs.artifact-id }}
+          PART_17_DIGEST: ${{ steps.part17.outputs.artifact-digest }}
+          PART_18_ID: ${{ steps.part18.outputs.artifact-id }}
+          PART_18_DIGEST: ${{ steps.part18.outputs.artifact-digest }}
+          PART_19_ID: ${{ steps.part19.outputs.artifact-id }}
+          PART_19_DIGEST: ${{ steps.part19.outputs.artifact-digest }}
+          PART_20_ID: ${{ steps.part20.outputs.artifact-id }}
+          PART_20_DIGEST: ${{ steps.part20.outputs.artifact-digest }}
+          PART_21_ID: ${{ steps.part21.outputs.artifact-id }}
+          PART_21_DIGEST: ${{ steps.part21.outputs.artifact-digest }}
+          PART_22_ID: ${{ steps.part22.outputs.artifact-id }}
+          PART_22_DIGEST: ${{ steps.part22.outputs.artifact-digest }}
+          PART_23_ID: ${{ steps.part23.outputs.artifact-id }}
+          PART_23_DIGEST: ${{ steps.part23.outputs.artifact-digest }}
+          PART_24_ID: ${{ steps.part24.outputs.artifact-id }}
+          PART_24_DIGEST: ${{ steps.part24.outputs.artifact-digest }}
+          PART_25_ID: ${{ steps.part25.outputs.artifact-id }}
+          PART_25_DIGEST: ${{ steps.part25.outputs.artifact-digest }}
+          PART_26_ID: ${{ steps.part26.outputs.artifact-id }}
+          PART_26_DIGEST: ${{ steps.part26.outputs.artifact-digest }}
+          PART_27_ID: ${{ steps.part27.outputs.artifact-id }}
+          PART_27_DIGEST: ${{ steps.part27.outputs.artifact-digest }}
+          PART_28_ID: ${{ steps.part28.outputs.artifact-id }}
+          PART_28_DIGEST: ${{ steps.part28.outputs.artifact-digest }}
+          PART_29_ID: ${{ steps.part29.outputs.artifact-id }}
+          PART_29_DIGEST: ${{ steps.part29.outputs.artifact-digest }}
+          PART_30_ID: ${{ steps.part30.outputs.artifact-id }}
+          PART_30_DIGEST: ${{ steps.part30.outputs.artifact-digest }}
+          PART_31_ID: ${{ steps.part31.outputs.artifact-id }}
+          PART_31_DIGEST: ${{ steps.part31.outputs.artifact-digest }}
+          PART_32_ID: ${{ steps.part32.outputs.artifact-id }}
+          PART_32_DIGEST: ${{ steps.part32.outputs.artifact-digest }}
+          PART_33_ID: ${{ steps.part33.outputs.artifact-id }}
+          PART_33_DIGEST: ${{ steps.part33.outputs.artifact-digest }}
+          PART_34_ID: ${{ steps.part34.outputs.artifact-id }}
+          PART_34_DIGEST: ${{ steps.part34.outputs.artifact-digest }}
+        run: python .github/scripts/financial-renewal-candidate-transport.py finalize --directory "$RUNNER_TEMP/financial-renewal-candidate-transport"
+      - name: Retain TRANSPORT ONLY manifest
+        id: manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-renewal-candidate-transport-${{ github.run_id }}-${{ github.run_attempt }}-manifest
+          path: ${{ runner.temp }}/financial-renewal-candidate-transport/transport-manifest.json
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
