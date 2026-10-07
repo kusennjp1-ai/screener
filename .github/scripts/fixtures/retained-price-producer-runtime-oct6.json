@@ -1,0 +1,14 @@
+{
+  "schema_version": "retained-price-producer-runtime-review-v1",
+  "publication_authority": false,
+  "scope": "unpublished_original_producer_arithmetic_binding",
+  "source_sha": "448c188de584b77a09bea52f233f881c2b31eeb9",
+  "workflow_path": ".github/workflows/static-site.yml",
+  "workflow_bytes": 46007,
+  "workflow_sha256": "cec52c9286bf6e775c7e767d760febb1fd1966276a8f8cb52c52579295f06616",
+  "workflow_git_blob_sha": "c601578500182f3a3a18dc7e929de1fd03bebaa5",
+  "python_version": "3.11",
+  "sum_semantics": "sequential_numeric_accumulation_in_original_full_scan_order",
+  "verified_workflow_url": "https://github.com/kusennjp1-ai/screener/blob/448c188de584b77a09bea52f233f881c2b31eeb9/.github/workflows/static-site.yml",
+  "python_sum_change_reference": "https://docs.python.org/3/library/functions.html#sum"
+}

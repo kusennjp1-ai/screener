@@ -5,7 +5,7 @@ import {renewalCiLocalContext} from './financial-renewal-ci-admission.mjs';
 import {enforceRenewalQuota} from './financial-renewal-quota.mjs';
 import {isPerformanceException, isPackedCandidate, selectExceptionVersion, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { applyPendingCorrectionHold, readPendingCorrection } from './pending-financial-correction.mjs';
@@ -17,6 +17,8 @@ import { bootstrap, compareData, dataFiles, dataInventoryDigest, downloadArtifac
 import { financialReleasePolicy, readFinancialReleaseRequest, readFinancialActivationCandidate, selectActivationCandidate, verifyActivationCandidate, sourceLineage, writeFinancialReleaseReceipt, verifyFinancialReleaseAssets, assertFinancialLineageContinuity, restorePublishedFinancialSource } from './financial-release-activation.mjs';
 import {verifyCarriedBundle} from './financial-generation-carry-controller.mjs';
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,assertTransportDeclaration,verifyCapturedTransportAssets} from './static-transport-publication.mjs';
+import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
+import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -31,7 +33,10 @@ export function checkedExport(artifact, pages, repo, api = githubApi, load = loa
   if (!Number.isSafeInteger(attempt) || attempt <= 0) return null;
   const run = api(`repos/${repo}/actions/runs/${id}/attempts/${attempt}`);
   if (run.id !== id || run.run_attempt !== attempt || !sameRepository(run, repo) || run.head_branch !== 'main' || run.path !== workflowPath('static-site.yml')
-    || !['schedule', 'workflow_dispatch'].includes(run.event) || run.status !== 'completed') return null;
+    || !['schedule', 'workflow_dispatch','workflow_run'].includes(run.event) || run.status !== 'completed') return null;
+  // The finite source expires with its request. Retained archives stay auditable
+  // but must not obstruct later ordinary exports after request-only disable.
+  if(run.event==='workflow_run'&&!readRepairRequest(repairControllerRoot())?.value.enabled)return null;
   const jobs = api(`repos/${repo}/actions/runs/${id}/attempts/${attempt}/jobs?per_page=100`, true).flatMap(page => page.jobs);
   const job = jobs.find(job => job.name === 'combine-and-build' && job.run_attempt === attempt && job.conclusion === 'success');
   if (!job?.steps?.some(step => step.name === 'Build static frontend' && step.conclusion === 'success')) return null;
@@ -43,15 +48,20 @@ export function checkedExport(artifact, pages, repo, api = githubApi, load = loa
     }
   }
   const metadata = load(companion, repo);
+  const marked=Object.hasOwn(metadata,'retained_price_repair'),repairStep=job.steps.some(step=>step.name===PRICE_REPAIR_STEP&&step.conclusion==='success');
+  if((marked||repairStep||run.event==='workflow_run')&&!(marked&&repairStep&&run.event==='workflow_run'))throw Error('Finite repair origin/declaration cannot fall through as ordinary source');
   if (metadata.run_id !== id || metadata.run_attempt !== attempt || metadata.source_sha !== run.head_sha
     || metadata.artifact_name !== artifact.name || typeof metadata.manifest_json !== 'string' || sha256(metadata.manifest_json) !== metadata.manifest_sha256) throw Error('Export attempt and manifest provenance disagree');
   if (priceObservationDigest(metadata.price_observations) !== metadata.price_observations_sha256) throw Error('Export price observation proof is inconsistent');
   assertPriceObservationBounds(metadata.price_observations, artifact.created_at);
-  return { artifact, runId: id, attempt, manifest: JSON.parse(metadata.manifest_json), manifestHash: metadata.manifest_sha256,
-    priceObservations: metadata.price_observations, priceObservationsDigest: metadata.price_observations_sha256 };
+  const source={ artifact, runId: id, attempt, manifest: JSON.parse(metadata.manifest_json), manifestHash: metadata.manifest_sha256,
+    priceObservations: metadata.price_observations, priceObservationsDigest: metadata.price_observations_sha256,
+    ...(marked?{companion,repair:metadata.retained_price_repair}:{}) };
+  if(marked)authenticateRepairSource({source,api,root:repairControllerRoot()});
+  return source;
 }
 export function loadExportManifest(artifact, repo) {
-  const directory = downloadArtifact(artifact, artifactDirectory(artifact), repo, 'source.json');
+  const directory = downloadArtifact(artifact, artifactDirectory(artifact), repo, 'source.json',64*1024**2);
   return JSON.parse(readFileSync(join(directory, 'source.json'), 'utf8'));
 }
 
@@ -67,6 +77,16 @@ export function chooseExport(live, pages, repo, api = githubApi, load = loadExpo
     }
   }
   return null;
+}
+
+export function chooseFiniteExport(live,pages,repo,identity,api=githubApi,load=loadExportManifest){
+  if(!Number.isSafeInteger(identity?.runId)||identity.runId<=0||identity.attempt!==1)throw Error('Missing exact finite source completion identity');
+  const artifact=uniqueArtifact(pages,`static-site-data-${identity.runId}-${identity.attempt}`,identity.runId);
+  const source=checkedExport(artifact,pages,repo,api,load);
+  if(!source?.repair||source.runId!==identity.runId||source.attempt!==identity.attempt)throw Error('Exact finite source completion is not eligible');
+  const chronology=compareData(source.manifest,live.manifest),prices=comparePriceObservations(source.priceObservations,live.knownPriceDates);
+  if(['unknown','regression'].includes(chronology)||prices.regressions.length||!(chronology==='advance'||prices.advances))throw Error('Exact finite source does not advance current data');
+  return source;
 }
 
 function archiveMember(archive, name) {
@@ -88,10 +108,18 @@ with tarfile.open(sys.argv[1]) as t:
 `, archive], { stdio: 'pipe' });
   if (sha256(archiveMember(archive, 'static-data/manifest.json')) !== source.manifestHash) throw Error('Archive and dated manifest disagree');
 }
-async function materialize(source, destination, migration = false,frontendRoot=resolve('release/frontend')) {
-  const directory = downloadArtifact(source.artifact, artifactDirectory(source.artifact), repository());
+async function materialize(source, destination, migration = false,frontendRoot=resolve('release/frontend'),repairLive=null) {
+  const directory = downloadArtifact(source.artifact, artifactDirectory(source.artifact), repository(),'artifact.tar',source.repair?2*1024**3:null);
   const archive = join(directory, 'artifact.tar');
   verifyArchive(source, archive);
+  let recovered=null;
+  if(source.repair){
+    if(!repairLive)throw Error('Finite repair restore requires its actual current predecessor');
+    const selectedRoot=join(directory,'finite-producer-complete');
+    const {extractRetainedProducerArchive}=await import('./retained-price-source-driver.mjs');
+    await extractRetainedProducerArchive({root:repairControllerRoot(),source,archive,destination:selectedRoot,authority:authorityExports(),api:githubApi});
+    recovered=await verifyRepairRestore({source,selectedRoot,live:repairLive,output:join(scratch(),'finite-source-replay'),jobStart:process.env.RETAINED_PRICE_PUBLISHER_JOB_START,api:githubApi,root:repairControllerRoot()});
+  }
   if (source.receiptHash && sha256(archiveMember(archive, 'publication.json')) !== source.receiptHash) throw Error('Archive and live publication receipt disagree');
   rmSync(join(destination, 'static-data'), { recursive: true, force: true });
   mkdirSync(destination, { recursive: true });
@@ -111,6 +139,16 @@ async function materialize(source, destination, migration = false,frontendRoot=r
   const observations = extractPriceObservations({ dataRoot: join(destination, 'static-data'), manifest: source.manifest });
   assertPriceObservationBounds(observations, source.artifact.created_at);
   if (priceObservationDigest(observations) !== source.priceObservationsDigest) throw Error('Archive price observations disagree with its exact attempt metadata');
+  if(recovered){
+    // Consume the authenticated producer bytes. Keep replay observations in a
+    // separate bounded namespace; never rewrite one receipt to impersonate another.
+    for(const file of dataFiles)writeFileSync(join(destination,file),archiveMember(archive,file));
+    const replayAudit=join(destination,'static-data/retained-price-source-replay-audit');
+    if(existsSync(replayAudit))throw Error('Source occupies reserved replay-audit namespace');
+    cpSync(join(recovered.sourceRoot,'static-data/retained-price-source-audit'),replayAudit,{recursive:true,errorOnExist:true,force:false});
+    const state=readState();state.sourceRecovery={verification:recovered.verification,verification_file:recovered.verification_file,restored_data_digest:dataInventoryDigest(destination)};
+    writeFileSync(statePath(),JSON.stringify(state));output({offline_recovery_verified:true});
+  }
   if (migration) {
     for (const file of dataFiles) writeFileSync(join(destination, file), archiveMember(archive, file));
     const state = readState();
@@ -176,7 +214,8 @@ async function plan(design = false) {
   // Install durable provenance without refreshing any currently approved byte.
   // This cannot be blocked by a newly exported but degraded candidate bundle.
   const migration = !renewalControls && !intent && !activation && !design && !live.receipt && Boolean(live.legacyArtifact);
-  const fresh = migration || intent || activation || renewalControls ? null : chooseExport(live, pages, repository());
+  const fresh = migration || intent || activation || renewalControls ? null : gated.finitePriceSource
+    ? chooseFiniteExport(live,pages,repository(),gated.finitePriceSource) : chooseExport(live, pages, repository());
   if (migration) { decision.mode = 'data'; decision.migration = true; }
   const duplicate = !renewalControls && !intent && !activation && !design && !migration && !fresh && (decision.mode === 'data' || live.uiSha === sha);
   if (duplicate) { output({ publish: false }); console.log('No advancing data or newly verified UI to publish.'); return; }
@@ -193,6 +232,7 @@ async function plan(design = false) {
     decision.mode = 'data';
   }
   const source = fresh || publishedSource(live, pages);
+  if(source.repair){const request=readRepairRequest(repairControllerRoot());assertRepairPredecessor(live,request.value);decision.mode='data';delete decision.approval;}
   const renewal=renewalControls?await selectRenewalCandidate({live,controls:renewalControls,mainSha:sha,source}):null;
   if(renewal){decision.mode='renewal';delete decision.approval;}
   const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
@@ -220,6 +260,12 @@ async function recheck() {
   if(state.activation&&!state.activation.exception&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
   const live = await livePublication({ repository: repository() });
   if (live.identity !== state.live.identity) throw Error('Live UI or data changed; discard this superseded publication');
+  if(state.source.repair){
+    const authenticated=authenticateRepairSource({source:state.source,api:githubApi,root:repairControllerRoot()});assertRepairPredecessor(live,authenticated.request.value);
+    if(!state.sourceRecovery?.verification_file||!state.carry?.priceSourceProof)throw Error('Finite repair lost independently replayed source or ordinary financial carry');
+    const {verifyRetainedRestoreBinding}=await import('./retained-price-source-driver.mjs');
+    await verifyRetainedRestoreBinding({root:repairControllerRoot(),source:state.source,record:state.sourceRecovery,live,authority:authorityExports(),api:githubApi});
+  }
   const physical=resolve('release/frontend/dist'),receipt = validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json'))));
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
@@ -393,6 +439,12 @@ async function prepareCarry() {
   // Establish the fully prepared new-price baseline once, including normal
   // performance history, before the carry takes exclusive financial ownership.
   execFileSync(process.execPath,['tools/export-research.mjs'],{cwd:frontend,env,stdio:'inherit'});
+  if(state.source.repair){
+    const {verifyRetainedRestoreBinding}=await import('./retained-price-source-driver.mjs');
+    const proof=await verifyRetainedRestoreBinding({root:repairControllerRoot(),source:state.source,record:state.sourceRecovery,live:state.live,authority:authorityExports(),api:githubApi});
+    const {assertFinitePriceBaseline}=await import('./retained-price-source-baseline.mjs');
+    state.carry.priceSourceProof=assertFinitePriceBaseline({sourceRoot:proof.sourceRoot,targetRoot:root,replayRoot:proof.replayRoot,request:readRepairRequest(repairControllerRoot()).value});
+  }
   const baseline=join(scratch(),'carry-baseline');rmSync(baseline,{recursive:true,force:true});copyBundleData(root,baseline);
   const manifest=JSON.parse(readFileSync(join(root,'static-data/manifest.json'),'utf8'));
   const {decodeResearchIndex}=await import(pathToFileURL(join(frontend,'src/static/researchTransport.js')).href);
@@ -570,7 +622,7 @@ async function runCommand(command) {
   }
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration); if(state.correction) await restoreCorrection(state);if(state.carry)await restoreCarrySources(state);} }
+  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
   else if(command==='prepare-carry')await prepareCarry();
   else if (command === 'compose') await compose();
   else if (command === 'check-design-data') await verifyCoverage(resolve('frontend'), resolve('frontend/public/static-data'), readState().live.verificationUniverse.required_symbols);

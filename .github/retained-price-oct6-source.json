@@ -1,0 +1,198 @@
+{
+  "schema_version": "retained-price-oct6-source-v1",
+  "enabled": false,
+  "activation": null,
+  "repository": "kusennjp1-ai/screener",
+  "repository_id": 1203919607,
+  "target_as_of_date": "2026-10-06",
+  "originals": {
+    "schema_version": "retained-price-recovery-review-inputs-v1",
+    "publication_authority": false,
+    "mode": "offline_exact_inputs_only",
+    "reviewed_main": "c3e2efe4de7aa33132bcdb46157adefc0276633c",
+    "target_price_session": "2026-10-06",
+    "current_session_when_reviewed": "2026-10-06",
+    "catch_up_only": false,
+    "scoped_extraction_receipts": {
+      "prior_metadata": "3da94cb5482b207def6b269e9f58f851084de2025eda1c94bd1ded7bef011597",
+      "candidate_metadata": "d76f24b4cea6981707d7c507e8f766b93b2991e142ed59e932fcb3f0f592b82c",
+      "prior_history": "18ae873becdbd58d09cd97859cc75b5a8edc5125831a687849ab593781db51ca",
+      "prior_home": "b269ec6b2defc51fd0205280ba78dc28d54cbad86fe04826c700803edd2d0136"
+    },
+    "prior": {
+      "run_id": 37456692717,
+      "run_attempt": 1,
+      "artifact_id": 11421722413,
+      "head_sha": "8a490df5b0a873637781a8e4e5351cece9313f37",
+      "bytes": 363691194,
+      "sha256": "1ab2594be91d3bbc8716481c730a9afdf22eb4ca554fcd5d02770b92252de4eb",
+      "publication_sha256": "0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a",
+      "manifest_sha256": "ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+      "research_path": "static-data/research-index-76ff161f3b55ac1b.json",
+      "research_sha256": "76ff161f3b55ac1b9a60683982ec11ff4610a1265f31318668d9cf8eec59b03e",
+      "chart_index_path": "static-data/charts-index-f447668786ed02f2.json",
+      "required_symbol_count": 1895,
+      "actual_price_series": 8746,
+      "known_price_series": 8749
+    },
+    "candidate": {
+      "run_id": 37562536786,
+      "run_attempt": 1,
+      "artifact_id": 11461777446,
+      "artifact_name": "static-site-data-37562536786-1",
+      "head_sha": "448c188de584b77a09bea52f233f881c2b31eeb9",
+      "bytes": 305667482,
+      "sha256": "e52fd2d3c70e695730ad97d3074b4bd0ca5e67418c10aef0ab4dce2671bef46f",
+      "manifest_sha256": "9a781863bb2eecc5cc16ee08c862a20e7f0cd60adc89ff5403e824c1e5a9a39e",
+      "research_path": "static-data/research-index-b7bcd15016e5d28d.json",
+      "research_sha256": "b7bcd15016e5d28dd5de61c30e7c3d1f8d0bfb53a533ed12a87722a093d73fb2",
+      "chart_index_path": "static-data/charts-index-f0b45b63067ee034.json",
+      "price_observations_sha256": "f819926b39e833ee5ec4f364899afa9810f245743a0c546fa0188d23422f7e88",
+      "companion_bytes": 30257,
+      "companion_sha256": "494cd92773818484e2fcaef6ff5d62e01f37010832e212494d9dc9c0db3e0fde",
+      "retained_source_json_sha256": "00a2976609467080c84d10e605de703c379815322f6adbe0cb7fa7528a8044f7",
+      "companion_fresh_download_verified": true,
+      "companion_artifact_id": 11461613143
+    },
+    "expected_recovery": {
+      "prior_public_rows": 5901,
+      "candidate_public_rows": 5901,
+      "required_union": 1909,
+      "conservative_verified": 1852,
+      "minimum_verification_ratio": 0.9,
+      "actual_recoverable_histories": 59,
+      "chart_index_only_histories": 10,
+      "ledger_only_absences": [
+        "DHY",
+        "FSEA",
+        "GBTG"
+      ],
+      "known_regression": {
+        "symbol": "LPSN",
+        "prior": "2026-09-04",
+        "candidate": "2026-08-11"
+      },
+      "restored_research_rows": 49,
+      "quarantined_research_rows": 0,
+      "total_unknown_rows": 49,
+      "required_symbols_sha256": "dd0facf6f0dd50f923671c08a5099fbc51d6aa17eb1ca2a548e00774d253f9a8",
+      "retained_home_histories": 1
+    },
+    "constraints": {
+      "providers": "denied",
+      "remote_writes": "denied",
+      "main_changes": "denied",
+      "new_source_promotion": "denied",
+      "existing_gates": "unchanged",
+      "new_verified_artifact_requires_separate_plan": true,
+      "scoped_extraction_is_not_full_site_validation": true,
+      "publication_requires_new_repair_provenance_and_all_existing_guards": true
+    },
+    "quarantine_adjustments": [],
+    "home_history": {
+      "prior_path": "markets/us/home.json",
+      "prior_sha256": "ef72eaf4598b04ffe2389792b79d147b45d58a8941642e6e18bd2df44f9ce909",
+      "candidate_path": "markets/us/home.json",
+      "candidate_sha256": "12e76e87719b49f4d9131fd9e4c5d55707770119808e4c1c6c3f5d12111d7970"
+    },
+    "financial_predecessor": "Independently bind the actual renewed live publication for final replay; #99 is immutable historical evidence only."
+  },
+  "approved_ui": {
+    "sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "tree": "1c0219a170dcbdeb1af539e4cf7a04018251ca02",
+    "frontend_tree": "0ba620a84264e1ff026898beed3fbc8ad5894618"
+  },
+  "repair": {
+    "diagnostic_head": "411b9d0f20df72b359a005ee189637ce316679be",
+    "diagnostic_tree": "781314667da4ee3bce2b8002d7c4290538495b60",
+    "diagnostic_run": 37602587421,
+    "diagnostic_attempt": 1,
+    "reports_artifact": {
+      "id": 11473976629,
+      "bytes": 9967776,
+      "sha256": "6c7cc5ae0881793f1e91e458a0ac7dde7e58371631f810d1a266719bc084cdb6"
+    },
+    "prepared": {
+      "bytes": 21432445,
+      "sha256": "5631574ab4bc06b59c64a63087d3cae86d793139c3ff780f0e9757d443c88421"
+    },
+    "aggregate_proof": {
+      "bytes": 4900969,
+      "sha256": "19fed4f2b8f9644dae3d17adfd3e8a2297eed03c7e76e04b40d01c552ffb21a5"
+    },
+    "expected": {
+      "rows": 5901,
+      "affected": 101,
+      "unchanged": 5800,
+      "restored_prior_histories": 59,
+      "stale_candidate_histories": 6,
+      "undated": 46,
+      "chart_members": 8740,
+      "groups": 195,
+      "verified": 1852,
+      "required": 1909,
+      "required_symbols_sha256": "dd0facf6f0dd50f923671c08a5099fbc51d6aa17eb1ca2a548e00774d253f9a8"
+    },
+    "original_controller_code": {
+      ".github/scripts/complete-retained-price-quarantine.mjs": "cae102ff59054af80a9358d5ea1ba96c52b7b518",
+      ".github/scripts/materialize-retained-price-graph.mjs": "9615e0be119e582d3084db8e94160b98cb842a0f",
+      ".github/scripts/oct6-retained-price-rehearsal.mjs": "53693061161884188ed68f9a18b3462c8d29cc15",
+      ".github/scripts/read-retained-price-archive.py": "d3175840948acbf10938ebee484ac232e2c5a5ae",
+      ".github/scripts/recalculate-retained-price-groups.py": "35fafef5c098eb2b1945a32ed84c96d47fd39a4b",
+      ".github/scripts/restore-retained-price-candidate.py": "eda74fa40fe74d9c2b63714d58f9cf879ae76351",
+      ".github/scripts/retained-home-history.mjs": "8431b3e526fbc7859522cdf08f986587e0e012c1",
+      ".github/scripts/retained-price-recovery.mjs": "f71d036a97416678d5a8f2b7e9a0aa15727e05de",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/candidate-histories.json": "9dd23bab44e72202ddbecff6db33c9556737deac",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/candidate-metadata.json": "e9cda751aeb7fe4093be635295dc8dbf5e33c2b8",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/contract.json": "366aea5189e68d4c84aa45d3db5e61391cabae44",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/full-row-source-receipt.json": "3b43fd45f9eba28660623cd1187675d80f33628c",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/prior-catalogs.json": "318283a4615925a62d62b64c1b30f1849a3a5516",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/prior-histories.json": "d237663a70ac36591be1dbda0c531cc9fc97ab91",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/prior-home.json": "c35e2ed27cf88a7a99d4c677d135d2f6a05c2a68",
+      ".github/scripts/fixtures/oct6-retained-price-rehearsal/prior-metadata.json": "d4ee87fa7191658773d9c111f6283a2e6f4b2898",
+      ".github/scripts/fixtures/retained-price-producer-runtime.json": "c813715ff28374a50e13c1d27b98c0513fd75acd",
+      ".github/scripts/fixtures/retained-price-producer-runtime-oct6.json": "c27dbca2e831e95a5d09039ac0c2b48244a3d0b3",
+      ".github/scripts/fixtures/retained-price-recovery-oct6-inputs.json": "88d3b65185963e17b4333a1127aeaaad132beb2f",
+      ".github/scripts/fixtures/retained-price-recovery-oct6-unindexed-history.json": "b50fa9a93f18d209795837386928869191218345",
+      ".github/scripts/fixtures/retained-price-residual-oct6-review.json": "218e558bf01d73697ca03c88677eb8c7f08beb3a",
+      ".github/scripts/price-observations.mjs": "df8650fb08c80c3108602901dece6247ac476da6",
+      ".github/scripts/retained-universe.mjs": "9129f69200e122a5154e7fc14ecdb09a2527999c",
+      "contracts/static_financial_current_v1.json": "679445c8dc264478130138c47e19d6c186d4271f",
+      "frontend/contracts/native_annual_history_v1.json": "beea39095c460eef366be13cded9b28624c13b59",
+      "frontend/src/static/evidenceTime.js": "aa2fa649de9493a5b67469f9127de6f366237ebb",
+      "frontend/src/static/financialHistory.js": "a5fdc8d970c17c53d3c0b022e3be1a13775627fc",
+      "frontend/src/static/qualificationAudit.js": "73dc1b9ac9c51d03bc2f63e2ffd2f6240e3a5502",
+      "frontend/src/static/researchFloat64.js": "83de1db2c1972588efcc75163c75a48c33f871ba",
+      "frontend/src/static/researchHex.js": "350140ff67cff8eda9df97428a9d5d2b0413b834",
+      "frontend/src/static/researchTransport.js": "18c7c7a73aa418b9dfebc362f2dbed43d47a5b74",
+      "backend/app/services/static_site_export_service.py": "358938e52b903ae6bfed4d80a8f73160389ddd1e",
+      ".github/scripts/run-oct6-retained-price-rehearsal.py": "7f57c0da94a595db30f86be831cf4ebd0a8578d1"
+    }
+  },
+  "predecessor": {
+    "identity": "37456692717/1/0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a/ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+    "run_id": 37456692717,
+    "run_attempt": 1,
+    "financial_lineage_sha256": "2828fbf2d497ae32c29ddb46a34903a9c1c8494862e127ba67dff9880e356a13",
+    "financial_generation": "69c80cd8bfa2a4bedf891aea1e82229b4d6768e59914f15fb9ef9e09b51c7de7"
+  },
+  "bounds": {
+    "reserve_bytes": 8589934592,
+    "job_minutes": 110,
+    "lifecycle_minutes": 95,
+    "upload_minutes": 10,
+    "download_timeout_ms": 240000,
+    "max_files": 50000,
+    "max_payload_bytes": 8589934592,
+    "max_audit_bytes": 134217728
+  },
+  "policy": {
+    "ordinary_source_requires_genuine_producer": true,
+    "diagnostic_source_authority": false,
+    "provider_acquisition": false,
+    "source_promotion": false,
+    "renewal_prerequisite": false,
+    "preserve_live_approved_ui": true,
+    "financial_expiry_uses_actual_current_time": true
+  }
+}

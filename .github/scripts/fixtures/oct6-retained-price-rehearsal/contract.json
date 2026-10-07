@@ -1,0 +1,70 @@
+{
+  "schema_version": "oct6-retained-price-rehearsal-v1",
+  "publication_authority": false,
+  "stage": "price_only_precarry_checkpoint",
+  "repository": "kusennjp1-ai/screener",
+  "repair_base": "1126e7b97782dffabccac7fd48fc55e8215fc923",
+  "repair_tree": "cc7e51dff72294192d3d12c65d04a4669bebc5c0",
+  "reviewed_historical_main": {
+    "sha": "22548890d0fe161edf7be3943b1775c4f293d0d9",
+    "tree": "8245b42cdff76c1fe51c652227a0eb8d6809cf63"
+  },
+  "approved_ui": {
+    "sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "tree": "1c0219a170dcbdeb1af539e4cf7a04018251ca02",
+    "frontend_tree": "0ba620a84264e1ff026898beed3fbc8ad5894618"
+  },
+  "scopes": {
+    "prior-metadata": {
+      "receipt_sha256": "130b0199e4bad9f2e907d64eac92e591d69e786276a180c0dbbcdabe5e84ff3e",
+      "archive": "prior"
+    },
+    "candidate-metadata": {
+      "receipt_sha256": "d76f24b4cea6981707d7c507e8f766b93b2991e142ed59e932fcb3f0f592b82c",
+      "archive": "candidate"
+    },
+    "prior-histories": {
+      "receipt_sha256": "39deb20f3376112f6c06a8624fde8768e6e8393b82ba952e9019b8f281bfa9d1",
+      "archive": "prior"
+    },
+    "prior-home": {
+      "receipt_sha256": "e1f78fd3bf58615f17ffe41190719d0f90a630c9a369aa94ec8fdf8fc08c4906",
+      "archive": "prior"
+    },
+    "prior-catalogs": {
+      "receipt_sha256": "c1b24e381183f82b53bf8962ecbda31133ab53772d277430bf663e41807e2149",
+      "archive": "prior"
+    },
+    "candidate-histories": {
+      "receipt_sha256": "88ee83752d4e6dc46519d9534059c17f5fc471152b3532cf035830b938d56f03",
+      "archive": "candidate"
+    }
+  },
+  "prepared": {
+    "bytes": 21432445,
+    "sha256": "5631574ab4bc06b59c64a63087d3cae86d793139c3ff780f0e9757d443c88421"
+  },
+  "aggregate_proof": {
+    "bytes": 4900969,
+    "sha256": "19fed4f2b8f9644dae3d17adfd3e8a2297eed03c7e76e04b40d01c552ffb21a5"
+  },
+  "source_files": 19480,
+  "source_payload_bytes": 1876607954,
+  "expected": {
+    "rows": 5901,
+    "affected": 101,
+    "unchanged": 5800,
+    "restored_prior_histories": 59,
+    "stale_candidate_histories": 6,
+    "undated": 46,
+    "chart_members": 8740,
+    "groups": 195,
+    "verified": 1852,
+    "required": 1909,
+    "required_symbols_sha256": "dd0facf6f0dd50f923671c08a5099fbc51d6aa17eb1ca2a548e00774d253f9a8"
+  },
+  "reserve_bytes": 8589934592,
+  "max_checkpoint_bytes": 8589934592,
+  "max_checkpoint_files": 50000,
+  "future_financial_binding": null
+}

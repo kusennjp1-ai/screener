@@ -37,6 +37,8 @@ jobs:
       actions: read
     outputs:
       renewal: ${{ steps.route.outputs.renewal }}
+      price_wait: ${{ steps.price-route.outputs.price_wait }}
+      price_source: ${{ steps.price-route.outputs.price_source }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,7 +47,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Route the finite price activation before any publication
+        id: price-route
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/retained-price-ci-admission.mjs publication-route
+      - name: Hold finite retained-price activation
+        if: steps.price-route.outputs.price_wait == 'true'
+        run: ':'
       - name: Resolve only the exact admitted renewal route
+        if: steps.price-route.outputs.price_wait != 'true' && steps.price-route.outputs.price_source != 'true'
         id: route
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,12 +66,16 @@ jobs:
         run: ':'
   publish:
     needs: renewal_route
-    if: needs.renewal_route.result == 'success' && (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
+    if: needs.renewal_route.result == 'success' && needs.renewal_route.outputs.price_wait != 'true' && (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ needs.renewal_route.outputs.price_source == 'true' && 110 || 360 }}
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Record first finite publisher step clock
+        if: needs.renewal_route.outputs.price_source == 'true'
+        run: date +%s > "$RUNNER_TEMP/retained-price-publisher-job-start"
       # Reconcile main after taking the serial lock. A stale completion event may
       # replace a newer pending event, but can never choose an unverified UI SHA.
       - name: Resolve current main under the publication lock
@@ -95,16 +110,21 @@ jobs:
           CAPTURE_SHAS: ${{ steps.exception_controls.outputs.pinned_capture_shas }}
         run: for capture_sha in $CAPTURE_SHAS; do git fetch --no-tags origin "$capture_sha"; done
       - uses: actions/setup-python@v5
-        if: hashFiles('.github/financial-release-request.json') != '' || hashFiles('.github/financial-source-renewal-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
+        if: needs.renewal_route.outputs.price_source == 'true' || hashFiles('.github/financial-release-request.json') != '' || hashFiles('.github/financial-source-renewal-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
         with:
           python-version: '3.11'
       - name: Install offline statement projection dependencies
-        if: hashFiles('.github/financial-release-request.json') != '' || hashFiles('.github/financial-source-renewal-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
+        if: needs.renewal_route.outputs.price_source == 'true' || hashFiles('.github/financial-release-request.json') != '' || hashFiles('.github/financial-source-renewal-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
         run: |
           python -m venv "$RUNNER_TEMP/financial-replay-runtime"
           "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
           echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
           echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
+      - name: Bind existing pinned arithmetic runtime for finite replay
+        if: needs.renewal_route.outputs.price_source == 'true'
+        run: |
+          test -x "$RUNNER_TEMP/financial-replay-runtime/bin/python3.11"
+          echo "RETAINED_PRICE_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python3.11" >> "$GITHUB_ENV"
       - name: Verify isolated offline native projection runtime
         if: hashFiles('.github/financial-release-request.json') != '' || hashFiles('.github/financial-source-renewal-request.json') != '' || (github.event_name == 'workflow_dispatch' && inputs.financial_correction != '')
         env:
@@ -116,6 +136,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs plan
+      - name: Prepare immutable controller for finite price publication
+        if: steps.plan.outputs.publish == 'true' && needs.renewal_route.outputs.price_source == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/retained-price-source-admission.mjs prepare-controller --output "$RUNNER_TEMP/retained-price-controller"
       - name: Checkout the exact verified UI source
         if: steps.plan.outputs.publish == 'true'
         uses: actions/checkout@v4
@@ -129,26 +154,33 @@ jobs:
           cache: npm
           cache-dependency-path: release/frontend/package-lock.json
       - name: Restore the exact selected data artifact
+        id: restore
         if: steps.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RETAINED_PRICE_PUBLISHER_JOB_START: ${{ runner.temp }}/retained-price-publisher-job-start
         run: node .github/scripts/select-release-source.mjs restore
       - run: npm ci --no-audit --no-fund
         if: steps.plan.outputs.publish == 'true'
         working-directory: release/frontend
+      - name: Install locked Chromium for finite price verification
+        if: steps.restore.outputs.offline_recovery_verified == 'true'
+        timeout-minutes: 10
+        working-directory: release/frontend
+        run: npx --no-install playwright install --with-deps chromium
       - name: Verify research rules and 100 synthetic task profiles
         if: steps.plan.outputs.publish == 'true'
         run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/personalQuote.test.js src/static/usePersonalQuote.test.jsx src/static/components/QuoteConnection.test.jsx src/static/entryReadiness.test.js src/static/swipeNavigation.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/StaticChartViewerModal.test.jsx src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/breadthSummary.test.js src/static/pages/StaticBreadthPage.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/components/QualificationVerification.test.jsx src/static/components/PortfolioDecision.test.jsx src/static/pages/ResearchPage.test.jsx src/static/components/ResearchChart.test.jsx src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/components/DailyChanges.test.jsx src/static/components/CandidateCharts.test.jsx --maxWorkers=2
         working-directory: release/frontend
       - name: Cache public SEC archives and security mappings
-        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true'
+        if: steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true'
         uses: actions/cache@v4
         with:
           path: release/.cache/sec13f
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
-        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && !inputs.ui_only }}
+        if: ${{ steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && !inputs.ui_only }}
         working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
@@ -172,7 +204,7 @@ jobs:
           node tools/export-research.mjs
           python tools/export-entry-context.py
       - name: Prepare workbench using verified published evidence
-        if: ${{ steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && inputs.ui_only }}
+        if: ${{ steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && inputs.ui_only }}
         working-directory: release/frontend
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
@@ -202,6 +234,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs compose
+      - name: Verify composed finite price browser and CSV surfaces
+        if: steps.restore.outputs.offline_recovery_verified == 'true'
+        timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/retained-price-source-browser.mjs
       - name: Preserve correction source and predecessor audit material
         if: steps.plan.outputs.correction == 'true'
         uses: actions/upload-artifact@v4
@@ -260,6 +298,29 @@ jobs:
         id: deploy
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Preserve finite price publication diagnostic reports
+        if: always() && needs.renewal_route.outputs.price_source == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: retained-price-publication-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/verified-publication/finite-source-replay/report.json
+            ${{ runner.temp }}/verified-publication/finite-source-replay-supervisor/supervisor.json
+            ${{ runner.temp }}/verified-publication/finite-source-replay-supervisor/heartbeat.jsonl
+            ${{ runner.temp }}/verified-publication/finite-source-replay/storage-preflight.json
+            ${{ runner.temp }}/verified-publication/finite-source-replay/compiler-evaluation.json
+            ${{ runner.temp }}/verified-publication/finite-source-replay-driver-plan.json
+            ${{ runner.temp }}/verified-publication/finite-source-replay-inputs/original-api-evidence.json
+            ${{ runner.temp }}/verified-publication/finite-source-replay/replay-verification.json
+            ${{ runner.temp }}/verified-publication/finite-source-browser/report.json
+            ${{ runner.temp }}/verified-publication/finite-source-browser/NVDA.png
+            ${{ runner.temp }}/verified-publication/finite-source-browser/FUTU.png
+            ${{ runner.temp }}/verified-publication/finite-source-browser/ALH.png
+            ${{ runner.temp }}/verified-publication/finite-source-browser/LPSN.png
+            ${{ runner.temp }}/verified-publication/finite-source-browser/AIHS.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Retain automatic quota observations independently of publication
         if: always() && needs.renewal_route.outputs.renewal == 'true'
         # A post-deploy audit-storage outage must not turn the successfully

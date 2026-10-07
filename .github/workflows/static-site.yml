@@ -1,6 +1,10 @@
 name: Static Site
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   schedule:
     # FAST price publish — minutes after the US close. Refreshes today's prices
     # and republishes charts/bands/signals against the latest published scan
@@ -45,7 +49,7 @@ concurrency:
   # Keep full and fast runs independent. A newer run waits for active work
   # in its group so fetched prices can reach artifact upload. GitHub may
   # still replace an older pending run; active runs can be canceled manually.
-  group: static-site-${{ github.ref }}${{ (contains('4 16 * * 1-5|31 16 * * 1-5|58 16 * * 1-5', github.event.schedule) && github.event.schedule != '' || github.event.inputs.prices_only == 'true') && '-fast' || '' }}
+  group: ${{ github.event_name == 'workflow_run' && format('static-site-oct6-{0}', github.event.workflow_run.head_sha) || format('static-site-{0}{1}', github.ref, (contains('4 16 * * 1-5|31 16 * * 1-5|58 16 * * 1-5', github.event.schedule) && github.event.schedule != '' || github.event.inputs.prices_only == 'true') && '-fast' || '') }}
   cancel-in-progress: false
 
 permissions:
@@ -54,15 +58,33 @@ permissions:
 
 jobs:
   select-markets:
+    permissions:
+      contents: read
+      actions: read
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-latest
     outputs:
+      repair: ${{ steps.price-route.outputs.repair }}
       markets: ${{ steps.pick.outputs.markets }}
       mode: ${{ steps.pick.outputs.mode }}
       source_promotion: ${{ steps.source-policy.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'workflow_run'
+        with:
+          node-version: '22'
+      - name: Admit only the finite exact-main price CI trigger
+        id: price-route
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/retained-price-ci-admission.mjs producer-route
       - id: source-policy
+        if: github.event_name != 'workflow_run'
         run: |
           python - <<'PY'
           import json, os
@@ -85,13 +107,21 @@ jobs:
           SCHEDULE: ${{ github.event.schedule }}
           MARKET_GROUP: ${{ github.event.inputs.market_group }}
           PRICES_ONLY: ${{ github.event.inputs.prices_only }}
+          PRICE_REPAIR: ${{ steps.price-route.outputs.repair }}
         run: |
           ASIA='["HK","IN","JP","KR","TW","CN","SG","MY","AU"]'
           US='["US"]'
           ALL='["US"]'
 
           mode="full"
-          if [ "$EVENT_NAME" = "schedule" ]; then
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            markets='[]'
+            mode="noop"
+            if [ "$PRICE_REPAIR" = "true" ]; then
+              markets="$US"
+              mode="offline_repair"
+            fi
+          elif [ "$EVENT_NAME" = "schedule" ]; then
             markets="$US"   # 4:10pm ET (America/New_York), US-only deployment
             case "$SCHEDULE" in
               "4 16 * * 1-5"|"31 16 * * 1-5"|"58 16 * * 1-5")
@@ -115,7 +145,8 @@ jobs:
           echo "Building markets: $markets (mode: $mode)"
 
   ensure_daily_price_release:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    needs: select-markets
+    if: ${{ github.event_name != 'workflow_run' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
     runs-on: ubuntu-latest
     steps:
       - name: Ensure daily price release exists
@@ -130,7 +161,7 @@ jobs:
             --notes "Automated daily market-scoped OHLCV bundles for runtime bootstrap and refresh."
 
   build-market:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    if: ${{ github.event_name != 'workflow_run' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
     needs: [select-markets, ensure_daily_price_release]
     outputs:
       produced_candidate: ${{ steps.candidate-produced.outputs.produced }}
@@ -550,8 +581,12 @@ jobs:
 
   combine-and-build:
     # Preserve fallback after failure or a skip, but not after cancellation.
-    if: ${{ !cancelled() && needs.build-market.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
-    needs: build-market
+    if: ${{ !cancelled() && ((github.event_name == 'workflow_run' && needs.select-markets.result == 'success' && needs.select-markets.outputs.repair == 'true') || (github.event_name != 'workflow_run' && needs.build-market.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)))) }}
+    needs: [select-markets, build-market]
+    timeout-minutes: ${{ needs.select-markets.outputs.repair == 'true' && 110 || 360 }}
+    permissions:
+      contents: read
+      actions: read
     outputs:
       downstream_artifact_id: ${{ steps.source-downstream.outputs.artifact-id }}
       downstream_artifact_digest: ${{ steps.source-downstream.outputs.artifact-digest }}
@@ -562,13 +597,26 @@ jobs:
       DATABASE_URL: postgresql://stockscanner:stockscanner@localhost:5432/stockscanner
 
     steps:
+      - name: Record first producer step clock
+        if: needs.select-markets.outputs.repair == 'true'
+        run: date +%s > "$RUNNER_TEMP/retained-price-source-job-start"
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: ${{ needs.select-markets.outputs.repair == 'true' && '0' || '1' }}
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
+        if: needs.select-markets.outputs.repair != 'true'
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-python@v5
+        if: needs.select-markets.outputs.repair == 'true'
+        with:
+          python-version: '3.11'
 
       - uses: actions/setup-node@v4
         with:
@@ -577,12 +625,22 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install backend dependencies
+        if: needs.select-markets.outputs.repair != 'true'
         run: pip install -r backend/requirements.txt
 
       - name: Install frontend dependencies
+        if: needs.select-markets.outputs.repair != 'true'
         run: cd frontend && npm ci
 
+      - name: Prepare pinned finite price arithmetic runtime
+        if: needs.select-markets.outputs.repair == 'true'
+        run: |
+          python3.11 -m venv "$RUNNER_TEMP/retained-price-python"
+          "$RUNNER_TEMP/retained-price-python/bin/python3.11" -m pip install numpy==1.26.3 pandas==2.2.0
+          echo "RETAINED_PRICE_PYTHON=$RUNNER_TEMP/retained-price-python/bin/python3.11" >> "$GITHUB_ENV"
+
       - name: Download current market artifacts
+        if: needs.select-markets.outputs.repair != 'true'
         id: download-market-artifacts
         continue-on-error: true
         uses: actions/download-artifact@v4
@@ -592,6 +650,7 @@ jobs:
           merge-multiple: false
 
       - name: Download per-market fallback artifacts
+        if: needs.select-markets.outputs.repair != 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -846,6 +905,7 @@ jobs:
           PY
 
       - name: Validate market artifacts
+        if: needs.select-markets.outputs.repair != 'true'
         run: |
           mkdir -p /tmp/static-market-artifacts-current /tmp/static-market-artifacts-fallback
           cd backend
@@ -896,6 +956,7 @@ jobs:
           PY
 
       - name: Combine static data bundle
+        if: needs.select-markets.outputs.repair != 'true'
         run: |
           cd backend
           python -m app.scripts.export_static_site \
@@ -904,38 +965,54 @@ jobs:
             --fallback-artifacts-dir /tmp/static-market-artifacts-fallback
 
       - name: Cache public SEC archives and security mappings
+        if: needs.select-markets.outputs.repair != 'true'
         uses: actions/cache@v4
         with:
           path: .cache/sec13f
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Build static frontend
+        id: build-frontend
         env:
-          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          GH_TOKEN: ${{ github.token }}
+          PRICE_REPAIR: ${{ needs.select-markets.outputs.repair }}
+          SEC_USER_AGENT: ${{ needs.select-markets.outputs.repair != 'true' && secrets.SEC_USER_AGENT || '' }}
           VITE_STATIC_SITE: "true"
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: |
-          cd frontend
-          npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
-          python tools/test_sec_financials.py
-          python tools/export-book-benchmark.py --allow-unavailable
-          python tools/restore-candidate-history.py
-          python tools/export-sector-prices.py
-          node tools/repair-price-history.mjs
-          python tools/test_institutional_holdings.py
-          python tools/test_recalculate_setups.py
-          python tools/export-institutional.py --refresh --mapping-limit 200
-          python tools/recalculate-setups.py
-          node tools/export-research.mjs
-          python tools/sec-financials.py --limit 60
-          npm run build
-          node tools/check-data-quality.mjs
+          if [ "$PRICE_REPAIR" = "true" ]; then
+            node .github/scripts/retained-price-source-admission.mjs produce --output "$RUNNER_TEMP/retained-price-source" --job-start "$RUNNER_TEMP/retained-price-source-job-start"
+          else
+            cd frontend
+            npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookPatternReview.test.js src/static/components/BookPatternReview.test.jsx src/static/partialSalePlan.test.js src/static/components/PartialSalePlan.test.jsx src/static/bookExitEvidence.test.js src/static/bookBreakoutJournal.test.js src/static/components/BookExitEvidence.test.jsx src/static/bookMarketEvidence.test.js src/static/localTradeJournal.test.js src/static/components/LocalTradeJournal.test.jsx src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/bookRiskPolicy.test.js src/static/components/BookRiskWorkbench.test.jsx src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/breadthSummary.test.js --maxWorkers=2
+            python tools/test_sec_financials.py
+            python tools/export-book-benchmark.py --allow-unavailable
+            python tools/restore-candidate-history.py
+            python tools/export-sector-prices.py
+            node tools/repair-price-history.mjs
+            python tools/test_institutional_holdings.py
+            python tools/test_recalculate_setups.py
+            python tools/export-institutional.py --refresh --mapping-limit 200
+            python tools/recalculate-setups.py
+            node tools/export-research.mjs
+            python tools/sec-financials.py --limit 60
+            npm run build
+            node tools/check-data-quality.mjs
+          fi
+
+      - name: Verify finite retained-price repair
+        if: needs.select-markets.outputs.repair == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/retained-price-source-admission.mjs verify-produced --output "$RUNNER_TEMP/retained-price-source"
 
       - name: Bind downstream close observations after both quality gates
+        if: needs.select-markets.outputs.repair != 'true'
         run: node .github/scripts/export-source-promotion-inputs.mjs frontend/dist/static-data /tmp/daily-source-downstream.json
 
       - name: Record the actual downstream producer attempt
+        if: needs.select-markets.outputs.repair != 'true'
         id: source-downstream-record
         run: |
           cd backend
@@ -943,6 +1020,7 @@ jobs:
             --root /tmp --paths daily-source-downstream.json --record /tmp/daily-source-downstream-producer.json
 
       - name: Retain downstream source-promotion inputs
+        if: needs.select-markets.outputs.repair != 'true'
         id: source-downstream
         uses: actions/upload-artifact@v4
         with:
@@ -960,11 +1038,23 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           name: static-site-data-${{ github.run_id }}-${{ github.run_attempt }}
-          path: frontend/dist
+          path: ${{ steps.build-frontend.outputs.site_dir || 'frontend/dist' }}
           retention-days: 7
 
       - name: Record exact export attempt and dated evidence
-        run: node .github/scripts/select-release-source.mjs export-metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRICE_REPAIR: ${{ needs.select-markets.outputs.repair }}
+          PRICE_ARTIFACT_ID: ${{ steps.upload-data-artifact.outputs.artifact_id }}
+        run: |
+          if [ "$PRICE_REPAIR" = "true" ]; then
+            [[ "$PRICE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+            artifact_digest=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PRICE_ARTIFACT_ID" --jq .digest)
+            [[ "$artifact_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            node .github/scripts/retained-price-source-admission.mjs companion --output "$RUNNER_TEMP/retained-price-source" --artifact-id "$PRICE_ARTIFACT_ID" --artifact-digest "$artifact_digest"
+          else
+            node .github/scripts/select-release-source.mjs export-metadata
+          fi
       - name: Preserve dated export provenance for release selection
         uses: actions/upload-artifact@v4
         with:
@@ -972,6 +1062,23 @@ jobs:
           path: ${{ runner.temp }}/export-provenance/source.json
           retention-days: 7
           if-no-files-found: error
+
+      - name: Preserve finite price producer diagnostic reports
+        if: always() && needs.select-markets.outputs.repair == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: retained-price-source-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/retained-price-source/report.json
+            ${{ runner.temp }}/retained-price-source-supervisor/supervisor.json
+            ${{ runner.temp }}/retained-price-source-supervisor/heartbeat.jsonl
+            ${{ runner.temp }}/retained-price-source/storage-preflight.json
+            ${{ runner.temp }}/retained-price-source/compiler-evaluation.json
+            ${{ runner.temp }}/retained-price-source-driver-plan.json
+            ${{ runner.temp }}/retained-price-source-inputs/original-api-evidence.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   promote-daily-source:
     needs: [select-markets, build-market, combine-and-build]
