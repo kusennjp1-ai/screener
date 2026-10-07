@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
-import {PRICE_CI,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
+import {PRICE_CI,priceAdmissionDiagnostic,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
 
 const sha256=b=>createHash('sha256').update(b).digest('hex');
 const repo={id:PRICE_CI.repositoryId,full_name:PRICE_CI.repository,default_branch:'main'};
@@ -13,7 +13,9 @@ const prefix=`repos/${PRICE_CI.repository}`;
 const now=Date.now();
 const timestamp=seconds=>new Date(now+seconds*1000).toISOString();
 const copy=v=>structuredClone(v);
+const diagnostic=result=>JSON.parse(priceAdmissionDiagnostic(result)).observations;
 function fixture(t,{disabled=false,extraCommitFile=false}={}){
+  const logs=[];t.mock.method(console,'log',value=>logs.push(value));
   const root=mkdtempSync(join(tmpdir(),'finite-price-ci-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
   const write=(path,value)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),typeof value==='string'?value:JSON.stringify(value)+'\n');};
@@ -47,7 +49,7 @@ function fixture(t,{disabled=false,extraCommitFile=false}={}){
   const execution=workflow=>({event_name:'workflow_run',repository:PRICE_CI.repository,repository_id:PRICE_CI.repositoryId,ref:'refs/heads/main',sha:head,workflow_ref:`${PRICE_CI.repository}/${workflow.path}@refs/heads/main`,workflow_sha:head,run_id:workflow.id===PRICE_CI.producer.id?200:400,run_attempt:1});
   const event=source=>({action:'completed',repository:repo,workflow_run:copy(source)});
   function finish(){producer.status='completed';producer.conclusion='success';sourceJob.status='completed';sourceJob.conclusion='success';sourceJob.steps=sourceSteps.map(name=>({name,status:'completed',conclusion:'success'}));sync();}
-  return {root,git,write,head,tree,parent,parentTree,request,map,records,jobRecords,ci,producer,publisher,sourceJob,api,sync,finish,event,execution,
+  return {logs,root,git,write,head,tree,parent,parentTree,request,map,records,jobRecords,ci,producer,publisher,sourceJob,api,sync,finish,event,execution,
     produce:()=>verifyPriceCiProducer({root,event:event(ci),execution:execution(PRICE_CI.producer),api,now}),
     source:()=>verifyPriceSourceCompletion({root,sourceRun:copy(producer),api,now}),
     route:source=>routePricePublication({root,event:event(source),execution:execution(PRICE_CI.publisher),api,now})};
@@ -68,7 +70,7 @@ test('finite activation rejects expiry, unreviewed parent tree, body change and 
   f.map[`${prefix}/git/commits/${f.parent}`].tree.sha=f.parentTree;f.write('untracked.js','malicious');assert.throws(()=>f.produce(),/untracked/);
 });
 test('all exact controller and trigger identities are enforced',t=>{
-  for(const [key,value]of [['workflow_id',99],['run_attempt',2],['head_sha','f'.repeat(40)],['head_branch','other'],['event','pull_request'],['status','in_progress'],['conclusion','failure']]){
+  for(const [key,value]of [['workflow_id',99],['run_attempt',2],['head_sha','f'.repeat(40)],['head_branch','other'],['event','pull_request'],['status','in_progress']]){
     const f=fixture(t);f.ci[key]=value;f.sync();assert.throws(()=>f.produce(),undefined,`${key}=${value}`);
   }
   const f=fixture(t);f.map[`${prefix}/git/ref/heads/main`].object.sha='b'.repeat(40);assert.throws(()=>f.produce(),/no longer current main/);
@@ -80,7 +82,7 @@ test('payload, current attempt and required job must match independently read fa
 });
 test('active caller progress timestamp may advance without relaxing completed-source clocks',t=>{
   const f=fixture(t);f.map[`${prefix}/actions/runs/200`].updated_at=timestamp(-3390);assert.equal(f.produce().repair,true);
-  f.map[`${prefix}/actions/runs/100`].updated_at=timestamp(-3479);assert.throws(()=>f.produce(),/current\/original attempt/);
+  f.map[`${prefix}/actions/runs/100`].updated_at=timestamp(-3479);assert.throws(()=>f.produce(),/observation clocks/);
 });
 test('a prior failed caller consumes the finite activation; attempt2 and duplicate winners reject',t=>{
   const f=fixture(t);f.records.producer.push({...f.producer,id:199,status:'completed',conclusion:'failure'});f.sync();assert.throws(()=>f.produce(),/consumed/);
@@ -139,4 +141,169 @@ test('real publisher checkout/build paths remain outside the immutable clean con
   execFileSync('git',['checkout','--',PRICE_REQUEST_PATH],{cwd:clean});
   process.env.RETAINED_PRICE_CONTROLLER_ROOT=f.root;assert.throws(()=>priceControllerRoot(),/unexpected clean controller path/);
   process.env.RETAINED_PRICE_CONTROLLER_ROOT=clean;f.git('worktree','remove','--force',clean);symlinkSync(f.root,clean,'dir');assert.throws(()=>priceControllerRoot(),/linked/);
+});
+
+// Actual failed callbacks from Oct 7, 2026 API evidence, SHA-256
+// 5ac6584303c082f687f930abc22f8aa06a186a83893dcb0ed0d96cf6d079a474.
+// Keep literal API job/step shapes (including skipped inverted clocks); fixture
+// rebinding changes only head/run identities and applies one common clock shift.
+const observedCallbackJobs={"producer":[{"id":112842194722,"run_id":37635978773,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"select-markets","status":"completed","conclusion":"failure","started_at":"2026-10-07T14:21:18Z","completed_at":"2026-10-07T14:21:32Z","steps":[{"name":"Set up job","status":"completed","conclusion":"success","number":1,"started_at":"2026-10-07T14:21:19Z","completed_at":"2026-10-07T14:21:20Z"},{"name":"Run actions/checkout@v4","status":"completed","conclusion":"success","number":2,"started_at":"2026-10-07T14:21:20Z","completed_at":"2026-10-07T14:21:23Z"},{"name":"Run actions/setup-node@v4","status":"completed","conclusion":"success","number":3,"started_at":"2026-10-07T14:21:23Z","completed_at":"2026-10-07T14:21:23Z"},{"name":"Admit only the finite exact-main price CI trigger","status":"completed","conclusion":"failure","number":4,"started_at":"2026-10-07T14:21:23Z","completed_at":"2026-10-07T14:21:31Z"},{"name":"Run python - <<'PY'","status":"completed","conclusion":"skipped","number":5,"started_at":"2026-10-07T14:21:31Z","completed_at":"2026-10-07T14:21:31Z"},{"name":"Run ASIA='[\"HK\",\"IN\",\"JP\",\"KR\",\"TW\",\"CN\",\"SG\",\"MY\",\"AU\"]'","status":"completed","conclusion":"skipped","number":6,"started_at":"2026-10-07T14:21:31Z","completed_at":"2026-10-07T14:21:31Z"},{"name":"Post Run actions/setup-node@v4","status":"completed","conclusion":"skipped","number":11,"started_at":"2026-10-07T14:21:31Z","completed_at":"2026-10-07T14:21:31Z"},{"name":"Post Run actions/checkout@v4","status":"completed","conclusion":"success","number":12,"started_at":"2026-10-07T14:21:31Z","completed_at":"2026-10-07T14:21:31Z"},{"name":"Complete job","status":"completed","conclusion":"success","number":13,"started_at":"2026-10-07T14:21:31Z","completed_at":"2026-10-07T14:21:31Z"}]},{"id":112842327100,"run_id":37635978773,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"ensure_daily_price_release","status":"completed","conclusion":"skipped","started_at":"2026-10-07T14:21:33Z","completed_at":"2026-10-07T14:21:33Z","steps":[]},{"id":112842328412,"run_id":37635978773,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"build-market","status":"completed","conclusion":"skipped","started_at":"2026-10-07T14:21:33Z","completed_at":"2026-10-07T14:21:33Z","steps":[]},{"id":112842329330,"run_id":37635978773,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"combine-and-build","status":"completed","conclusion":"skipped","started_at":"2026-10-07T14:21:33Z","completed_at":"2026-10-07T14:21:33Z","steps":[]},{"id":112842330629,"run_id":37635978773,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"promote-daily-source","status":"completed","conclusion":"skipped","started_at":"2026-10-07T14:21:33Z","completed_at":"2026-10-07T14:21:33Z","steps":[]}],"publisher":[{"id":112842193606,"run_id":37635978671,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"Route exact renewal CI admission","status":"completed","conclusion":"failure","started_at":"2026-10-07T14:21:18Z","completed_at":"2026-10-07T14:21:45Z","steps":[{"name":"Set up job","status":"completed","conclusion":"success","number":1,"started_at":"2026-10-07T14:21:19Z","completed_at":"2026-10-07T14:21:20Z"},{"name":"Run actions/checkout@v4","status":"completed","conclusion":"success","number":2,"started_at":"2026-10-07T14:21:20Z","completed_at":"2026-10-07T14:21:22Z"},{"name":"Run actions/setup-node@v4","status":"completed","conclusion":"success","number":3,"started_at":"2026-10-07T14:21:22Z","completed_at":"2026-10-07T14:21:32Z"},{"name":"Route the finite price activation before any publication","status":"completed","conclusion":"failure","number":4,"started_at":"2026-10-07T14:21:32Z","completed_at":"2026-10-07T14:21:43Z"},{"name":"Hold finite retained-price activation","status":"completed","conclusion":"skipped","number":5,"started_at":"2026-10-07T14:21:43Z","completed_at":"2026-10-07T14:21:43Z"},{"name":"Resolve only the exact admitted renewal route","status":"completed","conclusion":"skipped","number":6,"started_at":"2026-10-07T14:21:43Z","completed_at":"2026-10-07T14:21:43Z"},{"name":"Ordinary non-CI publication: /","status":"completed","conclusion":"skipped","number":7,"started_at":"2026-10-07T14:21:43Z","completed_at":"2026-10-07T14:21:43Z"},{"name":"Post Run actions/setup-node@v4","status":"completed","conclusion":"skipped","number":13,"started_at":"2026-10-07T14:21:43Z","completed_at":"2026-10-07T14:21:43Z"},{"name":"Post Run actions/checkout@v4","status":"completed","conclusion":"success","number":14,"started_at":"2026-10-07T14:21:43Z","completed_at":"2026-10-07T14:21:43Z"},{"name":"Complete job","status":"completed","conclusion":"success","number":15,"started_at":"2026-10-07T14:21:43Z","completed_at":"2026-10-07T14:21:43Z"}]},{"id":112842430662,"run_id":37635978671,"run_attempt":1,"head_sha":"c26e86d03204705c74159989f15b5e2c432e2291","name":"publish","status":"completed","conclusion":"skipped","started_at":"2026-10-07T14:21:46Z","completed_at":"2026-10-07T14:21:45Z","steps":[]}]};
+function earlierCallback(f,kind,{empty=false,noop=false,callbackId}={}){
+  const producer=kind==='producer',id=callbackId??(producer?199:300),original=producer?f.producer:f.publisher;
+  const run={...original,id,status:'completed',conclusion:empty?'cancelled':noop?'success':'failure',created_at:timestamp(-3540),run_started_at:timestamp(-3540),updated_at:timestamp(-3509)};
+  f.records[kind].unshift(run);
+  const shift=value=>new Date(Date.parse(value)-Date.parse('2026-10-07T14:21:15Z')+Date.parse(timestamp(-3540))).toISOString();
+  f.jobRecords[id]=empty?[]:copy(observedCallbackJobs[kind]).map(j=>({...j,run_id:id,head_sha:f.head,started_at:shift(j.started_at),completed_at:shift(j.completed_at),steps:j.steps.map(s=>({...s,started_at:shift(s.started_at),completed_at:shift(s.completed_at)}))}));
+  if(noop){const job=f.jobRecords[id][0];job.conclusion='success';job.steps[3].conclusion='success';job.steps[5].conclusion='success';job.steps[6].conclusion='success';}
+  f.ci.created_at=timestamp(-3600);f.ci.run_started_at=timestamp(-3590);
+  for(const j of f.jobRecords[100])j.started_at=f.ci.run_started_at;
+  f.sync();f.map[`${prefix}/actions/runs/${id}/artifacts?per_page=100`]=[{total_count:0,artifacts:[]}];
+  return {run,jobs:f.jobRecords[id],sync:()=>f.sync(),runEndpoint:`${prefix}/actions/runs/${id}`,jobEndpoint:`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`,artifactEndpoint:`${prefix}/actions/runs/${id}/artifacts?per_page=100`};
+}
+
+test('authenticated predecessor and unsuccessful exact-A CI callbacks explicitly perform no work',t=>{
+  for(const headKind of ['parent','activation'])for(const conclusion of ['cancelled','failure','timed_out',...(headKind==='parent'?['success']:[])]){
+    const f=fixture(t),callback={...f.ci,id:99,head_sha:headKind==='parent'?f.parent:f.head,conclusion};
+    for(const suffix of ['','/attempts/1'])f.map[`${prefix}/actions/runs/99${suffix}`]=copy(callback);
+    const result=verifyPriceCiProducer({root:f.root,event:f.event(callback),execution:f.execution(PRICE_CI.producer),api:f.api,now});
+    assert.deepEqual(result,{status:'noop',repair:false});
+  }
+});
+test('no-op routing still authenticates callback identity, original attempt, payload and terminal clocks',t=>{
+  for(const mutate of [r=>r.run_attempt=2,r=>r.head_sha='f'.repeat(40),r=>r.workflow_id=5,r=>r.repository={...repo,id:5},r=>r.status='in_progress',r=>r.updated_at=timestamp(1),r=>r.conclusion='unknown']){
+    const f=fixture(t);f.ci.conclusion='cancelled';mutate(f.ci);f.sync();assert.throws(()=>f.produce());
+  }
+  const f=fixture(t);f.ci.conclusion='cancelled';f.sync();f.map[`${prefix}/actions/runs/100/attempts/1`].updated_at=timestamp(3600);assert.throws(()=>f.produce(),/observation clocks/);
+});
+test('actual failed producer callback and narrowly proven successful no-op do not consume later exact-CI producer',t=>{
+  for(const options of [{},{noop:true},{empty:true}]){
+    const f=fixture(t),prior=earlierCallback(f,'producer',options),result=f.produce();assert.equal(result.repair,true);
+    assert.equal(diagnostic(result).excluded_callbacks.length,1);assert.deepEqual(diagnostic(result).excluded_callbacks[0].jobs,prior.jobs);
+    f.finish();assert.equal(f.source().producer.id,200);
+  }
+});
+test('actual publisher admission failure, inverted skipped clocks and zero-job cancellation permit publication',t=>{
+  for(const options of [{},{empty:true}]){
+    const f=fixture(t);f.finish();const prior=earlierCallback(f,'publisher',options);
+    if(!options.empty)assert(Date.parse(prior.jobs[1].started_at)>Date.parse(prior.jobs[1].completed_at));
+    assert.equal(f.route(f.producer).price_source,true);
+  }
+});
+test('endpoint-specific attempt creation retains exact literal observations without changing run chronology',t=>{
+  const f=fixture(t);f.producer.created_at=f.producer.run_started_at;f.sync();
+  const original=copy(f.map[`${prefix}/actions/runs/200/attempts/1`]);original.created_at=timestamp(-3459);f.map[`${prefix}/actions/runs/200/attempts/1`]=original;
+  const result=f.produce();assert.equal(result.producer.created_at,f.producer.created_at);assert.deepEqual(diagnostic(result).producer.attempt,original);assert.deepEqual(diagnostic(result).producer.run,f.producer);
+  for(const key of ['id','head_sha','run_attempt','status','conclusion','run_started_at']){
+    f.map[`${prefix}/actions/runs/200/attempts/1`]={...copy(original),[key]:key==='run_started_at'?timestamp(-3458):'changed'};
+    assert.throws(()=>f.produce(),undefined,key);
+  }
+  f.map[`${prefix}/actions/runs/200/attempts/1`]={...copy(original),created_at:timestamp(-3461)};assert.throws(()=>f.produce(),/observation clocks/);
+  f.map[`${prefix}/actions/runs/200/attempts/1`]=copy(original);f.map[`${prefix}/actions/runs/200`].created_at=timestamp(-3458);assert.throws(()=>f.produce(),/run clocks/);
+});
+test('actual predecessor publisher attempt creation may follow run start without erasing either response',t=>{
+  const f=fixture(t);f.finish();const prior=earlierCallback(f,'publisher');f.map[`${prior.runEndpoint}/attempts/1`].created_at=timestamp(-3539);
+  assert.equal(f.route(f.producer).price_source,true);
+});
+test('started, uncertain, rerun, incomplete or artifact-bearing prior callbacks remain blocking',t=>{
+  const mutations=[
+    ['after required CI',p=>p.run.updated_at=timestamp(-3479)],
+    ['equal required CI',p=>p.run.updated_at=timestamp(-3480)],
+    ['in progress',p=>{p.run.status='in_progress';p.run.conclusion=null;}],
+    ['rerun',p=>p.run.run_attempt=2],
+    ['wrong run head',p=>p.run.head_sha='f'.repeat(40)],
+    ['wrong job head',p=>p.jobs[0].head_sha='f'.repeat(40)],
+    ['downstream attempted',p=>{p.jobs[1].conclusion='failure';}],
+    ['downstream running',p=>{p.jobs[1].status='in_progress';p.jobs[1].conclusion=null;}],
+    ['skipped job with steps',p=>p.jobs[1].steps.push({name:'executed',status:'completed',conclusion:'success'})],
+    ['missing downstream',p=>p.jobs.pop()],
+    ['extra downstream',p=>p.jobs.push({...copy(p.jobs[1]),id:9876,name:'unknown'})],
+    ['missing steps',p=>delete p.jobs[0].steps],
+    ['missing admission',p=>p.jobs[0].steps.splice(3,1)],
+    ['duplicate admission',p=>p.jobs[0].steps.push(copy(p.jobs[0].steps[3]))],
+    ['unknown step',p=>p.jobs[0].steps[4].name='unknown work'],
+    ['post-admission executed',p=>p.jobs[0].steps[4].conclusion='success'],
+    ['unproven cleanup',p=>p.jobs[0].steps.at(-1).conclusion='failure'],
+    ['inverted executed job',p=>p.jobs[0].completed_at=timestamp(-3550)],
+    ['inverted executed step',p=>p.jobs[0].steps[3].completed_at=timestamp(-3550)],
+    ['skipped job at CI',p=>p.jobs[1].started_at=timestamp(-3480)],
+    ['skipped step after CI',p=>p.jobs[0].steps[4].completed_at=timestamp(-3479)],
+  ];
+  for(const kind of ['producer','publisher'])for(const [label,mutate]of mutations){
+    const f=fixture(t);if(kind==='publisher')f.finish();const prior=earlierCallback(f,kind);mutate(prior);prior.sync();
+    assert.throws(()=>kind==='producer'?f.produce():f.route(f.producer),undefined,`${kind}: ${label}`);
+  }
+});
+test('complete no-job and artifact inventories are mandatory for exclusion',t=>{
+  for(const kind of ['producer','publisher'])for(const defect of ['artifact','missing artifacts','truncated artifacts','missing jobs','truncated jobs','failed zero jobs']){
+    const f=fixture(t);if(kind==='publisher')f.finish();const p=earlierCallback(f,kind,{empty:true});
+    if(defect==='artifact')f.map[p.artifactEndpoint]=[{total_count:1,artifacts:[{id:999}]}];
+    if(defect==='missing artifacts')delete f.map[p.artifactEndpoint];
+    if(defect==='truncated artifacts')f.map[p.artifactEndpoint]=[{total_count:1,artifacts:[]}];
+    if(defect==='missing jobs')delete f.map[p.jobEndpoint];
+    if(defect==='truncated jobs')f.map[p.jobEndpoint]=[{total_count:1,jobs:[]}];
+    if(defect==='failed zero jobs'){p.run.conclusion='failure';p.sync();}
+    assert.throws(()=>kind==='producer'?f.produce():f.route(f.producer),undefined,`${kind}: ${defect}`);
+  }
+});
+
+test('successful run and attempt metadata updates remain separately recorded with run-level completion bounds',t=>{
+  // Actual successful diagnostic37602587421: run.updated_at09:52:17 versus
+  // attempt.updated_at09:52:18 (positive-run-clock-evidence SHA2565f60a1c6...).
+  const f=fixture(t);f.finish();const endpoint=`${prefix}/actions/runs/200/attempts/1`;
+  f.map[endpoint].updated_at=timestamp(-3399);const proof=f.source();
+  assert.equal(proof.producer.updated_at,timestamp(-3400));assert.equal(diagnostic(proof).producer.attempt.updated_at,timestamp(-3399));
+  for(const [key,value] of [['updated_at',timestamp(3600)],['updated_at',timestamp(-3401)],['created_at',timestamp(-3399)],['created_at',timestamp(-3398)],['run_started_at',timestamp(-3459)]]){
+    f.map[endpoint]={...copy(f.producer),updated_at:timestamp(-3399),[key]:value};assert.throws(()=>f.source(),undefined,key);
+  }
+  f.map[endpoint]={...copy(f.producer),updated_at:timestamp(-3399)};f.sourceJob.completed_at=timestamp(-3399);f.sync();f.map[endpoint].updated_at=timestamp(-3399);assert.throws(()=>f.source(),/completed producer job/);
+});
+test('run list and event creation and completion clocks remain exact',t=>{
+  for(const key of ['created_at','updated_at']){
+    const f=fixture(t),event=f.event(f.ci);event.workflow_run[key]=timestamp(-3479);
+    assert.throws(()=>verifyPriceCiProducer({root:f.root,event,execution:f.execution(PRICE_CI.producer),api:f.api,now}),/payload/);
+    f.map[`${prefix}/actions/workflows/${PRICE_CI.ci.id}/runs?branch=main&event=push&head_sha=${f.head}&per_page=100`][0].workflow_runs[0][key]=timestamp(-3479);
+    assert.throws(()=>f.produce(),/listed CI/);
+  }
+});
+test('attempt-only terminal metadata at or beyond required CI keeps earlier callback consumed',t=>{
+  for(const kind of ['producer','publisher']){
+    const f=fixture(t);if(kind==='publisher')f.finish();const p=earlierCallback(f,kind);
+    f.map[`${p.runEndpoint}/attempts/1`].updated_at=timestamp(-3480);
+    assert.throws(()=>kind==='producer'?f.produce():f.route(f.producer),/consumed/);
+  }
+});
+
+test('active metadata uses observation time after API reads without advancing activation or source evaluation',t=>{
+  const f=fixture(t);f.map[`${prefix}/actions/runs/200`].updated_at=timestamp(1);
+  t.mock.method(Date,'now',()=>now+2000);
+  const result=f.produce();assert.equal(result.repair,true);assert.equal(result.activation.verified_at,now);
+  assert.equal(diagnostic(result).producer.run.updated_at,timestamp(1));
+});
+
+test('all observed predecessor poison classes can precede the same genuine producer and publication',t=>{
+  const f=fixture(t);f.finish();earlierCallback(f,'producer');
+  const first=earlierCallback(f,'publisher');earlierCallback(f,'publisher',{empty:true,callbackId:301});earlierCallback(f,'publisher',{callbackId:302});
+  f.map[`${first.runEndpoint}/attempts/1`].created_at=timestamp(-3539);
+  assert.equal(f.source().producer.id,200);assert.equal(f.route(f.producer).price_source,true);
+});
+test('successful noop requires its normal recognized post-success cleanup',t=>{
+  const f=fixture(t),p=earlierCallback(f,'producer',{noop:true});assert.equal(f.produce().repair,true);
+  p.jobs[0].steps[6].conclusion='skipped';p.sync();assert.throws(()=>f.produce(),/post-admission step/);
+});
+
+test('bounded diagnostics persist raw producer and prior-publisher proof without changing routing/proof schemas',t=>{
+  const f=fixture(t);f.finish();earlierCallback(f,'producer');const prior=earlierCallback(f,'publisher');
+  f.map[`${prior.runEndpoint}/attempts/1`].created_at=timestamp(-3539);
+  const route=f.route(f.producer),raw=priceAdmissionDiagnostic(route),observed=diagnostic(route);
+  assert(f.logs.includes(raw));assert(Buffer.byteLength(raw)<=8*1024**2);
+  assert.deepEqual(Object.keys(route).sort(),['price_source','price_wait','source_run_attempt','source_run_id']);
+  assert.deepEqual(observed.source.ci.jobs,f.jobRecords[100]);assert.deepEqual(observed.prior_callbacks[0].jobs,prior.jobs);assert.deepEqual(observed.prior_callbacks[0].artifacts,[]);
+  assert.equal(observed.prior_callbacks[0].reason,'failed_admission_before_required_ci');
+  assert.equal(observed.prior_callbacks[0].run.run.created_at,timestamp(-3540));assert.equal(observed.prior_callbacks[0].run.attempt.created_at,timestamp(-3539));
+  const proof=f.source();assert(!Object.hasOwn(proof,'observations'));assert(isVerifiedPriceSourceProof(proof));
+  assert(f.logs.includes(priceAdmissionDiagnostic(proof)));assert.equal(priceAdmissionDiagnostic(copy(proof)),null);
+});
+test('oversized raw callback diagnostic blocks admission rather than silently dropping evidence',t=>{
+  const f=fixture(t);f.map[`${prefix}/actions/runs/200`].diagnostic_padding='x'.repeat(8*1024**2);
+  assert.throws(()=>f.produce(),/diagnostic exceeds bounded/);
 });

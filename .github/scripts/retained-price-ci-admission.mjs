@@ -14,6 +14,14 @@ export const PRICE_HOLD_STEP='Hold finite retained-price activation';
 export const PRICE_REPAIR_STEP='Verify finite retained-price repair';
 const prefix=`repos/${PRICE_CI.repository}`;
 const sourceProofs=new WeakMap();
+const runObservations=new WeakMap();
+const admissionDiagnostics=new WeakMap();
+export function priceAdmissionDiagnostic(result){return admissionDiagnostics.get(result)??null;}
+function recordAdmission(result,observations){
+  const raw=JSON.stringify({schema_version:'retained-price-ci-diagnostic-v1',observations},null,2);
+  require(Buffer.byteLength(raw)<=8*1024**2,'admission diagnostic exceeds bounded output');
+  admissionDiagnostics.set(result,raw);console.log(raw);return result;
+}
 const freeze=value=>{if(value&&typeof value==='object'&&!Object.isFrozen(value)){for(const child of Object.values(value))freeze(child);Object.freeze(value);}return value;};
 export function isVerifiedPriceSourceProof(proof,{sourceRunId,controllerSha,controllerTree}={}){
   const context=proof&&sourceProofs.get(proof);if(!context)return false;
@@ -102,9 +110,10 @@ export function verifyPriceActivation({root=priceControllerRoot(),api=priceReadA
 function runIdentity(run){return Object.fromEntries(['id','run_attempt','workflow_id','path','head_sha','head_branch','event','created_at','run_started_at','repository','head_repository'].map(k=>[k,['repository','head_repository'].includes(k)?{id:run[k]?.id,full_name:run[k]?.full_name}:run[k]]));}
 function completedIdentity(run){return {...runIdentity(run),status:run.status,conclusion:run.conclusion,updated_at:run.updated_at};}
 function observedRunIdentity(run){return run.status==='in_progress'&&run.conclusion===null?{...runIdentity(run),status:run.status,conclusion:run.conclusion}:completedIdentity(run);}
-function validRun(run,workflow,head,event){
+function validRun(run,workflow,head,event,{attempt=false}={}){
   require(positive(run?.id)&&run.run_attempt===1&&run.workflow_id===workflow.id&&run.path===workflow.path&&run.head_sha===head&&run.head_branch==='main'&&run.event===event&&sameRepo(run),'wrong run identity/current attempt');
-  require(clock(run.created_at)<=clock(run.run_started_at),'invalid run clocks');
+  const created=clock(run.created_at),started=clock(run.run_started_at);
+  if(!attempt)require(created<=started,'invalid run clocks');
 }
 function completeInventory(api,endpoint,key,validate){
   const pages=api(endpoint,true);require(Array.isArray(pages)&&pages.length>0&&pages.length<=10,'missing complete API inventory');
@@ -116,8 +125,22 @@ function completeInventory(api,endpoint,key,validate){
 function runs(api,workflow,head,event){return completeInventory(api,`${prefix}/actions/workflows/${workflow.id}/runs?branch=main&event=${event}&head_sha=${head}&per_page=100`,'workflow_runs',r=>require(r.path===workflow.path&&r.workflow_id===workflow.id&&r.head_sha===head&&r.head_branch==='main'&&r.event===event&&sameRepo(r)&&positive(r.run_attempt),'invalid listed run'));}
 function jobs(api,id){return completeInventory(api,`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`,'jobs',j=>require(j.run_id===id&&j.run_attempt===1&&sha(j.head_sha),'invalid listed job'));}
 function exactAttempt(api,id,workflow,head,event){
-  const original=api(`${prefix}/actions/runs/${id}/attempts/1`),current=api(`${prefix}/actions/runs/${id}`);validRun(original,workflow,head,event);validRun(current,workflow,head,event);
-  require(original.id===id&&current.id===id,'wrong run response');equal(observedRunIdentity(current),observedRunIdentity(original),'current/original attempt');return original;
+  const original=api(`${prefix}/actions/runs/${id}/attempts/1`),current=api(`${prefix}/actions/runs/${id}`);validRun(original,workflow,head,event,{attempt:true});validRun(current,workflow,head,event);
+  const observedAt=Date.now();
+  require(original.id===id&&current.id===id,'wrong run response');
+  // GitHub's attempt creation is a distinct observation, sometimes after the
+  // run has started; attempt metadata may also finish updating after the run.
+  // The run endpoint alone defines run chronology. Keep both literal resources
+  // and exact attempt/head/status/start bindings, never an arithmetic tolerance.
+  const attemptIdentity={...observedRunIdentity(original),created_at:current.created_at};
+  if(current.status!=='in_progress'||current.conclusion!==null)attemptIdentity.updated_at=current.updated_at;
+  equal(observedRunIdentity(current),attemptIdentity,'current/original attempt');
+  require(Number.isFinite(observedAt)&&clock(current.created_at)<=clock(original.created_at)&&clock(original.created_at)<=clock(original.updated_at)
+    &&clock(original.created_at)<=clock(current.updated_at)
+    &&clock(current.run_started_at)<=clock(current.updated_at)&&clock(current.run_started_at)<=clock(original.updated_at)
+    &&clock(current.updated_at)<=observedAt&&clock(original.updated_at)<=observedAt
+    &&(current.status!=='completed'||clock(current.updated_at)<=clock(original.updated_at)),'invalid attempt observation clocks');
+  runObservations.set(current,{run:structuredClone(current),attempt:structuredClone(original)});return current;
 }
 function verifyCi(api,activation,payload=null){
   const head=activation.executing.sha,listed=runs(api,PRICE_CI.ci,head,'push').sort((a,b)=>b.id-a.id);require(listed.length>0,'no exact controller CI');
@@ -126,51 +149,108 @@ function verifyCi(api,activation,payload=null){
   if(payload)equal(completedIdentity(payload),completedIdentity(run),'CI completion payload');
   const all=jobs(api,run.id),required=['Backend Quality Gates','Frontend','Static Browser Regression'];
   const checks=required.map(name=>{const found=all.filter(j=>j.name===name);require(found.length===1,'missing or duplicate required CI job');const j=found[0];require(j.head_sha===head&&j.status==='completed'&&j.conclusion==='success'&&clock(j.started_at)>=clock(run.run_started_at)&&clock(j.completed_at)>=clock(j.started_at)&&clock(j.completed_at)<=clock(run.updated_at),'required CI job failed or changed');return{id:j.id,name};});
-  return {run,checks};
+  return {run,checks,jobs:all,required_completed_at:Math.max(...all.filter(j=>required.includes(j.name)).map(j=>clock(j.completed_at)))};
 }
+function ciObservation(ci){return {...runObservations.get(ci.run),jobs:ci.jobs};}
 function verifyContext(api,activation,execution,workflow){
   const head=activation.executing.sha;require(execution.event_name==='workflow_run'&&execution.repository===PRICE_CI.repository&&execution.repository_id===PRICE_CI.repositoryId&&execution.ref==='refs/heads/main'&&execution.sha===head&&execution.workflow_sha===head&&execution.workflow_ref===`${PRICE_CI.repository}/${workflow.path}@refs/heads/main`&&positive(execution.run_id)&&execution.run_attempt===1,'execution is not exact original main workflow');
   const own=exactAttempt(api,execution.run_id,workflow,head,'workflow_run');require(own.status==='in_progress'&&own.conclusion===null&&clock(own.run_started_at)<=activation.verified_at,'caller is not active original attempt');return own;
 }
 function verifyEvent(event){require(event?.action==='completed'&&event.repository?.id===PRICE_CI.repositoryId&&event.repository.full_name===PRICE_CI.repository&&event.repository.default_branch==='main','invalid completed event repository');}
-function verifyWinningProducer(api,activation,producer,{active=false,root=process.cwd()}={}){
+const terminalConclusions=new Set(['success','failure','cancelled','timed_out','action_required','neutral','skipped','stale','startup_failure']);
+function ignoredCiCallback(api,activation,payload,own){
+  const head=payload?.head_sha;
+  require(head===activation.executing.sha||head===activation.reviewed_parent.sha,'CI callback is not exact activation or reviewed parent');
+  if(head===activation.executing.sha&&payload.conclusion==='success')return false;
+  const run=exactAttempt(api,payload.id,PRICE_CI.ci,head,'push');equal(completedIdentity(payload),completedIdentity(run),'ignored CI completion payload');
+  require(run.status==='completed'&&terminalConclusions.has(run.conclusion)&&clock(run.run_started_at)<=clock(run.updated_at)
+    &&clock(run.updated_at)<=activation.verified_at&&clock(run.updated_at)<=clock(own.created_at),'ignored CI is not terminal before callback');
+  return run;
+}
+const producerAdmission='Admit only the finite exact-main price CI trigger';
+const publisherAdmission='Route the finite price activation before any publication';
+const producerPick='Run ASIA=\'["HK","IN","JP","KR","TW","CN","SG","MY","AU"]\'';
+function preAdmissionCallback(api,activation,listed,workflow,ci){
+  const run=exactAttempt(api,listed.id,workflow,activation.executing.sha,'workflow_run');equal(completedIdentity(listed),completedIdentity(run),'pre-admission callback list');
+  require(run.status==='completed'&&['failure','cancelled','success'].includes(run.conclusion)
+    &&clock(run.run_started_at)<=clock(run.updated_at)&&clock(run.updated_at)<ci.required_completed_at
+    &&clock(runObservations.get(run).attempt.updated_at)<ci.required_completed_at,'activation already consumed by possible admitted callback');
+  const all=jobs(api,run.id),artifacts=completeInventory(api,`${prefix}/actions/runs/${run.id}/artifacts?per_page=100`,'artifacts',()=>{});
+  require(artifacts.length===0,'pre-admission callback has artifacts');
+  const observation={run:runObservations.get(run),jobs:all,artifacts,required_ci_run_id:ci.run.id,required_ci_job_completed_at:new Date(ci.required_completed_at).toISOString()};
+  if(all.length===0){require(run.conclusion==='cancelled','zero-job callback is not cancelled');return {...observation,reason:'cancelled_before_jobs_and_required_ci'};}
+  const producer=workflow===PRICE_CI.producer,name=producer?'select-markets':'Route exact renewal CI admission';
+  const expectedJobs=producer?[name,'ensure_daily_price_release','build-market','combine-and-build','promote-daily-source']:[name,'publish'];
+  require(all.length===expectedJobs.length&&expectedJobs.every(n=>all.filter(j=>j.name===n).length===1),'unknown or incomplete pre-admission job inventory');
+  require(all.every(j=>j.head_sha===activation.executing.sha&&j.status==='completed'&&Array.isArray(j.steps)),'nonterminal pre-admission job inventory');
+  require(all.every(j=>clock(j.started_at)<ci.required_completed_at&&clock(j.completed_at)<ci.required_completed_at),'pre-admission job reaches CI admission');
+  const route=all.find(j=>j.name===name);
+  require(all.filter(j=>j!==route).every(j=>j.conclusion==='skipped'&&j.steps.length===0),'pre-admission downstream work started');
+  // Skipped jobs/steps carry GitHub placeholder clocks, including inverted
+  // timestamps. They are never treated as executed work or chronology proof.
+  require(clock(route.started_at)>=clock(run.run_started_at)&&clock(route.completed_at)>=clock(route.started_at)&&clock(route.completed_at)<=clock(run.updated_at),'invalid executed admission job clocks');
+  const noop=producer&&run.conclusion==='success';
+  require(route.conclusion===(noop?'success':'failure')&&run.conclusion===(noop?'success':'failure'),'uncertain admission callback');
+  const expectedSteps=[['Set up job',1,'success'],['Run actions/checkout@v4',2,'success'],['Run actions/setup-node@v4',3,'success'],
+    [producer?producerAdmission:publisherAdmission,4,noop?'success':'failure'],
+    ...(producer?[["Run python - <<'PY'",5,'skipped'],[producerPick,6,noop?'success':'skipped']]
+      :[[PRICE_HOLD_STEP,5,'skipped'],['Resolve only the exact admitted renewal route',6,'skipped'],['Ordinary non-CI publication: /',7,'skipped']]),
+    ['Post Run actions/setup-node@v4',producer?11:13,noop?'success':'skipped'],['Post Run actions/checkout@v4',producer?12:14,'success'],['Complete job',producer?13:15,'success']];
+  require(route.steps.length===expectedSteps.length,'incomplete admission step inventory');
+  for(let i=0;i<expectedSteps.length;i++){
+    const step=route.steps[i],[stepName,number,conclusion]=expectedSteps[i];
+    require(step.name===stepName&&step.number===number&&step.status==='completed'&&step.conclusion===conclusion,'unknown or executed post-admission step');
+    require(clock(step.started_at)<ci.required_completed_at&&clock(step.completed_at)<ci.required_completed_at,'pre-admission step reaches CI admission');
+    if(conclusion!=='skipped')require(clock(step.started_at)>=clock(route.started_at)&&clock(step.completed_at)>=clock(step.started_at)&&clock(step.completed_at)<=clock(route.completed_at),'invalid executed admission step clocks');
+  }
+  return {...observation,reason:noop?'successful_noop_before_required_ci':'failed_admission_before_required_ci'};
+}
+function verifyWinningProducer(api,activation,producer,{active=false,root=process.cwd(),ci}={}){
   const all=runs(api,PRICE_CI.producer,activation.executing.sha,'workflow_run').sort((a,b)=>a.id-b.id);
-  require(all.length&&all[0].id===producer.id&&all[0].run_attempt===1,'activation already consumed by another producer');
-  equal(observedRunIdentity(all[0]),observedRunIdentity(producer),'winning producer list');
-  for(const later of all.slice(1))require(later.id>producer.id&&later.run_attempt===1,'replayed producer attempt');
+  const winner=all.find(r=>r.id===producer.id);require(winner&&winner.run_attempt===1,'missing winning producer');
+  equal(observedRunIdentity(winner),observedRunIdentity(producer),'winning producer list');
+  const excluded=all.filter(r=>r.id<producer.id).map(r=>preAdmissionCallback(api,activation,r,PRICE_CI.producer,ci));
+  for(const later of all.filter(r=>r.id>producer.id))require(later.run_attempt===1,'replayed producer attempt');
   const source=readFileSync(join(root,PRICE_CI.producer.path),'utf8');
   // The whole workflow blob is bound by the immutable activation edge. Also
   // assert the lock we rely on; no queued duplicate can become a winner later.
   require(source.includes("format('static-site-oct6-{0}', github.event.workflow_run.head_sha)")&&/cancel-in-progress:\s*false/.test(source),'missing finite producer concurrency lock');
   const allJobs=jobs(api,producer.id);if(active)require(allJobs.some(j=>['select-markets','combine-and-build'].includes(j.name)&&j.head_sha===activation.executing.sha&&j.status==='in_progress'&&j.conclusion===null),'missing active producer lock job');
-  return allJobs;
+  return {jobs:allJobs,excluded};
 }
 export function verifyPriceCiProducer({root=priceControllerRoot(),event,execution=priceExecution(),api=priceReadApi,now=Date.now()}={}){
   const activation=verifyPriceActivation({root,api,now});if(activation.status==='disabled')return {status:'disabled',repair:false};
-  verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.producer),ci=verifyCi(api,activation,event.workflow_run);
-  require(clock(ci.run.updated_at)<=clock(own.created_at),'producer predates CI completion');verifyWinningProducer(api,activation,own,{active:true,root});
-  return {status:'verified',repair:true,activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:runIdentity(own)};
+  verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.producer);
+  const ignored=ignoredCiCallback(api,activation,event.workflow_run,own);
+  if(ignored)return recordAdmission({status:'noop',repair:false},{reason:'authenticated_predecessor_or_unsuccessful_ci',ci:runObservations.get(ignored),producer:runObservations.get(own)});
+  const ci=verifyCi(api,activation,event.workflow_run);
+  require(clock(ci.run.updated_at)<=clock(own.created_at),'producer predates CI completion');const winner=verifyWinningProducer(api,activation,own,{active:true,root,ci});
+  return recordAdmission({status:'verified',repair:true,activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:runIdentity(own)},
+    {ci:ciObservation(ci),producer:runObservations.get(own),excluded_callbacks:winner.excluded});
 }
 function verifySource(api,activation,sourceRun,root){
   require(positive(sourceRun?.id),'missing source run');const source=exactAttempt(api,sourceRun.id,PRICE_CI.producer,activation.executing.sha,'workflow_run');equal(completedIdentity(sourceRun),completedIdentity(source),'producer completion');
   require(source.status==='completed'&&source.conclusion==='success'&&clock(source.updated_at)<=activation.verified_at,'producer is not terminal success');const ci=verifyCi(api,activation);require(clock(ci.run.updated_at)<=clock(source.created_at),'producer predates controller CI');
-  const allJobs=verifyWinningProducer(api,activation,source,{root}),found=allJobs.filter(j=>j.name==='combine-and-build');require(found.length===1,'missing genuine combine-and-build');
+  const winner=verifyWinningProducer(api,activation,source,{root,ci}),found=winner.jobs.filter(j=>j.name==='combine-and-build');require(found.length===1,'missing genuine combine-and-build');
   const job=found[0];require(job.head_sha===activation.executing.sha&&job.status==='completed'&&job.conclusion==='success'&&clock(job.started_at)>=clock(source.run_started_at)&&clock(job.completed_at)>=clock(job.started_at)&&clock(job.completed_at)<=clock(source.updated_at),'invalid completed producer job');
   for(const name of ['Build static frontend',PRICE_REPAIR_STEP,'Upload verified data export','Record exact export attempt and dated evidence','Preserve dated export provenance for release selection']){
     const steps=job.steps?.filter(s=>s.name===name);require(steps?.length===1&&steps[0].status==='completed'&&steps[0].conclusion==='success','required genuine producer step missing or failed');}
-  const proof=freeze({status:'verified',activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:completedIdentity(source),job:{id:job.id,name:job.name,started_at:job.started_at,completed_at:job.completed_at}});sourceProofs.set(proof,{root,api});return proof;
+  const proof=freeze({status:'verified',activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:completedIdentity(source),job:{id:job.id,name:job.name,started_at:job.started_at,completed_at:job.completed_at}});sourceProofs.set(proof,{root,api});
+  return recordAdmission(proof,{ci:ciObservation(ci),producer:runObservations.get(source),excluded_callbacks:winner.excluded});
 }
 export function verifyPriceSourceCompletion({root=priceControllerRoot(),sourceRun,event,api=priceReadApi,now=Date.now()}={}){
   const activation=verifyPriceActivation({root,api,now});require(activation.status==='active','source request is disabled');
   if(event){verifyEvent(event);sourceRun=event.workflow_run;}
-  if(positive(sourceRun))sourceRun=api(`${prefix}/actions/runs/${sourceRun}/attempts/1`);
+  if(positive(sourceRun))sourceRun=api(`${prefix}/actions/runs/${sourceRun}`);
   return verifySource(api,activation,sourceRun,root);
 }
-function priorHold(api,activation,listed){
+function priorHold(api,activation,listed,ci){
+  if(listed.conclusion!=='success')return preAdmissionCallback(api,activation,listed,PRICE_CI.publisher,ci);
   const run=exactAttempt(api,listed.id,PRICE_CI.publisher,activation.executing.sha,'workflow_run');equal(completedIdentity(listed),completedIdentity(run),'previous hold run');require(run.status==='completed'&&run.conclusion==='success','previous publication caller is not a completed hold');
   const all=jobs(api,run.id),route=all.filter(j=>j.name==='Route exact renewal CI admission'),publish=all.filter(j=>j.name==='publish');
   require(all.length===2&&route.length===1&&publish.length===1&&all.every(j=>j.head_sha===activation.executing.sha&&j.status==='completed')&&route[0].conclusion==='success'&&publish[0].conclusion==='skipped','previous caller is not a proven no-publication hold');
   const marker=route[0].steps?.filter(s=>s.name===PRICE_HOLD_STEP);require(marker?.length===1&&marker[0].status==='completed'&&marker[0].conclusion==='success','previous caller lacks exact hold marker');
+  return {reason:'verified_finite_publication_hold',run:runObservations.get(run),jobs:all};
 }
 export function routePricePublication({root=priceControllerRoot(),event,execution=priceExecution(),api=priceReadApi,now=Date.now()}={}){
   const activation=verifyPriceActivation({root,api,now});if(activation.status==='disabled')return {price_wait:false,price_source:false};
@@ -178,11 +258,14 @@ export function routePricePublication({root=priceControllerRoot(),event,executio
   // All competing CI/Design/ordinary source events remain no-op, never fallback.
   if(execution.event_name!=='workflow_run')return {price_wait:true,price_source:false};
   verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.publisher);
-  if(event.workflow_run?.path!==PRICE_CI.producer.path||event.workflow_run?.event!=='workflow_run'||event.workflow_run?.head_sha!==activation.executing.sha)return {price_wait:true,price_source:false};
+  if(event.workflow_run?.path!==PRICE_CI.producer.path||event.workflow_run?.event!=='workflow_run'||event.workflow_run?.head_sha!==activation.executing.sha)
+    return recordAdmission({price_wait:true,price_source:false},{reason:'finite_publication_hold',publisher:runObservations.get(own)});
   const proof=verifySource(api,activation,event.workflow_run,root);require(clock(proof.producer.updated_at)<=clock(own.created_at),'publication caller predates genuine source');
   const all=runs(api,PRICE_CI.publisher,activation.executing.sha,'workflow_run');require(all.some(r=>r.id===own.id),'missing publication caller inventory');
-  for(const item of all){if(item.id===own.id){equal(observedRunIdentity(item),observedRunIdentity(own),'publication caller list');continue;}if(item.id<own.id)priorHold(api,activation,item);else require(item.run_attempt===1,'replayed publication successor');}
-  return {price_wait:false,price_source:true,source_run_id:proof.producer.id,source_run_attempt:1};
+  const ci=verifyCi(api,activation),prior=[];
+  for(const item of all){if(item.id===own.id){equal(observedRunIdentity(item),observedRunIdentity(own),'publication caller list');continue;}if(item.id<own.id)prior.push(priorHold(api,activation,item,ci));else require(item.run_attempt===1,'replayed publication successor');}
+  return recordAdmission({price_wait:false,price_source:true,source_run_id:proof.producer.id,source_run_attempt:1},
+    {source:JSON.parse(priceAdmissionDiagnostic(proof)).observations,publisher:runObservations.get(own),prior_callbacks:prior});
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
