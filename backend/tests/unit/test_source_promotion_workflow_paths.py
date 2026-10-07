@@ -1,4 +1,5 @@
 """Exercise the actual workflow admission expression for non-producing paths."""
+import ast
 from pathlib import Path
 import re
 import unittest
@@ -58,6 +59,99 @@ class WorkflowPromotionPathTests(unittest.TestCase):
         self.assertEqual(len(publishers), 1)
         self.assertIn('--controller-sha "$GITHUB_SHA" --controller-ref "$GITHUB_REF"', publishers[0])
         self.assertNotIn('--controller-sha "${{ needs.', publishers[0])
+
+
+class WorkflowSchedulingPathTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[3]
+        cls.workflow = yaml.safe_load((root / '.github/workflows/static-site.yml').read_text())
+
+    def evaluate(self, expression, *, event='schedule', ref='refs/heads/main',
+                 default_branch='main', schedule='', prices_only='',
+                 cancelled=False, build_result='success', job_condition=False):
+        # Evaluate the YAML's expression, with a deliberately small allowlist.
+        # Model GitHub's implicit success() too, so removing every explicit
+        # status function cannot accidentally pass the failure/skip cases.
+        expression = expression.removeprefix('${{').removesuffix('}}').strip()
+        if job_condition and not re.search(r'\b(always|cancelled|success|failure)\s*\(', expression):
+            expression = f'success() && ({expression})'
+        values = {
+            'github.event_name': event,
+            'github.ref': ref,
+            'github.event.repository.default_branch': default_branch,
+            'github.event.schedule': schedule,
+            'github.event.inputs.prices_only': prices_only,
+            'needs.build-market.result': build_result,
+        }
+        for key, value in sorted(values.items(), key=lambda item: -len(item[0])):
+            expression = expression.replace(key, repr(value))
+        expression = expression.replace('&&', ' and ').replace('||', ' or ')
+        expression = re.sub(r'!(?!=)', ' not ', expression).strip()
+        functions = {
+            'contains': lambda text, item: item.lower() in text.lower(),
+            'format': lambda template, *args: template.format(*args),
+            'always': lambda: True,
+            'cancelled': lambda: cancelled,
+            'success': lambda: build_result == 'success' and not cancelled,
+            'failure': lambda: build_result == 'failure',
+        }
+        tree = ast.parse(expression, mode='eval')
+        allowed = (ast.Expression, ast.BoolOp, ast.UnaryOp, ast.Compare,
+                   ast.Constant, ast.And, ast.Or, ast.Not, ast.Eq, ast.NotEq,
+                   ast.Call, ast.Name, ast.Load)
+        for node in ast.walk(tree):
+            if not isinstance(node, allowed) or isinstance(node, ast.Name) and node.id not in functions:
+                raise AssertionError('New workflow expression requires explicit test support')
+        return eval(compile(tree, '<workflow expression>', 'eval'), {'__builtins__': {}}, functions)
+
+    def group(self, **context):
+        return re.sub(r'\$\{\{(.*?)\}\}',
+                      lambda match: str(self.evaluate(match.group(1), **context)),
+                      self.workflow['concurrency']['group'])
+
+    def test_full_and_fast_schedules_preserve_active_work_in_separate_groups(self):
+        schedules = {
+            '10 16 * * 1-6': 'static-site-refs/heads/main',
+            '30 23 * * 1-6': 'static-site-refs/heads/main',
+            '4 16 * * 1-5': 'static-site-refs/heads/main-fast',
+            '31 16 * * 1-5': 'static-site-refs/heads/main-fast',
+            '58 16 * * 1-5': 'static-site-refs/heads/main-fast',
+        }
+        for schedule, expected in schedules.items():
+            with self.subTest(schedule=schedule):
+                self.assertEqual(self.group(schedule=schedule), expected)
+                self.assertIs(self.workflow['concurrency']['cancel-in-progress'], False)
+
+    def test_manual_runs_keep_mode_and_branch_group_boundaries(self):
+        for ref in ('refs/heads/main', 'refs/heads/topic'):
+            for prices_only in ('', 'false', 'true'):
+                with self.subTest(ref=ref, prices_only=prices_only):
+                    suffix = '-fast' if prices_only == 'true' else ''
+                    self.assertEqual(self.group(event='workflow_dispatch', ref=ref,
+                                                prices_only=prices_only), f'static-site-{ref}{suffix}')
+                    self.assertIs(self.workflow['concurrency']['cancel-in-progress'], False)
+
+    def test_combine_truth_table_preserves_fallback_scope_and_honors_cancellation(self):
+        condition = self.workflow['jobs']['combine-and-build']['if']
+        scopes = (
+            ('schedule', 'refs/heads/main', 'main', True),
+            ('schedule', 'refs/heads/topic', 'main', False),
+            ('schedule', 'refs/heads/trunk', 'trunk', True),
+            ('schedule', 'refs/heads/main', 'trunk', False),
+            ('workflow_dispatch', 'refs/heads/main', 'main', True),
+            ('workflow_dispatch', 'refs/heads/topic', 'main', True),
+        )
+        for event, ref, default_branch, admitted in scopes:
+            for build_result in ('success', 'failure', 'skipped', 'cancelled'):
+                for cancelled in (False, True):
+                    with self.subTest(event=event, ref=ref, default_branch=default_branch,
+                                      build_result=build_result, cancelled=cancelled):
+                        self.assertEqual(self.evaluate(condition, event=event, ref=ref,
+                                                       default_branch=default_branch,
+                                                       build_result=build_result,
+                                                       cancelled=cancelled, job_condition=True),
+                                         admitted and not cancelled and build_result != 'cancelled')
 
 
 if __name__ == '__main__':

@@ -21,11 +21,10 @@ on:
     # timezone so it tracks DST automatically.
     - cron: '10 16 * * 1-6'
       timezone: 'America/New_York'
-    # UTC safety net. GitHub frequently delays or silently drops scheduled
-    # runs under load, which would leave a day with no fresh scan. 23:30 UTC is
-    # comfortably after the US close year-round (20:00 UTC in EDT, 21:00 UTC in
-    # EST) and ~3h after the primary trigger, so it re-runs the day only if the
-    # primary run never fired (no overlap with the ~1.5h primary build).
+    # UTC safety net for best-effort scheduling: 23:30 UTC is after the US
+    # close year-round (20:00 UTC in EDT, 21:00 UTC in EST). This trigger runs
+    # even if the primary fired. It waits for active full builds, including
+    # long backfills; a newer trigger may replace an older pending run.
     - cron: '30 23 * * 1-6'
   workflow_dispatch:
     inputs:
@@ -43,11 +42,11 @@ on:
         default: false
 
 concurrency:
-  # The fast prices-only run gets its own group so the 4:10pm full build does
-  # not cancel it mid-publish (and vice versa); full runs keep sharing one
-  # group so the UTC safety net still supersedes a hung primary.
+  # Keep full and fast runs independent. A newer run waits for active work
+  # in its group so fetched prices can reach artifact upload. GitHub may
+  # still replace an older pending run; active runs can be canceled manually.
   group: static-site-${{ github.ref }}${{ (contains('4 16 * * 1-5|31 16 * * 1-5|58 16 * * 1-5', github.event.schedule) && github.event.schedule != '' || github.event.inputs.prices_only == 'true') && '-fast' || '' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   actions: write
@@ -550,7 +549,8 @@ jobs:
           if-no-files-found: error
 
   combine-and-build:
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+    # Preserve fallback after failure or a skip, but not after cancellation.
+    if: ${{ !cancelled() && needs.build-market.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
     needs: build-market
     outputs:
       downstream_artifact_id: ${{ steps.source-downstream.outputs.artifact-id }}
