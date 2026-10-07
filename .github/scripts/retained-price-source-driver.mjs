@@ -120,15 +120,15 @@ export function immutableOriginals(evidence){
   return {...Object.fromEntries(['schema_version','publication_authority','provider_work','reviewed_historical_main','approved_ui','producer_runtime','selected'].map(k=>[k,evidence[k]])),
     immutable_responses,immutable_response_sha256};
 }
-async function liveFor(o){
-  const api=createRetainedPriceLiveApi(o.api);
+async function liveFor(o,caller,request){
+  const api=createRetainedPriceLiveApi(o.api,{requiredIds:[caller.run.id,request.predecessor.run_id]});
   return o.readLive?o.readLive({repository:REPOSITORY,api}):(await import('./publication-state.mjs')).livePublication({repository:REPOSITORY,api});
 }
 async function freshProducer(o){
   const request=o.authority.readRepairRequest(o.root);assert(request?.value.enabled,'Finite source request is disabled');o.authority.validateRepairRequest(request.value);
   const gate=o.producerGate({root:o.root,event:eventFor(o),execution:o.execution,api:o.api,now:o.now()});assert(gate.status==='verified'&&gate.repair===true,'Fresh exact CI producer admission failed');
   const controller=controllerFor(o);same(gate.activation.executing,{sha:controller.head,tree:controller.tree},'CI/controller binding differs');
-  const caller=callerFor(o,controller,'producer'),live=await liveFor(o);o.authority.assertRepairPredecessor(live,request.value);
+  const caller=callerFor(o,controller,'producer'),live=await liveFor(o,caller,request.value);o.authority.assertRepairPredecessor(live,request.value);
   const originals=o.authority.authenticateOriginals({api:o.api,request:request.value,caller,controller,now:o.now()});
   return {request,gate,controller,caller,live,originals};
 }
@@ -468,7 +468,7 @@ export async function verifyRetainedRestoreBinding(input){
   const controller=controllerFor(o),activation=o.activationGate({root:o.root,api:o.api,now:o.now()});
   assert(activation.status==='active','Finite restore activation expired');same(activation.executing,{sha:controller.head,tree:controller.tree},'Final restore controller changed');
   const caller=callerFor(o,controller,'replay');same(verification.controller,controller,'Private restore controller differs');same(verification.caller,compact(caller),'Private restore belongs to another caller');
-  o.authority.assertRepairPredecessor(input.live,authenticated.request.value);o.authority.assertRepairPredecessor(await liveFor(o),authenticated.request.value);
+  o.authority.assertRepairPredecessor(input.live,authenticated.request.value);o.authority.assertRepairPredecessor(await liveFor(o,caller,authenticated.request.value),authenticated.request.value);
   assert(verification.request_sha256===authenticated.request.sha256&&verification.predecessor_identity===authenticated.request.value.predecessor.identity,'Private restore request/predecessor differs');
   same(verification.artifact,{id:authenticated.artifact.id,sha256:authenticated.artifact.digest},'Private restore artifact changed');
   same(verification.companion,{id:authenticated.companion.id,sha256:authenticated.companion.digest},'Private restore companion changed');
@@ -505,7 +505,7 @@ export async function replayRetainedSource(input){
   const o=options(input),output=outputPath(input.output,o),authenticated=o.authority.authenticateRepairSource({root:o.root,source:input.source,api:o.api,now:o.now()});
   const request=authenticated.request,controller=controllerFor(o),activation=o.activationGate({root:o.root,api:o.api,now:o.now()});
   assert(activation.status==='active','Replay activation expired');same(activation.executing,{sha:controller.head,tree:controller.tree},'Replay controller changed');
-  const caller=callerFor(o,controller,'replay'),live=await liveFor(o);o.authority.assertRepairPredecessor(live,request.value);
+  const caller=callerFor(o,controller,'replay'),live=await liveFor(o,caller,request.value);o.authority.assertRepairPredecessor(live,request.value);
   if(input.live)o.authority.assertRepairPredecessor(input.live,request.value);
   const selectedRoot=resolve(input.selectedRoot);assert(isAbsolute(input.selectedRoot)&&realpathSync(selectedRoot)===selectedRoot,'Invalid selected archive root');
   const inventory=(o.inventory??physicalInventory)(selectedRoot);same(inventory,authenticated.physical.value.dist,'Selected archive differs from complete literal producer inventory');
@@ -520,7 +520,7 @@ export async function replayRetainedSource(input){
   (o.verifySelectedProjection??verifySelectedProjection)(o,selectedRoot,join(output+'-inputs','producer-declaration.json'),controller.tree);
   const reauthenticated=o.authority.authenticateRepairSource({root:o.root,source:input.source,api:o.api,now:o.now()});
   assert(reauthenticated.declaration.sha256===authenticated.declaration.sha256&&reauthenticated.physical.sha256===authenticated.physical.sha256,'Selected producer changed during replay');
-  o.authority.assertRepairPredecessor(await liveFor(o),request.value);
+  o.authority.assertRepairPredecessor(await liveFor(o,caller,request.value),request.value);
   const receipt={schema_version:'retained-price-source-replay-verification-v1',controller,caller:compact(caller),request_sha256:request.sha256,
     predecessor_identity:request.value.predecessor.identity,artifact:{id:authenticated.artifact.id,sha256:authenticated.artifact.digest},
     companion:{id:authenticated.companion.id,sha256:authenticated.companion.digest},payload_sha256:payload.sha256,

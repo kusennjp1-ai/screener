@@ -1,0 +1,52 @@
+name: Oct6 Repository Adapter Check
+
+on:
+  push:
+    branches: [preview/oct6-repository-adapter-check-20261007]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: oct6-repository-adapter-check-20261007
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'kusennjp1-ai/screener' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned test dependencies
+        run: |
+          python3 -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          npm ci --no-audit --no-fund --prefix frontend
+      - name: Verify finite inventory and source contracts
+        run: |
+          node --test --test-concurrency=2 .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs
+      - name: Verify unchanged standard Vitest import and reader configuration
+        working-directory: frontend
+        run: node node_modules/vitest/vitest.mjs run tools/retained-price-source-imports.test.mjs tools/select-release-source.test.mjs tools/publication-gate.test.mjs tools/publication-state.test.mjs
+      - name: Verify actual current predecessor with two fresh inventory rounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/check-oct6-repository-adapter.mjs
+      - name: Retain read-only predecessor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct6-repository-adapter-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oct6-repository-adapter-check/
+          if-no-files-found: ignore
+          retention-days: 7
