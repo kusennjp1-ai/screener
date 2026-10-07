@@ -1,0 +1,42 @@
+{
+  "publication_authority": false,
+  "full_compiler_passed": false,
+  "archive": {
+    "bytes": 305667482,
+    "sha256": "e52fd2d3c70e695730ad97d3074b4bd0ca5e67418c10aef0ab4dce2671bef46f"
+  },
+  "selected_bytes": 399002935,
+  "source_files": {
+    "static-data/markets/us/scan/chunks/chunk-0004.json": {
+      "bytes": 78057509,
+      "sha256": "2be5ad0e630dcf8c7bc353b5f8755699c6253289ef217b10a47d735a0e546d7f"
+    },
+    "static-data/markets/us/scan/chunks/chunk-0003.json": {
+      "bytes": 87905764,
+      "sha256": "50ccb4e745075ea97ac8c0d2cc85f94b9ff57f4506f6a7db95d1a695d2fbfef5"
+    },
+    "static-data/markets/us/scan/chunks/chunk-0006.json": {
+      "bytes": 10462711,
+      "sha256": "30bd59db1dc4fcf83a1023da9c053e012f90a5554079b56ac90786164413587c"
+    },
+    "static-data/markets/us/scan/chunks/chunk-0001.json": {
+      "bytes": 93380410,
+      "sha256": "40452598d2ab6b28fc1d7123ae8a8e4960cd12f38b22a9daddf75d971e967a69"
+    },
+    "static-data/markets/us/scan/chunks/chunk-0005.json": {
+      "bytes": 38620492,
+      "sha256": "dc2214cc7b4adff53598a22ec0cadfeddde30b91c0adb28a5e221afeff745a5b"
+    },
+    "static-data/markets/us/scan/chunks/chunk-0002.json": {
+      "bytes": 90576049,
+      "sha256": "a89691cac0761038572246ed5a5d3b8b9b314bbead8e536f4be89b9292a09f72"
+    }
+  },
+  "tar_structure": {
+    "regularFiles": 19480,
+    "directories": 13,
+    "payloadBytes": 1876607954
+  },
+  "rows": 5901,
+  "producer_row_order": "original_full_scan_manifest_chunk_order"
+}

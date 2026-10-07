@@ -1,0 +1,389 @@
+{
+  "schema_version": "retained-price-residual-review-v1",
+  "publication_authority": false,
+  "scope": "unpublished_local_preparation_only",
+  "target_as_of_date": "2026-10-06",
+  "base_prepared_sha256": "98902d4acce30329d765333fa13fada0152525ee005a59ea54c50c65ee99c148",
+  "source_observations_sha256": "f819926b39e833ee5ec4f364899afa9810f245743a0c546fa0188d23422f7e88",
+  "candidate_chart_index_sha256": "f0b45b63067ee0344430c13e89d6460adc44f266f38aba320158176a9e2fb9b7",
+  "candidate": {
+    "run_id": 37562536786,
+    "run_attempt": 1,
+    "artifact_id": 11461777446,
+    "artifact_name": "static-site-data-37562536786-1",
+    "head_sha": "448c188de584b77a09bea52f233f881c2b31eeb9",
+    "bytes": 305667482,
+    "sha256": "e52fd2d3c70e695730ad97d3074b4bd0ca5e67418c10aef0ab4dce2671bef46f",
+    "manifest_sha256": "9a781863bb2eecc5cc16ee08c862a20e7f0cd60adc89ff5403e824c1e5a9a39e",
+    "research_path": "static-data/research-index-b7bcd15016e5d28d.json",
+    "research_sha256": "b7bcd15016e5d28dd5de61c30e7c3d1f8d0bfb53a533ed12a87722a093d73fb2",
+    "chart_index_path": "static-data/charts-index-f0b45b63067ee034.json",
+    "price_observations_sha256": "f819926b39e833ee5ec4f364899afa9810f245743a0c546fa0188d23422f7e88",
+    "companion_bytes": 30257,
+    "companion_sha256": "494cd92773818484e2fcaef6ff5d62e01f37010832e212494d9dc9c0db3e0fde",
+    "retained_source_json_sha256": "00a2976609467080c84d10e605de703c379815322f6adbe0cb7fa7528a8044f7",
+    "companion_fresh_download_verified": true,
+    "companion_artifact_id": 11461613143
+  },
+  "financial_predecessor": "Independently bind the actual renewed live publication for final replay; #99 is immutable historical evidence only.",
+  "input_files": {
+    "prepared": {
+      "bytes": 20648936,
+      "sha256": "feec61c14d3edb9ab86b3f5e2ec8fc59de1ff5660e3fe9c148a480227a61003d"
+    },
+    "plan": {
+      "bytes": 1132350,
+      "sha256": "60a7623937e6d62ecd6e9c1ad7efa909b562e9c92014c59db2713d5810560bd6"
+    },
+    "candidate_source": {
+      "bytes": 376233,
+      "sha256": "00a2976609467080c84d10e605de703c379815322f6adbe0cb7fa7528a8044f7"
+    },
+    "candidate_research": {
+      "bytes": 2857887,
+      "sha256": "b7bcd15016e5d28dd5de61c30e7c3d1f8d0bfb53a533ed12a87722a093d73fb2"
+    },
+    "candidate_chart_index": {
+      "bytes": 1567674,
+      "sha256": "f0b45b63067ee0344430c13e89d6460adc44f266f38aba320158176a9e2fb9b7"
+    },
+    "chart:LBRDA": {
+      "bytes": 26582,
+      "sha256": "9b49f60ceabe8738cbbab85b334995c5c03c7acacca57a9fcf614886bc463017"
+    },
+    "chart:NSTS": {
+      "bytes": 77927,
+      "sha256": "1bfad892de6f29eddefbbdbe7572c9dff3ca577988365575b2526fc500ff2e74"
+    },
+    "chart:QRVO": {
+      "bytes": 94410,
+      "sha256": "2c808549b7270bd0fe1903d4e5bb74d57881c0ccaee32347cf37a1039b2d857d"
+    },
+    "chart:TBPH": {
+      "bytes": 30525,
+      "sha256": "65c0ebb06c73934acf80b4717421f749398fe316f9f6b5509e4353787a992f7e"
+    },
+    "chart:VACI": {
+      "bytes": 22281,
+      "sha256": "a1cd4e3c89c03ec0517799dbed192ab51f3739406b335f013e6c55024c470675"
+    },
+    "chart:WALD": {
+      "bytes": 61024,
+      "sha256": "1088d2366dd7ccbff1d4ede3cfdeb850ec6f40bbf385e6005c19e60992ed2b01"
+    }
+  },
+  "symbols": [
+    {
+      "symbol": "AIHS",
+      "candidate_row_sha256": "78f6b1d4a7fdc93dd1d5d9c127a8238467ab0b560fa5a79bbbd17ee7dfb4a05b",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "ALOT",
+      "candidate_row_sha256": "a56388e326b8daed7e90e0e818e78921f2b7255546064448e927a5b7f7f4dc1e",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "ANSC",
+      "candidate_row_sha256": "2a8ec4a16197f2625599a78429bb35f29c3e028a1e3eca68d8268add4078c9ba",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "AREN",
+      "candidate_row_sha256": "46e34a4dafed779acc98ee319cd821c3cf15eee7886c1fde2e3b5b5b1fecb89c",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "AXIA",
+      "candidate_row_sha256": "b5e287e0235312b7f1defee7b2c57897a9c26d9f87bf41f3ee1e04d51a2fe30c",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "BGI",
+      "candidate_row_sha256": "48250597882a4829434cc2a6bf9af8d3b7217b2804592fa834790a2507c9a503",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "BNRG",
+      "candidate_row_sha256": "dbd357b759eebfe3e3ba951dad94af2043e84ec4200182cb86ab06b5ed77c3e1",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "BNZI",
+      "candidate_row_sha256": "234b0628d1e00c90fabebb79fb278d5d4284d780ecb268e83f123e2068da45d9",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "BTAI",
+      "candidate_row_sha256": "a9381b60912ae69df7e7ec3168a7e53a2ebd98b8a33fbee5eeafcd309ef5b8bd",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "BTOG",
+      "candidate_row_sha256": "9b02d9a48073db63c75bb779eead94d48c927304d7efea21a1ab3eaa9f45227e",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "CMII",
+      "candidate_row_sha256": "74f0b88793848f03dc892eb4dfa818c23dfdf9951eb798a470dbef51e190cbf8",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "COLA",
+      "candidate_row_sha256": "0bb1569c14f44821fb044e875c52cbe72adfabd438cfdfe91bc1af595cb149c2",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "CRNX",
+      "candidate_row_sha256": "5082413be6a5551bf63a591afef2acd2af0a58a47705cf13bdb29957583ad1c3",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "CSAN",
+      "candidate_row_sha256": "c04390cd5ce8cca85cedf5a35aa1a7e0f17215410687fff841be9c9363339f7e",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "EQR",
+      "candidate_row_sha256": "84ecd4079cc4b2f5916662d1b600e1a294c46a4c4ccf12f2283c8e6d54c021b0",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "FBRX",
+      "candidate_row_sha256": "623d2a7c153d477e278f5339ea3d60c4dfa8b78b6a5b7874eb7a15abf6a39f65",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "FCT",
+      "candidate_row_sha256": "65f0b6f01a7de087abcdcd604d52c905e658acf580fcfc528ccc7be209c32380",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "FSEA",
+      "candidate_row_sha256": "ab664679f89e1479cfaef5232da850ec1bbeb5737763012a3b76c075302f4121",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "GBTG",
+      "candidate_row_sha256": "45f3b2686759ad201f110af9909a90fad79954a5245966cee8e0f60dc775ca29",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "GLMD",
+      "candidate_row_sha256": "f00ab44a70b4b8783cdbe0754e77c6573a6ec6028c131e50990d13cf42159a3c",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "HLX",
+      "candidate_row_sha256": "1ae1b99e975d6df39d9dd4f2630337dd3819b5d974e68bef1e9c19cd0e03966d",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "HWH",
+      "candidate_row_sha256": "89ba51f8973a73a5eb2fd849424fe7a70209d14d2bcc529fedc2fea0813590ae",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "IPCX",
+      "candidate_row_sha256": "7bc0577accd9725f6c46e3f0e0edaf6b5e94ba2e93560bd90739677a30a7d5b7",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "IPEX",
+      "candidate_row_sha256": "a40a95e4ebc5b8f84e810136d499cafb2a7fcf96e8340bd56fa2220a365129da",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "JFB",
+      "candidate_row_sha256": "70d7fcf7fbc7307c3b81dc3909e0697cba9b66ba504362ae37163b3d63f989db",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "KWM",
+      "candidate_row_sha256": "5f88aea10fad5c828b7f963ee4b945756cd3deea9de80f7ee50f0b71dbf324bf",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "LBRDA",
+      "candidate_row_sha256": "c99e91d45a5918d92b82a030955d5d6706a35f0b5761c5163a3c73e8121f490d",
+      "observation_date": "2026-08-21",
+      "candidate_chart_sha256": "56472855ac9fa1982ab46ab8ac7e23902df1e55ffdb649c3ad7e496c6c954e31"
+    },
+    {
+      "symbol": "LEG",
+      "candidate_row_sha256": "3d136174ae967512f4f3475129594096c9a9741600a30c3898ea103eeb3b04b3",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "LPRO",
+      "candidate_row_sha256": "91b1255dc6ddeeb14d96b52920661760886961b7037f409d9a07bff3e9120a89",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "MDV",
+      "candidate_row_sha256": "455079c33f874c7f4df916706612662c7d38a3ddd23d4edf4fc5f9f3ba696481",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "NCSM",
+      "candidate_row_sha256": "82c7727a33a7acf1f86c875946fd4572d9cb8976e565d3ebcec8909a1fd70f81",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "NHIC",
+      "candidate_row_sha256": "ffeac32096a832a82d5ade4a54c174099b3bf3b5f36df740af4761b5530c047d",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "NSTS",
+      "candidate_row_sha256": "463d2d2c2bc33142b4f433e82d35d2221e0f58ce13ea0bb45307f491fc18f8f3",
+      "observation_date": "2026-10-05",
+      "candidate_chart_sha256": "e3d150651822804fcf7e85e37021e1d0315bb4f23e0811004f8714f5b9480c2b"
+    },
+    {
+      "symbol": "NTZ",
+      "candidate_row_sha256": "cd198e1329bfb19ac8240d31d84fd23e2273f768eaa56ebd92544ae100254018",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "ORLA",
+      "candidate_row_sha256": "2165849a242904b2844c7c7fd1315b3485f124f3a075fc17a9b371cf8c8158a6",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "PHGE",
+      "candidate_row_sha256": "15006848685846ded7b5215240df283c722df2b20a70ffe28490e383b6bd34dc",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "QRVO",
+      "candidate_row_sha256": "bc5e74dbcb0ced25a7c6a71b5c6748f301cae4d18a073741e9d481963c01051a",
+      "observation_date": "2026-10-05",
+      "candidate_chart_sha256": "d4c55deceb9d98a32ecb33564bf0ed8eddcb3147d0605f8b58ef43d6cfd2d73b"
+    },
+    {
+      "symbol": "RAY",
+      "candidate_row_sha256": "c815c7673c0c1cee1ef504c846be2739169931133ab70e598e6887b56c7d6eae",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "SBEV",
+      "candidate_row_sha256": "bd58d3be1176d4a8eaed1666dca8431e84fae0f33f32bbcc1c14c7d365563b58",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "SBXD",
+      "candidate_row_sha256": "97c5564a16a8b543cb64c7dbd06c7943309efb91c1dc60f2aff899b1fe64446c",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "SNYR",
+      "candidate_row_sha256": "5a6c11f0ed8d0448ae7c00153e017d3f5601a133c176cdaa05291f1c4c408fac",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "TBPH",
+      "candidate_row_sha256": "dd69b702a79bde73d593968b761c2ed5c803b259f74f66bc91157d49539b44da",
+      "observation_date": "2026-09-25",
+      "candidate_chart_sha256": "5977b6e58f909252f4331f3f6a90b177cabb339c677e2a48f8031a9147632292"
+    },
+    {
+      "symbol": "TWO",
+      "candidate_row_sha256": "a86bce6358cefc7b6439eecf63e7f222ff290a4276c502b58a22215e10d43671",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "VACI",
+      "candidate_row_sha256": "0de48d33a520e4bac29200b126be9c797b95674cd19d21f38c31e23274181981",
+      "observation_date": "2026-10-01",
+      "candidate_chart_sha256": "b5f46c5549a76d92c94e8b25d2b87f17c3ee2af35764b4b3e21ea7ee6a989aa5"
+    },
+    {
+      "symbol": "VBX",
+      "candidate_row_sha256": "271efdd7dc52a6f475ebfbfa83cdc57453ceca5531611e0076948cc641790789",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "VSEE",
+      "candidate_row_sha256": "c977776e1aa2e46599fb778ea6917ace5964f1453d8cb76aafaf76a34604b412",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "VYNE",
+      "candidate_row_sha256": "78b7bb6c3b281002ab1cc77d86eda313ffe4f5c9938514aa74a6f65b904db83b",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "WALD",
+      "candidate_row_sha256": "c613a7f33be3268f9e19bb1c68d2bd055fb7a25e1179e6525e0b945786b82dd5",
+      "observation_date": "2026-10-05",
+      "candidate_chart_sha256": "858217a7c77590f81c3553219da5605b81861062200ddeff849bfb64c7d0fa6c"
+    },
+    {
+      "symbol": "WBS",
+      "candidate_row_sha256": "123fc4349b123976c31c3ac46d7886b3810118d8bd1e7c014b27cefd604e5b84",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "WILC",
+      "candidate_row_sha256": "ba29a0d36fed232a1acbb49947e651d3ea0d8c5aa834996ea016c34bc7bdefe3",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "XVO",
+      "candidate_row_sha256": "f30f7cf3c91cedd359b94c787c9ea1139d945821a632c271f2c468168f2968a4",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    },
+    {
+      "symbol": "XVUG",
+      "candidate_row_sha256": "ed8b1b54a0a5c8d080f2edebe720507cdd3f57bf395538565b62ee0ef6b661dd",
+      "observation_date": null,
+      "candidate_chart_sha256": null
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createImmutableGitApi } from './immutable-github-api.mjs';
+import {priceControllerRoot,verifyPriceSourceCompletion,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
+import {readRepairRequest,validateRepairRequest} from './retained-price-source-admission.mjs';
 
 const invocationApi = new AsyncLocalStorage();
 
@@ -24,19 +26,24 @@ export const sameRepository = (run, repository) => run?.repository?.full_name ==
   && run?.head_repository?.full_name === repository;
 export const workflowPath = file => `.github/workflows/${file}`;
 
-export function publicationDecision({ eventName, event, sha, currentSha, runs = [] }) {
+export function publicationDecision({ eventName, event, sha, currentSha, runs = [], finitePriceSource = null }) {
   const repository = event.repository?.full_name;
   const blocked = reason => ({ publish: false, reason });
   if (!repository || event.repository.default_branch !== 'main' || !/^[a-f0-9]{40}$/.test(sha ?? '')) return blocked('Invalid repository or revision');
   if (sha !== currentSha) return blocked('Controller revision is no longer current main');
   const trigger = event.workflow_run;
+  let finite=false;
+  if(isVerifiedPriceSourceProof(finitePriceSource,{sourceRunId:trigger?.id,controllerSha:sha})){
+    try{validateRepairRequest(finitePriceSource.activation.request);finite=trigger?.event==='workflow_run'&&trigger.path===workflowPath('static-site.yml')&&trigger.head_sha===sha;}catch{finite=false;}
+  }
   if (eventName !== 'workflow_dispatch' && (eventName !== 'workflow_run' || !sameRepository(trigger, repository)
     || trigger.head_branch !== 'main' || trigger.status !== 'completed'
     || ![...gateWorkflows, 'static-site.yml'].some(file => trigger.path === workflowPath(file))
     || (trigger.path !== workflowPath('static-site.yml') && trigger.event !== 'push')
-    || (trigger.path === workflowPath('static-site.yml') && !['schedule', 'workflow_dispatch'].includes(trigger.event)))) {
+    || (trigger.path === workflowPath('static-site.yml') && !['schedule', 'workflow_dispatch'].includes(trigger.event)&&!finite))) {
     return blocked('Untrusted publication trigger');
   }
+  if(finite)return {publish:true,mode:'data',finitePriceSource:{runId:finitePriceSource.producer.id,attempt:finitePriceSource.producer.run_attempt},reason:'Exact finite repaired source; preserve the currently approved live UI'};
   const gates = gateWorkflows.map(file => runs.filter(run => run.path === workflowPath(file) && run.event === 'push'
     && run.head_branch === 'main' && run.head_sha === sha && sameRepository(run, repository))
     .sort((a, b) => b.id - a.id || b.run_attempt - a.run_attempt)[0]);
@@ -62,6 +69,11 @@ export function checkPublication(event, sha, repository, api = githubApi) {
   }
   const normalizedEvent = { ...event, repository: repo, workflow_run: trigger };
   const currentSha = api(`repos/${repository}/git/ref/heads/main`).object.sha;
+  let finitePriceSource=null;
+  if(trigger?.path===workflowPath('static-site.yml')&&trigger.event==='workflow_run'){
+    const root=priceControllerRoot(),request=readRepairRequest(root);
+    if(request?.value.enabled)finitePriceSource=verifyPriceSourceCompletion({root,sourceRun:trigger,api});
+  }
   const runs = gateWorkflows.flatMap(file => api(`repos/${repository}/actions/workflows/${file}/runs?branch=main&event=push&head_sha=${sha}&per_page=100`, true).flatMap(page => page.workflow_runs));
-  return publicationDecision({ eventName: process.env.GITHUB_EVENT_NAME, event: normalizedEvent, sha, currentSha, runs });
+  return publicationDecision({ eventName: process.env.GITHUB_EVENT_NAME, event: normalizedEvent, sha, currentSha, runs,finitePriceSource });
 }

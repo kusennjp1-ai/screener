@@ -69,6 +69,7 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
 
     def evaluate(self, expression, *, event='schedule', ref='refs/heads/main',
                  default_branch='main', schedule='', prices_only='',
+                 workflow_run_head_sha='', select_result='success', repair='',
                  cancelled=False, build_result='success', job_condition=False):
         # Evaluate the YAML's expression, with a deliberately small allowlist.
         # Model GitHub's implicit success() too, so removing every explicit
@@ -82,6 +83,9 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
             'github.event.repository.default_branch': default_branch,
             'github.event.schedule': schedule,
             'github.event.inputs.prices_only': prices_only,
+            'github.event.workflow_run.head_sha': workflow_run_head_sha,
+            'needs.select-markets.result': select_result,
+            'needs.select-markets.outputs.repair': repair,
             'needs.build-market.result': build_result,
         }
         for key, value in sorted(values.items(), key=lambda item: -len(item[0])):
@@ -132,6 +136,18 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
                                                 prices_only=prices_only), f'static-site-{ref}{suffix}')
                     self.assertIs(self.workflow['concurrency']['cancel-in-progress'], False)
 
+    def test_finite_ci_runs_group_by_source_head_without_cancelling_active_work(self):
+        groups = []
+        for head_sha in ('a' * 40, 'b' * 40):
+            with self.subTest(head_sha=head_sha):
+                group = self.group(event='workflow_run', workflow_run_head_sha=head_sha)
+                groups.append(group)
+                self.assertEqual(group, f'static-site-oct6-{head_sha}')
+                self.assertEqual(self.group(event='workflow_run', workflow_run_head_sha=head_sha,
+                                            prices_only='true', schedule='4 16 * * 1-5'), group)
+                self.assertIs(self.workflow['concurrency']['cancel-in-progress'], False)
+        self.assertNotEqual(groups[0], groups[1])
+
     def test_combine_truth_table_preserves_fallback_scope_and_honors_cancellation(self):
         condition = self.workflow['jobs']['combine-and-build']['if']
         scopes = (
@@ -152,6 +168,44 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
                                                        build_result=build_result,
                                                        cancelled=cancelled, job_condition=True),
                                          admitted and not cancelled and build_result != 'cancelled')
+
+    def test_finite_combine_requires_positive_admission_and_successful_selector(self):
+        condition = self.workflow['jobs']['combine-and-build']['if']
+        self.assertEqual(self.workflow['jobs']['combine-and-build']['needs'],
+                         ['select-markets', 'build-market'])
+        # The finite route always skips build-market. Disabled or rejected
+        # admission supplies false/empty, and must never enter ordinary fallback.
+        for repair in ('', 'false', 'true'):
+            for select_result in ('success', 'failure', 'skipped', 'cancelled'):
+                for cancelled in (False, True):
+                    with self.subTest(repair=repair, select_result=select_result,
+                                      cancelled=cancelled):
+                        self.assertEqual(self.evaluate(condition, event='workflow_run',
+                                                       repair=repair, select_result=select_result,
+                                                       build_result='skipped', cancelled=cancelled,
+                                                       job_condition=True),
+                                         repair == 'true' and select_result == 'success' and not cancelled)
+
+    def test_disabled_and_admitted_ci_runs_cannot_enter_provider_jobs(self):
+        for job in ('ensure_daily_price_release', 'build-market'):
+            condition = self.workflow['jobs'][job]['if']
+            for repair in ('', 'false', 'true'):
+                with self.subTest(job=job, repair=repair):
+                    # Successful prerequisites isolate the event guard from
+                    # GitHub's implicit success() behavior.
+                    self.assertFalse(self.evaluate(condition, event='workflow_run',
+                                                   repair=repair, job_condition=True))
+            for event in ('schedule', 'workflow_dispatch'):
+                with self.subTest(job=job, event=event):
+                    self.assertTrue(self.evaluate(condition, event=event, job_condition=True))
+
+    def test_evaluator_still_rejects_unmodelled_context_and_functions(self):
+        for expression in ("github.event.workflow_run.unreviewed == 'true'",
+                           "needs.select-markets.outputs.unreviewed == 'true'",
+                           "unreviewed('true')"):
+            with self.subTest(expression=expression):
+                with self.assertRaisesRegex(AssertionError, 'requires explicit test support'):
+                    self.evaluate(expression)
 
 
 if __name__ == '__main__':

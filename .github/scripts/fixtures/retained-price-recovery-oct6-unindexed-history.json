@@ -1,0 +1,14 @@
+{
+  "schema_version": "retained-price-unindexed-source-history-v1",
+  "publication_authority": false,
+  "archive_sha256": "e52fd2d3c70e695730ad97d3074b4bd0ca5e67418c10aef0ab4dce2671bef46f",
+  "target_as_of_date": "2026-10-06",
+  "path": "static-data/candidate-history/2026-10-06-4703c40aa252d277.json.gz",
+  "bytes": 601602,
+  "sha256": "c9361bcf55734d128d2e0a1fe118a07e450aef8f5f0a3a3075d98b788593f692",
+  "decoded_bytes": 8976392,
+  "decoded_sha256": "4703c40aa252d277e755eca9c879b58e34b68441f56d2ed912eb76e08b1b92dc",
+  "records": 5901,
+  "published_at": null,
+  "disposition": "preserve_exact_raw_bytes_in_audit_only_never_approved_history"
+}
