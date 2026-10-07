@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import stat
@@ -79,6 +80,114 @@ class RestorationTests(unittest.TestCase):
         sha, size = pin or self.pin()
         return R._restore(self.archive, sha, size, output or self.output,
                           _reserve_bytes=reserve)
+
+    def checked_fixture(self, *, publication=False, source_change=None):
+        files = {name: data for name, data in FILES.items() if name != 'publication.json' or publication}
+        archive_sha, archive_bytes = self.make_archive(files)
+        ref = {**R._checked_export_reference(), 'sha256': archive_sha, 'bytes': archive_bytes,
+               'manifest_sha256': R.R.digest(files['static-data/manifest.json']),
+               'regular_files': len(files), 'payload_bytes': sum(map(len, files.values()))}
+        observations = {'["US","chart","ABC"]': '2026-10-06'}
+        ref['price_observations_sha256'] = R.R.digest(json.dumps(observations, separators=(',', ':')).encode())
+        source = {'run_id': ref['run_id'], 'run_attempt': ref['run_attempt'], 'source_sha': ref['head_sha'],
+                  'artifact_name': ref['artifact_name'], 'manifest_json': files['static-data/manifest.json'].decode(),
+                  'manifest_sha256': ref['manifest_sha256'], 'price_observations': observations,
+                  'price_observations_sha256': ref['price_observations_sha256']}
+        if source_change:
+            source_change(source)
+        source_raw = json.dumps(source).encode()
+        companion = self.base / 'companion.zip'
+        with zipfile.ZipFile(companion, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr('source.json', source_raw)
+        ref.update(companion_sha256=R.R.digest(companion.read_bytes()), companion_bytes=companion.stat().st_size,
+                   retained_source_json_sha256=R.R.digest(source_raw))
+        repository = {'full_name': ref['repository'], 'id': ref['repository_id']}
+        run = {'id': ref['run_id'], 'run_attempt': ref['run_attempt'], 'head_sha': ref['head_sha'], 'head_branch': 'main',
+               'path': '.github/workflows/static-site.yml', 'event': 'schedule', 'status': 'completed',
+               'head_commit': {'id': ref['head_sha'], 'tree_id': ref['tree_sha']}, 'repository': repository, 'head_repository': repository}
+        job = {'id': 123, 'name': 'combine-and-build', 'run_id': ref['run_id'], 'run_attempt': ref['run_attempt'],
+               'head_sha': ref['head_sha'], 'status': 'completed', 'conclusion': 'success',
+               'steps': [{'name': name, 'status': 'completed', 'conclusion': 'success'} for name in
+                         ['Build static frontend', 'Upload verified data export', 'Preserve dated export provenance for release selection']]}
+        evidence = {'schema_version': 'oct6-retained-price-rehearsal-api-v1', 'publication_authority': False, 'provider_work': False, 'selected': {}}
+        for role, artifact_id, name, size, digest in [
+                ('candidate', ref['artifact_id'], ref['artifact_name'], ref['bytes'], ref['sha256']),
+                ('companion', ref['companion_artifact_id'], f"static-site-data-manifest-{ref['run_id']}-{ref['run_attempt']}", ref['companion_bytes'], ref['companion_sha256'])]:
+            evidence['selected'][role] = {'run': run, 'current': run, 'producer_job': job, 'jobs': [job],
+                'artifact': {'id': artifact_id, 'name': name, 'size_in_bytes': size, 'digest': 'sha256:' + digest, 'expired': False,
+                             'workflow_run': {'id': ref['run_id'], 'head_sha': ref['head_sha'], 'head_branch': 'main',
+                                              'repository_id': ref['repository_id'], 'head_repository_id': ref['repository_id']}}}
+        path = self.base / 'api-evidence.json'
+        path.write_text(json.dumps(evidence))
+        return ref, files, companion, path, evidence
+
+    def checked_restore(self, values):
+        ref, _files, companion, evidence_path, _evidence = values
+        # Only this tiny test replaces the immutable trusted source reference.
+        # The public API/CLI expose neither a reference nor a reserve override.
+        with patch.object(R, '_checked_export_reference', return_value=ref), \
+             patch.object(R, '_disk_free_bytes', return_value=R.DEFAULT_RESERVE_BYTES + 10 * R.R.MIB):
+            return R.restore_checked_export(self.archive, ref['sha256'], ref['bytes'], self.output,
+                   companion_path=companion, evidence_path=evidence_path, evidence_sha256=R.R.digest(evidence_path.read_bytes()))
+
+    def test_checked_export_restores_exact_bytes_without_fabricating_publication(self):
+        values = self.checked_fixture()
+        result = self.checked_restore(values)
+        self.assertEqual(result['mode'], 'checked-export')
+        self.assertIsNone(result['publication'])
+        self.assertFalse((self.output / 'publication.json').exists())
+        self.assertIn('prepublication Static Site export', result['scope'])
+        self.assertFalse(result['publication_authority']); self.assertFalse(result['fullSiteVerified'])
+        self.assertEqual(result['checked_export']['api_evidence']['sha256'], R.R.digest(values[3].read_bytes()))
+        self.assertEqual(result['restoredFiles'], len(values[1])); self.assertEqual(result['restoredBytes'], sum(map(len, values[1].values())))
+        for name, raw in values[1].items():
+            self.assertEqual((self.output / name).read_bytes(), raw)
+
+    def test_checked_export_never_weakens_default_published_candidate_mode(self):
+        self.checked_fixture()
+        self.refuse('publication.json is missing', self.restore)
+
+    def test_checked_export_refuses_borrowed_publication_and_changed_source_origin(self):
+        self.refuse('must not claim a publication.json', lambda: self.checked_restore(self.checked_fixture(publication=True)))
+        self.refuse('source origin differs', lambda: self.checked_restore(self.checked_fixture(source_change=lambda source: source.update(source_sha='f' * 40))))
+
+    def test_checked_export_requires_companion_and_authenticated_evidence(self):
+        ref, _files, companion, evidence_path, _ = self.checked_fixture()
+        with patch.object(R, '_checked_export_reference', return_value=ref):
+            for path, evidence, digest in [(None, evidence_path, R.R.digest(evidence_path.read_bytes())), (companion, None, 'a' * 64), (companion, evidence_path, None)]:
+                self.refuse('requires exact companion', lambda: R.restore_checked_export(self.archive, ref['sha256'], ref['bytes'], self.output,
+                            companion_path=path, evidence_path=evidence, evidence_sha256=digest))
+
+    def test_checked_export_rejects_wrong_repo_run_head_job_step_and_artifact(self):
+        for mutate in [lambda data: data['selected']['candidate']['run'].update(head_sha='f' * 40),
+                       lambda data: data['selected']['companion']['run']['repository'].update(id=42),
+                       lambda data: data['selected']['candidate']['artifact']['workflow_run'].update(id=42),
+                       lambda data: data['selected']['candidate']['artifact'].update(digest='sha256:' + 'f' * 64),
+                       lambda data: data['selected']['candidate']['producer_job'].update(name='diagnostic'),
+                       lambda data: data['selected']['candidate']['producer_job']['steps'].pop(),
+                       lambda data: data.update(publication_authority=True)]:
+            values = self.checked_fixture(); mutate(values[4]); values[3].write_text(json.dumps(values[4]))
+            with patch.object(R, '_new_staging') as staging:
+                self.refuse('Checked-export|checked-export|producer step', lambda: self.checked_restore(values))
+                staging.assert_not_called()
+
+    def test_checked_export_inventory_mismatch_fails_before_staging(self):
+        for field in ['regular_files', 'payload_bytes']:
+            values = self.checked_fixture(); values[0][field] += 1
+            with patch.object(R, '_new_staging') as staging:
+                self.refuse('complete inventory differs', lambda: self.checked_restore(values)); staging.assert_not_called()
+
+    def test_checked_export_evidence_change_during_copy_discards_staging(self):
+        values = self.checked_fixture(); original = R._copy_files
+        def change(*args, **kwargs):
+            result = original(*args, **kwargs); values[3].write_bytes(values[3].read_bytes() + b' '); return result
+        with patch.object(R, '_copy_files', side_effect=change):
+            self.refuse('evidence size mismatch|evidence SHA256 mismatch', lambda: self.checked_restore(values))
+
+    def test_checked_export_public_api_cannot_accept_an_arbitrary_archive(self):
+        pin = self.make_archive()
+        self.refuse('Unreviewed checked-export archive', lambda: R.restore_checked_export(self.archive, *pin, self.output,
+                    companion_path=self.base / 'missing', evidence_path=self.base / 'missing', evidence_sha256='a' * 64))
 
     def refuse(self, message, action, error=R.RecoveryError):
         with self.assertRaisesRegex(error, message):

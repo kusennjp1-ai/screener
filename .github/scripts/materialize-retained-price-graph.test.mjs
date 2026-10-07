@@ -5,10 +5,12 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,exis
 import {join,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
 import {gzipSync} from 'node:zlib';
-import {materializeRecoveryGraph,syncRecoveryHome,proveRecoveryAggregateEquivalence,proveRecoveryAggregateCorrectionFromRowBindings} from './materialize-retained-price-graph.mjs';
+import {materializeRecoveryGraph,validateRecoveryRestorationMode,validateUnindexedOct6HistoryBinding,syncRecoveryHome,proveRecoveryAggregateEquivalence,proveRecoveryAggregateCorrectionFromRowBindings} from './materialize-retained-price-graph.mjs';
 import {RECOVERY_FINANCIAL_FIELDS,recoveryDigest} from './retained-price-recovery.mjs';
 import {prepareRetainedHomeHistory,RETAINED_HOME_KEY} from './retained-home-history.mjs';
 import {priceObservationDigest} from './price-observations.mjs';
+import oct6Review from './fixtures/retained-price-recovery-oct6-inputs.json' with {type:'json'};
+import unindexedOct6History from './fixtures/retained-price-recovery-oct6-unindexed-history.json' with {type:'json'};
 import oct6ProducerRuntime from './fixtures/retained-price-producer-runtime-oct6.json' with {type:'json'};
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -264,4 +266,55 @@ test('Oct6 arithmetic proof carries its own reviewed producer and rejects an inv
   assert.throws(()=>proveRecoveryAggregateCorrectionFromRowBindings({...input,producerRuntimeReview:{...oct6ProducerRuntime,python_version:'3.12'}}),/Unreviewed producer runtime/);
   f.args.aggregateProof=proof;const before=inventory(f.root);
   assert.throws(()=>materializeRecoveryGraph(f.args),/differs from the complete/);assert.deepEqual(inventory(f.root),before);
+});
+
+
+function checkedExportReceipt(){
+  const pin=oct6Review.candidate,manifest={bytes:4759,sha256:pin.manifest_sha256};
+  const files={'static-data/manifest.json':manifest};
+  for(let i=1;i<19480;i++)files[`static-data/f${i}.json`]={bytes:0,sha256:'a'.repeat(64)};
+  files['static-data/f1.json'].bytes=1876607954-manifest.bytes;
+  return {mode:'checked-export',publication:null,archive:{bytes:pin.bytes,sha256:pin.sha256},files,restoredFiles:19480,restoredBytes:1876607954,
+    checked_export:{schema_version:'retained-price-checked-export-input-v1',publication_authority:false,repository:'kusennjp1-ai/screener',
+      ...Object.fromEntries(['run_id','run_attempt','head_sha','artifact_id','artifact_name'].map(key=>[key,pin[key]])),
+      archive:{bytes:pin.bytes,sha256:pin.sha256},companion:{artifact_id:pin.companion_artifact_id,bytes:pin.companion_bytes,sha256:pin.companion_sha256,source_json_sha256:pin.retained_source_json_sha256,source_json_bytes:376233},
+      manifest,api_evidence:{bytes:100,sha256:'e'.repeat(64)},complete_inventory_required:true}};
+}
+
+test('checked export mode requires the exact original origin and closed restoration receipt',()=>{
+  const source=checkedExportReceipt();assert.doesNotThrow(()=>validateRecoveryRestorationMode(source));
+  assert.doesNotThrow(()=>validateRecoveryRestorationMode({mode:'normal-candidate'}));
+  for(const mutate of [s=>s.mode='export',s=>s.publication={},s=>s.files['publication.json']={bytes:0,sha256:'a'.repeat(64)},
+    s=>delete s.checked_export,s=>s.checked_export.run_id++,s=>s.checked_export.head_sha='0'.repeat(40),s=>s.checked_export.archive.sha256='0'.repeat(64),
+    s=>s.checked_export.companion.artifact_id++,s=>s.checked_export.companion.source_json_sha256='0'.repeat(64),
+    s=>s.checked_export.api_evidence.sha256='',s=>delete s.files['static-data/f2.json'],s=>s.files['static-data/f1.json'].bytes++]){
+    const changed=clone(source);mutate(changed);assert.throws(()=>validateRecoveryRestorationMode(changed));
+  }
+});
+
+test('only the exact original unindexed Oct6 snapshot can be retained as audit bytes',()=>{
+  const pin=unindexedOct6History,source={mode:'checked-export',archive:{sha256:pin.archive_sha256}},ref={bytes:pin.bytes,sha256:pin.sha256};
+  assert.equal(validateUnindexedOct6HistoryBinding(source,pin.target_as_of_date,pin.path,ref),`static-data/retained-price-repair-audit/history/unindexed/${pin.sha256}.json.gz`);
+  for(const args of [
+    [{...source,mode:'normal-candidate'},pin.target_as_of_date,pin.path,ref],
+    [{...source,archive:{sha256:'0'.repeat(64)}},pin.target_as_of_date,pin.path,ref],
+    [source,'2026-10-05',pin.path,ref],[source,pin.target_as_of_date,pin.path+'.extra',ref],
+    [source,pin.target_as_of_date,pin.path,{...ref,bytes:ref.bytes+1}],
+    [source,pin.target_as_of_date,pin.path,{...ref,sha256:'0'.repeat(64)}],
+  ])assert.throws(()=>validateUnindexedOct6HistoryBinding(...args),/Unindexed/);
+});
+
+test('short audit names preserve exact rejected snapshot and catalog bytes with complete hash bindings',t=>{
+  const f=fixture(t),original=inventory(f.root),result=materializeRecoveryGraph(f.args);
+  for(const history of result.history_rebase){
+    const records=[history.rejected_catalog,...history.excluded];
+    for(const ref of records){
+      const raw=readFileSync(join(f.root,ref.evidence_path));
+      assert.equal(raw.length,ref.bytes);assert.equal(sha(raw),ref.sha256);
+      const originalPath=ref.path.startsWith('static-data/')?ref.path:'static-data/'+ref.path;
+      assert.deepEqual(original[originalPath],{bytes:ref.bytes,sha256:ref.sha256});
+      assert(Buffer.byteLength(ref.evidence_path.split('/').at(-1))<=100);
+      assert(ref.evidence_path.includes(ref.sha256),'full hash retained in short filename');
+    }
+  }
 });

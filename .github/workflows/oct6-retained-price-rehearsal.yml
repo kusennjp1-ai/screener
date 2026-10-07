@@ -1,0 +1,108 @@
+name: Oct6 Retained Price Artifact Rehearsal
+
+on:
+  push:
+    branches: [preview/oct6-retained-price-rehearsal]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: oct6-retained-price-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  oct6-retained-price-rehearsal:
+    name: oct6-retained-price-rehearsal
+    if: github.event_name == 'push' && github.ref == 'refs/heads/preview/oct6-retained-price-rehearsal' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - name: Record original job clock
+        run: python3 -c 'import os,time;from pathlib import Path;Path(os.environ["RUNNER_TEMP"],"oct6-price-job-start").write_text(str(time.time()))'
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install only original arithmetic runtime
+        timeout-minutes: 5
+        run: python -m pip install 'pandas==2.2.0' 'numpy==1.26.3'
+
+      - name: Test offline boundaries and unchanged graph helpers
+        timeout-minutes: 6
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m unittest discover -s .github/scripts -p test_run_oct6_retained_price_rehearsal.py
+          node --test --test-concurrency=2 .github/scripts/oct6-retained-price-rehearsal.test.mjs .github/scripts/restore-oct6-retained-price-rehearsal.test.mjs .github/scripts/materialize-retained-price-graph.test.mjs .github/scripts/retained-home-history.test.mjs .github/scripts/complete-retained-price-quarantine.test.mjs
+
+      - name: Authenticate and preserve exact original archives
+        timeout-minutes: 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/restore-oct6-retained-price-rehearsal.mjs restore "$RUNNER_TEMP/oct6-price-inputs"
+
+      - name: Replay exact price graph and compiler offline
+        timeout-minutes: 96
+        run: |
+          parent_namespace=$(readlink /proc/self/ns/net)
+          sudo -n unshare --net --setuid="$(id -u)" --setgid="$(id -g)" -- env -i \
+            PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+            python3 .github/scripts/run-oct6-retained-price-rehearsal.py \
+            --inputs "$RUNNER_TEMP/oct6-price-inputs/inputs.json" \
+            --output "$RUNNER_TEMP/oct6-price-replay" \
+            --job-start "$RUNNER_TEMP/oct6-price-job-start" \
+            --parent-network-namespace "$parent_namespace"
+
+      - name: Recheck genuine origins and unchanged diagnostic controls
+        if: always()
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -f "$RUNNER_TEMP/oct6-price-inputs/inputs.json"
+          node .github/scripts/restore-oct6-retained-price-rehearsal.mjs recheck "$RUNNER_TEMP/oct6-price-inputs"
+
+      - name: Collect bounded reports
+        if: always()
+        timeout-minutes: 1
+        run: python3 .github/scripts/run-oct6-retained-price-rehearsal.py --collect --output "$RUNNER_TEMP/oct6-price-replay" --reports "$RUNNER_TEMP/oct6-price-reports"
+
+      - name: Retain diagnostic reports
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct6-retained-price-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/oct6-price-reports/
+            ${{ runner.temp }}/oct6-price-inputs/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain independently read-back pre-carry bytes
+        if: success()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct6-retained-price-precarry-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/oct6-price-replay/oct6-retained-price-precarry.tar.gz
+            ${{ runner.temp }}/oct6-price-replay/checkpoint.json
+            ${{ runner.temp }}/oct6-price-replay/checkpoint-readback.json
+            ${{ runner.temp }}/oct6-price-inputs/*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

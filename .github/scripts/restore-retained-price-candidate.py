@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restore every original regular file from a pinned normal candidate Pages ZIP.
+"""Restore original regular files from pinned Pages or explicitly checked export bytes.
 
 This is an artifact-only, non-authoritative restoration helper for Linux CI. It
 does not certify publication, financial lineage, prices, or candidate quality.
@@ -34,6 +34,111 @@ DEFAULT_RESERVE_BYTES = 8 * 1024 ** 3
 RECEIPT_NAME = 'retained-price-restoration-receipt.json'
 RECEIPT_CAP = 64 * R.MIB
 STAGING_PREFIX = '.retained-price-restore-'
+CHECKED_EXPORT_SCHEMA = 'retained-price-checked-export-input-v1'
+
+
+def _checked_export_reference():
+    raw = (Path(__file__).parent / 'fixtures/retained-price-recovery-oct6-inputs.json').read_bytes()
+    require(R.digest(raw) == '46d422e9f5e27dcd1e50fb068619c0aafbff04f646060324c29570d219955e89',
+            'Unreviewed checked-export reference')
+    source = R.parse_json(raw)['candidate']
+    return {**source, 'repository': 'kusennjp1-ai/screener', 'repository_id': 1203919607,
+            'tree_sha': '2186101e92e1f71771936831cea0a40e410975f7',
+            'regular_files': 19480, 'payload_bytes': 1876607954}
+
+
+def _read_bound_file(path, expected_sha256, expected_bytes=None, cap=64 * R.MIB):
+    path = Path(os.path.abspath(path))
+    require(path.resolve(strict=True) == path, 'Checked-export evidence path must not contain symlinks')
+    with path.open('rb') as stream:
+        before = R.snapshot(stream)
+        require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode) and before[2] <= cap,
+                'Checked-export evidence must be a bounded regular file')
+        require(expected_bytes is None or before[2] == expected_bytes, 'Checked-export evidence size mismatch')
+        raw = stream.read(cap + 1)
+        require(len(raw) == before[2] and R.digest(raw) == expected_sha256, 'Checked-export evidence SHA256 mismatch')
+        _source_stable(stream, path, before)
+    return raw
+
+
+def _verify_checked_export_inputs(archive_sha256, archive_bytes, companion_path, evidence_path, evidence_sha256):
+    """No caller-defined reference or origin bypass is exposed by the public API."""
+    ref = _checked_export_reference()
+    require((archive_sha256, archive_bytes) == (ref['sha256'], ref['bytes']), 'Unreviewed checked-export archive')
+    require(companion_path and evidence_path and R.valid_hash(evidence_sha256), 'Checked export requires exact companion and authenticated API evidence')
+    companion = _read_bound_file(companion_path, ref['companion_sha256'], ref['companion_bytes'], R.MIB)
+    import io
+    with zipfile.ZipFile(io.BytesIO(companion)) as archive:
+        infos = archive.infolist()
+        require(len(infos) == 1 and infos[0].filename == 'source.json', 'Checked-export companion must contain only source.json')
+        item = infos[0]
+        require(stat.S_IFMT(item.external_attr >> 16) in (0, stat.S_IFREG) and not item.flag_bits & 1
+                and item.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED) and item.file_size <= R.MIB,
+                'Invalid checked-export companion member')
+        source_raw = archive.read(item)
+    require(R.digest(source_raw) == ref['retained_source_json_sha256'], 'Checked-export source.json changed')
+    source = R.parse_json(source_raw)
+    require(type(source.get('run_id')) is int and type(source.get('run_attempt')) is int,
+            'Invalid checked-export source run identity')
+    for key, value in [('run_id', ref['run_id']), ('run_attempt', ref['run_attempt']), ('source_sha', ref['head_sha']),
+                       ('artifact_name', ref['artifact_name']), ('manifest_sha256', ref['manifest_sha256']),
+                       ('price_observations_sha256', ref['price_observations_sha256'])]:
+        require(source.get(key) == value, 'Checked-export source origin differs: ' + key)
+    require(isinstance(source.get('manifest_json'), str), 'Checked export lacks literal manifest')
+    manifest_raw = source['manifest_json'].encode('utf-8')
+    require(R.digest(manifest_raw) == ref['manifest_sha256'], 'Checked-export literal manifest changed')
+    R.parse_json(manifest_raw)
+    evidence_raw = _read_bound_file(evidence_path, evidence_sha256)
+    evidence = R.parse_json(evidence_raw)
+    require(evidence.get('schema_version') == 'oct6-retained-price-rehearsal-api-v1'
+            and evidence.get('publication_authority') is False and evidence.get('provider_work') is False,
+            'Invalid checked-export API evidence scope')
+    jobs = []
+    for role, artifact_id, name, size, digest in [
+            ('candidate', ref['artifact_id'], ref['artifact_name'], ref['bytes'], ref['sha256']),
+            ('companion', ref['companion_artifact_id'], f"static-site-data-manifest-{ref['run_id']}-{ref['run_attempt']}",
+             ref['companion_bytes'], ref['companion_sha256'])]:
+        selected = evidence.get('selected', {}).get(role, {})
+        for field in ('run', 'current'):
+            run = selected.get(field, {})
+            require(run.get('id') == ref['run_id'] and run.get('run_attempt') == ref['run_attempt']
+                    and run.get('head_sha') == ref['head_sha'] and run.get('head_branch') == 'main'
+                    and run.get('path') == '.github/workflows/static-site.yml'
+                    and run.get('event') in ('schedule', 'workflow_dispatch') and run.get('status') == 'completed'
+                    and run.get('head_commit', {}).get('id') == ref['head_sha']
+                    and run.get('head_commit', {}).get('tree_id') == ref['tree_sha'], 'Checked-export run origin changed')
+            for key in ('repository', 'head_repository'):
+                require(run.get(key, {}).get('full_name') == ref['repository'] and run[key].get('id') == ref['repository_id'],
+                        'Checked-export repository origin changed')
+        artifact = selected.get('artifact', {})
+        require(artifact.get('id') == artifact_id and artifact.get('name') == name and artifact.get('size_in_bytes') == size
+                and artifact.get('digest') == 'sha256:' + digest and artifact.get('expired') is False,
+                'Checked-export artifact binding changed')
+        origin = artifact.get('workflow_run', {})
+        require(origin.get('id') == ref['run_id'] and origin.get('head_sha') == ref['head_sha'] and origin.get('head_branch') == 'main'
+                and origin.get('repository_id') == origin.get('head_repository_id') == ref['repository_id'], 'Checked-export artifact origin changed')
+        job = selected.get('producer_job', {})
+        require(type(job.get('id')) is int and job['id'] > 0 and job.get('name') == 'combine-and-build'
+                and job.get('run_id') == ref['run_id'] and job.get('run_attempt') == ref['run_attempt']
+                and job.get('head_sha') == ref['head_sha'] and job.get('status') == 'completed' and job.get('conclusion') == 'success'
+                and job in selected.get('jobs', []), 'Checked-export producer job changed')
+        for step_name in ('Build static frontend', 'Upload verified data export', 'Preserve dated export provenance for release selection'):
+            steps = [step for step in job.get('steps', []) if step.get('name') == step_name]
+            require(len(steps) == 1 and steps[0].get('status') == 'completed' and steps[0].get('conclusion') == 'success',
+                    'Checked-export successful producer step missing: ' + step_name)
+        jobs.append(job)
+    require(jobs[0] == jobs[1], 'Checked-export companion and candidate producer differ')
+    declaration = {'schema_version': CHECKED_EXPORT_SCHEMA, 'publication_authority': False,
+                   'repository': ref['repository'], 'run_id': ref['run_id'], 'run_attempt': ref['run_attempt'],
+                   'head_sha': ref['head_sha'], 'artifact_id': ref['artifact_id'], 'artifact_name': ref['artifact_name'],
+                   'archive': {'bytes': archive_bytes, 'sha256': archive_sha256},
+                   'companion': {'artifact_id': ref['companion_artifact_id'], 'bytes': len(companion), 'sha256': R.digest(companion),
+                                 'source_json_bytes': len(source_raw), 'source_json_sha256': R.digest(source_raw)},
+                   'manifest': {'bytes': len(manifest_raw), 'sha256': R.digest(manifest_raw)},
+                   'api_evidence': {'bytes': len(evidence_raw), 'sha256': R.digest(evidence_raw)},
+                   'complete_inventory_required': True}
+    return {'declaration': declaration, 'manifest_bytes': manifest_raw, 'reference': ref,
+            'evidence_paths': [(companion_path, ref['companion_sha256'], len(companion)), (evidence_path, evidence_sha256, len(evidence_raw))]}
 
 
 class _HashingReader:
@@ -190,7 +295,7 @@ def _copy_files(archive, plan, staging_fd, tar_bytes, expected_tar_sha256):
 
 
 def _restore(archive_path, expected_sha256, expected_bytes, output, *,
-             _reserve_bytes=DEFAULT_RESERVE_BYTES):
+             _reserve_bytes=DEFAULT_RESERVE_BYTES, _checked_export=None):
     """Private fixture seam; the public API and CLI cannot lower the reserve."""
     require(R.valid_hash(expected_sha256), 'Expected archive SHA256 must be lowercase hex')
     require(R.integer(expected_bytes, R.MAX_ZIP, 1), 'Expected archive byte size is invalid')
@@ -236,16 +341,27 @@ def _restore(archive_path, expected_sha256, expected_bytes, output, *,
                     if name == 'publication.json':
                         require(size <= R.PUBLICATION_CAP, 'Publication byte cap exceeded')
                         return True
+                    if _checked_export is not None and name == 'static-data/manifest.json':
+                        require(size <= R.MIB, 'Checked-export manifest byte cap exceeded')
+                        return True
                     return False
 
-                selected, sizes, structure = R.scan_tar(measured, select, R.PUBLICATION_CAP)
+                selected, sizes, structure = R.scan_tar(measured, select, R.PUBLICATION_CAP + (R.MIB if _checked_export else 0))
                 require(measured.reader.position == info.file_size, 'TAR byte size mismatch')
                 tar_sha256 = measured.reader.sha256.hexdigest()
                 publication_bytes = selected.get('publication.json')
-                require(publication_bytes is not None, 'Normal candidate publication.json is missing')
-                publication = R.parse_json(publication_bytes)
-                require(isinstance(publication, dict) and publication.get('transport') is None,
-                        'Only normal candidates are supported; packed transport refused')
+                if _checked_export is None:
+                    require(publication_bytes is not None, 'Normal candidate publication.json is missing')
+                    publication = R.parse_json(publication_bytes)
+                    require(isinstance(publication, dict) and publication.get('transport') is None,
+                            'Only normal candidates are supported; packed transport refused')
+                else:
+                    require(publication_bytes is None, 'Checked export must not claim a publication.json')
+                    require(selected.get('static-data/manifest.json') == _checked_export['manifest_bytes'],
+                            'Checked-export TAR manifest differs from exact companion')
+                    ref = _checked_export['reference']
+                    require(len(sizes) == ref['regular_files'] and sum(sizes.values()) == ref['payload_bytes'],
+                            'Checked-export complete inventory differs from reviewed source')
                 require('static-data/manifest.json' in sizes, 'Normal candidate static-data/manifest.json is missing')
                 _source_stable(source, archive_path, before)
                 _parent_stable(output.parent, parent_fd)
@@ -268,14 +384,15 @@ def _restore(archive_path, expected_sha256, expected_bytes, output, *,
                 _source_stable(source, archive_path, before)
                 result = {
                     'schema_version': 'retained-price-candidate-restoration-v1',
-                    'scope': 'Original regular-file bytes of one normal candidate only; '
+                    'scope': ('Original regular-file bytes of the explicitly checked prepublication Static Site export only; '
+                              if _checked_export else 'Original regular-file bytes of one normal candidate only; ') +
                              'empty directories and archive ownership, permissions, and timestamps are not restored',
                     'publication_authority': False,
                     'ready_to_publish': False,
                     'financial_success_claim': False,
                     'quality_success_claim': False,
                     'fullSiteVerified': False,
-                    'mode': 'normal-candidate',
+                    'mode': 'checked-export' if _checked_export else 'normal-candidate',
                     'archive': {'path': str(archive_path), 'bytes': expected_bytes,
                                 'sha256': expected_sha256, 'member': 'artifact.tar',
                                 'tarBytes': info.file_size, 'tarSha256': tar_sha256},
@@ -285,9 +402,13 @@ def _restore(archive_path, expected_sha256, expected_bytes, output, *,
                     'diskPreflight': {'availableBytes': free_bytes, 'requiredBytes': required_bytes,
                                       'payloadBytes': payload_bytes, 'reserveBytes': _reserve_bytes,
                                       'reservePurpose': 'Filesystem overhead, receipt, and downstream full carry'},
-                    'publication': {'bytes': len(publication_bytes), 'sha256': R.digest(publication_bytes)},
+                    'publication': {'bytes': len(publication_bytes), 'sha256': R.digest(publication_bytes)} if publication_bytes is not None else None,
                     'files': dict(sorted(files.items())),
                 }
+                if _checked_export is not None:
+                    result['checked_export'] = _checked_export['declaration']
+                    for evidence_path, evidence_hash, evidence_bytes in _checked_export['evidence_paths']:
+                        _read_bound_file(evidence_path, evidence_hash, evidence_bytes)
                 receipt_bytes = R.canonical(result)
                 require(len(receipt_bytes) <= RECEIPT_CAP, 'Restoration receipt byte cap exceeded')
                 with _exclusive_file(staging_fd, RECEIPT_NAME) as sink:
@@ -312,15 +433,31 @@ def restore(archive_path, expected_sha256, expected_bytes, output):
     return _restore(archive_path, expected_sha256, expected_bytes, output)
 
 
+def restore_checked_export(archive_path, expected_sha256, expected_bytes, output, *, companion_path, evidence_path, evidence_sha256):
+    checked = _verify_checked_export_inputs(expected_sha256, expected_bytes, companion_path, evidence_path, evidence_sha256)
+    return _restore(archive_path, expected_sha256, expected_bytes, output, _checked_export=checked)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', required=True)
     parser.add_argument('--sha256', required=True, help='Pinned complete ZIP SHA256')
     parser.add_argument('--bytes', required=True, type=int, help='Pinned complete ZIP byte size')
     parser.add_argument('--output', required=True, help='New directory under an existing real parent')
+    parser.add_argument('--input-kind', choices=['normal-candidate', 'checked-export'], default='normal-candidate')
+    parser.add_argument('--checked-export-companion')
+    parser.add_argument('--checked-export-api-evidence')
+    parser.add_argument('--checked-export-api-evidence-sha256')
     args = parser.parse_args()
     try:
-        result = restore(args.archive, args.sha256, args.bytes, args.output)
+        if args.input_kind == 'checked-export':
+            result = restore_checked_export(args.archive, args.sha256, args.bytes, args.output,
+                     companion_path=args.checked_export_companion, evidence_path=args.checked_export_api_evidence,
+                     evidence_sha256=args.checked_export_api_evidence_sha256)
+        else:
+            require(not any([args.checked_export_companion, args.checked_export_api_evidence, args.checked_export_api_evidence_sha256]),
+                    'Checked-export evidence requires explicit checked-export input kind')
+            result = restore(args.archive, args.sha256, args.bytes, args.output)
         print(json.dumps({'output': str(Path(args.output).absolute()),
                           'mode': result['mode'], 'restoredFiles': result['restoredFiles'],
                           'restoredBytes': result['restoredBytes'],

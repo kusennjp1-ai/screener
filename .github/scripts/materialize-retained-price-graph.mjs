@@ -8,6 +8,8 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import producerRuntime from './fixtures/retained-price-producer-runtime.json' with {type:'json'};
 import oct6ProducerRuntime from './fixtures/retained-price-producer-runtime-oct6.json' with {type:'json'};
+import oct6Review from './fixtures/retained-price-recovery-oct6-inputs.json' with {type:'json'};
+import unindexedOct6History from './fixtures/retained-price-recovery-oct6-unindexed-history.json' with {type:'json'};
 import {RECOVERY_SCHEMA,RECOVERY_FINANCIAL_FIELDS,RECOVERY_PRESERVED_FIELDS,recoveryDigest} from './retained-price-recovery.mjs';
 import {auditDailyBars} from '../../frontend/src/static/qualificationAudit.js';
 import {validateResidualChart} from './complete-retained-price-quarantine.mjs';
@@ -68,6 +70,32 @@ function replaceRows(payload,replacements){
   return result;
 }
 
+export function validateRecoveryRestorationMode(source){
+  if(source.mode==='normal-candidate')return; // Existing Pages restoration contract is unchanged.
+  assert.equal(source.mode,'checked-export','Unsupported restoration input kind');
+  const proof=source.checked_export,pin=oct6Review.candidate;
+  assert.equal(source.publication,null,'Checked export cannot claim a publication receipt');
+  assert(!Object.hasOwn(source.files??{},'publication.json'),'Checked export cannot borrow a publication.json');
+  assert.equal(proof?.schema_version,'retained-price-checked-export-input-v1');assert.equal(proof.publication_authority,false);
+  assert.equal(proof.repository,'kusennjp1-ai/screener');
+  for(const [key,value] of Object.entries({run_id:pin.run_id,run_attempt:pin.run_attempt,head_sha:pin.head_sha,artifact_id:pin.artifact_id,artifact_name:pin.artifact_name}))assert.equal(proof[key],value,`Checked-export origin changed: ${key}`);
+  assert.deepEqual(proof.archive,{bytes:pin.bytes,sha256:pin.sha256});assert.equal(source.archive?.bytes,pin.bytes);assert.equal(source.archive.sha256,pin.sha256);
+  assert.equal(proof.companion?.artifact_id,pin.companion_artifact_id);assert.equal(proof.companion.bytes,pin.companion_bytes);assert.equal(proof.companion.sha256,pin.companion_sha256);
+  assert.equal(proof.companion.source_json_sha256,pin.retained_source_json_sha256);assert.equal(proof.companion.source_json_bytes,376233);
+  assert.equal(proof.manifest?.sha256,pin.manifest_sha256);assert.deepEqual(source.files['static-data/manifest.json'],proof.manifest,'Checked-export manifest inventory changed');
+  assert(validHash(proof.api_evidence?.sha256)&&Number.isSafeInteger(proof.api_evidence.bytes)&&proof.api_evidence.bytes>0&&proof.api_evidence.bytes<=64*1024*1024,'Unbound checked-export API evidence');
+  assert.equal(proof.complete_inventory_required,true);assert.equal(source.restoredFiles,19480);assert.equal(source.restoredBytes,1876607954);
+  assert.equal(Object.keys(source.files).length,source.restoredFiles,'Incomplete checked-export restoration inventory');
+  assert.equal(Object.values(source.files).reduce((total,file)=>{assert(Number.isSafeInteger(file.bytes)&&file.bytes>=0&&validHash(file.sha256),'Invalid checked-export inventory entry');return total+file.bytes;},0),source.restoredBytes,'Checked-export inventory byte total changed');
+}
+
+export function validateUnindexedOct6HistoryBinding(source,target,file,reference){
+  const pin=unindexedOct6History;
+  assert(source.mode==='checked-export'&&source.archive.sha256===pin.archive_sha256&&target===pin.target_as_of_date&&file===pin.path,`Unindexed active history payload: ${file}`);
+  assert.deepEqual(reference,{bytes:pin.bytes,sha256:pin.sha256},'Unindexed original history bytes changed');
+  return `static-data/retained-price-repair-audit/history/unindexed/${pin.sha256}.json.gz`;
+}
+
 /** root is the full restoration directory (it contains static-data/). Each
  * supplied digest pins exact bytes, not a re-serialized approximation.
  * All dependency checks finish before staging starts. A write failure can leave
@@ -79,7 +107,7 @@ export function materializeRecoveryGraph({root,prepared,expectedPreparedSha256,s
   assert(receiptPath===join(root,'retained-price-restoration-receipt.json'),'Receipt must belong to the disposable restored tree');
   const source=JSON.parse(receiptRaw);assert.equal(source.schema_version,'retained-price-candidate-restoration-v1');
   for(const key of ['publication_authority','ready_to_publish','fullSiteVerified'])assert.equal(source[key],false,`Unexpected restoration authority: ${key}`);
-  assert.equal(source.mode,'normal-candidate');assert(source.files&&typeof source.files==='object','Missing restoration inventory');
+  validateRecoveryRestorationMode(source);assert(source.files&&typeof source.files==='object','Missing restoration inventory');
   const archive=resolve(source.archive.path);assert(archive!==root&&!archive.startsWith(root+sep),'Original archive must be outside the disposable tree');
   if(typeof prepared==='string')assert(!resolve(prepared).startsWith(root+sep),'Prepared evidence must be outside the disposable tree');
   const preparedRaw=inputBytes(prepared);assert(validHash(expectedPreparedSha256)&&sha(preparedRaw)===expectedPreparedSha256,'Prepared SHA256 mismatch');
@@ -305,12 +333,18 @@ export function materializeRecoveryGraph({root,prepared,expectedPreparedSha256,s
     assert.equal(previousIndex.schema_version,1);assert.equal(current.schema_version,1);assert(Array.isArray(previousIndex[listKey])&&Array.isArray(current[listKey]),'Invalid history catalog');
     function refs(index){const result=new Map();for(const ref of index[listKey]){safeRelative(ref.path);assert(ref.path.startsWith(directory+'/')&&ref.path!==directory+'/index.json'&&validHash(ref.sha256)&&!result.has(ref.path),'Invalid/duplicate history reference');result.set(ref.path,ref);}return result;}
     const priorRefs=refs(previousIndex),currentRefs=refs(current);for(const [refPath,ref]of priorRefs){assert(currentRefs.has(refPath),'Prior snapshot missing from restored catalog');assert.deepEqual(currentRefs.get(refPath),ref,'Prior snapshot reference changed');assert.equal(sha(read(data(refPath))),ref.sha256,'Prior raw snapshot SHA256 mismatch');}
-    const excluded=[];for(const [refPath,ref]of currentRefs)if(!priorRefs.has(refPath)){const raw=read(data(refPath));assert.equal(sha(raw),ref.sha256,'Rejected snapshot raw SHA256 mismatch');const evidence=`static-data/retained-price-repair-audit/history/${sha(raw)}-${refPath.split('/').at(-1)}`;planWrite(evidence,raw,{raw:true,reason:'immutable_rejected_history_evidence'});removals.add(data(refPath));mutations.push({path:data(refPath),operation:'remove',reason:'remove_unpublished_history_from_active_namespace',fields:['/'],before_sha256:sha(raw),after_sha256:null,bytes:0});excluded.push({path:refPath,sha256:ref.sha256,evidence_path:evidence});}
-    // No unindexed historical payload may silently survive into the repaired
-    // candidate's active history namespace.
-    for(const file of Object.keys(source.files).filter(p=>p.startsWith(data(directory)+'/')&&p!==path))assert(currentRefs.has(file.slice('static-data/'.length)),`Unindexed active history payload: ${file}`);
-    planWrite(`static-data/retained-price-repair-audit/history/${sha(currentBytes)}-${directory}-index.json`,currentBytes,{raw:true,reason:'immutable_exact_rejected_history_catalog'});
-    planWrite(path,previous,{raw:true,reason:'restore_exact_previous_approved_catalog'});history.push({directory,prior_catalog_sha256:pinned.sha256,retained_references:priorRefs.size,excluded});
+    const excluded=[];for(const [refPath,ref]of currentRefs)if(!priorRefs.has(refPath)){const raw=read(data(refPath));assert.equal(sha(raw),ref.sha256,'Rejected snapshot raw SHA256 mismatch');const evidence=`static-data/retained-price-repair-audit/history/snapshots/${sha(raw)}.json.gz`;planWrite(evidence,raw,{raw:true,reason:'immutable_rejected_history_evidence'});removals.add(data(refPath));mutations.push({path:data(refPath),operation:'remove',reason:'remove_unpublished_history_from_active_namespace',fields:['/'],before_sha256:sha(raw),after_sha256:null,bytes:0});excluded.push({path:refPath,bytes:raw.length,sha256:ref.sha256,evidence_path:evidence});}
+    // The actual export contains one unindexed prepublication snapshot. Preserve
+    // its exact raw bytes only in audit; every other unindexed file still fails.
+    for(const file of Object.keys(source.files).filter(p=>p.startsWith(data(directory)+'/')&&p!==path))if(!currentRefs.has(file.slice('static-data/'.length))){
+      const raw=read(file),reference={bytes:raw.length,sha256:sha(raw)},evidence=validateUnindexedOct6HistoryBinding(source,target,file,reference);
+      planWrite(evidence,raw,{raw:true,reason:'immutable_exact_unindexed_prepublication_history'});removals.add(file);
+      mutations.push({path:file,operation:'remove',reason:'quarantine_exact_unindexed_prepublication_history',fields:['/'],before_sha256:reference.sha256,after_sha256:null,bytes:0});
+      excluded.push({path:file.slice('static-data/'.length),...reference,evidence_path:evidence,reason:'unindexed_prepublication_history_only'});
+    }
+    const catalogEvidence=`static-data/retained-price-repair-audit/history/catalogs/${sha(currentBytes)}.json`;
+    planWrite(catalogEvidence,currentBytes,{raw:true,reason:'immutable_exact_rejected_history_catalog'});
+    planWrite(path,previous,{raw:true,reason:'restore_exact_previous_approved_catalog'});history.push({directory,prior_catalog_sha256:pinned.sha256,retained_references:priorRefs.size,rejected_catalog:{path,bytes:currentBytes.length,sha256:sha(currentBytes),evidence_path:catalogEvidence},excluded});
   }
   const ledger=input.ledger_only_absences??[];for(const key of ledger){const [m,type,symbol]=JSON.parse(key);assert.equal(m,'US');assert.equal(type,'chart');assert(!patches.has(symbol)&&!activeSymbols.includes(symbol),'Ledger-only absence gained chart authority');}
   // No mutation before this line: all graph identities, hashes, duplicates,
