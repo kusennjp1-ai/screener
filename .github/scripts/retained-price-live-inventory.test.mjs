@@ -10,6 +10,7 @@ import {latestDeployment} from './publication-state.mjs';
 const repo='kusennjp1-ai/screener',prefix=`repos/${repo}`;
 const publisher=`${prefix}/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100`;
 const producer=`${prefix}/actions/workflows/static-site.yml/runs?branch=main&per_page=100`;
+const numeric=(endpoint,page=1)=>`repositories/1203919607/actions/workflows/${endpoint===publisher?364666954:294257497}/runs?branch=main&per_page=100&page=${page}`;
 const sha=value=>createHash('sha256').update(value).digest('hex');
 function run(id=1,workflow='research-ui-release.yml'){
   return {id,workflow_id:workflow==='research-ui-release.yml'?364666954:294257497,path:'.github/workflows/'+workflow,head_branch:'main',
@@ -34,7 +35,7 @@ test('complete inventories preserve every object and accept exact GitHub Link/he
   const pages=[page(first,101),page(last,101)];
   const f=fixture([http(pages[0],link(publisher,2)+', '+link(publisher,2,'last')),http(pages[1],link(publisher,1,'prev')+', '+link(publisher,1,'first'),'\n')]);
   assert.deepEqual(f.read(publisher,true),pages);
-  assert.deepEqual(f.calls.map(c=>c.args),[['api','--include',publisher],['api','--include',publisher+'&page=2']]);
+  assert.deepEqual(f.calls.map(c=>c.args),[['api','--include',numeric(publisher)],['api','--include',numeric(publisher,2)]]);
   for(const c of f.calls){assert.equal(c.command,'gh');assert.equal(c.options.timeout,30000);assert.equal(c.options.killSignal,'SIGKILL');assert.deepEqual(c.options.stdio,['ignore','pipe','pipe']);}
   assert(f.calls[1].options.maxBuffer<f.calls[0].options.maxBuffer);
   assert.equal(f.events[0].inventory_sha256,sha(JSON.stringify(pages)));assert.equal(f.events[0].total_count,101);
@@ -44,7 +45,7 @@ test('EOF after partial page restarts page1 and returns only freshly fetched pag
   const old=page(Array.from({length:100},(_,i)=>run(i+1)),101),fresh=page([run(900)]);
   const f=fixture([http(old,link(publisher,2)),commandError('unexpected end of JSON input','partial-secret-token'),http(fresh)]);
   assert.deepEqual(f.read(publisher,true),[fresh]);
-  assert.deepEqual(f.calls.map(c=>c.args[2]),[publisher,publisher+'&page=2',publisher]);
+  assert.deepEqual(f.calls.map(c=>c.args[2]),[numeric(publisher),numeric(publisher,2),numeric(publisher)]);
   assert.deepEqual(f.events.map(e=>[e.status,e.attempt]),[['failed',1],['complete',2]]);
   assert.equal(f.events[0].failed_stdout.sha256,sha('partial-secret-token'));assert.equal(f.events[0].exit_code,1);
   assert.equal(f.events[0].failed_stderr.bytes,Buffer.byteLength('unexpected end of JSON input'));
@@ -143,7 +144,7 @@ test('canonical numeric GitHub pagination aliases are bound to exact repository 
   const first=page(Array.from({length:100},(_,i)=>run(i+1)),101),last=page([run(101)],101);
   for(const repoPath of [`repos/${repo}`,'repositories/1203919607'])for(const workflow of ['research-ui-release.yml','364666954']){
     const alias=`${repoPath}/actions/workflows/${workflow}/runs?branch=main&per_page=100`,f=fixture([http(first,link(alias,2)),http(last)]);
-    assert.equal(f.read(publisher,true).length,2);assert.equal(f.calls[1].args[2],alias+'&page=2');
+    assert.equal(f.read(publisher,true).length,2);assert.equal(f.calls[1].args[2],numeric(publisher,2));
   }
   for(const alias of ['repositories/999/actions/workflows/364666954/runs?branch=main&per_page=100',`${prefix}/actions/workflows/294257497/runs?branch=main&per_page=100`]){
     const f=fixture([http(first,link(alias,2))]);assert.throws(()=>f.read(publisher,true),/pagination-origin-or-route/);assert.equal(f.calls.length,1);
@@ -222,10 +223,10 @@ test('isolated total growth discards the whole attempt and records both totals',
   const changed=page([run(101),run(102)],102),fresh=page([run(900)]);
   const f=fixture([http(first,link(publisher,2)),http(changed),http(fresh)]);
   assert.deepEqual(f.read(publisher,true),[fresh]);
-  assert.deepEqual(f.calls.map(c=>c.args[2]),[publisher,publisher+'&page=2',publisher]);
+  assert.deepEqual(f.calls.map(c=>c.args[2]),[numeric(publisher),numeric(publisher,2),numeric(publisher)]);
   assert.deepEqual(f.events.map(e=>[e.status,e.attempt,e.retry]),[['failed',1,true],['complete',2,undefined]]);
   const e=f.events[0].page_evidence[1];
-  assert.equal(e.page_number,2);assert.equal(e.requested_route,publisher+'&page=2');
+  assert.equal(e.page_number,2);assert.equal(e.requested_route,numeric(publisher,2));
   assert.equal(e.expected_total,101);assert.equal(e.observed_total,102);assert.equal(e.row_count,2);
   assert.equal(e.ids_sha256,sha(JSON.stringify([101,102])));
   assert.equal(e.body_bytes,Buffer.byteLength(JSON.stringify(changed)));
@@ -258,7 +259,7 @@ test('repeated valid total drift exhausts exactly two whole attempts',()=>{
   const f=fixture([http(first,link(publisher,2)),http(changed),http(first,link(publisher,2)),http(changed),http(page([]))]);
   assert.throws(()=>f.read(publisher,true),/changing-inventory-total/);
   assert.equal(f.calls.length,4);assert.deepEqual(f.events.map(e=>e.retry),[true,false]);
-  assert.deepEqual(f.calls.map(c=>c.args[2]),[publisher,publisher+'&page=2',publisher,publisher+'&page=2']);
+  assert.deepEqual(f.calls.map(c=>c.args[2]),[numeric(publisher),numeric(publisher,2),numeric(publisher),numeric(publisher,2)]);
 });
 
 test('invalid rows identities duplicates or Links accompanying drift remain terminal',()=>{
@@ -328,7 +329,7 @@ test('drift recovery preserves complete old-run deployment coverage without filt
     }});
   assert.equal(latestDeployment(repo,f.read).runId,501);
   assert.equal(queried.length,101);assert(queried.every(id=>id>=401&&id<=501));
-  assert.equal(f.calls.length,5);assert.equal(f.calls.at(-1).args[2],producer);
+  assert.equal(f.calls.length,5);assert.equal(f.calls.at(-1).args[2],numeric(producer));
 });
 
 test('count-drift retries spend the original shared monotonic budget',()=>{
@@ -346,4 +347,44 @@ test('count-drift retries spend the original shared monotonic budget',()=>{
   assert.throws(()=>f.read(publisher,true),/time-budget-exhausted/);assert.equal(f.calls.length,5);
   assert.equal(f.events[0].inventory_budget_used_ms,28000);
   assert.equal(f.events[1].inventory_budget_used_ms,53000);assert.equal(f.events[2].inventory_budget_used_ms,60000);
+});
+
+test('numeric transport is consistent from explicit page1 through every validated Link alias',()=>{
+  for(const endpoint of [publisher,producer]){
+    const workflow=endpoint===publisher?'research-ui-release.yml':'static-site.yml';
+    const first=page(Array.from({length:100},(_,i)=>run(i+1,workflow)),101),last=page([run(101,workflow)],101);
+    for(const repoPath of [`repos/${repo}`,'repositories/1203919607'])for(const name of [workflow,endpoint===publisher?'364666954':'294257497']){
+      const alias=`${repoPath}/actions/workflows/${name}/runs?branch=main&per_page=100`;
+      const f=fixture([http(first,link(alias,2)),http(last)]);
+      assert.deepEqual(f.read(endpoint,true),[first,last]);
+      assert.deepEqual(f.calls.map(c=>c.args[2]),[numeric(endpoint),numeric(endpoint,2)]);
+      assert.equal(f.events[0].endpoint,endpoint);
+      assert.deepEqual(f.events[0].page_evidence.map(e=>e.requested_route),[numeric(endpoint),numeric(endpoint,2)]);
+    }
+  }
+});
+
+test('canonicalization never turns an unvalidated Link into a trusted request',()=>{
+  const first=page(Array.from({length:100},(_,i)=>run(i+1)),101);
+  for(const changed of [
+    link(publisher,2).replace('research-ui-release.yml','static-site.yml'),
+    link(publisher,2).replace('branch=main','branch=other'),
+    link(publisher,2).replace('&page=2','&page=2&status=success'),
+    link(publisher,2).replace('&page=2','&page=2&page=2'),
+    link(publisher,2).replace('api.github.com','api.github.com.evil.example'),
+    link(publisher,2).replace('kusennjp1-ai/screener','foreign/repository')]){
+    const f=fixture([http(first,changed),http(page([run(101)],101))]);
+    assert.throws(()=>f.read(publisher,true),/pagination/);assert.equal(f.calls.length,1);
+    assert.equal(f.events[0].retry,false);
+  }
+});
+
+test('the observed 204-to-427 overlap is a hard duplicate failure on numeric transport too',()=>{
+  const first=page(Array.from({length:100},(_,i)=>run(i+101,'static-site.yml')),204);
+  const overlap=page(Array.from({length:100},(_,i)=>run(i+101,'static-site.yml')),427);
+  const f=fixture([http(first,link(producer,2)),http(overlap,link(producer,3)),http(page([]))]);
+  assert.throws(()=>f.read(producer,true),/invalid-or-duplicate-run/);
+  assert.deepEqual(f.calls.map(c=>c.args[2]),[numeric(producer),numeric(producer,2)]);
+  assert.equal(f.events[0].retry,false);
+  assert.deepEqual(f.events[0].page_evidence.map(e=>e.observed_total),[204,427]);
 });
