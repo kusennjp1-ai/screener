@@ -1,0 +1,30 @@
+name: Oct6 Publisher Token Check
+on:
+  push:
+    branches: [preview/oct6-publisher-token-check-20261007]
+permissions:
+  contents: read
+concurrency:
+  group: oct6-publisher-token-check-20261007
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'kusennjp1-ai/screener' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check exact disabled correction identity
+        run: |
+          test "$(git rev-parse HEAD^)" = 24ef177167a992594c363a5e1689846293acb20b
+          test "$(git rev-parse HEAD:.github/workflows/research-ui-release.yml)" = c7cc9b88a832d8aa51e33fbca483ef738c40cf44
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-source-workflow.test.mjs)" = 636a66314f651e7d6ebf2a81b8449df6e65c3ecd
+          test "$(git rev-parse HEAD:.github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+      - name: Verify token wiring and unchanged finite admission and data boundaries
+        run: node --test .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-source-readers.test.mjs

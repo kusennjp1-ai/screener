@@ -139,3 +139,44 @@ test('required focused tests execute in the explicit exact-main CI script list',
   const ci=read('ci.yml');for(const name of ['retained-price-ci-admission.test.mjs','retained-price-source-admission.test.mjs','retained-price-source-driver.test.mjs','retained-price-source-baseline.test.mjs','retained-price-source-browser.test.mjs','retained-price-source-readers.test.mjs','retained-price-source-workflow.test.mjs','test_run_retained_price_source.py'])assert(ci.includes(name),name);
   assert(ci.includes('financial-renewal-ci-admission.test.mjs'));assert(ci.includes('financial-renewal-ci-routing.test.mjs'));
 });
+
+test('all authenticated finite entry points inherit only the existing step-scoped GitHub token',()=>{
+  const publisherNames=[
+    'Verify live provenance, UI gates and non-regressing data',
+    'Prepare immutable controller for finite price publication',
+    'Restore the exact selected data artifact',
+    'Carry the active financial source onto the new price target',
+    'Preserve approved UI bytes or record verified new UI',
+    'Verify composed finite price browser and CSV surfaces',
+    'Recheck live identity, main and final data before uploading',
+    'Reject a superseded release immediately before deployment',
+  ];
+  const points=[
+    [staticWorkflow,'select-markets','Admit only the finite exact-main price CI trigger'],
+    ...['Build static frontend','Verify finite retained-price repair','Record exact export attempt and dated evidence'].map(name=>[staticWorkflow,'combine-and-build',name]),
+    [release,'renewal_route','Route the finite price activation before any publication'],
+    ...publisherNames.map(name=>[release,'publish',name]),
+  ];
+  const token='${{ github.token }}';
+  const check=(text,jobName,name)=>{
+    const body=step(job(text,jobName),name);
+    assert.match(body,/^        env:\n(?:          [^\n]*\n)*          GH_TOKEN: \$\{\{ github\.token \}\}\n/m,name+': missing existing step token');
+    assert.doesNotMatch(body,/GH_TOKEN:.*(?:secrets\.|steps\.|inputs\.)/,name+': unexpected credential source');
+  };
+  for(const [text,jobName,name] of points){
+    check(text,jobName,name);
+    const original=step(job(text,jobName),name);
+    for(const changed of [
+      original.replace('          GH_TOKEN: '+token+'\n',''),
+      original.replace('          GH_TOKEN:','          WRONG_TOKEN:'),
+      original.replace('GH_TOKEN: '+token,'GH_TOKEN: ${{ secrets.EXTRA_TOKEN }}'),
+    ])assert.throws(()=>check(text.replace(original,changed),jobName,name),undefined,name);
+  }
+  // This was historically local-only. The finite path now reauthenticates the
+  // exact source before checking and snapshotting the first compiler output.
+  const selector=readFileSync(new URL('./select-release-source.mjs',import.meta.url),'utf8');
+  const carry=selector.split('async function prepareCarry() {')[1]?.split('async function carryAssessment(')[0];
+  assert(carry,'Missing actual prepare-carry command');
+  assert.match(carry,/await verifyRetainedRestoreBinding\(/);
+  assert.match(carry,/api:githubApi/);
+});
