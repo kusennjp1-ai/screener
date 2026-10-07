@@ -213,6 +213,8 @@ jobs:
           python tools/export-sector-prices.py
       - name: Carry the active financial source onto the new price target
         if: steps.plan.outputs.carry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs prepare-carry
       # Correction mode runs only the pinned archive projector and approved
       # exporter. It deliberately skips every provider/enrichment/repair step.
