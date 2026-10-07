@@ -9,6 +9,9 @@ const WORKFLOWS=new Map([['research-ui-release.yml',364666954],['static-site.yml
 const ENDPOINTS=new Map([...WORKFLOWS].map(([file,id])=>[
   `repos/${REPOSITORY}/actions/workflows/${file}/runs?branch=main&per_page=100`,{file,id}]));
 export const LIVE_INVENTORY_LIMITS=Object.freeze({attempts:2,attemptMs:30000,totalMs:60000,bytes:64*1024**2,runs:1000});
+// Use one numeric resource spelling for every transmitted page. The public
+// caller API and validated Link aliases still identify the same pinned objects.
+const transportPage=(workflow,page)=>`repositories/${REPOSITORY_ID}/actions/workflows/${workflow.id}/runs?branch=main&per_page=100&page=${page}`;
 const hash=raw=>createHash('sha256').update(raw).digest('hex');
 const facts=raw=>({bytes:Buffer.byteLength(raw),sha256:hash(raw)});
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -119,7 +122,7 @@ function nextPage(link,endpoint,pageNumber,pageCount){
   for(const [rel,expected]of [['first',1],['last',pageCount],['prev',pageNumber-1]]){
     requireValue(!relations.has(rel)||relations.get(rel).number===expected,'inconsistent-pagination');
   }
-  return next?next.url.pathname.slice(1)+next.url.search:null;
+  return next?transportPage(workflow,next.number):null;
 }
 
 function validatePage(page,workflow,pageNumber,seen){
@@ -151,7 +154,7 @@ export function createRetainedPriceLiveApi(api,{run=execFileSync,monotonic=()=>p
     for(let attempt=1;attempt<=LIVE_INVENTORY_LIMITS.attempts;attempt++){
       const start=monotonic(),attemptDeadline=start+Math.min(LIVE_INVENTORY_LIMITS.totalMs-usedMs,LIVE_INVENTORY_LIMITS.attemptMs);
       const pages=[],pageEvidence=[],seen=new Set(),stdoutHash=createHash('sha256');
-      let current=endpoint,total=null,stdoutBytes=0,pageNumber=0,failedStdout='',failedStderr='',exit=null,signal=null,http=null;
+      let current=transportPage(workflow,1),total=null,stdoutBytes=0,pageNumber=0,failedStdout='',failedStderr='',exit=null,signal=null,http=null;
       try{
         while(current){
           const remaining=Math.floor(attemptDeadline-monotonic());
