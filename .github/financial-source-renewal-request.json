@@ -1,0 +1,80 @@
+{
+  "schema_version": "financial-source-renewal-request-v1",
+  "previous_publication_identity": "37456692717/1/0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a/ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+  "previous_release": {
+    "schema_version": "financial-release-receipt-v1",
+    "path": "static-data/financial-corrections/release-fe36a0bc261ca032b9b6682533da57e915fc40c6855cf0d4757082cce42f02a4.json",
+    "sha256": "fe36a0bc261ca032b9b6682533da57e915fc40c6855cf0d4757082cce42f02a4"
+  },
+  "previous_lineage_sha256": "2828fbf2d497ae32c29ddb46a34903a9c1c8494862e127ba67dff9880e356a13",
+  "previous_financial_generation": "69c80cd8bfa2a4bedf891aea1e82229b4d6768e59914f15fb9ef9e09b51c7de7",
+  "origin_release": {
+    "schema_version": "financial-release-receipt-v1",
+    "path": "static-data/financial-corrections/release-fe36a0bc261ca032b9b6682533da57e915fc40c6855cf0d4757082cce42f02a4.json",
+    "sha256": "fe36a0bc261ca032b9b6682533da57e915fc40c6855cf0d4757082cce42f02a4"
+  },
+  "ui": {
+    "sha": "1e1943e1d5f78a738a05baa69eb9f2e8508e32ac",
+    "digest": "72fd791b42a691e286279cada721207a812d13b13233e814d0c2cfde73571788",
+    "approval_sha256": "8df6f2ad8338c0bde7b22094fae1e61c729645db62900599929bbbefc48ed60c"
+  },
+  "consumer_code_sha256": "ca8feb88a14737439defc1420b22f85e8bbcb3c9a7648de2563cdd580f9e5a2a",
+  "financial_request": {
+    "schema_version": "financial-renewal-postcapture-request-v1",
+    "correction": {
+      "schema_version": "financial-correction-v1",
+      "kind": "financial_source_correction",
+      "reason": "audited_statement_source_recovery",
+      "previous_publication_identity": "37456692717/1/0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a/ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+      "source": {
+        "repository": "kusennjp1-ai/screener",
+        "workflow": ".github/workflows/financial-statement-recovery.yml",
+        "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+        "run_id": 37478731832,
+        "run_attempt": 1,
+        "artifact_id": 11420873789,
+        "artifact_name": "financial-statement-recovery-4715b218cc25720d1d3be455930554e1e6282136-1",
+        "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+        "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+        "acquisition_base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+        "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
+      }
+    },
+    "source_validation": {
+      "guard": "postcapture_source_artifact_v1",
+      "certificate": {
+        "schema_version": "financial-source-postcapture-reference-v1",
+        "repository": "kusennjp1-ai/screener",
+        "workflow": ".github/workflows/financial-source-postcapture-validation.yml",
+        "head_sha": "28e298ee21ea275629a94e7066ac8835b7654182",
+        "run_id": 37495003542,
+        "run_attempt": 1,
+        "job_id": 112377172824,
+        "artifact_id": 11426862690,
+        "artifact_name": "financial-source-postcapture-validation-28e298ee21ea275629a94e7066ac8835b7654182-1",
+        "artifact_sha256": "f63ecbe50b61b49666abdfaa6bf2f30605a7ddb31af82d8a2e20da3ca1859d23",
+        "receipt_sha256": "f5e925de47bfe9dc5f00f28b179e6d4e124b24d2f793692390e08177e55f57d5"
+      }
+    },
+    "destination_projection": {
+      "projector": "native_annual_destination_v1",
+      "policy": "financial-correction-native-annual-v1"
+    }
+  },
+  "target": {
+    "evaluated_at": "2026-10-06T21:47:36.426Z",
+    "base_sha256": "dcea67d81023b0f4ef18eeea5ef016da154bd95ef652115d7f4997b4a4081f1a",
+    "manifest_sha256": "ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+    "price_observations_sha256": "22ea57c59b56eaa4eddf02547791b2698dec0b68e1ec15c80d5f7b5d66191fdd",
+    "known_price_dates_sha256": "f2a1139e471504c41ad8199415287589aae540637fc330bc862ef18284cfd06c",
+    "universe_sha256": "2e1e30d022a07d5ddae80ee3427621621f646c032ce4273da8ed78e927bf1ede"
+  },
+  "price_input": {
+    "artifact_id": 11421722413,
+    "artifact_sha256": "1ab2594be91d3bbc8716481c730a9afdf22eb4ca554fcd5d02770b92252de4eb",
+    "manifest_sha256": "ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0",
+    "price_observations_sha256": "22ea57c59b56eaa4eddf02547791b2698dec0b68e1ec15c80d5f7b5d66191fdd",
+    "known_price_dates_sha256": "f2a1139e471504c41ad8199415287589aae540637fc330bc862ef18284cfd06c"
+  },
+  "maximum_new_receipts": 400
+}

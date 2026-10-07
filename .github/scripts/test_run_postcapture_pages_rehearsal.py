@@ -15,6 +15,29 @@ collector = importlib.util.module_from_spec(collector_spec)
 collector_spec.loader.exec_module(collector)
 
 
+def disabled_checkout(directory: Path) -> Path:
+    """Model the diagnostic checkout without inheriting a live renewal phase."""
+    root = Path(__file__).resolve().parents[2]
+    checkout = directory / "checkout"
+    for name in collector.CONTROL_HASHES:
+        destination = checkout / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / name, destination)
+    contracts = checkout / "contracts"
+    contracts.mkdir()
+    (contracts / "financial_source_postcapture_trust_v1.json").write_text(json.dumps({
+        "schema_version": "financial-source-postcapture-trust-v1",
+        "reviewed_requests": [],
+    }))
+    (contracts / "financial_source_renewal_v1.json").write_text(json.dumps({
+        "schema_version": "financial-source-renewal-policy-v1",
+        "publication_enabled": False,
+        "reviewed_controllers": [],
+        "reviewed_consumer_transitions": [],
+    }))
+    return checkout
+
+
 class SupervisorTests(unittest.TestCase):
     def test_process_and_job_deadlines_preserve_upload_margin(self):
         self.assertEqual(module.remaining_budget(100, 100), 5700)
@@ -74,38 +97,62 @@ class SupervisorTests(unittest.TestCase):
 
     def test_report_collection_preserves_production_controls(self):
         root = Path(__file__).resolve().parents[2]
-        self.assertEqual(collector.verify_controls(root), collector.CONTROL_HASHES)
+        for name, expected in collector.CONTROL_HASHES.items():
+            with self.subTest(live_control=name):
+                self.assertFalse((root / name).is_symlink())
+                self.assertEqual(collector.sha(root / name), expected)
         with tempfile.TemporaryDirectory() as directory:
-            checkout = Path(directory) / "checkout"
-            for name in [*collector.CONTROL_HASHES, "contracts/financial_source_postcapture_trust_v1.json", "contracts/financial_source_renewal_v1.json"]:
-                destination = checkout / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(root / name, destination)
-            path = checkout / ".github/financial-performance-release-v2.json"
-            original = path.read_bytes()
-            path.write_bytes(original + b" ")
-            with self.assertRaisesRegex(ValueError, "live control changed"):
-                collector.verify_controls(checkout)
-            path.write_bytes(original)
-            (checkout / ".github/financial-source-renewal-release.json").write_text("{}")
-            with self.assertRaisesRegex(ValueError, "escaped"):
-                collector.verify_controls(checkout)
+            checkout = disabled_checkout(Path(directory))
+            self.assertEqual(collector.verify_controls(checkout), collector.CONTROL_HASHES)
+            for name in collector.CONTROL_HASHES:
+                with self.subTest(changed_control=name):
+                    path = checkout / name
+                    original = path.read_bytes()
+                    path.write_bytes(original + b" ")
+                    with self.assertRaisesRegex(ValueError, "live control changed"):
+                        collector.verify_controls(checkout)
+                    path.write_bytes(original)
+
+    def test_report_collection_rejects_production_authority(self):
+        for name, field, value in (
+            ("financial_source_postcapture_trust_v1.json", "reviewed_requests", [{"test_only": True}]),
+            ("financial_source_renewal_v1.json", "reviewed_controllers", [{"test_only": True}]),
+            ("financial_source_renewal_v1.json", "reviewed_consumer_transitions", [{"test_only": True}]),
+            ("financial_source_renewal_v1.json", "publication_enabled", True),
+        ):
+            with self.subTest(authority=field), tempfile.TemporaryDirectory() as directory:
+                checkout = disabled_checkout(Path(directory))
+                path = checkout / "contracts" / name
+                control = json.loads(path.read_text())
+                control[field] = value
+                path.write_text(json.dumps(control))
+                with self.assertRaisesRegex(ValueError, "production source or renewal authority"):
+                    collector.verify_controls(checkout)
+
+    def test_report_collection_rejects_escaped_renewal_controls(self):
+        for name in ("request", "candidate", "release"):
+            with self.subTest(control=name), tempfile.TemporaryDirectory() as directory:
+                checkout = disabled_checkout(Path(directory))
+                (checkout / f".github/financial-source-renewal-{name}.json").write_text("{}")
+                with self.assertRaisesRegex(ValueError, "escaped"):
+                    collector.verify_controls(checkout)
 
     def test_report_allowlist_excludes_pages_and_refuses_links(self):
-        root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
+            checkout = disabled_checkout(temp)
             source = temp / "postcapture-pages-fixture"
             source.mkdir()
             (source / "report.json").write_text('{"status":"failed"}')
             (source / "publication.json").write_text('{"not_a_report":true}')
-            result = collector.collect(temp, temp / "reports", root)
+            result = collector.collect(temp, temp / "reports", checkout)
             self.assertEqual(list(result["files"]), ["postcapture-pages-fixture/report.json"])
+            self.assertEqual(result["errors"], [])
             (source / "report.json").unlink()
             (source / "report.json").symlink_to(source / "publication.json")
-            linked = collector.collect(temp, temp / "linked-reports", root)
+            linked = collector.collect(temp, temp / "linked-reports", checkout)
             self.assertEqual(linked["files"], {})
-            self.assertTrue(linked["errors"])
+            self.assertEqual(linked["errors"], ["Unsafe or over-limit diagnostic report: postcapture-pages-fixture/report.json"])
 
     def test_workflow_limits_network_scope_and_required_ci_runs_the_reader_boundary(self):
         root = Path(__file__).resolve().parents[2]
@@ -127,15 +174,15 @@ class SupervisorTests(unittest.TestCase):
             self.assertIn(test, normal)
 
     def test_report_collection_retains_both_complete_targets_and_binding_diagnostics(self):
-        root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
+            checkout = disabled_checkout(temp)
             source = temp / "postcapture-pages-fixture"
             source.mkdir()
             names = ("request-target-base.json", "certified-target-base.json", "target-base-binding.json", "target-base-comparison.json")
             for name in names:
                 (source / name).write_text(json.dumps({"diagnostic": name, "rows": [{"symbol": "NVDA", "price": 123}]}))
-            result = collector.collect(temp, temp / "reports", root)
+            result = collector.collect(temp, temp / "reports", checkout)
             self.assertEqual(len(result["files"]), 4)
             self.assertEqual(result["errors"], [])
             for name in names:
