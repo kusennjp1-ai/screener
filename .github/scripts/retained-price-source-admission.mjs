@@ -7,7 +7,7 @@ import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {PRICE_REQUEST_PATH,PRICE_CI,priceControllerRoot,priceReadApi,verifyPriceActivation,verifyPriceSourceCompletion,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
 
-export const ROOT=fileURLToPath(new URL('../../',import.meta.url));
+export const ROOT=join(dirname(fileURLToPath(import.meta.url)),'../../');
 export const REPAIR_SCHEMA='retained-price-source-declaration-v1';
 export const IMMUTABLE_REQUEST_SHA256='516bfb60f2bc6114767840a9f5a1563343f74e2537ece362cc7b6ea88d446c1e';
 const repo='kusennjp1-ai/screener',prefix=`repos/${repo}`,MAX_JSON=64*1024**2;

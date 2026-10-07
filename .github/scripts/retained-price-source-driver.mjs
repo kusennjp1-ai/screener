@@ -8,6 +8,7 @@ import {appendFileSync,closeSync,createWriteStream,existsSync,fstatSync,lstatSyn
   readlinkSync,readSync,readdirSync,realpathSync,statfsSync,writeFileSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {pipeline} from 'node:stream/promises';
+import {fileURLToPath} from 'node:url';
 import {priceReadApi,priceExecution,verifyPriceCiProducer,verifyPriceActivation,PRICE_CI} from './retained-price-ci-admission.mjs';
 import {extractPriceObservations,priceObservationDigest,assertPriceObservationBounds} from './price-observations.mjs';
 
@@ -17,7 +18,7 @@ const REPOSITORY='kusennjp1-ai/screener',PREFIX=`repos/${REPOSITORY}`;
 const DATA_FILES=new Set(['research-daily.json','portfolio-model.json','qualification-audit.json','ibd-reference.json']);
 const SOURCE_AUDIT='static-data/retained-price-source-audit/',REPLAY_AUDIT='static-data/retained-price-source-replay-audit/';
 const isData=name=>name.startsWith('static-data/')||DATA_FILES.has(name);
-const ORIGINAL_PINS=JSON.parse(readFileSync(new URL('./fixtures/retained-price-recovery-oct6-inputs.json',import.meta.url)));
+const ORIGINAL_PINS=JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)),'fixtures/retained-price-recovery-oct6-inputs.json')));
 export const OBSERVATION_RESPONSE_KEYS=[`GET ${PREFIX}`,`GET ${PREFIX}/git/ref/heads/main`];
 export const ORIGINAL_RESPONSE_KEYS=[`GET ${PREFIX}/git/trees/2186101e92e1f71771936831cea0a40e410975f7?recursive=1`,
   ...['candidate','prior'].flatMap(role=>{const pin=ORIGINAL_PINS[role];return [`GET ${PREFIX}/actions/runs/${pin.run_id}`,`GET ${PREFIX}/actions/runs/${pin.run_id}/attempts/1`,

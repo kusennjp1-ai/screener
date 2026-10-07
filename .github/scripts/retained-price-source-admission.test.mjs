@@ -4,11 +4,15 @@ import {readFileSync,mkdtempSync,mkdirSync,writeFileSync,rmSync,copyFileSync} fr
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {validateRepairRequest,readRepairRequest,assertRepairPredecessor,parseRepairDeclaration,authenticateOriginals,digest} from './retained-price-source-admission.mjs';
+import {fileURLToPath} from 'node:url';
+import {ROOT,validateRepairRequest,readRepairRequest,assertRepairPredecessor,parseRepairDeclaration,authenticateOriginals,digest} from './retained-price-source-admission.mjs';
 const committed=JSON.parse(readFileSync(new URL('../retained-price-oct6-source.json',import.meta.url)));
 const initial={...committed,enabled:false,activation:null};
 const clone=structuredClone;
 function active(){return {...clone(initial),enabled:true,activation:{reviewed_parent_sha:'a'.repeat(40),reviewed_parent_tree:'b'.repeat(40),disabled_request_sha256:'c'.repeat(64),not_before:'2026-10-07T00:00:00Z',not_after:'2026-10-07T02:00:00Z'}};}
+test('module root preserves the native URL-derived path including its trailing separator',()=>{
+  assert.equal(ROOT,fileURLToPath(new URL('../../',import.meta.url)));
+});
 test('disabled fixture has no activation and the actual request always passes the same closed schema',()=>{validateRepairRequest(readRepairRequest().value);assert.equal(initial.activation,null);assert.equal(validateRepairRequest(initial),initial);});
 test('every fixed source, runtime, predecessor and authority field is closed',()=>{
   for(const change of [r=>r.target_as_of_date='2026-10-07',r=>r.originals.candidate.artifact_id++,r=>r.originals.candidate.sha256='0'.repeat(64),r=>r.originals.candidate.head_sha='0'.repeat(40),r=>r.predecessor.identity='synthetic',r=>r.predecessor.financial_generation='0'.repeat(64),r=>r.predecessor.financial_lineage_sha256='0'.repeat(64),r=>r.approved_ui.sha='0'.repeat(40),r=>r.bounds.reserve_bytes=0,r=>r.bounds.download_timeout_ms++,r=>r.policy.provider_acquisition=true,r=>r.policy.financial_expiry_uses_actual_current_time=false,r=>r.policy.diagnostic_source_authority=true,r=>r.policy.renewal_prerequisite=true,r=>r.extra=true,r=>delete r.repair]){const v=clone(initial);change(v);assert.throws(()=>validateRepairRequest(v));}
