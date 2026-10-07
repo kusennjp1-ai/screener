@@ -11,6 +11,7 @@ import {pipeline} from 'node:stream/promises';
 import {fileURLToPath} from 'node:url';
 import {priceReadApi,priceExecution,verifyPriceCiProducer,verifyPriceActivation,PRICE_CI} from './retained-price-ci-admission.mjs';
 import {extractPriceObservations,priceObservationDigest,assertPriceObservationBounds} from './price-observations.mjs';
+import {createRetainedPriceLiveApi} from './retained-price-live-inventory.mjs';
 
 const MIB=1024**2,MAX_JSON=64*MIB,RESERVE=8*1024**3,SOURCE_BYTES=1876607954;
 const REPLAY_FREE=RESERVE+3*SOURCE_BYTES+256*MIB,DEPENDENCY_BYTES=2*1024**3;
@@ -119,7 +120,10 @@ export function immutableOriginals(evidence){
   return {...Object.fromEntries(['schema_version','publication_authority','provider_work','reviewed_historical_main','approved_ui','producer_runtime','selected'].map(k=>[k,evidence[k]])),
     immutable_responses,immutable_response_sha256};
 }
-async function liveFor(o){return o.readLive?o.readLive({repository:REPOSITORY,api:o.api}):(await import('./publication-state.mjs')).livePublication({repository:REPOSITORY,api:o.api});}
+async function liveFor(o){
+  const api=createRetainedPriceLiveApi(o.api);
+  return o.readLive?o.readLive({repository:REPOSITORY,api}):(await import('./publication-state.mjs')).livePublication({repository:REPOSITORY,api});
+}
 async function freshProducer(o){
   const request=o.authority.readRepairRequest(o.root);assert(request?.value.enabled,'Finite source request is disabled');o.authority.validateRepairRequest(request.value);
   const gate=o.producerGate({root:o.root,event:eventFor(o),execution:o.execution,api:o.api,now:o.now()});assert(gate.status==='verified'&&gate.repair===true,'Fresh exact CI producer admission failed');
