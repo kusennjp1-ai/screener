@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {spawnSync} from 'node:child_process';
-import {mkdtempSync,readdirSync,rmSync,readFileSync,writeFileSync,copyFileSync} from 'node:fs';
+import {execFileSync,spawnSync} from 'node:child_process';
+import {mkdtempSync,mkdirSync,readdirSync,rmSync,readFileSync,writeFileSync,copyFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {FIXED,STEPS,ARCHIVE_LIMIT,FILE_LIMIT,RESERVE,validateBinding,verifySourceMetadata,storageBudget} from './financial-renewal-actual-candidate-validation.mjs';
+import {FIXED,STEPS,ARCHIVE_LIMIT,FILE_LIMIT,RESERVE,validateBinding,verifySourceMetadata,storageBudget,lockedPythonEnvironment,preflightLockedPython,preflightPythonSourceImports} from './financial-renewal-actual-candidate-validation.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const stamp=minute=>`2026-10-07T01:${String(minute).padStart(2,'0')}:00Z`;
 function fixture(){
@@ -50,4 +50,53 @@ test('measured extraction and two full canonical restores determine space admiss
   assert.throws(()=>storageBudget({...m,availableBytes:Number.MAX_SAFE_INTEGER,candidateRestoreBytes:Number.MAX_SAFE_INTEGER}));
   assert.throws(()=>storageBudget({...m,availableBytes:Number.MAX_SAFE_INTEGER,fileCount:FILE_LIMIT+1}));
   assert.throws(()=>storageBudget({...m,availableBytes:Number.MAX_SAFE_INTEGER,extractedBytes:ARCHIVE_LIMIT+1}));
+});
+
+const testPins={yfinance:'0.2.66',curl_cffi:'0.16.3',pandas:'2.2.0',numpy:'1.26.3',requests:'2.31.0',jsonschema:'4.23.0'};
+function pythonFixture(){
+  const directory=mkdtempSync(join(tmpdir(),'renewal-python-env-')),runtime=join(directory,'venv'),root=join(directory,'source'),decoy=join(directory,'system-bin');
+  execFileSync('python3',['-m','venv','--without-pip',runtime]);
+  const site=execFileSync(join(runtime,'bin/python'),['-c','import sysconfig; print(sysconfig.get_path("purelib"))'],{encoding:'utf8'}).trim();
+  // Tiny test modules stand in for package imports only. No production source,
+  // financial implementation or provider behavior is supplied by this fixture.
+  for(const [name,version]of Object.entries(testPins)){
+    writeFileSync(join(site,`${name}.py`),`fixture_marker = ${JSON.stringify(name)}\n`);
+    const dist=join(site,`${name}-${version}.dist-info`);mkdirSync(dist);writeFileSync(join(dist,'METADATA'),`Metadata-Version: 2.1\nName: ${name}\nVersion: ${version}\n`);
+  }
+  mkdirSync(join(root,'.github/scripts'),{recursive:true});writeFileSync(join(root,'.github/scripts/financial-release-projection-requirements.txt'),Object.entries(testPins).map(([name,version])=>`${name}==${version}\n`).join(''));
+  mkdirSync(decoy);for(const name of ['python','python3'])writeFileSync(join(decoy,name),'#!/bin/sh\necho WRONG_SYSTEM_PYTHON >&2\nexit 61\n',{mode:0o755});
+  return {directory,runtime,root,site,environment:{...process.env,PATH:decoy+':'+process.env.PATH,FINANCIAL_REPLAY_PYTHON:join(runtime,'bin/python')}};
+}
+test('explicit replay Python alone leaves nested bare-python calls broken; PATH activation fixes all launches',()=>{
+  const f=pythonFixture();try{
+    const prior=spawnSync('python3',['-c','import jsonschema,pandas,numpy'],{env:f.environment,encoding:'utf8'});assert.equal(prior.status,61);assert.match(prior.stderr,/WRONG_SYSTEM_PYTHON/);
+    const verified=preflightLockedPython(f.root,f.runtime,f.environment);assert.equal(verified.report.launches.length,3);
+    for(const launch of verified.report.launches){assert.equal(launch.prefix,f.runtime);assert.equal(dirname(launch.executable),join(f.runtime,'bin'));assert.deepEqual(launch.versions,testPins);}
+    const nested=execFileSync(process.execPath,['--input-type=module','-e','import {execFileSync} from "node:child_process";process.stdout.write(execFileSync("python3",["-c","import jsonschema,pandas,numpy,sys;print(sys.prefix)"],{encoding:"utf8"}));'],{env:verified.environment,encoding:'utf8'});
+    assert.equal(nested.trim(),f.runtime);
+  }finally{rmSync(f.directory,{recursive:true});}
+});
+test('locked Python preflight refuses missing dependency and mismatched pinned version',()=>{
+  const f=pythonFixture();try{
+    writeFileSync(join(f.site,'jsonschema-4.23.0.dist-info/METADATA'),'Metadata-Version: 2.1\nName: jsonschema\nVersion: 0.0.0\n');
+    assert.throws(()=>preflightLockedPython(f.root,f.runtime,f.environment),/Locked dependency version mismatch/);
+    writeFileSync(join(f.site,'jsonschema-4.23.0.dist-info/METADATA'),'Metadata-Version: 2.1\nName: jsonschema\nVersion: 4.23.0\n');
+    rmSync(join(f.site,'numpy.py'));assert.throws(()=>preflightLockedPython(f.root,f.runtime,f.environment),/No module named 'numpy'/);
+  }finally{rmSync(f.directory,{recursive:true});}
+});
+test('configured explicit interpreter cannot diverge from the locked PATH interpreter',()=>{
+  assert.throws(()=>lockedPythonEnvironment('/absolute/venv',{PATH:'/usr/bin',FINANCIAL_REPLAY_PYTHON:'/usr/bin/python3'}),/differs from locked venv/);
+  const env=lockedPythonEnvironment('/absolute/venv',{PATH:'/usr/bin'});assert.equal(env.PATH,'/absolute/venv/bin:/usr/bin');assert.equal(env.FINANCIAL_REPLAY_PYTHON,'/absolute/venv/bin/python');
+});
+test('source import preflight detects a missing lazy adapter dependency before replay',()=>{
+  const f=pythonFixture();try{
+    for(const name of ['services','scripts'])mkdirSync(join(f.root,'backend/app',name),{recursive:true});
+    for(const name of ['export_native_annual_projection','verify_statement_source_renewal'])writeFileSync(join(f.root,'backend/app/scripts',`${name}.py`),'fixture_module = True\n');
+    const batch=join(f.root,'backend/app/services/financial_statement_batch.py');writeFileSync(batch,'def runtime():\n import definitely_missing_runtime_dependency\n');
+    for(const name of ['verify-postcapture-correction-archive.py','verify-certified-correction-archive.py','check-pages-payload.py'])writeFileSync(join(f.root,'.github/scripts',name),'fixture_helper = True\n');
+    const environment=lockedPythonEnvironment(f.runtime,f.environment);
+    assert.throws(()=>preflightPythonSourceImports(f.root,environment),/definitely_missing_runtime_dependency/);
+    writeFileSync(batch,'def runtime():\n return tuple(range(7))\n');
+    const passed=preflightPythonSourceImports(f.root,environment);assert.equal(passed.prefix,f.runtime);assert.equal(passed.imported_modules.length,2);assert.equal(passed.imported_helpers.length,3);assert.equal(passed.lazy_runtime_handles,7);
+  }finally{rmSync(f.directory,{recursive:true});}
 });

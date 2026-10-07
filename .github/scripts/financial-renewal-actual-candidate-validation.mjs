@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {closeSync,existsSync,lstatSync,mkdirSync,openSync,readFileSync,statfsSync,writeFileSync,writeSync} from 'node:fs';
-import {dirname,join,resolve} from 'node:path';
+import {delimiter,dirname,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const here=dirname(fileURLToPath(import.meta.url));
@@ -28,6 +28,63 @@ const save=(path,value)=>writeFileSync(path,JSON.stringify(value,null,2)+'\n',{f
 const fileHash=path=>execFileSync('sha256sum',[path],{encoding:'utf8'}).split(' ')[0];
 const git=(root,...args)=>execFileSync('git',['-C',root,...args],{encoding:'utf8',maxBuffer:32*1024**2}).trim();
 const free=path=>{const s=statfsSync(path);return s.bavail*s.bsize;};
+
+export function lockedPythonEnvironment(runtime,inherited=process.env){
+  assert.equal(resolve(runtime),runtime,'Replay runtime must be absolute');
+  const bin=join(runtime,'bin'),python=join(bin,'python');
+  if(inherited.FINANCIAL_REPLAY_PYTHON!==undefined)assert.equal(inherited.FINANCIAL_REPLAY_PYTHON,python,'Explicit replay Python differs from locked venv');
+  return {...inherited,PATH:bin+delimiter+(inherited.PATH??''),FINANCIAL_REPLAY_PYTHON:python};
+}
+
+export function preflightLockedPython(root,runtime,inherited=process.env){
+  const env=lockedPythonEnvironment(runtime,inherited),requirements=Object.fromEntries(readFileSync(join(root,'.github/scripts/financial-release-projection-requirements.txt'),'utf8').split(/\r?\n/).map(line=>line.trim()).filter(line=>line&&!line.startsWith('#')).map(line=>{
+    const match=/^([A-Za-z_][A-Za-z0-9_]*)==([0-9][A-Za-z0-9.]*)$/.exec(line);assert(match,'Replay dependency is not exactly pinned');return [match[1],match[2]];
+  }));
+  for(const name of ['jsonschema','pandas','numpy'])assert(requirements[name],`Missing locked ${name}`);
+  const probe=`import importlib,importlib.metadata,json,pathlib,sys
+runtime=pathlib.Path(sys.argv[1]);expected=json.loads(sys.argv[2])
+assert pathlib.Path(sys.prefix).resolve()==runtime.resolve(),'Python did not select locked venv prefix'
+assert sys.prefix!=sys.base_prefix,'Python did not activate a virtual environment'
+assert pathlib.Path(sys.executable).absolute().parent==runtime/'bin','Python executable escaped locked venv bin'
+assert sys.version_info[:2]>=(3,11),'Python 3.11 or newer required'
+versions={}
+for name,version in expected.items():
+ importlib.import_module(name)
+ versions[name]=importlib.metadata.version(name)
+ assert versions[name]==version,'Locked dependency version mismatch: '+name
+print(json.dumps({'executable':sys.executable,'prefix':sys.prefix,'base_prefix':sys.base_prefix,'python_version':list(sys.version_info[:3]),'versions':versions}))
+`;
+  const launches=[env.FINANCIAL_REPLAY_PYTHON,'python3','python'].map(command=>({command,...JSON.parse(execFileSync(command,['-c',probe,runtime,JSON.stringify(requirements)],{env,encoding:'utf8',maxBuffer:64*1024,timeout:60_000}))}));
+  for(const launch of launches){assert.deepEqual(launch.versions,requirements);assert.deepEqual(launch.python_version,launches[0].python_version);assert.equal(launch.prefix,launches[0].prefix);}
+  return {environment:env,report:{schema_version:'financial-renewal-locked-python-preflight-v1',status:'verified',runtime,launches}};
+}
+
+export function preflightPythonSourceImports(root,environment){
+  const probe=`import importlib,json,pathlib,runpy,sys
+root=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(root/'backend'))
+from app.services import financial_statement_batch as batch
+modules=['app.scripts.export_native_annual_projection','app.scripts.verify_statement_source_renewal']
+for name in modules:importlib.import_module(name)
+runtime=batch.runtime()
+helpers=['verify-postcapture-correction-archive.py','verify-certified-correction-archive.py','check-pages-payload.py']
+for name in helpers:runpy.run_path(str(root/'.github/scripts'/name),run_name='diagnostic_import_only')
+print(json.dumps({'status':'verified','command':'python3','executable':sys.executable,'prefix':sys.prefix,'imported_modules':modules,'imported_helpers':helpers,'lazy_runtime_handles':len(runtime)}))
+`;
+  // Import the exact entrypoints and lazy adapter dependency closure only.
+  // No Ticker/session is constructed and no collector/projector is invoked.
+  return JSON.parse(execFileSync('python3',['-c',probe,root],{env:environment,encoding:'utf8',maxBuffer:64*1024,timeout:60_000}));
+}
+
+function activateLockedPython(root,runtime,phase,reports){
+  const checked=preflightLockedPython(root,runtime);
+  checked.report.source_imports=preflightPythonSourceImports(root,checked.environment);
+  // Existing validators intentionally use both an explicit interpreter and
+  // bare python3. Propagate the same locked venv to every nested subprocess.
+  process.env.PATH=checked.environment.PATH;
+  process.env.FINANCIAL_REPLAY_PYTHON=checked.environment.FINANCIAL_REPLAY_PYTHON;
+  save(join(reports,`${phase}-runtime.json`),checked.report);
+  return checked.report;
+}
 
 export function validateBinding(binding){
   assert.deepEqual(Object.keys(binding).sort(),[...Object.keys(FIXED),...mutable].sort(),'Unexpected binding fields');
@@ -111,16 +168,19 @@ export async function runPhase(phase,root,candidate,reports){
     execFileSync('npm',['ci','--prefix',join(root,'frontend'),'--ignore-scripts','--no-audit','--no-fund'],{stdio:'inherit'});
     execFileSync('python3',['-m','venv',runtime],{stdio:'inherit'});
     execFileSync(join(runtime,'bin/python'),['-m','pip','install','-r',join(root,'.github/scripts/financial-release-projection-requirements.txt')],{stdio:'inherit'});
+    const pythonRuntime=activateLockedPython(root,runtime,phase,reports);
     assert.equal(git(root,'status','--porcelain','--untracked-files=no'),'','A checkout changed during setup');
-    const result={status:'locked-runtime-installed',phase,publication_authority:'none',binding_sha256:hash(bindingBytes),completed_at:new Date().toISOString()};
+    const result={status:'locked-runtime-installed',phase,publication_authority:'none',binding_sha256:hash(bindingBytes),python_runtime:pythonRuntime,completed_at:new Date().toISOString()};
     save(join(reports,'setup-result.json'),result);return result;
   }
+  mkdirSync(reports,{recursive:true});assert(process.env.RUNNER_TEMP,'Missing runner temp directory');
+  const pythonRuntime=activateLockedPython(root,join(resolve(process.env.RUNNER_TEMP),'financial-renewal-validation-python'),phase,reports);
   const load=name=>import(pathToFileURL(join(root,'.github/scripts',name)).href);
   const gate=await load('publication-gate.mjs'),state=await load('publication-state.mjs'),renewal=await load('financial-source-renewal.mjs'),cert=await load('financial-source-renewal-certification.mjs'),release=await load('financial-release-activation.mjs'),ci=await load('financial-renewal-ci-admission.mjs'),correction=await load('financial-correction.mjs'),audit=await load('financial-audit-transport.mjs');
   assert.equal(release.financialReleasePolicy.maximum_archive_bytes,ARCHIVE_LIMIT);assert.equal(release.financialReleasePolicy.maximum_archive_files,FILE_LIMIT);
   mkdirSync(reports,{recursive:true});const directory=dirname(candidate);mkdirSync(directory,{recursive:true});
   const archive=join(directory,'candidate.tar'),zip=join(directory,'artifact.zip'),metadata=join(directory,'metadata'),retrievalPath=join(reports,'retrieval-result.json');
-  const report={schema_version:'financial-renewal-independent-diagnostic-v1',publication_authority:'none',phase,started_at:new Date().toISOString(),binding_sha256:hash(bindingBytes),source:binding};
+  const report={schema_version:'financial-renewal-independent-diagnostic-v1',publication_authority:'none',phase,started_at:new Date().toISOString(),binding_sha256:hash(bindingBytes),source:binding,python_runtime:pythonRuntime};
   return gate.withInvocationImmutableGitApi(binding.repository,async()=>{
     const api=gate.githubApi,prefix=`repos/${binding.repository}`;
     const authority=()=>{
