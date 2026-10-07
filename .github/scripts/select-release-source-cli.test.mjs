@@ -93,7 +93,7 @@ test('release CLI rejects unknown commands', t => {
 });
 
 test('old-workflow recheck rejects oversized final payloads before any remote read in every publishing mode', t => {
-  for (const mode of ['data', 'ui', 'migration', 'activation', 'carry']) {
+  for (const mode of ['data', 'ui', 'migration', 'activation', 'carry', 'renewal']) {
     const f = fixture(t, { systemTools: true });
     const dist = join(f.root, 'release/frontend/dist'), state = join(f.root, 'verified-publication');
     mkdirSync(dist, { recursive: true });mkdirSync(state);

@@ -1,5 +1,6 @@
 import {assertFinancialAuditDirectory,verifyFinancialAuditFile,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,FINANCIAL_AUDIT_MAX_BYTES,FINANCIAL_AUDIT_MAX_FILE_BYTES} from './financial-audit-history.mjs';
 import {compressedAuditFiles,financialAuditReader} from './financial-audit-transport.mjs';
+import {renewalSchema,validateRenewalCandidate,validateRenewalChain,inspectRenewalChain,assertRenewalCarryContinuity} from './financial-source-renewal.mjs';
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,previewPublication,validateTransportPreview,verifyTransportPublication,assertTransportDeclaration} from './static-transport-publication.mjs';
 import {isPerformanceException, isExceptionCandidate, isPackedCandidate, exceptionPolicyFor, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation} from './financial-performance-exception.mjs';
 // Publication authority requires current-main CI and immutable tested artifacts,
@@ -12,6 +13,8 @@ import { pathToFileURL } from 'node:url';
 import { contract, digest, parseCorrectionIntent, verifyCorrectionSource, verifyCorrectionChecks, verifyCorrectionConsumerChecks, dataInventory, verifyConsumerCapability, restoreCorrectionSource } from './financial-correction.mjs';
 import { comparePreviewDataIsolated } from './financial-preview-comparison.mjs';
 import { parseCertifiedPreviewSelection, CERTIFIED_PREVIEW_SCHEMA, NATIVE_PROJECTOR_PATH } from './financial-candidate-preview-v2.mjs';
+import {POSTCAPTURE_PREVIEW_SCHEMA,POSTCAPTURE_SOURCE_GUARD,POSTCAPTURE_RENEWAL_REQUEST,parseRenewalFinancialRequest,previewSchemaForRequest,verifyRenewalCorrectionSource} from './financial-candidate-preview-postcapture.mjs';
+import {isPostcaptureReference} from './verify-postcapture-correction-source.mjs';
 import { bootstrap, downloadArtifact, inventoryDigest, livePublication, safePath, sha256, uiInventory } from './publication-state.mjs';
 import { githubApi, sameRepository } from './publication-gate.mjs';
 import { priceObservationDigest, extractPriceObservations } from './price-observations.mjs';
@@ -81,6 +84,7 @@ export function completeInventory(root) {
   }};walk(root);return files;
 }
 export function validateCandidateRecord(record) {
+  if(record?.schema_version===renewalSchema)return validateRenewalCandidate(record);
   if(isExceptionCandidate(record))return validateExceptionCandidate(record);
   const packed=record?.schema_version==='financial-release-candidate-v2';
   exact(record,['schema_version','producer','captured_ui','request_sha256','preview_receipt_sha256','corrected_inventory_sha256','protected_code_sha256',...(packed?['transport_sha256']:[])],'candidate record');
@@ -98,6 +102,7 @@ export function verifyCandidateAttempt({artifact,run,jobs,record,mainSha,approva
   return verifyCandidateArtifactAttempt({artifact,run,jobs,record,now});
 }
 function verifyCandidateArtifactAttempt({artifact,run,jobs,record,now=Date.now()}) {
+  if(record?.schema_version===renewalSchema)throw Error('Renewal cannot use initial Design activation authority');
   validateCandidateRecord(record);
   if(run.id!==record.producer.run_id||run.run_attempt!==record.producer.run_attempt||record.producer.head_sha!==run.head_sha
     ||!sameRepository(run,bootstrap.repository)||run.path!==policy.candidate_workflow||run.head_branch!=='main'||run.event!=='push'||run.status!=='completed'||run.conclusion!=='success')throw Error('Candidate lacks the exact current-main Design gate');
@@ -248,9 +253,9 @@ export function restorePinnedCandidateArchive({pin,evidence,directory,candidate}
   return record;
 }
 
-function candidateTransportLineage(receipt) {
-  if(receipt.schema_version!==CERTIFIED_PREVIEW_SCHEMA)throw Error('Packed financial capture requires a certified preview');
-  return sourceLineage({source:receipt.source,certificate:receipt.source_validation.certificate.reference,sourceProjectionSha256:receipt.financial.projection_sha256,
+function candidateTransportLineage(receipt,renewalAudit=false) {
+  if(receipt.schema_version!==CERTIFIED_PREVIEW_SCHEMA&&!(renewalAudit&&receipt.schema_version===POSTCAPTURE_PREVIEW_SCHEMA))throw Error('Packed financial capture requires its correctly scoped certified preview');
+  return (renewalAudit?renewalSourceLineage:sourceLineage)({source:receipt.source,certificate:receipt.source_validation.certificate.reference,sourceProjectionSha256:receipt.financial.projection_sha256,
     receiptInventorySha256:receipt.financial.receipt_inventory_sha256,projectionPolicy:receipt.destination_projection.policy}).id;
 }
 
@@ -280,16 +285,25 @@ export async function verifyCandidateTransport(root,candidate,record=null,{resto
   if(record&&!isPackedCandidate(record))throw Error('Packed candidate requires its own v2 capture; old acceptance cannot be reused');
   if(isExceptionCandidate(record))validateExceptionCandidate(record);
   const bytes=readFileSync(path),transport=JSON.parse(bytes);
-  exact(transport,['schema_version','preview_receipt_sha256','bootstrap_sha256','corrected'],'candidate transport');
+  const renewalAudit=transport.schema_version==='financial-renewal-candidate-transport-v1';
+  if(renewalAudit){
+    if(record?.schema_version!==renewalSchema)throw Error('Nested audit preview requires its own sealed renewal capture');
+    validateRenewalCandidate(record);
+  }
+  exact(transport,['schema_version','preview_receipt_sha256','bootstrap_sha256','corrected',...(renewalAudit?['financial_audit']:[])],'candidate transport');
   const {validatePreviewReceipt}=await import('./financial-candidate-preview.mjs');
   const previewBytes=readFileSync(join(candidate,'preview-receipt.json')),preview=validatePreviewReceipt(JSON.parse(previewBytes));
   const bootstrapBytes=readFileSync(join(corrected,'publication.json')),publication=validateTransportPreview(JSON.parse(bootstrapBytes));
-  if(transport.schema_version!=='financial-candidate-transport-v1'||transport.preview_receipt_sha256!==sha256(previewBytes)||transport.bootstrap_sha256!==sha256(bootstrapBytes)
+  if((!renewalAudit&&transport.schema_version!=='financial-candidate-transport-v1')||transport.preview_receipt_sha256!==sha256(previewBytes)||transport.bootstrap_sha256!==sha256(bootstrapBytes)
     ||record&&record.transport_sha256!==sha256(bytes)||transport.corrected.root.bindings.candidateId!==sha256(previewBytes)
-    ||transport.corrected.root.bindings.financialGeneration!==preview.financial.generation||transport.corrected.root.bindings.financialLineageSha256!==candidateTransportLineage(preview)||transport.corrected.root.bindings.sourceCommit!==preview.controller.sha
+    ||transport.corrected.root.bindings.financialGeneration!==preview.financial.generation||transport.corrected.root.bindings.financialLineageSha256!==candidateTransportLineage(preview,renewalAudit)||transport.corrected.root.bindings.sourceCommit!==preview.controller.sha
     ||publication.ui_sha!==preview.candidate_ui.sha||publication.ui_digest!==preview.candidate_ui.digest
     ||transport.corrected.logical_data_inventory_sha256!==preview.bundles.corrected_data_sha256)throw Error('Candidate transport capture binding changed');
   equal(transport.corrected,publication.transport,'candidate bootstrap transport');
+  if(renewalAudit){
+    const {verifyRenewalCandidateStorage}=await import('./financial-renewal-candidate-transport.mjs');
+    return verifyRenewalCandidateStorage({root,candidate,record,transport,publication,restore});
+  }
   if(restore){const logicalRoot=await canonicalPublication({root:corrected,frontendRoot:join(root,'frontend'),publication,restore});return {transport,publication,logicalRoot};}
   await verifyTransportPublication({root:corrected,frontendRoot:join(root,'frontend'),publication});
   return {transport,publication};
@@ -365,8 +379,11 @@ export async function verifyActivationCandidate(state,live,root=process.cwd(),ap
   return verifyCandidatePayload(state,live,root,api);
 }
 
-export async function verifyCandidatePayload(state,live,root,api) {
+export async function verifyCandidatePayload(state,live,root,api,{offline=false,inspectVerifiedBundles,renewalSource=false}={}) {
   const {candidate,request,record}=state;
+  if(typeof renewalSource!=='boolean'||renewalSource&&record.schema_version!==renewalSchema)throw Error('Postcapture source requires the sealed renewal boundary');
+  if(renewalSource)parseRenewalFinancialRequest(request);else parseFinancialReleaseRequest(request);
+  if(inspectVerifiedBundles!==undefined&&typeof inspectVerifiedBundles!=='function')throw Error('Invalid internal verified-bundle inspection');
   if(live.identity!==request.correction.previous_publication_identity)throw Error('Candidate predecessor was superseded');
   if(git(root,['rev-parse',`${record.captured_ui.sha}^{tree}`])!==record.captured_ui.tree)throw Error('Captured consumer commit/tree changed');
   equal(read(join(candidate,'protected-code.json')),protectedCodeInventory(root,record.captured_ui.sha),'captured source Git objects');
@@ -374,23 +391,24 @@ export async function verifyCandidatePayload(state,live,root,api) {
   if(record.request_sha256!==digest(request)||record.protected_code_sha256!==digest(read(join(candidate,'protected-code.json'))))throw Error('Candidate request/code binding changed');
   const {validatePreviewReceipt,verifyExistingPredecessor,verifyPredecessor}=await import('./financial-candidate-preview.mjs');
   const receiptBytes=readFileSync(join(candidate,'preview-receipt.json')),receipt=validatePreviewReceipt(JSON.parse(receiptBytes));
-  if(receipt.schema_version!==CERTIFIED_PREVIEW_SCHEMA||sha256(receiptBytes)!==record.preview_receipt_sha256||digest(receipt.candidate_ui)!==digest(record.captured_ui)
+  if(receipt.schema_version!==(renewalSource?previewSchemaForRequest(request):CERTIFIED_PREVIEW_SCHEMA)||sha256(receiptBytes)!==record.preview_receipt_sha256||digest(receipt.candidate_ui)!==digest(record.captured_ui)
     ||receipt.previous_publication.identity!==live.identity||receipt.financial.generation===live.receipt?.financial_generation)throw Error('Activation preview identity/progress changed');
   if(sha256(readFileSync(join(candidate,'verification.json')))!==receipt.verification_sha256||sha256(readFileSync(join(candidate,'evidence.json')))!==receipt.source_evidence_sha256)throw Error('Activation evidence changed');
   equal(receipt.source,request.correction.source,'preview source');
   equal(receipt.source_validation.certificate.reference,request.source_validation.certificate,'preview certificate');
-  const packed=await verifyCandidateTransport(root,candidate,record),physical=join(candidate,'corrected'),restored=join(candidate,'replayed-corrected');
+  const physical=join(candidate,'corrected'),restored=join(candidate,'replayed-corrected');
   rmSync(restored,{recursive:true,force:true});
-  const corrected=await canonicalPublication({root:physical,frontendRoot:join(root,'frontend'),publication:packed?.publication,restore:restored});
+  const packed=await verifyCandidateTransport(root,candidate,record,{restore:restored}),corrected=packed?.logicalRoot??physical;
   let priorLogical=null,priorPhysical=null;
   try {
   if(inventoryDigest(completeInventory(physical))!==record.corrected_inventory_sha256||inventoryDigest(dataInventory(corrected))!==receipt.bundles.corrected_data_sha256
     ||inventoryDigest(dataInventory(join(candidate,'baseline')))!==receipt.bundles.baseline_data_sha256||inventoryDigest(uiInventory(corrected))!==receipt.candidate_ui.digest)throw Error('Tested candidate bytes changed');
-  const certified=verifyCorrectionSource(request.correction.source,api,{reference:request.source_validation.certificate,certificateZipPath:join(candidate,'original-certification/artifact.zip')});
+  const certificationInput={reference:request.source_validation.certificate,certificateZipPath:join(candidate,'original-certification/artifact.zip')};
+  const certified=renewalSource?verifyRenewalCorrectionSource(request.correction.source,certificationInput,api):verifyCorrectionSource(request.correction.source,api,certificationInput);
   equal(certified.certification,receipt.source_validation.certificate,'current source certification');
-  const sourceRoot=restoreCorrectionSource(request.correction.source,join(candidate,'original-source'),certified);
+  const sourceRoot=restoreCorrectionSource(request.correction.source,join(candidate,'original-source'),certified,{offline});
   const evidence=read(join(candidate,'evidence.json')),prior=join(candidate,'predecessor');
-  if(!existsSync(prior)){mkdirSync(prior,{recursive:true});const zipdir=join(candidate,'original-predecessor');downloadArtifact(evidence.predecessor_artifact,zipdir,bootstrap.repository);extractCandidateTar(join(zipdir,'artifact.tar'),prior);rmSync(join(zipdir,'artifact.tar'));}
+  if(!existsSync(prior)){if(offline)throw Error('Offline candidate verification requires its complete retained predecessor');mkdirSync(prior,{recursive:true});const zipdir=join(candidate,'original-predecessor');downloadArtifact(evidence.predecessor_artifact,zipdir,bootstrap.repository);extractCandidateTar(join(zipdir,'artifact.tar'),prior);rmSync(join(zipdir,'artifact.tar'));}
   verifyExistingPredecessor(join(candidate,'original-predecessor/artifact.zip'),prior,evidence.predecessor_artifact);
   const predecessor=await verifyPredecessor(prior,live,evidence.predecessor_artifact,live.identity,join(root,'frontend'));priorPhysical=prior;priorLogical=predecessor.logicalRoot;
   const frontend=join(root,'frontend');
@@ -412,7 +430,11 @@ export async function verifyCandidatePayload(state,live,root,api) {
   const manifest=read(join(corrected,'static-data/manifest.json'));
   if(priceObservationDigest(extractPriceObservations({dataRoot:join(corrected,'static-data'),manifest}))!==priceObservationDigest(live.priceObservations))throw Error('Activation changed original price observations');
   state.projectionPath=replay.projection_path;state.previewReceipt=receipt;
-  return {projection,receipt};
+  // Renewal may inspect the already verified logical audit while the decoder
+  // roots are open. Mandatory source/projection/comparison checks above always
+  // run first; no CLI or serialized input can supply this internal callback.
+  const additional=inspectVerifiedBundles?await inspectVerifiedBundles({corrected,predecessor:priorLogical,projection,receipt,projectionPath:replay.projection_path}):null;
+  return {projection,receipt,...(additional===null?{}:{additional})};
   }finally{removeCanonical(physical,corrected);if(priorLogical)removeCanonical(priorPhysical,priorLogical);}
 }
 
@@ -424,6 +446,16 @@ export function sourceLineage({source,certificate,sourceProjectionSha256,receipt
   if(!hash(sourceProjectionSha256)||!hash(receiptInventorySha256)||!hash(projectionPolicy.contract_sha256)||!hash(projectionPolicy.projector_sha256))throw Error('Invalid financial source lineage');
   return {id:digest(value),value};
 }
+export function renewalSourceLineage(values) {
+  if(!isPostcaptureReference(values.certificate))return sourceLineage(values);
+  const {source,certificate,sourceProjectionSha256,receiptInventorySha256,projectionPolicy}=values;
+  parseRenewalFinancialRequest({schema_version:POSTCAPTURE_RENEWAL_REQUEST,correction:{schema_version:contract.schema_version,kind:contract.kind,reason:contract.reason,previous_publication_identity:`1/1/${'0'.repeat(64)}/${'0'.repeat(64)}`,source},
+    source_validation:{guard:POSTCAPTURE_SOURCE_GUARD,certificate},destination_projection:{projector:'native_annual_destination_v1',policy:projectionPolicy?.id}});
+  exact(projectionPolicy,['id','contract_sha256','projector_sha256'],'postcapture source policy');
+  if(!hash(sourceProjectionSha256)||!hash(receiptInventorySha256)||!hash(projectionPolicy.contract_sha256)||!hash(projectionPolicy.projector_sha256))throw Error('Invalid postcapture source lineage');
+  const value={schema_version:'financial-source-lineage-v2',source,certificate,source_projection_sha256:sourceProjectionSha256,receipt_inventory_sha256:receiptInventorySha256,policy:projectionPolicy};
+  return {id:digest(value),value};
+}
 function assetReference(kind,bytes) {
   const checksum=sha256(bytes);return {path:`static-data/financial-corrections/${kind}-${checksum}.json`,sha256:checksum};
 }
@@ -432,14 +464,17 @@ function validateAssetReference(reference,kind) {
   if(!hash(reference.sha256)||reference.path!==`static-data/financial-corrections/${kind}-${reference.sha256}.json`)throw Error('Invalid content-addressed financial asset');
 }
 export function validateFinancialReleaseReceipt(value) {
-  exact(value,['schema_version','mode','previous_publication_identity','lineage','lineage_sha256','source_projection','source_base','evaluation_projection','financial_generation','evaluated_at','ui','price_input','candidate','data_inventory_sha256'],'receipt');
-  if(value.schema_version!=='financial-release-receipt-v1'||!['activation','carry'].includes(value.mode)||!identity(value.previous_publication_identity)
+  const renewed=value?.schema_version==='financial-release-receipt-v2';
+  exact(value,['schema_version','mode','previous_publication_identity','lineage','lineage_sha256','source_projection','source_base','evaluation_projection','financial_generation','evaluated_at','ui','price_input','candidate','data_inventory_sha256',...(renewed?['renewal']:[])],'receipt');
+  if(renewed)validateRenewalChain(value.renewal);
+  if((!renewed&&value.schema_version!=='financial-release-receipt-v1')||!(renewed?['renewal','carry']:['activation','carry']).includes(value.mode)||!identity(value.previous_publication_identity)
     ||!hash(value.lineage_sha256)||digest(value.lineage)!==value.lineage_sha256||!hash(value.financial_generation)||!Number.isFinite(Date.parse(value.evaluated_at))||!hash(value.data_inventory_sha256))throw Error('Invalid financial release receipt identity');
   exact(value.lineage,['schema_version','source','certificate','source_projection_sha256','receipt_inventory_sha256','policy'],'source lineage');
-  const lineage=sourceLineage({source:value.lineage.source,certificate:value.lineage.certificate,sourceProjectionSha256:value.lineage.source_projection_sha256,receiptInventorySha256:value.lineage.receipt_inventory_sha256,projectionPolicy:value.lineage.policy});
+  if(isPostcaptureReference(value.lineage.certificate)&&(!renewed||value.lineage.schema_version!=='financial-source-lineage-v2'))throw Error('Postcapture lineage cannot enter original activation receipts');
+  const lineage=(renewed?renewalSourceLineage:sourceLineage)({source:value.lineage.source,certificate:value.lineage.certificate,sourceProjectionSha256:value.lineage.source_projection_sha256,receiptInventorySha256:value.lineage.receipt_inventory_sha256,projectionPolicy:value.lineage.policy});
   if(lineage.id!==value.lineage_sha256)throw Error('Invalid financial lineage binding');
   validateAssetReference(value.source_projection,'source-projection');validateAssetReference(value.source_base,'source-base');
-  validateAssetReference(value.evaluation_projection,value.mode==='activation'?'source-projection':'carry-projection');
+  validateAssetReference(value.evaluation_projection,value.mode!=='carry'?'source-projection':'carry-projection');
   if(value.source_projection.sha256!==value.lineage.source_projection_sha256)throw Error('Financial source projection changed lineage');
   exact(value.ui,['approved_sha','captured_sha','digest','approval','checks'],'UI');
   const exception=isPerformanceException(value.ui.approval),performanceExceptionPolicy=exception?exceptionPolicyFor(value.ui.approval):null;
@@ -464,28 +499,31 @@ export function validateFinancialReleaseReceipt(value) {
     if(exception){const pin=value.ui.approval.certificate;for(const key of ['repository','workflow','head_sha','run_id','run_attempt','job_id','artifact_id','artifact_name','artifact_sha256'])if(value.candidate[key]!==pin[key])throw Error('Financial exception certificate disagrees with activation');if(value.candidate.record_sha256!==pin.candidate_record_sha256||value.candidate.candidate_receipt_sha256!==pin.preview_receipt_sha256)throw Error('Financial exception candidate seal changed');}
     equal(value.source_projection,value.evaluation_projection,'activation projection');
   }else if(value.candidate!==null)throw Error('A carry cannot claim new activation authority');
+  if(value.mode==='renewal')equal(value.source_projection,value.evaluation_projection,'renewal projection');
   return value;
 }
-export function writeFinancialReleaseReceipt({dist,mode,previousIdentity,lineage,sourceProjectionBytes,sourceBaseBytes,evaluationBytes,generation,evaluatedAt,ui,priceInput,candidate=null}) {
+export function writeFinancialReleaseReceipt({dist,mode,previousIdentity,lineage,sourceProjectionBytes,sourceBaseBytes,evaluationBytes,generation,evaluatedAt,ui,priceInput,candidate=null,renewal=null}) {
   const sourceProjection=assetReference('source-projection',sourceProjectionBytes),sourceBase=assetReference('source-base',sourceBaseBytes);
-  const evaluated=assetReference(mode==='activation'?'source-projection':'carry-projection',evaluationBytes);
+  const evaluated=assetReference(mode!=='carry'?'source-projection':'carry-projection',evaluationBytes);
   for(const [ref,bytes]of [[sourceProjection,sourceProjectionBytes],[sourceBase,sourceBaseBytes],[evaluated,evaluationBytes]]){
     const path=join(dist,ref.path);mkdirSync(dirname(path),{recursive:true});
     if(existsSync(path)&&sha256(readFileSync(path))!==ref.sha256)throw Error('Financial audit asset was replaced');
     writeFileSync(path,bytes);
   }
-  const receipt=validateFinancialReleaseReceipt({schema_version:'financial-release-receipt-v1',mode,previous_publication_identity:previousIdentity,lineage:lineage.value,lineage_sha256:lineage.id,
+  const receipt=validateFinancialReleaseReceipt({schema_version:renewal?'financial-release-receipt-v2':'financial-release-receipt-v1',...(renewal?{renewal}:{}),mode,previous_publication_identity:previousIdentity,lineage:lineage.value,lineage_sha256:lineage.id,
     source_projection:sourceProjection,source_base:sourceBase,evaluation_projection:evaluated,financial_generation:generation,evaluated_at:evaluatedAt,ui,price_input:priceInput,candidate,
     data_inventory_sha256:inventoryDigest(dataInventory(dist))});
   const bytes=JSON.stringify(receipt),reference=assetReference('release',bytes);writeFileSync(join(dist,reference.path),bytes);
-  return {receipt,reference:{schema_version:'financial-release-receipt-v1',...reference},added:[...new Set([sourceProjection.path,sourceBase.path,evaluated.path,reference.path])]};
+  return {receipt,reference:{schema_version:receipt.schema_version,...reference},added:[...new Set([sourceProjection.path,sourceBase.path,evaluated.path,reference.path])]};
 }
 export function verifyFinancialReleaseAssets(root,reference,publication=null) {
   exact(reference,['schema_version','path','sha256'],'publication reference');
-  if(reference.schema_version!=='financial-release-receipt-v1')throw Error('Unknown financial release reference');
+  if(!['financial-release-receipt-v1','financial-release-receipt-v2'].includes(reference.schema_version))throw Error('Unknown financial release reference');
   validateAssetReference({path:reference.path,sha256:reference.sha256},'release');
   const bytes=readFileSync(join(root,reference.path));if(sha256(bytes)!==reference.sha256)throw Error('Financial release receipt changed');
   const receipt=validateFinancialReleaseReceipt(JSON.parse(bytes));
+  if(receipt.schema_version!==reference.schema_version)throw Error('Financial release reference version changed');
+  if(receipt.renewal)inspectRenewalChain(receipt,path=>readFileSync(join(root,path)));
   for(const ref of [receipt.source_projection,receipt.source_base,receipt.evaluation_projection])if(sha256(readFileSync(join(root,ref.path)))!==ref.sha256)throw Error('Financial lineage asset changed');
   if(inventoryDigest(dataInventory(root,[reference.path]))!==receipt.data_inventory_sha256)throw Error('Financial release inventory changed');
   if(publication?.financial_audit_files){
@@ -502,6 +540,7 @@ export function assertFinancialLineageContinuity(live,candidate) {
   equal(candidate.lineage,live.financialRelease.lineage,'carried source lineage');
   equal(candidate.source_projection,live.financialRelease.source_projection,'carried source projection');
   equal(candidate.source_base,live.financialRelease.source_base,'carried source base');
+  assertRenewalCarryContinuity(live.financialRelease,candidate);
 }
 export async function restorePublishedFinancialSource(live,root,fetcher=fetch) {
   const receipt=validateFinancialReleaseReceipt(live.financialRelease),reference=live.receipt?.financial_release;
@@ -541,6 +580,7 @@ export async function restorePublishedFinancialSource(live,root,fetcher=fetch) {
     if(existsSync(path))verifyFinancialAuditFile(root,ref.path,ref.sha256);
     else writeFileSync(path,bytes,{flag:'wx'});
   }
+  if(receipt.renewal)inspectRenewalChain(receipt,path=>readFileSync(join(root,path)));
   equal(read(join(root,reference.path)),receipt,'restored live financial receipt');
   assertFinancialAuditPreserved(required,financialAuditInventory(root));
   return root;

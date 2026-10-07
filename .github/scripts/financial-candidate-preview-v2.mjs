@@ -21,6 +21,10 @@ export function parseCertifiedPreviewSelection(sourceValidation, destination) {
   exact(sourceValidation, ['guard', 'certificate'], 'preview source selection');
   if (sourceValidation.guard !== CERTIFIED_SOURCE_GUARD) throw Error('Unlisted preview source guard');
   parseCertificateReference(sourceValidation.certificate);
+  parseNativeDestinationSelection(destination);
+}
+
+export function parseNativeDestinationSelection(destination) {
   exact(destination, ['projector', 'policy'], 'preview destination selection');
   if (destination.projector !== NATIVE_PROJECTOR || destination.policy !== nativeContract.policy_id) throw Error('Unlisted or mismatched preview destination projector');
 }
@@ -65,7 +69,7 @@ export function nativeDestinationDescriptor(projection, projectionSha, controlle
   return descriptor;
 }
 
-function validateNativeDestination(value, receiptsSha, projectionSha) {
+export function validateNativeDestination(value, receiptsSha, projectionSha) {
   exact(value,['projector','policy','derivation','projection_sha256','verification_sha256'],'preview destination receipt');
   const {verification_sha256,...body}=value;
   if(verification_sha256!==digest(body))throw Error('Native preview receipt changed its verified derivation');

@@ -1,3 +1,5 @@
+import {assertCurrentRenewalEvaluation} from './financial-source-renewal.mjs';
+import {preserveRenewalPriceHistory} from './financial-renewal-baseline.mjs';
 import {canonicalPublication,removeCanonical} from './static-transport-publication.mjs';
 // LOCAL, OFFLINE REVIEW ONLY. This command neither authorizes publication nor
 // calls GitHub, providers, Pages, npm lifecycle hooks or a release controller.
@@ -15,6 +17,8 @@ import { sameRepository } from './publication-gate.mjs';
 import { compareCandidateBaselineData } from './financial-candidate-baseline.mjs';
 import currentContract from '../../contracts/static_financial_current_v1.json' with { type: 'json' };
 import { CERTIFIED_PREVIEW_SCHEMA, CERTIFIED_SOURCE_GUARD, NATIVE_PROJECTOR_PATH, parseCertifiedPreviewSelection, verifyRecordedCertifiedSource, validateCertifiedPreviewReceipt } from './financial-candidate-preview-v2.mjs';
+import {POSTCAPTURE_PREVIEW_SCHEMA,isCertifiedPreviewSchema,parsePostcapturePreviewSelection,verifyRecordedPostcaptureSource,verifyPostcapturePreviewCycle,validatePostcapturePreviewReceipt} from './financial-candidate-preview-postcapture.mjs';
+import {isPostcaptureReference} from './verify-postcapture-correction-source.mjs';
 
 export const PREVIEW_SCHEMA = 'financial-candidate-preview-v1';
 const exact = (value, keys, name) => {
@@ -27,11 +31,11 @@ const git = (root, args) => execFileSync('git', ['-C', root, ...args], { encodin
 const write = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2));
 
 export function parsePreviewRequest(value) {
-  const certified=value.schema_version===CERTIFIED_PREVIEW_SCHEMA;
+  const certified=isCertifiedPreviewSchema(value.schema_version);
   exact(value, ['schema_version', 'kind', ...(certified?['source_validation','destination_projection']:['source_policy']), 'candidate_ui', 'correction'], 'preview request');
-  if(certified)parseCertifiedPreviewSelection(value.source_validation,value.destination_projection);
+  if(certified)(value.schema_version===POSTCAPTURE_PREVIEW_SCHEMA?parsePostcapturePreviewSelection:parseCertifiedPreviewSelection)(value.source_validation,value.destination_projection);
   exact(value.candidate_ui, ['sha', 'tree'], 'candidate UI');
-  if (![PREVIEW_SCHEMA,CERTIFIED_PREVIEW_SCHEMA].includes(value.schema_version) || value.kind !== 'unpublished_financial_candidate'
+  if (![PREVIEW_SCHEMA,CERTIFIED_PREVIEW_SCHEMA,POSTCAPTURE_PREVIEW_SCHEMA].includes(value.schema_version) || value.kind !== 'unpublished_financial_candidate'
     || (!certified && !['successful_capture', 'terminal_partial_receipts'].includes(value.source_policy))
     || !sha(value.candidate_ui.sha) || !sha(value.candidate_ui.tree)) throw Error('Invalid unpublished candidate identity');
   parseCorrectionIntent(JSON.stringify(value.correction));
@@ -111,7 +115,7 @@ export function sourceOutcome(request, evidence, files, projection, verifiedCert
     job: { id: job.id, attempt: job.run_attempt, status: job.status, conclusion: job.conclusion,
       failed_steps: (job.steps || []).filter(step => step.conclusion === 'failure').map(({ number, name, conclusion }) => ({ number, name, conclusion })) },
     reported_batch: summary ? { sha256: sha256(bytes), exit_code: summary.exit_code, provider_stop: summary.provider_stop ?? null, execution_stop: summary.execution_stop ?? null, counts: summary.counts } : null,
-    reported_cycle: verifiedCertification ? verifyCertifiedPreviewCycle(request.correction.source,files,verifiedCertification) : request.source_policy === 'terminal_partial_receipts' ? verifyPartialPreviewCycle(request.correction.source, files) : null,
+    reported_cycle: verifiedCertification ? (isPostcaptureReference(verifiedCertification.reference)?verifyPostcapturePreviewCycle:verifyCertifiedPreviewCycle)(request.correction.source,files,verifiedCertification) : request.source_policy === 'terminal_partial_receipts' ? verifyPartialPreviewCycle(request.correction.source, files) : null,
     recomputed: { symbols: Object.keys(projection.symbols).length, selected_receipts: projection.receipt_inventory.length, field_reason_counts: reasons } };
 }
 
@@ -212,6 +216,7 @@ async function writeTargetBase(root,frontend,path) {
   const {index}=await research(root,frontend);
   writeFileSync(path,JSON.stringify({market:'US',as_of_date:index.as_of_date,rows:index.rows}));
   // No decoded rows escape this phase into projection parsing or comparison.
+  return index.rows.length;
 }
 
 async function coverage(root, frontend, live) {
@@ -247,17 +252,38 @@ function build(frontend, output, evaluatedAt, extraEnv = {}) {
   for (const file of dataFiles) rmSync(join(frontend, 'public', file));
 }
 
-export async function preparePreview({ requestPath, evidencePath, candidateRoot, predecessorZip, predecessorRoot, sourceZip, certificateZip, output, python = 'python3' }) {
+export function previewEvaluationAt({request,live,preservePublishedPriceHistory=false,renewalEvaluation}){
+  if(renewalEvaluation===undefined)return new Date().toISOString();
+  exact(renewalEvaluation,['evaluated_at','expected_base_sha256'],'renewal evaluation');
+  if(!preservePublishedPriceHistory||!isCertifiedPreviewSchema(request.schema_version)||!live?.financialRelease||request.candidate_ui.sha!==live.uiSha)throw Error('Evaluation binding requires an already active same-UI certified renewal with preserved price history');
+  if(!hash(renewalEvaluation.expected_base_sha256))throw Error('Invalid renewal target base hash');
+  assertCurrentRenewalEvaluation(renewalEvaluation.evaluated_at);
+  return renewalEvaluation.evaluated_at;
+}
+export function verifyPreviewRenewalTarget({target,output,renewalEvaluation,rowCount}){
+  const bytes=readFileSync(target),actual=sha256(bytes);
+  const report={schema_version:'financial-renewal-target-binding-v1',evaluated_at:renewalEvaluation.evaluated_at,
+    expected_base_sha256:renewalEvaluation.expected_base_sha256,actual_base_sha256:actual,target_bytes:bytes.length,target_rows:rowCount,
+    full_target_path:'target-base.json',full_target_captured:true,matched:actual===renewalEvaluation.expected_base_sha256};
+  write(join(output,'target-base-binding.json'),report);
+  if(!report.matched)throw Error(`Renewal target base differs from the explicitly selected current prices: expected ${report.expected_base_sha256}, actual ${actual}, rows ${rowCount}, evaluated_at ${report.evaluated_at}; full target retained at ${target}`);
+  assertCurrentRenewalEvaluation(renewalEvaluation.evaluated_at);
+  return report;
+}
+
+export async function preparePreview({ requestPath, evidencePath, candidateRoot, predecessorZip, predecessorRoot, sourceZip, certificateZip, output, python = 'python3', preservePublishedPriceHistory = false, renewalEvaluation }) {
   const {runPreviewSourcePhase}=await import('./financial-preview-source-phase.mjs');
   const request = parsePreviewRequest(json(requestPath)), evidenceBytes = readFileSync(evidencePath);
   if (evidenceBytes.length > 4 * 1024 * 1024) throw Error('Preview evidence exceeds bounded size');
   const evidence = JSON.parse(evidenceBytes);
-  const certified=request.schema_version===CERTIFIED_PREVIEW_SCHEMA;
+  const certified=isCertifiedPreviewSchema(request.schema_version);
+  const renewalEvaluatedAt=renewalEvaluation===undefined?undefined:previewEvaluationAt({request,live:evidence.live,preservePublishedPriceHistory,renewalEvaluation});
+  if(typeof preservePublishedPriceHistory!=='boolean'||preservePublishedPriceHistory&&(!certified||!evidence.live?.financialRelease||request.candidate_ui.sha!==evidence.live.uiSha))throw Error('Price-history preservation requires an already active same-UI certified renewal');
   exact(evidence, ['live', 'predecessor_artifact', 'source',...(certified?['certifier']:[])], 'preview evidence');
   if(certified!==Boolean(certificateZip))throw Error('Certificate ZIP requires an explicit v2 certified preview request');
   verifyCandidateTree(candidateRoot, request.candidate_ui);
   const verifiedSource = certified
-    ? verifyRecordedCertifiedSource(request.correction.source,evidence.source,evidence.certifier,request.source_validation.certificate,certificateZip)
+    ? (request.schema_version===POSTCAPTURE_PREVIEW_SCHEMA?verifyRecordedPostcaptureSource:verifyRecordedCertifiedSource)(request.correction.source,evidence.source,evidence.certifier,request.source_validation.certificate,certificateZip)
     : verifyRecordedSource(request.correction.source, evidence.source, request.source_policy);
   const controllerRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
   if (git(controllerRoot, ['status', '--porcelain', '--untracked-files=no'])) throw Error('Preview controller must be committed and clean');
@@ -265,7 +291,7 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
   output = resolve(output);
   if (existsSync(output)) throw Error('Preview output must be a new directory');
   mkdirSync(output, { recursive: true });
-  const evaluatedAt = new Date().toISOString();
+  const evaluatedAt=renewalEvaluatedAt??new Date().toISOString();
   write(join(output, 'request.json'), request);
   writeFileSync(join(output, 'evidence.json'), evidenceBytes);
   if(certified){const archive=join(output,'original-certification');mkdirSync(archive);cpSync(certificateZip,join(archive,'artifact.zip'));
@@ -291,7 +317,7 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
   cpSync(sourceZip, join(sourceRoot, 'source.zip'));
   const sourceFiles = restoreCorrectionSource(request.correction.source, sourceRoot, verifiedSource);
   if (request.source_policy === 'terminal_partial_receipts') verifyPartialPreviewCycle(request.correction.source, sourceFiles);
-  if(certified)verifyCertifiedPreviewCycle(request.correction.source,sourceFiles,verifiedSource.certification);
+  if(certified)(request.schema_version===POSTCAPTURE_PREVIEW_SCHEMA?verifyPostcapturePreviewCycle:verifyCertifiedPreviewCycle)(request.correction.source,sourceFiles,verifiedSource.certification);
   const checkout = join(output, 'candidate-source'); mkdirSync(checkout);
   const candidateTar = join(output, 'candidate-source.tar');
   execFileSync('git', ['-C', candidateRoot, 'archive', '--format=tar', '-o', candidateTar, request.candidate_ui.sha, 'frontend', 'contracts', 'data/ibd_reference'], { stdio: 'pipe' });
@@ -303,12 +329,14 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
   copyData(logicalPredecessor, publicRoot);
   const baseline = join(output, 'baseline');
   build(frontend, baseline, evaluatedAt);
+  if(preservePublishedPriceHistory)preserveRenewalPriceHistory({predecessor:logicalPredecessor,baseline});
   const baselineCoverage = await coverage(baseline, frontend, live);
   // Finish the complete baseline proof before retaining either large native
   // projection or another decoded copy of the target research universe.
-  const baselineEquality = await compareCandidateBaselineData(logicalPredecessor, baseline, frontend, {auditDirectory:join(output,'verification-phases','baseline')});
   const target = join(output, 'target-base.json');
-  await writeTargetBase(baseline,frontend,target);
+  const targetRows=await writeTargetBase(baseline,frontend,target);
+  if(renewalEvaluation)verifyPreviewRenewalTarget({target,output,renewalEvaluation,rowCount:targetRows});
+  const baselineEquality = await compareCandidateBaselineData(logicalPredecessor, baseline, frontend, {auditDirectory:join(output,'verification-phases','baseline')});
   const source = request.correction.source;
   const projectionResult = JSON.parse(execFileSync(python, [join(controllerRoot, certified ? NATIVE_PROJECTOR_PATH : 'backend/app/scripts/export_statement_projection.py'),
     '--archive', join(sourceFiles, 'archive'), '--archive-sha256', source.archive_manifest_sha256,
@@ -356,9 +384,9 @@ export async function preparePreview({ requestPath, evidencePath, candidateRoot,
 }
 
 export function validatePreviewReceipt(value) {
-  const certified=value.schema_version===CERTIFIED_PREVIEW_SCHEMA;
+  const certified=isCertifiedPreviewSchema(value.schema_version);
   exact(value, ['schema_version',...(certified?['source_validation','destination_projection']:[]), 'kind', 'publication_authority', 'verification_basis', 'candidate_ui', 'controller', 'previous_publication', 'source', 'source_outcome', 'source_evidence_sha256', 'financial', 'bundles', 'verification_sha256'], 'preview receipt');
-  if (![PREVIEW_SCHEMA,CERTIFIED_PREVIEW_SCHEMA].includes(value.schema_version) || value.kind !== 'unpublished_financial_candidate' || value.publication_authority !== 'none'
+  if (![PREVIEW_SCHEMA,CERTIFIED_PREVIEW_SCHEMA,POSTCAPTURE_PREVIEW_SCHEMA].includes(value.schema_version) || value.kind !== 'unpublished_financial_candidate' || value.publication_authority !== 'none'
     || value.verification_basis !== 'local_bytes_and_recorded_remote_evidence_requires_live_revalidation') throw Error('Preview cannot grant publication authority');
   exact(value.candidate_ui, ['sha', 'tree', 'digest'], 'preview candidate');
   exact(value.controller, ['sha', 'tree'], 'preview controller');
@@ -370,7 +398,7 @@ export function validatePreviewReceipt(value) {
   if (!sha(prior.ui_sha) || !['ui_digest', 'artifact_sha256', 'data_inventory_sha256', 'price_observations_sha256'].every(key => hash(prior[key]))
     || !Number.isSafeInteger(prior.artifact_id) || prior.artifact_id <= 0) throw Error('Invalid preview predecessor binding');
   exact(value.source_outcome, ['policy', 'run', 'job', 'reported_batch', 'reported_cycle', 'recomputed'], 'preview source outcome');
-  const outcome = value.source_outcome, expectedConclusion = certified ? value.source_validation?.certificate?.source_execution?.producer_run_conclusion : outcome.policy === 'successful_capture' ? 'success' : 'failure';
+  const outcome = value.source_outcome, expectedConclusion = value.schema_version===POSTCAPTURE_PREVIEW_SCHEMA ? value.source_validation?.certificate?.receipt?.producer_execution?.producer_run_conclusion : certified ? value.source_validation?.certificate?.source_execution?.producer_run_conclusion : outcome.policy === 'successful_capture' ? 'success' : 'failure';
   exact(outcome.run, ['id', 'attempt', 'status', 'conclusion'], 'preview producer outcome');
   exact(outcome.job, ['id', 'attempt', 'status', 'conclusion', 'failed_steps'], 'preview job outcome');
   exact(outcome.recomputed, ['symbols', 'selected_receipts', 'field_reason_counts'], 'preview recomputed counts');
@@ -388,7 +416,7 @@ export function validatePreviewReceipt(value) {
     || outcome.reported_cycle.phase !== 'completed' || outcome.reported_cycle.exit_code !== 3 || outcome.reported_cycle.published !== false
     || outcome.reported_cycle.archive_manifest_sha256 !== value.source.archive_manifest_sha256 || outcome.reported_cycle.base_artifact_sha256 !== value.source.acquisition_base_sha256
     || outcome.reported_cycle.code_revision !== value.source.head_sha)) throw Error('Partial preview cycle binding changed');
-  if(certified)validateCertifiedPreviewReceipt(value);
+  if(certified)(value.schema_version===POSTCAPTURE_PREVIEW_SCHEMA?validatePostcapturePreviewReceipt:validateCertifiedPreviewReceipt)(value);
   parsePreviewRequest({ schema_version: value.schema_version, kind: value.kind, ...(certified?{source_validation:{guard:value.source_validation.guard,certificate:value.source_validation.certificate.reference},destination_projection:{projector:value.destination_projection.projector,policy:value.destination_projection.policy.id}}:{source_policy:outcome.policy}), candidate_ui: { sha: value.candidate_ui.sha, tree: value.candidate_ui.tree },
     correction: { schema_version: contract.schema_version, kind: contract.kind, reason: contract.reason, previous_publication_identity: value.previous_publication.identity, source: value.source } });
   exact(value.bundles, ['baseline_data_sha256', 'corrected_data_sha256'], 'preview bundles');
