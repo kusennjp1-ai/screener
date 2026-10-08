@@ -1,0 +1,100 @@
+name: Read pinned browser capture report
+on:
+  push:
+    branches:
+      - finite-browser-capture-readback-a11
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: finite-browser-capture-readback-a11
+  cancel-in-progress: false
+jobs:
+  readback:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/finite-browser-capture-readback-a11' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read exact failed diagnostic artifact as bounded text
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_PROMPT_DISABLED: '1'
+          GH_NO_UPDATE_NOTIFIER: '1'
+          GH_HTTP_MAX_RETRIES: '0'
+          GH_DEBUG: ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          #!/usr/bin/env python3
+          """Read one pinned synthetic diagnostic artifact; emit bounded text, no images."""
+          import hashlib, io, json, stat, subprocess, zipfile
+          REPO = "kusennjp1-ai/screener"
+          RUN, ARTIFACT = 37816282143, 11566634309
+          HEAD = "146f2860bcb911f7d0f8fd2895f487aeb9d61066"
+          ZIP_BYTES = 84235
+          ZIP_SHA = "41789ec47dffc0ca20554cad84b37d71e7f109e67a6f51cdea151ed013942ab4"
+          REPORT_CAP, TAP_CAP, OUTPUT_CAP = 8*1024**2, 512*1024, 4*1024**2
+          sha = lambda b: hashlib.sha256(b).hexdigest()
+          def api(path):
+              p = subprocess.run(["gh", "api", "repos/"+REPO+path], capture_output=True, timeout=30)
+              assert p.returncode == 0, "Pinned GitHub metadata read failed; do not retry"
+              assert len(p.stdout) <= 1024**2, "Metadata cap exceeded"
+              return json.loads(p.stdout)
+          run = api("/actions/runs/"+str(RUN))
+          attempt = api("/actions/runs/"+str(RUN)+"/attempts/1")
+          for value in [run, attempt]:
+              assert value["id"] == RUN and value["run_attempt"] == 1 and value["head_sha"] == HEAD
+              assert value["workflow_id"] == 378760639
+              assert value["path"] == ".github/workflows/retained-price-browser-capture-diagnostic.yml"
+              assert value["head_branch"] == "finite-browser-capture-diagnostic-a11" and value["event"] == "push"
+              assert value["status"] == "completed" and value["conclusion"] == "failure"
+              assert value["repository"]["full_name"] == REPO and value["repository"]["id"] == 1203919607
+          artifact = api("/actions/artifacts/"+str(ARTIFACT))
+          assert artifact["id"] == ARTIFACT and artifact["expired"] is False and artifact["size_in_bytes"] == ZIP_BYTES
+          assert artifact["name"] == "browser-capture-diagnostic-"+str(RUN)+"-1"
+          assert artifact["digest"] == "sha256:"+ZIP_SHA
+          assert artifact["workflow_run"]["id"] == RUN and artifact["workflow_run"]["head_sha"] == HEAD
+          download = subprocess.run(["gh", "api", "repos/"+REPO+"/actions/artifacts/"+str(ARTIFACT)+"/zip"],
+                                    capture_output=True, timeout=30)
+          assert download.returncode == 0, "Pinned artifact read failed; do not retry"
+          raw = download.stdout
+          assert len(raw) == ZIP_BYTES and sha(raw) == ZIP_SHA, "Pinned artifact bytes/hash changed"
+          members = []
+          with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+              infos = archive.infolist()
+              allowed = {"browser-capture-diagnostic/report.json", "browser-capture-unit-tests/node.tap", "report.json", "node.tap"}
+              assert len(infos) == 2 and len({x.filename for x in infos}) == 2, "Unexpected ZIP membership"
+              values = {}
+              for info in infos:
+                  assert info.filename in allowed and not info.is_dir(), "Unlisted ZIP member"
+                  assert stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG), "Nonregular ZIP member"
+                  cap = REPORT_CAP if info.filename.endswith("report.json") else TAP_CAP
+                  assert 0 <= info.file_size <= cap, "ZIP member exceeds cap"
+                  with archive.open(info) as stream:
+                      body = stream.read(cap+1)
+                  assert len(body) == info.file_size <= cap, "Incomplete or oversized ZIP member"
+                  members.append({"path": info.filename, "bytes": len(body), "sha256": sha(body)})
+                  key = "report" if info.filename.endswith("report.json") else "tap"
+                  assert key not in values, "Ambiguous ZIP member"
+                  values[key] = body
+          report_raw = values["report"]
+          report = json.loads(report_raw.decode("utf-8"))
+          assert report["schema_version"] == "retained-price-browser-capture-diagnostic-v1"
+          assert report["run_id"] == RUN and report["head_sha"] == HEAD
+          assert report["diagnostic_only"] is True and report["publication_authority"] is False and report["source_authority"] is False
+          cases = report["cases"]
+          assert isinstance(cases, list) and len(cases) <= 200
+          assert len({c["id"] for c in cases}) == len(cases), "Duplicate case identity"
+          manifest = {"schema_version":"browser-capture-text-readback-v1", "diagnostic_only":True,
+                      "artifact_id":ARTIFACT, "artifact_bytes":len(raw), "artifact_sha256":sha(raw),
+                      "members":members, "report_bytes":len(report_raw), "report_sha256":sha(report_raw),
+                      "run_id":RUN, "run_attempt":1, "head_sha":HEAD, "recorded_cases":len(cases),
+                      "note":"Complete original report follows without classification or modification."}
+          prefix = (json.dumps(manifest, separators=(",",":"))+"\nREPORT_JSON_BEGIN\n").encode("utf-8")
+          suffix = b"\nREPORT_JSON_END\n"
+          assert len(prefix)+len(report_raw)+len(suffix) <= OUTPUT_CAP, "Complete readback exceeds output cap"
+          import sys
+          sys.stdout.buffer.write(prefix+report_raw+suffix)
+          PY
