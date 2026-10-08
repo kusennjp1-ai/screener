@@ -1,0 +1,150 @@
+name: Oct6 exact amended current carry diagnostic
+on:
+  push:
+    branches: [preview/oct6-carry-tooling-proof-20261008]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: oct6-carry-tooling-proof-20261008
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-carry-tooling-proof-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact isolated diagnostic inputs
+        id: pins
+        run: |
+          test "$(git rev-parse HEAD^)" = c822e55df34c1cb7b559bfa9f11ecda7018ee3ce
+          test "$(git -C release rev-parse HEAD)" = 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          test "$(git -C release rev-parse HEAD^{tree})" = 1c0219a170dcbdeb1af539e4cf7a04018251ca02
+          test "$(git hash-object .github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git hash-object .github/scripts/acquire-oct6-carry-identity.py)" = e5eede1b388178d64943ba724717af5656570ac9
+          test "$(git hash-object .github/scripts/install-oct6-carried-export-tooling.mjs)" = 46492be0c3dd75a5cb0fb0710174499e744b8002
+          test "$(git hash-object .github/scripts/prepare-oct6-carry-identity.mjs)" = e3cd0c4008f709eab62e733de8548a1b0ce8351d
+          test "$(git hash-object .github/scripts/diagnose-oct6-carry-identity.mjs)" = 9dc019888e8c536c046232dfb5f82dac1ce2517a
+          test "$(git hash-object .github/scripts/prove-carry-default-node.mjs)" = e86e78ddc373ba170fdbe6e8ed956692bf461722
+          test "$(git hash-object .github/scripts/prove-oct6-carried-export-browser-equality.mjs)" = 71e3e3512444523b1bb7fe02078e67a67134741c
+          test "$(git hash-object .github/scripts/fixtures/publisher-export-research-oct6-carry-v1.mjs)" = 1f630be308dd2ce604c26635c3d67243c7e48944
+          test "$(git hash-object .github/scripts/financial-generation-carry-controller.mjs)" = 1f9839d0e11e23b354df2ddb4d28278e409bc7fb
+          test "$(git hash-object .github/scripts/select-release-source.mjs)" = ad2650f0020590ffbdfef5844155d91c1df5a9c6
+          test "$(git hash-object .github/scripts/publication-state.mjs)" = eefcccd99edf912bf573b2649159f19d216d9115
+          test "$(git hash-object .github/scripts/retained-price-source-browser.mjs)" = 38e73adf3dd8d64a04be4c86874f81857394acfc
+          test "$(git hash-object .github/workflows/research-ui-release.yml)" = b32e8ca6ae26d12847dad9a0432b16f85df2097c
+          test "$(git hash-object .github/workflows/ci.yml)" = bc413dc64dd4997a070428ad94a41e7747b66d51
+          test "$(git hash-object .github/scripts/retained-price-publisher-tooling.mjs)" = 57689ae8df9a57efd84a03e6058a27885b9a548f
+          test "$(git hash-object .github/scripts/retained-price-publisher-tooling.test.mjs)" = bda94ba1406c3a20743b3176b47d912131fa1ba6
+          test "$(git hash-object frontend/tools/retained-price-publisher-tooling.test.mjs)" = 1d6751282a35cec1cf4b8e4998100e4fd7d7011b
+          test "$(git hash-object .github/scripts/retained-price-source-workflow.test.mjs)" = 5f0ef069c2528806bddb0ff977a073ea9ca79c6a
+          test "$(git hash-object .github/scripts/test_check_pages_payload.py)" = 2488ee1a33bd13c775a8481b06e45b14f709f4b0
+          test "$(git hash-object .github/scripts/financial-release-lifecycle.test.mjs)" = f9175b830251b3c6c41950817152291ff3a7b305
+          test "$(git hash-object frontend/tools/financial-generation-carry.test.mjs)" = 229ebd15f3ca9125850c6aaf841217cfc23fbba1
+          test "$(git hash-object frontend/tools/financial-correction-overlay.test.mjs)" = d9a31a6e7a811405a6cc306eb4609a5a107c2b32
+          test "$(git hash-object frontend/tools/export-financial-current.test.mjs)" = 4d1ef72eb36c9b840d668ed50481382d6afad372
+          test "$(git hash-object frontend/tools/export-research.mjs)" = dac7f8784a0bc836ab6977e1e88ca643c49c01ed
+          test "$(git hash-object frontend/vite.config.js)" = 47d43acafde635f86e2033ea8f89e764c057656b
+          test "$(git hash-object frontend/package.json)" = 81dab927e85fea4031e3bca6e9751b6007b613f8
+          test "$(git hash-object frontend/package-lock.json)" = 3533b0f6ff61b73235da8765bccbdc754add0294
+          node --check .github/scripts/install-oct6-carried-export-tooling.mjs
+          node --check .github/scripts/prove-carry-default-node.mjs
+          node --check .github/scripts/prove-oct6-carried-export-browser-equality.mjs
+          node --check .github/scripts/retained-price-publisher-tooling.mjs
+          python3 -m py_compile .github/scripts/acquire-oct6-carry-identity.py
+          node --check .github/scripts/prepare-oct6-carry-identity.mjs
+          node --check .github/scripts/diagnose-oct6-carry-identity.mjs
+      - name: Install exact one-file diagnostic tooling overlay
+        id: install
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/oct6-tooling-provenance"
+          node .github/scripts/install-oct6-carried-export-tooling.mjs 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/installation-console.log"
+      - name: Install dependencies using the unchanged locks
+        id: dependencies
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          python3 -c 'import shutil,os; assert shutil.disk_usage(os.environ["RUNNER_TEMP"]).free >= 10*1024**3, "Dependencies lack 8 GiB reserve plus 2 GiB headroom"'
+          timeout --kill-after=10s 2m npm ci --prefix frontend --no-audit --no-fund 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/main-npm-ci.log"
+          python3 -c 'import shutil,os; assert shutil.disk_usage(os.environ["RUNNER_TEMP"]).free >= 9*1024**3, "Second install lacks 8 GiB reserve plus 1 GiB headroom"'
+          timeout --kill-after=10s 2m npm ci --prefix release/frontend --no-audit --no-fund 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/release-npm-ci.log"
+          python3 -c 'import shutil,os; assert shutil.disk_usage(os.environ["RUNNER_TEMP"]).free >= 8*1024**3, "Eight GiB reserve was exceeded"'
+          git diff --exit-code -- frontend/package.json frontend/package-lock.json frontend/vite.config.js
+          git -C release diff --exit-code -- frontend/package.json frontend/package-lock.json frontend/vite.config.js
+      - name: Run exact tooling, carry, correction, current, workflow and Pages regressions
+        id: regressions
+        timeout-minutes: 5
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          timeout --kill-after=10s 4m bash -e -o pipefail -c '
+            npm run test:run -- tools/financial-generation-carry.test.mjs tools/financial-correction-overlay.test.mjs tools/export-financial-current.test.mjs tools/retained-price-publisher-tooling.test.mjs 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/regression-vitest.log"
+            cd ..
+            node --test .github/scripts/retained-price-publisher-tooling.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/select-release-source-cli.test.mjs 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/regression-node.log"
+            python3 .github/scripts/test_check_pages_payload.py 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/regression-pages-python.log"
+            python3 .github/scripts/test_run_retained_price_source.py 2>&1 | tee "$RUNNER_TEMP/oct6-tooling-provenance/regression-source-python.log"
+          '
+          test "$(git hash-object tools/export-research.mjs)" = dac7f8784a0bc836ab6977e1e88ca643c49c01ed
+          git diff --exit-code
+      - name: Authenticate original source and predecessor archives
+        id: acquisition
+        timeout-minutes: 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: timeout --kill-after=10s 11m python3 .github/scripts/acquire-oct6-carry-identity.py
+      - name: Prove amended current carry with complete quality and bundle comparison
+        id: current
+        timeout-minutes: 16
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -o pipefail
+          timeout --kill-after=10s 15m bash -e -c '
+            node .github/scripts/prepare-oct6-carry-identity.mjs
+            node .github/scripts/diagnose-oct6-carry-identity.mjs "$RUNNER_TEMP/carry-identity-diagnostic/config.json"
+          ' 2>&1 | tee "$RUNNER_TEMP/carry-identity-diagnostic/reports/console.log"
+      - name: Build Vite directly and compare complete old/new dist inventories
+        id: paired_vite
+        timeout-minutes: 4
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: /screener/
+          VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
+        run: |
+          set -o pipefail
+          timeout --kill-after=10s 230s node .github/scripts/prove-oct6-carried-export-browser-equality.mjs 2>&1 | tee "$RUNNER_TEMP/carry-identity-diagnostic/reports/paired-vite-console.log"
+      - name: Record actual stage outcomes and gather evidence
+        if: always()
+        env:
+          STAGE_PINS: ${{ steps.pins.outcome }}
+          STAGE_INSTALL: ${{ steps.install.outcome }}
+          STAGE_DEPENDENCIES: ${{ steps.dependencies.outcome }}
+          STAGE_REGRESSIONS: ${{ steps.regressions.outcome }}
+          STAGE_ACQUISITION: ${{ steps.acquisition.outcome }}
+          STAGE_CURRENT: ${{ steps.current.outcome }}
+          STAGE_PAIRED_VITE: ${{ steps.paired_vite.outcome }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/carry-identity-diagnostic/reports"
+          if [ -d "$RUNNER_TEMP/oct6-tooling-provenance" ]; then cp -a "$RUNNER_TEMP/oct6-tooling-provenance" "$RUNNER_TEMP/carry-identity-diagnostic/reports/tooling-provenance"; fi
+          node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";const stages=Object.fromEntries(Object.entries(process.env).filter(([key])=>key.startsWith("STAGE_")).map(([key,value])=>[key.slice(6).toLowerCase(),value||"not_reported"]));writeFileSync(join(process.env.RUNNER_TEMP,"carry-identity-diagnostic/reports/stage-outcomes.json"),JSON.stringify({schema_version:"oct6-exact-tooling-diagnostic-stages-v1",scope:"diagnostic only; no production admission, composition, deployment or browser/CSV acceptance",recorded_at:new Date().toISOString(),head_sha:process.env.GITHUB_SHA,run_id:process.env.GITHUB_RUN_ID,run_attempt:process.env.GITHUB_RUN_ATTEMPT,all_required_stages_succeeded:Object.values(stages).every(value=>value==="success"),stages},null,2)+String.fromCharCode(10));'
+      - name: Preserve complete diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct6-carry-tooling-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/carry-identity-diagnostic/reports
+          retention-days: 7
+          if-no-files-found: error

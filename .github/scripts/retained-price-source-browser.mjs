@@ -8,6 +8,7 @@ import {dirname,extname,join,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {execFileSync} from 'node:child_process';
+import {publisherToolingBoundary,publisherToolingReceipt,verifyPublisherToolingCheckout} from './retained-price-publisher-tooling.mjs';
 
 export const BROWSER_LIMITS=Object.freeze({milliseconds:360000,csvBytes:8*1024**2,reportBytes:8*1024**2,screenshotBytes:8*1024**2,fileBytes:64*1024**2,servedBytes:512*1024**2,requests:4000});
 const TARGET='2026-10-06',BASE='/screener/',METHOD='oneil';
@@ -111,10 +112,7 @@ export async function startReleaseServer(root){
 async function loadApprovedFrontend(frontend,expected){
   regularRoot(frontend);const repository=dirname(frontend),git=(...args)=>execFileSync('git',['-C',repository,...args],{encoding:'utf8',maxBuffer:16*1024**2}).trim();
   assert.equal(git('rev-parse','HEAD'),expected.sha,'Consumer checkout is not exact approved UI');assert.equal(git('rev-parse','HEAD:frontend'),expected.frontend_tree,'Approved frontend tree changed');
-  for(const line of git('ls-tree','-r','HEAD','frontend/src','frontend/tools','frontend/contracts','frontend/package.json','frontend/package-lock.json','.github/scripts','contracts').split('\n')){
-    const [metadata,path]=line.split('\t'),[mode,type,pin]=metadata.split(' ');assert(type==='blob'&&['100644','100755'].includes(mode),'Unexpected approved executable kind');
-    const raw=bytes(join(repository,path));assert.equal(createHash('sha1').update(`blob ${raw.length}\0`).update(raw).digest('hex'),pin,'Approved executable changed: '+path);
-  }
+  verifyPublisherToolingCheckout(frontend,{amended:true});
   const load=path=>import(pathToFileURL(join(frontend,path)).href);
   const [observer,financial,history,presentation,engine,cases,position,transport]=await Promise.all(['tools/design-static-assets.mjs','src/static/financialCurrent.js','src/static/financialHistory.js','src/static/financialEvidencePresentation.js','src/static/researchEngine.js','tools/financial-design-cases.mjs','src/static/positionGeometry.js','src/static/researchTransport.js'].map(load));
   const require=createRequire(join(frontend,'package.json'));return {...observer,...financial,...history,...presentation,...engine,...cases,...position,...transport,chromium:require('playwright').chromium};
@@ -193,7 +191,8 @@ export async function runBrowserProof(){
   assert.equal(process.execArgv.length,0,'Browser proof accepts no loader/clock hooks');
   assert(!process.env.NODE_PATH&&(!process.env.NODE_OPTIONS||/^--max-old-space-size=\d+$/.test(process.env.NODE_OPTIONS)),'Unexpected browser runtime loader options');
   const [{readRepairRequest,repairControllerRoot,authorityExports},{verifyRetainedRestoreBinding},{uiInventory,inventoryDigest,validateReceipt},{githubApi}]=await Promise.all([import('./retained-price-source-admission.mjs'),import('./retained-price-source-driver.mjs'),import('./publication-state.mjs'),import('./publication-gate.mjs')]);
-  const root=repairControllerRoot(),scratch=join(process.env.RUNNER_TEMP||'/tmp','verified-publication'),statePath=join(scratch,'state.json'),stateRaw=bytes(statePath),state=JSON.parse(stateRaw),request=readRepairRequest(root)?.value;
+  const root=repairControllerRoot(),scratch=join(process.env.RUNNER_TEMP||'/tmp','verified-publication'),statePath=join(scratch,'state.json'),state=JSON.parse(bytes(statePath)),request=readRepairRequest(root)?.value;
+  await publisherToolingBoundary(state,'browser-before');writeFileSync(statePath,JSON.stringify(state));const stateRaw=bytes(statePath);
   assert(state.source?.repair&&state.carry?.priceSourceProof&&state.carry?.assessment&&state.financialPrepared&&state.decision.mode==='data','Browser gate requires authenticated finite source after ordinary carry/composition');
   const proof=await verifyRetainedRestoreBinding({root,source:state.source,record:state.sourceRecovery,live:state.live,authority:authorityExports(),api:githubApi});
   const frontend=resolve('release/frontend'),dist=regularRoot(join(frontend,'dist')),publicationRaw=bytes(join(dist,'publication.json')),publication=validateReceipt(JSON.parse(publicationRaw));
@@ -201,10 +200,11 @@ export async function runBrowserProof(){
   equal(uiInventory(dist),publication.ui_files,'Composed UI bytes differ');assert.equal(inventoryDigest(publication.ui_files),state.live.uiDigest);
   assert(publication.data_source.artifact_id===state.source.artifact.id&&publication.financial_lineage_sha256===state.live.financialRelease.lineage_sha256,'Composed price/financial lineage differs');
   equal(publication.financial_release,state.financialPrepared.reference,'Composed carry receipt differs');
+  equal(publication.publisher_tooling,publisherToolingReceipt(state,publication),'Composed publisher tooling receipt differs');
   const carryIdentity=requireCarryBinding(publication,state,bytes(state.carry.projectionPath,128*1024**2));
   const preparedRaw=bytes(join(proof.replayRoot,'prepared.json'));equal({bytes:preparedRaw.length,sha256:sha(preparedRaw)},request.repair.prepared,'Replay preparation changed');
   const output=join(scratch,'finite-source-browser');assert(!existsSync(output),'Browser report directory must be new');mkdirSync(output);let server,browser,assets,timer,removeInterrupts;
-  const report={schema_version:'retained-price-source-browser-v1',status:'running',scope:'finite actual composed data/DOM/CSV gate; not Design screenshot acceptance',publication_sha256:sha(publicationRaw),approved_ui:request.approved_ui,ui_digest:publication.ui_digest,source_artifact:state.source.artifact.id,financial_lineage:publication.financial_lineage_sha256,carry:carryIdentity,started_at:new Date().toISOString(),clock:'actual browser and host time; no overrides',cases:[],network_denials:[]};
+  const report={schema_version:'retained-price-source-browser-v1',status:'running',scope:'finite actual composed data/DOM/CSV gate; not Design screenshot acceptance',publication_sha256:sha(publicationRaw),approved_ui:request.approved_ui,ui_digest:publication.ui_digest,source_artifact:state.source.artifact.id,financial_lineage:publication.financial_lineage_sha256,carry:carryIdentity,publisher_tooling:publication.publisher_tooling,started_at:new Date().toISOString(),clock:'actual browser and host time; no overrides',cases:[],network_denials:[]};
   const save=()=>{const raw=JSON.stringify(report,null,2)+'\n';assert(Buffer.byteLength(raw)<=BROWSER_LIMITS.reportBytes,'Browser report exceeds bound');writeFileSync(join(output,'report.json'),raw);};save();
   try{
     const run=async()=>{
@@ -217,6 +217,7 @@ export async function runBrowserProof(){
       for(const item of selected){report.active_case={symbol:item.symbol,category:item.category};save();report.cases.push(await inspectCase({browser,server,assets,model,item,generation:assets.manifest.research_generation||assets.manifest.generated_at,output,network:report.network_denials}));save();}
       equal(bytes(statePath),stateRaw,'Publication state changed during browser verification');equal(bytes(join(dist,'publication.json')),publicationRaw,'Publication changed during browser verification');equal(uiInventory(dist),publication.ui_files,'UI changed during browser verification');
       delete report.active_case;report.expired_components=report.cases.reduce((sum,item)=>sum+(item.expiry?.expired_components||0),0);assert(report.expired_components>0,'No real expired financial component was proved; no simulated clock is permitted');report.server=server.stats();assert.equal(report.server.failures.length,0,'Static server rejected a request');report.status='passed';
+      await publisherToolingBoundary(state,'browser-after');writeFileSync(statePath,JSON.stringify(state));
     };
     const interrupted=new Promise((_,reject)=>{removeInterrupts=interruptRejection(reject);});
     await Promise.race([run(),interrupted,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Finite browser deadline exceeded')),BROWSER_LIMITS.milliseconds);})]);

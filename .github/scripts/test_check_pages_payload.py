@@ -329,6 +329,25 @@ class WorkflowScopeTests(unittest.TestCase):
                     self.assertNotIn("working-directory:", build + verification + step)
                     continue
                 self.assertEqual(workflow.name, "research-ui-release.yml")
+                # The finite-only amendment authenticates at both build boundaries
+                # using the existing scoped token. Build/quality/Pages limits stay exact.
+                build_steps = [(i, s) for i, s in enumerate(steps)
+                               if field(s, "name") == "Build with daily selection export"]
+                self.assertEqual(len(build_steps), 1)
+                build_index, build = build_steps[0]
+                self.assertLess(build_index, index)
+                self.assertEqual(field(build, "working-directory"), "release/frontend")
+                self.assertEqual(input_field(build, "GH_TOKEN"), "${{ github.token }}")
+                self.assertEqual(field(build, "if"), "steps.plan.outputs.publish == 'true'")
+                self.assertNotIn("continue-on-error:", build)
+                self.assertIn("        run: |\n", build)
+                commands = [line.strip() for line in build.split("        run: |\n", 1)[1].splitlines() if line.strip()]
+                self.assertEqual(commands, [
+                    "(cd ../.. && node .github/scripts/select-release-source.mjs publisher-build-before)",
+                    'if [ "$METADATA_MIGRATION" != true ] && [ "$FINANCIAL_ACTIVATION" != true ] && [ "$FINANCIAL_SOURCE_RENEWAL" != true ]; then npm run build; fi',
+                    "node tools/check-data-quality.mjs",
+                    "(cd ../.. && node .github/scripts/select-release-source.mjs publisher-build-after)",
+                ])
                 self.assertEqual(input_field(step, "path"), "release/frontend/dist")
                 self.assertEqual(input_field(step, "name"), "github-pages-${{ github.run_id }}-${{ github.run_attempt }}")
                 self.assertGreater(index, 0)
@@ -393,6 +412,40 @@ class WorkflowScopeTests(unittest.TestCase):
         for reason, changed in mutations.items():
             with self.subTest(reason=reason):
                 self.assert_static_mutation_rejected(text, changed)
+
+
+
+    def assert_publisher_mutation_rejected(self, original, changed):
+        self.assertNotEqual(changed, original, "Mutation must change the actual workflow")
+        publisher = REPO / ".github/workflows/research-ui-release.yml"
+        read_text = Path.read_text
+
+        def mutated_read(path, *args, **kwargs):
+            return changed if path == publisher else read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", mutated_read), self.assertRaises(AssertionError):
+            self.test_every_final_pages_upload_is_guarded_and_intermediate_is_separate()
+
+    def test_publisher_tooling_build_guard_and_token_mutations_fail_closed(self):
+        text = (REPO / ".github/workflows/research-ui-release.yml").read_text()
+        build = re.search(r'(?m)^      - name: Build with daily selection export\n'
+                          r'[\s\S]*?(?=^      - )', text).group(0)
+        before = "(cd ../.. && node .github/scripts/select-release-source.mjs publisher-build-before)"
+        after = "(cd ../.. && node .github/scripts/select-release-source.mjs publisher-build-after)"
+        mutations = {
+            "missing before": build.replace("          " + before + "\n", "", 1),
+            "missing after": build.replace("          " + after + "\n", "", 1),
+            "wrong caller cwd": build.replace("(cd ../.. && node", "(node", 1),
+            "wrong before command": build.replace("publisher-build-before", "compose", 1),
+            "missing original quality": build.replace("          node tools/check-data-quality.mjs\n", "", 1),
+            "changed original build guard": build.replace('"$FINANCIAL_SOURCE_RENEWAL" != true', '"$FINANCIAL_SOURCE_RENEWAL" = true', 1),
+            "missing token": build.replace("          GH_TOKEN: ${{ github.token }}\n", "", 1),
+            "new token": build.replace("GH_TOKEN: ${{ github.token }}", "GH_TOKEN: ${{ secrets.EXTRA_TOKEN }}", 1),
+            "ignored failure": build.replace("        env:", "        continue-on-error: true\n        env:", 1),
+        }
+        for reason, changed in mutations.items():
+            with self.subTest(reason=reason):
+                self.assert_publisher_mutation_rejected(text, text.replace(build, changed, 1))
 
 
 if __name__ == "__main__":
