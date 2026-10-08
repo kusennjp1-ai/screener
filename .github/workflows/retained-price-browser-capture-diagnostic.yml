@@ -1,0 +1,63 @@
+name: Finite browser capture diagnostic
+on:
+  push:
+    branches:
+      - finite-browser-capture-diagnostic-a11
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: finite-browser-capture-diagnostic-a11
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/finite-browser-capture-diagnostic-a11' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact diagnostic head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Checkout unchanged approved observer and packer
+        uses: actions/checkout@v4
+        with:
+          ref: 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          path: .capture-approved
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse diagnostic and verify body promise lifecycle
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/browser-capture-unit-tests"
+          node --check .github/scripts/retained-price-browser-capture-adapter.mjs
+          node --check .github/scripts/retained-price-browser-capture-diagnostic.mjs
+          node --test .github/scripts/retained-price-browser-capture-adapter.test.mjs 2>&1 | tee "$RUNNER_TEMP/browser-capture-unit-tests/node.tap"
+      - name: Install exact approved locked browser tooling
+        timeout-minutes: 4
+        working-directory: .capture-approved/frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object package-lock.json)" = "3533b0f6ff61b73235da8765bccbdc754add0294"
+          npm ci --no-audit --no-fund
+          npx --no-install playwright install --with-deps chromium
+      - name: Diagnose unchanged observer with exact shared offline network handler
+        timeout-minutes: 7
+        run: node --max-old-space-size=384 .github/scripts/retained-price-browser-capture-diagnostic.mjs
+      - name: Retain bounded synthetic capture evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-capture-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/browser-capture-unit-tests/
+            ${{ runner.temp }}/browser-capture-diagnostic/
+          if-no-files-found: error
+          retention-days: 7
