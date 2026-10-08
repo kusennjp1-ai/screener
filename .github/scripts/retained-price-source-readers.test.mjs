@@ -17,7 +17,8 @@ const manifest=date=>({as_of_date:date,default_market:'US',supported_markets:['U
 function ordinary({id=300,head='d'.repeat(40),date='2026-10-07',created='2026-10-07T10:00:00Z'}={}){
   const workflow_run={id,head_sha:head,head_branch:'main'},artifact={id:id*10,name:`static-site-data-${id}-1`,expired:false,created_at:created,workflow_run,size_in_bytes:100,digest:'sha256:'+'c'.repeat(64)},companion={...artifact,id:id*10+1,name:`static-site-data-manifest-${id}-1`};
   const run={...workflow_run,run_attempt:1,path:PRICE_CI.producer.path,event:'schedule',status:'completed',conclusion:'success',repository:repo,head_repository:repo};
-  const job={id:id*100,name:'combine-and-build',run_attempt:1,conclusion:'success',started_at:'2026-10-07T00:00:00Z',completed_at:'2026-10-07T23:59:59Z',steps:[{name:'Build static frontend',conclusion:'success'}]};
+  const createdMs=Date.parse(created);assert(Number.isFinite(createdMs),'Invalid ordinary fixture creation clock');
+  const job={id:id*100,name:'combine-and-build',run_attempt:1,conclusion:'success',started_at:new Date(createdMs-60000).toISOString(),completed_at:new Date(createdMs+30000).toISOString(),steps:[{name:'Build static frontend',conclusion:'success'}]};
   const raw=JSON.stringify(manifest(date)),metadata={run_id:id,run_attempt:1,source_sha:head,artifact_name:artifact.name,manifest_json:raw,manifest_sha256:digest(raw),price_observations:{},price_observations_sha256:digest('{}')};
   return{artifact,companion,run,job,metadata};
 }
@@ -79,7 +80,7 @@ test('finite publication gate requires the actual in-process proof and forces th
   assert.equal(checkPublication(f.event,f.head,repo.full_name,f.api).mode,'data');
 });
 test('finite selector binds the actual winning source even when a newer ordinary export exists',t=>{
-  const f=fixture(t),newer=ordinary({id:300,date:'2026-10-07',created:new Date().toISOString()});f.items.push(newer);
+  const f=fixture(t),newer=ordinary({id:300,date:'2026-10-07',created:new Date(Date.now()-60000).toISOString()});f.items.push(newer);
   const chosen=chooseFiniteExport(f.live,f.pages(),repo.full_name,{runId:200,attempt:1},f.api,f.load);assert.equal(chosen.runId,200);assert(chosen.repair);
   assert.throws(()=>chooseFiniteExport(f.live,[{artifacts:[newer.artifact,newer.companion]}],repo.full_name,{runId:200,attempt:1},f.api,f.load),/unique retained artifact/);
   assert.throws(()=>chooseFiniteExport(f.live,f.pages(),repo.full_name,{runId:300,attempt:1},f.api,f.load),/not eligible/);
@@ -116,4 +117,17 @@ test('a once-valid finite proof cannot authorize publication after current main 
   const f=fixture(t),proof=f.proof();f.map[`${prefix}/git/ref/heads/main`].object.sha='b'.repeat(40);
   assert.equal(publicationDecision({eventName:'workflow_run',event:f.event,sha:f.head,currentSha:f.head,runs:[f.ci,f.design],finitePriceSource:proof}).publish,false);
   assert.throws(()=>checkedExport(f.item.artifact,f.pages(),repo.full_name,f.api,f.load),/no longer current main/);
+});
+
+test('ordinary fixture clocks cross UTC midnight while the actual reader retains exact attempt bounds',t=>{
+  const f=fixture(t);f.disable();
+  for(const created of ['2026-10-07T23:59:59.000Z','2026-10-08T00:00:00.000Z']){
+    const item=ordinary({id:300,date:'2026-10-07',created});f.items.splice(1,f.items.length-1,item);
+    assert(Date.parse(item.job.started_at)<Date.parse(created)&&Date.parse(created)<Date.parse(item.job.completed_at));
+    assert.equal(checkedExport(item.artifact,f.pages(),repo.full_name,f.api,f.load).runId,300);
+    for(const stamp of [Date.parse(item.job.started_at)-1,Date.parse(item.job.completed_at)+1]){
+      const outside={...item.artifact,created_at:new Date(stamp).toISOString()};
+      assert.throws(()=>checkedExport(outside,f.pages(),repo.full_name,f.api,f.load),/not created by its validated attempt/);
+    }
+  }
 });
