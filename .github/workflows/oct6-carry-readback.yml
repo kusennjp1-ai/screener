@@ -19,7 +19,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test "$(git rev-parse HEAD^)" = 3b7db5ccdc941500cade8d08e8bfc8e835bd31bb
+          test "$(git rev-parse HEAD^)" = dfadfd28ebab6f54e14528134500d4e676199b13
           ulimit -f 32768
           timeout --kill-after=10s 4m python3 - <<'PY'
           import hashlib,json,os,pathlib,stat,subprocess,zipfile
@@ -58,12 +58,25 @@ jobs:
             assert count==entry.file_size
             inventory[name]={'bytes':count,'sha256':h.hexdigest()}
             if name in selected:
-             assert count<=4*1024**2
-             payloads[name]=json.loads(z.read(entry))
+             value=json.loads(z.read(entry))
+             if name.endswith('-mismatches.json'):
+              assert isinstance(value,list) and len(value)<=5901
+              value=[{'symbol':x['symbol'],'changed':x['changed'],'full_identity':x['full']['identity'],'research_identity':x['compact']['identity'],'full_evidence_sha256':hashlib.sha256(json.dumps(x['full'],sort_keys=True,separators=(',',':')).encode()).hexdigest(),'research_evidence_sha256':hashlib.sha256(json.dumps(x['compact'],sort_keys=True,separators=(',',':')).encode()).hexdigest()} for x in value]
+             def bounded_text(x):
+              if isinstance(x,str) and len(x.encode())>4096:return {'text_prefix':x[:2048],'text_truncated':True,'original_bytes':len(x.encode()),'original_sha256':hashlib.sha256(x.encode()).hexdigest()}
+              if isinstance(x,list):return [bounded_text(y) for y in x]
+              if isinstance(x,dict):return {k:bounded_text(y) for k,y in x.items()}
+              return x
+             payloads[name]=value if name.endswith('-mismatches.json') else bounded_text(value)
           lines=[json.dumps({'kind':'archive-binding','run':run,'head':head,'artifact_id':artifact_id,'bytes':size,'sha256':digest,'members':len(inventory),'inventory':inventory},separators=(',',':'))]
           for name in selected:
            lines.append(json.dumps({'kind':'selected-member','path':name,'pin':inventory.get(name),'value':payloads.get(name),'present':name in payloads},separators=(',',':')))
-          assert sum(len(x.encode()) for x in lines)<=4*1024**2,'Selected complete proof exceeds log cap; no partial acceptance'
+          output_bytes=sum(len(x.encode()) for x in lines)
+          if output_bytes>4*1024**2:
+           failure={'status':'output-cap-exceeded','complete_selected_output':False,'output_bytes':output_bytes,'inventory':inventory}
+           (root/'readback.json').write_text(json.dumps(failure,separators=(',',':')))
+           print('CARRY_PROOF '+json.dumps(failure,separators=(',',':')),flush=True)
+           raise RuntimeError('Complete typed proof exceeds log cap; no affected-symbol truncation')
           for line in lines:print('CARRY_PROOF '+line,flush=True)
           (root/'readback.json').write_text(json.dumps({'records':records,'artifact':metadata,'inventory':inventory,'selected':payloads},separators=(',',':')))
           PY
