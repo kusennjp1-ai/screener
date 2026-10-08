@@ -1,4 +1,4 @@
-import {financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
+import {FINANCIAL_AUDIT_MAX_FILE_BYTES,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
 import {selectRenewalControls,selectRenewalCandidate,verifyRenewalSelection,restoreRenewalCandidate,prepareRenewalReceipt,verifyPreparedRenewalRelease,checkFinalRenewalPayload} from './financial-source-renewal-publisher.mjs';
 import {verifyPublishedRenewal,verifyPreparedAutomaticRenewal} from './financial-source-renewal.mjs';
 import {renewalCiLocalContext} from './financial-renewal-ci-admission.mjs';
@@ -15,10 +15,11 @@ import { eligibleArtifacts, uniqueArtifact } from './select-published-runs.mjs';
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
 import { bootstrap, compareData, dataFiles, dataInventoryDigest, downloadArtifact, inventoryDigest, isData, livePublication, sha256, uiInventory, validateReceipt, safePath } from './publication-state.mjs';
 import { financialReleasePolicy, readFinancialReleaseRequest, readFinancialActivationCandidate, selectActivationCandidate, verifyActivationCandidate, sourceLineage, writeFinancialReleaseReceipt, verifyFinancialReleaseAssets, assertFinancialLineageContinuity, restorePublishedFinancialSource } from './financial-release-activation.mjs';
-import {verifyCarriedBundle} from './financial-generation-carry-controller.mjs';
+import {readCarryTargetBase,verifyCarriedBundle} from './financial-generation-carry-controller.mjs';
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,assertTransportDeclaration,verifyCapturedTransportAssets} from './static-transport-publication.mjs';
 import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
 import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
+import {publisherToolingBoundary,publisherToolingReceipt,validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -266,7 +267,10 @@ async function recheck() {
     const {verifyRetainedRestoreBinding}=await import('./retained-price-source-driver.mjs');
     await verifyRetainedRestoreBinding({root:repairControllerRoot(),source:state.source,record:state.sourceRecovery,live,authority:authorityExports(),api:githubApi});
   }
+  await publisherToolingBoundary(state,'recheck');
   const physical=resolve('release/frontend/dist'),receipt = validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json'))));
+  if(state.publisherTooling){validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);if(digest(receipt.publisher_tooling)!==digest(publisherToolingReceipt(state,receipt)))throw Error('Final publisher tooling receipt changed');}
+  else if(receipt.publisher_tooling)throw Error('Unexpected publisher tooling receipt');
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
   try {
@@ -292,6 +296,7 @@ async function recheck() {
   }
   }finally{removeCanonical(physical,logical);}
   if(state.renewal)await checkFinalRenewalPayload(physical,{request:state.renewal.request,projection:verifiedRenewalProjection,frontendRoot:resolve('frontend'),renewalState:state.renewal,expectedLive:live});
+  if(state.publisherTooling)writeFileSync(statePath(),JSON.stringify(state));
 }
 async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
   const manifest = JSON.parse(readFileSync(join(dataRoot, 'manifest.json'), 'utf8'));
@@ -316,6 +321,7 @@ async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
 }
 async function compose() {
   const state = readState(), dist = resolve('release/frontend/dist');
+  await publisherToolingBoundary(state,'compose');
   if (state.decision.migration) {
     rmSync(dist, { recursive: true, force: true });
     mkdirSync(dist, { recursive: true });
@@ -358,6 +364,7 @@ async function compose() {
     if(state.live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(state.live),receipt.financial_audit_files);
     state.financialPrepared=prepared;writeFileSync(statePath(),JSON.stringify(state));
   }
+  if(state.publisherTooling){receipt.publisher_tooling=publisherToolingReceipt(state,receipt);writeFileSync(statePath(),JSON.stringify(state));}
   if (state.decision.migration && dataInventoryDigest(dist) !== state.migrationDataDigest) throw Error('Metadata migration changed approved data bytes');
   // The final logical tree is complete before encoding. A data-only release
   // discovers this capability in its retained approved UI, never the controller.
@@ -433,6 +440,7 @@ function copyBundleData(source,destination) {
 }
 async function prepareCarry() {
   const state=readState();if(!state.carry)throw Error('Missing financial carry plan');
+  await publisherToolingBoundary(state,'prepare');
   const frontend=resolve('release/frontend'),root=join(frontend,'public'),evaluatedAt=new Date().toISOString();
   const env={...process.env,FINANCIAL_EVALUATED_AT:evaluatedAt};
   for(const key of Object.keys(env))if(key.startsWith('FINANCIAL_CORRECTION_')||key.startsWith('FINANCIAL_GENERATION_CARRY_'))delete env[key];
@@ -446,18 +454,24 @@ async function prepareCarry() {
     state.carry.priceSourceProof=assertFinitePriceBaseline({sourceRoot:proof.sourceRoot,targetRoot:root,replayRoot:proof.replayRoot,request:readRepairRequest(repairControllerRoot()).value});
   }
   const baseline=join(scratch(),'carry-baseline');rmSync(baseline,{recursive:true,force:true});copyBundleData(root,baseline);
-  const manifest=JSON.parse(readFileSync(join(root,'static-data/manifest.json'),'utf8'));
-  const {decodeResearchIndex}=await import(pathToFileURL(join(frontend,'src/static/researchTransport.js')).href);
-  const index=decodeResearchIndex(JSON.parse(readFileSync(join(root,'static-data',manifest.markets.US.assets.research.path),'utf8')));
-  const target=JSON.stringify({market:'US',as_of_date:index.as_of_date,rows:index.rows});
+  const targetInput=await readCarryTargetBase({root,frontendRoot:frontend}),target=targetInput.bytes;
   const previous=state.live.financialRelease;
   const sourceProjection=readFileSync(join(state.carry.sourceRoot,previous.source_projection.path));
   const sourceBase=readFileSync(join(state.carry.sourceRoot,previous.source_base.path));
   const helper=await import(pathToFileURL(join(frontend,'tools/financial-generation-carry.mjs')).href);
   const carry=helper.createFinancialGenerationCarry({sourceProjection,sourceProjectionSha256:previous.source_projection.sha256,sourceBase,sourceBaseSha256:previous.source_base.sha256,
     sourceLineage:previous.lineage_sha256,previousPublicationIdentity:state.live.identity,targetBase:target,targetBaseSha256:sha256(target),evaluatedAt});
-  const projectionPath=join(scratch(),'carry-projection.json'),bytes=JSON.stringify(carry);writeFileSync(projectionPath,bytes);
+  const projectionPath=join(scratch(),'carry-projection.json'),bytes=JSON.stringify(carry);
+  if(Buffer.byteLength(bytes)>FINANCIAL_AUDIT_MAX_FILE_BYTES)throw Error('Carry projection exceeds existing 128 MiB financial audit file cap');
+  writeFileSync(projectionPath,bytes);
+  const carryEnv={...env,FINANCIAL_GENERATION_CARRY_PROJECTION:projectionPath,FINANCIAL_GENERATION_CARRY_SHA256:sha256(bytes),
+    FINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE:previous.lineage_sha256,FINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY:state.live.identity,
+    FINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256:sha256(target)};
+  // The unchanged selected consumer must accept every full input before this
+  // controller exposes a carry plan. The target-only envelope grants no bypass.
+  await helper.loadFinancialGenerationCarry({env:carryEnv,rows:targetInput.rows,asOfDate:targetInput.asOfDate});
   state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt};
+  await publisherToolingBoundary(state,'apply');
   writeFileSync(statePath(),JSON.stringify(state));
   if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
 }
@@ -624,6 +638,11 @@ async function runCommand(command) {
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
   else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
   else if(command==='prepare-carry')await prepareCarry();
+  else if(['publisher-build-before','publisher-build-after'].includes(command)){
+    if(process.argv.length!==3||process.execArgv.length)throw Error('Publisher build boundary accepts no caller inputs or runtime hooks');
+    const state=readState();await publisherToolingBoundary(state,command==='publisher-build-before'?'build-before':'build-after');
+    if(state.publisherTooling)writeFileSync(statePath(),JSON.stringify(state));
+  }
   else if (command === 'compose') await compose();
   else if (command === 'check-design-data') await verifyCoverage(resolve('frontend'), resolve('frontend/public/static-data'), readState().live.verificationUniverse.required_symbols);
   else if (command === 'recheck') await recheck();

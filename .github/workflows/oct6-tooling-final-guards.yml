@@ -1,0 +1,66 @@
+name: Oct6 final publisher tooling guard regressions
+on:
+  push:
+    branches: [preview/oct6-tooling-final-guards-20261008]
+permissions:
+  contents: read
+concurrency:
+  group: oct6-tooling-final-guards-20261008
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-tooling-final-guards-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact disabled candidate and default runtime
+        run: |
+          test "$(git rev-parse HEAD^)" = 8ef12ef99c6fc11d97f16bcef54e5add06029410
+          test "$(git hash-object .github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git hash-object .github/scripts/financial-generation-carry-controller.mjs)" = 1f9839d0e11e23b354df2ddb4d28278e409bc7fb
+          test "$(git hash-object .github/scripts/financial-release-lifecycle.test.mjs)" = f9175b830251b3c6c41950817152291ff3a7b305
+          test "$(git hash-object frontend/tools/financial-generation-carry.test.mjs)" = 229ebd15f3ca9125850c6aaf841217cfc23fbba1
+          test "$(git hash-object .github/scripts/retained-price-publisher-tooling.mjs)" = 6f4000b94df9d44fa58f5c018f3b430e18cb5090
+          test "$(git hash-object .github/scripts/retained-price-publisher-tooling.test.mjs)" = a259456f7eb0d6de0751c52ba8d8f3efbceffb7c
+          test "$(git hash-object frontend/tools/retained-price-publisher-tooling.test.mjs)" = 1d6751282a35cec1cf4b8e4998100e4fd7d7011b
+          test "$(git hash-object .github/scripts/select-release-source.mjs)" = ad2650f0020590ffbdfef5844155d91c1df5a9c6
+          test "$(git hash-object .github/scripts/retained-price-source-browser.mjs)" = 122c32973d412cccd614f0c2be6c3a263576c908
+          test "$(git hash-object .github/scripts/publication-state.mjs)" = eefcccd99edf912bf573b2649159f19d216d9115
+          test "$(git hash-object .github/workflows/research-ui-release.yml)" = 89a36a39a6c6addfa878560dc4dc9596a92b81f4
+          test "$(git hash-object .github/scripts/fixtures/publisher-export-research-oct6-carry-v1.mjs)" = 1f630be308dd2ce604c26635c3d67243c7e48944
+          test "$(git hash-object .github/workflows/ci.yml)" = bc413dc64dd4997a070428ad94a41e7747b66d51
+          test "$(git hash-object .github/scripts/retained-price-source-workflow.test.mjs)" = 008c058d65ec52ccb57816eca3386d7a8deb7a2b
+          test "$(git hash-object .github/scripts/test_check_pages_payload.py)" = 77066d3a01c4f57a2c7cf03441bef0438fb3c443
+          test "$(git hash-object .github/scripts/retained-price-source-browser.test.mjs)" = 0f03aa29707bd3a75e86d25c1e33ba1a9d33d76d
+          guard_index="$RUNNER_TEMP/oct6-tooling-guard-index"
+          GIT_INDEX_FILE="$guard_index" git read-tree HEAD
+          GIT_INDEX_FILE="$guard_index" git update-index --force-remove .github/workflows/oct6-tooling-final-guards.yml
+          test "$(GIT_INDEX_FILE="$guard_index" git write-tree)" = ff52916eec56b4726547a838497829f7247a598a
+          node --input-type=module -e 'import assert from "node:assert/strict";import v8 from "node:v8";assert.equal(process.env.GH_TOKEN,undefined);assert.equal(process.env.NODE_OPTIONS,undefined);console.log(JSON.stringify({node:process.version,heap_size_limit:v8.getHeapStatistics().heap_size_limit,gh_token_present:false,node_options_present:false}));'
+      - name: Install unchanged frontend dependencies
+        timeout-minutes: 3
+        run: |
+          timeout --kill-after=10s 2m npm ci --prefix frontend --no-audit --no-fund
+          git diff --exit-code -- frontend/package.json frontend/package-lock.json frontend/vite.config.js
+      - name: Run exact Node and real Git guard regressions
+        timeout-minutes: 5
+        run: |
+          timeout --kill-after=10s 4m node --test .github/scripts/retained-price-publisher-tooling.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/select-release-source-cli.test.mjs
+      - name: Run unchanged standard Vite configuration checks
+        timeout-minutes: 4
+        working-directory: frontend
+        run: |
+          timeout --kill-after=10s 3m npm run test:run -- tools/financial-generation-carry.test.mjs tools/financial-correction-overlay.test.mjs tools/export-financial-current.test.mjs tools/retained-price-publisher-tooling.test.mjs tools/retained-price-source-imports.test.mjs tools/publication-state.test.mjs tools/select-release-source.test.mjs
+      - name: Run Pages and source workflow regressions
+        timeout-minutes: 2
+        run: |
+          python3 .github/scripts/test_check_pages_payload.py
+          python3 .github/scripts/test_run_retained_price_source.py
+          git diff --exit-code

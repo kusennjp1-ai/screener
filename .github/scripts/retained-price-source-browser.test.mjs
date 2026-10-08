@@ -2,6 +2,8 @@ import test from 'node:test';
 import {createHash} from 'node:crypto';
 import {EventEmitter} from 'node:events';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createPublisherBrowserProofHandoff,consumePublisherToolingBrowserProof} from './retained-price-publisher-tooling.mjs';
 import {localBrowserUrl,requireActualClock,selectBrowserCases,requireFinancialCategory,inspectHistoryExpiry,interruptRejection,requireUnknownPrice,compareDownloadedCsv,requireCarryBinding,BROWSER_LIMITS} from './retained-price-source-browser.mjs';
 const day='2026-10-06';
 const rows=()=>Array.from({length:5901},(_,index)=>({symbol:['NVDA','FUTU','ALH','LPSN','UNDATED'][index]||`ROW${index}`,as_of_date:day,research_detail_path:`details/${index}.json`}));
@@ -65,4 +67,72 @@ test('new carry generation is bound independently from original source and previ
  assert.throws(()=>requireCarryBinding({...publication,financial_generation:'previous-carry'},state,raw));
  assert.throws(()=>requireCarryBinding(publication,state,raw+' '));
  const changed=structuredClone(state);changed.live.financialRelease.source_projection.sha256='changed';assert.throws(()=>requireCarryBinding(publication,changed,raw));
+});
+
+const handoffState=()=>({source:{repair:{request:'actual'}},publisherTooling:{phase:'browsing',binding:{source:'verified'}},carry:{projection:'actual'}});
+test('browser proof handoff consumes the exact before-boundary proof once',()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState(),proof={verified:true,replayRoot:'/actual-replay',sourceRoot:'/actual-source'};
+  handoff.offer(state,proof);assert.equal(handoff.consume(state),proof);assert(Object.isFrozen(proof));
+  assert.throws(()=>handoff.consume(state),/same-invocation/);assert.throws(()=>handoff.offer(state,{verified:true}),/reused/);
+});
+test('browser proof handoff rejects cloned or serialized state identity',()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState();handoff.offer(state,{verified:true});
+  assert.throws(()=>handoff.consume(structuredClone(state)),/same-invocation/);
+  assert.throws(()=>handoff.consume(state),/same-invocation/);
+  assert.throws(()=>consumePublisherToolingBrowserProof(state),/same-invocation/,'An isolated factory cannot seed the production handoff');
+});
+test('browser proof handoff rejects interleaved offers and retains neither proof',()=>{
+  const handoff=createPublisherBrowserProofHandoff(),first=handoffState(),second=handoffState();handoff.offer(first,{verified:true});
+  assert.throws(()=>handoff.offer(second,{verified:true}),/Interleaved/);assert.throws(()=>handoff.consume(first),/same-invocation/);assert.throws(()=>handoff.consume(second),/same-invocation/);
+});
+for(const [name,change]of [
+  ['source mutation',state=>{state.source.repair.request='changed';}],
+  ['projection mutation',state=>{state.carry.projection='changed';}],
+  ['binding mutation',state=>{state.publisherTooling.binding.source='changed';}],
+  ['later phase',state=>{state.publisherTooling.phase='browser_verified';}],
+])test('browser proof handoff rejects '+name,()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState();handoff.offer(state,{verified:true});change(state);
+  assert.throws(()=>handoff.consume(state),/changed|same-invocation/);assert.throws(()=>handoff.consume(state),/same-invocation/);
+});
+test('browser proof handoff rejects proof mutation and a later boundary invalidates pending proof',()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState(),proof={verified:true,replayRoot:'/actual'};
+  handoff.offer(state,proof);proof.replayRoot='/changed';assert.throws(()=>handoff.consume(state),/changed/);
+  const later=handoffState();handoff.offer(later,{verified:true});handoff.invalidate();assert.throws(()=>handoff.consume(later),/same-invocation/);
+});
+test('later browser and final phases retain fresh authority and unchanged runtime bounds',()=>{
+  const helper=readFileSync(new URL('./retained-price-publisher-tooling.mjs',import.meta.url),'utf8'),browser=readFileSync(new URL('./retained-price-source-browser.mjs',import.meta.url),'utf8');
+  const boundary=helper.split('export async function publisherToolingBoundary(state,action){')[1];
+  assert(boundary);assert.match(boundary,/publisherBrowserProofHandoff\.invalidate\(\)/);
+  assert.match(boundary,/const context=await currentContext\(state\)/);assert.match(helper,/const proof=await verifyRetainedRestoreBinding\(/);
+  assert.match(boundary,/if\(action==='browser-before'\)publisherBrowserProofHandoff\.offer\(state,context\.proof\)/);
+  assert.match(browser,/const proof=consumePublisherToolingBrowserProof\(state\)/);assert.doesNotMatch(browser,/verifyRetainedRestoreBinding/);
+  assert.match(browser,/await publisherToolingBoundary\(state,'browser-after'\)/);
+  assert.equal(BROWSER_LIMITS.milliseconds,360000);
+});
+
+test('browser-before async return keeps its one-use proof for the awaited body',async()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState(),proof={verified:true,replayRoot:'/actual-async-replay'};
+  state.publisherTooling.phase='composed';
+  const before=async()=>{
+    await Promise.resolve();
+    state.publisherTooling.phase='browsing';
+    handoff.offer(state,proof);
+    return state.publisherTooling;
+  };
+  await before();
+  // Match runBrowserProof: persist/read the same state, then consume in its body.
+  const persisted=JSON.stringify(state);assert.deepEqual(JSON.parse(persisted),state);
+  assert.equal(handoff.consume(state),proof);assert.throws(()=>handoff.consume(state),/same-invocation/);
+});
+test('an interleaved later boundary after await invalidates the offered proof',async()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState();
+  const before=async()=>{await Promise.resolve();handoff.offer(state,{verified:true});};
+  await before();await Promise.resolve();handoff.invalidate();
+  assert.throws(()=>handoff.consume(state),/same-invocation/);
+});
+test('mutation after awaited browser-before cannot consume its proof',async()=>{
+  const handoff=createPublisherBrowserProofHandoff(),state=handoffState();
+  const before=async()=>{await Promise.resolve();handoff.offer(state,{verified:true});};
+  await before();await Promise.resolve();state.carry.projection='interleaved-change';
+  assert.throws(()=>handoff.consume(state),/changed/);
 });

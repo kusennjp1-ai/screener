@@ -3,20 +3,20 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { CORRECTION_FIELDS, overlayFinancialCorrection, overlayFinancialChart, validateCorrectionProjection } from './financial-correction-overlay.mjs';
 import { FINANCIAL_GENERATION_CARRY_SCHEMA, FINANCIAL_GENERATION_CARRY_ENV, createFinancialGenerationCarry, validateFinancialGenerationCarry, readFinancialGenerationCarry, loadFinancialGenerationCarry, verifyCarryCompatibility } from './financial-generation-carry.mjs';
-import { FINANCIAL_FIELDS, projectFinancialRow, currentFinancialHistory } from '../src/static/financialCurrent.js';
+import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, currentFinancialHistory } from '../src/static/financialCurrent.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../src/test/fixtures/nativeAnnual.js';
-import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { decodeResearchIndex, encodeResearchIndex } from '../src/static/researchTransport.js';
 import { assess } from '../src/static/researchEngine.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { exportWorkbench } from './export-workbench.mjs';
-import { verifyCarriedBundle } from '../../.github/scripts/financial-generation-carry-controller.mjs';
-import { instrumentApplicability } from '../src/static/instrumentApplicability.js';
+import { readCarryTargetBase, verifyCarriedBundle } from '../../.github/scripts/financial-generation-carry-controller.mjs';
+import { instrumentApplicability, instrumentIdentityEvidence } from '../src/static/instrumentApplicability.js';
 
 const originalTime = Date.parse('2026-10-04T12:00:00Z'), originalDate = '2026-10-02';
 const buildTime = Date.parse('2026-10-05T12:00:00Z'), targetDate = '2026-10-05';
@@ -493,4 +493,228 @@ it('exports inherited fund and corporate chart aliases through strict carry veri
       await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 })).rejects.toThrow();
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+// These controller-target regressions use this file's existing synthetic source
+// fixture and the selected local frontend modules. Actual approved-UI coverage
+// is separately bound by the full-cohort diagnostic.
+const carryReaderFrontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+async function carryReaderFixture(target) {
+  const root = await mkdtemp(join(tmpdir(), 'carry-reader-'));
+  const wire = encodeResearchIndex({ as_of_date: target.as_of_date, rows: target.rows });
+  await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: target.as_of_date,
+    pages: { scan: { path: 'scan.json' } }, assets: { research: { path: 'research.json' } } } } });
+  await write(join(root, 'static-data/scan.json'), { as_of_date: target.as_of_date, initial_rows: target.rows.slice(0, 2), chunks: [{ path: 'chunk.json' }] });
+  await write(join(root, 'static-data/chunk.json'), { as_of_date: target.as_of_date, rows: target.rows });
+  await write(join(root, 'static-data/research.json'), wire);
+  await write(join(root, 'qualification-audit.json'), { version: 'ohlcv-v1', as_of_date: target.as_of_date, total: target.rows.length,
+    results: target.rows.map(row => ({ symbol: row.symbol, audit: { version: 'ohlcv-v1', symbol: row.symbol, as_of_date: target.as_of_date } })) });
+  const prepared = await readCarryTargetBase({ root, frontendRoot: carryReaderFrontend });
+  return { root, wire, prepared };
+}
+function bindSyntheticSourceIdentity(options, properties) {
+  const base = JSON.parse(options.sourceBase), source = JSON.parse(options.sourceProjection);
+  Object.assign(base.rows.find(row => row.symbol === 'OWNED'), properties);
+  options.sourceBase = JSON.stringify(base); options.sourceBaseSha256 = hash(options.sourceBase);
+  source.bindings.target_base_sha256 = options.sourceBaseSha256;
+  options.sourceProjection = JSON.stringify(source); options.sourceProjectionSha256 = hash(options.sourceProjection);
+  return options;
+}
+async function persistedCarry(root, options, target, name) {
+  const carry = createFinancialGenerationCarry({ ...options, targetBase: target, targetBaseSha256: hash(target) });
+  const path = join(root, name), raw = JSON.stringify(carry);
+  await write(path, raw);
+  return { carry, env: envFor(path, carry, raw) };
+}
+
+it('binds omitted historical CUSIP observations with the unchanged full-input carry loader', async () => {
+  const options = bindSyntheticSourceIdentity(inputs(), { cusip: '123456782' });
+  const target = JSON.parse(options.targetBase), owned = target.rows.find(row => row.symbol === 'OWNED');
+  owned.financial_historical = { source_evidence: { identity: { cusip: '123456782' } }, unrelated_large_report: 'report '.repeat(4096) };
+  const fixture = await carryReaderFixture(target);
+  try {
+    const compact = decodeResearchIndex(fixture.wire), compactBase = JSON.stringify({ market: 'US', as_of_date: target.as_of_date, rows: compact.rows });
+    expect(instrumentIdentityEvidence(compact.rows.find(row => row.symbol === 'OWNED')).some(context => context.cusip)).toBe(false);
+    const old = await persistedCarry(fixture.root, options, compactBase, 'compact-carry.json');
+    await expect(loadFinancialGenerationCarry({ env: old.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date })).rejects.toThrow('target issuer OWNED mismatch');
+    const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'bounded-carry.json');
+    const loaded = await loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date });
+    expect(loaded).toEqual(next.carry);
+    expect(next.carry.ownership.OWNED).toBe('retained');
+    const projected = JSON.parse(fixture.prepared.bytes).rows.find(row => row.symbol === 'OWNED');
+    expect(projected.instrument_identity.observed_contexts).toEqual(instrumentIdentityEvidence(owned));
+    expect(projected).not.toHaveProperty('financial_historical');
+    expect(fixture.prepared.bytes.length).toBeLessThan(JSON.stringify({ market: 'US', as_of_date: target.as_of_date, rows: fixture.prepared.rows }).length);
+    expect(next.carry.source_projection_json).toBe(options.sourceProjection);
+    expect(next.carry.source_base_json).toBe(options.sourceBase);
+    expect(next.carry.symbols.OWNED.financial_current.p).toEqual(JSON.parse(options.sourceProjection).symbols.OWNED.financial_current.p);
+    expect(next.carry.symbols.OWNED.source_receipts).toEqual(JSON.parse(options.sourceProjection).symbols.OWNED.source_receipts);
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+it('keeps conflicting observed identities unknown in the bounded controller target', async () => {
+  for (const [label, evidence] of [
+    ['CUSIP', { source_evidence: { identity: { cusip: 'CONFLICTING-CUSIP' } } }],
+    ['name', { detail_identity: { company_name: 'Conflicting issuer' } }],
+    ['type', { detail_identity: { quoteType: 'ETF' } }],
+    ['market', { detail_identity: { market: 'JP' } }],
+    ['symbol', { detail_identity: { symbol: 'DIFFERENT' } }],
+  ]) {
+    const options = bindSyntheticSourceIdentity(inputs(), { cusip: '123456782' });
+    const target = JSON.parse(options.targetBase), owned = target.rows.find(row => row.symbol === 'OWNED');
+    owned.financial_source_evidence = { identity: { cusip: '123456782' } };
+    owned.financial_historical = evidence;
+    const fixture = await carryReaderFixture(target);
+    try {
+      const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'conflict-carry.json');
+      await expect(loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date })).resolves.toEqual(next.carry);
+      expect(next.carry.ownership.OWNED, label).toBe('identity_mismatch');
+      expect(Object.values(next.carry.symbols.OWNED.financial_values).every(value => value === null), label).toBe(true);
+      expect(next.carry.symbols.OWNED.source_receipts, label).toEqual([]);
+      expect(next.carry.symbols.OWNED.financial_history.annual, label).toEqual([]);
+      expect(next.carry.symbols.OWNED.financial_history.quarterly, label).toEqual([]);
+    } finally { await rm(fixture.root, { recursive: true, force: true }); }
+  }
+});
+
+it('preserves normalized name and CIK evidence without changing the observed text', async () => {
+  const options = bindSyntheticSourceIdentity(inputs(), { cik: 123 });
+  const target = JSON.parse(options.targetBase), owned = target.rows.find(row => row.symbol === 'OWNED');
+  owned.company_name = ' ＯＷＮＥＤ   corporation ';
+  owned.financial_historical = { detail_identity: { issuer_cik: '0000000123' } };
+  const fixture = await carryReaderFixture(target);
+  try {
+    const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'normalized-carry.json');
+    await expect(loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date })).resolves.toEqual(next.carry);
+    expect(next.carry.ownership.OWNED).toBe('retained');
+    const evidence = JSON.parse(fixture.prepared.bytes).rows.find(row => row.symbol === 'OWNED').instrument_identity.observed_contexts;
+    expect(evidence.some(context => context.company_name === owned.company_name)).toBe(true);
+    expect(evidence.some(context => context.issuer_cik === '0000000123')).toBe(true);
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+it('rejects postbinding issuer, price and universe substitutions against the bounded target', async () => {
+  const options = bindSyntheticSourceIdentity(inputs(), { cusip: '123456782' }), target = JSON.parse(options.targetBase);
+  target.rows.find(row => row.symbol === 'OWNED').financial_historical = { detail_identity: { cusip: '123456782' } };
+  const fixture = await carryReaderFixture(target);
+  try {
+    const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'bound-carry.json');
+    for (const mutation of [
+      row => ({ ...row, financial_historical: { detail_identity: { cusip: 'ALTERED-CUSIP' } } }),
+      row => ({ ...row, company_name: 'Different issuer after binding' }),
+      row => ({ ...row, current_price: row.current_price + 1 }),
+      row => ({ ...row, adv_usd: row.adv_usd + 1 }),
+      row => ({ ...row, market: 'JP' }),
+      row => ({ ...row, as_of_date: '2026-10-04' }),
+    ]) {
+      const rows = fixture.prepared.rows.map(row => row.symbol === 'OWNED' ? mutation(row) : row);
+      await expect(loadFinancialGenerationCarry({ env: next.env, rows, asOfDate: target.as_of_date })).rejects.toThrow(/Financial carry target/);
+    }
+    await expect(loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows.slice(1), asOfDate: target.as_of_date })).rejects.toThrow('target universe');
+    await expect(loadFinancialGenerationCarry({ env: next.env, rows: [...fixture.prepared.rows, fixture.prepared.rows[0]], asOfDate: target.as_of_date })).rejects.toThrow('target universe');
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+// Execute the canonical-chart statements from the exact separately pinned
+// publisher exporter fixture. The approved UI exporter remains unchanged;
+// these regressions exercise the explicit publisher tooling amendment.
+async function exportChartProjection(chart, { carry = null, correction = carry, symbol = chart.symbol ?? chart.stock_data?.symbol, now = buildTime, date = targetDate, market = 'US' } = {}) {
+  const fixturePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../.github/scripts/fixtures/publisher-export-research-oct6-carry-v1.mjs');
+  const source = await readFile(fixturePath, 'utf8');
+  expect(hash(source)).toBe('f9e0ad58f7bbaf911eab2943fcfb18df32f6ee881c3847272f5201e448d9cf40');
+  expect(Buffer.byteLength(source)).toBe(23247);
+  const start = source.indexOf('    canonicalChart='), end = source.indexOf('    Object.assign(canonicalChart,', start);
+  expect(start).toBeGreaterThan(0); expect(end).toBeGreaterThan(start);
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const run = new AsyncFunction('read', 'paths', 'symbol', 'correction', 'carry', 'evaluatedAt', 'scan', 'row', 'overlayFinancialChart', 'projectFinancialPayload',
+    'let canonicalChart=null;\n' + source.slice(start, end) + '\nreturn canonicalChart;');
+  return run(async () => structuredClone(chart), new Map([[symbol, 'fixture.json']]), symbol, correction, carry, now, { as_of_date: date }, { market }, overlayFinancialChart, projectFinancialPayload);
+}
+
+it('keeps carried stale-reporting-period reasons through the source-bound exporter and repeated serialization', async () => {
+  const now = Date.parse('2026-10-08T12:00:00Z'), date = '2026-10-08', options = inputs({ now, date });
+  const source = JSON.parse(options.sourceProjection), item = source.symbols.OWNED;
+  const periodExpiry = Date.parse('2026-03-31') + 191 * day - 1;
+  item.financial_values.eps_q2_yoy = 25;
+  item.financial_current.r = item.financial_current.r.slice(0, 7) + '0' + item.financial_current.r.slice(8);
+  item.financial_current.p['7'] = [25, '2', 'Diluted EPS', ['2026-03-31', '2025-12-31', '2025-09-30', '2025-06-30', '2025-03-31'], originalTime - 3600000, periodExpiry, 'g', 'r'];
+  validateCorrectionProjection(source);
+  options.sourceProjection = JSON.stringify(source); options.sourceProjectionSha256 = hash(options.sourceProjection);
+  const carry = createFinancialGenerationCarry(options), target = targetRows(options).find(row => row.symbol === 'OWNED');
+  const chart = { symbol: target.symbol, as_of_date: date, bars: [], stock_data: target,
+    fundamentals: { current_price: 120, eps_q2_yoy: 999, eps_growth_qq: 999 } };
+  const before = JSON.stringify(chart), once = overlayFinancialChart(chart, carry, target.symbol);
+  const extra = projectFinancialPayload(once, { now, asOfDate: date, market: 'US' });
+  expect(once.fundamentals.financial_current_state.fields.eps_q2_yoy).toMatchObject({ value: null, availability: 'unknown', reason: 'stale_reporting_period' });
+  expect(extra.fundamentals.financial_current_state.fields.eps_q2_yoy.reason).toBe('missing_or_invalid_value');
+  const exported = await exportChartProjection(chart, { carry, now, date });
+  expect(exported).toEqual(once); expect(JSON.stringify(chart)).toBe(before);
+  expect(await exportChartProjection(JSON.parse(JSON.stringify(exported)), { carry, now, date })).toEqual(exported);
+  for (const context of [exported.stock_data, exported.fundamentals]) {
+    expect(context.eps_q2_yoy).toBeNull();
+    expect(context.financial_current_state.fields.eps_q2_yoy.reason).toBe('stale_reporting_period');
+    expect(context.eps_growth_qq).toBe(30); expect(context.financial_current_state.fields.eps_growth_qq.source_validated).toBe(true);
+    expect(context.financial_current.t).toBe(originalTime); expect(context.financial_current.p).toEqual(source.symbols.OWNED.financial_current.p);
+  }
+  for (const key of ['symbol', 'market', 'as_of_date']) expect(Object.hasOwn(exported.fundamentals, key)).toBe(false);
+  expect(exported).not.toHaveProperty('market');
+  expect(carry.symbols.OWNED.financial_values.eps_q2_yoy).toBe(25);
+  expect(carry.symbols.OWNED.source_receipts).toEqual(source.symbols.OWNED.source_receipts);
+});
+
+it('keeps carried source-age expiry and current annual fields without renewing source clocks', async () => {
+  const now = originalTime + 2 * day, date = '2026-10-06', options = inputs({ now, date, quarterAgeHours: 6 * 24 });
+  const carry = createFinancialGenerationCarry(options), target = targetRows(options).find(row => row.symbol === 'OWNED');
+  const chart = { symbol: target.symbol, as_of_date: date, bars: [], stock_data: target,
+    fundamentals: { eps_growth_yy: 999, current_price: 120 } };
+  const once = overlayFinancialChart(chart, carry), result = await exportChartProjection(chart, { carry, now, date });
+  expect(result).toEqual(once);
+  for (const context of [result.stock_data, result.fundamentals]) {
+    expect(context.eps_growth_yy).toBeNull(); expect(context.financial_current_state.fields.eps_growth_yy.reason).toBe('stale_source');
+    expect(context.eps_5yr_cagr).toBe(100); expect(context.financial_current_state.fields.eps_5yr_cagr.source_validated).toBe(true);
+    expect(context.financial_current.t).toBe(originalTime); expect(context.financial_current.p['1'][4]).toBe(originalTime - 6 * day);
+  }
+  expect(await exportChartProjection(JSON.parse(JSON.stringify(result)), { carry, now, date })).toEqual(result);
+});
+
+it('preserves inherited and absent symbol ownership for carried unknown, unowned and reviewed-fund wrappers', async () => {
+  const ordinaryOptions = inputs(), ordinaryCarry = createFinancialGenerationCarry(ordinaryOptions);
+  for (const symbol of ['OWNED', 'NULL', 'NEW']) {
+    const target = targetRows(ordinaryOptions).find(row => row.symbol === symbol);
+    const chart = { as_of_date: targetDate, bars: [], stock_data: target, fundamentals: { eps_growth_yy: 999 } };
+    const once = overlayFinancialChart(chart, ordinaryCarry, symbol), result = await exportChartProjection(chart, { carry: ordinaryCarry, symbol });
+    expect(result).toEqual(once);
+    expect(result).not.toHaveProperty('symbol'); expect(result).not.toHaveProperty('financial_current_state');
+    for (const key of ['symbol', 'market', 'as_of_date']) expect(Object.hasOwn(result.fundamentals, key)).toBe(false);
+    if (symbol === 'OWNED') expect(result.fundamentals.financial_current_state.fields.eps_growth_yy.source_validated).toBe(true);
+    else expect(Object.values(result.fundamentals.financial_current_state.fields).some(field => field.source_validated)).toBe(false);
+  }
+  const { options, chartForRow } = inheritedChartCarryInputs(), carry = createFinancialGenerationCarry(options);
+  const fund = targetRows(options).find(row => row.symbol === 'BITU'), chart = chartForRow(fund);
+  delete chart.fundamentals.market; delete chart.fundamentals.as_of_date;
+  const result = await exportChartProjection(chart, { carry }), once = overlayFinancialChart(chart, carry);
+  expect(result).toEqual(once); expect(result).not.toHaveProperty('market');
+  for (const context of [result, result.stock_data, result.fundamentals]) {
+    expect(context.instrument_applicability.status).toBe('not_applicable');
+    expect(context.financial_current).toBeNull(); expect(FINANCIAL_FIELDS.every(field => context[field] === null)).toBe(true);
+  }
+  expect(await exportChartProjection(JSON.parse(JSON.stringify(result)), { carry })).toEqual(result);
+});
+
+it('preserves the exact original non-carry projection for ordinary exports and corrections', async () => {
+  const options = inputs(), correction = validateCorrectionProjection(JSON.parse(options.sourceProjection));
+  const target = row('OWNED'), current = withFinancialProof({ ...target, eps_growth_qq: 30, eps_growth_yy: 40 }, originalTime, originalDate);
+  const unknown = { symbol: 'OUTSIDE', market: 'US', as_of_date: originalDate, eps_growth_yy: 999 };
+  const charts = [
+    { symbol: 'OWNED', as_of_date: originalDate, bars: [], stock_data: current, fundamentals: { market: 'US', eps_growth_yy: 999 } },
+    { as_of_date: originalDate, bars: [], stock_data: current, fundamentals: { eps_growth_yy: 999 } },
+    { symbol: 'OUTSIDE', as_of_date: originalDate, bars: [], stock_data: unknown, fundamentals: { eps_growth_yy: 999 } },
+  ];
+  for (const chart of charts) for (const projection of [null, correction]) {
+    const symbol = chart.symbol ?? chart.stock_data.symbol, before = JSON.stringify(chart);
+    const expected = projectFinancialPayload(overlayFinancialChart(structuredClone(chart), projection, symbol), { now: originalTime, asOfDate: originalDate, market: 'US' });
+    const result = await exportChartProjection(chart, { carry: null, correction: projection, symbol, now: originalTime, date: originalDate });
+    expect(result).toEqual(expected); expect(JSON.stringify(result)).toBe(JSON.stringify(expected)); expect(JSON.stringify(chart)).toBe(before);
+  }
 });

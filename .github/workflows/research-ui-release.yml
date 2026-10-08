@@ -218,6 +218,11 @@ jobs:
         run: node .github/scripts/select-release-source.mjs prepare-carry
       # Correction mode runs only the pinned archive projector and approved
       # exporter. It deliberately skips every provider/enrichment/repair step.
+      - name: Verify publisher tooling before finite build
+        if: steps.restore.outputs.offline_recovery_verified == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs publisher-build-before
       - name: Build with daily selection export
         if: steps.plan.outputs.publish == 'true'
         working-directory: release/frontend
@@ -231,6 +236,11 @@ jobs:
         run: |
           if [ "$METADATA_MIGRATION" != true ] && [ "$FINANCIAL_ACTIVATION" != true ] && [ "$FINANCIAL_SOURCE_RENEWAL" != true ]; then npm run build; fi
           node tools/check-data-quality.mjs
+      - name: Verify publisher tooling after finite build
+        if: steps.restore.outputs.offline_recovery_verified == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs publisher-build-after
       - name: Preserve approved UI bytes or record verified new UI
         if: steps.plan.outputs.publish == 'true'
         env:
