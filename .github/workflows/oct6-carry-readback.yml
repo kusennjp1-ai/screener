@@ -1,0 +1,76 @@
+name: Oct6 carry diagnostic readback
+on:
+  push:
+    branches: [preview/oct6-carry-readback-20261008]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  readback:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-carry-readback-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Read the exact retained diagnostic artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git rev-parse HEAD^)" = 3b7db5ccdc941500cade8d08e8bfc8e835bd31bb
+          ulimit -f 32768
+          timeout --kill-after=10s 4m python3 - <<'PY'
+          import hashlib,json,os,pathlib,stat,subprocess,zipfile
+          repo='kusennjp1-ai/screener';run=37731046190;head='3b7db5ccdc941500cade8d08e8bfc8e835bd31bb'
+          artifact_id=11529703156;size=10969176;digest='e313869ea80f8e9ae082d634c9a7070b3e72f3e884af31fb07ef8bd93234adff'
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'carry-proof-readback';root.mkdir()
+          def get(route):
+           result=subprocess.run(['gh','api',route],capture_output=True,timeout=30,check=True)
+           assert len(result.stdout)<16*1024**2
+           return json.loads(result.stdout)
+          records=[]
+          for suffix in ('','/attempts/1'):
+           item=get(f'repos/{repo}/actions/runs/{run}'+suffix)
+           assert item['id']==run and item['head_sha']==head and item['run_attempt']==1 and item['status']=='completed' and item['conclusion']=='failure'
+           assert item['head_branch']=='preview/oct6-carry-identity-20261008' and item['path']=='.github/workflows/oct6-carry-identity.yml' and item['repository']['id']==1203919607
+           records.append(item)
+          metadata=get(f'repos/{repo}/actions/artifacts/{artifact_id}')
+          assert metadata['id']==artifact_id and metadata['size_in_bytes']==size and metadata['digest']=='sha256:'+digest and not metadata['expired']
+          assert metadata['workflow_run']['id']==run and metadata['workflow_run']['head_sha']==head
+          archive=root/'original.zip'
+          with archive.open('xb') as target:
+           subprocess.run(['gh','api',f'repos/{repo}/actions/artifacts/{artifact_id}/zip'],stdout=target,stderr=subprocess.PIPE,timeout=120,check=True)
+          assert archive.stat().st_size==size and hashlib.sha256(archive.read_bytes()).hexdigest()==digest
+          selected=['acquisition-result.json','setup-result.json','identity/report.json','identity/before-mismatches.json','identity/ownership-changes.json','identity/current-before-mismatches.json','identity/current-after-mismatches.json','identity/roundtrip-file-differences.json','identity/current-admission-negatives.json','identity/current-carried-bundle-verification.json']
+          inventory={};payloads={};total=0
+          with zipfile.ZipFile(archive) as z:
+           assert len(z.infolist())<=1000
+           for entry in z.infolist():
+            name=entry.filename
+            assert name and not name.startswith('/') and '\\' not in name and all(x not in ('','.','..') for x in name.split('/')) and name not in inventory
+            assert not entry.is_dir() and not stat.S_ISLNK(entry.external_attr>>16) and not entry.flag_bits&1
+            total+=entry.file_size;assert total<=2*1024**3 and entry.file_size<=256*1024**2
+            h=hashlib.sha256();count=0
+            with z.open(entry) as source:
+             for block in iter(lambda:source.read(1024*1024),b''):h.update(block);count+=len(block)
+            assert count==entry.file_size
+            inventory[name]={'bytes':count,'sha256':h.hexdigest()}
+            if name in selected:
+             assert count<=4*1024**2
+             payloads[name]=json.loads(z.read(entry))
+          lines=[json.dumps({'kind':'archive-binding','run':run,'head':head,'artifact_id':artifact_id,'bytes':size,'sha256':digest,'members':len(inventory),'inventory':inventory},separators=(',',':'))]
+          for name in selected:
+           lines.append(json.dumps({'kind':'selected-member','path':name,'pin':inventory.get(name),'value':payloads.get(name),'present':name in payloads},separators=(',',':')))
+          assert sum(len(x.encode()) for x in lines)<=4*1024**2,'Selected complete proof exceeds log cap; no partial acceptance'
+          for line in lines:print('CARRY_PROOF '+line,flush=True)
+          (root/'readback.json').write_text(json.dumps({'records':records,'artifact':metadata,'inventory':inventory,'selected':payloads},separators=(',',':')))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oct6-carry-proof-readback-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/carry-proof-readback/readback.json
+          if-no-files-found: error
+          retention-days: 7
