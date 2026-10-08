@@ -1,3 +1,4 @@
+import {validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
 import {validateFinancialAuditFiles,requiredFinancialAuditFiles,parsePublicationReceipt,PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
 import {isPerformanceException, packedExceptionType, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { createHash } from 'node:crypto';
@@ -124,6 +125,7 @@ export function validateReceipt(receipt) {
       || !/^[a-f0-9]{64}$/.test(receipt.financial_generation || '') || !/^[a-f0-9]{64}$/.test(receipt.data_inventory_sha256 || '')) throw Error('Invalid publication financial correction reference');
   }
   if(receipt.financial_audit_files!==undefined){validateFinancialAuditFiles(receipt.financial_audit_files);if(!receipt.financial_release||receipt.financial_audit_files[receipt.financial_release.path]!==receipt.financial_release.sha256)throw Error('Financial audit inventory lost the active release');}
+  if(Object.hasOwn(receipt,'publisher_tooling'))validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);
   if(Object.hasOwn(receipt,'transport'))validateTransportDescriptor(receipt.transport,receipt);
   if(Object.hasOwn(receipt,'financial_audit_transport'))validateFinancialAuditTransport(receipt.financial_audit_transport,receipt);
   return receipt;

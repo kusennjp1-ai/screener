@@ -136,7 +136,7 @@ test('only independently verified restore skips enrichment while ordinary carry 
   assert.match(publish,/check-pages-payload/);
 });
 test('required focused tests execute in the explicit exact-main CI script list',()=>{
-  const ci=read('ci.yml');for(const name of ['retained-price-ci-admission.test.mjs','retained-price-source-admission.test.mjs','retained-price-source-driver.test.mjs','retained-price-source-baseline.test.mjs','retained-price-source-browser.test.mjs','retained-price-source-readers.test.mjs','retained-price-source-workflow.test.mjs','test_run_retained_price_source.py'])assert(ci.includes(name),name);
+  const ci=read('ci.yml');for(const name of ['retained-price-ci-admission.test.mjs','retained-price-source-admission.test.mjs','retained-price-source-driver.test.mjs','retained-price-source-baseline.test.mjs','retained-price-source-browser.test.mjs','retained-price-source-readers.test.mjs','retained-price-source-workflow.test.mjs','retained-price-publisher-tooling.test.mjs','test_run_retained_price_source.py'])assert(ci.includes(name),name);
   assert(ci.includes('financial-renewal-ci-admission.test.mjs'));assert(ci.includes('financial-renewal-ci-routing.test.mjs'));
 });
 
@@ -146,6 +146,8 @@ test('all authenticated finite entry points inherit only the existing step-scope
     'Prepare immutable controller for finite price publication',
     'Restore the exact selected data artifact',
     'Carry the active financial source onto the new price target',
+    'Verify publisher tooling before finite build',
+    'Verify publisher tooling after finite build',
     'Preserve approved UI bytes or record verified new UI',
     'Verify composed finite price browser and CSV surfaces',
     'Recheck live identity, main and final data before uploading',
@@ -179,4 +181,32 @@ test('all authenticated finite entry points inherit only the existing step-scope
   assert(carry,'Missing actual prepare-carry command');
   assert.match(carry,/await verifyRetainedRestoreBinding\(/);
   assert.match(carry,/api:githubApi/);
+});
+
+
+test('exact finite publisher guards isolate token from unchanged ordinary build and quality checks',()=>{
+  const publish=job(release,'publish'),build=step(publish,'Build with daily selection export'),before=step(publish,'Verify publisher tooling before finite build'),after=step(publish,'Verify publisher tooling after finite build');
+  for(const [body,command]of [[before,'publisher-build-before'],[after,'publisher-build-after']]){
+    assert.match(body,/if: steps\.restore\.outputs\.offline_recovery_verified == 'true'/);
+    assert.match(body,/GH_TOKEN: \$\{\{ github\.token \}\}/);
+    assert(body.includes('run: node .github/scripts/select-release-source.mjs '+command));
+    assert.doesNotMatch(body,/working-directory|continue-on-error|EXTRA_TOKEN|permissions:/);
+  }
+  assert(publish.indexOf('Verify publisher tooling before finite build')<publish.indexOf('Build with daily selection export'));
+  assert(publish.indexOf('Build with daily selection export')<publish.indexOf('Verify publisher tooling after finite build'));
+  assert(publish.indexOf('Verify publisher tooling after finite build')<publish.indexOf('Preserve approved UI bytes'));
+  assert.match(build,/working-directory: release\/frontend/);
+  assert.doesNotMatch(build,/GH_TOKEN|publisher-build-|continue-on-error/);
+  const body=build.split('        run: |\n')[1].trim().split('\n').map(line=>line.trim());
+  assert.deepEqual(body,[
+    'if [ "$METADATA_MIGRATION" != true ] && [ "$FINANCIAL_ACTIVATION" != true ] && [ "$FINANCIAL_SOURCE_RENEWAL" != true ]; then npm run build; fi',
+    'node tools/check-data-quality.mjs',
+  ]);
+  const selector=readFileSync(new URL('./select-release-source.mjs',import.meta.url),'utf8'),tooling=readFileSync(new URL('./retained-price-publisher-tooling.mjs',import.meta.url),'utf8');
+  assert.match(selector,/publisher-build-before.*publisher-build-after/);assert.match(selector,/await publisherToolingBoundary\(state,command==='publisher-build-before'\?'build-before':'build-after'\)/);
+  assert.match(tooling,/await verifyRetainedRestoreBinding\(/);assert.match(tooling,/api:githubApi/);assert.match(tooling,/const now=Date\.now\(\)/);
+  const vite=readFileSync(new URL('../../frontend/tools/retained-price-publisher-tooling.test.mjs',import.meta.url),'utf8');
+  assert.match(read('ci.yml'),/run: cd frontend && npm run test:run/);
+  assert.match(vite,/await publisherToolingBoundary\(state,'apply'\)/);assert.match(vite,/validatePublisherToolingFiles\(source,amended/);
+  assert.doesNotMatch(vite,/new URL\(/,'Vite helper filesystem paths must use dirname/fileURLToPath/resolve');
 });

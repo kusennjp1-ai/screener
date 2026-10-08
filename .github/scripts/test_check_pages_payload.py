@@ -329,6 +329,39 @@ class WorkflowScopeTests(unittest.TestCase):
                     self.assertNotIn("working-directory:", build + verification + step)
                     continue
                 self.assertEqual(workflow.name, "research-ui-release.yml")
+                # Finite guards authenticate using separate token-scoped steps.
+                # The ordinary build and quality step keeps its original environment.
+                build_steps = [(i, s) for i, s in enumerate(steps)
+                               if field(s, "name") == "Build with daily selection export"]
+                self.assertEqual(len(build_steps), 1)
+                build_index, build = build_steps[0]
+                self.assertLess(build_index, index)
+                self.assertEqual(field(build, "working-directory"), "release/frontend")
+                self.assertIsNone(input_field(build, "GH_TOKEN"))
+                self.assertEqual(field(build, "if"), "steps.plan.outputs.publish == 'true'")
+                self.assertNotIn("continue-on-error:", build)
+                commands = [line.strip() for line in build.split("        run: |\n", 1)[1].splitlines() if line.strip()]
+                self.assertEqual(commands, [
+                    'if [ "$METADATA_MIGRATION" != true ] && [ "$FINANCIAL_ACTIVATION" != true ] && [ "$FINANCIAL_SOURCE_RENEWAL" != true ]; then npm run build; fi',
+                    "node tools/check-data-quality.mjs",
+                ])
+                for name, command, relation in [
+                    ("Verify publisher tooling before finite build", "publisher-build-before", "before"),
+                    ("Verify publisher tooling after finite build", "publisher-build-after", "after"),
+                ]:
+                    boundary_steps = [(i, s) for i, s in enumerate(steps) if field(s, "name") == name]
+                    self.assertEqual(len(boundary_steps), 1)
+                    boundary_index, boundary = boundary_steps[0]
+                    if relation == "before":
+                        self.assertLess(boundary_index, build_index)
+                    else:
+                        self.assertGreater(boundary_index, build_index)
+                    self.assertLess(boundary_index, index)
+                    self.assertEqual(field(boundary, "if"), "steps.restore.outputs.offline_recovery_verified == 'true'")
+                    self.assertEqual(input_field(boundary, "GH_TOKEN"), "${{ github.token }}")
+                    self.assertEqual(field(boundary, "run"), "node .github/scripts/select-release-source.mjs " + command)
+                    self.assertIsNone(field(boundary, "working-directory"))
+                    self.assertNotIn("continue-on-error:", boundary)
                 self.assertEqual(input_field(step, "path"), "release/frontend/dist")
                 self.assertEqual(input_field(step, "name"), "github-pages-${{ github.run_id }}-${{ github.run_attempt }}")
                 self.assertGreater(index, 0)
@@ -393,6 +426,45 @@ class WorkflowScopeTests(unittest.TestCase):
         for reason, changed in mutations.items():
             with self.subTest(reason=reason):
                 self.assert_static_mutation_rejected(text, changed)
+
+
+
+    def assert_publisher_mutation_rejected(self, original, changed):
+        self.assertNotEqual(changed, original, "Mutation must change the actual workflow")
+        publisher = REPO / ".github/workflows/research-ui-release.yml"
+        read_text = Path.read_text
+
+        def mutated_read(path, *args, **kwargs):
+            return changed if path == publisher else read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", mutated_read), self.assertRaises(AssertionError):
+            self.test_every_final_pages_upload_is_guarded_and_intermediate_is_separate()
+
+    def test_publisher_tooling_build_guard_and_token_mutations_fail_closed(self):
+        text = (REPO / ".github/workflows/research-ui-release.yml").read_text()
+        block = lambda name: re.search(r'(?m)^      - name: ' + re.escape(name) + r'\n'
+                                       r'[\s\S]*?(?=^      - )', text).group(0)
+        build = block("Build with daily selection export")
+        before = block("Verify publisher tooling before finite build")
+        after = block("Verify publisher tooling after finite build")
+        mutations = {
+            "missing before": text.replace(before, "", 1),
+            "missing after": text.replace(after, "", 1),
+            "wrong before command": text.replace(before, before.replace("publisher-build-before", "compose", 1), 1),
+            "wrong guard caller cwd": text.replace(before, before.replace("        env:", "        working-directory: release/frontend\n        env:", 1), 1),
+            "ordinary token exposure": text.replace(build, build.replace("        env:", "        env:\n          GH_TOKEN: ${{ github.token }}", 1), 1),
+            "missing original quality": text.replace(build, build.replace("          node tools/check-data-quality.mjs\n", "", 1), 1),
+            "changed original build guard": text.replace(build, build.replace('"$FINANCIAL_SOURCE_RENEWAL" != true', '"$FINANCIAL_SOURCE_RENEWAL" = true', 1), 1),
+            "missing token": text.replace(before, before.replace("          GH_TOKEN: ${{ github.token }}\n", "", 1), 1),
+            "new token": text.replace(after, after.replace("GH_TOKEN: ${{ github.token }}", "GH_TOKEN: ${{ secrets.EXTRA_TOKEN }}", 1), 1),
+            "ordinary guard admission": text.replace(before, before.replace("== 'true'", "!= 'true'", 1), 1),
+            "ignored failure": text.replace(after, after.replace("        env:", "        continue-on-error: true\n        env:", 1), 1),
+            "late before guard": text.replace(before, "", 1).replace(after, after + before, 1),
+        }
+        for reason, changed in mutations.items():
+            with self.subTest(reason=reason):
+                self.assert_publisher_mutation_rejected(text, changed)
+
 
 
 if __name__ == "__main__":
