@@ -1,0 +1,66 @@
+name: Oct6 carry identity projection proof
+on:
+  push:
+    branches: [preview/oct6-carry-projection-20261008]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: oct6-carry-projection-20261008
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-carry-projection-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact isolated diagnostic inputs
+        run: |
+          test "$(git rev-parse HEAD^)" = c822e55df34c1cb7b559bfa9f11ecda7018ee3ce
+          test "$(git -C release rev-parse HEAD)" = 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          test "$(git hash-object .github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git hash-object .github/scripts/acquire-oct6-carry-identity.py)" = e2cccd211f90afe0781ed24a5c9cfc32093c404e
+          test "$(git hash-object .github/scripts/prepare-oct6-carry-identity.mjs)" = 2d202551b5fb09624cb244552023448ee45ede20
+          test "$(git hash-object .github/scripts/diagnose-oct6-carry-identity.mjs)" = 94b013da72209629d641f1e85e7479f823784206
+          test "$(git hash-object .github/scripts/prove-carry-default-node.mjs)" = e86e78ddc373ba170fdbe6e8ed956692bf461722
+          test "$(git hash-object .github/scripts/financial-generation-carry-controller.mjs)" = 1f9839d0e11e23b354df2ddb4d28278e409bc7fb
+          test "$(git hash-object .github/scripts/select-release-source.mjs)" = 36120578f7934b1c601751ce00ca676556ad10d3
+          node --check .github/scripts/prove-carry-default-node.mjs
+          python3 -m py_compile .github/scripts/acquire-oct6-carry-identity.py
+          node --check .github/scripts/prepare-oct6-carry-identity.mjs
+          node --check .github/scripts/diagnose-oct6-carry-identity.mjs
+      - name: Authenticate original source and predecessor archives
+        timeout-minutes: 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: timeout --kill-after=10s 11m python3 .github/scripts/acquire-oct6-carry-identity.py
+      - name: Reproduce all issuer identities and verify clean current carry
+        timeout-minutes: 16
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -o pipefail
+          timeout --kill-after=10s 15m bash -e -c '
+            node .github/scripts/prepare-oct6-carry-identity.mjs
+            node .github/scripts/diagnose-oct6-carry-identity.mjs "$RUNNER_TEMP/carry-identity-diagnostic/config.json"
+          ' 2>&1 | tee "$RUNNER_TEMP/carry-identity-diagnostic/reports/console.log"
+      - name: Preserve complete diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct6-carry-identity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/carry-identity-diagnostic/reports
+          retention-days: 7
+          if-no-files-found: error
