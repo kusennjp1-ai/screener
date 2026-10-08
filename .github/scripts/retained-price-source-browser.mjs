@@ -223,7 +223,7 @@ export async function startReleaseServer(root){
       assert.equal(realpathSync(file),file,'Linked release asset');const stat=statSync(file);assert(stat.isFile()&&stat.size<=BROWSER_LIMITS.fileBytes,'Unsafe/oversized browser asset');
       servedBytes+=request.method==='HEAD'?0:stat.size;assert(servedBytes<=BROWSER_LIMITS.servedBytes,'Browser byte bound exhausted');
       const type={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'}[extname(file)]||'application/octet-stream';
-      response.writeHead(200,{'Content-Type':type,'Content-Length':stat.size,'Cache-Control':'no-store'});
+      response.writeHead(200,{'Content-Type':type,'Content-Length':stat.size,'Cache-Control':'no-cache'});
       if(request.method==='HEAD')response.end();else createReadStream(file).on('error',()=>response.destroy()).pipe(response);
     }catch(error){failures.push(error.message);response.writeHead(400);response.end();}
   });

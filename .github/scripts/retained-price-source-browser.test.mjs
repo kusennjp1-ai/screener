@@ -2,9 +2,12 @@ import test from 'node:test';
 import {createHash} from 'node:crypto';
 import {EventEmitter} from 'node:events';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,realpathSync,rmSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {gzipSync} from 'node:zlib';
 import {createPublisherBrowserProofHandoff,consumePublisherToolingBrowserProof} from './retained-price-publisher-tooling.mjs';
-import {localBrowserUrl,requireActualClock,selectBrowserCases,requireFinancialCategory,inspectHistoryExpiry,interruptRejection,requireUnknownPrice,compareDownloadedCsv,requireCarryBinding,BROWSER_LIMITS} from './retained-price-source-browser.mjs';
+import {localBrowserUrl,requireActualClock,selectBrowserCases,requireFinancialCategory,inspectHistoryExpiry,interruptRejection,requireUnknownPrice,compareDownloadedCsv,requireCarryBinding,BROWSER_LIMITS,startReleaseServer} from './retained-price-source-browser.mjs';
 const day='2026-10-06';
 const rows=()=>Array.from({length:5901},(_,index)=>({symbol:['NVDA','FUTU','ALH','LPSN','UNDATED'][index]||`ROW${index}`,as_of_date:day,research_detail_path:`details/${index}.json`}));
 const prepared=()=>({target_as_of_date:day,patches:[{symbol:'LPSN',row:{}}],row_quarantines:[{symbol:'UNDATED'}]});
@@ -248,4 +251,39 @@ test('selected fallback proof needs real platform font evidence and scoped visib
     x=>{x.geometry.width=NaN;},x=>{x.geometry.width=0;},x=>{x.geometry.x=-20;},x=>{x.geometry.scroll_width=200;},
     x=>{x.geometry.x=1400;},x=>{x.computed_font_family='x'.repeat(513);},x=>{x.platform_fonts[0].familyName='x'.repeat(129);},
   ]){const sample=fallbackSample();mutate(sample);assert.throws(()=>requireFallbackFontSample(sample));}
+});
+
+test('real release server revalidates browser responses without changing GET bytes or HEAD accounting',{timeout:15000},async()=>{
+  const root=realpathSync(mkdtempSync(join(tmpdir(),'retained-price-browser-server-')));
+  const logical=Buffer.from('{"symbol":"FUTU","zero":-0,"absent":null}\n');
+  const packed=gzipSync(logical,{mtime:0});
+  const digest=createHash('sha256').update(packed).digest('hex');
+  const relative='static-data/_transport/gzip/'+digest+'.bin';
+  let server;
+  try{
+    mkdirSync(join(root,'static-data/_transport/gzip'),{recursive:true});
+    writeFileSync(join(root,relative),packed);
+    server=await startReleaseServer(root);
+    const url=server.origin+'/screener/'+relative;
+    const get=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(5000)});
+    assert.equal(get.status,200);
+    assert.equal(get.headers.get('cache-control'),'no-cache');
+    assert.equal(get.headers.get('content-type'),'application/octet-stream');
+    assert.equal(Number(get.headers.get('content-length')),packed.length);
+    const observed=Buffer.from(await get.arrayBuffer());
+    assert.deepEqual(observed,packed);
+    assert.equal(createHash('sha256').update(observed).digest('hex'),digest);
+    const head=await fetch(url,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(5000)});
+    assert.equal(head.status,200);
+    assert.equal(head.headers.get('cache-control'),'no-cache');
+    assert.equal(Number(head.headers.get('content-length')),packed.length);
+    assert.equal((await head.arrayBuffer()).byteLength,0);
+    assert.deepEqual(server.stats(),{requests:2,served_bytes:packed.length,failures:[]});
+    assert.equal(BROWSER_LIMITS.fileBytes,64*1024**2);
+    assert.equal(BROWSER_LIMITS.servedBytes,512*1024**2);
+    assert.equal(BROWSER_LIMITS.requests,4000);
+  }finally{
+    if(server)await server.close();
+    rmSync(root,{recursive:true,force:true});
+  }
 });
