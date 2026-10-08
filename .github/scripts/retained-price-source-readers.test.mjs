@@ -8,6 +8,8 @@ import {join,dirname} from 'node:path';
 import {checkedExport,chooseExport,chooseFiniteExport} from './select-release-source.mjs';
 import {publicationDecision,checkPublication} from './publication-gate.mjs';
 import {PRICE_CI,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,verifyPriceSourceCompletion,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
+import {createRetainedPriceAdmissionApi} from './retained-price-admission-inventory.mjs';
+import {admissionSnapshotResult} from './fixtures/retained-price-admission-inventory.mjs';
 
 const digest=b=>createHash('sha256').update(b).digest('hex');
 const repo={id:PRICE_CI.repositoryId,full_name:PRICE_CI.repository,default_branch:'main'};
@@ -39,7 +41,7 @@ function fixture(t){
   const saved=Object.fromEntries(['RUNNER_TEMP','GITHUB_WORKSPACE','RETAINED_PRICE_CONTROLLER_ROOT','GITHUB_EVENT_NAME'].map(k=>[k,process.env[k]]));
   t.after(()=>{for(const[k,v]of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;});
   Object.assign(process.env,{RUNNER_TEMP:temp,GITHUB_WORKSPACE:workspace,RETAINED_PRICE_CONTROLLER_ROOT:root,GITHUB_EVENT_NAME:'workflow_run'});
-  const map={},calls=[];
+  const map={},calls=[],admissionCalls=[];
   const treeResponse=(sha,ref)=>({sha,truncated:false,tree:git(workspace,'ls-tree','-r',ref).split('\n').map(line=>{const [metadata,path]=line.split('\t'),[mode,type,sha]=metadata.split(' ');return{path,mode,type,sha};})});
   const rawAt=ref=>Buffer.from(git(workspace,'show',`${ref}:${PRICE_REQUEST_PATH}`)+'\n');
   for(const [sha,treeSha,parents]of [[parent,parentTree,[]],[head,tree,[{sha:parent}]]]){
@@ -49,12 +51,13 @@ function fixture(t){
   map[prefix]=repo;map[`${prefix}/git/ref/heads/main`]={object:{sha:head}};
   const run=(id,wf,event,start,end)=>({id,run_attempt:1,workflow_id:wf.id,path:wf.path,event,head_sha:head,head_branch:'main',status:'completed',conclusion:'success',created_at:iso(start),run_started_at:iso(start+1),updated_at:iso(end),repository:repo,head_repository:repo});
   const ci=run(100,PRICE_CI.ci,'push',0,3),source=run(200,PRICE_CI.producer,'workflow_run',4,15),design={...ci,id:101,path:'.github/workflows/design-acceptance.yml'};
+  const predecessor={...run(request.predecessor.run_id,PRICE_CI.publisher,'workflow_run',-500,-400),head_sha:request.originals.prior.head_sha};
+  const admissionRuns=[ci,source,predecessor];
   const sourceJob={id:2000,run_id:200,run_attempt:1,head_sha:head,name:'combine-and-build',status:'completed',conclusion:'success',started_at:iso(6),completed_at:iso(14),steps:['Build static frontend',PRICE_REPAIR_STEP,'Upload verified data export','Record exact export attempt and dated evidence','Preserve dated export provenance for release selection'].map(name=>({name,status:'completed',conclusion:'success',started_at:iso(7),completed_at:iso(13)}))};
   const ciJobs=['Backend Quality Gates','Frontend','Static Browser Regression'].map((name,i)=>({id:1000+i,run_id:100,run_attempt:1,head_sha:head,name,status:'completed',conclusion:'success',started_at:iso(1),completed_at:iso(2)}));
   for(const [r,wf,event,jobs]of [[ci,PRICE_CI.ci,'push',ciJobs],[source,PRICE_CI.producer,'workflow_run',[sourceJob]]]){
     map[`${prefix}/actions/runs/${r.id}`]=r;map[`${prefix}/actions/runs/${r.id}/attempts/1`]=r;
     map[`${prefix}/actions/runs/${r.id}/attempts/1/jobs?per_page=100`]=[{total_count:jobs.length,jobs}];
-    map[`${prefix}/actions/workflows/${wf.id}/runs?branch=main&event=${event}&head_sha=${head}&per_page=100`]=[{total_count:1,workflow_runs:[r]}];
   }
   for(const [file,r]of [['ci.yml',ci],['design-acceptance.yml',design]])map[`${prefix}/actions/workflows/${file}/runs?branch=main&event=push&head_sha=${head}&per_page=100`]=[{workflow_runs:[r]}];
   const item=ordinary({id:200,head,date:'2026-10-06',created:iso(12)});item.run=source;item.job=sourceJob;
@@ -62,11 +65,18 @@ function fixture(t){
   const requestSha=digest(rawAt(head)),payload={schema_version:'retained-price-source-payload-v1',request_sha256:requestSha,approved_ui:request.approved_ui,producer:{run_id:200,run_attempt:1,head_sha:head,job:{id:2000,started_at:iso(6)}},evaluated_at:iso(10)},payloadJson=JSON.stringify(payload),physicalJson=JSON.stringify({dist:{}});
   item.metadata.retained_price_repair={schema_version:'retained-price-source-declaration-v1',request_sha256:requestSha,producer_controller_tree:tree,predecessor_identity:request.predecessor.identity,artifact:{id:item.artifact.id,name:item.artifact.name,bytes:item.artifact.size_in_bytes,sha256:item.artifact.digest.slice(7)},payload_json:payloadJson,payload_sha256:digest(payloadJson),physical_inventory_json:physicalJson,physical_inventory_sha256:digest(physicalJson)};
   const items=[item];
-  const api=(endpoint)=>{calls.push(endpoint);if(Object.hasOwn(map,endpoint))return clone(map[endpoint]);for(const candidate of items){const base=`${prefix}/actions/runs/${candidate.run.id}/attempts/1`;if(endpoint===base)return clone(candidate.run);if(endpoint===base+'/jobs?per_page=100')return[{jobs:[clone(candidate.job)]}];}throw Error('Unexpected fixture API '+endpoint);};
+  const baseApi=(endpoint)=>{calls.push(endpoint);if(Object.hasOwn(map,endpoint))return clone(map[endpoint]);for(const candidate of items){const base=`${prefix}/actions/runs/${candidate.run.id}/attempts/1`;if(endpoint===base)return clone(candidate.run);if(endpoint===base+'/jobs?per_page=100')return[{jobs:[clone(candidate.job)]}];}throw Error('Unexpected fixture API '+endpoint);};
+  const fakeWorker=(command,args,options)=>{
+    assert.equal(command,process.execPath);assert.equal(args.length,2);assert.equal(args[0],'--max-old-space-size=384');assert(args[1].endsWith('/retained-price-repository-inventory.mjs'));
+    const input=JSON.parse(options.input);assert.deepEqual(Object.keys(input).sort(),['requiredIds','timeoutMs']);
+    assert.deepEqual(input.requiredIds,[source.id,request.predecessor.run_id]);assert(Number.isSafeInteger(input.timeoutMs)&&input.timeoutMs>0&&input.timeoutMs<=30000);
+    admissionCalls.push({args:clone(args),input:clone(input)});return JSON.stringify(admissionSnapshotResult(admissionRuns));
+  };
+  const api=createRetainedPriceAdmissionApi(baseApi,{run:fakeWorker});
   const load=artifact=>{const match=items.find(x=>x.companion.id===artifact.id);assert(match,'Unknown companion');return clone(match.metadata);};
   const pages=()=>[{artifacts:items.flatMap(x=>[x.artifact,x.companion])}];
   const event={action:'completed',repository:repo,workflow_run:source},live={manifest:manifest('2026-10-05'),knownPriceDates:{}};
-  return{root,workspace,temp,head,tree,source,item,items,event,live,api,load,pages,map,calls,ci,design,write,
+  return{root,workspace,temp,head,tree,source,item,items,event,live,api,load,pages,map,calls,admissionCalls,admissionRuns,predecessor,ci,design,write,
     disable(){write(root,PRICE_REQUEST_PATH,disabled);git(root,'add',PRICE_REQUEST_PATH);git(root,'commit','-qm','request-only post-publication disable');map[`${prefix}/git/ref/heads/main`].object.sha=git(root,'rev-parse','HEAD');},
     proof:()=>verifyPriceSourceCompletion({root,sourceRun:200,api}),
   };
@@ -77,7 +87,10 @@ test('finite publication gate requires the actual in-process proof and forces th
   assert.equal(publicationDecision(input).publish,false);
   assert.equal(publicationDecision({...input,finitePriceSource:clone(proof)}).publish,false);
   const good=publicationDecision({...input,finitePriceSource:proof});assert.equal(good.publish,true);assert.equal(good.mode,'data');assert.deepEqual(good.finitePriceSource,{runId:200,attempt:1});assert.equal(good.approval,undefined);
+  f.calls.length=0;f.admissionCalls.length=0;
   assert.equal(checkPublication(f.event,f.head,repo.full_name,f.api).mode,'data');
+  assert.equal(f.admissionCalls.length,1);
+  assert(!f.calls.some(endpoint=>endpoint.includes('/actions/workflows/')&&endpoint.includes('/runs?')),'Finite publication must skip ordinary CI/Design filtered reads');
 });
 test('finite selector binds the actual winning source even when a newer ordinary export exists',t=>{
   const f=fixture(t),newer=ordinary({id:300,date:'2026-10-07',created:new Date(Date.now()-60000).toISOString()});f.items.push(newer);
@@ -130,4 +143,30 @@ test('ordinary fixture clocks cross UTC midnight while the actual reader retains
       assert.throws(()=>checkedExport(outside,f.pages(),repo.full_name,f.api,f.load),/not created by its validated attempt/);
     }
   }
+});
+
+test('finite source authentication uses a fresh repository snapshot and keeps individual observations fresh',t=>{
+  const f=fixture(t),filtered=endpoint=>endpoint.includes('/actions/workflows/')&&endpoint.includes('/runs?');
+  for(let i=0;i<2;i++){
+    f.calls.length=0;const before=f.admissionCalls.length;
+    assert.equal(checkedExport(f.item.artifact,f.pages(),repo.full_name,f.api,f.load).runId,200);
+    assert.equal(f.admissionCalls.length,before+1,'Each source authentication must create a new repository snapshot');
+    assert(!f.calls.some(filtered),'Admission inventory must not use filtered workflow routes');
+    for(const run of [f.ci,f.source])for(const suffix of ['', '/attempts/1', '/attempts/1/jobs?per_page=100'])
+      assert(f.calls.includes(`${prefix}/actions/runs/${run.id}${suffix}`),'Missing fresh individual run, attempt or job observation');
+    for(const artifact of [f.item.artifact,f.item.companion])assert(f.calls.includes(`${prefix}/actions/artifacts/${artifact.id}`));
+  }
+  f.admissionRuns.push({...clone(f.source),id:201,run_attempt:2});const before=f.admissionCalls.length;
+  assert.throws(()=>checkedExport(f.item.artifact,f.pages(),repo.full_name,f.api,f.load),/replayed producer attempt/);
+  assert.equal(f.admissionCalls.length,before+1,'Recheck must observe a later replay in a fresh snapshot');
+});
+test('ordinary publication still reads both exact-main UI gate inventories without an admission snapshot',t=>{
+  const f=fixture(t);f.disable();const item=ordinary();f.items.push(item);f.map[`${prefix}/actions/runs/${item.run.id}`]=item.run;
+  const current=f.map[`${prefix}/git/ref/heads/main`].object.sha;
+  for(const [file,run]of [['ci.yml',f.ci],['design-acceptance.yml',f.design]])
+    f.map[`${prefix}/actions/workflows/${file}/runs?branch=main&event=push&head_sha=${current}&per_page=100`]=[{workflow_runs:[{...run,head_sha:current}]}];
+  f.calls.length=0;const decision=checkPublication({...f.event,workflow_run:item.run},current,repo.full_name,f.api);
+  assert.equal(decision.publish,true);assert.equal(decision.mode,'ui');assert.equal(f.admissionCalls.length,0);
+  assert.deepEqual(f.calls.filter(endpoint=>endpoint.includes('/actions/workflows/')&&endpoint.includes('/runs?')),
+    ['ci.yml','design-acceptance.yml'].map(file=>`${prefix}/actions/workflows/${file}/runs?branch=main&event=push&head_sha=${current}&per_page=100`));
 });

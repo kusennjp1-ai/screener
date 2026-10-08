@@ -1,6 +1,7 @@
 // A finite CI completion schedules one reviewed price replay. It grants no
 // source, financial, UI or publication authority by itself.
 import {execFileSync} from 'node:child_process';
+import {createRetainedPriceAdmissionInventory} from './retained-price-admission-inventory.mjs';
 import {createHash} from 'node:crypto';
 import {appendFileSync,lstatSync,readFileSync,realpathSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
@@ -223,26 +224,31 @@ export function verifyPriceCiProducer({root=priceControllerRoot(),event,executio
   verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.producer);
   const ignored=ignoredCiCallback(api,activation,event.workflow_run,own);
   if(ignored)return recordAdmission({status:'noop',repair:false},{reason:'authenticated_predecessor_or_unsuccessful_ci',ci:runObservations.get(ignored),producer:runObservations.get(own)});
-  const ci=verifyCi(api,activation,event.workflow_run);
-  require(clock(ci.run.updated_at)<=clock(own.created_at),'producer predates CI completion');const winner=verifyWinningProducer(api,activation,own,{active:true,root,ci});
-  return recordAdmission({status:'verified',repair:true,activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:runIdentity(own)},
-    {ci:ciObservation(ci),producer:runObservations.get(own),excluded_callbacks:winner.excluded});
+  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[own.id,event.workflow_run.id],head:activation.executing.sha});
+  try{
+    const ci=verifyCi(scoped,activation,event.workflow_run);
+    require(clock(ci.run.updated_at)<=clock(own.created_at),'producer predates CI completion');const winner=verifyWinningProducer(scoped,activation,own,{active:true,root,ci});
+    return recordAdmission({status:'verified',repair:true,activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:runIdentity(own)},
+      {ci:ciObservation(ci),producer:runObservations.get(own),excluded_callbacks:winner.excluded});
+  }finally{scoped.dispose();}
 }
-function verifySource(api,activation,sourceRun,root){
+function verifySource(api,activation,sourceRun,root,proofApi=api){
   require(positive(sourceRun?.id),'missing source run');const source=exactAttempt(api,sourceRun.id,PRICE_CI.producer,activation.executing.sha,'workflow_run');equal(completedIdentity(sourceRun),completedIdentity(source),'producer completion');
   require(source.status==='completed'&&source.conclusion==='success'&&clock(source.updated_at)<=activation.verified_at,'producer is not terminal success');const ci=verifyCi(api,activation);require(clock(ci.run.updated_at)<=clock(source.created_at),'producer predates controller CI');
   const winner=verifyWinningProducer(api,activation,source,{root,ci}),found=winner.jobs.filter(j=>j.name==='combine-and-build');require(found.length===1,'missing genuine combine-and-build');
   const job=found[0];require(job.head_sha===activation.executing.sha&&job.status==='completed'&&job.conclusion==='success'&&clock(job.started_at)>=clock(source.run_started_at)&&clock(job.completed_at)>=clock(job.started_at)&&clock(job.completed_at)<=clock(source.updated_at),'invalid completed producer job');
   for(const name of ['Build static frontend',PRICE_REPAIR_STEP,'Upload verified data export','Record exact export attempt and dated evidence','Preserve dated export provenance for release selection']){
     const steps=job.steps?.filter(s=>s.name===name);require(steps?.length===1&&steps[0].status==='completed'&&steps[0].conclusion==='success','required genuine producer step missing or failed');}
-  const proof=freeze({status:'verified',activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:completedIdentity(source),job:{id:job.id,name:job.name,started_at:job.started_at,completed_at:job.completed_at}});sourceProofs.set(proof,{root,api});
+  const proof=freeze({status:'verified',activation,trigger:completedIdentity(ci.run),checks:ci.checks,producer:completedIdentity(source),job:{id:job.id,name:job.name,started_at:job.started_at,completed_at:job.completed_at}});sourceProofs.set(proof,{root,api:proofApi});
   return recordAdmission(proof,{ci:ciObservation(ci),producer:runObservations.get(source),excluded_callbacks:winner.excluded});
 }
 export function verifyPriceSourceCompletion({root=priceControllerRoot(),sourceRun,event,api=priceReadApi,now=Date.now()}={}){
   const activation=verifyPriceActivation({root,api,now});require(activation.status==='active','source request is disabled');
   if(event){verifyEvent(event);sourceRun=event.workflow_run;}
   if(positive(sourceRun))sourceRun=api(`${prefix}/actions/runs/${sourceRun}`);
-  return verifySource(api,activation,sourceRun,root);
+  require(positive(sourceRun?.id),'missing source run');
+  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[sourceRun.id,activation.request.predecessor?.run_id],head:activation.executing.sha});
+  try{return verifySource(scoped,activation,sourceRun,root,api);}finally{scoped.dispose();}
 }
 function priorHold(api,activation,listed,ci){
   if(listed.conclusion!=='success')return preAdmissionCallback(api,activation,listed,PRICE_CI.publisher,ci);
@@ -260,12 +266,15 @@ export function routePricePublication({root=priceControllerRoot(),event,executio
   verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.publisher);
   if(event.workflow_run?.path!==PRICE_CI.producer.path||event.workflow_run?.event!=='workflow_run'||event.workflow_run?.head_sha!==activation.executing.sha)
     return recordAdmission({price_wait:true,price_source:false},{reason:'finite_publication_hold',publisher:runObservations.get(own)});
-  const proof=verifySource(api,activation,event.workflow_run,root);require(clock(proof.producer.updated_at)<=clock(own.created_at),'publication caller predates genuine source');
-  const all=runs(api,PRICE_CI.publisher,activation.executing.sha,'workflow_run');require(all.some(r=>r.id===own.id),'missing publication caller inventory');
-  const ci=verifyCi(api,activation),prior=[];
-  for(const item of all){if(item.id===own.id){equal(observedRunIdentity(item),observedRunIdentity(own),'publication caller list');continue;}if(item.id<own.id)prior.push(priorHold(api,activation,item,ci));else require(item.run_attempt===1,'replayed publication successor');}
-  return recordAdmission({price_wait:false,price_source:true,source_run_id:proof.producer.id,source_run_attempt:1},
-    {source:JSON.parse(priceAdmissionDiagnostic(proof)).observations,publisher:runObservations.get(own),prior_callbacks:prior});
+  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[own.id,event.workflow_run.id],head:activation.executing.sha});
+  try{
+    const proof=verifySource(scoped,activation,event.workflow_run,root,api);require(clock(proof.producer.updated_at)<=clock(own.created_at),'publication caller predates genuine source');
+    const all=runs(scoped,PRICE_CI.publisher,activation.executing.sha,'workflow_run');require(all.some(r=>r.id===own.id),'missing publication caller inventory');
+    const ci=verifyCi(scoped,activation),prior=[];
+    for(const item of all){if(item.id===own.id){equal(observedRunIdentity(item),observedRunIdentity(own),'publication caller list');continue;}if(item.id<own.id)prior.push(priorHold(scoped,activation,item,ci));else require(item.run_attempt===1,'replayed publication successor');}
+    return recordAdmission({price_wait:false,price_source:true,source_run_id:proof.producer.id,source_run_attempt:1},
+      {source:JSON.parse(priceAdmissionDiagnostic(proof)).observations,publisher:runObservations.get(own),prior_callbacks:prior});
+  }finally{scoped.dispose();}
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

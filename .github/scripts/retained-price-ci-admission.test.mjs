@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
+import {createRetainedPriceAdmissionApi} from './retained-price-admission-inventory.mjs';
+import {admissionSnapshotResult} from './fixtures/retained-price-admission-inventory.mjs';
 import {PRICE_CI,priceAdmissionDiagnostic,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
 
 const sha256=b=>createHash('sha256').update(b).digest('hex');
@@ -21,7 +23,7 @@ function fixture(t,{disabled=false,extraCommitFile=false}={}){
   const write=(path,value)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),typeof value==='string'?value:JSON.stringify(value)+'\n');};
   git('init','-q');git('config','user.email','fixture@example.test');git('config','user.name','Fixture');
   write(PRICE_CI.producer.path,"concurrency:\n  group: ${{ github.event_name == 'workflow_run' && format('static-site-oct6-{0}', github.event.workflow_run.head_sha) || 'ordinary' }}\n  cancel-in-progress: false\n");
-  const old={schema_version:'retained-price-oct6-source-v1',enabled:false,activation:null,immutable_test_body:{source:'fixed'}};write(PRICE_REQUEST_PATH,old);
+  const old={schema_version:'retained-price-oct6-source-v1',enabled:false,activation:null,predecessor:{run_id:50},immutable_test_body:{source:'fixed'}};write(PRICE_REQUEST_PATH,old);
   git('add','.');git('commit','-qm','disabled reviewed plumbing');const parent=git('rev-parse','HEAD'),parentTree=git('rev-parse','HEAD^{tree}'),oldRaw=readFileSync(join(root,PRICE_REQUEST_PATH));
   const request={...old,enabled:!disabled,activation:disabled?null:{reviewed_parent_sha:parent,reviewed_parent_tree:parentTree,disabled_request_sha256:sha256(oldRaw),not_before:timestamp(-3600),not_after:timestamp(3600)}};write(PRICE_REQUEST_PATH,request);if(extraCommitFile)write('unreviewed.txt','extra');
   git('add','.');git('commit','--allow-empty','-qm','finite request-only activation');const head=git('rev-parse','HEAD'),tree=git('rev-parse','HEAD^{tree}');
@@ -31,6 +33,7 @@ function fixture(t,{disabled=false,extraCommitFile=false}={}){
   const content=ref=>{const raw=Buffer.from(git('show',`${ref}:${PRICE_REQUEST_PATH}`)+'\n');return{type:'file',path:PRICE_REQUEST_PATH,encoding:'base64',content:raw.toString('base64'),size:raw.length,sha:git('rev-parse',`${ref}:${PRICE_REQUEST_PATH}`)};};
   const run=(id,workflow,event,status='completed')=>({id,run_attempt:1,workflow_id:workflow.id,path:workflow.path,head_sha:head,head_branch:'main',event,status,conclusion:status==='completed'?'success':null,created_at:timestamp(-3500),run_started_at:timestamp(-3490),updated_at:timestamp(-3480),repository:repo,head_repository:repo});
   const ci=run(100,PRICE_CI.ci,'push'),producer=run(200,PRICE_CI.producer,'workflow_run','in_progress');Object.assign(producer,{created_at:timestamp(-3470),run_started_at:timestamp(-3460),updated_at:timestamp(-3400)});
+  const predecessor={...run(50,PRICE_CI.publisher,'workflow_run'),head_sha:parent};
   const publisher=run(400,PRICE_CI.publisher,'workflow_run','in_progress');Object.assign(publisher,{created_at:timestamp(-3300),run_started_at:timestamp(-3290),updated_at:timestamp(-3280)});
   const job=(id,run,name,status='completed')=>({id,run_id:run.id,run_attempt:1,head_sha:head,name,status,conclusion:status==='completed'?'success':null,started_at:run.run_started_at,completed_at:run.updated_at,steps:[]});
   const ciJobs=['Backend Quality Gates','Frontend','Static Browser Regression'].map((name,i)=>job(1000+i,ci,name));
@@ -42,14 +45,18 @@ function fixture(t,{disabled=false,extraCommitFile=false}={}){
     [`${prefix}/contents/${PRICE_REQUEST_PATH}?ref=${head}`]:content(head),[`${prefix}/contents/${PRICE_REQUEST_PATH}?ref=${parent}`]:content(parent),
   };
   const records={ci:[ci],producer:[producer],publisher:[publisher]},jobRecords={100:ciJobs,200:[sourceJob],400:[job(4000,publisher,'Route exact renewal CI admission','in_progress')]};
-  function sync(){for(const [kind,rs]of Object.entries(records)){const wf=PRICE_CI[kind];map[`${prefix}/actions/workflows/${wf.id}/runs?branch=main&event=${kind==='ci'?'push':'workflow_run'}&head_sha=${head}&per_page=100`]=[{total_count:rs.length,workflow_runs:copy(rs)}];for(const r of rs){map[`${prefix}/actions/runs/${r.id}`]=copy(r);map[`${prefix}/actions/runs/${r.id}/attempts/1`]=copy(r);}}
+  function sync(){for(const rs of Object.values(records)){for(const r of rs){map[`${prefix}/actions/runs/${r.id}`]=copy(r);map[`${prefix}/actions/runs/${r.id}/attempts/1`]=copy(r);}}
     for(const [id,jobs]of Object.entries(jobRecords))map[`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`]=[{total_count:jobs.length,jobs:copy(jobs)}];}
   sync();
-  const api=(endpoint)=>{assert(Object.hasOwn(map,endpoint),`Unexpected API read ${endpoint}`);return copy(map[endpoint]);};
+  const calls=[],inventory={calls:[],reports:[],transform:result=>result};
+  const baseApi=(endpoint)=>{calls.push(endpoint);assert(!endpoint.includes('/actions/workflows/'),'Filtered admission read');assert(Object.hasOwn(map,endpoint),`Unexpected API read ${endpoint}`);return copy(map[endpoint]);};
+  const api=createRetainedPriceAdmissionApi(baseApi,{run:(_node,_args,options)=>{
+    inventory.calls.push(JSON.parse(options.input));return JSON.stringify(inventory.transform(admissionSnapshotResult([...Object.values(records).flat(),predecessor])));
+  },report:value=>inventory.reports.push(value)});
   const execution=workflow=>({event_name:'workflow_run',repository:PRICE_CI.repository,repository_id:PRICE_CI.repositoryId,ref:'refs/heads/main',sha:head,workflow_ref:`${PRICE_CI.repository}/${workflow.path}@refs/heads/main`,workflow_sha:head,run_id:workflow.id===PRICE_CI.producer.id?200:400,run_attempt:1});
   const event=source=>({action:'completed',repository:repo,workflow_run:copy(source)});
   function finish(){producer.status='completed';producer.conclusion='success';sourceJob.status='completed';sourceJob.conclusion='success';sourceJob.steps=sourceSteps.map(name=>({name,status:'completed',conclusion:'success'}));sync();}
-  return {logs,root,git,write,head,tree,parent,parentTree,request,map,records,jobRecords,ci,producer,publisher,sourceJob,api,sync,finish,event,execution,
+  return {logs,calls,inventory,predecessor,root,git,write,head,tree,parent,parentTree,request,map,records,jobRecords,ci,producer,publisher,sourceJob,api,sync,finish,event,execution,
     produce:()=>verifyPriceCiProducer({root,event:event(ci),execution:execution(PRICE_CI.producer),api,now}),
     source:()=>verifyPriceSourceCompletion({root,sourceRun:copy(producer),api,now}),
     route:source=>routePricePublication({root,event:event(source),execution:execution(PRICE_CI.publisher),api,now})};
@@ -89,9 +96,9 @@ test('a prior failed caller consumes the finite activation; attempt2 and duplica
   f.records.producer.splice(1);f.producer.run_attempt=2;f.sync();assert.throws(()=>f.produce(),/attempt/);
 });
 test('incomplete and duplicate API inventories fail closed',t=>{
-  const f=fixture(t),endpoint=`${prefix}/actions/workflows/${PRICE_CI.ci.id}/runs?branch=main&event=push&head_sha=${f.head}&per_page=100`;
-  f.map[endpoint][0].total_count=101;assert.throws(()=>f.produce(),/inventory/);
-  f.sync();f.map[endpoint][0].workflow_runs.push(copy(f.ci));f.map[endpoint][0].total_count=2;assert.throws(()=>f.produce(),/duplicate/);
+  const f=fixture(t);
+  f.inventory.transform=result=>{result.pages[0].value.total_count=101;return result;};assert.throws(()=>f.produce(),/inventory/);
+  f.inventory.transform=result=>result;f.records.ci.push(copy(f.ci));assert.throws(()=>f.produce(),/duplicate/);
 });
 test('exact activated CI and competing events hold publication without entering renewal',t=>{
   const f=fixture(t);assert.deepEqual(f.route(f.ci),{price_wait:true,price_source:false});
@@ -158,7 +165,7 @@ function earlierCallback(f,kind,{empty=false,noop=false,callbackId}={}){
   f.ci.created_at=timestamp(-3600);f.ci.run_started_at=timestamp(-3590);
   for(const j of f.jobRecords[100])j.started_at=f.ci.run_started_at;
   f.sync();f.map[`${prefix}/actions/runs/${id}/artifacts?per_page=100`]=[{total_count:0,artifacts:[]}];
-  return {run,jobs:f.jobRecords[id],sync:()=>f.sync(),runEndpoint:`${prefix}/actions/runs/${id}`,jobEndpoint:`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`,artifactEndpoint:`${prefix}/actions/runs/${id}/artifacts?per_page=100`};
+  const result={run,jobs:f.jobRecords[id],sync:()=>{f.sync();if(result.freshRunHead)for(const suffix of ['','/attempts/1'])f.map[`${prefix}/actions/runs/${id}${suffix}`].head_sha=result.freshRunHead;},runEndpoint:`${prefix}/actions/runs/${id}`,jobEndpoint:`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`,artifactEndpoint:`${prefix}/actions/runs/${id}/artifacts?per_page=100`};return result;
 }
 
 test('authenticated predecessor and unsuccessful exact-A CI callbacks explicitly perform no work',t=>{
@@ -210,7 +217,7 @@ test('started, uncertain, rerun, incomplete or artifact-bearing prior callbacks 
     ['equal required CI',p=>p.run.updated_at=timestamp(-3480)],
     ['in progress',p=>{p.run.status='in_progress';p.run.conclusion=null;}],
     ['rerun',p=>p.run.run_attempt=2],
-    ['wrong run head',p=>p.run.head_sha='f'.repeat(40)],
+    ['wrong fresh run head',p=>p.freshRunHead='f'.repeat(40)],
     ['wrong job head',p=>p.jobs[0].head_sha='f'.repeat(40)],
     ['downstream attempted',p=>{p.jobs[1].conclusion='failure';}],
     ['downstream running',p=>{p.jobs[1].status='in_progress';p.jobs[1].conclusion=null;}],
@@ -261,7 +268,7 @@ test('run list and event creation and completion clocks remain exact',t=>{
   for(const key of ['created_at','updated_at']){
     const f=fixture(t),event=f.event(f.ci);event.workflow_run[key]=timestamp(-3479);
     assert.throws(()=>verifyPriceCiProducer({root:f.root,event,execution:f.execution(PRICE_CI.producer),api:f.api,now}),/payload/);
-    f.map[`${prefix}/actions/workflows/${PRICE_CI.ci.id}/runs?branch=main&event=push&head_sha=${f.head}&per_page=100`][0].workflow_runs[0][key]=timestamp(-3479);
+    f.inventory.transform=result=>{result.pages[0].value.workflow_runs.find(r=>r.id===100)[key]=timestamp(-3479);return result;};
     assert.throws(()=>f.produce(),/listed CI/);
   }
 });
@@ -306,4 +313,42 @@ test('bounded diagnostics persist raw producer and prior-publisher proof without
 test('oversized raw callback diagnostic blocks admission rather than silently dropping evidence',t=>{
   const f=fixture(t);f.map[`${prefix}/actions/runs/200`].diagnostic_padding='x'.repeat(8*1024**2);
   assert.throws(()=>f.produce(),/diagnostic exceeds bounded/);
+});
+
+
+test('nested publication admission shares one complete snapshot while individual checks and later gates stay fresh',t=>{
+  const f=fixture(t);f.finish();f.route(f.producer);
+  assert.equal(f.inventory.calls.length,1);assert.deepEqual(f.inventory.calls[0].requiredIds,[400,200]);
+  for(const endpoint of [prefix+'/actions/runs/100',prefix+'/actions/runs/100/attempts/1',prefix+'/actions/runs/100/attempts/1/jobs?per_page=100'])
+    assert.equal(f.calls.filter(e=>e===endpoint).length,2);
+  f.route(f.producer);assert.equal(f.inventory.calls.length,2);
+  const proof=f.source();assert.equal(f.inventory.calls.length,3);assert.deepEqual(f.inventory.calls[2].requiredIds,[200,50]);
+  assert(isVerifiedPriceSourceProof(proof));assert.equal(f.inventory.calls.length,3);
+});
+test('disabled, ignored-CI and authenticated publication holds perform no repository snapshot work',t=>{
+  const disabled=fixture(t,{disabled:true});disabled.produce();disabled.route(disabled.ci);assert.equal(disabled.inventory.calls.length,0);
+  const f=fixture(t);f.route(f.ci);assert.equal(f.inventory.calls.length,0);
+  f.ci.conclusion='cancelled';f.sync();f.produce();assert.equal(f.inventory.calls.length,0);
+});
+test('missing current caller, CI and winning source are never filled from individual endpoints',t=>{
+  for(const kind of ['ci','producer']){
+    const f=fixture(t);f.inventory.transform=result=>{
+      const runs=result.pages.flatMap(p=>p.value.workflow_runs).filter(r=>r.id!==(kind==='ci'?100:200));return admissionSnapshotResult(runs);
+    };
+    assert.throws(()=>f.produce(),/required-run-anchor-absent/);assert.equal(f.inventory.calls.length,1);
+    assert.equal(f.inventory.reports.at(-1).status,'failed');assert.equal(f.inventory.reports.at(-1).reason,'required-run-anchor-absent');
+  }
+  const f=fixture(t);f.finish();f.inventory.transform=result=>admissionSnapshotResult(result.pages.flatMap(p=>p.value.workflow_runs).filter(r=>r.id!==100));
+  assert.throws(()=>f.source(),/no exact controller CI/);assert.equal(f.inventory.reports.at(-1).status,'complete');
+  assert.deepEqual(f.inventory.reports.at(-1).projections.find(p=>p.workflow_id===PRICE_CI.ci.id).runs,[]);
+});
+test('whole repository CI identity conflicts and later reruns remain fail closed across all admission paths',t=>{
+  const f=fixture(t);f.inventory.transform=result=>{
+    const runs=result.pages.flatMap(p=>p.value.workflow_runs);runs.push({...copy(f.ci),id:777,path:'.github/workflows/unknown.yml',head_sha:'f'.repeat(40),head_branch:'other'});
+    return admissionSnapshotResult(runs);
+  };
+  assert.throws(()=>f.produce(),/conflicting-workflow-identity/);
+  f.inventory.transform=result=>result;f.finish();f.route(f.producer);
+  f.producer.run_attempt=2;f.sync();assert.throws(()=>f.route(f.producer),/attempt/);
+  const g=fixture(t);g.records.producer.push({...copy(g.producer),id:201,run_attempt:2});g.sync();assert.throws(()=>g.produce(),/replayed producer attempt/);
 });
