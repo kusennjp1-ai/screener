@@ -1,0 +1,42 @@
+name: Retained price admission inventory probe
+on:
+  push:
+    branches:
+      - finite-admission-inventory-probe-a10
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: retained-price-admission-inventory-probe-a10
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/finite-admission-inventory-probe-a10' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse and test read-only diagnostic
+        run: |
+          node --check .github/scripts/retained-price-admission-inventory-probe.mjs
+          node .github/scripts/retained-price-admission-inventory-probe.mjs --self-test
+      - name: Compare literal filtered inventories with two fresh complete repository snapshots
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --max-old-space-size=384 .github/scripts/retained-price-admission-inventory-probe.mjs
+      - name: Retain only public API diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retained-price-admission-inventory-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/retained-price-admission-inventory-probe/
+          if-no-files-found: error
+          retention-days: 7
