@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -2851,3 +2852,609 @@ def test_earnings_line_points_are_price_scaled_and_well_formed(service_and_sessi
 
     # Fewer than two TTM anchors -> empty (cannot fit a baseline).
     assert service._earnings_line_points(df, pairs[:3]) == []  # noqa: SLF001
+
+def _synthetic_price_session_frame():
+    index = pd.bdate_range(end="2026-10-08", periods=280, tz="UTC")
+    closes = [50.0 + offset * 0.25 for offset in range(len(index))]
+    closes[-1] = 9999.0
+    return pd.DataFrame({
+        "Open": closes, "High": [value + 1 for value in closes],
+        "Low": [value - 1 for value in closes], "Close": closes,
+        "Volume": [1_000_000] * len(index),
+    }, index=index)
+
+
+def _synthetic_price_source(symbol="A"):
+    return {
+        "symbol": symbol, "market": "US", "currency": "USD",
+        "current_price": 100.0, "price_change_1d": 1.0, "adv_usd": 25_000_000,
+        "volume": 100_000_000, "composite_score": 95.0, "minervini_score": 90.0,
+        "volume_breakthrough_score": 80.0, "pressure_state": "buy", "tpr_score": 90.0,
+        "pct_day": 99.0, "rs_rating": 95.0, "passes_template": True,
+        "se_pivot_price": 110.0, "se_setup_ready": True,
+        "setup_recalculation": {"status": "calculated", "as_of_date": "2026-10-06"},
+        "eps_growth_yy": 30.0,
+        "financial_current": {"a": "2026-10-06", "t": 123, "p": {}},
+        "financial_source_evidence": {"symbol": symbol, "observed_at": "2026-10-06T18:00:00Z"},
+    }
+
+
+def test_price_session_observation_bounds_values_and_withholds_old_certification():
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    frame = _synthetic_price_session_frame()
+    source = _synthetic_price_source()
+    original = json.loads(json.dumps(source))
+    target = date(2026, 10, 7)
+    result = service._price_session_row(source, frame, run=run, as_of_date=target)
+    eligible = frame.iloc[:-1]
+    assert source == original
+    assert frame.index[-1].date() == date(2026, 10, 8)
+    assert result["current_price"] == eligible.Close.iloc[-1]
+    assert result["adv_usd"] == float((eligible.iloc[-50:].Close * eligible.iloc[-50:].Volume).mean())
+    assert result["feature_price_snapshot"] == {
+        "role": "published_export_baseline", "feature_run_id": 42,
+        "feature_as_of_date": "2026-10-06", "current_price": 100.0,
+        "price_change_1d": 1.0, "adv_usd": 25_000_000, "volume": 100_000_000,
+    }
+    assert result["price_observation"] == {
+        "as_of_date": "2026-10-07", "cached_bars": 280, "eligible_bars": 279,
+        "after_cutoff_bars": 1, "latest_cached_session": "2026-10-08",
+        "latest_eligible_session": "2026-10-07", "status": "available",
+    }
+    assert result["financial_current"] == original["financial_current"]
+    assert result["financial_source_evidence"] == original["financial_source_evidence"]
+    assert result["source_rs_rating"] == 95.0
+    assert result["source_rs_as_of_date"] == "2026-10-06"
+    for key in ("composite_score", "minervini_score", "volume_breakthrough_score", "pressure_state",
+                "tpr_score", "pct_day", "rs_rating", "passes_template", "se_pivot_price", "se_setup_ready"):
+        assert result[key] is None
+    assert result["setup_recalculation"]["status"] == "unavailable"
+    assert run.as_of_date == date(2026, 10, 6)
+
+
+@pytest.mark.parametrize("history_case", ["missing_target", "only_future", "duplicate_dates"])
+def test_price_session_failure_keeps_baseline_and_never_substitutes_a_later_close(history_case):
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    frame = _synthetic_price_session_frame()
+    if history_case == "missing_target":
+        frame = frame.drop(pd.Timestamp("2026-10-07", tz="UTC"))
+    elif history_case == "only_future":
+        frame = frame.iloc[-1:]
+    else:
+        frame = pd.concat([frame.iloc[:-1], frame.iloc[-2:]])
+    result = service._price_session_row(
+        _synthetic_price_source(), frame, run=run, as_of_date=date(2026, 10, 7)
+    )
+    assert result["current_price"] is None
+    assert result["adv_usd"] is None
+    assert result["price_observation"]["status"] == "unavailable"
+    assert result["price_observation"]["after_cutoff_bars"] == 1
+    assert result["feature_price_snapshot"]["current_price"] == 100.0
+    assert result["feature_price_snapshot"]["adv_usd"] == 25_000_000
+
+
+def test_explicit_price_session_propagates_through_export_without_redating_sources(
+    service_and_session_factory, monkeypatch, tmp_path,
+):
+    service, session_factory = service_and_session_factory
+    target = date(2026, 10, 7)
+    feature_date = date(2026, 10, 6)
+    _insert_runs(
+        session_factory,
+        FeatureRun(id=42, as_of_date=feature_date, run_type="daily_snapshot", status="published",
+                   published_at=datetime(2026, 10, 6, 21), config_json={"universe": {"market": "US"}}),
+        pointer_run_id=42, pointer_key="latest_published_market:US",
+    )
+    frame = _synthetic_price_session_frame()
+    rows = [SimpleNamespace(symbol=symbol, payload=_synthetic_price_source(symbol)) for symbol in ("A", "B")]
+    options = SimpleNamespace(ibd_industries=[], gics_sectors=[], ratings=[])
+    service._price_cache = _FakePriceCache(
+        lambda symbols, period="2y": {symbol: frame for symbol in symbols}
+    )
+    service._fundamentals_cache = SimpleNamespace(get_many_cached_only=lambda _symbols: {})
+    monkeypatch.setattr(service, "_load_scan_export_source", lambda *_args: (rows, options))
+    monkeypatch.setattr(service, "_serialize_scan_row", lambda row: dict(row.payload))
+    monkeypatch.setattr(service, "_sort_static_scan_rows", lambda values: values)
+    monkeypatch.setattr(service, "_annotate_preset_match_counts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_apply_static_default_filters", lambda values, **_kwargs: values)
+    monkeypatch.setattr(export_module, "STATIC_CHART_LIMIT", 1)
+    monkeypatch.setattr(export_module, "PRESET_SCREENS", [])
+    monkeypatch.setattr(service, "_static_chart_cutoff", lambda index: index[0].to_pydatetime())
+    monkeypatch.setattr(service, "_get_market_benchmark_history", lambda *_args, **_kwargs: ("SPY", frame))
+    monkeypatch.setattr(service, "_get_symbol_price_history", lambda *_args, **_kwargs: frame)
+
+    def forbidden_code33(*_args, **_kwargs):
+        raise AssertionError("A price advance cannot recertify stale feature/financial flags")
+
+    monkeypatch.setattr(service, "_stamp_code33_flags", forbidden_code33)
+    engine_inputs = []
+
+    def bounded_engine(name, result):
+        def calculate(price_frame, *args, **kwargs):
+            assert price_frame.index[-1].date() == target
+            for value in args:
+                if isinstance(value, pd.DataFrame):
+                    assert value.index[-1].date() == target
+            engine_inputs.append(name)
+            return result
+        return calculate
+
+    monkeypatch.setattr(service, "_serialize_rs_line", bounded_engine("rs", ([], [])))
+    monkeypatch.setattr(service, "_compute_buy_points", bounded_engine("buy", []))
+    monkeypatch.setattr(service, "_compute_chart_bands", bounded_engine("bands", {}))
+    monkeypatch.setattr(service, "_compute_m360_signals", bounded_engine("signals", {}))
+    monkeypatch.setattr(service, "_compute_trend_template", bounded_engine("trend", None))
+    monkeypatch.setattr(service, "_compute_vcp_boxes", bounded_engine("vcp", []))
+    monkeypatch.setattr(service, "_compute_eps_line", lambda _symbol, prices: bounded_engine("eps", [])(prices))
+    monkeypatch.setattr(service, "_build_groups_payload", lambda **kwargs: {
+        "available": True, "payload": {"rankings": {"date": kwargs["expected_as_of_date"].isoformat(), "rankings": []}},
+    })
+    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: {"available": False, "payload": {}})
+    monkeypatch.setattr(service, "_build_breadth_payload", lambda **kwargs: {
+        "available": True, "payload": {"current": {"date": kwargs["expected_as_of_date"].isoformat()}},
+    })
+    exported = service.export(tmp_path, markets=("US",), price_as_of_date=target)
+    market_dir = tmp_path / "markets" / "us"
+
+    def read(path):
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    root = read(tmp_path / "manifest.json")
+    scan = read(market_dir / "scan" / "manifest.json")
+    chunk = read(tmp_path / scan["chunks"][0]["path"])
+    chart_index = read(market_dir / "charts" / "index.json")
+    home = read(market_dir / "home.json")
+    for payload in (root["markets"]["US"], scan, chunk, chart_index, home):
+        assert payload["as_of_date"] == "2026-10-07"
+        assert payload["price_as_of_date"] == "2026-10-07"
+        assert payload["feature_as_of_date"] == "2026-10-06"
+    assert root["as_of_date"] == exported.as_of_date == "2026-10-07"
+    audit_asset = root["markets"]["US"]["assets"]["price_session_audit"]
+    audit_bytes = (tmp_path / audit_asset["path"]).read_bytes()
+    audit = json.loads(audit_bytes)
+    assert hashlib.sha256(audit_bytes).hexdigest() == audit_asset["sha256"]
+    assert audit["total"] == audit_asset["total"] == 2
+    assert audit["verified"] == audit_asset["verified"] == 2
+    assert audit["source_universe_count"] == audit_asset["source_universe_count"] == 2
+    assert audit["passed"] is audit_asset["passed"] is True
+    assert audit["minimum_target"] == audit_asset["minimum_target"] == 0.9
+    assert audit["as_of_date"] == audit_asset["as_of_date"] == "2026-10-07"
+    assert audit["feature_run_id"] == audit_asset["feature_run_id"] == 42
+    assert audit["feature_as_of_date"] == audit_asset["feature_as_of_date"] == "2026-10-06"
+    assert audit["source_universe_sha256"] == audit_asset["source_universe_sha256"]
+    assert audit["required_symbols_sha256"] == audit_asset["required_symbols_sha256"]
+    assert chunk["run_id"] == scan["run_id"] == 42
+    assert home["freshness"]["scan_as_of_date"] == "2026-10-06"
+    assert home["freshness"]["breadth_latest_date"] == "2026-10-06"
+    assert home["freshness"]["groups_latest_date"] == "2026-10-06"
+    assert read(market_dir / "breadth.json")["payload"]["current"]["date"] == "2026-10-06"
+    assert read(market_dir / "groups.json")["payload"]["rankings"]["date"] == "2026-10-06"
+    assert all(item["latest_date"] == "2026-10-07" for item in home["key_markets"])
+    assert all(item["price_observation"]["after_cutoff_bars"] == 1 for item in home["key_markets"])
+    rich = read(market_dir / "charts" / "A.json")
+    light = read(market_dir / "charts" / "B.json")
+    assert light["verification_only"] is True
+    for chart in (rich, light):
+        assert chart["as_of_date"] == chart["bars"][-1]["date"] == "2026-10-07"
+        assert all(bar["date"] <= "2026-10-07" for bar in chart["bars"])
+        assert chart["stock_data"]["current_price"] == chart["bars"][-1]["close"]
+        assert chart["stock_data"]["financial_current"]["a"] == "2026-10-06"
+        assert chart["stock_data"]["financial_reference"]["a"] == "2026-10-06"
+        assert chart["stock_data"]["financial_source_evidence"]["observed_at"] == "2026-10-06T18:00:00Z"
+    assert chart_index["benchmark_price_observation"]["after_cutoff_bars"] == 1
+    assert set(engine_inputs) == {"rs", "buy", "bands", "signals", "trend", "vcp", "eps"}
+    assert frame.index[-1].date() == date(2026, 10, 8)
+    with session_factory() as db:
+        assert db.get(FeatureRun, 42).as_of_date == feature_date
+
+    # A missing target session stays required through its exact baseline facts.
+    # The later cached close must not rescue the observation or shrink coverage.
+    missing_target = frame.drop(pd.Timestamp("2026-10-07", tz="UTC"))
+    service._price_cache = _FakePriceCache(
+        lambda symbols, period="2y": {
+            symbol: frame if symbol == "A" else missing_target for symbol in symbols
+        }
+    )
+    rejected_dir = tmp_path / "rejected"
+    with pytest.raises(ValueError, match="below 90%"):
+        service.export(rejected_dir, markets=("US",), price_as_of_date=target)
+    failed = read(rejected_dir / "markets" / "us" / "price-session-audit.json")
+    assert failed["total"] == 2
+    assert failed["verified"] == 1
+    assert failed["passed"] is False
+    records = {item["symbol"]: item for item in failed["results"]}
+    assert records["B"]["baseline_liquid"] is True
+    assert records["B"]["required"] is True
+    assert records["B"]["valid"] is False
+    assert "final_session_mismatch" in records["B"]["errors"]
+    assert not (rejected_dir / "manifest.json").exists()
+    assert not (rejected_dir / "markets" / "us" / STATIC_MARKET_METADATA_FILENAME).exists()
+
+
+def test_default_scan_export_keeps_source_session_and_does_not_read_new_observations(monkeypatch, tmp_path):
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    row = SimpleNamespace(symbol="A", payload=_synthetic_price_source())
+
+    def forbidden_prices(*_args, **_kwargs):
+        raise AssertionError("Default scan export must keep its existing price source")
+
+    service._price_cache = _FakePriceCache(forbidden_prices)
+    monkeypatch.setattr(service, "_serialize_scan_row", lambda value: dict(value.payload))
+    monkeypatch.setattr(service, "_sort_static_scan_rows", lambda values: values)
+    monkeypatch.setattr(service, "_annotate_preset_match_counts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_stamp_code33_flags", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_apply_static_default_filters", lambda values, **_kwargs: values)
+    monkeypatch.setattr(export_module, "PRESET_SCREENS", [])
+    manifest, rows = service._export_scan_bundle(
+        db=None, output_dir=tmp_path, generated_at="2026-10-07T20:10:00Z", run=run,
+        rows=[row], filter_options=SimpleNamespace(ibd_industries=[], gics_sectors=[], ratings=[]), market="US",
+    )
+    assert manifest["as_of_date"] == "2026-10-06"
+    assert "price_as_of_date" not in manifest
+    assert "feature_as_of_date" not in manifest
+    assert rows[0]["current_price"] == 100.0
+    assert rows[0]["composite_score"] == 95.0
+    assert "feature_price_snapshot" not in rows[0]
+    frame = _synthetic_price_session_frame()
+    assert service._bounded_price_history(frame, None) is frame
+
+
+def test_price_session_export_rejects_ambiguous_or_backward_session(service_and_session_factory, tmp_path):
+    service, session_factory = service_and_session_factory
+    with pytest.raises(ValueError, match="exactly one"):
+        service.export(tmp_path, price_as_of_date=date(2026, 10, 7))
+    with pytest.raises(ValueError, match="session date"):
+        service.export(tmp_path, markets=("US",), price_as_of_date=datetime(2026, 10, 7))
+    _insert_runs(
+        session_factory,
+        FeatureRun(id=42, as_of_date=date(2026, 10, 6), run_type="daily_snapshot", status="published",
+                   published_at=datetime(2026, 10, 6, 21), config_json={"universe": {"market": "US"}}),
+        pointer_run_id=42, pointer_key="latest_published_market:US",
+    )
+    with pytest.raises(ValueError, match="precedes"):
+        service.export(tmp_path, markets=("US",), price_as_of_date=date(2026, 10, 5))
+
+
+def test_non_us_explicit_price_session_does_not_apply_usd_coverage(monkeypatch, tmp_path):
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    monkeypatch.setattr(service, "_get_latest_published_run", lambda *_args, **_kwargs: run)
+    monkeypatch.setattr(service, "_load_scan_export_source", lambda *_args: ([], None))
+    monkeypatch.setattr(service, "_export_scan_bundle", lambda **_kwargs: (
+        {"as_of_date": "2026-10-07", "rows_total": 0, "preview_rows": []}, []
+    ))
+    monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: {
+        "path": "markets/hk/charts/index.json", "limit": 1, "symbols_total": 0,
+        "available": False, "skipped_symbols": [],
+    })
+    for name in ("_build_groups_payload", "_build_groups_rrg_payload", "_build_breadth_payload"):
+        monkeypatch.setattr(service, name, lambda **_kwargs: {"available": False, "payload": {}})
+    monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: {"freshness": {}})
+
+    def forbidden_us_audit(**_kwargs):
+        raise AssertionError("HK prices cannot inherit US/USD liquidity criteria")
+
+    monkeypatch.setattr(service, "_export_price_session_audit", forbidden_us_audit)
+    result = service._export_market_bundle(
+        db=None, output_dir=tmp_path, market="HK", generated_at="2026-10-07T20:10:00Z",
+        warnings=[], price_as_of_date=date(2026, 10, 7),
+    )
+    assert result["as_of_date"] == "2026-10-07"
+    assert "price_session_audit" not in result["assets"]
+
+
+def test_same_price_session_changed_history_withholds_old_feature_certification(monkeypatch, tmp_path):
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    source = _synthetic_price_source()
+    original = json.loads(json.dumps(source))
+    frame = _synthetic_price_session_frame()
+    selected = pd.Timestamp("2026-10-06", tz="UTC")
+    frame.loc[selected, ["Open", "High", "Low", "Close"]] = [130.0, 131.0, 129.0, 130.0]
+    observed = service._price_session_row(source, frame, run=run, as_of_date=run.as_of_date)
+    assert observed["current_price"] == 130.0
+    assert observed["feature_price_snapshot"]["current_price"] == 100.0
+    assert observed["feature_as_of_date"] == observed["price_as_of_date"] == "2026-10-06"
+    assert observed["source_rs_rating"] == 95.0
+    assert observed["source_rs_as_of_date"] == "2026-10-06"
+    assert observed["financial_current"] == original["financial_current"]
+    assert observed["financial_source_evidence"] == original["financial_source_evidence"]
+    assert observed["setup_recalculation"]["status"] == "unavailable"
+    for field in ("composite_score", "minervini_score", "volume_breakthrough_score", "pressure_state",
+                  "tpr_score", "pct_day", "rs_rating", "passes_template", "se_pivot_price", "se_setup_ready"):
+        assert observed[field] is None
+    assert source == original
+    assert run.as_of_date == date(2026, 10, 6)
+
+    service._price_cache = _FakePriceCache(
+        lambda symbols, period="2y": {symbol: frame for symbol in symbols}
+    )
+    row = SimpleNamespace(symbol="A", payload=source)
+    monkeypatch.setattr(service, "_serialize_scan_row", lambda value: dict(value.payload))
+    monkeypatch.setattr(service, "_sort_static_scan_rows", lambda values: values)
+    monkeypatch.setattr(service, "_annotate_preset_match_counts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_apply_static_default_filters", lambda values, **_kwargs: values)
+    monkeypatch.setattr(export_module, "PRESET_SCREENS", [])
+
+    def forbidden_certification(*_args, **_kwargs):
+        raise AssertionError("Same-session price replacement cannot recertify imported feature flags")
+
+    monkeypatch.setattr(service, "_stamp_code33_flags", forbidden_certification)
+    manifest, serialized = service._export_scan_bundle(
+        db=None, output_dir=tmp_path, generated_at="2026-10-08T20:00:00Z", run=run,
+        rows=[row], filter_options=SimpleNamespace(ibd_industries=[], gics_sectors=[], ratings=[]),
+        market="US", price_as_of_date=run.as_of_date,
+    )
+    assert manifest["as_of_date"] == manifest["feature_as_of_date"] == "2026-10-06"
+    assert serialized[0]["current_price"] == 130.0
+    assert serialized[0]["financial_current"]["a"] == "2026-10-06"
+    assert serialized[0]["financial_source_evidence"] == original["financial_source_evidence"]
+    for field in ("pct_day", "pct_week", "pct_month", "code33", "composite_score", "rs_rating"):
+        assert serialized[0][field] is None
+
+
+@pytest.mark.parametrize("defect", [
+    "missing_path", "missing_file", "missing_index_entry", "duplicate_symbol",
+    "malformed_chart", "missing_index", "malformed_index", "outside_output",
+])
+def test_price_session_audit_retains_required_failures_for_declared_chart_source_defects(tmp_path, monkeypatch, defect):
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    monkeypatch.setattr(service, "_static_chart_cutoff", lambda index: index[0].to_pydatetime())
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    frame = _synthetic_price_session_frame()
+    target = date(2026, 10, 7)
+    rows = [
+        service._price_session_row(_synthetic_price_source(symbol), frame, run=run, as_of_date=target)
+        for symbol in ("A", "B")
+    ]
+    chart_dir = tmp_path / "charts"
+    chart_dir.mkdir()
+    entries = []
+    for row in rows:
+        symbol = row["symbol"]
+        payload = {
+            "symbol": symbol, "as_of_date": target.isoformat(),
+            "bars": service._serialize_chart_bars(service._bounded_price_history(frame, target)),
+        }
+        # The exported synthetic history must be independently eligible.
+        assert len(payload["bars"]) >= 252
+        service._write_json(chart_dir / f"{symbol}.json", payload)
+        entries.append({"symbol": symbol, "path": f"charts/{symbol}.json"})
+    if defect == "missing_path":
+        entries[1].pop("path")
+    elif defect == "missing_file":
+        (chart_dir / "B.json").unlink()
+    elif defect == "missing_index_entry":
+        entries.pop()
+    elif defect == "duplicate_symbol":
+        entries.append(dict(entries[1]))
+    elif defect == "malformed_chart":
+        (chart_dir / "B.json").write_text("{", encoding="utf-8")
+    elif defect == "outside_output":
+        entries[1]["path"] = "../outside-chart.json"
+    index = chart_dir / "index.json"
+    if defect == "malformed_index":
+        index.write_text("{", encoding="utf-8")
+    elif defect != "missing_index":
+        service._write_json(index, {"as_of_date": target.isoformat(), "symbols": entries})
+    with pytest.raises(ValueError, match="below 90%"):
+        service._export_price_session_audit(
+            output_dir=tmp_path, market="US", run=run, rows=rows,
+            chart_manifest={"path": "charts/index.json"}, price_as_of_date=target,
+        )
+    retained = json.loads((tmp_path / "markets/us/price-session-audit.json").read_text(encoding="utf-8"))
+    assert retained["total"] == 2
+    assert retained["verified"] == (0 if defect in ("missing_index", "malformed_index") else 1)
+    assert retained["passed"] is False
+    records = {record["symbol"]: record for record in retained["results"]}
+    assert records["B"]["required"] is True
+    assert records["B"]["valid"] is False
+    assert "missing_history" in records["B"]["errors"]
+    assert retained["chart_source_diagnostics"]
+    if defect == "duplicate_symbol":
+        assert any(item["reason"] == "duplicate_symbol_entry" for item in retained["chart_source_diagnostics"])
+    if defect == "outside_output":
+        assert any(item["reason"] == "path_outside_output" for item in retained["chart_source_diagnostics"])
+    assert not (tmp_path / "manifest.json").exists()
+    assert not (tmp_path / "markets/us" / STATIC_MARKET_METADATA_FILENAME).exists()
+
+
+def test_price_session_audit_reads_each_chart_lazily_without_retaining_payloads(tmp_path, monkeypatch):
+    import gc
+    import weakref
+    from collections import Counter
+
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    monkeypatch.setattr(service, "_static_chart_cutoff", lambda index: index[0].to_pydatetime())
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    target = date(2026, 10, 7)
+    frame = _synthetic_price_session_frame()
+    rows = [
+        service._price_session_row(_synthetic_price_source(symbol), frame, run=run, as_of_date=target)
+        for symbol in ("A", "B")
+    ]
+    paths = {symbol: tmp_path / "charts" / f"{symbol}.json" for symbol in ("A", "B")}
+    for symbol, path in paths.items():
+        service._write_json(path, {
+            "symbol": symbol, "as_of_date": target.isoformat(),
+            "bars": service._serialize_chart_bars(service._bounded_price_history(frame, target)),
+        })
+    service._write_json(tmp_path / "charts/index.json", {
+        "symbols": [{"symbol": symbol, "path": f"charts/{symbol}.json"} for symbol in ("A", "B")],
+    })
+    reads = Counter()
+    real_open = type(tmp_path).open
+    chart_paths = {path.resolve() for path in paths.values()}
+
+    class CountedRead:
+        def __init__(self, handle, path):
+            self.handle, self.path = handle, path
+
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.handle.__exit__(*args)
+
+        def read(self, size=-1):
+            reads[self.path] += 1
+            return self.handle.read(size)
+
+    def counted_open(path, mode="r", *args, **kwargs):
+        handle = real_open(path, mode, *args, **kwargs)
+        resolved = path.resolve()
+        return CountedRead(handle, resolved) if mode == "rb" and resolved in chart_paths else handle
+
+    monkeypatch.setattr(type(tmp_path), "open", counted_open)
+    real_loads = export_module.json.loads
+    references = []
+
+    class TrackedChart(dict):
+        __slots__ = ("__weakref__",)
+
+    def tracked_loads(content, *args, **kwargs):
+        value = real_loads(content, *args, **kwargs)
+        if isinstance(value, dict) and "symbol" in value and "bars" in value:
+            tracked = TrackedChart(value)
+            references.append(weakref.ref(tracked))
+            return tracked
+        return value
+
+    monkeypatch.setattr(export_module.json, "loads", tracked_loads)
+    real_build_audit = export_module.build_price_session_audit
+
+    def observe_lazy_reader(**kwargs):
+        # Constructing the index mapping must not deserialize any chart.
+        assert all(reads[path.resolve()] == 0 for path in paths.values())
+        result = real_build_audit(**kwargs)
+        assert all(reads[path.resolve()] == 1 for path in paths.values())
+        gc.collect()
+        assert len(references) == 2
+        assert all(reference() is None for reference in references)
+        return result
+
+    monkeypatch.setattr(export_module, "build_price_session_audit", observe_lazy_reader)
+    asset = service._export_price_session_audit(
+        output_dir=tmp_path, market="US", run=run, rows=rows,
+        chart_manifest={"path": "charts/index.json"}, price_as_of_date=target,
+    )
+    assert asset["total"] == asset["verified"] == 2
+    assert asset["passed"] is True
+
+
+@pytest.mark.parametrize("limit_case", ["oversized_index", "oversized_chart", "chart_grows_after_stat"])
+def test_price_session_audit_enforces_file_ceiling_before_json_decoding(tmp_path, monkeypatch, limit_case):
+    assert export_module.STATIC_PRICE_SESSION_MAX_FILE_BYTES == 64 * 1024 * 1024
+    limit = 256
+    monkeypatch.setattr(export_module, "STATIC_PRICE_SESSION_MAX_FILE_BYTES", limit)
+    service = StaticSiteExportService.__new__(StaticSiteExportService)
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    target = date(2026, 10, 7)
+    frame = _synthetic_price_session_frame()
+    rows = [
+        service._price_session_row(_synthetic_price_source(symbol), frame, run=run, as_of_date=target)
+        for symbol in ("A", "B")
+    ]
+    chart_dir = tmp_path / "charts"
+    chart_dir.mkdir()
+    paths = {symbol: chart_dir / f"{symbol}.json" for symbol in ("A", "B")}
+    for symbol, path in paths.items():
+        content = json.dumps({"symbol": symbol, "as_of_date": target.isoformat(), "bars": []}).encode("utf-8")
+        assert len(content) < limit
+        if limit_case == "oversized_chart":
+            content += b" " * (limit + 1 - len(content))
+        path.write_bytes(content)
+    index_path = chart_dir / "index.json"
+    index_bytes = json.dumps({
+        "symbols": [{"symbol": symbol, "path": f"charts/{symbol}.json"} for symbol in ("A", "B")],
+    }, separators=(",", ":")).encode("utf-8")
+    assert len(index_bytes) < limit
+    if limit_case == "oversized_index":
+        index_bytes += b" " * (limit + 1 - len(index_bytes))
+    index_path.write_bytes(index_bytes)
+
+    real_open = type(tmp_path).open
+    producer_paths = {index_path.resolve(), *(path.resolve() for path in paths.values())}
+    bounded_reads = []
+    grown = False
+
+    class BoundedRead:
+        def __init__(self, handle, path):
+            self.handle, self.path = handle, path
+
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.handle.__exit__(*args)
+
+        def read(self, size=-1):
+            assert size == limit + 1
+            bounded_reads.append((self.path, size))
+            return self.handle.read(size)
+
+    def checked_open(path, mode="r", *args, **kwargs):
+        nonlocal grown
+        resolved = path.resolve()
+        if mode == "rb" and resolved == paths["B"].resolve() and limit_case == "chart_grows_after_stat" and not grown:
+            # The stat was below the ceiling; growth immediately before open
+            # must still be caught by the capped read before JSON decoding.
+            with real_open(path, "ab") as writer:
+                writer.write(b" " * (limit + 1))
+            grown = True
+        handle = real_open(path, mode, *args, **kwargs)
+        return BoundedRead(handle, resolved) if mode == "rb" and resolved in producer_paths else handle
+
+    monkeypatch.setattr(type(tmp_path), "open", checked_open)
+    real_loads = export_module.json.loads
+    decoded_inputs = []
+
+    def observed_loads(content, *args, **kwargs):
+        decoded_inputs.append(content)
+        assert len(content.encode("utf-8")) <= limit
+        return real_loads(content, *args, **kwargs)
+
+    monkeypatch.setattr(export_module.json, "loads", observed_loads)
+    with pytest.raises(ValueError, match="below 90%"):
+        service._export_price_session_audit(
+            output_dir=tmp_path, market="US", run=run, rows=rows,
+            chart_manifest={"path": "charts/index.json"}, price_as_of_date=target,
+        )
+    audit_path = tmp_path / "markets/us/price-session-audit.json"
+    retained = real_loads(audit_path.read_text(encoding="utf-8"))
+    assert retained["total"] == 2
+    assert retained["verified"] == 0
+    assert retained["passed"] is False
+    oversized = [
+        item for item in retained["chart_source_diagnostics"]
+        if item["reason"] == "payload_exceeds_file_limit"
+    ]
+    assert oversized
+    assert all(item["max_file_bytes"] == limit and item["observed_bytes"] > limit for item in oversized)
+    if limit_case == "oversized_index":
+        assert decoded_inputs == []
+        assert bounded_reads == []
+        assert any(item["section"] == "chart_index" and item["limit_check"] == "stat" for item in oversized)
+    elif limit_case == "oversized_chart":
+        assert len(decoded_inputs) == 1  # Only the bounded index is decoded.
+        assert bounded_reads == [(index_path.resolve(), limit + 1)]
+        assert all(item["section"] == "chart" and item["limit_check"] == "stat" for item in oversized)
+    else:
+        assert grown
+        assert len(decoded_inputs) == 2  # Index and A; oversized B never decodes.
+        assert any(
+            item.get("symbol") == "B" and item["limit_check"] == "read"
+            and item["observed_bytes_is_lower_bound"] is True for item in oversized
+        )
+        assert bounded_reads == [
+            (index_path.resolve(), limit + 1),
+            (paths["A"].resolve(), limit + 1),
+            (paths["B"].resolve(), limit + 1),
+        ]
+    assert not (tmp_path / "manifest.json").exists()
+    assert not (tmp_path / "markets/us" / STATIC_MARKET_METADATA_FILENAME).exists()

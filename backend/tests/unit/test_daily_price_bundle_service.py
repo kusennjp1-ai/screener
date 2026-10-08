@@ -14,7 +14,12 @@ from app.models.app_settings import AppSetting
 from app.models.stock import StockPrice
 from app.models.stock_universe import StockUniverse, UNIVERSE_STATUS_ACTIVE
 from app.services.daily_price_bundle_service import DailyPriceBundleService
-from app.services.price_cache_service import PriceCacheService
+from app.services.price_cache_service import PriceCacheService, PricePersistenceReceipt
+
+
+@pytest.fixture(autouse=True)
+def _disable_receipt_test_redis(monkeypatch):
+    monkeypatch.setattr("app.services.price_cache_service.get_redis_client", lambda: None)
 
 
 def _make_session():
@@ -441,7 +446,10 @@ def test_import_daily_price_bundle_skips_redis_warm_for_two_year_bundle(tmp_path
     db.commit()
 
     price_cache = SimpleNamespace(
-        _store_batch_in_database=MagicMock(),
+        persist_price_batch=MagicMock(return_value=PricePersistenceReceipt(
+            submitted_symbols=("AAPL",), accepted_symbols=("AAPL",),
+            persisted_symbols=("AAPL",), submitted_rows=1, persisted_rows=1,
+        )),
         store_batch_in_cache=MagicMock(return_value=1),
     )
     service = DailyPriceBundleService(price_cache=price_cache)
@@ -484,6 +492,122 @@ def test_import_daily_price_bundle_skips_redis_warm_for_two_year_bundle(tmp_path
     )
 
     assert result["redis_warmed_symbols"] == 0
-    price_cache._store_batch_in_database.assert_called_once()
+    price_cache.persist_price_batch.assert_called_once()
     price_cache.store_batch_in_cache.assert_not_called()
+    db.close()
+
+
+def _write_receipt_bundle(tmp_path, service, rows):
+    path = tmp_path / "synthetic-price-bundle.json"
+    path.write_text(json.dumps({
+        "schema_version": service.DAILY_PRICE_BUNDLE_SCHEMA_VERSION,
+        "market": "US", "as_of_date": "2026-10-06",
+        "bar_period": service.DAILY_PRICE_BAR_PERIOD,
+        "source_revision": "synthetic:new", "symbol_count": len(rows), "rows": rows,
+    }), encoding="utf-8")
+    return path
+
+
+def _receipt_bundle_row(symbol, *, high=102.0):
+    return {"symbol": symbol, "prices": [{
+        "date": "2026-10-06", "open": 100.0, "high": high, "low": 99.0,
+        "close": 101.0, "adj_close": 101.0, "volume": 1000,
+    }]}
+
+
+def _seed_receipt_import_state(service, db):
+    service._upsert_import_state(
+        db, market="US", source_revision="synthetic:previous",
+        as_of_date="2026-10-05", symbol_count=1, bar_period=service.DAILY_PRICE_BAR_PERIOD,
+    )
+
+
+def test_import_receipt_reports_rejection_without_advancing_source_revision(tmp_path):
+    factory = _make_session()
+    db = factory()
+    service = _make_service(factory)
+    _seed_receipt_import_state(service, db)
+    path = _write_receipt_bundle(
+        tmp_path, service, [_receipt_bundle_row("GOOD"), _receipt_bundle_row("BAD", high=90.0)],
+    )
+    result = service.import_daily_price_bundle(db, input_path=path, warm_redis_symbols=0)
+    assert result["status"] == "partial"
+    assert result["submitted_symbols"] == 2
+    assert result["submitted_rows"] == 2
+    assert result["imported_symbols"] == result["imported_rows"] == 1
+    assert result["rejected_symbols"] == {"BAD": "incoherent_history"}
+    assert result["target_session_symbols"] == 1
+    assert result["missing_target_symbols"] == ["BAD"]
+    assert result["import_state_advanced"] is False
+    assert service.get_import_state(db, "US")["source_revision"] == "synthetic:previous"
+    assert db.query(StockPrice).filter(StockPrice.symbol == "GOOD").count() == 1
+    assert db.query(StockPrice).filter(StockPrice.symbol == "BAD").count() == 0
+    db.close()
+
+
+def test_import_receipt_preserves_previous_state_on_commit_rollback(tmp_path):
+    factory = _make_session()
+    db = factory()
+    service = _make_service(factory)
+    _seed_receipt_import_state(service, db)
+    def failing_factory():
+        session = factory()
+        session.commit = MagicMock(side_effect=RuntimeError("synthetic commit failure"))
+        return session
+    service.price_cache = PriceCacheService(redis_client=None, session_factory=failing_factory)
+    path = _write_receipt_bundle(
+        tmp_path, service, [_receipt_bundle_row("FIRST"), _receipt_bundle_row("SECOND")],
+    )
+    result = service.import_daily_price_bundle(db, input_path=path, warm_redis_symbols=0)
+    assert result["status"] == "partial"
+    assert result["accepted_symbols"] == 2
+    assert result["imported_symbols"] == result["imported_rows"] == 0
+    assert set(result["rejected_symbols"]) == {"FIRST", "SECOND"}
+    assert service.get_import_state(db, "US")["source_revision"] == "synthetic:previous"
+    assert db.query(StockPrice).count() == 0
+    db.close()
+
+
+def test_import_receipt_rejects_duplicate_normalized_symbols(tmp_path):
+    factory = _make_session()
+    db = factory()
+    service = _make_service(factory)
+    _seed_receipt_import_state(service, db)
+    path = _write_receipt_bundle(
+        tmp_path, service, [_receipt_bundle_row("TEST"), _receipt_bundle_row(" test ")],
+    )
+    result = service.import_daily_price_bundle(db, input_path=path, warm_redis_symbols=0)
+    assert result["submitted_symbols"] == result["submitted_rows"] == 2
+    assert result["imported_symbols"] == result["imported_rows"] == 0
+    assert result["rejected_symbols"] == {"TEST": "duplicate_bundle_symbol"}
+    assert service.get_import_state(db, "US")["source_revision"] == "synthetic:previous"
+    assert db.query(StockPrice).count() == 0
+    db.close()
+
+
+def test_import_receipt_reports_committed_earlier_chunk_when_later_chunk_rolls_back(tmp_path):
+    factory = _make_session()
+    db = factory()
+    service = _make_service(factory)
+    _seed_receipt_import_state(service, db)
+    calls = []
+    def second_chunk_fails():
+        session = factory()
+        calls.append(session)
+        if len(calls) == 2:
+            session.commit = MagicMock(side_effect=RuntimeError("synthetic later-chunk failure"))
+        return session
+    service.price_cache = PriceCacheService(redis_client=None, session_factory=second_chunk_fails)
+    rows = [_receipt_bundle_row(f"TEST{index:03}") for index in range(101)]
+    path = _write_receipt_bundle(tmp_path, service, rows)
+    result = service.import_daily_price_bundle(db, input_path=path, warm_redis_symbols=0)
+    assert len(calls) == 2
+    assert result["status"] == "partial"
+    assert result["submitted_symbols"] == result["submitted_rows"] == 101
+    assert result["imported_symbols"] == result["imported_rows"] == 100
+    assert result["rejected_symbols"] == {"TEST100": "database_write_failed:RuntimeError"}
+    assert result["target_session_symbols"] == 100
+    assert result["missing_target_symbols"] == ["TEST100"]
+    assert service.get_import_state(db, "US")["source_revision"] == "synthetic:previous"
+    assert db.query(StockPrice).count() == 100
     db.close()

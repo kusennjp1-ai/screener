@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable
 
+from app.models.stock import StockPrice
 from app.models.stock_universe import StockUniverse
 from app.services.bulk_data_fetcher import BulkDataFetcher
 from app.services.price_history_coverage import classify_price_history
@@ -66,6 +68,26 @@ def _dedupe_symbols(symbols: list[str]) -> list[str]:
     return result
 
 
+@dataclass
+class StaticPriceFetchOutcome:
+    fetched_symbols: set[str] = field(default_factory=set)
+    persisted_symbols: set[str] = field(default_factory=set)
+    failed_symbols: dict[str, str] = field(default_factory=dict)
+    rate_limited_symbols: list[str] = field(default_factory=list)
+    unexpected_result_symbols: set[str] = field(default_factory=set)
+    submitted_rows: int = 0
+    persisted_rows: int = 0
+
+    def add(self, other: "StaticPriceFetchOutcome") -> None:
+        self.fetched_symbols.update(other.fetched_symbols)
+        self.persisted_symbols.update(other.persisted_symbols)
+        self.failed_symbols.update(other.failed_symbols)
+        self.rate_limited_symbols.extend(other.rate_limited_symbols)
+        self.unexpected_result_symbols.update(other.unexpected_result_symbols)
+        self.submitted_rows += other.submitted_rows
+        self.persisted_rows += other.persisted_rows
+
+
 class StaticDailyPriceRefreshService:
     """Refresh price rows needed by the static-site snapshot build."""
 
@@ -88,6 +110,20 @@ class StaticDailyPriceRefreshService:
             sleep = time.sleep
         self._sleep = sleep
 
+    def _target_session_symbols(self, symbols: list[str], as_of_date: date) -> set[str]:
+        """Read exact persisted sessions; a later session alone is insufficient."""
+        present: set[str] = set()
+        with self._session_factory() as db:
+            for chunk in _iter_chunks(symbols, 500):
+                rows = (
+                    db.query(StockPrice.symbol)
+                    .filter(StockPrice.symbol.in_(chunk), StockPrice.date == as_of_date)
+                    .distinct()
+                    .all()
+                )
+                present.update(symbol for symbol, in rows)
+        return present
+
     def refresh(
         self,
         *,
@@ -95,13 +131,7 @@ class StaticDailyPriceRefreshService:
         market: str | None = None,
         symbols: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Refresh price rows; ``symbols`` narrows the candidate set.
-
-        The fast post-close publish passes the chart-relevant subset (top of
-        the published feature run + key markets) — fresh closes only surface
-        through chart payloads there, and refreshing the full ~10k universe
-        cost 52 of its 84 pipeline minutes (C57 measurement).
-        """
+        """Refresh the selected published cohort and report committed coverage."""
         with self._session_factory() as db:
             if symbols is not None:
                 active_symbols = list(symbols)
@@ -117,76 +147,57 @@ class StaticDailyPriceRefreshService:
             key_market_symbols = _key_market_price_symbols(market)
             refresh_candidates = _dedupe_symbols(active_symbols + key_market_symbols)
             supported_symbols, skipped_symbols = split_supported_price_symbols(refresh_candidates)
-            coverage = classify_price_history(
-                db,
-                symbols=supported_symbols,
-                as_of_date=as_of_date,
-            )
+            coverage = classify_price_history(db, symbols=supported_symbols, as_of_date=as_of_date)
 
-        db_fresh_symbols = list(coverage.fresh)
-        stale_symbols = list(coverage.stale)
+        initial_target_symbols = self._target_session_symbols(supported_symbols, as_of_date)
+        db_fresh_symbols = [symbol for symbol in supported_symbols if symbol in initial_target_symbols]
         no_history_symbols = list(coverage.no_history)
-
-        if not stale_symbols and not no_history_symbols:
+        no_history_set = set(no_history_symbols)
+        stale_symbols = [
+            symbol for symbol in supported_symbols
+            if symbol not in initial_target_symbols and symbol not in no_history_set
+        ]
+        requested_symbols = stale_symbols + no_history_symbols
+        outcome = StaticPriceFetchOutcome()
+        retry_stats = {
+            "attempted": 0, "recovered": 0, "still_failed": 0, "wait_seconds": 0,
+            "batch_size": STATIC_RATE_LIMITED_RETRY_BATCH_SIZE,
+        }
+        if requested_symbols:
+            batch_size = self._batch_size_for_market(market)
             print(
-                f"[static-daily prices] Database already has fresh price rows for "
-                f"{len(db_fresh_symbols):,} supported symbols as of {as_of_date}.",
+                f"[static-daily prices] Refreshing {len(stale_symbols):,} stale and "
+                f"{len(no_history_symbols):,} no-history symbols for {as_of_date} "
+                f"(exact-session DB fresh: {len(db_fresh_symbols):,}).",
                 flush=True,
             )
-            return {
-                "status": "skipped",
-                "market": market,
-                "as_of_date": as_of_date.isoformat(),
-                "total_active_symbols": len(active_symbols),
-                "supported_symbols": len(supported_symbols),
-                "key_market_symbols": len(key_market_symbols),
-                "db_fresh_symbols": len(db_fresh_symbols),
-                "stale_symbols": len(stale_symbols),
-                "no_history_symbols": len(no_history_symbols),
-                "skipped_unsupported_symbols": len(skipped_symbols),
-                "yahoo_fetched_symbols": 0,
-                "yahoo_failed_symbols": 0,
-            }
-
-        batch_size = self._batch_size_for_market(market)
-        total_batches = (
-            (len(stale_symbols) + batch_size - 1) // batch_size
-            + (len(no_history_symbols) + batch_size - 1) // batch_size
-        )
-
-        print(
-            f"[static-daily prices] Refreshing {len(stale_symbols):,} stale and "
-            f"{len(no_history_symbols):,} no-history symbols in {total_batches} batches for {as_of_date} "
-            f"(DB fresh: {len(db_fresh_symbols):,}, unsupported skipped: {len(skipped_symbols):,}).",
-            flush=True,
-        )
-
-        stale_refreshed, stale_failed, stale_rate_limited = self._fetch_and_store(
-            stale_symbols,
-            period=STATIC_DAILY_PRICE_REFRESH_PERIOD,
-            batch_size=batch_size,
-            market=market,
-        )
-        bootstrap_refreshed, bootstrap_failed, bootstrap_rate_limited = self._fetch_and_store(
-            no_history_symbols,
-            period=STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD,
-            batch_size=batch_size,
-            market=market,
-        )
-        refreshed = stale_refreshed + bootstrap_refreshed
-        failed = stale_failed + bootstrap_failed
-        retry_stats = self._retry_rate_limited_failures(
-            market=market,
-            rate_limited_symbols_by_period={
-                STATIC_DAILY_PRICE_REFRESH_PERIOD: stale_rate_limited,
-                STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD: bootstrap_rate_limited,
-            },
-        )
-        refreshed += retry_stats["recovered"]
-        failed -= retry_stats["recovered"]
-
+            stale_outcome = self._fetch_and_store(
+                stale_symbols, period=STATIC_DAILY_PRICE_REFRESH_PERIOD,
+                batch_size=batch_size, market=market,
+            )
+            bootstrap_outcome = self._fetch_and_store(
+                no_history_symbols, period=STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD,
+                batch_size=batch_size, market=market,
+            )
+            outcome.add(stale_outcome)
+            outcome.add(bootstrap_outcome)
+            retry_stats, retry_outcome = self._retry_rate_limited_failures(
+                market=market, as_of_date=as_of_date,
+                rate_limited_symbols_by_period={
+                    STATIC_DAILY_PRICE_REFRESH_PERIOD: stale_outcome.rate_limited_symbols,
+                    STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD: bootstrap_outcome.rate_limited_symbols,
+                },
+            )
+            outcome.add(retry_outcome)
+        target_symbols = self._target_session_symbols(supported_symbols, as_of_date)
+        missing_target = [symbol for symbol in supported_symbols if symbol not in target_symbols]
+        for symbol in requested_symbols:
+            if symbol in target_symbols:
+                outcome.failed_symbols.pop(symbol, None)
+            else:
+                outcome.failed_symbols.setdefault(symbol, "target_session_missing")
         return {
-            "status": "completed",
+            "status": "partial" if missing_target else ("completed" if requested_symbols else "skipped"),
             "market": market,
             "as_of_date": as_of_date.isoformat(),
             "total_active_symbols": len(active_symbols),
@@ -196,8 +207,24 @@ class StaticDailyPriceRefreshService:
             "stale_symbols": len(stale_symbols),
             "no_history_symbols": len(no_history_symbols),
             "skipped_unsupported_symbols": len(skipped_symbols),
-            "yahoo_fetched_symbols": refreshed,
-            "yahoo_failed_symbols": failed,
+            "selected_symbol_ids": list(supported_symbols),
+            "requested_symbols": len(requested_symbols),
+            "requested_symbol_ids": requested_symbols,
+            "fetched_symbol_ids": sorted(outcome.fetched_symbols),
+            "persisted_symbol_ids": sorted(outcome.persisted_symbols),
+            "target_session_symbol_ids": [
+                symbol for symbol in supported_symbols if symbol in target_symbols
+            ],
+            "yahoo_fetched_symbols": len(outcome.fetched_symbols),
+            "yahoo_persisted_symbols": len(outcome.persisted_symbols),
+            "yahoo_failed_symbols": len(outcome.failed_symbols),
+            "submitted_rows": outcome.submitted_rows,
+            "persisted_rows": outcome.persisted_rows,
+            "target_session_symbols": len(target_symbols),
+            "target_session_coverage": len(target_symbols) / len(supported_symbols) if supported_symbols else None,
+            "missing_target_symbols": missing_target,
+            "failure_details": dict(outcome.failed_symbols),
+            "unexpected_result_symbols": sorted(outcome.unexpected_result_symbols),
             "rate_limited_retry": retry_stats,
         }
 
@@ -208,123 +235,79 @@ class StaticDailyPriceRefreshService:
         period: str,
         batch_size: int,
         market: str | None,
-    ) -> tuple[int, int, list[str]]:
-        refreshed_count = 0
-        failed_count = 0
-        rate_limited: list[str] = []
-        total_symbols = len(symbols)
-        if not symbols:
-            return 0, 0, []
-        total_group_batches = (total_symbols + batch_size - 1) // batch_size
-        for batch_index, batch_symbols in enumerate(
-            _iter_chunks(symbols, batch_size),
-            start=1,
-        ):
-            processed_before = refreshed_count + failed_count
+    ) -> StaticPriceFetchOutcome:
+        outcome = StaticPriceFetchOutcome()
+        for batch_index, batch_symbols in enumerate(_iter_chunks(symbols, batch_size), start=1):
             print(
-                f"[static-daily prices] Batch {batch_index}/{total_group_batches}: "
-                f"{processed_before:,}/{total_symbols:,} processed, fetching "
-                f"{len(batch_symbols):,} symbols from Yahoo ({period}).",
+                f"[static-daily prices] Batch {batch_index}: fetching "
+                f"{len(batch_symbols):,} requested symbols from Yahoo ({period}).",
                 flush=True,
             )
             batch_results = self._fetcher.fetch_prices_in_batches(
-                batch_symbols,
-                period=period,
-                start_batch_size=batch_size,
-                market=market,
+                batch_symbols, period=period, start_batch_size=batch_size, market=market,
             )
+            outcome.unexpected_result_symbols.update(set(batch_results) - set(batch_symbols))
             batch_to_store: dict[str, Any] = {}
-            for symbol, payload in batch_results.items():
+            for symbol in batch_symbols:
+                payload = batch_results.get(symbol)
+                if payload is None:
+                    outcome.failed_symbols[symbol] = "provider_result_missing"
+                    continue
                 price_data = payload.get("price_data")
                 if not payload.get("has_error") and price_data is not None and not price_data.empty:
                     batch_to_store[symbol] = price_data
-                    refreshed_count += 1
+                    outcome.fetched_symbols.add(symbol)
                 else:
-                    failed_count += 1
+                    outcome.failed_symbols[symbol] = str(payload.get("error") or "empty_provider_history")
                     if _is_rate_limit_failure(payload):
-                        rate_limited.append(symbol)
+                        outcome.rate_limited_symbols.append(symbol)
             if batch_to_store:
-                self._price_cache.store_batch_in_cache(
-                    batch_to_store,
-                    also_store_db=True,
-                    market=market,
-                )
+                receipt = self._price_cache.store_batch_in_cache_with_receipt(batch_to_store, market=market)
+                outcome.persisted_symbols.update(receipt.persisted_symbols)
+                outcome.failed_symbols.update(receipt.rejected_symbols)
+                outcome.submitted_rows += receipt.submitted_rows
+                outcome.persisted_rows += receipt.persisted_rows
             print(
-                f"[static-daily prices] Batch {batch_index}/{total_group_batches} complete: "
-                f"{refreshed_count + failed_count:,}/{total_symbols:,} processed, "
-                f"{refreshed_count:,} refreshed, {failed_count:,} failed.",
+                f"[static-daily prices] Batch {batch_index} complete: "
+                f"{len(outcome.fetched_symbols):,} fetched, "
+                f"{len(outcome.persisted_symbols):,} committed, "
+                f"{len(outcome.failed_symbols):,} failed.",
                 flush=True,
             )
-        return refreshed_count, failed_count, rate_limited
+        return outcome
 
     def _retry_rate_limited_failures(
         self,
         *,
         market: str | None,
+        as_of_date: date,
         rate_limited_symbols_by_period: dict[str, list[str]],
-    ) -> dict[str, Any]:
-        skipped_payload: dict[str, Any] = {
-            "attempted": 0,
-            "recovered": 0,
-            "still_failed": 0,
-            "wait_seconds": 0,
+    ) -> tuple[dict[str, Any], StaticPriceFetchOutcome]:
+        outcome = StaticPriceFetchOutcome()
+        stats: dict[str, Any] = {
+            "attempted": 0, "recovered": 0, "still_failed": 0, "wait_seconds": 0,
             "batch_size": STATIC_RATE_LIMITED_RETRY_BATCH_SIZE,
         }
         retry_groups = [
             (period, sorted(set(symbols)))
-            for period, symbols in rate_limited_symbols_by_period.items()
-            if symbols
+            for period, symbols in rate_limited_symbols_by_period.items() if symbols
         ]
         attempted = sum(len(symbols) for _period, symbols in retry_groups)
-        if not attempted:
-            return skipped_payload
-        normalized = (market or "").upper()
-        if normalized not in STATIC_RATE_LIMITED_RETRY_MARKETS:
-            print(
-                f"[static-daily prices] Skipping rate-limited retry for market={normalized or 'shared'}: "
-                f"{attempted} symbols looked throttled but market is outside the retry allowlist.",
-                flush=True,
-            )
-            return skipped_payload
-
-        print(
-            f"[static-daily prices:{normalized}] Yahoo flagged {attempted} symbols as rate-limited; "
-            f"waiting {STATIC_RATE_LIMITED_RETRY_WAIT_SECONDS}s then retrying with batch size "
-            f"{STATIC_RATE_LIMITED_RETRY_BATCH_SIZE}.",
-            flush=True,
-        )
+        if not attempted or (market or "").upper() not in STATIC_RATE_LIMITED_RETRY_MARKETS:
+            return stats, outcome
         self._sleep(STATIC_RATE_LIMITED_RETRY_WAIT_SECONDS)
-
-        recovered = 0
+        retry_symbols: list[str] = []
         for period, unique_symbols in retry_groups:
-            retry_results = self._fetcher.fetch_prices_in_batches(
-                unique_symbols,
-                period=period,
-                start_batch_size=STATIC_RATE_LIMITED_RETRY_BATCH_SIZE,
-                market=market,
-            )
-            recovered_payload: dict[str, Any] = {}
-            for symbol, payload in retry_results.items():
-                price_data = payload.get("price_data")
-                if not payload.get("has_error") and price_data is not None and not price_data.empty:
-                    recovered_payload[symbol] = price_data
-                    recovered += 1
-            if recovered_payload:
-                self._price_cache.store_batch_in_cache(
-                    recovered_payload,
-                    also_store_db=True,
-                    market=market,
-                )
-        still_failed = attempted - recovered
-        print(
-            f"[static-daily prices:{normalized}] Rate-limited retry complete: "
-            f"{recovered}/{attempted} recovered, {still_failed} still failed.",
-            flush=True,
+            retry_symbols.extend(unique_symbols)
+            outcome.add(self._fetch_and_store(
+                unique_symbols, period=period,
+                batch_size=STATIC_RATE_LIMITED_RETRY_BATCH_SIZE, market=market,
+            ))
+        target_symbols = self._target_session_symbols(retry_symbols, as_of_date)
+        recovered_symbols = outcome.persisted_symbols & target_symbols
+        stats.update(
+            attempted=attempted, recovered=len(recovered_symbols),
+            still_failed=attempted - len(recovered_symbols),
+            wait_seconds=STATIC_RATE_LIMITED_RETRY_WAIT_SECONDS,
         )
-        return {
-            "attempted": attempted,
-            "recovered": recovered,
-            "still_failed": still_failed,
-            "wait_seconds": STATIC_RATE_LIMITED_RETRY_WAIT_SECONDS,
-            "batch_size": STATIC_RATE_LIMITED_RETRY_BATCH_SIZE,
-        }
+        return stats, outcome

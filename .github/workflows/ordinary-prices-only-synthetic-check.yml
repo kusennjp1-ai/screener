@@ -1,0 +1,228 @@
+name: Check ordinary price-session source code
+on:
+  push:
+    branches:
+      - ordinary-prices-only-synthetic-check-a11
+permissions:
+  contents: read
+concurrency:
+  group: ordinary-prices-only-synthetic-check-a11
+  cancel-in-progress: false
+jobs:
+  synthetic:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/ordinary-prices-only-synthetic-check-a11' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+      STOCKSCANNER_TEST_ALLOW_POSTGRES: '0'
+      STOCKSCANNER_TEST_USE_DATABASE_URL: '0'
+      STOCKSCANNER_TEST_ALLOW_SQLITE: '1'
+      DATABASE_URL: sqlite://
+      STATIC_SITE_CODE33: '0'
+      PRICES_ONLY_NETWORK_GUARD_LOG: ${{ runner.temp }}/prices-only-network-blocked.log
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Bind the exact disabled code-only candidate
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          assert sys.version_info[:2] == (3, 11), "Unexpected Python interpreter"
+          assert os.environ["GITHUB_REPOSITORY"] == "kusennjp1-ai/screener"
+          assert os.environ["GITHUB_EVENT_NAME"] == "push"
+          assert os.environ["GITHUB_REF"] == "refs/heads/ordinary-prices-only-synthetic-check-a11"
+          assert os.environ["GITHUB_RUN_ATTEMPT"] == "1"
+          assert not os.environ.get("GH_TOKEN") and not os.environ.get("GITHUB_TOKEN"), "Unexpected token in code-only job"
+          base = "b464cd32691853b7128189f4e3350b74959468bb"
+          workflow = ".github/workflows/ordinary-prices-only-synthetic-check.yml"
+          pins = json.loads("{\"backend/app/scripts/export_static_site.py\":{\"blob\":\"74b8a15ac0d70cb1c3881eebc7da807c2a487526\",\"sha256\":\"92caa81bb450c4a654cb24c4429ac50445c01d6e5eea898d35dea85af71214a2\",\"bytes\":33691},\"backend/app/services/static_site_export_service.py\":{\"blob\":\"f39250e41b8d39e948deb86496419e35567f23c1\",\"sha256\":\"7f6b90583ab407d813079911f3cc92b7f3459df28922aa10971ce7e31e271ae6\",\"bytes\":136374},\"backend/tests/unit/test_export_static_site_script.py\":{\"blob\":\"fb110401a85bcfbf625eab63ee8c627e7fb3edcc\",\"sha256\":\"3d6b08fbde509216f7b2597017b0b7b5f37e632202b331c1496e23605209313c\",\"bytes\":53802},\"backend/tests/unit/test_static_site_export_service.py\":{\"blob\":\"c690f8c1242086fca95edf0f69d944b62969cc06\",\"sha256\":\"7dc48c7201a07e25dcec436ca177516304d3c5ad002dc773fbdba006c57236ce\",\"bytes\":138089},\"backend/app/services/price_cache_service.py\":{\"blob\":\"f0c45718ccf27891f2223f207b5fe7e03a1d5712\",\"sha256\":\"88d2e67a5bf59920fc4a573f54fea78d0f4aa6447007f8a18a1564fddf79767c\",\"bytes\":92994},\"backend/app/services/static_daily_price_refresh_service.py\":{\"blob\":\"d0e3a258cf81a7cb01908286894514d8c14dba25\",\"sha256\":\"d3915762ee063d115bdb82c051a64f22ba52328dfd49bf28b95744dbeb0d8cfc\",\"bytes\":14308},\"backend/app/services/daily_price_bundle_service.py\":{\"blob\":\"102e2870d6117ec62987b7e97704ec939c98d2c9\",\"sha256\":\"2363747238b81b819fb1e3b8533ee796551cf6668c5b52c04e7982ed7c45cae2\",\"bytes\":25767},\"backend/tests/unit/test_price_cache_warmup_store.py\":{\"blob\":\"ee4522797ceeeb1806150559f33fabbbe3c95e00\",\"sha256\":\"c2cfe11f5685eedc84b71208aafe7172fbf07a6fa73555d6e3cc50ef4eed5bb5\",\"bytes\":13702},\"backend/tests/unit/test_static_daily_price_refresh_service.py\":{\"blob\":\"45db0c0eec08952b1f07f57e4c0f4bb5c46c7e03\",\"sha256\":\"dab76d766047bb1d0e4d82f3afeb43055d66d92bf7702471068d263b736b0456\",\"bytes\":25400},\"backend/tests/unit/test_daily_price_bundle_service.py\":{\"blob\":\"6b7580973680f27fd31890f4188ea89d3f45b5bf\",\"sha256\":\"043dae8a386fc212122a3c910a28e36dc1a1429e5a2448ad07e715e0ddd0a580\",\"bytes\":22000},\"backend/app/services/static_price_session_audit.py\":{\"blob\":\"6038dedff09a317dc1ec5f8a1a723a24596ad40c\",\"sha256\":\"e7a076266720c362b4e7125967bca95f9541963bf414d99222b604ffe2276ca3\",\"bytes\":9281},\"backend/tests/unit/test_static_price_session_audit.py\":{\"blob\":\"6d91b7e2ef44ca310176833fd6e661ab0b62638e\",\"sha256\":\"bf5bed0a31d005edf5b0a765327b0f56d2d9ac12d47b22c5972305efd4c33d64\",\"bytes\":10997}}")
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True, timeout=20).strip()
+          assert git("rev-parse", "HEAD") == os.environ["GITHUB_SHA"]
+          assert git("show", "-s", "--format=%P", "HEAD") == base
+          assert sorted(git("diff", "--name-only", base, "HEAD").splitlines()) == sorted([*pins, workflow])
+          for path, pin in pins.items():
+              raw = pathlib.Path(path).read_bytes()
+              assert len(raw) == pin["bytes"], "Unexpected byte count: "+path
+              assert hashlib.sha256(raw).hexdigest() == pin["sha256"], "Unexpected SHA256: "+path
+              assert hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest() == pin["blob"], "Unexpected Git blob: "+path
+          production_root = {}
+          for record in subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"], timeout=20).split(b"\0"):
+              if not record:
+                  continue
+              metadata, raw_path = record.split(b"\t", 1)
+              if raw_path == workflow.encode():
+                  continue
+              mode, kind, object_sha = metadata.split(b" ", 2)
+              assert kind == b"blob", "Unexpected production tree object type"
+              parts = raw_path.split(b"/")
+              branch = production_root
+              for part in parts[:-1]:
+                  branch = branch.setdefault(part, {})
+              assert parts[-1] not in branch, "Duplicate production tree path"
+              branch[parts[-1]] = (mode, object_sha)
+          def tree_hash(branch):
+              records = []
+              for name, value in branch.items():
+                  directory = isinstance(value, dict)
+                  mode, object_sha = (b"40000", tree_hash(value).encode()) if directory else value
+                  records.append((name + (b"/" if directory else b""), mode + b" " + name + b"\0" + bytes.fromhex(object_sha.decode())))
+              raw = b"".join(record for _, record in sorted(records))
+              return hashlib.sha1(b"tree " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+          production_tree = tree_hash(production_root)
+          assert production_tree == "e5705c63a79183e6d6787bb48335bbbd3d45cd28", "Unexpected complete production tree"
+          request_raw = pathlib.Path(".github/retained-price-oct6-source.json").read_bytes()
+          assert hashlib.sha1(b"blob "+str(len(request_raw)).encode()+b"\0"+request_raw).hexdigest() == "3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a"
+          request = json.loads(request_raw)
+          assert request["enabled"] is False and request["activation"] is None
+          node = subprocess.check_output(["node", "--version"], text=True, timeout=10).strip()
+          assert node == "v22.23.3"
+          print(json.dumps({"code_only":True,"head":os.environ["GITHUB_SHA"],"base":base,"files":len(pins),"production_tree":production_tree,"node":node,"python":sys.version.split()[0],"request_disabled":True}))
+          PY
+      - name: Install the existing normal-CI backend requirements
+        timeout-minutes: 12
+        run: python -m pip install -r backend/requirements.txt -r backend/requirements-test.txt
+      - name: Compile exact changed Python source and install the test network boundary
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib, py_compile
+          for path in ["backend/app/scripts/export_static_site.py","backend/app/services/static_site_export_service.py","backend/tests/unit/test_export_static_site_script.py","backend/tests/unit/test_static_site_export_service.py","backend/app/services/price_cache_service.py","backend/app/services/static_daily_price_refresh_service.py","backend/app/services/daily_price_bundle_service.py","backend/tests/unit/test_price_cache_warmup_store.py","backend/tests/unit/test_static_daily_price_refresh_service.py","backend/tests/unit/test_daily_price_bundle_service.py","backend/app/services/static_price_session_audit.py","backend/tests/unit/test_static_price_session_audit.py"]:
+              py_compile.compile(path, doraise=True)
+          PY
+          mkdir "$RUNNER_TEMP/prices-only-network-guard"
+          cat > "$RUNNER_TEMP/prices-only-network-guard/sitecustomize.py" <<'PY'
+          import ipaddress
+          import socket
+          import os
+          
+          _BLOCK_LOG = os.environ.get("PRICES_ONLY_NETWORK_GUARD_LOG")
+          
+          def _blocked():
+              if _BLOCK_LOG:
+                  with open(_BLOCK_LOG, "a", encoding="ascii") as stream:
+                      stream.write("blocked\n")
+              raise RuntimeError("Code-only synthetic tests blocked a live network operation")
+          
+          _ALLOWED_NAMES = {"localhost"}
+          _original_getaddrinfo = socket.getaddrinfo
+          _original_connect = socket.socket.connect
+          _original_connect_ex = socket.socket.connect_ex
+          
+          
+          def _allowed(host):
+              if isinstance(host, bytes):
+                  host = host.decode("ascii", "strict")
+              if host in _ALLOWED_NAMES:
+                  return True
+              try:
+                  return ipaddress.ip_address(host).is_loopback
+              except (ValueError, TypeError):
+                  return False
+          
+          
+          def _checked(host):
+              if not _allowed(host):
+                  _blocked()
+          
+          
+          def _getaddrinfo(host, *args, **kwargs):
+              _checked(host)
+              return _original_getaddrinfo(host, *args, **kwargs)
+          
+          
+          def _connect(sock, address):
+              if sock.family in (socket.AF_INET, socket.AF_INET6):
+                  _checked(address[0])
+              return _original_connect(sock, address)
+          
+          
+          def _connect_ex(sock, address):
+              if sock.family in (socket.AF_INET, socket.AF_INET6):
+                  _checked(address[0])
+              return _original_connect_ex(sock, address)
+          
+          
+          socket.getaddrinfo = _getaddrinfo
+          socket.socket.connect = _connect
+          socket.socket.connect_ex = _connect_ex
+          
+          # curl_cffi uses native libcurl sockets, so Python socket wrappers alone do not
+          # constrain it. These suites require mocked HTTP; reject native HTTP before I/O.
+          try:
+              from curl_cffi import requests as _curl_requests
+          except ImportError:
+              _curl_requests = None
+          if _curl_requests is not None:
+              def _curl_request(*args, **kwargs):
+                  _blocked()
+              async def _curl_async_request(*args, **kwargs):
+                  _blocked()
+              _curl_requests.Session.request = _curl_request
+              if hasattr(_curl_requests, "AsyncSession"):
+                  _curl_requests.AsyncSession.request = _curl_async_request
+          PY
+      - name: Run the thirteen synthetic price-session and persistence suites
+        timeout-minutes: 8
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/prices-only-network-guard:$GITHUB_WORKSPACE/backend${PYTHONPATH:+:$PYTHONPATH}"
+          python - <<'PY'
+          import socket
+          from curl_cffi import requests
+          assert socket.socket.connect.__module__ == "sitecustomize"
+          assert requests.Session.request.__module__ == "sitecustomize"
+          PY
+          python -m pytest \
+            tests/unit/test_export_static_site_script.py \
+            tests/unit/test_static_site_export_service.py \
+            tests/unit/test_price_cache_warmup_store.py \
+            tests/unit/test_static_daily_price_refresh_service.py \
+            tests/unit/test_daily_price_bundle_service.py \
+            tests/unit/test_static_price_session_audit.py \
+            tests/unit/test_authoritative_price_history.py \
+            tests/unit/test_price_history_integrity.py \
+            tests/unit/test_cache_refresh_unification.py \
+            tests/unit/test_yahoo_batch_ingestion.py \
+            tests/unit/test_daily_price_bundle_scripts.py \
+            tests/unit/test_price_refresh_execution.py \
+            tests/unit/test_price_refresh_workflow.py \
+            -q --junitxml="$RUNNER_TEMP/prices-only-synthetic.xml"
+      - name: Require executed parity and zero live-network attempts
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib, xml.etree.ElementTree as ET
+          report = pathlib.Path(os.environ["RUNNER_TEMP"]) / "prices-only-synthetic.xml"
+          root = ET.parse(report).getroot()
+          cases = list(root.iter("testcase"))
+          assert cases, "No synthetic test cases were retained"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "Synthetic tests failed"
+          parity = [case for case in cases if case.get("name") == "test_exact_approved_javascript_audit_and_liquid_predicate_parity"]
+          assert len(parity) == 1, "Required actual-approved-JS parity case did not execute"
+          assert all(parity[0].find(tag) is None for tag in ("skipped", "failure", "error")), "Required actual-approved-JS parity case did not pass or was skipped"
+          blocked = pathlib.Path(os.environ["PRICES_ONLY_NETWORK_GUARD_LOG"])
+          assert not blocked.exists() or blocked.stat().st_size == 0, "Synthetic tests attempted live network access"
+          print(json.dumps({"code_only":True,"tests":len(cases),"failures":0,"errors":0,"required_js_parity":"passed","live_network_attempts":0,"actual_data_proof":False,"publication_authority":False}))
+          PY
