@@ -1,3 +1,4 @@
+import {ORDINARY_PUBLISHER_TOOLING,ordinaryPublisherToolingEligible,ordinaryPublisherToolingBoundary,validateOrdinaryPublisherToolingIdentity} from '../../.github/scripts/ordinary-publisher-tooling.mjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -373,5 +374,20 @@ describe('actual #59 rerun artifact association', () => {
       37078930007: [deployed(1, '2026-10-03T02:18:55Z')],
     } });
     expect(latestDeployment(repository, api)).toMatchObject({ runId: 37078930007, attempt: 1, headSha: oldUi.head_sha });
+  });
+});
+
+describe('ordinary tooling under the actual frontend Vite transform',()=>{
+  it('invokes the distinct immutable identity and eligibility validators',()=>{
+    expect(validateOrdinaryPublisherToolingIdentity(clone(ORDINARY_PUBLISHER_TOOLING))).toEqual(ORDINARY_PUBLISHER_TOOLING);
+    const state={source:{companion:{id:1}},carry:{},decision:{mode:'data'},sourceSha:ORDINARY_PUBLISHER_TOOLING.base.sha,live:{uiSha:ORDINARY_PUBLISHER_TOOLING.base.sha}};
+    expect(ordinaryPublisherToolingEligible(state)).toBe(true);
+    expect(ordinaryPublisherToolingEligible({...state,source:{...state.source,repair:{}}})).toBe(false);
+  });
+  it('invokes the production default boundary without GitHub, filesystem or token access',async()=>{
+    const state={source:{},decision:{mode:'data'}};expect(await ordinaryPublisherToolingBoundary(state,'apply')).toBeNull();expect(state).toEqual({source:{},decision:{mode:'data'}});
+  });
+  it('publication-state rejects an unbound ordinary tooling receipt',()=>{
+    expect(()=>validateReceipt(receipt(undefined,{ordinary_publisher_tooling:{override:true}}))).toThrow(/Unknown ordinary tooling receipt/);
   });
 });

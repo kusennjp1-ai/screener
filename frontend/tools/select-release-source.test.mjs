@@ -51,7 +51,7 @@ describe('checked export attempt and immutable artifact binding', () => {
   it('binds a successful exact attempt to its unique companion artifact and raw manifest bytes', () => {
     const item = fixture(), api = apiFor(item), load = loadFor(item);
     expect(checkedExport(item.artifact, pagesFor(item), repository, api, load)).toEqual({
-      artifact: item.artifact, runId: 20, attempt: 2, manifest: item.data, manifestHash: sha256(item.metadata.manifest_json), priceObservations: {}, priceObservationsDigest: sha256('{}'),
+      artifact: item.artifact, companion: item.companion, runId: 20, attempt: 2, manifest: item.data, manifestHash: sha256(item.metadata.manifest_json), priceObservations: {}, priceObservationsDigest: sha256('{}'),
     });
     expect(load).toHaveBeenCalledWith(item.companion, repository);
     expect(api.mock.calls.map(([endpoint]) => endpoint)).toEqual([
