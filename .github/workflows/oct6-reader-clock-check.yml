@@ -1,0 +1,47 @@
+name: Oct6 Reader Clock Check
+on:
+  push:
+    branches: [preview/oct6-reader-clock-check-20261008]
+permissions:
+  contents: read
+concurrency:
+  group: oct6-reader-clock-check-20261008
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'kusennjp1-ai/screener' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check exact disabled test-only correction
+        run: |
+          test "$(git rev-parse HEAD^)" = 02aa00b20959f276a1fd58cc2771ff11d244a2c3
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-source-readers.test.mjs)" = 34bfae0d85a634e6254499fecb93a68cad5ea99b
+          test "$(git rev-parse HEAD:.github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+      - name: Install existing pinned test dependencies
+        run: |
+          python3 -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          npm ci --no-audit --no-fund --prefix frontend
+      - name: Verify all finite contracts at the real clock and both UTC day boundaries
+        run: |
+          tests=(.github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs)
+          node --test "${tests[@]}"
+          for anchor in 2026-10-08T00:00:30.000Z 2026-10-09T00:00:30.000Z; do
+            echo "Diagnostic advancing test clock: $anchor"
+            OCT6_TEST_CLOCK_ANCHOR="$anchor" NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/oct6-test-clock-preload.mjs" node --test "${tests[@]}"
+          done
+      - name: Verify actual frontend import and reader configuration at current and next-day clocks
+        working-directory: frontend
+        run: |
+          node node_modules/vitest/vitest.mjs run tools/retained-price-source-imports.test.mjs tools/select-release-source.test.mjs tools/publication-gate.test.mjs tools/publication-state.test.mjs
+          OCT6_TEST_CLOCK_ANCHOR=2026-10-09T00:00:30.000Z NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/oct6-test-clock-preload.mjs" node node_modules/vitest/vitest.mjs run tools/retained-price-source-imports.test.mjs tools/select-release-source.test.mjs tools/publication-gate.test.mjs tools/publication-state.test.mjs
