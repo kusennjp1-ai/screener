@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { CORRECTION_FIELDS, overlayFinancialCorrection, overlayFinancialChart, validateCorrectionProjection } from './financial-correction-overlay.mjs';
@@ -11,12 +11,12 @@ import { FINANCIAL_GENERATION_CARRY_SCHEMA, FINANCIAL_GENERATION_CARRY_ENV, crea
 import { FINANCIAL_FIELDS, projectFinancialRow, currentFinancialHistory } from '../src/static/financialCurrent.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../src/test/fixtures/nativeAnnual.js';
-import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { decodeResearchIndex, encodeResearchIndex } from '../src/static/researchTransport.js';
 import { assess } from '../src/static/researchEngine.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { exportWorkbench } from './export-workbench.mjs';
-import { verifyCarriedBundle } from '../../.github/scripts/financial-generation-carry-controller.mjs';
-import { instrumentApplicability } from '../src/static/instrumentApplicability.js';
+import { readCarryTargetBase, verifyCarriedBundle } from '../../.github/scripts/financial-generation-carry-controller.mjs';
+import { instrumentApplicability, instrumentIdentityEvidence } from '../src/static/instrumentApplicability.js';
 
 const originalTime = Date.parse('2026-10-04T12:00:00Z'), originalDate = '2026-10-02';
 const buildTime = Date.parse('2026-10-05T12:00:00Z'), targetDate = '2026-10-05';
@@ -493,4 +493,125 @@ it('exports inherited fund and corporate chart aliases through strict carry veri
       await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 })).rejects.toThrow();
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+// These controller-target regressions use this file's existing synthetic source
+// fixture and the selected local frontend modules. Actual approved-UI coverage
+// is separately bound by the full-cohort diagnostic.
+const carryReaderFrontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+async function carryReaderFixture(target) {
+  const root = await mkdtemp(join(tmpdir(), 'carry-reader-'));
+  const wire = encodeResearchIndex({ as_of_date: target.as_of_date, rows: target.rows });
+  await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: target.as_of_date,
+    pages: { scan: { path: 'scan.json' } }, assets: { research: { path: 'research.json' } } } } });
+  await write(join(root, 'static-data/scan.json'), { as_of_date: target.as_of_date, initial_rows: target.rows.slice(0, 2), chunks: [{ path: 'chunk.json' }] });
+  await write(join(root, 'static-data/chunk.json'), { as_of_date: target.as_of_date, rows: target.rows });
+  await write(join(root, 'static-data/research.json'), wire);
+  await write(join(root, 'qualification-audit.json'), { version: 'ohlcv-v1', as_of_date: target.as_of_date, total: target.rows.length,
+    results: target.rows.map(row => ({ symbol: row.symbol, audit: { version: 'ohlcv-v1', symbol: row.symbol, as_of_date: target.as_of_date } })) });
+  const prepared = await readCarryTargetBase({ root, frontendRoot: carryReaderFrontend });
+  return { root, wire, prepared };
+}
+function bindSyntheticSourceIdentity(options, properties) {
+  const base = JSON.parse(options.sourceBase), source = JSON.parse(options.sourceProjection);
+  Object.assign(base.rows.find(row => row.symbol === 'OWNED'), properties);
+  options.sourceBase = JSON.stringify(base); options.sourceBaseSha256 = hash(options.sourceBase);
+  source.bindings.target_base_sha256 = options.sourceBaseSha256;
+  options.sourceProjection = JSON.stringify(source); options.sourceProjectionSha256 = hash(options.sourceProjection);
+  return options;
+}
+async function persistedCarry(root, options, target, name) {
+  const carry = createFinancialGenerationCarry({ ...options, targetBase: target, targetBaseSha256: hash(target) });
+  const path = join(root, name), raw = JSON.stringify(carry);
+  await write(path, raw);
+  return { carry, env: envFor(path, carry, raw) };
+}
+
+it('binds omitted historical CUSIP observations with the unchanged full-input carry loader', async () => {
+  const options = bindSyntheticSourceIdentity(inputs(), { cusip: '123456782' });
+  const target = JSON.parse(options.targetBase), owned = target.rows.find(row => row.symbol === 'OWNED');
+  owned.financial_historical = { source_evidence: { identity: { cusip: '123456782' } }, unrelated_large_report: 'report '.repeat(4096) };
+  const fixture = await carryReaderFixture(target);
+  try {
+    const compact = decodeResearchIndex(fixture.wire), compactBase = JSON.stringify({ market: 'US', as_of_date: target.as_of_date, rows: compact.rows });
+    expect(instrumentIdentityEvidence(compact.rows.find(row => row.symbol === 'OWNED')).some(context => context.cusip)).toBe(false);
+    const old = await persistedCarry(fixture.root, options, compactBase, 'compact-carry.json');
+    await expect(loadFinancialGenerationCarry({ env: old.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date })).rejects.toThrow('target issuer OWNED mismatch');
+    const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'bounded-carry.json');
+    const loaded = await loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date });
+    expect(loaded).toEqual(next.carry);
+    expect(next.carry.ownership.OWNED).toBe('retained');
+    const projected = JSON.parse(fixture.prepared.bytes).rows.find(row => row.symbol === 'OWNED');
+    expect(projected.instrument_identity.observed_contexts).toEqual(instrumentIdentityEvidence(owned));
+    expect(projected).not.toHaveProperty('financial_historical');
+    expect(fixture.prepared.bytes.length).toBeLessThan(JSON.stringify({ market: 'US', as_of_date: target.as_of_date, rows: fixture.prepared.rows }).length);
+    expect(next.carry.source_projection_json).toBe(options.sourceProjection);
+    expect(next.carry.source_base_json).toBe(options.sourceBase);
+    expect(next.carry.symbols.OWNED.financial_current.p).toEqual(JSON.parse(options.sourceProjection).symbols.OWNED.financial_current.p);
+    expect(next.carry.symbols.OWNED.source_receipts).toEqual(JSON.parse(options.sourceProjection).symbols.OWNED.source_receipts);
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+it('keeps conflicting observed identities unknown in the bounded controller target', async () => {
+  for (const [label, evidence] of [
+    ['CUSIP', { source_evidence: { identity: { cusip: 'CONFLICTING-CUSIP' } } }],
+    ['name', { detail_identity: { company_name: 'Conflicting issuer' } }],
+    ['type', { detail_identity: { quoteType: 'ETF' } }],
+    ['market', { detail_identity: { market: 'JP' } }],
+    ['symbol', { detail_identity: { symbol: 'DIFFERENT' } }],
+  ]) {
+    const options = bindSyntheticSourceIdentity(inputs(), { cusip: '123456782' });
+    const target = JSON.parse(options.targetBase), owned = target.rows.find(row => row.symbol === 'OWNED');
+    owned.financial_source_evidence = { identity: { cusip: '123456782' } };
+    owned.financial_historical = evidence;
+    const fixture = await carryReaderFixture(target);
+    try {
+      const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'conflict-carry.json');
+      await expect(loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date })).resolves.toEqual(next.carry);
+      expect(next.carry.ownership.OWNED, label).toBe('identity_mismatch');
+      expect(Object.values(next.carry.symbols.OWNED.financial_values).every(value => value === null), label).toBe(true);
+      expect(next.carry.symbols.OWNED.source_receipts, label).toEqual([]);
+      expect(next.carry.symbols.OWNED.financial_history.annual, label).toEqual([]);
+      expect(next.carry.symbols.OWNED.financial_history.quarterly, label).toEqual([]);
+    } finally { await rm(fixture.root, { recursive: true, force: true }); }
+  }
+});
+
+it('preserves normalized name and CIK evidence without changing the observed text', async () => {
+  const options = bindSyntheticSourceIdentity(inputs(), { cik: 123 });
+  const target = JSON.parse(options.targetBase), owned = target.rows.find(row => row.symbol === 'OWNED');
+  owned.company_name = ' ＯＷＮＥＤ   corporation ';
+  owned.financial_historical = { detail_identity: { issuer_cik: '0000000123' } };
+  const fixture = await carryReaderFixture(target);
+  try {
+    const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'normalized-carry.json');
+    await expect(loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows, asOfDate: target.as_of_date })).resolves.toEqual(next.carry);
+    expect(next.carry.ownership.OWNED).toBe('retained');
+    const evidence = JSON.parse(fixture.prepared.bytes).rows.find(row => row.symbol === 'OWNED').instrument_identity.observed_contexts;
+    expect(evidence.some(context => context.company_name === owned.company_name)).toBe(true);
+    expect(evidence.some(context => context.issuer_cik === '0000000123')).toBe(true);
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+it('rejects postbinding issuer, price and universe substitutions against the bounded target', async () => {
+  const options = bindSyntheticSourceIdentity(inputs(), { cusip: '123456782' }), target = JSON.parse(options.targetBase);
+  target.rows.find(row => row.symbol === 'OWNED').financial_historical = { detail_identity: { cusip: '123456782' } };
+  const fixture = await carryReaderFixture(target);
+  try {
+    const next = await persistedCarry(fixture.root, options, fixture.prepared.bytes, 'bound-carry.json');
+    for (const mutation of [
+      row => ({ ...row, financial_historical: { detail_identity: { cusip: 'ALTERED-CUSIP' } } }),
+      row => ({ ...row, company_name: 'Different issuer after binding' }),
+      row => ({ ...row, current_price: row.current_price + 1 }),
+      row => ({ ...row, adv_usd: row.adv_usd + 1 }),
+      row => ({ ...row, market: 'JP' }),
+      row => ({ ...row, as_of_date: '2026-10-04' }),
+    ]) {
+      const rows = fixture.prepared.rows.map(row => row.symbol === 'OWNED' ? mutation(row) : row);
+      await expect(loadFinancialGenerationCarry({ env: next.env, rows, asOfDate: target.as_of_date })).rejects.toThrow(/Financial carry target/);
+    }
+    await expect(loadFinancialGenerationCarry({ env: next.env, rows: fixture.prepared.rows.slice(1), asOfDate: target.as_of_date })).rejects.toThrow('target universe');
+    await expect(loadFinancialGenerationCarry({ env: next.env, rows: [...fixture.prepared.rows, fixture.prepared.rows[0]], asOfDate: target.as_of_date })).rejects.toThrow('target universe');
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
