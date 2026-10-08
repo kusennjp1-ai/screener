@@ -1,17 +1,17 @@
-name: Finite browser capture diagnostic
+name: Finite browser capture causal diagnostic
 on:
   push:
     branches:
-      - finite-browser-capture-diagnostic-a11
+      - finite-browser-capture-causal-a11
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: finite-browser-capture-diagnostic-a11
+  group: finite-browser-capture-causal-a11
   cancel-in-progress: false
 jobs:
   diagnose:
-    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/finite-browser-capture-diagnostic-a11' && github.run_attempt == 1
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/finite-browser-capture-causal-a11' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -38,7 +38,8 @@ jobs:
           mkdir "$RUNNER_TEMP/browser-capture-unit-tests"
           node --check .github/scripts/retained-price-browser-capture-adapter.mjs
           node --check .github/scripts/retained-price-browser-capture-diagnostic.mjs
-          node --test .github/scripts/retained-price-browser-capture-adapter.test.mjs 2>&1 | tee "$RUNNER_TEMP/browser-capture-unit-tests/node.tap"
+          node --check .github/scripts/retained-price-browser-stream-causal-diagnostic.mjs
+          node --test .github/scripts/retained-price-browser-capture-adapter.test.mjs .github/scripts/retained-price-browser-stream-causal-diagnostic.test.mjs 2>&1 | tee "$RUNNER_TEMP/browser-capture-unit-tests/node.tap"
       - name: Install exact approved locked browser tooling
         timeout-minutes: 4
         working-directory: .capture-approved/frontend
@@ -55,7 +56,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-capture-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          name: browser-capture-causal-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/browser-capture-unit-tests/
             ${{ runner.temp }}/browser-capture-diagnostic/

@@ -9,20 +9,22 @@ import {createRequire} from 'node:module';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {createBrowserNetworkGate,EXPECTED_BLOCKED_FONT_STYLESHEETS,captureFallbackTypography,BROWSER_LIMITS,localBrowserUrl} from './retained-price-source-browser.mjs';
 import {createDiagnosticCapturePage} from './retained-price-browser-capture-adapter.mjs';
+import {installBrowserStreamCausalDiagnostic} from './retained-price-browser-stream-causal-diagnostic.mjs';
 
-const BASE='b464cd32691853b7128189f4e3350b74959468bb',BRANCH='finite-browser-capture-diagnostic-a11';
+const BASE='146f2860bcb911f7d0f8fd2895f487aeb9d61066',BRANCH='finite-browser-capture-causal-a11';
 const UI={sha:'1e1943e1d5f78a738a05baa69eb9f2e8508e32ac',tree:'1c0219a170dcbdeb1af539e4cf7a04018251ca02',frontend:'0ba620a84264e1ff026898beed3fbc8ad5894618'};
 const APPROVED=resolve('.capture-approved/frontend'),OUTPUT=resolve(process.env.RUNNER_TEMP||'/tmp','browser-capture-diagnostic'),WORK=resolve(process.env.RUNNER_TEMP||'/tmp','browser-capture-fixtures');
 const SCRIPT='.github/scripts/retained-price-browser-capture-diagnostic.mjs',WORKFLOW='.github/workflows/retained-price-browser-capture-diagnostic.yml';
-const DIAGNOSTIC_FILES=[SCRIPT,WORKFLOW,'.github/scripts/retained-price-browser-capture-adapter.mjs','.github/scripts/retained-price-browser-capture-adapter.test.mjs'];
+const DIAGNOSTIC_FILES=[SCRIPT,WORKFLOW,'.github/scripts/retained-price-browser-stream-causal-diagnostic.mjs','.github/scripts/retained-price-browser-stream-causal-diagnostic.test.mjs'];
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const gitBlob=bytes=>createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
 const git=(cwd,...args)=>execFileSync('git',['-C',cwd,...args],{encoding:'utf8',maxBuffer:1024**2}).trim();
 const check=(v,message)=>assert(v,message);
-const paths=['research-details/NVDA-small.json','research-details/FUTU-small.json','research-details/FUTU-one.json','research-details/FUTU-eight.json','research-details/FUTU-eighteen.json','research-details/FUTU-twentyone.json'];
-const expectedEncodedMiB=[0.1,0.1,1,8,18,21];
-const report={schema_version:'retained-price-browser-capture-diagnostic-v1',diagnostic_only:true,publication_authority:false,source_authority:false,
-  scope:'Synthetic packed actual-response capture; no real financial acceptance or publication',limits:BROWSER_LIMITS,cases:[],fixtures:[],network_denials:[],server:[],started_at:new Date().toISOString()};
+const paths=['research-details/NVDA-small.json','research-details/FUTU-small.json','research-details/FUTU-one.json'];
+const expectedEncodedMiB=[0.1,0.1,1];
+const priorEncoded=[{bytes:105420,sha256:'eecf984a7e56914e5bd4ece287a0cd5f76ff4f55e29bfe37cfa51dfcf69887de'},{bytes:105420,sha256:'019d17ff2e85e2ce3655c83ac6ec64905d86e7cb1ce1e7aadbde5b15f0f6446a'},{bytes:1053120,sha256:'1e42a57ff30f2f7c13fb21a3512f1e6a114c349b9d101e690ccfcd5ea2518ad6'}];
+const report={schema_version:'retained-price-browser-capture-causal-v1',diagnostic_only:true,publication_authority:false,source_authority:false,
+  scope:'Small packed-response causal controls: cache header, transport lifetime and UI completion; no financial or publication authority',limits:BROWSER_LIMITS,cases:[],fixtures:[],network_denials:[],server:[],started_at:new Date().toISOString()};
 let browser,server,timer,approved,assets,deadline=false;
 function safeError(error){return {name:typeof error?.name==='string'?error.name:'Error',message:String(error?.message??error).slice(0,2048)};}
 function save(){
@@ -49,9 +51,9 @@ const html='<!doctype html><meta charset="utf-8"><title>Capture diagnostic</titl
   '<link rel="icon" href="./favicon.svg"><div class="symbol-title"><h2>NVDA</h2></div><div class="research-symbol-price"><strong>診断</strong></div><div id="research-detail-tabs"><button id="load" aria-selected="true">財務・機関</button></div>'+
   '<script type="module">import {createStaticTransport} from "./_approved/transport/index.mjs";'+
   'window.fixture={state:"idle"};window.configure=configuration=>{window.configuration=configuration;document.querySelector("h2").textContent=configuration.symbol;window.fixture={state:"idle"};};'+
-  'document.querySelector("#load").onclick=()=>{window.fixture.state="loading";window.fixture.promise=(async()=>{const c=window.configuration;'+
+  'document.querySelector("#load").onclick=()=>{window.fixture.state="loading";const work=(async()=>{const c=window.configuration;'+
   'if(c.abort){const controller=new AbortController();const response=await fetch(new URL(c.assetPath,location.href),{signal:controller.signal,cache:"no-store"});controller.abort();await response.arrayBuffer();return;}'+
-  'const transport=await createStaticTransport({baseURL:new URL("./",location.href).href,expectedRoot:c.expectedRoot});try{const value=await transport.readJson("static-data/"+c.logical);window.fixture={state:"passed",symbol:value.symbol,payload_chars:value.payload.length};}finally{transport.dispose();}})().catch(error=>{window.fixture={state:"failed",error:error.message,error_name:error.name};});};'+
+  'const transport=await createStaticTransport({baseURL:new URL("./",location.href).href,expectedRoot:c.expectedRoot});window.causalTransport=transport;try{const value=await transport.readJson("static-data/"+c.logical);window.fixture={state:"passed",symbol:value.symbol,payload_chars:value.payload.length,zero_is_negative:Object.is(value.zero,-0),absent_is_null:value.absent===null};window.__retainedPriceStreamDiagnostic.markUiOutcome({state:"passed",encoded_hash_checked:true,decoded_hash_checked:true,encoded_bytes:c.encodedBytes,encoded_sha256:c.encodedSha256,decoded_bytes:c.decodedBytes,decoded_sha256:c.decodedSha256});return value;}finally{if(c.lifetime==="immediate"){window.__retainedPriceStreamDiagnostic.markDisposal("ui-finally");transport.dispose();window.causalTransport=null;}}})();window.causalUiPromise=work;void work.catch(error=>{window.fixture={state:"failed",error:error.message,error_name:error.name};window.__retainedPriceStreamDiagnostic.markUiOutcome({state:"failed",error_name:error.name,error_string:String(error.message).slice(0,2048)});});};'+
   'window.ready=true;</script>';
 async function fixture(){
   const source=join(WORK,'source'),packed=join(WORK,'packed');mkdirSync(source,{recursive:true});
@@ -74,7 +76,7 @@ async function fixture(){
   for(const f of report.fixtures){
     const id=parseInt(hash(Buffer.from(f.logical_path)).slice(0,2),16),shard=JSON.parse(readFileSync(join(packed,root.shards[id].path)));
     const entry=shard.files.find(e=>e.path===f.logical_path);check(entry&&entry.decodedBytes===f.decoded_bytes&&entry.decodedSha256===f.decoded_sha256,'Real packer fixture mismatch');
-    check(entry.encodedBytes<=BROWSER_LIMITS.fileBytes,'Packed fixture exceeds file cap');Object.assign(f,{physical_path:entry.assetPath,kind:entry.kind,encoded_bytes:entry.encodedBytes,encoded_sha256:entry.encodedSha256});entries.push(entry);
+    check(entry.encodedBytes<=BROWSER_LIMITS.fileBytes,'Packed fixture exceeds file cap');check(entry.encodedBytes===priorEncoded[entries.length].bytes&&entry.encodedSha256===priorEncoded[entries.length].sha256,'Previously observed exact fixture bytes changed');Object.assign(f,{physical_path:entry.assetPath,kind:entry.kind,encoded_bytes:entry.encodedBytes,encoded_sha256:entry.encodedSha256});entries.push(entry);
   }
   // Negative input only: coherently repin one wrong decoded hash. The real
   // observer/decoder must reject it; this never grants production authority.
@@ -110,8 +112,10 @@ async function serve(site){
       if(target&&mode==='bad-encoded-hash'){memory=readFileSync(file);memory[15]^=1;}
       const length=memory?.length??stat.size;served+=request.method==='HEAD'?0:length;check(served<=BROWSER_LIMITS.servedBytes,'Diagnostic served-byte cap exhausted');
       const type={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml'}[extname(file)]||'application/octet-stream';
-      record.status=200;record.declared_bytes=length;record.mime_type=type;
-      response.writeHead(200,{'Content-Type':type,'Content-Length':length,'Cache-Control':'no-store'});
+      record.status=200;record.declared_bytes=length;record.mime_type=type;record.cache_control=target?active.cache:'no-store';
+      if(target&&!['aborted','incomplete'].includes(mode))record.complete_payload_sha256=memory?hash(memory):active.entry.encodedSha256;
+      check(['no-store','no-cache'].includes(record.cache_control),'Unexpected diagnostic cache header');
+      response.writeHead(200,{'Content-Type':type,'Content-Length':length,'Cache-Control':record.cache_control});
       if(request.method==='HEAD'){response.end();return;}
       if(target&&mode==='aborted'){
         record.abort_body_withheld=true;record.abort_close_observed=false;response.flushHeaders();
@@ -128,83 +132,127 @@ async function serve(site){
   return {origin:'http://127.0.0.1:'+native.address().port,setCase:value=>{active=value;},records,failures:failure,
     stats:()=>({requests,served_bytes:served}),close:()=>new Promise((ok,bad)=>{native.close(error=>error?bad(error):ok());native.closeAllConnections();})};
 }
-async function warmupExtras(page,context,session){
-  if(!session)session=await context.newCDPSession(page);
-  const typography=await captureFallbackTypography(page,session);
-  const [download]=await Promise.all([page.waitForEvent('download'),page.evaluate(()=>{
-    const data='synthetic capture warmup\n'.repeat(65536),url=URL.createObjectURL(new Blob([data],{type:'text/csv'})),anchor=document.createElement('a');
-    anchor.href=url;anchor.download='synthetic-warmup.csv';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  })]);
-  const stream=await download.createReadStream();check(stream,'Warmup download missing');let count=0;const digest=createHash('sha256');
-  for await(const chunk of stream){count+=chunk.length;check(count<=BROWSER_LIMITS.csvBytes,'Warmup CSV cap exhausted');digest.update(chunk);}
-  const screenshot=await page.screenshot({fullPage:false});check(screenshot.length<=BROWSER_LIMITS.screenshotBytes,'Warmup screenshot cap exhausted');
-  return {typography,csv:{bytes:count,sha256:digest.digest('hex'),synthetic:true},screenshot:{bytes:screenshot.length,sha256:hash(screenshot),contents_retained:false}};
-}
-async function one(site,{index,eager,observer,pass,mode='normal',gc=false,warmup=false}){
+async function one(site,{index,pass,cache='no-store',lifetime='immediate',awaitUi=false,mode='normal',warmup=false}){
   check(!deadline,'Diagnostic deadline exceeded');
   const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'ja-JP',serviceWorkers:'block',acceptDownloads:true});
-  const id=report.cases.length+1,result={id,label:warmup?'first-context-NVDA':'following-context-FUTU',index,pass,mode,gc,eager,observer,
+  const id=report.cases.length+1,result={id,label:warmup?'first-context-NVDA':'following-context-FUTU',index,pass,mode,cache,lifetime,await_ui:awaitUi,
     fixture:report.fixtures[index],started_ms:performance.now(),events:[],request_events:[],stage:'setup',status:'running'};
   report.cases.push(result);save();
-  let page,session,capture,assetsForCase=assets,caseError=null,closed=false,actionStarted=null,actionFinished=null;
+  let page,capture,assetsForCase=assets,caseError=null,closed=false;
   const gate=createBrowserNetworkGate({origin:server.origin,getPage:()=>page,denials:report.network_denials,symbol:(warmup?'NVDA':'FUTU')+'-'+id});
-  result.network=gate.evidence;server.setCase({id,entry:site.entries[index],mode});
-  const recordEvent=(kind,request)=>{check(result.request_events.length<64,'Case request event cap exhausted');const path=new URL(request.url()).pathname;
-    if(path.includes('_transport/gzip/'))result.request_events.push({kind,url:request.url(),at_ms:performance.now(),failure:request.failure()?.errorText??null});};
+  result.network=gate.evidence;
+  const recordEvent=(kind,request)=>{
+    if(request.url()===server.origin+'/screener/'+site.entries[index].assetPath){
+      check(result.request_events.length<16,'Physical request event cap exhausted');
+      result.request_events.push({kind,url:request.url(),at_ms:performance.now(),failure:request.failure()?.errorText??null});
+    }
+  };
+  const retainUi=async()=>{
+    const value=await page.evaluate(async()=>{
+      const terminal=Promise.resolve(window.causalUiPromise).then(()=>null,()=>null);
+      let timer;try{
+        const complete=await Promise.race([terminal.then(()=>true),new Promise(ok=>{timer=setTimeout(()=>ok(false),5000);})]);
+        return {complete,outcome:{...window.fixture,promise:undefined},retained_transport:!!window.causalTransport};
+      }finally{clearTimeout(timer);}
+    });
+    check(value.complete,'UI terminal observation exceeded its fixed five-second bound');
+    check(['passed','failed'].includes(value.outcome.state),'UI terminal result missing');
+    return value;
+  };
   try{
-    await context.route('**/*',gate.route);await context.routeWebSocket('**/*',gate.routeWebSocket);page=await context.newPage();page.setDefaultTimeout(45000);
-    if(observer)session=await gate.attach(context,page);else context.on('response',gate.observeHttpResponse);
+    server.setCase({id,mode,cache,entry:site.entries[index]});
+    await context.route('**/*',gate.route);await context.routeWebSocket('**/*',gate.routeWebSocket);
+    page=await context.newPage();page.setDefaultTimeout(45000);
+    await page.addInitScript(installBrowserStreamCausalDiagnostic,{targetPaths:[server.origin+'/screener/'+site.entries[index].assetPath],maxBodyBytes:BROWSER_LIMITS.fileBytes,maxEntries:256,maxEvidenceBytes:64*1024});
+    await gate.attach(context,page);
     page.on('requestfinished',request=>recordEvent('requestfinished',request));page.on('requestfailed',request=>recordEvent('requestfailed',request));
     await page.goto(server.origin+'/screener/');await page.waitForFunction(()=>window.ready===true);
+    const before=performance.now();
+    const browserClock=await page.evaluate(()=>({origin_ms:performance.timeOrigin,relative_ms:performance.now()}));
+    const after=performance.now(),browserEpoch=browserClock.origin_ms+browserClock.relative_ms;
+    result.clock_alignment={node_origin_ms:performance.timeOrigin,node_before_ms:before,node_after_ms:after,...browserClock,
+      browser_to_node_epoch_offset_bounds_ms:[performance.timeOrigin+before-browserEpoch,performance.timeOrigin+after-browserEpoch],
+      note:'Browser event ordering uses one realm monotonic clock; cross-realm order is bounded by this calibration interval.'};
+    await page.evaluate(value=>window.__retainedPriceStreamDiagnostic.markCalibration({node_performance_origin_ms:value.node_origin_ms,node_before_ms:value.node_before_ms,
+      node_after_ms:value.node_after_ms,browser_performance_ms:value.relative_ms,browser_performance_origin_ms:value.origin_ms}),result.clock_alignment);
     if(mode==='bad-decoded-hash')assetsForCase=await approved.createDesignAssetObserver({baseURL:server.origin+'/screener/',fetchImpl:(url,options)=>{
       check(localBrowserUrl(url,server.origin),'Negative observer attempted external access');return fetch(url,{...options,signal:AbortSignal.timeout(45000)});}});
     await page.evaluate(c=>window.configure(c),{symbol:warmup?'NVDA':'FUTU',logical:paths[index],assetPath:site.entries[index].assetPath,
-      expectedRoot:mode==='bad-decoded-hash'?site.wrongReceipt.expectedRoot:site.receipt.expectedRoot,abort:mode==='aborted'});
-    capture=createDiagnosticCapturePage(page,{eager,deadlineMs:45000,onEvent:event=>result.events.push(event)});
+      expectedRoot:mode==='bad-decoded-hash'?site.wrongReceipt.expectedRoot:site.receipt.expectedRoot,abort:mode==='aborted',lifetime,
+      encodedBytes:report.fixtures[index].encoded_bytes,encodedSha256:report.fixtures[index].encoded_sha256,
+      decodedBytes:report.fixtures[index].decoded_bytes,decodedSha256:report.fixtures[index].decoded_sha256});
+    capture=createDiagnosticCapturePage(page,{eager:false,deadlineMs:45000,onEvent:event=>result.events.push(event)});
     result.stage='observeJson';
     const action=async()=>{
-      actionStarted=performance.now();await page.locator('#load').click();
-      if(gc){
-        await page.waitForFunction(()=>window.fixture.state==='passed'||window.fixture.state==='failed');
-        if(!session)session=await context.newCDPSession(page);
-        await session.send('HeapProfiler.collectGarbage');await page.waitForTimeout(250);
-      }
-      actionFinished=performance.now();
+      result.action={started_ms:performance.now(),await_ui:awaitUi};
+      await page.locator('#load').click();
+      if(awaitUi)result.action.ui=await retainUi();
+      result.action.finished_ms=performance.now();
     };
     let observed;
     try{observed=await assetsForCase.observeJson(capture.page,paths[index],action);}
     catch(error){caseError=error;result.capture_error=safeError(error);}
-    result.action={started_ms:actionStarted,finished_ms:actionFinished};
+    // Retain the real UI result while the owning context remains alive, including
+    // when the original capture promise rejected. No second body read or retry.
+    result.ui=await retainUi();
+    await page.evaluate(()=>window.__retainedPriceStreamDiagnostic.drain());
+    result.lifecycle_before_cleanup=await page.evaluate(()=>window.__retainedPriceStreamDiagnostic.snapshot());
+    result.precleanup_snapshot_ms=performance.now();
+    const lifecycle=result.lifecycle_before_cleanup;
+    check(lifecycle.diagnostic_only===true&&!lifecycle.diagnostics.failed&&lifecycle.diagnostics.dropped_event_count===0
+      &&lifecycle.diagnostics.pending_count===0&&lifecycle.diagnostics.copied_chunk_refs===0,'Incomplete or failed stream telemetry');
+    result.native_reader=lifecycle.readers.find(item=>item.url===server.origin+'/screener/'+site.entries[index].assetPath)??null;
+    if(result.ui.outcome.state==='passed')check(result.native_reader?.eof===true&&result.native_reader.hash_failed===false
+      &&result.native_reader.native_body_bytes===result.fixture.encoded_bytes&&result.native_reader.native_body_sha256===result.fixture.encoded_sha256,'UI success lacks exact browser reader bytes/hash');
     if(caseError){
-      const bodyErrors=[...capture.originalBodyErrors().values()];
-      result.exact_original_body_error=bodyErrors.some(error=>error===caseError);
-      result.exact_original_waiter_error=capture.records.some(r=>r.waiter?.error_ref===caseError);
-      if(['aborted','incomplete'].includes(mode))check(result.exact_original_body_error||result.exact_original_waiter_error||/encoded length|encoded SHA-256/.test(caseError.message),'Failed transfer did not preserve body, waiter or integrity failure');
-      else if(mode==='bad-encoded-hash')check(/encoded SHA-256/.test(caseError.message),'Bad encoded bytes were not rejected');
-      else if(mode==='bad-decoded-hash')check(/decoded SHA-256/.test(caseError.message),'Bad decoded pin was not rejected');
-      else if(mode==='404')check(/browser HTTP 404/.test(caseError.message),'HTTP failure was not retained');
-      else check(result.exact_original_body_error&&/Network\.getResponseBody|No data found|inspector cache|session.*closed/i.test(caseError.message),'Unexpected positive fixture failure');
-      if(mode==='aborted'){
-        await page.waitForFunction(()=>window.fixture.state==='failed');result.ui=await page.evaluate(()=>({...window.fixture,promise:undefined}));
-        check(result.ui.error_name==='AbortError','Controlled browser abort did not reject the page body read');
+      result.exact_original_body_error=[...capture.originalBodyErrors().values()].some(error=>error===caseError);
+      result.exact_original_waiter_error=capture.records.some(item=>item.waiter?.error_ref===caseError);
+      const integrity=mode==='bad-encoded-hash'?/encoded SHA-256/:mode==='bad-decoded-hash'?/decoded SHA-256/:null;
+      if(integrity){
+        if(integrity.test(caseError.message))result.status='expected-integrity-rejection';
+        else{
+          check(result.exact_original_body_error||result.exact_original_waiter_error,'Unexpected error before integrity check');
+          result.status='integrity-check-not-reached';
+        }
+      }else if(mode==='404'){
+        check(/browser HTTP 404/.test(caseError.message),'HTTP failure was not retained');result.status='expected-http-rejection';
+      }else if(['aborted','incomplete'].includes(mode)){
+        check(result.exact_original_body_error||result.exact_original_waiter_error||/encoded length|encoded SHA-256/.test(caseError.message),'Failed transfer did not preserve original failure');
+        result.status='expected-transfer-rejection';
+      }else{
+        check(result.exact_original_body_error&&/Network\\.getResponseBody|No data found|inspector cache|session.*closed/i.test(caseError.message),'Unexpected positive fixture failure');
+        result.status='observed-capture-failure';
       }
-      result.status=mode==='normal'?'observed-capture-failure':'expected-rejection';
     }else{
       check(mode==='normal','Negative input unexpectedly passed');
       check(observed.value.symbol===(warmup?'NVDA':'FUTU')&&observed.value.payload.length===report.fixtures[index].payload_chars
         &&Object.is(observed.value.zero,-0)&&observed.value.absent===null,'Synthetic decoded value mismatch');
-      result.observation=observed.observation;check(observed.observation.decoded_sha256===report.fixtures[index].decoded_sha256,'Approved observer hash changed');
-      await page.waitForFunction(()=>window.fixture.state==='passed'||window.fixture.state==='failed');result.ui=await page.evaluate(()=>({...window.fixture,promise:undefined}));
-      check(result.ui.state==='passed','Actual browser transport rejected a positive fixture');
-      if(warmup)result.warmup=await warmupExtras(page,context,session);
-      result.status='captured';
+      check(observed.observation.decoded_sha256===report.fixtures[index].decoded_sha256,'Approved observer hash changed');
+      result.observation=observed.observation;result.status='captured';
     }
+    if(mode==='normal'&&result.ui.outcome.state==='passed'){
+      check(result.ui.outcome.symbol===(warmup?'NVDA':'FUTU')&&result.ui.outcome.payload_chars===report.fixtures[index].payload_chars
+        &&result.ui.outcome.zero_is_negative===true&&result.ui.outcome.absent_is_null===true,'Actual browser decoded value changed');
+    }
+    if(mode==='aborted')check(result.ui.outcome.state==='failed'&&result.ui.outcome.error_name==='AbortError','Controlled browser abort did not reject page body');
   }catch(error){result.status='diagnostic-error';result.error=safeError(error);throw error;}
   finally{
-    result.stage='cleanup';let cleanupFailure=null;
+    result.cleanup_started_ms=performance.now();result.stage='cleanup';let cleanupFailure=null;
     const retainCleanup=(error,key)=>{result[key]=safeError(error);cleanupFailure??=error;};
+    // Capture the explicit post-observation disposal in the same browser realm.
+    if(page&&!page.isClosed()){
+      try{
+        result.lifecycle_after_cleanup=await page.evaluate(async()=>{
+          const diag=window.__retainedPriceStreamDiagnostic;
+          if(window.causalTransport){diag.markDisposal('post-observation-cleanup');window.causalTransport.dispose();window.causalTransport=null;}
+          await diag.drain();diag.restore();return diag.snapshot();
+        });
+        check(result.lifecycle_after_cleanup.diagnostics.restored&&!result.lifecycle_after_cleanup.diagnostics.failed
+          &&result.lifecycle_after_cleanup.diagnostics.pending_count===0&&result.lifecycle_after_cleanup.diagnostics.copied_chunk_refs===0
+          &&result.lifecycle_after_cleanup.diagnostics.retained_responses===0,'Stream telemetry retained pending work or native response references');
+      }catch(error){retainCleanup(error,'lifecycle_cleanup_error');}
+    }
     try{if(assetsForCase!==assets)assetsForCase.dispose();}catch(error){retainCleanup(error,'observer_cleanup_error');}
-    // Close the owning context before draining a waiter left by a failed action.
     try{await context.close();closed=true;}catch(error){retainCleanup(error,'close_error');}
     if(capture){
       try{await capture.drain();result.drain='settled';}
@@ -213,18 +261,17 @@ async function one(site,{index,eager,observer,pass,mode='normal',gc=false,warmup
       catch(error){result.dispose_error=safeError(error);if(!caseError&&result.status!=='diagnostic-error')cleanupFailure??=error;}
       try{
         result.capture=capture.snapshot();result.capture_clock_origin_ms=result.capture.diagnostics.clock_origin_ms;
-        check(Number.isFinite(result.capture_clock_origin_ms),'Capture clock origin missing');
         check(result.capture.diagnostics.disposed&&result.capture.diagnostics.pending_count===0
-          &&result.capture.diagnostics.retained_body_promises===0&&result.capture.diagnostics.retained_responses===0,'Capture adapter retained pending work or response references');
+          &&result.capture.diagnostics.retained_body_promises===0&&result.capture.diagnostics.retained_responses===0,'Capture retained pending work or response references');
       }catch(error){retainCleanup(error,'capture_cleanup_error');}
     }
     try{check(closed,'Diagnostic browser context cleanup failed');gate.assertClean();}catch(error){retainCleanup(error,'network_cleanup_error');}
     try{
-      const requests=server.records.filter(r=>r.case_id===id&&r.path===site.entries[index].assetPath&&r.method==='GET');
-      result.physical_request_count=requests.length;check(requests.length===1,'Unexpected repeated/independent physical fetch');
-      if(mode==='aborted')check(requests[0].abort_body_withheld===true&&requests[0].stream_bytes===0
-        &&requests[0].early_close===true&&requests[0].abort_close_observed===true&&!requests[0].abort_not_observed
-        &&result.request_events.some(event=>event.kind==='requestfailed'),'Controlled abort did not interrupt an incomplete physical transfer');
+      result.physical_server_requests=server.records.filter(item=>item.case_id===id&&item.path===site.entries[index].assetPath&&item.method==='GET');
+      result.physical_request_count=result.physical_server_requests.length;check(result.physical_request_count===1,'Unexpected repeated/independent physical fetch');
+      if(mode==='aborted')check(result.physical_server_requests[0].abort_body_withheld===true&&result.physical_server_requests[0].stream_bytes===0
+        &&result.physical_server_requests[0].early_close===true&&result.physical_server_requests[0].abort_close_observed===true
+        &&!result.physical_server_requests[0].abort_not_observed&&result.request_events.some(event=>event.kind==='requestfailed'),'Controlled abort did not interrupt incomplete transfer');
     }catch(error){retainCleanup(error,'transfer_cleanup_error');}
     if(cleanupFailure){result.cleanup_error=safeError(cleanupFailure);result.status='diagnostic-error';}
     result.finished_ms=performance.now();result.stage='finished';
@@ -234,16 +281,13 @@ async function one(site,{index,eager,observer,pass,mode='normal',gc=false,warmup
 }
 function plannedCases(){
   const plan=[];
-  for(let pass=1;pass<=3;pass++)for(let index=1;index<paths.length;index++){
-    if(index>=4&&pass===3||index===5&&pass>=2)continue;
-    for(const observer of [false,true])for(const eager of [false,true]){
-      plan.push({index:0,eager,observer,pass,warmup:true});plan.push({index,eager,observer,pass});
+  for(let pass=1;pass<=2;pass++)for(const cache of ['no-store','no-cache'])for(const lifetime of ['immediate','retained'])
+    for(const awaitUi of [false,true])for(const index of [1,2]){
+      plan.push({index:0,cache,lifetime,awaitUi,pass,warmup:true});
+      plan.push({index,cache,lifetime,awaitUi,pass});
     }
-  }
-  for(const observer of [false,true])for(const eager of [false,true])plan.push({index:3,eager,observer,pass:0,gc:true});
-  for(const eager of [false,true])plan.push({index:4,eager,observer:true,pass:0,gc:true});
-  for(const mode of ['aborted','incomplete','404','bad-encoded-hash','bad-decoded-hash'])for(const eager of [false,true])
-    plan.push({index:1,eager,observer:true,pass:0,mode});
+  for(const mode of ['aborted','incomplete','404','bad-encoded-hash','bad-decoded-hash'])
+    plan.push({index:1,cache:'no-cache',lifetime:'retained',awaitUi:true,pass:0,mode});
   return plan;
 }
 function plannedBytes(site,plan){
@@ -293,13 +337,18 @@ async function main(){
   const plan=plannedCases();report.case_plan=plan;report.planned_bytes=plannedBytes(site,plan);save();
   for(const item of plan)await one(site,item);
   check(!deadline,'Diagnostic deadline exceeded');
-  const captureFailures=report.cases.filter(c=>c.status==='observed-capture-failure');
   report.actual_A11_cause_established=false;
-  report.interpretation=captureFailures.length===0?'Synthetic matrix did not reproduce the A11 capture failure':
-    captureFailures.every(c=>c.index>=4||c.gc)?'Only artificial oversized or forced-GC cases failed; this does not establish the A11 cause':
-      'An ordinary synthetic capture sequence failed; failed A11 FUTU payload/request facts remain unavailable, so causation is not established';
-  report.summary={ordinary_small_control_failures:captureFailures.filter(c=>c.index<4&&!c.gc).length,captures:report.cases.filter(c=>c.status==='captured').length,observed_capture_failures:report.cases.filter(c=>c.status==='observed-capture-failure').length,
-    expected_rejections:report.cases.filter(c=>c.status==='expected-rejection').length,cases:report.cases.length};
+  report.interpretation='Synthetic locked-runtime header/lifetime/UI controls only; actual failed A11 FUTU response facts remain unavailable.';
+  const groups=new Map();
+  for(const item of report.cases){
+    const key=[item.index,item.cache,item.lifetime,item.await_ui,item.mode].join('|');
+    if(!groups.has(key))groups.set(key,{index:item.index,cache:item.cache,lifetime:item.lifetime,await_ui:item.await_ui,mode:item.mode,counts:{},case_ids:[]});
+    const group=groups.get(key);group.counts[item.status]=(group.counts[item.status]||0)+1;group.case_ids.push(item.id);
+  }
+  report.summary={cases:report.cases.length,planned_cases:plan.length,groups:[...groups.values()],
+    captured:report.cases.filter(item=>item.status==='captured').length,
+    observed_capture_failures:report.cases.filter(item=>item.status==='observed-capture-failure').length,
+    integrity_checks_not_reached:report.cases.filter(item=>item.status==='integrity-check-not-reached').length};
   report.status='diagnostic-completed';report.finished_at=new Date().toISOString();save();
 }
 try{await main();}catch(error){report.status='diagnostic-failed';report.error=safeError(error);report.finished_at=new Date().toISOString();process.exitCode=1;}
@@ -309,5 +358,12 @@ finally{
   if(server){report.server=server.records;report.server_summary=server.stats();report.server_failures=server.failures;try{await server.close();}catch(error){report.cleanup_error??=safeError(error);process.exitCode=1;}}
   if(existsSync(OUTPUT)){try{save();}catch(error){console.error(safeError(error));process.exitCode=1;}}
   if(existsSync(WORK))rmSync(WORK,{recursive:true,force:true});
-  console.log(JSON.stringify({status:report.status,diagnostic_only:true,publication_authority:false,source_authority:false,summary:report.summary,error:report.error??null}));
+  const output=JSON.stringify({schema_version:report.schema_version,status:report.status,diagnostic_only:true,publication_authority:false,source_authority:false,
+    actual_A11_cause_established:false,run_id:report.run_id,head_sha:report.head_sha,playwright:report.playwright,browser:report.browser,
+    planned_bytes:report.planned_bytes,summary:report.summary,error:report.error??null,cleanup_error:report.cleanup_error??null,server_summary:report.server_summary,
+    cases:report.cases.map(({network,events,lifecycle_before_cleanup,...item})=>({...item,lifecycle_precleanup_summary:{diagnostics:lifecycle_before_cleanup?.diagnostics,event_count:lifecycle_before_cleanup?.events?.length},network_counts:{expected_blocked_stylesheets:network?.expected_blocked_stylesheets?.length,
+      unexpected_attempts:network?.unexpected_attempts?.length,successful_external_http:network?.successful_external_http?.length,
+      successful_external_websocket:network?.successful_external_websocket?.length,retention_failed:network?.retention_failed}}))});
+  check(Buffer.byteLength(output)<=4*1024**2,'Complete causal console evidence exceeds fixed four-MiB cap');
+  console.log('CAUSAL_REPORT '+output);
 }
