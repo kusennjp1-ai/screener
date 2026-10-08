@@ -1,0 +1,73 @@
+name: Retained Price Blocked Font Diagnostic
+
+on:
+  push:
+    branches: [preview/retained-price-font-diagnostic]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retained-price-font-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  blocked-fonts:
+    name: Check exact blocked imports with real Chromium
+    if: github.event_name == 'push' && github.ref == 'refs/heads/preview/retained-price-font-diagnostic' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ''
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Read only the exact public approved CSS and browser lock
+        uses: actions/checkout@v4
+        with:
+          ref: 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          path: approved-ui
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /frontend/package.json
+            /frontend/package-lock.json
+            /frontend/src/index.css
+            /frontend/src/static/theme/foundation.css
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+
+      - name: Install only the existing locked browser runtime
+        timeout-minutes: 8
+        run: npm ci --prefix approved-ui/frontend --ignore-scripts --no-audit --no-fund
+
+      - name: Install the exact lockfile Chromium and platform fonts
+        timeout-minutes: 5
+        run: approved-ui/frontend/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Preserve all old browser tests and run pure negative cases
+        timeout-minutes: 1
+        run: node --test --test-concurrency=1 .github/scripts/retained-price-source-browser.test.mjs
+
+      - name: Prove real abort metadata, Blob CSV and platform fallback geometry
+        timeout-minutes: 3
+        run: timeout 150s node .github/scripts/retained-price-font-diagnostic.mjs
+
+      - name: Retain synthetic diagnostic evidence only
+        if: always()
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: retained-price-font-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/retained-price-font-diagnostic/
+          retention-days: 2
+          if-no-files-found: error
+          compression-level: 6
