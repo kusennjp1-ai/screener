@@ -393,38 +393,60 @@ class DailyPriceBundleService:
 
         bundle_rows = payload.get("rows") or []
         batch_data: dict[str, pd.DataFrame] = {}
-        imported_rows = 0
-        for row in bundle_rows:
+        rejected: dict[str, str] = {}
+        seen_symbols: set[str] = set()
+        submitted_rows = 0
+        for index, row in enumerate(bundle_rows):
+            if not isinstance(row, dict):
+                rejected[f"row:{index}"] = "invalid_bundle_row"
+                continue
             symbol = str(row.get("symbol") or "").strip().upper()
             prices = row.get("prices") or []
-            if not symbol or not prices:
+            submitted_rows += len(prices) if isinstance(prices, list) else 0
+            if not symbol:
+                rejected[f"row:{index}"] = "missing_symbol"
                 continue
-            batch_data[symbol] = self._build_batch_dataframe(prices)
-            imported_rows += len(prices)
+            if symbol in seen_symbols:
+                rejected[symbol] = "duplicate_bundle_symbol"
+                batch_data.pop(symbol, None)
+                continue
+            seen_symbols.add(symbol)
+            if not isinstance(prices, list) or not prices:
+                rejected[symbol] = "empty_or_invalid_history"
+                continue
+            try:
+                batch_data[symbol] = self._build_batch_dataframe(prices)
+            except Exception as exc:
+                rejected[symbol] = f"row_preparation_failed:{type(exc).__name__}"
 
-        if batch_data:
-            for chunk_start in range(0, len(batch_data), 100):
-                chunk_symbols = list(batch_data.keys())[chunk_start:chunk_start + 100]
-                self.price_cache._store_batch_in_database(  # noqa: SLF001 - intentional import path reuse
-                    {symbol: batch_data[symbol] for symbol in chunk_symbols}
-                )
+        persisted_symbols: list[str] = []
+        imported_rows = 0
+        accepted_symbols: list[str] = []
+        input_symbols = list(batch_data)
+        for chunk_start in range(0, len(input_symbols), 100):
+            chunk_symbols = input_symbols[chunk_start:chunk_start + 100]
+            receipt = self.price_cache.persist_price_batch(
+                {symbol: batch_data[symbol] for symbol in chunk_symbols}
+            )
+            accepted_symbols.extend(receipt.accepted_symbols)
+            persisted_symbols.extend(receipt.persisted_symbols)
+            imported_rows += receipt.persisted_rows
+            rejected.update(receipt.rejected_symbols)
 
         redis_target = (
             settings.github_daily_price_redis_warm_symbols
-            if warm_redis_symbols is None
-            else warm_redis_symbols
+            if warm_redis_symbols is None else warm_redis_symbols
         )
         redis_warmed_symbols = 0
-        # Bundles currently ship 2y bars. Avoid overwriting the standard 5y
-        # Redis cache entries with truncated history during import.
-        if redis_target and batch_data and bar_period == "5y":
+        # Preserve the existing 2y/5y warmup boundary.
+        if redis_target and persisted_symbols and bar_period == "5y":
             warm_symbols = [
                 row.symbol
                 for row in (
                     db.query(StockUniverse)
                     .filter(
                         StockUniverse.market == market,
-                        StockUniverse.symbol.in_(list(batch_data)),
+                        StockUniverse.symbol.in_(persisted_symbols),
                     )
                     .order_by(StockUniverse.market_cap.desc().nullslast())
                     .limit(int(redis_target))
@@ -437,23 +459,55 @@ class DailyPriceBundleService:
                     also_store_db=False,
                 )
 
-        sync_state = self._upsert_import_state(
-            db,
-            market=market,
-            source_revision=str(payload.get("source_revision") or ""),
-            as_of_date=as_of_date.isoformat(),
-            symbol_count=int(payload.get("symbol_count") or len(batch_data)),
-            bar_period=bar_period,
+        complete = (
+            not rejected
+            and len(persisted_symbols) == len(bundle_rows)
+            and imported_rows == submitted_rows
+            and bool(bundle_rows)
         )
-
+        target_session_symbols: set[str] = set()
+        requested_symbols = sorted(seen_symbols)
+        for offset in range(0, len(requested_symbols), 500):
+            rows = (
+                db.query(StockPrice.symbol)
+                .filter(
+                    StockPrice.symbol.in_(requested_symbols[offset:offset + 500]),
+                    StockPrice.date == as_of_date,
+                )
+                .distinct()
+                .all()
+            )
+            target_session_symbols.update(symbol for symbol, in rows)
+        previous_state = self.get_import_state(db, market) or {}
+        if complete:
+            self._upsert_import_state(
+                db,
+                market=market,
+                source_revision=str(payload.get("source_revision") or ""),
+                as_of_date=as_of_date.isoformat(),
+                symbol_count=len(persisted_symbols),
+                bar_period=bar_period,
+            )
         return {
+            "status": "success" if complete else "partial",
             "market": market,
             "as_of_date": as_of_date.isoformat(),
-            "source_revision": sync_state["source_revision"],
+            "source_revision": str(payload.get("source_revision") or ""),
+            "previous_source_revision": previous_state.get("source_revision"),
             "bar_period": bar_period,
-            "symbol_count": int(payload.get("symbol_count") or len(batch_data)),
-            "imported_symbols": len(batch_data),
+            "symbol_count": int(payload.get("symbol_count") or len(bundle_rows)),
+            "submitted_symbols": len(bundle_rows),
+            "submitted_rows": submitted_rows,
+            "accepted_symbols": len(accepted_symbols),
+            "imported_symbols": len(persisted_symbols),
             "imported_rows": imported_rows,
+            "persisted_symbols": persisted_symbols,
+            "rejected_symbols": rejected,
+            "import_state_advanced": complete,
+            "target_session_symbols": len(target_session_symbols),
+            "missing_target_symbols": [
+                symbol for symbol in requested_symbols if symbol not in target_session_symbols
+            ],
             "redis_warmed_symbols": redis_warmed_symbols,
         }
 

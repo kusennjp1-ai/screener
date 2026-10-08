@@ -41,6 +41,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+
       - name: Install dependencies
         run: pip install -r backend/requirements.txt -r backend/requirements-test.txt
 
@@ -53,6 +57,41 @@ jobs:
         env:
           LITELLM_LOCAL_MODEL_COST_MAP: 'true'
         run: python -m pytest tests/unit/test_authoritative_price_history.py tests/unit/test_benchmark_cache_service.py tests/unit/infra/test_stock_data_provider.py tests/unit/scanners/test_data_prep_cached_only.py tests/unit/test_market_regime_scan_wiring.py tests/unit/test_price_history_integrity.py tests/unit/test_cache_refresh_unification.py tests/unit/test_price_cache_warmup_store.py tests/unit/test_yahoo_batch_ingestion.py tests/unit/test_rate_budget_policy.py -q
+
+      - name: Ordinary price-session export and compiler contracts
+        id: price-session-contract
+        timeout-minutes: 8
+        working-directory: backend
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+          STOCKSCANNER_TEST_ALLOW_POSTGRES: '0'
+          STOCKSCANNER_TEST_USE_DATABASE_URL: '0'
+          STOCKSCANNER_TEST_ALLOW_SQLITE: '1'
+          DATABASE_URL: sqlite://
+          STATIC_SITE_CODE33: '0'
+        run: |
+          set -euo pipefail
+          python -m pytest \
+            tests/unit/test_export_static_site_script.py \
+            tests/unit/test_static_daily_price_refresh_service.py \
+            tests/unit/test_daily_price_bundle_service.py \
+            tests/unit/test_static_price_session_audit.py \
+            tests/unit/test_price_session_ordinary_source_integration.py \
+            -q -s --junitxml="$RUNNER_TEMP/backend-price-session-contract.xml"
+          python - <<'PY'
+          import json, os, pathlib, xml.etree.ElementTree as ET
+          root = ET.parse(pathlib.Path(os.environ["RUNNER_TEMP"]) / "backend-price-session-contract.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert cases, "No price-session contract cases executed"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "Price-session contracts failed"
+          parity = [case for case in cases if case.get("name") == "test_exact_approved_javascript_audit_and_liquid_predicate_parity"]
+          assert len(parity) == 1 and all(parity[0].find(tag) is None for tag in ("skipped", "failure", "error")), "Approved-JS parity did not execute and pass"
+          expected = {f"test_ordinary_price_session_compiler_contract[{case}]" for case in ("later-missing", "later-duplicate", "same-missing", "same-duplicate")}
+          integration = [case for case in cases if case.get("name", "").startswith("test_ordinary_price_session_compiler_contract[")]
+          assert len(integration) == 4 and {case.get("name") for case in integration} == expected, "Ordinary compiler cases did not execute exactly"
+          assert all(case.find(tag) is None for case in integration for tag in ("skipped", "failure", "error")), "Ordinary compiler case failed or skipped"
+          print(json.dumps({"price_session_contracts":len(cases),"approved_js_parity":"passed","compiler_integration_cases":len(integration),"actual_data_proof":False,"publication_authority":False}))
+          PY
 
       - name: US close timing and source promotion regression
         working-directory: backend
@@ -182,7 +221,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p test_run_postcapture_pages_rehearsal.py
           node --test --test-concurrency=2 .github/scripts/verify-postcapture-correction-source.test.mjs .github/scripts/financial-postcapture-renewal.test.mjs .github/scripts/financial-audit-history.test.mjs .github/scripts/financial-source-renewal.test.mjs .github/scripts/financial-source-renewal-certification.test.mjs .github/scripts/financial-renewal-evaluation.test.mjs .github/scripts/immutable-github-api.test.mjs .github/scripts/financial-renewal-quota.test.mjs .github/scripts/postcapture-rehearsal-checkpoint.test.mjs .github/scripts/restore-postcapture-pages-rehearsal.test.mjs .github/scripts/financial-renewal-ci-admission.test.mjs .github/scripts/financial-renewal-ci-routing.test.mjs .github/scripts/financial-renewal-consumer-transition.test.mjs .github/scripts/financial-renewal-baseline.test.mjs .github/scripts/financial-performance-exception.test.mjs .github/scripts/financial-performance-exception-v2.test.mjs .github/scripts/financial-performance-lifecycle.test.mjs .github/scripts/financial-performance-packed-carry.test.mjs .github/scripts/financial-correction.test.mjs .github/scripts/financial-candidate-preview.test.mjs .github/scripts/financial-candidate-preview-v2.test.mjs .github/scripts/financial-candidate-baseline.test.mjs .github/scripts/financial-preview-comparison.test.mjs .github/scripts/financial-preview-source-phase.test.mjs .github/scripts/verify-certified-correction-source.test.mjs .github/scripts/financial-release-activation.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs
           python3 -m unittest discover -s .github/scripts -p test_run_retained_price_source.py
-          node --test --test-concurrency=2 .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-admission-inventory.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs
+          node --test --test-concurrency=2 .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-admission-inventory.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs .github/scripts/ordinary-publisher-tooling.test.mjs
 
       - name: Journal-backed renewal publisher lifecycle
         env:
