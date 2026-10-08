@@ -1,0 +1,81 @@
+name: Oct6 actual FUTU capture-only diagnostic
+on:
+  push:
+    branches: [preview/oct6-actual-futu-capture-20261008]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: oct6-actual-futu-capture-20261008
+  cancel-in-progress: false
+jobs:
+  capture:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-actual-futu-capture-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Verify exact capture-only diagnostic scope and source
+        run: |
+          test "$(git rev-parse HEAD^)" = b464cd32691853b7128189f4e3350b74959468bb
+          test "$(git -C release rev-parse HEAD)" = 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac
+          test "$(git -C release rev-parse HEAD^{tree})" = 1c0219a170dcbdeb1af539e4cf7a04018251ca02
+          test "$(git hash-object .github/scripts/retained-price-source-browser.mjs)" = 385ca311d0b0d26d76f0bab2826a5114bf15a368
+          test "$(git hash-object .github/scripts/retained-price-source-browser.test.mjs)" = f026057acb54bbf2fb61095cfbb9d421c8031e5d
+          test "$(git hash-object .github/scripts/acquire-oct6-actual-futu-capture.py)" = 9ab50e03817fb9fb722fa41c5d62a6f795cab455
+          test "$(git hash-object .github/scripts/prove-oct6-actual-futu-capture.mjs)" = 61b275c369c9c8af2080298bd3e655938105d126
+          test "$(git rev-parse HEAD^:.github/scripts/retained-price-source-browser.mjs)" = 096506586e6bb8db095b41c9caf2ae0419a26917
+          node --check .github/scripts/prove-oct6-actual-futu-capture.mjs
+          python3 -m py_compile .github/scripts/acquire-oct6-actual-futu-capture.py
+          node --input-type=module -e 'import{execFileSync}from"node:child_process";import{readFileSync}from"node:fs";import assert from"node:assert/strict";const expected=[".github/scripts/acquire-oct6-actual-futu-capture.py",".github/scripts/prove-oct6-actual-futu-capture.mjs",".github/scripts/retained-price-source-browser.mjs",".github/scripts/retained-price-source-browser.test.mjs",".github/workflows/oct6-actual-futu-capture.yml"].sort();assert.deepEqual(execFileSync("git",["diff","--name-only","HEAD^","HEAD"],{encoding:"utf8"}).trim().split("\n").sort(),expected);const request=JSON.parse(readFileSync(".github/retained-price-oct6-source.json"));assert.equal(request.enabled,false);assert.equal(request.activation,null);'
+      - name: Install only unchanged approved decoder lock and Chromium
+        timeout-minutes: 5
+        working-directory: release/frontend
+        run: |
+          python3 -c 'import shutil,os;assert shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=10*1024**3,"Eight GiB reserve plus two GiB dependencies required"'
+          timeout --kill-after=10s 2m npm ci --no-audit --no-fund
+          timeout --kill-after=10s 150s npx --no-install playwright install --with-deps chromium
+          git diff --exit-code -- package.json package-lock.json
+          python3 -c 'import shutil,os;assert shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=8*1024**3,"Eight GiB reserve exceeded"'
+      - name: Run all 31 final browser Node regression cases
+        id: regressions
+        timeout-minutes: 3
+        run: timeout --kill-after=10s 170s node --test .github/scripts/retained-price-source-browser.test.mjs
+      - name: Authenticate exact historical A11 source and companion
+        id: acquisition
+        timeout-minutes: 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: timeout --kill-after=10s 11m python3 .github/scripts/acquire-oct6-actual-futu-capture.py
+      - name: Capture unchanged source FUTU through exact shared server and observer
+        id: capture
+        timeout-minutes: 8
+        run: timeout --kill-after=10s 470s node .github/scripts/prove-oct6-actual-futu-capture.mjs
+      - name: Record explicit capture-only stage outcomes
+        if: always()
+        env:
+          REGRESSIONS: ${{ steps.regressions.outcome }}
+          ACQUISITION: ${{ steps.acquisition.outcome }}
+          CAPTURE: ${{ steps.capture.outcome }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/oct6-actual-futu-capture/reports"
+          node --input-type=module -e 'import{writeFileSync,readFileSync,existsSync,lstatSync}from"node:fs";import{join}from"node:path";const report=join(process.env.RUNNER_TEMP,"oct6-actual-futu-capture/reports/capture-report.json");if(existsSync(report)){if(lstatSync(report).size>4*1024**2)throw Error("Capture evidence exceeds4MiB print bound");console.log("ACTUAL_FUTU_CAPTURE_REPORT "+readFileSync(report,"utf8"));}else console.log("ACTUAL_FUTU_CAPTURE_REPORT_MISSING");const stages={browser_regressions:process.env.REGRESSIONS,acquisition:process.env.ACQUISITION,capture:process.env.CAPTURE};writeFileSync(join(process.env.RUNNER_TEMP,"oct6-actual-futu-capture/reports/stages.json"),JSON.stringify({schema_version:"oct6-actual-futu-capture-stages-v1",publication_authority:"none",scope:"Capture-only authenticated A11 source logical bytes; not composed A11 output, carried financial, approved application UI/CSV, full-quality or publication acceptance",head_sha:process.env.GITHUB_SHA,run_id:process.env.GITHUB_RUN_ID,run_attempt:process.env.GITHUB_RUN_ATTEMPT,recorded_at:new Date().toISOString(),stages},null,2)+"\n");'
+      - name: Preserve only bounded JSON capture and acquisition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct6-actual-futu-capture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oct6-actual-futu-capture/reports/*.json
+          if-no-files-found: error
+          retention-days: 7
