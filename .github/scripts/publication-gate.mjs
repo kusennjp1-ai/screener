@@ -74,6 +74,10 @@ export function checkPublication(event, sha, repository, api = githubApi) {
     const root=priceControllerRoot(),request=readRepairRequest(root);
     if(request?.value.enabled)finitePriceSource=verifyPriceSourceCompletion({root,sourceRun:trigger,api});
   }
+  if(finitePriceSource){
+    const finiteDecision=publicationDecision({eventName:process.env.GITHUB_EVENT_NAME,event:normalizedEvent,sha,currentSha,runs:[],finitePriceSource});
+    if(finiteDecision.publish&&finiteDecision.mode==='data'&&finiteDecision.finitePriceSource)return finiteDecision;
+  }
   const runs = gateWorkflows.flatMap(file => api(`repos/${repository}/actions/workflows/${file}/runs?branch=main&event=push&head_sha=${sha}&per_page=100`, true).flatMap(page => page.workflow_runs));
   return publicationDecision({ eventName: process.env.GITHUB_EVENT_NAME, event: normalizedEvent, sha, currentSha, runs,finitePriceSource });
 }
