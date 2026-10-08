@@ -136,3 +136,10 @@ finally{
   report.finished_at=new Date().toISOString();save();
 }
 console.log(JSON.stringify({status:report.status,cases:report.cases.length,scope:report.scope}));
+
+if(report.status==='passed'){
+  const image=readFileSync(join(output,'synthetic-fallback.png'));
+  assert(image.length<=256*1024&&image.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])),'Synthetic image bound/signature');
+  const record=JSON.stringify({schema_version:'synthetic-font-image-v1',scope:'New synthetic TEST/$123.45 fixture using pinned public CSS; no stock source, portfolio or retained image input',bytes:image.length,sha256:digest(image),base64:image.toString('base64')});
+  assert(Buffer.byteLength(record)<=512*1024,'Synthetic image record bound');console.log(record);
+}
