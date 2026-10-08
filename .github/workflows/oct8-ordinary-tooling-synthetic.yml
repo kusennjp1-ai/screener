@@ -1,0 +1,88 @@
+name: Ordinary Tooling Synthetic Proof
+on:
+  push:
+    branches: [preview/oct8-ordinary-tooling-synthetic-20261008-v2]
+permissions:
+  contents: read
+concurrency:
+  group: ordinary-tooling-synthetic-20261008
+  cancel-in-progress: false
+jobs:
+  synthetic:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct8-ordinary-tooling-synthetic-20261008-v2' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Bind exact disabled ordinary code and isolated synthetic scope
+        id: preflight
+        timeout-minutes: 2
+        run: |
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          import {readFileSync,statfsSync} from 'node:fs';
+          const git=(...args)=>execFileSync('git',args,{encoding:'utf8',timeout:30000}).trim();
+          const parent='b464cd32691853b7128189f4e3350b74959468bb',pins=[{"path":".github/scripts/ordinary-publisher-tooling.mjs","sha":"4efc538d1804410bb213d9034ec497331df26fde"},{"path":".github/scripts/ordinary-publisher-tooling.test.mjs","sha":"ecb746500bb54232b5bedb5c8550c65ae9dfedfc"},{"path":".github/scripts/select-release-source.mjs","sha":"a3258686a38769e9d1263c0b33a89943df122843"},{"path":".github/scripts/publication-state.mjs","sha":"7ec98232233a434b558556061a692cdb4222b313"},{"path":".github/workflows/research-ui-release.yml","sha":"0dc266577534275913b4daa23c229feb634c7511"},{"path":".github/workflows/ci.yml","sha":"30f13f8d235592cb645c76eec166019cd907fa61"},{"path":"frontend/tools/publication-state.test.mjs","sha":"9bfdde7765e80093aab4c355bd5b62f579ee803f"},{"path":"frontend/tools/select-release-source.test.mjs","sha":"a3d1fbf790804563554969d7418de1e0ce73755d"}];
+          assert.equal(git('rev-parse','HEAD^'),parent);
+          assert.equal(git('cat-file','-p','HEAD').split('\n').filter(line=>line.startsWith('parent ')).length,1);
+          for(const pin of pins)assert.equal(git('rev-parse','HEAD:'+pin.path),pin.sha,'Wrong frozen candidate '+pin.path);
+          const added='.github/workflows/oct8-ordinary-tooling-synthetic.yml';
+          const changed=git('diff-tree','--no-commit-id','--name-only','-r','HEAD').split('\n').filter(Boolean).sort();
+          assert.deepEqual(changed,[...pins.map(pin=>pin.path),added].sort(),'Unexpected candidate/target delta');
+          assert.equal(git('rev-parse','HEAD:.github/scripts/retained-price-source-browser.mjs'),'096506586e6bb8db095b41c9caf2ae0419a26917','Unlanded browser header fix included');
+          assert.equal(git('rev-parse','HEAD:.github/scripts/retained-price-publisher-tooling.mjs'),'6f4000b94df9d44fa58f5c018f3b430e18cb5090','Finite identity changed');
+          assert.equal(git('rev-parse','HEAD:frontend/tools/export-research.mjs'),'dac7f8784a0bc836ab6977e1e88ca643c49c01ed','Original main exporter changed');
+          assert.equal(git('rev-parse','HEAD:.github/scripts/fixtures/publisher-export-research-oct6-carry-v1.mjs'),'1f630be308dd2ce604c26635c3d67243c7e48944','Reviewed exporter variant changed');
+          const request=JSON.parse(readFileSync('.github/retained-price-oct6-source.json'));assert.equal(request.enabled,false);assert.equal(request.activation,null);
+          const storage=statfsSync('.');assert(storage.bavail*storage.bsize>=8*1024**3,'Existing 8 GiB reserve unavailable');
+          console.log(JSON.stringify({schema_version:'ordinary-tooling-synthetic-target-v1',scope:'Synthetic validators, actual temporary Git, offline Python and normal frontend Vite tests only',actual_data:false,source_artifact_access:false,provider_work:false,publication_authority:false,controller_parent:parent,pins}));
+          NODE
+          node --check .github/scripts/ordinary-publisher-tooling.mjs
+          node --check .github/scripts/select-release-source.mjs
+          node --check .github/scripts/publication-state.mjs
+      - name: Install only existing locked test dependencies
+        id: dependencies
+        timeout-minutes: 8
+        run: |
+          timeout 240s python -m pip install -r .github/scripts/financial-release-projection-requirements.txt
+          timeout 240s npm ci --prefix frontend --no-audit --no-fund
+          git diff --exit-code -- frontend/package.json frontend/package-lock.json
+      - name: Run synthetic native carry and real Git boundary contracts
+        id: native
+        timeout-minutes: 15
+        run: timeout 880s node --test --test-concurrency=2 .github/scripts/ordinary-publisher-tooling.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/select-release-source-cli.test.mjs .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-release-archive-lifecycle.test.mjs .github/scripts/financial-performance-packed-carry.test.mjs .github/scripts/financial-audit-history.test.mjs .github/scripts/financial-audit-transport.test.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs
+      - name: Run unchanged final payload and workflow AST contracts
+        id: python
+        timeout-minutes: 3
+        run: timeout 170s python3 -m unittest discover -s .github/scripts -p test_check_pages_payload.py
+      - name: Exercise normal frontend Vite imports and carry regressions
+        id: vitest
+        timeout-minutes: 7
+        working-directory: frontend
+        run: timeout 400s npm run test:run -- tools/publication-state.test.mjs tools/select-release-source.test.mjs tools/publication-cli.test.mjs tools/publication-gate.test.mjs tools/select-published-runs.test.mjs tools/financial-generation-carry.test.mjs --maxWorkers=2
+      - name: Record bounded synthetic-only stage outcomes
+        if: always()
+        env:
+          PREFLIGHT: ${{ steps.preflight.outcome }}
+          DEPENDENCIES: ${{ steps.dependencies.outcome }}
+          NATIVE: ${{ steps.native.outcome }}
+          PYTHON: ${{ steps.python.outcome }}
+          VITEST: ${{ steps.vitest.outcome }}
+        run: |
+          node --input-type=module <<'NODE'
+          console.log(JSON.stringify({schema_version:'ordinary-tooling-synthetic-stage-report-v1',scope:'Code contracts and synthetic inputs only',actual_data:false,source_artifact_access:false,provider_work:false,publication_authority:false,run_id:Number(process.env.GITHUB_RUN_ID),run_attempt:Number(process.env.GITHUB_RUN_ATTEMPT),head_sha:process.env.GITHUB_SHA,outcomes:Object.fromEntries(['PREFLIGHT','DEPENDENCIES','NATIVE','PYTHON','VITEST'].map(name=>[name.toLowerCase(),process.env[name]]))}));
+          NODE

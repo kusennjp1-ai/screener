@@ -1,3 +1,4 @@
+import {validateOrdinaryPublisherToolingReceipt} from './ordinary-publisher-tooling.mjs';
 import {validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
 import {validateFinancialAuditFiles,requiredFinancialAuditFiles,parsePublicationReceipt,PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
 import {isPerformanceException, packedExceptionType, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
@@ -126,6 +127,7 @@ export function validateReceipt(receipt) {
   }
   if(receipt.financial_audit_files!==undefined){validateFinancialAuditFiles(receipt.financial_audit_files);if(!receipt.financial_release||receipt.financial_audit_files[receipt.financial_release.path]!==receipt.financial_release.sha256)throw Error('Financial audit inventory lost the active release');}
   if(Object.hasOwn(receipt,'publisher_tooling'))validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);
+  if(Object.hasOwn(receipt,'ordinary_publisher_tooling'))validateOrdinaryPublisherToolingReceipt(receipt.ordinary_publisher_tooling,receipt);
   if(Object.hasOwn(receipt,'transport'))validateTransportDescriptor(receipt.transport,receipt);
   if(Object.hasOwn(receipt,'financial_audit_transport'))validateFinancialAuditTransport(receipt.financial_audit_transport,receipt);
   return receipt;

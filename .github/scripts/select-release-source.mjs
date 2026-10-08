@@ -20,6 +20,7 @@ import {canonicalPublication,removeCanonical,transportCapable,packPublication,as
 import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
 import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
 import {publisherToolingBoundary,publisherToolingReceipt,validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
+import {ordinaryPublisherToolingEligible,ordinaryPublisherToolingBoundary,ordinaryPublisherToolingReceipt,validateOrdinaryPublisherToolingReceipt} from './ordinary-publisher-tooling.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -56,8 +57,8 @@ export function checkedExport(artifact, pages, repo, api = githubApi, load = loa
   if (priceObservationDigest(metadata.price_observations) !== metadata.price_observations_sha256) throw Error('Export price observation proof is inconsistent');
   assertPriceObservationBounds(metadata.price_observations, artifact.created_at);
   const source={ artifact, runId: id, attempt, manifest: JSON.parse(metadata.manifest_json), manifestHash: metadata.manifest_sha256,
-    priceObservations: metadata.price_observations, priceObservationsDigest: metadata.price_observations_sha256,
-    ...(marked?{companion,repair:metadata.retained_price_repair}:{}) };
+    priceObservations: metadata.price_observations, priceObservationsDigest: metadata.price_observations_sha256,companion,
+    ...(marked?{repair:metadata.retained_price_repair}:{}) };
   if(marked)authenticateRepairSource({source,api,root:repairControllerRoot()});
   return source;
 }
@@ -242,7 +243,7 @@ async function plan(design = false) {
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
   if (design && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN=${source.runId}\n`);
-  output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(renewal?{renewal:true}:{}),...(state.carry?{carry:true}:{}) });
+  output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(renewal?{renewal:true}:{}),...(state.carry?{carry:true}:{}),...(ordinaryPublisherToolingEligible(state)?{ordinary_tooling:true}:{}) });
   console.log(`${decision.mode} publication uses UI ${sourceSha} and artifact ${source.artifact.id} (${fresh ? 'checked export' : 'verified live input'})`);
 }
 async function recheck() {
@@ -268,9 +269,12 @@ async function recheck() {
     await verifyRetainedRestoreBinding({root:repairControllerRoot(),source:state.source,record:state.sourceRecovery,live,authority:authorityExports(),api:githubApi});
   }
   await publisherToolingBoundary(state,'recheck');
+  await ordinaryPublisherToolingBoundary(state,'recheck');
   const physical=resolve('release/frontend/dist'),receipt = validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json'))));
   if(state.publisherTooling){validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);if(digest(receipt.publisher_tooling)!==digest(publisherToolingReceipt(state,receipt)))throw Error('Final publisher tooling receipt changed');}
   else if(receipt.publisher_tooling)throw Error('Unexpected publisher tooling receipt');
+  if(state.ordinaryPublisherTooling){validateOrdinaryPublisherToolingReceipt(receipt.ordinary_publisher_tooling,receipt);if(digest(receipt.ordinary_publisher_tooling)!==digest(ordinaryPublisherToolingReceipt(state,receipt)))throw Error('Final ordinary publisher tooling receipt changed');}
+  else if(receipt.ordinary_publisher_tooling)throw Error('Unexpected ordinary publisher tooling receipt');
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
   try {
@@ -296,7 +300,7 @@ async function recheck() {
   }
   }finally{removeCanonical(physical,logical);}
   if(state.renewal)await checkFinalRenewalPayload(physical,{request:state.renewal.request,projection:verifiedRenewalProjection,frontendRoot:resolve('frontend'),renewalState:state.renewal,expectedLive:live});
-  if(state.publisherTooling)writeFileSync(statePath(),JSON.stringify(state));
+  if(state.publisherTooling||state.ordinaryPublisherTooling)writeFileSync(statePath(),JSON.stringify(state));
 }
 async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
   const manifest = JSON.parse(readFileSync(join(dataRoot, 'manifest.json'), 'utf8'));
@@ -322,6 +326,7 @@ async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
 async function compose() {
   const state = readState(), dist = resolve('release/frontend/dist');
   await publisherToolingBoundary(state,'compose');
+  await ordinaryPublisherToolingBoundary(state,'compose');
   if (state.decision.migration) {
     rmSync(dist, { recursive: true, force: true });
     mkdirSync(dist, { recursive: true });
@@ -365,6 +370,7 @@ async function compose() {
     state.financialPrepared=prepared;writeFileSync(statePath(),JSON.stringify(state));
   }
   if(state.publisherTooling){receipt.publisher_tooling=publisherToolingReceipt(state,receipt);writeFileSync(statePath(),JSON.stringify(state));}
+  if(state.ordinaryPublisherTooling){receipt.ordinary_publisher_tooling=ordinaryPublisherToolingReceipt(state,receipt);writeFileSync(statePath(),JSON.stringify(state));}
   if (state.decision.migration && dataInventoryDigest(dist) !== state.migrationDataDigest) throw Error('Metadata migration changed approved data bytes');
   // The final logical tree is complete before encoding. A data-only release
   // discovers this capability in its retained approved UI, never the controller.
@@ -432,7 +438,7 @@ async function restoreCarrySources(state) {
   const root=join(scratch(),'carry-source');
   await restorePublishedFinancialSource(state.live,root);
   cpSync(join(root,'static-data/financial-corrections'),resolve('release/frontend/public/static-data/financial-corrections'),{recursive:true});
-  state.carry.sourceRoot=root;writeFileSync(statePath(),JSON.stringify(state));
+  state.carry.sourceRoot=root;await ordinaryPublisherToolingBoundary(state,'restore');writeFileSync(statePath(),JSON.stringify(state));
 }
 function copyBundleData(source,destination) {
   mkdirSync(destination,{recursive:true});cpSync(join(source,'static-data'),join(destination,'static-data'),{recursive:true});
@@ -441,6 +447,7 @@ function copyBundleData(source,destination) {
 async function prepareCarry() {
   const state=readState();if(!state.carry)throw Error('Missing financial carry plan');
   await publisherToolingBoundary(state,'prepare');
+  await ordinaryPublisherToolingBoundary(state,'prepare');
   const frontend=resolve('release/frontend'),root=join(frontend,'public'),evaluatedAt=new Date().toISOString();
   const env={...process.env,FINANCIAL_EVALUATED_AT:evaluatedAt};
   for(const key of Object.keys(env))if(key.startsWith('FINANCIAL_CORRECTION_')||key.startsWith('FINANCIAL_GENERATION_CARRY_'))delete env[key];
@@ -472,6 +479,7 @@ async function prepareCarry() {
   await helper.loadFinancialGenerationCarry({env:carryEnv,rows:targetInput.rows,asOfDate:targetInput.asOfDate});
   state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt};
   await publisherToolingBoundary(state,'apply');
+  await ordinaryPublisherToolingBoundary(state,'apply');
   writeFileSync(statePath(),JSON.stringify(state));
   if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
 }
@@ -640,8 +648,8 @@ async function runCommand(command) {
   else if(command==='prepare-carry')await prepareCarry();
   else if(['publisher-build-before','publisher-build-after'].includes(command)){
     if(process.argv.length!==3||process.execArgv.length)throw Error('Publisher build boundary accepts no caller inputs or runtime hooks');
-    const state=readState();await publisherToolingBoundary(state,command==='publisher-build-before'?'build-before':'build-after');
-    if(state.publisherTooling)writeFileSync(statePath(),JSON.stringify(state));
+    const state=readState(),action=command==='publisher-build-before'?'build-before':'build-after';await publisherToolingBoundary(state,command==='publisher-build-before'?'build-before':'build-after');await ordinaryPublisherToolingBoundary(state,action);
+    if(state.publisherTooling||state.ordinaryPublisherTooling)writeFileSync(statePath(),JSON.stringify(state));
   }
   else if (command === 'compose') await compose();
   else if (command === 'check-design-data') await verifyCoverage(resolve('frontend'), resolve('frontend/public/static-data'), readState().live.verificationUniverse.required_symbols);
