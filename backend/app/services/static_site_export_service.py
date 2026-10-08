@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import hashlib
 import json
 import logging
 import math
 from numbers import Integral, Real
 from pathlib import Path
 import shutil
+import stat
 from typing import Any
 from urllib.parse import quote
 
@@ -25,6 +28,10 @@ from app.domain.markets.key_markets import key_market_instruments
 from app.infra.db.models.feature_store import FeatureRun, FeatureRunPointer
 from app.infra.db.repositories.feature_store_repo import SqlFeatureStoreRepository
 from app.services.static_financial_evidence import add_static_financial_metadata, subset_static_financial_current
+from app.services.static_price_session_audit import (
+    build_price_session_audit,
+    require_price_session_coverage,
+)
 from app.models.stock import StockPrice
 from app.schemas.groups import (
     ConstituentStock,
@@ -118,6 +125,8 @@ STATIC_DEFAULT_MARKET = "US"
 _MARKET_CATALOG = get_market_catalog()
 STATIC_SUPPORTED_MARKETS = tuple(_MARKET_CATALOG.supported_market_codes())
 STATIC_MARKET_METADATA_FILENAME = "manifest.market.json"
+# Match the existing finite-file ceiling; neither index nor chart reads may exceed it.
+STATIC_PRICE_SESSION_MAX_FILE_BYTES = 64 * 1024 * 1024
 STATIC_MARKET_DISPLAY = {
     market: _MARKET_CATALOG.get(market).label for market in STATIC_SUPPORTED_MARKETS
 }
@@ -177,7 +186,15 @@ class StaticSiteExportService:
         clean: bool = True,
         markets: tuple[str, ...] | None = None,
         write_manifest: bool = True,
+        price_as_of_date: date | None = None,
     ) -> StaticSiteExportResult:
+        if price_as_of_date is not None:
+            if type(price_as_of_date) is not date:
+                raise ValueError("price_as_of_date must be a session date")
+            if markets is None or len(markets) != 1:
+                raise ValueError("price_as_of_date requires exactly one selected market")
+            if price_as_of_date > datetime.utcnow().date():
+                raise ValueError("price_as_of_date cannot be in the future")
         output_dir = Path(output_dir)
         generated_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         warnings: list[str] = []
@@ -214,6 +231,7 @@ class StaticSiteExportService:
                     market=market,
                     generated_at=generated_at,
                     warnings=warnings,
+                    **({"price_as_of_date": price_as_of_date} if price_as_of_date is not None else {}),
                 )
                 self._write_market_metadata(
                     output_dir=output_dir,
@@ -304,6 +322,7 @@ class StaticSiteExportService:
         market: str,
         generated_at: str,
         warnings: list[str],
+        price_as_of_date: date | None = None,
     ) -> dict[str, Any]:
         latest_run = self._get_latest_published_run(db, market=market)
         if latest_run is None:
@@ -312,6 +331,10 @@ class StaticSiteExportService:
                 markets=(market,),
             )
 
+        if price_as_of_date is not None and price_as_of_date < latest_run.as_of_date:
+            raise ValueError("price_as_of_date precedes the published feature source")
+        observation_date = price_as_of_date or latest_run.as_of_date
+        session_metadata = self._price_session_metadata(latest_run, price_as_of_date)
         path_prefix = Path("markets") / market.lower()
         scan_rows, filter_options = self._load_scan_export_source(db, latest_run)
         scan_manifest, serialized_rows = self._export_scan_bundle(
@@ -323,6 +346,7 @@ class StaticSiteExportService:
             filter_options=filter_options,
             path_prefix=path_prefix,
             market=market,
+            **({"price_as_of_date": price_as_of_date} if price_as_of_date is not None else {}),
         )
         groups_payload = self._build_optional_section_payload(
             section=f"{market} groups",
@@ -360,7 +384,18 @@ class StaticSiteExportService:
             path_prefix=path_prefix,
             groups_payload=groups_payload,
             preset_screens=scan_manifest.get("preset_screens"),
+            **({"price_as_of_date": price_as_of_date} if price_as_of_date is not None else {}),
         )
+        price_session_audit = None
+        if market.upper() == "US" and price_as_of_date is not None:
+            price_session_audit = self._export_price_session_audit(
+                output_dir=output_dir,
+                market=market.upper(),
+                run=latest_run,
+                rows=serialized_rows,
+                chart_manifest=chart_manifest,
+                price_as_of_date=price_as_of_date,
+            )
         breadth_payload = self._build_optional_section_payload(
             section=f"{market} breadth",
             warnings=warnings,
@@ -380,6 +415,7 @@ class StaticSiteExportService:
             scan_manifest=scan_manifest,
             breadth_payload=breadth_payload,
             groups_payload=groups_payload,
+            **({"price_as_of_date": price_as_of_date} if price_as_of_date is not None else {}),
         )
 
         scan_manifest["charts"] = {
@@ -414,6 +450,8 @@ class StaticSiteExportService:
                 "symbols_total": chart_manifest["symbols_total"],
             },
         }
+        if price_session_audit is not None:
+            assets["price_session_audit"] = price_session_audit
         # Only publish the RRG asset/file for markets that actually have it, so
         # the static page hides the RRG toggle (gated on assets.groups_rrg.path)
         # instead of offering an empty view that triggers a wasted fetch.
@@ -424,7 +462,8 @@ class StaticSiteExportService:
         return {
             "market": market,
             "display_name": STATIC_MARKET_DISPLAY.get(market, market),
-            "as_of_date": latest_run.as_of_date.isoformat(),
+            "as_of_date": observation_date.isoformat(),
+            **session_metadata,
             "features": {
                 "scan": True,
                 "breadth": bool(breadth_payload.get("available", True)),
@@ -440,6 +479,137 @@ class StaticSiteExportService:
             },
             "assets": assets,
             "freshness": home_payload.get("freshness", {}),
+        }
+
+    def _export_price_session_audit(
+        self,
+        *,
+        output_dir: Path,
+        market: str,
+        run: FeatureRun,
+        rows: list[dict[str, Any]],
+        chart_manifest: dict[str, Any],
+        price_as_of_date: date,
+    ) -> dict[str, Any]:
+        chart_paths: dict[str, str | None] = {}
+        source_diagnostics: list[dict[str, Any]] = []
+
+        def read_declared_json(relative_path, *, section, symbol=None):
+            context = {"section": section, **({"symbol": symbol} if symbol is not None else {})}
+            if not isinstance(relative_path, str) or not relative_path:
+                source_diagnostics.append({**context, "reason": "missing_declared_path"})
+                return None
+            context["path"] = relative_path
+            try:
+                relative = Path(relative_path)
+                resolved = (output_dir / relative).resolve()
+                if relative.is_absolute() or not resolved.is_relative_to(output_dir.resolve()):
+                    source_diagnostics.append({**context, "reason": "path_outside_output"})
+                    return None
+                file_stat = resolved.stat()
+                if not stat.S_ISREG(file_stat.st_mode):
+                    source_diagnostics.append({**context, "reason": "not_regular_file"})
+                    return None
+                limit = STATIC_PRICE_SESSION_MAX_FILE_BYTES
+                if file_stat.st_size > limit:
+                    source_diagnostics.append({
+                        **context, "reason": "payload_exceeds_file_limit",
+                        "max_file_bytes": limit, "observed_bytes": file_stat.st_size,
+                        "limit_check": "stat",
+                    })
+                    return None
+                with resolved.open("rb") as handle:
+                    payload_bytes = handle.read(limit + 1)
+                if len(payload_bytes) > limit:
+                    source_diagnostics.append({
+                        **context, "reason": "payload_exceeds_file_limit",
+                        "max_file_bytes": limit, "observed_bytes": len(payload_bytes),
+                        "observed_bytes_is_lower_bound": True, "limit_check": "read",
+                    })
+                    return None
+                return json.loads(payload_bytes.decode("utf-8"))
+            except (OSError, UnicodeError, ValueError, RuntimeError) as exc:
+                source_diagnostics.append({
+                    **context, "reason": "unreadable_declared_payload",
+                    "error_type": type(exc).__name__,
+                })
+                return None
+
+        index = read_declared_json(chart_manifest.get("path"), section="chart_index")
+        entries = index.get("symbols") if isinstance(index, dict) else None
+        if not isinstance(entries, list):
+            source_diagnostics.append({"section": "chart_index", "reason": "invalid_chart_index"})
+            entries = []
+        seen_symbols: set[str] = set()
+        for entry in entries:
+            symbol = entry.get("symbol") if isinstance(entry, dict) else None
+            if not isinstance(symbol, str) or not symbol.strip():
+                source_diagnostics.append({"section": "chart_index", "reason": "invalid_symbol_entry"})
+                continue
+            if symbol in seen_symbols:
+                chart_paths[symbol] = None
+                source_diagnostics.append({
+                    "section": "chart_index", "symbol": symbol, "reason": "duplicate_symbol_entry",
+                })
+                continue
+            seen_symbols.add(symbol)
+            relative_path = entry.get("path")
+            if not isinstance(relative_path, str) or not relative_path:
+                chart_paths[symbol] = None
+                source_diagnostics.append({
+                    "section": "chart", "symbol": symbol, "reason": "missing_declared_path",
+                })
+            else:
+                chart_paths[symbol] = relative_path
+        for row in rows:
+            if row["symbol"] not in seen_symbols:
+                chart_paths[row["symbol"]] = None
+                source_diagnostics.append({
+                    "section": "chart_index", "symbol": row["symbol"], "reason": "missing_symbol_entry",
+                })
+
+        class DeclaredCharts(Mapping[str, Any]):
+            """Read one contained declared payload per lookup; retain no payloads."""
+
+            def __getitem__(self, symbol):
+                relative_path = chart_paths[symbol]
+                if relative_path is None:
+                    return None
+                return read_declared_json(relative_path, section="chart", symbol=symbol)
+
+            def __iter__(self):
+                return iter(chart_paths)
+
+            def __len__(self):
+                return len(chart_paths)
+
+        report = build_price_session_audit(
+            rows=rows,
+            charts=DeclaredCharts(),
+            market=market,
+            price_as_of_date=price_as_of_date.isoformat(),
+            feature_run_id=run.id,
+            feature_as_of_date=run.as_of_date.isoformat(),
+        )
+        report["chart_source_diagnostics"] = source_diagnostics
+        relative_path = Path("markets") / market.lower() / "price-session-audit.json"
+        audit_path = output_dir / relative_path
+        self._write_json(audit_path, report)
+        # Keep failure evidence on disk while blocking any market publication.
+        require_price_session_coverage(report)
+        return {
+            "path": relative_path.as_posix(),
+            "sha256": hashlib.sha256(audit_path.read_bytes()).hexdigest(),
+            "as_of_date": price_as_of_date.isoformat(),
+            "feature_run_id": run.id,
+            "feature_as_of_date": run.as_of_date.isoformat(),
+            "total": report["total"],
+            "verified": report["verified"],
+            "minimum_target": report["minimum_target"],
+            "passed": report["passed"],
+            "source_universe_count": report["source_universe_count"],
+            "source_universe_sha256": report["source_universe_sha256"],
+            "required_symbols_sha256": report["required_symbols_sha256"],
         }
 
     @staticmethod
@@ -687,6 +857,7 @@ class StaticSiteExportService:
         filter_options: Any | None = None,
         path_prefix: Path | None = None,
         market: str | None = None,
+        price_as_of_date: date | None = None,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         if rows is None or filter_options is None:
             repo = SqlFeatureStoreRepository(db)
@@ -698,6 +869,8 @@ class StaticSiteExportService:
             )
             filter_options = repo.get_filter_options_for_run(run.id)
 
+        observation_date = price_as_of_date or run.as_of_date
+        session_metadata = self._price_session_metadata(run, price_as_of_date)
         normalized_prefix = Path() if path_prefix is None else Path(path_prefix)
         scan_dir = output_dir / normalized_prefix / "scan"
         chunk_dir = scan_dir / "chunks"
@@ -718,8 +891,27 @@ class StaticSiteExportService:
             for row in serialized_rows
             if row.get("ibd_industry_group") not in EXCLUDED_SCAN_INDUSTRY_GROUPS
         ]
+        if price_as_of_date is not None:
+            refreshed_rows: list[dict[str, Any]] = []
+            for offset in range(0, len(serialized_rows), STATIC_CHART_LOOKUP_BATCH_SIZE):
+                batch = serialized_rows[offset:offset + STATIC_CHART_LOOKUP_BATCH_SIZE]
+                cached = self._price_cache.get_many_cached_only(
+                    [row["symbol"] for row in batch if row.get("symbol")], period="2y"
+                )
+                refreshed_rows.extend(
+                    self._price_session_row(
+                        row, cached.get(row.get("symbol")), run=run, as_of_date=price_as_of_date
+                    ) for row in batch
+                )
+            serialized_rows = refreshed_rows
         self._annotate_percentile_ranks(serialized_rows)
-        self._stamp_code33_flags(serialized_rows, market=market)
+        if price_as_of_date is not None:
+            for row in serialized_rows:
+                # The dedicated setup/research stages own fresh certification.
+                for field in ("pct_day", "pct_week", "pct_month", "code33"):
+                    row[field] = None
+        else:
+            self._stamp_code33_flags(serialized_rows, market=market)
         serialized_rows = self._sort_static_scan_rows(serialized_rows)
         resolved_default_filters = self.resolve_static_default_filters(market)
         resolved_preset_screens = resolve_preset_screens_for_defaults(
@@ -740,7 +932,8 @@ class StaticSiteExportService:
             payload = {
                 "schema_version": SCAN_BUNDLE_SCHEMA_VERSION,
                 "generated_at": generated_at,
-                "as_of_date": run.as_of_date.isoformat(),
+                "as_of_date": observation_date.isoformat(),
+                **session_metadata,
                 "run_id": run.id,
                 "chunk_index": chunk_num,
                 "rows": chunk_rows,
@@ -756,7 +949,8 @@ class StaticSiteExportService:
         manifest = {
             "schema_version": SCAN_BUNDLE_SCHEMA_VERSION,
             "generated_at": generated_at,
-            "as_of_date": run.as_of_date.isoformat(),
+            "as_of_date": observation_date.isoformat(),
+            **session_metadata,
             "run_id": run.id,
             "sort": {"field": "composite_score", "order": "desc"},
             "default_page_size": 50,
@@ -788,7 +982,10 @@ class StaticSiteExportService:
         path_prefix: Path | None = None,
         groups_payload: dict[str, Any] | None = None,
         preset_screens: list[dict[str, Any]] | None = None,
+        price_as_of_date: date | None = None,
     ) -> dict[str, Any]:
+        observation_date = price_as_of_date or run.as_of_date
+        session_metadata = self._price_session_metadata(run, price_as_of_date)
         normalized_prefix = Path() if path_prefix is None else Path(path_prefix)
         chart_dir = output_dir / normalized_prefix / "charts"
         chart_dir.mkdir(parents=True, exist_ok=True)
@@ -796,6 +993,11 @@ class StaticSiteExportService:
         # Market benchmark (fetched once) drives the per-symbol RS line + blue dots.
         market = self._run_market(run) or STATIC_DEFAULT_MARKET
         benchmark_symbol, benchmark_df = self._get_market_benchmark_history(market, period="2y")
+        benchmark_diagnostics = (
+            self._price_history_diagnostics(benchmark_df, price_as_of_date)
+            if price_as_of_date is not None else {}
+        )
+        benchmark_df = self._bounded_price_history(benchmark_df, price_as_of_date)
 
         entries: list[dict[str, Any]] = []
         skipped_symbols: list[str] = []
@@ -804,6 +1006,8 @@ class StaticSiteExportService:
 
         def _emit_chart(symbol, *, rank, stock_data, price_df, fundamentals_value) -> None:
             """Serialize + write one chart payload, recording it in ``entries`` (or skip)."""
+            raw_price_df = price_df
+            price_df = self._bounded_price_history(price_df, price_as_of_date)
             bars = self._serialize_chart_bars(price_df)
             if not bars:
                 skipped_symbols.append(symbol)
@@ -818,6 +1022,10 @@ class StaticSiteExportService:
                 fundamentals_value, now=generated_at, as_of_date=run.as_of_date.isoformat(),
                 market=market, symbol=symbol,
             )
+            if price_as_of_date is not None and stock_data is not None:
+                stock_data = self._price_session_row(
+                    stock_data, raw_price_df, run=run, as_of_date=price_as_of_date
+                )
             rs_line, blue_dots = self._serialize_rs_line(price_df, benchmark_df)
             rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
             buy_points = self._compute_buy_points(price_df)
@@ -841,7 +1049,9 @@ class StaticSiteExportService:
                 {
                     "schema_version": CHART_BUNDLE_SCHEMA_VERSION,
                     "generated_at": generated_at,
-                    "as_of_date": run.as_of_date.isoformat(),
+                    "as_of_date": observation_date.isoformat(),
+                    **session_metadata,
+                    **({"benchmark_price_observation": benchmark_diagnostics} if price_as_of_date is not None else {}),
                     "symbol": symbol,
                     "rank": rank,
                     "period": STATIC_CHART_PERIOD,
@@ -986,7 +1196,10 @@ class StaticSiteExportService:
                 symbol = getattr(row, "symbol", None)
                 if not symbol:
                     continue
-                bars = self._serialize_chart_bars(cached.get(symbol))
+                raw_price_df = cached.get(symbol)
+                bars = self._serialize_chart_bars(
+                    self._bounded_price_history(raw_price_df, price_as_of_date)
+                )
                 if not bars:
                     skipped_symbols.append(symbol)
                     continue
@@ -995,9 +1208,14 @@ class StaticSiteExportService:
                     self._serialize_scan_row(row), now=generated_at,
                     as_of_date=run.as_of_date.isoformat(), market=market, symbol=symbol,
                 )
+                if price_as_of_date is not None:
+                    stock_data = self._price_session_row(
+                        stock_data, raw_price_df, run=run, as_of_date=price_as_of_date
+                    )
                 self._write_json(output_dir / rel_path, {
                     "schema_version": CHART_BUNDLE_SCHEMA_VERSION,
-                    "generated_at": generated_at, "as_of_date": run.as_of_date.isoformat(),
+                    "generated_at": generated_at, "as_of_date": observation_date.isoformat(),
+                    **session_metadata,
                     "symbol": symbol, "bars": bars, "stock_data": stock_data,
                     "verification_only": True,
                 })
@@ -1007,7 +1225,9 @@ class StaticSiteExportService:
         index_payload = {
             "schema_version": CHART_BUNDLE_SCHEMA_VERSION,
             "generated_at": generated_at,
-            "as_of_date": run.as_of_date.isoformat(),
+            "as_of_date": observation_date.isoformat(),
+            **session_metadata,
+            **({"benchmark_price_observation": benchmark_diagnostics} if price_as_of_date is not None else {}),
             "limit": STATIC_CHART_LIMIT,
             "symbols_total": len(entries),
             "skipped_symbols": skipped_symbols,
@@ -1375,8 +1595,13 @@ class StaticSiteExportService:
         scan_manifest: dict[str, Any],
         breadth_payload: dict[str, Any],
         groups_payload: dict[str, Any],
+        price_as_of_date: date | None = None,
     ) -> dict[str, Any]:
-        key_markets = self._build_key_markets(market)
+        observation_date = price_as_of_date or latest_run.as_of_date
+        session_metadata = self._price_session_metadata(latest_run, price_as_of_date)
+        key_markets = self._build_key_markets(
+            market, **({"price_as_of_date": price_as_of_date} if price_as_of_date is not None else {})
+        )
         top_groups = (
             ((groups_payload.get("payload") or {}).get("rankings") or {}).get("rankings") or []
         )[:10]
@@ -1386,7 +1611,8 @@ class StaticSiteExportService:
         return {
             "schema_version": STATIC_SITE_SCHEMA_VERSION,
             "generated_at": generated_at,
-            "as_of_date": latest_run.as_of_date.isoformat(),
+            "as_of_date": observation_date.isoformat(),
+            **session_metadata,
             "market": market,
             "market_display_name": STATIC_MARKET_DISPLAY.get(market, market),
             "freshness": {
@@ -1398,6 +1624,7 @@ class StaticSiteExportService:
                 # after the bell while scan_as_of_date is still yesterday's
                 # run — the UI shows both so the split is visible.
                 "prices_generated_at": generated_at,
+                **({"price_as_of_date": price_as_of_date.isoformat()} if price_as_of_date is not None else {}),
                 "breadth_latest_date": breadth_current.get("date"),
                 "groups_latest_date": (((groups_payload.get("payload") or {}).get("rankings") or {}).get("date")),
             },
@@ -1411,15 +1638,18 @@ class StaticSiteExportService:
             "top_groups": top_groups,
         }
 
-    def _build_key_markets(self, market: str | Session = STATIC_DEFAULT_MARKET) -> list[dict[str, Any]]:
+    def _build_key_markets(
+        self, market: str | Session = STATIC_DEFAULT_MARKET, *, price_as_of_date: date | None = None
+    ) -> list[dict[str, Any]]:
         if isinstance(market, Session):
             db = market
             entries: list[dict[str, Any]] = []
             for instrument in key_market_instruments(STATIC_DEFAULT_MARKET):
+                query = db.query(StockPrice).filter(StockPrice.symbol == instrument.data_symbol)
+                if price_as_of_date is not None:
+                    query = query.filter(StockPrice.date <= price_as_of_date)
                 rows = (
-                    db.query(StockPrice)
-                    .filter(StockPrice.symbol == instrument.data_symbol)
-                    .order_by(StockPrice.date.desc())
+                    query.order_by(StockPrice.date.desc())
                     .limit(30)
                     .all()
                 )
@@ -1452,6 +1682,11 @@ class StaticSiteExportService:
         entries: list[dict[str, Any]] = []
         for instrument in key_market_instruments(market):
             history = self._get_symbol_price_history(instrument.data_symbol, period="6mo")
+            diagnostics = (
+                self._price_history_diagnostics(history, price_as_of_date)
+                if price_as_of_date is not None else {}
+            )
+            history = self._bounded_price_history(history, price_as_of_date)
             ordered = self._serialize_close_history(history, days=30)
             latest = ordered[-1] if ordered else None
             previous = ordered[-2] if len(ordered) > 1 else None
@@ -1463,6 +1698,7 @@ class StaticSiteExportService:
                     "symbol": instrument.display_symbol,
                     "display_name": instrument.display_name,
                     "currency": instrument.currency,
+                    **({"price_observation": diagnostics} if price_as_of_date is not None else {}),
                     "latest_close": latest["close"] if latest is not None else None,
                     "latest_date": latest["date"] if latest is not None else None,
                     "change_1d": change_1d,
@@ -2607,6 +2843,133 @@ class StaticSiteExportService:
             except (KeyError, ValueError, TypeError):
                 continue
         return boxes
+
+    @staticmethod
+    def _price_session_metadata(run: FeatureRun, as_of_date: date | None) -> dict[str, str]:
+        if as_of_date is None:
+            return {}
+        if type(as_of_date) is not date or as_of_date < run.as_of_date:
+            raise ValueError("Price session must not precede the published feature source")
+        return {
+            "price_as_of_date": as_of_date.isoformat(),
+            "feature_as_of_date": run.as_of_date.isoformat(),
+        }
+
+    @staticmethod
+    def _bounded_price_history(data, as_of_date: date | None):
+        """Exclude later cached sessions before any observation calculation."""
+        if as_of_date is None or data is None or getattr(data, "empty", True):
+            return data
+        index = pd.to_datetime(data.index)
+        if index.isna().any():
+            raise ValueError("Cached price history contains an invalid date")
+        return data.loc[index.date <= as_of_date].copy()
+
+    @staticmethod
+    def _price_history_diagnostics(data, as_of_date: date) -> dict[str, Any]:
+        if data is None or getattr(data, "empty", True):
+            return {
+                "as_of_date": as_of_date.isoformat(), "cached_bars": 0,
+                "eligible_bars": 0, "after_cutoff_bars": 0,
+                "latest_cached_session": None, "latest_eligible_session": None,
+            }
+        index = pd.to_datetime(data.index)
+        if index.isna().any():
+            raise ValueError("Cached price history contains an invalid date")
+        dates = list(index.date)
+        eligible = [value for value in dates if value <= as_of_date]
+        return {
+            "as_of_date": as_of_date.isoformat(),
+            "cached_bars": len(dates), "eligible_bars": len(eligible),
+            "after_cutoff_bars": len(dates) - len(eligible),
+            "latest_cached_session": max(dates).isoformat(),
+            "latest_eligible_session": max(eligible).isoformat() if eligible else None,
+        }
+
+    def _price_session_row(
+        self, row: dict[str, Any], data, *, run: FeatureRun, as_of_date: date
+    ) -> dict[str, Any]:
+        """Copy price observations without changing the published feature source."""
+        result = dict(row)
+        fields = ("current_price", "price_change_1d", "adv_usd", "volume")
+        result["feature_price_snapshot"] = {
+            "role": "published_export_baseline",
+            "feature_run_id": run.id,
+            "feature_as_of_date": run.as_of_date.isoformat(),
+            **{field: row.get(field) for field in fields},
+        }
+        result.update(self._price_session_metadata(run, as_of_date))
+        result["as_of_date"] = as_of_date.isoformat()
+        if as_of_date >= run.as_of_date:
+            if "source_rs_rating" not in result:
+                result["source_rs_rating"] = row.get("rs_rating")
+                result["source_rs_as_of_date"] = run.as_of_date.isoformat()
+            stale_fields = {
+                "composite_score", "composite_reason", "minervini_score", "canslim_score",
+                "ipo_score", "custom_score", "volume_breakthrough_score", "rating_basis_score",
+                "rating_basis_screener", "buy_risk_atr", "buy_risk_state", "pressure_state",
+                "pressure_value", "tpr_max", "tpr_score", "tpr_state", "pct_day", "pct_week",
+                "pct_month", "code33", "passes_template", "stage", "stage_name", "adr_percent",
+                "pocket_pivot", "power_trend", "gap_percent", "volume_surge", "rating",
+                "rating_explanation", "execution_state", "execution_state_reason",
+                "risk_plan", "signal", "buy_signal", "breakout_signal",
+            }
+            for key in list(result):
+                if key in stale_fields or key.startswith(
+                    ("se_", "vcp_", "ma_", "ema_", "perf_", "beta", "rs_", "price_sparkline", "price_trend")
+                ):
+                    result[key] = None
+            result.pop("method_summary", None)
+            result.pop("technical_audit", None)
+            result.pop("setup_engine", None)
+            result["setup_recalculation"] = {
+                "status": "unavailable", "as_of_date": as_of_date.isoformat(),
+                "reason": "Selected price session requires independent recalculation",
+            }
+        result.update({field: None for field in fields})
+        diagnostics = self._price_history_diagnostics(data, as_of_date)
+        observation = {**diagnostics, "status": "unavailable"}
+        result["price_observation"] = observation
+        bounded = self._bounded_price_history(data, as_of_date)
+        if bounded is None or getattr(bounded, "empty", True):
+            observation["reason"] = "no_eligible_cached_prices"
+            return result
+        if bounded.index[-1].date() != as_of_date:
+            observation["reason"] = "selected_session_missing"
+            return result
+        if not bounded.index.is_monotonic_increasing or not bounded.index.is_unique:
+            observation["reason"] = "invalid_price_date_order"
+            return result
+        required = ("Open", "High", "Low", "Close", "Volume")
+        if any(field not in bounded.columns for field in required):
+            observation["reason"] = "missing_ohlcv_fields"
+            return result
+        try:
+            values = bounded.loc[:, list(required)].to_numpy(dtype=float)
+        except (TypeError, ValueError):
+            observation["reason"] = "invalid_ohlcv_values"
+            return result
+        if any(
+            not all(math.isfinite(float(value)) for value in bar)
+            or min(bar[:4]) <= 0 or bar[4] < 0
+            or bar[1] < max(bar[0], bar[2], bar[3])
+            or bar[2] > min(bar[0], bar[1], bar[3])
+            for bar in values
+        ):
+            observation["reason"] = "invalid_ohlcv_values"
+            return result
+        close = round(float(bounded["Close"].iloc[-1]), 2)
+        result["current_price"] = close
+        if len(bounded) >= 2:
+            previous = float(bounded["Close"].iloc[-2])
+            result["price_change_1d"] = round((float(bounded["Close"].iloc[-1]) / previous - 1) * 100, 2)
+        if len(bounded) >= 50:
+            recent = bounded.iloc[-50:]
+            result["volume"] = int(float(recent["Volume"].mean())) * close
+            if row.get("currency") == "USD":
+                result["adv_usd"] = float((recent["Close"] * recent["Volume"]).mean())
+        observation["status"] = "available"
+        return result
 
     def _serialize_chart_bars(self, data) -> list[dict[str, Any]]:
         if data is None or getattr(data, "empty", True):

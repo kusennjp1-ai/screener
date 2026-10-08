@@ -23,6 +23,7 @@ from app.services.static_daily_price_refresh_service import (
     static_daily_price_refresh_batch_size as _static_daily_price_refresh_batch_size,
 )
 from app.services.static_site_export_service import (
+    EXCLUDED_SCAN_INDUSTRY_GROUPS,
     NoPublishedStaticMarketArtifact,
     StaticSiteExportService,
 )
@@ -73,10 +74,9 @@ def _resolve_latest_completed_trading_date(market: str, *, close_buffer_minutes:
 # minutes (Yahoo's daily bar is final within minutes of the bell; waiting the
 # full consolidation window would defeat the point of the fast path).
 PRICES_ONLY_CLOSE_BUFFER_MINUTES = 5
-# Chart-relevant refresh budget for the fast path: STATIC_CHART_LIMIT charts
-# ship by default plus preset/group expansions — 6x covers those expansions
-# while keeping the refresh ~8 minutes instead of 52.
-PRICES_ONLY_REFRESH_SYMBOL_LIMIT = 1200
+# Refresh every exported stock in the published source. The final verification
+# cohort can change after fresh prices/ADV are calculated, so a top-N subset
+# cannot guarantee coverage of the existing verification predicate.
 
 
 def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
@@ -91,7 +91,7 @@ def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
     as_of = _resolve_latest_completed_trading_date(
         market, close_buffer_minutes=PRICES_ONLY_CLOSE_BUFFER_MINUTES
     )
-    symbols = _chart_relevant_symbols(market, limit=PRICES_ONLY_REFRESH_SYMBOL_LIMIT)
+    symbols = _published_price_refresh_symbols(market)
     with disable_serialized_data_fetch_lock(), disable_serialized_market_workload():
         return {
             "as_of_date": as_of.isoformat(),
@@ -194,32 +194,29 @@ def _refresh_static_daily_prices(
     return service.refresh(as_of_date=as_of_date, market=market, symbols=symbols)
 
 
-def _chart_relevant_symbols(market: str, limit: int) -> list[str] | None:
-    """Top of the latest PUBLISHED feature run — the names whose charts the
-    prices-only export re-serializes. Fresh closes only surface through
-    chart payloads on the fast path, so refreshing beyond this set is pure
-    wall-clock (C57: full-universe refresh was 52 of 84 pipeline minutes)."""
-    from app.infra.db.models.feature_store import (
-        FeatureRunPointer,
-        StockFeatureDaily,
-    )
-
+def _published_price_refresh_symbols(market: str) -> list[str]:
+    """Select the same ETF-excluded published stock source that export uses."""
+    service = StaticSiteExportService(SessionLocal)
     with SessionLocal() as db:
-        pointer = (
-            db.query(FeatureRunPointer)
-            .filter(FeatureRunPointer.key == _market_pointer_key(market))
-            .one_or_none()
+        run = service._get_latest_published_run(db, market=market)
+        if run is None:
+            raise NoPublishedStaticMarketArtifact(
+                f"No published feature run is available for market {market}",
+                markets=(market,),
+            )
+        rows, _ = service._load_scan_export_source(db, run)
+        serialized = [service._serialize_scan_row(row) for row in rows]
+    symbols = sorted({
+        row["symbol"] for row in serialized
+        if row.get("symbol")
+        and row.get("ibd_industry_group") not in EXCLUDED_SCAN_INDUSTRY_GROUPS
+    })
+    if not symbols:
+        raise NoPublishedStaticMarketArtifact(
+            f"No exported published stock source is available for market {market}",
+            markets=(market,),
         )
-        if pointer is None:
-            return None
-        rows = (
-            db.query(StockFeatureDaily.symbol)
-            .filter(StockFeatureDaily.run_id == pointer.run_id)
-            .order_by(StockFeatureDaily.composite_score.desc().nullslast())
-            .limit(limit)
-            .all()
-        )
-    return [symbol for symbol, in rows] or None
+    return symbols
 
 
 def _generate_trading_dates(
@@ -726,8 +723,14 @@ def main() -> int:
     else:
         prepare_runtime()
 
+        price_as_of_date: date | None = None
         if args.prices_only:
-            prices_only_result = _run_prices_only_refresh(market=args.market)
+            try:
+                prices_only_result = _run_prices_only_refresh(market=args.market)
+            except NoPublishedStaticMarketArtifact as exc:
+                print(f"Prices-only export skipped for market {args.market}: {exc}.")
+                return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
+            price_as_of_date = date.fromisoformat(prices_only_result["as_of_date"])
             print("Prices-only refresh complete:")
             for name, result_item in prices_only_result.items():
                 print(f"  - {name}: {result_item}")
@@ -763,6 +766,7 @@ def main() -> int:
                 clean=not args.no_clean,
                 markets=((args.market,) if args.market else None),
                 write_manifest=args.market is None,
+                **({"price_as_of_date": price_as_of_date} if price_as_of_date is not None else {}),
             )
         except NoPublishedStaticMarketArtifact:
             if args.prices_only:

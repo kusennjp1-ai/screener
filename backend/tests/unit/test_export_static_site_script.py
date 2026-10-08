@@ -1369,3 +1369,88 @@ def test_main_reraises_unrelated_runtime_errors_for_non_ready_selected_market(
 
     with pytest.raises(RuntimeError, match="database connection dropped"):
         export_script.main()
+
+@pytest.mark.parametrize("prices_only", [False, True])
+def test_main_forwards_price_session_only_for_prices_only(monkeypatch, tmp_path, prices_only):
+    calls = []
+    monkeypatch.setattr(export_script, "prepare_runtime", lambda: None)
+    monkeypatch.setattr(
+        export_script, "_run_prices_only_refresh",
+        lambda *, market: {"as_of_date": "2026-10-07", "price_refresh": {"status": "completed"}},
+    )
+
+    class ExportStub:
+        def __init__(self, *_args):
+            pass
+
+        def export(self, output_dir, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_dir=output_dir, generated_at="2026-10-07T20:10:00Z",
+                as_of_date="2026-10-07", warnings=(),
+            )
+
+    monkeypatch.setattr(export_script, "StaticSiteExportService", ExportStub)
+    argv = ["export_static_site.py", "--output-dir", str(tmp_path), "--market", "US"]
+    if prices_only:
+        argv.append("--prices-only")
+    monkeypatch.setattr(sys, "argv", argv)
+    assert export_script.main() == 0
+    assert len(calls) == 1
+    if prices_only:
+        assert calls[0]["price_as_of_date"] == date(2026, 10, 7)
+    else:
+        assert "price_as_of_date" not in calls[0]
+
+
+def test_published_price_refresh_symbols_covers_complete_exported_stock_source(monkeypatch):
+    source = [{"symbol": f"S{index:04d}", "current_price": 1, "adv_usd": 0} for index in range(1401)]
+    source += [{"symbol": "S1400"}, {"symbol": "FUND", "ibd_industry_group": "Finance-ETF / ETN"}]
+    run = SimpleNamespace(id=42, as_of_date=date(2026, 10, 6))
+    calls = []
+
+    @contextmanager
+    def session():
+        yield "synthetic-db"
+
+    class PublishedSourceStub:
+        def __init__(self, *_args):
+            pass
+
+        def _get_latest_published_run(self, db, *, market):
+            calls.append(("run", db, market))
+            return run
+
+        def _load_scan_export_source(self, db, selected_run):
+            assert selected_run is run
+            return source, None
+
+        def _serialize_scan_row(self, row):
+            return dict(row)
+
+    monkeypatch.setattr(export_script, "SessionLocal", session)
+    monkeypatch.setattr(export_script, "StaticSiteExportService", PublishedSourceStub)
+    symbols = export_script._published_price_refresh_symbols("US")
+    assert symbols == [f"S{index:04d}" for index in range(1401)]
+    assert calls == [("run", "synthetic-db", "US")]
+
+
+def test_prices_only_missing_published_source_skips_before_refresh(monkeypatch, tmp_path):
+    refresh_calls = []
+    monkeypatch.setattr(export_script, "prepare_runtime", lambda: None)
+    monkeypatch.setattr(
+        export_script, "_resolve_latest_completed_trading_date",
+        lambda *_args, **_kwargs: date(2026, 10, 7),
+    )
+
+    def missing_source(_market):
+        raise export_script.NoPublishedStaticMarketArtifact("No published stock source", markets=("US",))
+
+    monkeypatch.setattr(export_script, "_published_price_refresh_symbols", missing_source)
+    monkeypatch.setattr(
+        export_script, "_refresh_static_daily_prices",
+        lambda **kwargs: refresh_calls.append(kwargs),
+    )
+    monkeypatch.setattr(sys, "argv", ["export_static_site.py", "--market", "US", "--prices-only", "--output-dir", str(tmp_path)])
+    assert export_script.main() == export_script.STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
+    assert refresh_calls == []
