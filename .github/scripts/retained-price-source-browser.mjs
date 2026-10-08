@@ -19,6 +19,127 @@ const read=path=>JSON.parse(bytes(path));
 const regularRoot=path=>{assert.equal(realpathSync(path),resolve(path),'Linked root');assert(lstatSync(path).isDirectory(),'Missing directory');return path;};
 
 export function localBrowserUrl(value,origin){try{const url=new URL(value);return url.origin===origin&&url.protocol==='http:'&&url.hostname==='127.0.0.1'&&!url.username&&!url.password;}catch{return false;}}
+// Exact approved-UI imports remain aborted. This is classification of denied
+// attempts, never permission to contact a font host or change the approved UI.
+export const EXPECTED_BLOCKED_FONT_STYLESHEETS=Object.freeze([
+  'https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap',
+]);
+export const BROWSER_NETWORK_LIMITS=Object.freeze({events:64,fieldChars:2048,bytes:256*1024});
+export const BROWSER_NETWORK_CONTRACT='Every external HTTP request is aborted and every WebSocket is closed without connecting. Require zero unexpected attempts and zero successful external HTTP/WebSocket accesses; separately retain at most one exact approved blocked font stylesheet attempt per URL per case. network_denials retains all denied URL evidence.';
+
+export function browserRequestMetadata(request,page,origin){
+  const value={url:null,method:null,resource_type:null,navigation:null,frame_url:null,page_url:null,current_local_main_frame:false,metadata_complete:false};
+  try{
+    value.url=request.url();value.method=request.method();value.resource_type=request.resourceType();value.navigation=request.isNavigationRequest();
+    const frame=request.frame();value.frame_url=frame.url();value.page_url=page.url();
+    value.current_local_main_frame=frame===page.mainFrame()&&frame.page()===page&&frame.parentFrame()===null&&value.frame_url===value.page_url&&localBrowserUrl(value.frame_url,origin)&&localBrowserUrl(value.page_url,origin);
+    value.metadata_complete=[value.url,value.method,value.resource_type,value.frame_url,value.page_url].every(x=>typeof x==='string'&&x.length>0&&x.length<=BROWSER_NETWORK_LIMITS.fieldChars)&&typeof value.navigation==='boolean';
+  }catch{/* Missing/throwing frame or request metadata is an unexpected attempt. */}
+  return value;
+}
+export function classifyBlockedFontAttempt(value,seen){
+  if(!value?.metadata_complete)return 'missing-or-invalid-metadata';
+  if(!EXPECTED_BLOCKED_FONT_STYLESHEETS.includes(value.url))return 'unapproved-url';
+  if(value.method!=='GET')return 'unexpected-method';
+  if(value.resource_type!=='stylesheet')return 'unexpected-resource-type';
+  if(value.navigation!==false)return 'navigation-request';
+  if(value.current_local_main_frame!==true)return 'other-or-nonlocal-frame';
+  if(seen.has(value.url))return 'repeated-font-attempt';
+  return 'expected-blocked-font-stylesheet';
+}
+export function createBrowserNetworkGate({origin,getPage,denials,symbol}){
+  const evidence={symbol,contract:BROWSER_NETWORK_CONTRACT,expected_blocked_stylesheets:[],unexpected_attempts:[],successful_external_http:[],successful_external_websocket:[],limits:BROWSER_NETWORK_LIMITS,retention_failed:false,retained_bytes:0,events:0,dropped_events:0};
+  const seen=new Set(),sockets=new Map();let retainedBytes=0,pending=0;
+  const bounded=value=>{
+    const result={};for(const [key,item]of Object.entries(value)){
+      if(typeof item==='string'&&item.length>BROWSER_NETWORK_LIMITS.fieldChars){evidence.retention_failed=true;result[key]=item.slice(0,BROWSER_NETWORK_LIMITS.fieldChars);result[key+'_truncated']=true;}
+      else if(item===null||['string','boolean'].includes(typeof item)||(typeof item==='number'&&Number.isFinite(item)))result[key]=item;
+      else {evidence.retention_failed=true;result[key]=null;}
+    }return result;
+  };
+  const retain=(kind,value,denial=false)=>{
+    evidence.events++;const record=bounded(value),raw=JSON.stringify(record),url=record.url;
+    const size=Buffer.byteLength(raw)+(denial?Buffer.byteLength(typeof url==='string'?url:'[unavailable URL]'):0);
+    if(evidence.events>BROWSER_NETWORK_LIMITS.events||retainedBytes+size>BROWSER_NETWORK_LIMITS.bytes){evidence.retention_failed=true;evidence.dropped_events++;return;}
+    retainedBytes+=size;evidence.retained_bytes=retainedBytes;evidence[kind].push(record);if(denial)denials.push(typeof url==='string'?url:'[unavailable URL]');
+  };
+  const readUrl=value=>{try{const url=value.url();return typeof url==='string'?url:null;}catch{return null;}};
+  const route=async route=>{
+    let request;try{request=route.request();}catch{}const url=readUrl(request);
+    if(localBrowserUrl(url,origin))return route.continue();
+    pending++;let page;try{page=getPage();}catch{}const metadata=browserRequestMetadata(request,page,origin);let reason=classifyBlockedFontAttempt(metadata,seen),blocked=false;
+    if(EXPECTED_BLOCKED_FONT_STYLESHEETS.includes(metadata.url))seen.add(metadata.url);
+    try{await route.abort('failed');blocked=true;}catch{reason='abort-failed';}
+    finally{retain(reason==='expected-blocked-font-stylesheet'&&blocked?'expected_blocked_stylesheets':'unexpected_attempts',{...metadata,reason,blocked},true);pending--;}
+  };
+  const routeWebSocket=async socket=>{
+    pending++;const url=readUrl(socket);let blocked=false;
+    try{await socket.close();blocked=true;}catch{}
+    finally{retain('unexpected_attempts',{url,resource_type:'websocket',reason:'websocket-attempt',blocked},true);pending--;}
+  };
+  const observeHttpResponse=response=>{
+    const url=readUrl(response);if(localBrowserUrl(url,origin))return;
+    // Blob/data responses are browser-owned bytes, not successful HTTP access.
+    // This does not change the request route: every nonlocal routed request aborts.
+    try{const protocol=new URL(url).protocol;if(protocol==='blob:'||protocol==='data:')return;}catch{}
+    let status=null;try{status=response.status();}catch{}
+    retain('successful_external_http',{url,status,reason:'external-http-response'});
+  };
+  const observeWebSocketCreated=event=>{
+    if(sockets.size>=BROWSER_NETWORK_LIMITS.events||typeof event.requestId!=='string'||event.requestId.length>BROWSER_NETWORK_LIMITS.fieldChars||typeof event.url!=='string'||event.url.length>BROWSER_NETWORK_LIMITS.fieldChars){evidence.retention_failed=true;return;}
+    sockets.set(event.requestId,event.url);
+  };
+  const observeWebSocketHandshake=event=>{
+    const url=sockets.get(event.requestId);
+    // A response proves external access even when the upgrade was rejected.
+    if(!url){retain('unexpected_attempts',{url:null,reason:'websocket-handshake-without-metadata'});return;}
+    if(!localBrowserUrl(url,origin))retain('successful_external_websocket',{url,status:event.response?.status??null,reason:'external-websocket-handshake-response'});
+  };
+  const attach=async(context,page)=>{
+    context.on('response',observeHttpResponse);
+    const session=await context.newCDPSession(page);
+    session.on('Network.webSocketCreated',observeWebSocketCreated);
+    session.on('Network.webSocketHandshakeResponseReceived',observeWebSocketHandshake);
+    await session.send('Network.enable');return session;
+  };
+  const assertClean=()=>{
+    assert.equal(pending,0,'Unsettled external abort or WebSocket close');
+    assert.equal(evidence.retention_failed,false,'Network evidence exceeded its bounded retention');
+    assert.equal(evidence.unexpected_attempts.length,0,'Browser attempted unexpected external network or WebSocket');
+    assert.equal(evidence.successful_external_http.length,0,'Browser received an external HTTP response');
+    assert.equal(evidence.successful_external_websocket.length,0,'Browser received an external WebSocket handshake response');
+  };
+  return {evidence,route,routeWebSocket,attach,assertClean,observeHttpResponse,observeWebSocketCreated,observeWebSocketHandshake};
+}
+export const FALLBACK_FONT_SELECTORS=Object.freeze(['.symbol-title h2','.research-symbol-price strong','#research-detail-tabs button[aria-selected="true"]']);
+export function requireFallbackFontSample(sample){
+  assert(sample&&typeof sample.selector==='string'&&sample.selector.length<=128,'Missing scoped font sample');
+  const box=sample.geometry;
+  assert(box&&['x','y','width','height','viewport_width','client_width','scroll_width'].every(key=>Number.isFinite(box[key]))&&box.width>0&&box.height>0&&box.viewport_width>0&&box.client_width>=0&&box.scroll_width>=0,'Invalid scoped text geometry');
+  if(sample.visible_in_viewport)assert(box.x>=-1&&box.x+box.width<=box.viewport_width+1&&(!box.client_width||box.scroll_width<=box.client_width+1),'Scoped visible fallback text is horizontally clipped');
+  assert(typeof sample.computed_font_family==='string'&&sample.computed_font_family.length<=512,'Unbounded requested font family');
+  assert(Array.isArray(sample.platform_fonts)&&sample.platform_fonts.length>0&&sample.platform_fonts.length<=16,'Missing/unbounded actual selected platform fonts');
+  for(const font of sample.platform_fonts)assert(typeof font.familyName==='string'&&font.familyName.length>0&&font.familyName.length<=128&&font.isCustomFont===false&&Number.isSafeInteger(font.glyphCount)&&font.glyphCount>0,'Selected text did not use an actual platform fallback font');
+  return sample;
+}
+export async function captureFallbackTypography(page,session){
+  await page.evaluate(()=>document.fonts.ready);
+  await session.send('DOM.enable');await session.send('CSS.enable');
+  const {root}=await session.send('DOM.getDocument',{depth:0});const samples=[];
+  for(const selector of FALLBACK_FONT_SELECTORS){
+    const element=page.locator(selector);assert.equal(await element.count(),1,'Scoped font node must be unique: '+selector);
+    const visual=await element.evaluate(node=>{
+      const box=node.getBoundingClientRect(),style=getComputedStyle(node);
+      return {computed_font_family:style.fontFamily,geometry:{x:box.x,y:box.y,width:box.width,height:box.height,viewport_width:innerWidth,client_width:node.clientWidth,scroll_width:node.scrollWidth},visible_in_viewport:box.bottom>0&&box.top<innerHeight};
+    });
+    const {nodeId}=await session.send('DOM.querySelector',{nodeId:root.nodeId,selector});assert(nodeId,'Scoped font node unavailable to Chromium');
+    const {fonts}=await session.send('CSS.getPlatformFontsForNode',{nodeId});
+    samples.push(requireFallbackFontSample({selector,...visual,platform_fonts:fonts.map(({familyName,isCustomFont,glyphCount})=>({familyName,isCustomFont,glyphCount}))}));
+  }
+  return {scope:'Three existing symbol/price/selected-tab text nodes; actual Chromium-selected platform fonts and horizontal fit only, not Design acceptance',selection_source:'CDP CSS.getPlatformFontsForNode; computed font-family is requested CSS, not selection proof',samples};
+}
+
 export function requireActualClock(value,browserNow,hostNow=Date.now()){
   const parsed=typeof value==='string'?Date.parse(value):value;
   assert(Number.isFinite(parsed)&&Number.isFinite(browserNow)&&Math.abs(hostNow-browserNow)<30000&&Math.abs(parsed-browserNow)<90000,'Browser/report clock is not the actual current clock');return parsed;
@@ -136,12 +257,13 @@ async function actualCsv(page,model,item){
   await filters.getByRole('button',{name:'絞り込みを閉じる',exact:true}).click();
   return {filename:download.suggestedFilename(),bytes:raw.length,sha256:sha(raw),row,source:'actual browser download'};
 }
-async function inspectCase({browser,server,assets,model,item,generation,output,network}){
+async function inspectCase({browser,server,assets,model,item,generation,output,network,networkCases}){
   const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'ja-JP',serviceWorkers:'block',acceptDownloads:true});
-  await context.route('**/*',route=>{if(localBrowserUrl(route.request().url(),server.origin))return route.continue();network.push(route.request().url());return route.abort();});
-  await context.routeWebSocket('**/*',socket=>{network.push(socket.url());socket.close();});
-  const page=await context.newPage();page.setDefaultTimeout(45000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  let page,closed=false;const gate=createBrowserNetworkGate({origin:server.origin,getPage:()=>page,denials:network,symbol:item.symbol});networkCases.push(gate.evidence);
+  let session;const errors=[];
   try{
+    await context.route('**/*',gate.route);await context.routeWebSocket('**/*',gate.routeWebSocket);
+    page=await context.newPage();session=await gate.attach(context,page);page.setDefaultTimeout(45000);page.on('pageerror',error=>errors.push(error.message));
     const currentUrl=server.origin+BASE,staticUrl=path=>new URL('static-data/'+path,currentUrl).href;
     const bootstrap=Promise.all([page.waitForResponse(r=>r.url()===staticUrl('manifest.json')),page.waitForResponse(r=>r.url()===new URL('publication.json',currentUrl).href)]);
     const go=()=>page.goto(`${currentUrl}#/?method=${METHOD}&symbol=${encodeURIComponent(item.symbol)}`);
@@ -181,9 +303,10 @@ async function inspectCase({browser,server,assets,model,item,generation,output,n
       result.detail=loaded.observation;
     }
     result.csv=await actualCsv(page,model,item);
+    result.typography=await captureFallbackTypography(page,session);
     const screen=await page.screenshot({fullPage:false});assert(screen.length<=BROWSER_LIMITS.screenshotBytes,'Screenshot exceeds bound');writeFileSync(join(output,item.symbol+'.png'),screen,{flag:'wx'});result.screenshot={path:item.symbol+'.png',bytes:screen.length,sha256:sha(screen),scope:'one viewport; DOM and CSV assertions cover additional fields'};
-    assert.equal(errors.length,0,'Browser runtime error: '+errors.join('; '));assert.equal(network.length,0,'Browser attempted external network');return result;
-  }finally{await context.close();}
+    await context.close();closed=true;assert.equal(errors.length,0,'Browser runtime error: '+errors.join('; '));gate.assertClean();return result;
+  }finally{if(!closed)await context.close();}
 }
 
 export async function runBrowserProof(){
@@ -204,7 +327,7 @@ export async function runBrowserProof(){
   const carryIdentity=requireCarryBinding(publication,state,bytes(state.carry.projectionPath,128*1024**2));
   const preparedRaw=bytes(join(proof.replayRoot,'prepared.json'));equal({bytes:preparedRaw.length,sha256:sha(preparedRaw)},request.repair.prepared,'Replay preparation changed');
   const output=join(scratch,'finite-source-browser');assert(!existsSync(output),'Browser report directory must be new');mkdirSync(output);let server,browser,assets,timer,removeInterrupts;
-  const report={schema_version:'retained-price-source-browser-v1',status:'running',scope:'finite actual composed data/DOM/CSV gate; not Design screenshot acceptance',publication_sha256:sha(publicationRaw),approved_ui:request.approved_ui,ui_digest:publication.ui_digest,source_artifact:state.source.artifact.id,financial_lineage:publication.financial_lineage_sha256,carry:carryIdentity,publisher_tooling:publication.publisher_tooling,started_at:new Date().toISOString(),clock:'actual browser and host time; no overrides',cases:[],network_denials:[]};
+  const report={schema_version:'retained-price-source-browser-v1',status:'running',scope:'finite actual composed data/DOM/CSV gate; not Design screenshot acceptance',publication_sha256:sha(publicationRaw),approved_ui:request.approved_ui,ui_digest:publication.ui_digest,source_artifact:state.source.artifact.id,financial_lineage:publication.financial_lineage_sha256,carry:carryIdentity,publisher_tooling:publication.publisher_tooling,started_at:new Date().toISOString(),clock:'actual browser and host time; no overrides',cases:[],network_denials:[],network_contract:BROWSER_NETWORK_CONTRACT,network_cases:[]};
   const save=()=>{const raw=JSON.stringify(report,null,2)+'\n';assert(Buffer.byteLength(raw)<=BROWSER_LIMITS.reportBytes,'Browser report exceeds bound');writeFileSync(join(output,'report.json'),raw);};save();
   try{
     const run=async()=>{
@@ -214,7 +337,7 @@ export async function runBrowserProof(){
       assert.equal(sha(bytes(join(dist,'static-data/manifest.json'))),publication.data_manifest_sha256,'Composed manifest changed');
       const index=model.decodeResearchIndex(await assets.readJson(assets.manifest.markets.US.assets.research.path));const selected=selectBrowserCases(index.rows,JSON.parse(preparedRaw));
       browser=await model.chromium.launch({headless:true});report.browser=browser.version();report.node=process.version;
-      for(const item of selected){report.active_case={symbol:item.symbol,category:item.category};save();report.cases.push(await inspectCase({browser,server,assets,model,item,generation:assets.manifest.research_generation||assets.manifest.generated_at,output,network:report.network_denials}));save();}
+      for(const item of selected){report.active_case={symbol:item.symbol,category:item.category};save();report.cases.push(await inspectCase({browser,server,assets,model,item,generation:assets.manifest.research_generation||assets.manifest.generated_at,output,network:report.network_denials,networkCases:report.network_cases}));save();}
       equal(bytes(statePath),stateRaw,'Publication state changed during browser verification');equal(bytes(join(dist,'publication.json')),publicationRaw,'Publication changed during browser verification');equal(uiInventory(dist),publication.ui_files,'UI changed during browser verification');
       delete report.active_case;report.expired_components=report.cases.reduce((sum,item)=>sum+(item.expiry?.expired_components||0),0);assert(report.expired_components>0,'No real expired financial component was proved; no simulated clock is permitted');report.server=server.stats();assert.equal(report.server.failures.length,0,'Static server rejected a request');report.status='passed';
       await publisherToolingBoundary(state,'browser-after');writeFileSync(statePath,JSON.stringify(state));

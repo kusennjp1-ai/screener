@@ -136,3 +136,116 @@ test('mutation after awaited browser-before cannot consume its proof',async()=>{
   await before();await Promise.resolve();state.carry.projection='interleaved-change';
   assert.throws(()=>handoff.consume(state),/changed/);
 });
+
+import {EXPECTED_BLOCKED_FONT_STYLESHEETS,BROWSER_NETWORK_LIMITS,BROWSER_NETWORK_CONTRACT,browserRequestMetadata,classifyBlockedFontAttempt,createBrowserNetworkGate,requireFallbackFontSample} from './retained-price-source-browser.mjs';
+const fontOrigin='http://127.0.0.1:3210',fontUrl=EXPECTED_BLOCKED_FONT_STYLESHEETS[0];
+function fontRequestFixture(){
+  const page={url:()=>fontOrigin+'/screener/#/?symbol=NVDA',mainFrame:()=>frame};
+  const frame={url:()=>page.url(),page:()=>page,parentFrame:()=>null};
+  const request={url:()=>fontUrl,method:()=>'GET',resourceType:()=>'stylesheet',isNavigationRequest:()=>false,frame:()=>frame};
+  return {request,page,frame};
+}
+function fontGateFixture(){
+  const fixture=fontRequestFixture(),denials=[],gate=createBrowserNetworkGate({origin:fontOrigin,getPage:()=>fixture.page,denials,symbol:'NVDA'});
+  return {...fixture,denials,gate};
+}
+test('blocked font constants bind only the exact two unchanged approved CSS imports',()=>{
+  assert.equal(EXPECTED_BLOCKED_FONT_STYLESHEETS.length,2);assert(Object.isFrozen(EXPECTED_BLOCKED_FONT_STYLESHEETS));
+  for(const [path,blob,url]of [
+    ['../../frontend/src/static/theme/foundation.css','d2790d3b3b1764c34a936b26d719fdbce4e35e5f',EXPECTED_BLOCKED_FONT_STYLESHEETS[0]],
+    ['../../frontend/src/index.css','3909758330379e3061badf17624a1698288e616a',EXPECTED_BLOCKED_FONT_STYLESHEETS[1]],
+  ]){
+    const raw=readFileSync(new URL(path,import.meta.url));assert.equal(createHash('sha1').update(Buffer.from('blob '+raw.length+'\0')).update(raw).digest('hex'),blob);
+    assert(raw.toString('utf8').startsWith("@import url('"+url+"');"));
+  }
+  assert.match(BROWSER_NETWORK_CONTRACT,/zero unexpected attempts and zero successful external HTTP\/WebSocket accesses/);
+});
+test('classification requires exact URL, GET, stylesheet, non-navigation and the actual current local main page frame',()=>{
+  const {request,page}=fontRequestFixture(),metadata=browserRequestMetadata(request,page,fontOrigin);assert.equal(classifyBlockedFontAttempt(metadata,new Set()),'expected-blocked-font-stylesheet');
+  const changes=[
+    {url:fontUrl+'&changed=1'},{url:fontUrl.replace('display=swap','display=block')},
+    {url:fontUrl.replace('https:','http:')},{url:fontUrl.replace('fonts.googleapis.com','fonts.googleapis.com.example.org')},
+    {url:'https://fonts.googleapis.com/css2?family=Other&display=swap'},{url:fontUrl+'#extra'},
+    {method:'POST'},{method:'HEAD'},{method:'get'},
+    {resource_type:'font'},{resource_type:'fetch'},{resource_type:'image'},{resource_type:'script'},{resource_type:'document'},
+    {navigation:true},{navigation:null},{current_local_main_frame:false},{current_local_main_frame:undefined},
+    {metadata_complete:false},{metadata_complete:undefined},
+  ];
+  for(const change of changes)assert.notEqual(classifyBlockedFontAttempt({...metadata,...change},new Set()),'expected-blocked-font-stylesheet',JSON.stringify(change));
+  assert.equal(classifyBlockedFontAttempt(metadata,new Set([fontUrl])),'repeated-font-attempt');
+});
+test('request/page/frame metadata missing, throwing or on another frame/origin fails closed',()=>{
+  for(const target of ['request','page','frame']){
+    const keys={request:['url','method','resourceType','isNavigationRequest','frame'],page:['url','mainFrame'],frame:['url','page','parentFrame']}[target];
+    for(const key of keys)for(const mode of ['missing','throwing']){
+      const fixture=fontRequestFixture();if(mode==='missing')delete fixture[target][key];else fixture[target][key]=()=>{throw Error('missing browser metadata');};
+      assert.notEqual(classifyBlockedFontAttempt(browserRequestMetadata(fixture.request,fixture.page,fontOrigin),new Set()),'expected-blocked-font-stylesheet',target+'.'+key+' '+mode);
+    }
+  }
+  for(const mutate of [
+    f=>{f.request.method=()=>null;},f=>{f.request.resourceType=()=>({});},f=>{f.request.isNavigationRequest=()=>0;},
+    f=>{f.page.url=()=> 'https://example.org/';},
+    f=>{f.frame.url=()=>fontOrigin+'/other-page';},
+    f=>{f.frame.page=()=>({});},
+    f=>{f.frame.parentFrame=()=>({});},
+    f=>{f.page.mainFrame=()=>({});},
+  ]){
+    const fixture=fontRequestFixture();mutate(fixture);assert.notEqual(classifyBlockedFontAttempt(browserRequestMetadata(fixture.request,fixture.page,fontOrigin),new Set()),'expected-blocked-font-stylesheet');
+  }
+});
+test('actual route handler aborts both exact imports, retains raw URLs, and rejects their repeats per case',async()=>{
+  const {request,gate,denials}=fontGateFixture();let aborted=0,continued=0;
+  for(const url of EXPECTED_BLOCKED_FONT_STYLESHEETS){request.url=()=>url;await gate.route({request:()=>request,abort:async reason=>{assert.equal(reason,'failed');aborted++;},continue:async()=>{continued++;}});}
+  assert.equal(aborted,2);assert.equal(continued,0);assert.deepEqual(denials,EXPECTED_BLOCKED_FONT_STYLESHEETS);gate.assertClean();
+  assert(gate.evidence.expected_blocked_stylesheets.every(item=>item.blocked&&item.metadata_complete&&item.current_local_main_frame&&item.method==='GET'&&item.resource_type==='stylesheet'&&item.navigation===false));
+  await gate.route({request:()=>request,abort:async()=>{aborted++;}});assert.equal(aborted,3);assert.equal(gate.evidence.unexpected_attempts[0].reason,'repeated-font-attempt');assert.throws(()=>gate.assertClean(),/unexpected/);
+  const fresh=fontGateFixture();await fresh.gate.route({request:()=>fresh.request,abort:async()=>{}});fresh.gate.assertClean();
+});
+test('every invalid external route remains aborted, including metadata and abort failures',async()=>{
+  for(const mutate of [
+    f=>{f.request.url=()=>fontUrl+'&changed=1';},f=>{f.request.method=()=>'POST';},f=>{f.request.resourceType=()=>'fetch';},
+    f=>{f.request.isNavigationRequest=()=>true;},f=>{f.request.frame=()=>{throw Error('worker frame');};},f=>{f.page.mainFrame=()=>({});},
+  ]){
+    const fixture=fontGateFixture();mutate(fixture);let aborted=0;
+    await fixture.gate.route({request:()=>fixture.request,abort:async()=>{aborted++;}});
+    assert.equal(aborted,1);assert.equal(fixture.gate.evidence.expected_blocked_stylesheets.length,0);assert.equal(fixture.gate.evidence.unexpected_attempts.length,1);assert.throws(()=>fixture.gate.assertClean());
+  }
+  const failed=fontGateFixture();await failed.gate.route({request:()=>failed.request,abort:async()=>{throw Error('closed context');}});
+  assert.equal(failed.gate.evidence.unexpected_attempts[0].reason,'abort-failed');assert.equal(failed.gate.evidence.unexpected_attempts[0].blocked,false);assert.throws(()=>failed.gate.assertClean());
+  const missing=fontGateFixture();let aborted=0;await missing.gate.route({request:()=>{throw Error('request unavailable');},abort:async()=>{aborted++;}});
+  assert.equal(aborted,1);assert.deepEqual(missing.denials,['[unavailable URL]']);assert.throws(()=>missing.gate.assertClean());
+});
+test('the existing exact loopback route continues while external HTTP responses and all WebSockets fail',async()=>{
+  const fixture=fontGateFixture();fixture.request.url=()=>fontOrigin+'/screener/local.css';let continued=0;
+  await fixture.gate.route({request:()=>fixture.request,continue:async()=>{continued++;},abort:async()=>{assert.fail('local request was aborted');}});
+  assert.equal(continued,1);assert.equal(fixture.denials.length,0);fixture.gate.assertClean();
+  fixture.gate.observeHttpResponse({url:()=>fontOrigin+'/screener/local.css',status:()=>200});fixture.gate.assertClean();
+  for(const url of ['blob:'+fontOrigin+'/browser-owned-csv','data:text/csv,symbol%2Cprice'])fixture.gate.observeHttpResponse({url:()=>url,status:()=>200});fixture.gate.assertClean();
+  fixture.gate.observeHttpResponse({url:()=>fontUrl,status:()=>200});assert.equal(fixture.gate.evidence.successful_external_http.length,1);assert.throws(()=>fixture.gate.assertClean(),/HTTP response/);
+  for(const url of [fontUrl,'wss://example.org/socket','ws://127.0.0.1:3210/socket']){
+    const next=fontGateFixture();let closed=0;await next.gate.routeWebSocket({url:()=>url,close:async()=>{closed++;}});
+    assert.equal(closed,1);assert.equal(next.gate.evidence.expected_blocked_stylesheets.length,0);assert.throws(()=>next.gate.assertClean(),/unexpected/);
+  }
+  const failedClose=fontGateFixture();await failedClose.gate.routeWebSocket({url:()=> 'wss://example.org/socket',close:async()=>{throw Error('socket close rejected');}});assert.equal(failedClose.gate.evidence.unexpected_attempts[0].blocked,false);assert.throws(()=>failedClose.gate.assertClean(),/unexpected/);
+  const handshake=fontGateFixture();handshake.gate.observeWebSocketCreated({requestId:'1',url:'wss://example.org/socket'});handshake.gate.observeWebSocketHandshake({requestId:'1',response:{status:403}});
+  assert.equal(handshake.gate.evidence.successful_external_websocket.length,1);assert.throws(()=>handshake.gate.assertClean(),/WebSocket handshake/);
+  const unknown=fontGateFixture();unknown.gate.observeWebSocketHandshake({requestId:'unknown',response:{status:101}});assert.throws(()=>unknown.gate.assertClean(),/unexpected/);
+});
+test('network report exhaustion and oversized metadata stay bounded, retain failure, and still abort every request',async()=>{
+  const fixture=fontGateFixture();let aborted=0;
+  for(let index=0;index<BROWSER_NETWORK_LIMITS.events+2;index++)await fixture.gate.route({request:()=>fixture.request,abort:async()=>{aborted++;}});
+  assert.equal(aborted,BROWSER_NETWORK_LIMITS.events+2);assert.equal(fixture.denials.length,BROWSER_NETWORK_LIMITS.events);assert.equal(fixture.gate.evidence.dropped_events,2);assert.throws(()=>fixture.gate.assertClean(),/bounded retention/);
+  const huge=fontGateFixture();huge.request.url=()=>fontUrl+'x'.repeat(BROWSER_NETWORK_LIMITS.fieldChars);await huge.gate.route({request:()=>huge.request,abort:async()=>{}});
+  assert.equal(huge.gate.evidence.retention_failed,true);assert.equal(huge.denials[0].length,BROWSER_NETWORK_LIMITS.fieldChars);assert.equal(huge.gate.evidence.unexpected_attempts[0].url_truncated,true);assert.throws(()=>huge.gate.assertClean(),/bounded retention/);
+});
+const fallbackSample=()=>({selector:'.symbol-title h2',computed_font_family:'"Geist Mono", monospace',visible_in_viewport:true,geometry:{x:10,y:10,width:80,height:24,viewport_width:1440,client_width:80,scroll_width:80},platform_fonts:[{familyName:'DejaVu Sans Mono',isCustomFont:false,glyphCount:4}]});
+test('selected fallback proof needs real platform font evidence and scoped visible text fit, with ordinary scrolling preserved',()=>{
+  requireFallbackFontSample(fallbackSample());
+  const offscreen=fallbackSample();offscreen.visible_in_viewport=false;offscreen.geometry.y=-200;requireFallbackFontSample(offscreen);
+  const inline=fallbackSample();inline.geometry.client_width=0;inline.geometry.scroll_width=0;requireFallbackFontSample(inline);
+  for(const mutate of [
+    x=>{x.platform_fonts=[];},x=>{x.platform_fonts[0].isCustomFont=true;},x=>{x.platform_fonts[0].glyphCount=0;},
+    x=>{x.geometry.width=NaN;},x=>{x.geometry.width=0;},x=>{x.geometry.x=-20;},x=>{x.geometry.scroll_width=200;},
+    x=>{x.geometry.x=1400;},x=>{x.computed_font_family='x'.repeat(513);},x=>{x.platform_fonts[0].familyName='x'.repeat(129);},
+  ]){const sample=fallbackSample();mutate(sample);assert.throws(()=>requireFallbackFontSample(sample));}
+});
