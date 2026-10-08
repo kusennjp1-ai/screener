@@ -1,0 +1,42 @@
+name: Oct6 carry controller synthetic check
+on:
+  push:
+    branches: [preview/oct6-carry-controller-check-20261008]
+permissions:
+  contents: read
+jobs:
+  check:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-carry-controller-check-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify exact disabled code-only candidate
+        run: |
+          test "$(git rev-parse HEAD^)" = c822e55df34c1cb7b559bfa9f11ecda7018ee3ce
+          test "$(git hash-object .github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git hash-object .github/scripts/financial-generation-carry-controller.mjs)" = 1f9839d0e11e23b354df2ddb4d28278e409bc7fb
+          test "$(git hash-object .github/scripts/select-release-source.mjs)" = 36120578f7934b1c601751ce00ca676556ad10d3
+          test "$(git hash-object .github/scripts/financial-release-lifecycle.test.mjs)" = f9175b830251b3c6c41950817152291ff3a7b305
+          test "$(git hash-object frontend/tools/financial-generation-carry.test.mjs)" = 49ceb70e6f9328c60214d82b70317a15e32d7120
+          test -z "${GH_TOKEN:-}"
+          test -z "${NODE_OPTIONS:-}"
+          node -e 'console.log(JSON.stringify({node:process.version,heap_limit:require("node:v8").getHeapStatistics().heap_size_limit,total_memory:require("node:os").totalmem(),source:"synthetic fixtures only"}))'
+      - name: Install the existing locked frontend runtime
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Verify synthetic controller lifecycle and two ordinary carries
+        timeout-minutes: 7
+        run: timeout --kill-after=10s 6m node --test --test-concurrency=1 .github/scripts/financial-release-lifecycle.test.mjs .github/scripts/financial-performance-packed-carry.test.mjs
+      - name: Verify selected-reader imports and synthetic issuer guards in normal Vite config
+        timeout-minutes: 5
+        working-directory: frontend
+        run: timeout --kill-after=10s 4m node node_modules/vitest/vitest.mjs run tools/financial-generation-carry.test.mjs tools/retained-price-source-imports.test.mjs
