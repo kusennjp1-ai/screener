@@ -12,7 +12,9 @@ docs/learning_loop/adr_ll2_e1_canonical_price_contract_v1.md
 """
 import json
 import logging
+import math
 import pickle
+from dataclasses import dataclass, field
 from typing import Any, Optional, Dict, List, Callable
 from datetime import datetime, timedelta, date, time
 import pandas as pd
@@ -44,6 +46,26 @@ logger = logging.getLogger(__name__)
 # Redis keys for warmup metadata
 WARMUP_METADATA_KEY = "cache:warmup:metadata"
 WARMUP_HEARTBEAT_KEY = "cache:warmup:heartbeat"
+
+
+@dataclass(frozen=True)
+class PricePersistenceReceipt:
+    """Committed database writes; Redis counts are a separate contract."""
+
+    submitted_symbols: tuple[str, ...]
+    accepted_symbols: tuple[str, ...] = ()
+    persisted_symbols: tuple[str, ...] = ()
+    submitted_rows: int = 0
+    persisted_rows: int = 0
+    rejected_symbols: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def complete(self) -> bool:
+        return (
+            not self.rejected_symbols
+            and self.persisted_symbols == self.submitted_symbols
+            and self.persisted_rows == self.submitted_rows
+        )
 
 
 class PriceCacheService:
@@ -1611,117 +1633,144 @@ class PriceCacheService:
 
         return stored
 
-    def _store_batch_in_database(self, batch_data: Dict[str, pd.DataFrame]) -> None:
-        """
-        Store multiple symbols' price data in database in a single transaction.
+    def persist_price_batch(
+        self, batch_data: Dict[str, pd.DataFrame]
+    ) -> PricePersistenceReceipt:
+        """Persist histories without warming the Redis cache."""
+        return self._store_batch_in_database(batch_data)
 
-        Queries existing dates for ALL symbols at once and upserts every supplied
-        historical row, including provider corrections.
+    def store_batch_in_cache_with_receipt(
+        self,
+        batch_data: Dict[str, pd.DataFrame],
+        market: str | None = None,
+    ) -> PricePersistenceReceipt:
+        """Persist first and warm Redis only for committed symbol histories."""
+        receipt = self.persist_price_batch(batch_data)
+        if receipt.persisted_symbols:
+            self.store_batch_in_cache(
+                {symbol: batch_data[symbol] for symbol in receipt.persisted_symbols},
+                also_store_db=False,
+                market=market,
+            )
+        return receipt
 
-        Args:
-            batch_data: Dict mapping symbol to price DataFrame
-        """
-        batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
-        if not batch_data:
-            return
-
-        db = self._session_factory()
-
-        try:
-            symbols = list(batch_data.keys())
-
-            symbol_dates: Dict[str, set] = {}
-            for symbol, data in batch_data.items():
-                if data is None or data.empty:
+    def _store_batch_in_database(
+        self, batch_data: Dict[str, pd.DataFrame]
+    ) -> PricePersistenceReceipt:
+        """Upsert complete accepted histories and report only committed writes."""
+        submitted_symbols = tuple(batch_data)
+        submitted_rows = 0
+        prepared_by_symbol: dict[str, list[dict[str, Any]]] = {}
+        rejected: dict[str, str] = {}
+        for symbol, data in batch_data.items():
+            try:
+                submitted_rows += len(data) if data is not None else 0
+                if not coherent_history(data):
+                    rejected[symbol] = "incoherent_history"
                     continue
-                normalized = set()
-                for raw_date in data.index:
-                    row_date = raw_date
-                    if isinstance(row_date, pd.Timestamp):
-                        row_date = row_date.date()
-                    elif isinstance(row_date, datetime):
-                        row_date = row_date.date()
-                    normalized.add(row_date)
-                if normalized:
-                    symbol_dates[symbol] = normalized
+                frame = data.reset_index()
+                if "Date" not in frame.columns:
+                    frame = frame.rename(columns={frame.columns[0]: "Date"})
+                prepared: list[dict[str, Any]] = []
+                for _, row in frame.iterrows():
+                    row_date = pd.Timestamp(row["Date"]).date()
+                    if not isinstance(row_date, date):
+                        raise ValueError("invalid session date")
+                    raw_adjusted_close = row.get("Adj Close")
+                    if raw_adjusted_close is None or pd.isna(raw_adjusted_close):
+                        adjusted_close = None
+                    else:
+                        adjusted_close = float(raw_adjusted_close)
+                        if not math.isfinite(adjusted_close):
+                            raise ValueError("invalid adjusted close")
+                    prepared.append({
+                        "symbol": symbol,
+                        "date": row_date,
+                        "open": float(row.get("Open", 0)),
+                        "high": float(row.get("High", 0)),
+                        "low": float(row.get("Low", 0)),
+                        "close": float(row.get("Close", 0)),
+                        "volume": int(row.get("Volume", 0)) if pd.notna(row.get("Volume")) else 0,
+                        "adj_close": adjusted_close,
+                    })
+                if not prepared:
+                    rejected[symbol] = "empty_history"
+                    continue
+                prepared_by_symbol[symbol] = prepared
+            except Exception as exc:
+                # A failed row rejects its whole symbol, never a partial history.
+                rejected[symbol] = f"row_preparation_failed:{type(exc).__name__}"
+                logger.warning("Refusing unprepared history for %s: %s", symbol, exc)
 
+        accepted_symbols = tuple(prepared_by_symbol)
+        if not accepted_symbols:
+            return PricePersistenceReceipt(
+                submitted_symbols=submitted_symbols,
+                submitted_rows=submitted_rows,
+                rejected_symbols=rejected,
+            )
+
+        db = None
+        try:
+            db = self._session_factory()
+            symbol_dates = {
+                symbol: {row["date"] for row in rows}
+                for symbol, rows in prepared_by_symbol.items()
+            }
             existing_pairs: Dict[tuple[str, date], int] = {}
-            for chunk_start in range(0, len(symbols), 100):
-                chunk_symbols = symbols[chunk_start:chunk_start + 100]
+            for chunk_start in range(0, len(accepted_symbols), 100):
+                chunk_symbols = accepted_symbols[chunk_start:chunk_start + 100]
                 rows = db.query(StockPrice.id, StockPrice.symbol, StockPrice.date).filter(
                     StockPrice.symbol.in_(chunk_symbols)
                 ).all()
                 for record_id, record_symbol, record_date in rows:
-                    target_dates = symbol_dates.get(record_symbol)
-                    if target_dates and record_date in target_dates:
+                    if record_date in symbol_dates.get(record_symbol, set()):
                         existing_pairs[(record_symbol, record_date)] = record_id
 
-            rows_to_insert = []
-            rows_to_update = []
-            for symbol, data in batch_data.items():
-                if data is None or data.empty:
-                    continue
-
-                df = data.reset_index()
-                if 'Date' not in df.columns and len(df.columns) > 0:
-                    df = df.rename(columns={df.columns[0]: 'Date'})
-                for _, row in df.iterrows():
-                    row_date = row['Date']
-                    if isinstance(row_date, pd.Timestamp):
-                        row_date = row_date.date()
-                    elif isinstance(row_date, datetime):
-                        row_date = row_date.date()
-
-                    try:
-                        price_dict = {
-                            'symbol': symbol,
-                            'date': row_date,
-                            'open': float(row.get('Open', 0)),
-                            'high': float(row.get('High', 0)),
-                            'low': float(row.get('Low', 0)),
-                            'close': float(row.get('Close', 0)),
-                            'volume': int(row.get('Volume', 0)) if pd.notna(row.get('Volume')) else 0,
-                            'adj_close': float(row.get('Adj Close', row.get('Close', 0))),
-                        }
-                        existing_id = existing_pairs.get((symbol, row_date))
-                        if existing_id is None:
-                            rows_to_insert.append(price_dict)
-                        else:
-                            price_dict["id"] = existing_id
-                            rows_to_update.append(price_dict)
-                    except Exception as e:
-                        logger.warning(f"Error preparing row for {symbol}: {e}")
-
-            # Bulk insert in conservative chunks to keep statement size bounded.
-            if rows_to_insert:
-                chunk_size = 100
-                for i in range(0, len(rows_to_insert), chunk_size):
-                    chunk = rows_to_insert[i:i + chunk_size]
-                    db.bulk_insert_mappings(StockPrice, chunk)
-            if rows_to_update:
-                chunk_size = 100
-                for i in range(0, len(rows_to_update), chunk_size):
-                    chunk = rows_to_update[i:i + chunk_size]
-                    db.bulk_update_mappings(StockPrice, chunk)
-
-            if rows_to_insert or rows_to_update:
-                db.commit()
-                logger.info(
-                    "Batch persisted %d price rows for %d symbols (%d inserts, %d historical/latest updates)",
-                    len(rows_to_insert) + len(rows_to_update),
-                    len(batch_data),
-                    len(rows_to_insert),
-                    len(rows_to_update),
-                )
-            else:
-                logger.debug(f"No new rows to persist for batch of {len(batch_data)} symbols")
-
-        except Exception as e:
-            logger.error(f"Error in batch database write: {e}", exc_info=True)
-            db.rollback()
-
+            rows_to_insert: list[dict[str, Any]] = []
+            rows_to_update: list[dict[str, Any]] = []
+            for rows in prepared_by_symbol.values():
+                for row in rows:
+                    existing_id = existing_pairs.get((row["symbol"], row["date"]))
+                    if existing_id is None:
+                        rows_to_insert.append(row)
+                    else:
+                        rows_to_update.append({**row, "id": existing_id})
+            for offset in range(0, len(rows_to_insert), 100):
+                db.bulk_insert_mappings(StockPrice, rows_to_insert[offset:offset + 100])
+            for offset in range(0, len(rows_to_update), 100):
+                db.bulk_update_mappings(StockPrice, rows_to_update[offset:offset + 100])
+            db.commit()
+            persisted_rows = len(rows_to_insert) + len(rows_to_update)
+            logger.info(
+                "Batch persisted %d price rows for %d symbols (%d inserts, %d updates)",
+                persisted_rows, len(accepted_symbols), len(rows_to_insert), len(rows_to_update),
+            )
+            return PricePersistenceReceipt(
+                submitted_symbols=submitted_symbols,
+                accepted_symbols=accepted_symbols,
+                persisted_symbols=accepted_symbols,
+                submitted_rows=submitted_rows,
+                persisted_rows=persisted_rows,
+                rejected_symbols=rejected,
+            )
+        except Exception as exc:
+            logger.error("Error in batch database write: %s", exc, exc_info=True)
+            if db is not None:
+                db.rollback()
+            rejected.update({
+                symbol: f"database_write_failed:{type(exc).__name__}"
+                for symbol in accepted_symbols
+            })
+            return PricePersistenceReceipt(
+                submitted_symbols=submitted_symbols,
+                accepted_symbols=accepted_symbols,
+                submitted_rows=submitted_rows,
+                rejected_symbols=rejected,
+            )
         finally:
-            db.close()
+            if db is not None:
+                db.close()
 
     @staticmethod
     def _market_for_symbol(
