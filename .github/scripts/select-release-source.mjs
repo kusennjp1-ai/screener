@@ -1,4 +1,4 @@
-import {financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
+import {FINANCIAL_AUDIT_MAX_FILE_BYTES,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
 import {selectRenewalControls,selectRenewalCandidate,verifyRenewalSelection,restoreRenewalCandidate,prepareRenewalReceipt,verifyPreparedRenewalRelease,checkFinalRenewalPayload} from './financial-source-renewal-publisher.mjs';
 import {verifyPublishedRenewal,verifyPreparedAutomaticRenewal} from './financial-source-renewal.mjs';
 import {renewalCiLocalContext} from './financial-renewal-ci-admission.mjs';
@@ -15,7 +15,7 @@ import { eligibleArtifacts, uniqueArtifact } from './select-published-runs.mjs';
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
 import { bootstrap, compareData, dataFiles, dataInventoryDigest, downloadArtifact, inventoryDigest, isData, livePublication, sha256, uiInventory, validateReceipt, safePath } from './publication-state.mjs';
 import { financialReleasePolicy, readFinancialReleaseRequest, readFinancialActivationCandidate, selectActivationCandidate, verifyActivationCandidate, sourceLineage, writeFinancialReleaseReceipt, verifyFinancialReleaseAssets, assertFinancialLineageContinuity, restorePublishedFinancialSource } from './financial-release-activation.mjs';
-import {verifyCarriedBundle} from './financial-generation-carry-controller.mjs';
+import {readCarryTargetBase,verifyCarriedBundle} from './financial-generation-carry-controller.mjs';
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,assertTransportDeclaration,verifyCapturedTransportAssets} from './static-transport-publication.mjs';
 import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
 import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
@@ -446,17 +446,22 @@ async function prepareCarry() {
     state.carry.priceSourceProof=assertFinitePriceBaseline({sourceRoot:proof.sourceRoot,targetRoot:root,replayRoot:proof.replayRoot,request:readRepairRequest(repairControllerRoot()).value});
   }
   const baseline=join(scratch(),'carry-baseline');rmSync(baseline,{recursive:true,force:true});copyBundleData(root,baseline);
-  const manifest=JSON.parse(readFileSync(join(root,'static-data/manifest.json'),'utf8'));
-  const {decodeResearchIndex}=await import(pathToFileURL(join(frontend,'src/static/researchTransport.js')).href);
-  const index=decodeResearchIndex(JSON.parse(readFileSync(join(root,'static-data',manifest.markets.US.assets.research.path),'utf8')));
-  const target=JSON.stringify({market:'US',as_of_date:index.as_of_date,rows:index.rows});
+  const targetInput=await readCarryTargetBase({root,frontendRoot:frontend}),target=targetInput.bytes;
   const previous=state.live.financialRelease;
   const sourceProjection=readFileSync(join(state.carry.sourceRoot,previous.source_projection.path));
   const sourceBase=readFileSync(join(state.carry.sourceRoot,previous.source_base.path));
   const helper=await import(pathToFileURL(join(frontend,'tools/financial-generation-carry.mjs')).href);
   const carry=helper.createFinancialGenerationCarry({sourceProjection,sourceProjectionSha256:previous.source_projection.sha256,sourceBase,sourceBaseSha256:previous.source_base.sha256,
     sourceLineage:previous.lineage_sha256,previousPublicationIdentity:state.live.identity,targetBase:target,targetBaseSha256:sha256(target),evaluatedAt});
-  const projectionPath=join(scratch(),'carry-projection.json'),bytes=JSON.stringify(carry);writeFileSync(projectionPath,bytes);
+  const projectionPath=join(scratch(),'carry-projection.json'),bytes=JSON.stringify(carry);
+  if(Buffer.byteLength(bytes)>FINANCIAL_AUDIT_MAX_FILE_BYTES)throw Error('Carry projection exceeds existing 128 MiB financial audit file cap');
+  writeFileSync(projectionPath,bytes);
+  const carryEnv={...env,FINANCIAL_GENERATION_CARRY_PROJECTION:projectionPath,FINANCIAL_GENERATION_CARRY_SHA256:sha256(bytes),
+    FINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE:previous.lineage_sha256,FINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY:state.live.identity,
+    FINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256:sha256(target)};
+  // The unchanged selected consumer must accept every full input before this
+  // controller exposes a carry plan. The target-only envelope grants no bypass.
+  await helper.loadFinancialGenerationCarry({env:carryEnv,rows:targetInput.rows,asOfDate:targetInput.asOfDate});
   state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt};
   writeFileSync(statePath(),JSON.stringify(state));
   if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
