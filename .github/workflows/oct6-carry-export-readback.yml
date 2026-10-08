@@ -1,0 +1,412 @@
+name: Oct6 carry export drift readback
+on:
+  push:
+    branches: [preview/oct6-carry-export-readback-20261008]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: oct6-carry-export-readback-20261008
+  cancel-in-progress: false
+jobs:
+  readback:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/preview/oct6-carry-export-readback-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Diagnose the exact retained export byte drift
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git rev-parse HEAD^)" = 8417f4c199b8ea3eb1f219f90bd66b3b16949566
+          ulimit -f 262144
+          timeout --kill-after=10s 6m python3 - <<'PY'
+          import collections,decimal,hashlib,json,os,pathlib,re,resource,selectors,stat,subprocess,time,zipfile
+          REPO='kusennjp1-ai/screener'
+          RUN=37743571566
+          HEAD='8417f4c199b8ea3eb1f219f90bd66b3b16949566'
+          BRANCH='preview/oct6-carry-projection-20261008'
+          ARTIFACT=11535252901
+          ZIP_BYTES=47081780
+          ZIP_SHA='e0712d71b6ad3f9717d27c41ce979fc09affe188585927bb6541eed817ccd529'
+          MiB=1024**2
+          CAP_LOG=4*MiB
+          CAP_DETAIL=128*MiB
+          CAP_ALL_DETAILS=256*MiB
+          resource.setrlimit(resource.RLIMIT_AS,(2*1024**3,2*1024**3))
+          resource.setrlimit(resource.RLIMIT_CPU,(210,210))
+          resource.setrlimit(resource.RLIMIT_FSIZE,(128*MiB,128*MiB))
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'carry-export-drift-readback'
+          root.mkdir()
+          proof=root/'proof'
+          proof.mkdir()
+          written=0
+          output_pins={}
+          def require(condition,message):
+           if not condition:raise RuntimeError(message)
+          def sha(data):return hashlib.sha256(data).hexdigest()
+          def safe_path(name):
+           require(isinstance(name,str) and name and len(name.encode('utf-8'))<=4096,'Invalid bounded path')
+           require(not name.startswith('/') and '\\' not in name and ':' not in name and all(p not in ('','.','..') for p in name.split('/')),'Unsafe path')
+           require(not any(ord(c)<32 or ord(c)==127 for c in name),'Control character in path')
+           return name
+          def reject_constant(token):raise ValueError('Non-JSON numeric constant')
+          def unique_object(pairs):
+           result={}
+           for key,value in pairs:
+            require(key not in result and len(key.encode('utf-8'))<=4096,'Duplicate or oversized JSON key')
+            result[key]=value
+           return result
+          def ordinary_json(raw):
+           return json.loads(raw.decode('utf-8'),object_pairs_hook=unique_object,parse_constant=reject_constant)
+          def bounded_process(args,cap,timeout,destination=None):
+           deadline=time.monotonic()+timeout
+           child=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+           selector=selectors.DefaultSelector()
+           selector.register(child.stdout,selectors.EVENT_READ)
+           count=0
+           chunks=[]
+           try:
+            while True:
+             remaining=deadline-time.monotonic()
+             require(remaining>0,'Read deadline exceeded')
+             if not selector.select(min(remaining,2)):continue
+             block=os.read(child.stdout.fileno(),1024*1024)
+             if not block:break
+             count+=len(block)
+             require(count<=cap,'Read exceeded exact bounded byte cap')
+             if destination is None:chunks.append(block)
+             else:destination.write(block)
+            require(child.wait(timeout=max(.1,deadline-time.monotonic()))==0,'GitHub read failed')
+           finally:
+            selector.close()
+            child.stdout.close()
+            if child.poll() is None:
+             child.kill()
+             child.wait(timeout=2)
+           return b''.join(chunks) if destination is None else count
+          def api(route):
+           return ordinary_json(bounded_process(['gh','api',route],MiB,30))
+          class Number:
+           __slots__=('token','parts')
+           def __init__(self,token):
+            require(len(token)<=1024,'JSON numeric token cap exceeded')
+            value=decimal.Decimal(token)
+            require(value.is_finite(),'Non-finite JSON number')
+            item=value.as_tuple()
+            digits=list(item.digits)
+            exponent=item.exponent
+            if not any(digits):self.parts=(item.sign,'0',0)
+            else:
+             while digits[-1]==0:
+              digits.pop()
+              exponent+=1
+             self.parts=(item.sign,''.join(str(d) for d in digits),exponent)
+            self.token=token
+          def number_difference(a,b):
+           if a.parts!=b.parts:return 'value_changed'
+           if a.token!=b.token:return 'number_lexeme'
+           return None
+          require(number_difference(Number('0'),Number('-0'))=='value_changed','Signed zero classifier regression')
+          require(number_difference(Number('1'),Number('1.0'))=='number_lexeme','Equivalent number-token classifier regression')
+          def target_json(raw):
+           return json.loads(raw.decode('utf-8'),parse_int=Number,parse_float=Number,object_pairs_hook=unique_object,parse_constant=reject_constant)
+          def kind(value):
+           if isinstance(value,Number):return 'number'
+           if value is None:return 'null'
+           if isinstance(value,bool):return 'boolean'
+           if isinstance(value,str):return 'string'
+           if isinstance(value,list):return 'array'
+           if isinstance(value,dict):return 'object'
+           raise TypeError('Unexpected decoded JSON type')
+          def typed(value):
+           tag=kind(value)
+           if tag=='number':return {'type':tag,'json':value.token}
+           if tag=='object':return {'type':tag,'entries':[[k,typed(v)] for k,v in value.items()]}
+           if tag=='array':return {'type':tag,'values':[typed(v) for v in value]}
+           return {'type':tag,'value':value}
+          def semantic_hash(value):
+           h=hashlib.sha256()
+           def token(item):h.update(json.dumps(item,ensure_ascii=True,separators=(',',':')).encode())
+           def visit(item,depth=0):
+            require(depth<=128,'JSON semantic nesting cap exceeded')
+            tag=kind(item)
+            token(tag)
+            if tag=='number':token(item.parts)
+            elif tag=='object':
+             token(len(item))
+             for key in sorted(item):
+              token(key)
+              visit(item[key],depth+1)
+            elif tag=='array':
+             token(len(item))
+             for value in item:visit(value,depth+1)
+            else:token(item)
+           visit(value)
+           return h.hexdigest()
+          class Output:
+           def __init__(self,name):
+            self.name=name
+            self.file=(proof/name).open('xb')
+            self.bytes=0
+            self.records=0
+            self.hash=hashlib.sha256()
+           def raw(self,data):
+            global written
+            require(self.bytes+len(data)<=CAP_DETAIL and written+len(data)<=CAP_ALL_DETAILS,'Complete detail output cap exceeded; no truncation')
+            self.file.write(data)
+            self.hash.update(data)
+            self.bytes+=len(data)
+            written+=len(data)
+           def record(self,value):
+            self.raw(json.dumps(value,ensure_ascii=True,separators=(',',':'),allow_nan=False).encode()+b'\n')
+            self.records+=1
+           def close(self):
+            self.file.close()
+            output_pins[self.name]={'bytes':self.bytes,'sha256':self.hash.hexdigest(),'records':self.records,'complete':True}
+          def write_json(name,value):
+           out=Output(name)
+           out.record(value)
+           out.close()
+          def member_json(z,name,cap=64*MiB,target=False):
+           entry=z.getinfo(name)
+           require(entry.file_size<=cap,'Selected JSON member decode cap exceeded')
+           raw=z.read(entry)
+           require(len(raw)==entry.file_size,'Selected member byte count changed')
+           return target_json(raw) if target else ordinary_json(raw)
+          def pins_inventory(value):
+           require(isinstance(value,dict) and len(value)<=60000,'Invalid public inventory')
+           for name,pin in value.items():
+            safe_path(name)
+            require(isinstance(pin,dict) and set(pin)=={'bytes','sha256'} and type(pin['bytes']) is int and 0<=pin['bytes']<=2*1024**3 and re.fullmatch('[0-9a-f]{64}',pin['sha256']) is not None,'Invalid public file pin')
+           return value
+          def leaf_scope(parts):
+           if parts and parts[-1] in ('chart_path','research_detail_path'):return 'public_content_reference'
+           if parts and parts[0]=='input_bindings':return 'input_binding'
+           return 'non_reference'
+          def pointer(parts):
+           return '/'+ '/'.join(str(p).replace('~','~0').replace('/','~1') for p in parts) if parts else ''
+          class Comparison:
+           def __init__(self,label):
+            self.label=label
+            self.details=Output(label+'-differences.jsonl')
+            self.symbol_file=Output(label+'-symbols.jsonl')
+            self.counts=collections.Counter()
+            self.categories={}
+            self.semantic_scopes=collections.Counter()
+            self.equal_leaves=collections.Counter()
+            self.symbols=[]
+            self.changed_rows=0
+           def change(self,operation,parts,category,before,after,symbol,counts,cats):
+            self.counts[operation]+=1
+            counts[operation]+=1
+            if operation in ('added','removed','type_changed','value_changed','array_length','row_order'):
+             scope=leaf_scope(category)
+             self.semantic_scopes[scope]+=1
+             counts['scope:'+scope]+=1
+            path=pointer(category)
+            self.categories.setdefault(path,collections.Counter())[operation]+=1
+            cats.setdefault(path,collections.Counter())[operation]+=1
+            record={'operation':operation,'json_pointer':pointer(parts),'category':path,'symbol':symbol,'before':before,'after':after}
+            self.details.record(record)
+           def missing(self,value,parts,category,operation,symbol,counts,cats):
+            tag=kind(value)
+            if tag=='object' and value:
+             for key,child in value.items():self.missing(child,parts+[key],category+[key],operation,symbol,counts,cats)
+            elif tag=='array' and value:
+             for index,child in enumerate(value):self.missing(child,parts+[index],category+['*'],operation,symbol,counts,cats)
+            else:
+             item=typed(value)
+             self.change(operation,parts,category,item if operation=='removed' else None,item if operation=='added' else None,symbol,counts,cats)
+           def walk(self,a,b,parts,category,symbol,counts,cats,depth=0):
+            require(depth<=128,'JSON diff nesting cap exceeded')
+            ka,kb=kind(a),kind(b)
+            if ka!=kb:
+             self.change('type_changed',parts,category,typed(a),typed(b),symbol,counts,cats)
+            elif ka=='object':
+             if set(a)==set(b) and list(a)!=list(b):
+              self.change('key_order',parts,category,{'keys':list(a)},{'keys':list(b)},symbol,counts,cats)
+             for key in sorted(set(a)|set(b)):
+              if key not in a:self.missing(b[key],parts+[key],category+[key],'added',symbol,counts,cats)
+              elif key not in b:self.missing(a[key],parts+[key],category+[key],'removed',symbol,counts,cats)
+              else:self.walk(a[key],b[key],parts+[key],category+[key],symbol,counts,cats,depth+1)
+            elif ka=='array':
+             if len(a)!=len(b):
+              self.change('array_length',parts,category,{'length':len(a)},{'length':len(b)},symbol,counts,cats)
+             for index in range(max(len(a),len(b))):
+              if index>=len(a):self.missing(b[index],parts+[index],category+['*'],'added',symbol,counts,cats)
+              elif index>=len(b):self.missing(a[index],parts+[index],category+['*'],'removed',symbol,counts,cats)
+              else:self.walk(a[index],b[index],parts+[index],category+['*'],symbol,counts,cats,depth+1)
+            elif ka=='number':
+             if a.parts==b.parts:self.equal_leaves[leaf_scope(category)]+=1
+             operation=number_difference(a,b)
+             if operation:self.change(operation,parts,category,typed(a),typed(b),symbol,counts,cats)
+            elif a!=b:self.change('value_changed',parts,category,typed(a),typed(b),symbol,counts,cats)
+            else:self.equal_leaves[leaf_scope(category)]+=1
+           def compare(self,a,b,before_pin,after_pin):
+            require(isinstance(a,dict) and isinstance(b,dict) and isinstance(a.get('rows'),list) and isinstance(b.get('rows'),list),'Expected saved target document')
+            left,right=a['rows'],b['rows']
+            require(len(left)==5901 and len(right)==5901,'Exact target cohort changed')
+            def index(rows):
+             result={}
+             for i,row in enumerate(rows):
+              require(isinstance(row,dict) and isinstance(row.get('symbol'),str) and row['symbol'] and len(row['symbol'])<=128 and row['symbol'] not in result,'Invalid or repeated target symbol')
+              result[row['symbol']]=(i,row)
+             return result
+            ia,ib=index(left),index(right)
+            require(set(ia)==set(ib),'Target symbols changed')
+            counts=collections.Counter()
+            cats={}
+            if set(a)==set(b) and list(a)!=list(b):
+             self.change('key_order',[],[],{'keys':list(a)},{'keys':list(b)},None,counts,cats)
+            self.walk({k:a[k] for k in sorted(a) if k!='rows'},{k:b[k] for k in sorted(b) if k!='rows'},[],[],None,counts,cats)
+            if [r['symbol'] for r in left]!=[r['symbol'] for r in right]:
+             self.change('row_order',['rows'],['rows'],{'symbols':[r['symbol'] for r in left]},{'symbols':[r['symbol'] for r in right]},None,counts,cats)
+            document_counts=dict(counts)
+            structural={'added','removed','type_changed','value_changed','array_length','row_order'}
+            for symbol in sorted(ia):
+             ai,ar=ia[symbol]
+             bi,br=ib[symbol]
+             counts=collections.Counter()
+             cats={}
+             self.walk(ar,br,['rows',symbol],['rows','*'],symbol,counts,cats)
+             if counts:
+              self.changed_rows+=1
+              self.symbols.append({'symbol':symbol,'structural':sum(v for k,v in counts.items() if k in structural),'key_order':counts['key_order'],'number_lexeme':counts['number_lexeme'],'reference':counts['scope:public_content_reference'],'non_reference':counts['scope:non_reference'],'input_binding':counts['scope:input_binding']})
+              self.symbol_file.record({'symbol':symbol,'before_row_index':ai,'after_row_index':bi,'before_semantic_sha256':semantic_hash(ar),'after_semantic_sha256':semantic_hash(br),'counts':dict(counts),'categories':{k:dict(v) for k,v in sorted(cats.items())}})
+            self.details.close()
+            self.symbol_file.close()
+            value_changes=sum(v for k,v in self.counts.items() if k in structural)
+            return {'label':self.label,'before':before_pin,'after':after_pin,'rows':len(left),'changed_symbols':self.changed_rows,'structurally_changed_symbols':sum(x['structural']>0 for x in self.symbols),'non_reference_changed_symbols':sum(x['non_reference']>0 for x in self.symbols),'reference_only_symbols':sum(x['reference']>0 and x['non_reference']==0 and x['input_binding']==0 for x in self.symbols),'structural_difference_records':value_changes,'structural_record_scopes':dict(self.semantic_scopes),'equal_semantic_scalar_leaf_counts':dict(self.equal_leaves),'counts':dict(self.counts),'document_counts':document_counts,'categories':{k:dict(v) for k,v in sorted(self.categories.items())},'per_symbol':self.symbols,'before_semantic_sha256':semantic_hash(a),'after_semantic_sha256':semantic_hash(b),'byte_identical':before_pin['sha256']==after_pin['sha256'],'structurally_equal':value_changes==0,'serialization_only':value_changes==0 and before_pin['sha256']!=after_pin['sha256'],'detail_coverage':'all fields and array positions of both complete saved target JSON documents; no fields normalized or excluded'}
+          expected={'caller.json','pins.json','source.json','acquisition-result.json','setup-result.json','clean-source-inventory.json','prior-local-audit-reads.json','console.log'}
+          for role in ('source','prior','companion'):
+           expected.update(role+suffix for suffix in ('-artifact.json','-current.json','-attempt.json'))
+          for role in ('source','prior'):expected.add(role+'-extraction.json')
+          for stage in ('before','after1','after2'):
+           for suffix in ('-conflicting-repeats.json','-price-parity.json','-full-identities.json','-research-identities.json','-mismatches.json','-source-files.json','-raw-full-target-measurement.json','-projected-identities.json','-projected-target.json','-research-target.json'):
+            expected.add('identity/'+stage+suffix)
+          for name in ('approved-helper.mjs','diagnostic-helper.mjs','source-projection.json','source-base.json','original-carry.json','corrected-carry.json','ownership-changes.json','issuer-negatives.json','after1-input-identity-changes.json','after2-input-identity-changes.json','after1-public-inventory.json','after2-public-inventory.json','roundtrip-file-differences.json','report.json'):
+           expected.add('identity/'+name)
+          require(len(expected)==63,'Collector allowlist construction changed')
+          inventory={}
+          try:
+           require(os.environ.get('GITHUB_REPOSITORY')==REPO and os.environ.get('GITHUB_REF')=='refs/heads/preview/oct6-carry-export-readback-20261008' and os.environ.get('GITHUB_RUN_ATTEMPT')=='1','Unexpected collector caller')
+           caller=api(f'repos/{REPO}/actions/runs/{os.environ["GITHUB_RUN_ID"]}')
+           require(caller['head_sha']==os.environ['GITHUB_SHA'] and caller['run_attempt']==1 and caller['event']=='push' and caller['path']=='.github/workflows/oct6-carry-export-readback.yml' and caller['repository']['id']==1203919607,'Collector caller binding failed')
+           records=[]
+           for suffix in ('','/attempts/1'):
+            item=api(f'repos/{REPO}/actions/runs/{RUN}'+suffix)
+            require(item['id']==RUN and item['head_sha']==HEAD and item['head_branch']==BRANCH and item['run_attempt']==1 and item['status']=='completed' and item['conclusion']=='failure' and item['path']=='.github/workflows/oct6-carry-identity.yml' and item['repository']['id']==1203919607,'Original run binding failed')
+            records.append({k:item[k] for k in ('id','head_sha','head_branch','run_attempt','status','conclusion','path')})
+           metadata=api(f'repos/{REPO}/actions/artifacts/{ARTIFACT}')
+           require(metadata['id']==ARTIFACT and metadata['name']==f'oct6-carry-identity-{RUN}-1' and metadata['size_in_bytes']==ZIP_BYTES and metadata['digest']=='sha256:'+ZIP_SHA and metadata['expired'] is False,'Artifact pin failed')
+           require(metadata['workflow_run']['id']==RUN and metadata['workflow_run']['head_sha']==HEAD and metadata['workflow_run']['repository_id']==1203919607,'Artifact origin failed')
+           archive=root/'original.zip'
+           with archive.open('xb') as out:
+            count=bounded_process(['gh','api',f'repos/{REPO}/actions/artifacts/{ARTIFACT}/zip'],ZIP_BYTES,120,out)
+           require(count==ZIP_BYTES and archive.stat().st_size==ZIP_BYTES,'Archive exact byte count failed')
+           h=hashlib.sha256()
+           with archive.open('rb') as source:
+            for block in iter(lambda:source.read(MiB),b''):h.update(block)
+           require(h.hexdigest()==ZIP_SHA,'Archive exact SHA256 failed')
+           with zipfile.ZipFile(archive) as z:
+            entries=z.infolist()
+            require(len(entries)==63 and {e.filename for e in entries}==expected,'Closed 63-member ZIP inventory failed')
+            total=0
+            for entry in entries:
+             name=safe_path(entry.filename)
+             mode=entry.external_attr>>16
+             require(name not in inventory and not entry.is_dir() and not entry.flag_bits&1 and (stat.S_IFMT(mode) in (0,stat.S_IFREG)) and entry.compress_type in (zipfile.ZIP_STORED,zipfile.ZIP_DEFLATED),'Unsafe ZIP member')
+             require(0<=entry.file_size<=256*MiB,'ZIP member logical cap failed')
+             total+=entry.file_size
+             require(total<=2*1024**3,'ZIP total logical cap failed')
+             h=hashlib.sha256()
+             count=0
+             with z.open(entry) as source:
+              for block in iter(lambda:source.read(MiB),b''):
+               count+=len(block)
+               require(count<=entry.file_size,'ZIP member exceeded declared size')
+               h.update(block)
+             require(count==entry.file_size,'ZIP member exact size failed')
+             inventory[name]={'bytes':count,'sha256':h.hexdigest(),'crc32':f'{entry.CRC:08x}','compressed_bytes':entry.compress_size}
+            write_json('zip-member-inventory.json',{'closed':True,'members':inventory,'total_decoded_bytes':total})
+            report=member_json(z,'identity/report.json',16*MiB)
+            require(report['schema_version']=='financial-carry-identity-diagnostic-v1' and report['result']=='failed' and report['ui_sha']=='1e1943e1d5f78a738a05baa69eb9f2e8508e32ac','Original diagnostic report binding failed')
+            require(report['roundtrip']['changed_files']==19517 and report['roundtrip']['byte_idempotent'] is False and report['roundtrip']['identity_idempotent'] is True,'Original roundtrip result changed')
+            require(set(report['artifacts'])=={p.removeprefix('identity/') for p in expected if p.startswith('identity/') and p!='identity/report.json'},'Closed report artifact pins failed')
+            for name,pin in report['artifacts'].items():
+             member='identity/'+safe_path(name)
+             require(pin['path']==name and pin['bytes']==inventory[member]['bytes'] and pin['sha256']==inventory[member]['sha256'],'Original report/member pin mismatch')
+            out=Output('original-report.json')
+            out.raw(z.read('identity/report.json'))
+            out.close()
+            before=pins_inventory(member_json(z,'identity/after1-public-inventory.json',32*MiB))
+            after=pins_inventory(member_json(z,'identity/after2-public-inventory.json',32*MiB))
+            recorded=member_json(z,'identity/roundtrip-file-differences.json',32*MiB)
+            require(isinstance(recorded,list) and len(recorded)==19517,'Roundtrip difference list changed')
+            actual=[{'path':name,'before':before.get(name),'after':after.get(name)} for name in sorted(set(before)|set(after)) if before.get(name)!=after.get(name)]
+            require(actual==recorded,'Roundtrip differences do not exactly reconcile to both complete inventories')
+            public_detail=Output('public-inventory-differences.jsonl')
+            buckets=collections.Counter()
+            statuses=collections.Counter()
+            for item in actual:
+             name=safe_path(item['path'])
+             require(set(item)=={'path','before','after'},'Unexpected roundtrip record shape')
+             state='added' if item['before'] is None else 'removed' if item['after'] is None else 'changed'
+             statuses[state]+=1
+             parts=name.split('/')
+             bucket='/'.join(parts[:2]) if len(parts)>2 else (parts[0]+'/*' if len(parts)>1 else name)
+             buckets[bucket]+=1
+             public_detail.record({'path':name,'operation':state,'before':item['before'],'after':item['after'],'structural_classification':'unavailable: complete emitted public file bytes were not retained'})
+            public_detail.close()
+            comparisons=[]
+            for label in ('research','projected'):
+             left='identity/after1-'+label+'-target.json'
+             right='identity/after2-'+label+'-target.json'
+             lp={k:inventory[left][k] for k in ('bytes','sha256')}
+             rp={k:inventory[right][k] for k in ('bytes','sha256')}
+             for stage,path in (('after1',left),('after2',right)):
+              require(report['stages'][stage][label+'_target_sha256']==inventory[path]['sha256'],'Target stage/member pin mismatch')
+             a=member_json(z,left,target=True)
+             b=member_json(z,right,target=True)
+             comparison=Comparison(label)
+             comparisons.append(comparison.compare(a,b,lp,rp))
+             del a,b
+            research_changed=next((x['symbol'] for x in comparisons[0]['per_symbol'] if x['structural']),None)
+            sample_symbols=sorted({'TWLO'}|({research_changed} if research_changed else set()))
+            sample_orders=[]
+            sample_fields=('book_diagnostics','book_technical_evidence','book_financials','financial_generation','financial_evaluated_at','financial_policy_version','chart_path','research_detail_path')
+            for stage in ('before','after1','after2'):
+             target=member_json(z,'identity/'+stage+'-research-target.json',target=True)
+             selected={row['symbol']:row for row in target['rows'] if row['symbol'] in sample_symbols}
+             require(set(selected)==set(sample_symbols),'Key-order sample symbol missing')
+             for symbol in sample_symbols:
+              row=selected[symbol]
+              keys=list(row)
+              sample_orders.append({'stage':stage,'symbol':symbol,'top_level_keys_in_original_order':keys,'selected_fields':{field:{'present':field in row,'key_index':keys.index(field) if field in row else None,'value':typed(row[field]) if field in row else None} for field in sample_fields}})
+             del target
+            write_json('sample-original-key-orders.json',sample_orders)
+            summary={'kind':'oct6-export-drift-readback-v1','status':'passed','source':{'repository':REPO,'run':RUN,'attempt':1,'head':HEAD,'branch':BRANCH,'artifact_id':ARTIFACT,'zip_bytes':ZIP_BYTES,'zip_sha256':ZIP_SHA,'run_records':records},'original_report':{'result':report['result'],'evaluated_at':report['evaluated_at'],'roundtrip':report['roundtrip'],'stages':report['stages'],'error':report.get('error')},'inventory':inventory,'public_inventory':{'after1_entries':len(before),'after2_entries':len(after),'changed_entries':len(actual),'reconciliation':'exact complete difference set','operation_counts':dict(statuses),'path_buckets':dict(sorted(buckets.items())),'structurally_classified_entries':0,'structurally_unclassified_entries':len(actual),'coverage_limit':'The artifact retains complete after1/after2 public inventories and complete saved Research/projected targets, but not the emitted public trees. Hash changes in all 19,517 public entries remain unclassified unless later full file bytes are supplied. Saved-target JSON structural results cannot establish full public-tree semantic equality.'},'comparison_policy':{'json_numbers':'exact decimal value comparison plus original numeric lexeme differences; no binary floating point','duplicate_keys':'rejected','objects':'all key/value presence plus insertion-order differences','arrays':'all positions and lengths; rows align by exact symbol and separately preserve row order','no_value_normalization':True,'no_clock_assumptions':True,'no_financial_price_date_expiry_exclusions':True,'details':'complete typed original scalar values in JSONL; number values carry their original JSON numeric token; all detailed outputs bounded and hashed; never silently truncated'},'comparisons':comparisons,'sample_original_key_orders':sample_orders,'complete_detailed_output_pins':dict(output_pins),'caps':{'printed_bytes':CAP_LOG,'selected_member_decode_bytes':64*MiB,'detail_file_bytes':CAP_DETAIL,'all_detail_bytes':CAP_ALL_DETAILS,'zip_members':63,'zip_total_decode_bytes':2*1024**3,'memory_bytes':2*1024**3,'cpu_seconds':210}}
+            write_json('summary.json',summary)
+            line='CARRY_EXPORT_DRIFT '+json.dumps(summary,ensure_ascii=True,separators=(',',':'),allow_nan=False)+'\n'
+            require(len(line.encode())<=CAP_LOG,'Complete typed summary exceeds 4 MiB log cap; no symbol/category truncation')
+            print(line,end='',flush=True)
+          except BaseException as error:
+           failure={'kind':'oct6-export-drift-readback-failure-v1','status':'failed','error_type':type(error).__name__,'message':str(error),'complete':False,'completed_output_pins':output_pins,'closed_member_inventory_complete':len(inventory)==63,'artifact_id':ARTIFACT,'zip_sha256':ZIP_SHA,'no_silent_truncation':True}
+           try:write_json('failure.json',failure)
+           except BaseException:pass
+           message='CARRY_EXPORT_DRIFT '+json.dumps(failure,ensure_ascii=True,separators=(',',':'))+'\n'
+           if len(message.encode())<=CAP_LOG:print(message,end='',flush=True)
+           raise
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oct6-carry-export-drift-readback-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/carry-export-drift-readback/proof
+          if-no-files-found: error
+          retention-days: 7
