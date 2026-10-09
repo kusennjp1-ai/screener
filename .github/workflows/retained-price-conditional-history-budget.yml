@@ -1,0 +1,107 @@
+name: Finite conditional history budget diagnostic
+on:
+  push:
+    branches: [finite-conditional-history-budget-a13-v7]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: finite-conditional-history-budget-a13-v7
+  cancel-in-progress: false
+jobs:
+  code-and-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Exact isolated diagnostic context
+        id: preflight
+        timeout-minutes: 2
+        env:
+          EXPECTED_PRODUCTION_TREE: '7aee712564d9d4979190dca3566febcefcbd2275'
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REPOSITORY" = kusennjp1-ai/screener
+          test "$GITHUB_REPOSITORY_ID" = 1203919607
+          test "$GITHUB_REF" = refs/heads/finite-conditional-history-budget-a13-v7
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list --parents -n 1 HEAD)" = "$GITHUB_SHA 2e289c42c00e0d0bad05263ab8273a257dc0ae8e"
+          test "$(git rev-parse HEAD:.github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-source-browser.mjs)" = 385ca311d0b0d26d76f0bab2826a5114bf15a368
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-live-inventory.mjs)" = 15e0b31fcc64c9e94e3207821d7b444ab5e9c975
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs-worker.mjs)" = 54c58eac8175fbb56ba98c76d5b82ae8fedf2a7f
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs-worker.test.mjs)" = 6f376d6469ca344b05a976a0785ae09ca89e38d5
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs.mjs)" = 5390a3a6b75886049d1483b94ef8ff553d619288
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs.test.mjs)" = 1c8219aba9f2df6a925d79500e4c43372de73c1c
+          test "$(git rev-parse HEAD:frontend/tools/conditional-deployment-jobs-imports.test.mjs)" = ef500fddb5aa95e98c15a282f2b1550c73f2c1cc
+          test "$(git rev-parse HEAD:.github/scripts/measure-conditional-deployment-jobs-budget.mjs)" = '286525d366c85401eb46b41ca3772b82e3fca6f1'
+          GIT_INDEX_FILE="$RUNNER_TEMP/conditional-budget-index" git read-tree HEAD
+          GIT_INDEX_FILE="$RUNNER_TEMP/conditional-budget-index" git update-index --force-remove .github/workflows/retained-price-conditional-history-budget.yml
+          test "$(GIT_INDEX_FILE="$RUNNER_TEMP/conditional-budget-index" git write-tree)" = "$EXPECTED_PRODUCTION_TREE"
+          node --check .github/scripts/conditional-deployment-jobs-worker.mjs
+          node --check .github/scripts/conditional-deployment-jobs.mjs
+          node --check .github/scripts/conditional-deployment-jobs.test.mjs
+          node --check frontend/tools/conditional-deployment-jobs-imports.test.mjs
+          node --check .github/scripts/measure-conditional-deployment-jobs-budget.mjs
+          printf 'isolated read-only diagnostic; original adapters/authority and disabled request retained\n'
+      - name: Native protocol lifecycle admission and reader contracts
+        id: native
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --test --test-concurrency=2 .github/scripts/conditional-deployment-jobs-worker.test.mjs .github/scripts/conditional-deployment-jobs.test.mjs .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-admission-inventory.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs
+      - name: Install exact frontend lock
+        id: dependencies
+        if: ${{ !cancelled() && steps.preflight.outcome == 'success' }}
+        timeout-minutes: 5
+        working-directory: frontend
+        run: npm ci
+      - name: Unchanged normal-config transformed import and publication contracts
+        id: vite
+        if: ${{ !cancelled() && steps.preflight.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        timeout-minutes: 4
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          npx vitest run tools/conditional-deployment-jobs-imports.test.mjs tools/retained-price-source-imports.test.mjs tools/select-release-source.test.mjs tools/publication-gate.test.mjs tools/publication-state.test.mjs
+      - name: Bounded actual candidate count receipt metadata and cold warm client measurement
+        id: metadata
+        if: ${{ !cancelled() && steps.preflight.outcome == 'success' && steps.native.outcome == 'success' && steps.vite.outcome == 'success' }}
+        timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --max-old-space-size=384 .github/scripts/measure-conditional-deployment-jobs-budget.mjs
+      - name: Exact scope and acceptance status
+        if: ${{ always() }}
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          NATIVE_OUTCOME: ${{ steps.native.outcome }}
+          DEPENDENCIES_OUTCOME: ${{ steps.dependencies.outcome }}
+          VITE_OUTCOME: ${{ steps.vite.outcome }}
+          METADATA_OUTCOME: ${{ steps.metadata.outcome }}
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          printf 'stage outcomes preflight=%s native=%s dependencies=%s vite=%s metadata=%s\n' "$PREFLIGHT_OUTCOME" "$NATIVE_OUTCOME" "$DEPENDENCIES_OUTCOME" "$VITE_OUTCOME" "$METADATA_OUTCOME"
+          test "$PREFLIGHT_OUTCOME" = success
+          test "$NATIVE_OUTCOME" = success
+          test "$DEPENDENCIES_OUTCOME" = success
+          test "$VITE_OUTCOME" = success
+          test "$METADATA_OUTCOME" = success
+          printf 'code and metadata diagnostic completed; release budget acceptance is reported separately; no publication authority\n'
