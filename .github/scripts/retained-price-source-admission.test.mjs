@@ -82,7 +82,7 @@ test('original run, archive, companion, clock, repository and code tampering all
 test('real disabled CLI completes across the publication-reader import cycle without API work',t=>{
   const root=mkdtempSync(join(tmpdir(),'finite-core-entry-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   mkdirSync(join(root,'.github/scripts'),{recursive:true});
-  for(const name of ['retained-price-source-admission.mjs','retained-price-ci-admission.mjs','publication-gate.mjs','immutable-github-api.mjs','retained-price-admission-inventory.mjs','retained-price-repository-inventory.mjs'])copyFileSync(new URL('./'+name,import.meta.url),join(root,'.github/scripts',name));
+  for(const name of ['retained-price-source-admission.mjs','retained-price-ci-admission.mjs','publication-gate.mjs','immutable-github-api.mjs','retained-price-admission-inventory.mjs','retained-price-repository-inventory.mjs','conditional-deployment-jobs.mjs','conditional-deployment-jobs-worker.mjs','conditional-deployment-jobs-cache.mjs'])copyFileSync(new URL('./'+name,import.meta.url),join(root,'.github/scripts',name));
   writeFileSync(join(root,'.github/retained-price-oct6-source.json'),JSON.stringify(initial));
   const stdout=execFileSync(process.execPath,[join(root,'.github/scripts/retained-price-source-admission.mjs'),'prepare-controller','--output',join(root,'unused')],{encoding:'utf8',timeout:5000,env:{...process.env,PATH:''}});
   assert.deepEqual(JSON.parse(stdout),{active:false});
