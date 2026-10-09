@@ -1,0 +1,84 @@
+name: Finite bounded GitHub pager code checks
+on:
+  push:
+    branches: [finite-bounded-github-pager-a13-v1]
+permissions:
+  contents: read
+concurrency:
+  group: finite-bounded-github-pager-a13-v1
+  cancel-in-progress: false
+jobs:
+  code-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Bind isolated code-only context
+        id: preflight
+        timeout-minutes: 2
+        env:
+          EXPECTED_CODE_TREE: '877214370086134ef45026328eb812188f142162'
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REPOSITORY" = kusennjp1-ai/screener
+          test "$GITHUB_REPOSITORY_ID" = 1203919607
+          test "$GITHUB_REF" = refs/heads/finite-bounded-github-pager-a13-v1
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list --parents -n 1 HEAD)" = "$GITHUB_SHA 2e289c42c00e0d0bad05263ab8273a257dc0ae8e"
+          test "$(git rev-parse 'HEAD^1^{tree}')" = 'e22ddee3121979d0ef805601cd9f7265f79fc643'
+          test "$(git rev-parse HEAD:.github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git rev-parse HEAD:.github/scripts/bounded-github-api.mjs)" = e550ff4e5afef890eb672d280f332901839efb10
+          test "$(git rev-parse HEAD:.github/scripts/bounded-github-api.test.mjs)" = 355c68aa9de5df333ccb668e82f3f86fc4f602c4
+          test ! -e .github/scripts/conditional-deployment-jobs-cache.mjs
+          test ! -e .github/scripts/conditional-deployment-jobs.mjs
+          test ! -e .github/scripts/measure-conditional-deployment-jobs-budget.mjs
+          GIT_INDEX_FILE="$RUNNER_TEMP/bounded-gh-pager-index" git read-tree HEAD
+          GIT_INDEX_FILE="$RUNNER_TEMP/bounded-gh-pager-index" git update-index --force-remove .github/workflows/finite-bounded-github-pager-a13.yml
+          test "$(GIT_INDEX_FILE="$RUNNER_TEMP/bounded-gh-pager-index" git write-tree)" = "$EXPECTED_CODE_TREE"
+          test "$(node --version)" = v22.23.3
+          node --check .github/scripts/bounded-github-api.mjs
+          node --check .github/scripts/bounded-github-api.test.mjs
+          printf 'Two inert pager files verified; original disabled production tree retained.\n'
+      - name: Native complete-page and resource contracts
+        id: native
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --max-old-space-size=384 --test --test-concurrency=1 --test-reporter=tap .github/scripts/bounded-github-api.test.mjs | tee "$RUNNER_TEMP/bounded-gh-pager.tap"
+          node --input-type=module - "$RUNNER_TEMP/bounded-gh-pager.tap" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const text = readFileSync(process.argv[2], 'utf8');
+          for (const [field, expected] of Object.entries({tests:20,pass:20,fail:0,cancelled:0,skipped:0,todo:0})) {
+            const matches = [...text.matchAll(new RegExp('^# ' + field + ' ([0-9]+)$', 'gm'))];
+            assert.equal(matches.length, 1, field + ' must be reported once');
+            assert.equal(Number(matches[0][1]), expected, field);
+          }
+          console.log('exact native outcome: 20 passed; zero failures, skips, cancellations or todo');
+          NODE
+      - name: State complete diagnostic scope
+        if: ${{ always() }}
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          NATIVE_OUTCOME: ${{ steps.native.outcome }}
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          printf 'stage outcomes preflight=%s native=%s\n' "$PREFLIGHT_OUTCOME" "$NATIVE_OUTCOME"
+          test "$PREFLIGHT_OUTCOME" = success
+          test "$NATIVE_OUTCOME" = success
+          printf 'Synthetic pager contracts passed. Production integration, live metadata, full API budget and release acceptance remain pending.\n'
