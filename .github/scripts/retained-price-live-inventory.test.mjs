@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {createRetainedPriceLiveApi,LIVE_INVENTORY_LIMITS} from './retained-price-live-inventory.mjs';
-import {route} from './retained-price-repository-inventory.mjs';
+import {route,readRepositorySnapshot} from './retained-price-repository-inventory.mjs';
 import {createImmutableGitApi} from './immutable-github-api.mjs';
 import {latestDeployment} from './publication-state.mjs';
 
@@ -107,6 +107,51 @@ test('whole-snapshot drift, transport timeout and EOF get one fresh retry only',
     assert.equal(f.events[0].call_id,f.events[1].call_id);
     const g=fixture([failed(reason),failed(reason),envelope()]);assert.throws(()=>g.read(publisher,true),new RegExp(reason));
     assert.equal(g.calls.length,2);assert.equal(g.events[1].retry,false);
+  }
+});
+test('real worker envelopes discard overlapping drift and restart page 1 under unchanged adapter bounds',async()=>{
+  for(const nextFailure of[null,'required-run-anchor-absent','invalid-or-duplicate-run']){
+    const attemptCalls=[[],[]],requiredIds=[1,101];
+    const getAttempt=async attempt=>readRepositorySnapshot({timeoutMs:30000,requiredIds,token:'fixture-token',fetcher:async url=>{
+      const n=Number(new URL(url).searchParams.get('page'));attemptCalls[attempt].push(n);
+      assert.equal(url,'https://api.github.com/'+route(n));
+      const source=envelope(Array.from({length:101},(_,i)=>row(i+1,i%2?'static-site.yml':'research-ui-release.yml')));
+      const page=structuredClone(source.pages[n-1]);
+      if(attempt===0&&n===2){page.value.total_count=102;page.value.workflow_runs[0]=row(1);}
+      if(attempt===1&&n===3&&nextFailure)page.value.workflow_runs[0]=row(nextFailure==='required-run-anchor-absent'?999:1);
+      const body=JSON.stringify(page.value);
+      return {url,status:200,redirected:false,headers:new Headers({link:page.link}),
+        body:(async function*(){yield Buffer.from(body);})()};
+    }});
+    const first=await getAttempt(0),second=await getAttempt(1);
+    assert.equal(first.status,'failed');assert.equal(first.reason,'changing-inventory-total');assert.equal(first.retryable,true);
+    assert.equal(Object.hasOwn(first,'pages'),false);
+    assert.equal(first.evidence.find(p=>p.page_number===2).observed_total,102);
+    assert.deepEqual(attemptCalls,[[1,2,3],[1,2,3]]);
+    let tick=0;const f=fixture([first,second,envelope()],{requiredIds,clock:()=>tick++});
+    if(nextFailure){
+      assert.equal(second.status,'failed');assert.equal(second.reason,nextFailure);assert.equal(second.retryable,false);
+      assert.throws(()=>f.read(publisher,true),new RegExp(nextFailure));
+    }else{
+      assert.equal(second.status,'complete');
+      assert.equal(f.read(publisher,true)[0].total_count,51);
+      assert.equal(f.read(producer,true)[0].total_count,50);assert.equal(f.calls.length,2);
+      assert.equal(f.events[2].snapshot_id,f.events[1].snapshot_id);
+      assert.equal(f.events[2].reused_immediate_snapshot,true);
+    }
+    assert.equal(f.calls.length,2);assert.deepEqual(f.events.slice(0,2).map(e=>e.attempt),[1,2]);
+    assert.equal(f.events[0].retry,true);
+    if(nextFailure)assert.equal(f.events[1].retry,false);
+    assert(f.events.every(e=>e.inventory_budget_used_ms<=60000));
+    for(const call of f.calls){
+      assert.deepEqual(call.args.slice(0,1),['--max-old-space-size=384']);
+      assert(call.args[1].endsWith('/retained-price-repository-inventory.mjs'));
+      assert.equal(call.options.maxBuffer,64*1024**2);assert.equal(call.options.killSignal,'SIGKILL');
+      assert(call.options.timeout>0&&call.options.timeout<=30000);
+      assert.deepEqual(JSON.parse(call.options.input),{timeoutMs:call.options.timeout,requiredIds});
+    }
+    assert(f.calls[1].options.timeout<=f.calls[0].options.timeout);
+    assert.equal(f.events[0].call_id,f.events[1].call_id);
   }
 });
 test('malformed semantic and unknown worker failures never inherit a retry request',()=>{

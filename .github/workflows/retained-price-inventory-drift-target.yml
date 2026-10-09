@@ -1,0 +1,94 @@
+name: Retained price inventory drift target
+on:
+  push:
+    branches:
+      - finite-inventory-drift-check-a12
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: retained-price-inventory-drift-check-a12
+  cancel-in-progress: false
+jobs:
+  target:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.ref == 'refs/heads/finite-inventory-drift-check-a12' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Bind exact disabled tree and unchanged limits
+        id: preflight
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --check .github/scripts/retained-price-repository-inventory.mjs
+          node --check .github/scripts/retained-price-repository-inventory.test.mjs
+          node --check .github/scripts/retained-price-live-inventory.test.mjs
+          node --check .github/scripts/retained-price-inventory-drift-target.mjs
+          node .github/scripts/retained-price-inventory-drift-target.mjs --verify-only
+      - name: Verify native repository, live, admission and source reader contracts
+        id: native
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --test --test-concurrency=2 .github/scripts/retained-price-admission-inventory.test.mjs .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs .github/scripts/immutable-github-api.test.mjs
+      - name: Install exact locked frontend tooling
+        id: dependencies
+        timeout-minutes: 4
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          test "$(git hash-object package.json)" = "81dab927e85fea4031e3bca6e9751b6007b613f8"
+          test "$(git hash-object package-lock.json)" = "3533b0f6ff61b73235da8765bccbdc754add0294"
+          npm ci --no-audit --no-fund
+      - name: Verify normal Vitest configuration and transformed finite imports
+        id: vitest
+        timeout-minutes: 4
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          npm run test:run -- tools/retained-price-source-imports.test.mjs tools/select-release-source.test.mjs tools/publication-gate.test.mjs tools/publication-state.test.mjs --reporter=verbose
+      - name: Observe one fresh actual complete repository snapshot with same-token live reader
+        id: metadata
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --max-old-space-size=384 .github/scripts/retained-price-inventory-drift-target.mjs
+      - name: Require every scoped stage to pass
+        if: always()
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          NATIVE_OUTCOME: ${{ steps.native.outcome }}
+          DEPENDENCIES_OUTCOME: ${{ steps.dependencies.outcome }}
+          VITEST_OUTCOME: ${{ steps.vitest.outcome }}
+          METADATA_OUTCOME: ${{ steps.metadata.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          test "$PREFLIGHT_OUTCOME" = success
+          test "$NATIVE_OUTCOME" = success
+          test "$DEPENDENCIES_OUTCOME" = success
+          test "$VITEST_OUTCOME" = success
+          test "$METADATA_OUTCOME" = success
+          echo INVENTORY_DRIFT_ALL_SCOPED_STAGES_PASSED
