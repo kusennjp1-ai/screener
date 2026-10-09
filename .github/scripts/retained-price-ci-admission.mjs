@@ -2,6 +2,7 @@
 // source, financial, UI or publication authority by itself.
 import {execFileSync} from 'node:child_process';
 import {createRetainedPriceAdmissionInventory} from './retained-price-admission-inventory.mjs';
+import {hasScopedConditionalJobContext,bindScopedConditionalCaller} from './conditional-deployment-jobs.mjs';
 import {createHash} from 'node:crypto';
 import {appendFileSync,lstatSync,readFileSync,realpathSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
@@ -249,6 +250,27 @@ export function verifyPriceSourceCompletion({root=priceControllerRoot(),sourceRu
   require(positive(sourceRun?.id),'missing source run');
   const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[sourceRun.id,activation.request.predecessor?.run_id],head:activation.executing.sha});
   try{return verifySource(scoped,activation,sourceRun,root,api);}finally{scoped.dispose();}
+}
+export function registerPricePublisherTransportCaller(proof,{api,execution=priceExecution(),now=Date.now()}={}){
+  if(!hasScopedConditionalJobContext(PRICE_CI.repository))return false;
+  const context=proof&&sourceProofs.get(proof);
+  require(context&&typeof api==='function'&&context.api===api,'publisher transport requires the original verified source proof/API');
+  require(resolve(context.root)===resolve(priceControllerRoot()),'publisher transport requires the original source controller root');
+  const request=readRequest(context.root),executing=proof.activation.executing;
+  require(request?.value.enabled&&checksum(request.raw)===proof.activation.request_sha256,'publisher transport source request changed');
+  require(Number.isFinite(now)&&clock(request.value.activation.not_before)<=now&&now<clock(request.value.activation.not_after),'publisher transport activation expired');
+  require(git(context.root,'rev-parse','HEAD')===executing.sha&&git(context.root,'rev-parse','HEAD^{tree}')===executing.tree,'publisher transport source controller changed');
+  const run=verifyContext(api,proof.activation,execution,PRICE_CI.publisher),all=jobs(api,run.id);
+  const found=all.filter(job=>job.name==='publish');require(found.length===1,'publisher transport requires one active publish job');
+  const job=found[0];
+  require(job.head_sha===executing.sha&&job.status==='in_progress'&&job.conclusion===null
+    &&clock(job.started_at)>=clock(run.run_started_at)&&clock(job.started_at)<=now,'publisher transport publish job is not active');
+  // This immutable identity was verified by the branded source activation.
+  // Its projection is sufficient for transport binding; no new commit GET.
+  const controller={head:executing.sha,tree:executing.tree},commit={sha:executing.sha,tree:{sha:executing.tree}};
+  return bindScopedConditionalCaller({repository:PRICE_CI.repository,controller,
+    caller:{run,attempt:1,job,commit,job_started_at:job.started_at},role:'publisher',
+    criticalIds:[proof.producer.id,proof.trigger.id]});
 }
 function priorHold(api,activation,listed,ci){
   if(listed.conclusion!=='success')return preAdmissionCallback(api,activation,listed,PRICE_CI.publisher,ci);

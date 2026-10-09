@@ -1,0 +1,115 @@
+name: Finite conditional history cache code checks
+on:
+  push:
+    branches: [finite-conditional-history-cache-integration-a13]
+permissions:
+  contents: read
+concurrency:
+  group: finite-conditional-history-cache-integration-a13
+  cancel-in-progress: false
+jobs:
+  code-and-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Exact isolated diagnostic context
+        id: preflight
+        timeout-minutes: 2
+        env:
+          EXPECTED_PRODUCTION_TREE: '413f600376883ff7e8ef4a112cb837f7da3538a8'
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REPOSITORY" = kusennjp1-ai/screener
+          test "$GITHUB_REPOSITORY_ID" = 1203919607
+          test "$GITHUB_REF" = refs/heads/finite-conditional-history-cache-integration-a13
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list --parents -n 1 HEAD)" = "$GITHUB_SHA 2e289c42c00e0d0bad05263ab8273a257dc0ae8e"
+          test "$(git rev-parse HEAD:.github/retained-price-oct6-source.json)" = 3b2bc955ce66ba5a97e7dd9b3a5587c605b4350a
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-source-browser.mjs)" = 385ca311d0b0d26d76f0bab2826a5114bf15a368
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-live-inventory.mjs)" = 15e0b31fcc64c9e94e3207821d7b444ab5e9c975
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs-worker.mjs)" = aec69c0bafd2ab0c2ab33bbf935242be284616df
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs-worker.test.mjs)" = 47649fc9cc2c5c7579a9a166e8742d3616379621
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs-cache.mjs)" = 930759314fa8567ce0064648d87f96c7c59e43e7
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs-cache.test.mjs)" = 5899e271a210d4cfb21e6ecde1ea6929ee6c7b40
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs.mjs)" = b376022e1aa37e68f6acef345c343a294bf25ff3
+          test "$(git rev-parse HEAD:.github/scripts/conditional-deployment-jobs.test.mjs)" = 0bae114bbc32742877f4a1613fa32ed05b78b4bd
+          test "$(git rev-parse HEAD:frontend/tools/conditional-deployment-jobs-imports.test.mjs)" = e546586c4d19fb9f774bef53bd6f0a4937e4d8c8
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-ci-admission.mjs)" = a16f87c48740474f56dd3d250fa09857c7ccfc2f
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-ci-admission.test.mjs)" = 04e113a40f1c3bb4694dc4277b9ece861797dc8a
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-source-driver.mjs)" = ff8179e0436d00a8fa588502b4985efca3e4d497
+          test "$(git rev-parse HEAD:.github/scripts/retained-price-source-driver.test.mjs)" = b7f097cdc66cf960b79e9e20afbe4722e8b87fb2
+          test "$(git rev-parse HEAD:.github/scripts/publication-gate.mjs)" = d96a4c2e18fdc03e928b6eb984635cf1454f302f
+          test "$(git rev-parse HEAD:.github/scripts/publication-state.mjs)" = 1774e89ee3e706b743dbfd56f6d70200988c6ca0
+          test "$(git rev-parse HEAD:frontend/tools/publication-gate.test.mjs)" = 0aed291b76d26c3b652ecc6464288fc175360ec1
+          test "$(git rev-parse HEAD:frontend/tools/publication-state.test.mjs)" = 5558b8855741f00d45a7809ceceb39ac7df0d9d9
+          test "$(git rev-parse HEAD:.github/workflows/static-site.yml)" = 76ce6cbbee0c8ebb301462ab0c9ab0e36fde0b05
+          test "$(git rev-parse HEAD:.github/workflows/research-ui-release.yml)" = 83536ecc6284efb20b1f6adb72edf756577c71f1
+          test "$(git rev-parse HEAD:.github/workflows/ci.yml)" = c4d1265d18a77d1938df36bfa2c9c8788f425411
+          test ! -e .github/scripts/measure-conditional-deployment-jobs-budget.mjs
+          GIT_INDEX_FILE="$RUNNER_TEMP/conditional-budget-index" git read-tree HEAD
+          GIT_INDEX_FILE="$RUNNER_TEMP/conditional-budget-index" git update-index --force-remove .github/workflows/retained-price-conditional-history-cache-code.yml
+          test "$(GIT_INDEX_FILE="$RUNNER_TEMP/conditional-budget-index" git write-tree)" = "$EXPECTED_PRODUCTION_TREE"
+          node --check .github/scripts/conditional-deployment-jobs-worker.mjs
+          node --check .github/scripts/conditional-deployment-jobs-cache.mjs
+          node --check .github/scripts/conditional-deployment-jobs-cache.test.mjs
+          node --check .github/scripts/conditional-deployment-jobs.mjs
+          node --check .github/scripts/conditional-deployment-jobs.test.mjs
+          node --check frontend/tools/conditional-deployment-jobs-imports.test.mjs
+          printf 'isolated token-free cache integration checks; finite authority and disabled request retained\n'
+      - name: Native protocol lifecycle admission and reader contracts
+        id: native
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --test --test-concurrency=2 .github/scripts/conditional-deployment-jobs-worker.test.mjs .github/scripts/conditional-deployment-jobs-cache.test.mjs .github/scripts/conditional-deployment-jobs.test.mjs .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-admission-inventory.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs
+      - name: Install exact frontend lock
+        id: dependencies
+        if: ${{ !cancelled() && steps.preflight.outcome == 'success' }}
+        timeout-minutes: 5
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          npm ci
+      - name: Unchanged normal-config transformed import and publication contracts
+        id: vite
+        if: ${{ !cancelled() && steps.preflight.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        timeout-minutes: 4
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          npx vitest run tools/conditional-deployment-jobs-imports.test.mjs tools/retained-price-source-imports.test.mjs tools/select-release-source.test.mjs tools/publication-gate.test.mjs tools/publication-state.test.mjs
+      - name: Exact scope and acceptance status
+        if: ${{ always() }}
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          NATIVE_OUTCOME: ${{ steps.native.outcome }}
+          DEPENDENCIES_OUTCOME: ${{ steps.dependencies.outcome }}
+          VITE_OUTCOME: ${{ steps.vite.outcome }}
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          printf 'stage outcomes preflight=%s native=%s dependencies=%s vite=%s\n' "$PREFLIGHT_OUTCOME" "$NATIVE_OUTCOME" "$DEPENDENCIES_OUTCOME" "$VITE_OUTCOME"
+          test "$PREFLIGHT_OUTCOME" = success
+          test "$NATIVE_OUTCOME" = success
+          test "$DEPENDENCIES_OUTCOME" = success
+          test "$VITE_OUTCOME" = success
+          printf 'synthetic code-only reader/cache contracts completed; actual metadata and release budget acceptance remain pending\n'

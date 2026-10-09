@@ -12,6 +12,7 @@ import {fileURLToPath} from 'node:url';
 import {priceReadApi,priceExecution,verifyPriceCiProducer,verifyPriceActivation,PRICE_CI} from './retained-price-ci-admission.mjs';
 import {extractPriceObservations,priceObservationDigest,assertPriceObservationBounds} from './price-observations.mjs';
 import {createRetainedPriceLiveApi} from './retained-price-live-inventory.mjs';
+import {bindScopedConditionalCaller} from './conditional-deployment-jobs.mjs';
 
 const MIB=1024**2,MAX_JSON=64*MIB,RESERVE=8*1024**3,SOURCE_BYTES=1876607954;
 const REPLAY_FREE=RESERVE+3*SOURCE_BYTES+256*MIB,DEPENDENCY_BYTES=2*1024**3;
@@ -104,7 +105,10 @@ function callerFor(o,controller,role){
   assert(positive(job.id)&&job.run_id===run.id&&job.run_attempt===1&&job.head_sha===controller.head&&job.status==='in_progress'&&job.conclusion===null
     &&utc(job.started_at)<=o.now(),'Caller job is not active');
   const commit=o.api(`${PREFIX}/git/commits/${controller.head}`);assert(commit.sha===controller.head&&commit.tree?.sha===controller.tree,'Caller controller tree differs');
-  return {run,attempt:1,job,commit,job_started_at:job.started_at};
+  const caller={run,attempt:1,job,commit,job_started_at:job.started_at};
+  bindScopedConditionalCaller({repository:REPOSITORY,controller,caller,
+    role:role==='producer'?'producer-combine':'publisher',criticalIds:[]});
+  return caller;
 }
 const compact=caller=>({run_id:caller.run.id,run_attempt:caller.attempt,head_sha:caller.run.head_sha,job:{id:caller.job.id,started_at:caller.job.started_at}});
 export function immutableOriginals(evidence){
