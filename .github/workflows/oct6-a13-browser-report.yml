@@ -1,0 +1,426 @@
+name: Preserve original A13 five-case browser report
+on:
+  push:
+    branches:
+      - preview/oct6-a13-browser-report-20261009
+    paths:
+      - .github/workflows/oct6-a13-browser-report.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  collect:
+    if: github.repository == 'kusennjp1-ai/screener' && github.event_name == 'push' && github.run_attempt == 1 && github.ref == 'refs/heads/preview/oct6-a13-browser-report-20261009'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Preserve the original browser proof within a fixed read budget
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 4m python3 -u <<'PY'
+          import hashlib
+          import io
+          import json
+          import os
+          import re
+          import stat
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          import zipfile
+          
+          REPO = "kusennjp1-ai/screener"
+          RUN = 37868986673
+          ATTEMPT = 1
+          HEAD = "183a4abf26ffc0c927369c31c8c3e4bc8cc368b9"
+          WORKFLOW = 364666954
+          JOB = 113622569965
+          ROUTE_JOB = 113622394896
+          ARTIFACT = 11591092979
+          QUALITY_ARTIFACT = 11591122119
+          ARTIFACT_NAME = "retained-price-publication-reports-37868986673-1"
+          ZIP_BYTES = 1184742
+          ZIP_SHA = "533e728b9dd30ba5ee4bd5a97f0631aaa3fc7c2b3a9444b3953a512f5d2f44c1"
+          REPORT = "finite-source-browser/report.json"
+          LOG_BYTES = 3847548
+          LOG_SHA = "0ed03aad1448b190f8f643177d9c751313b05307feabef2a70a6cbee8a61b313"
+          SOURCE_EXPORT = {"id": 11589446985, "bytes": 318518846,
+                           "sha256": "45faa9274d389cfc2e1a4513f0f97a162e796e21bdd9a64a71b78f482e3c63bf"}
+          SOURCE_COMPANION = {"id": 11589147426, "bytes": 7302648,
+                              "sha256": "bf0406bf3ba9d2bb66fab94890b0200f12c5f6e5e4a202c00153c84165fb2132"}
+          EXPECTED_MEMBERS = {
+              "finite-source-replay/report.json", "finite-source-replay-supervisor/supervisor.json",
+              "finite-source-replay-supervisor/heartbeat.jsonl", "finite-source-replay/storage-preflight.json",
+              "finite-source-replay/compiler-evaluation.json", "finite-source-replay-driver-plan.json",
+              "finite-source-replay-inputs/original-api-evidence.json", "finite-source-replay/replay-verification.json",
+              REPORT, *(f"finite-source-browser/{symbol}.png" for symbol in ("NVDA", "FUTU", "ALH", "LPSN", "AIHS")),
+          }
+          BRANCH = "refs/heads/preview/oct6-a13-browser-report-20261009"
+          API = "https://api.github.com/repos/" + REPO
+          MAX_API = 8
+          MAX_DOWNLOADS = 2
+          MAX_HTTP = 10
+          START_REMAINING = 32
+          RESERVE = 20
+          MAX_WIRE = 24 * 1024**2
+          MAX_OUTPUT = 4 * 1024**2
+          MAX_JSON = 2 * 1024**2
+          MAX_LOG = 8 * 1024**2
+          MAX_MEMBER = 16 * 1024**2
+          MAX_TOTAL = 64 * 1024**2
+          CASES = {"NVDA", "FUTU", "ALH", "LPSN", "AIHS"}
+          
+          api_requests = downloads = wire_bytes = 0
+          quota = []
+          records = []
+          token = os.environ.pop("GH_TOKEN", "")
+          
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+          
+          def record(kind, value, footer=False):
+              line = json.dumps({"kind": kind, "value": value}, ensure_ascii=True,
+                                separators=(",", ":"), allow_nan=False) + "\n"
+              require(sum(len(item.encode("utf-8")) for item in records)
+                      + len(line.encode("utf-8")) <= (MAX_OUTPUT if footer else MAX_OUTPUT - 32768),
+                      "Complete output exceeds aggregate 4 MiB cap")
+              records.append(line)
+          
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+          
+          opener = urllib.request.build_opener(NoRedirect())
+          
+          def observe_quota(headers):
+              snapshot = {"api_request": api_requests,
+                          "resource": headers.get("X-RateLimit-Resource")}
+              for name in ("limit", "used", "remaining", "reset"):
+                  value = headers.get("X-RateLimit-" + name)
+                  snapshot[name] = int(value) if value and value.isdecimal() and len(value) <= 12 else None
+              quota.append(snapshot)
+              if api_requests == 1:
+                  record("first_repository_rate_limit", snapshot)
+              require(isinstance(snapshot["resource"], str)
+                      and 0 < len(snapshot["resource"]) <= 32
+                      and all(type(snapshot[name]) is int for name in ("limit", "used", "remaining", "reset"))
+                      and snapshot["limit"] > 0
+                      and 0 <= snapshot["used"] <= snapshot["limit"]
+                      and 0 <= snapshot["remaining"] <= snapshot["limit"],
+                      "Actual repository quota headers are missing or malformed")
+              require(snapshot["resource"] == quota[0]["resource"],
+                      "Repository response changed rate-limit resource")
+              require(snapshot["remaining"] >= (START_REMAINING if api_requests == 1 else RESERVE),
+                      "Actual repository quota is below the conservative reserve")
+          
+          def read_bounded(response, limit):
+              global wire_bytes
+              declared = response.headers.get("Content-Length")
+              if declared is not None:
+                  require(int(declared) <= limit, "HTTP response exceeds finite byte bound")
+              chunks, size = [], 0
+              while True:
+                  chunk = response.read(min(65536, limit + 1 - size))
+                  if not chunk:
+                      break
+                  size += len(chunk)
+                  wire_bytes += len(chunk)
+                  require(size <= limit and wire_bytes <= MAX_WIRE,
+                          "HTTP bytes exceed per-response or aggregate bound")
+                  chunks.append(chunk)
+              return b"".join(chunks)
+          
+          def api_read(path, limit, download=False):
+              global api_requests, downloads
+              require(path in ENDPOINTS, "Unapproved repository endpoint")
+              require(api_requests < MAX_API and api_requests + downloads < MAX_HTTP,
+                      "Fixed repository request cap exhausted")
+              if api_requests:
+                  require(quota and quota[-1]["remaining"] >= RESERVE + MAX_API - api_requests,
+                          "Insufficient actual repository quota for remaining bounded reads")
+              api_requests += 1
+              request = urllib.request.Request(API + path, method="GET", headers={
+                  "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28", "Accept-Encoding": "identity",
+                  "User-Agent": "screener-fixed-a13-browser-evidence",
+              })
+              try:
+                  with opener.open(request, timeout=20) as response:
+                      observe_quota(response.headers)
+                      require(response.status == 200, "Unexpected GitHub repository status")
+                      return read_bounded(response, limit)
+              except urllib.error.HTTPError as error:
+                  headers = error.headers
+                  location, code = headers.get("Location", ""), error.code
+                  error.close()
+                  observe_quota(headers)
+                  require(download and code == 302, "GitHub repository read failed; no retry")
+                  parsed = urllib.parse.urlsplit(location)
+                  require(parsed.scheme == "https" and parsed.hostname
+                          and parsed.hostname.endswith(".blob.core.windows.net")
+                          and not parsed.username and not parsed.password
+                          and parsed.port in (None, 443) and not parsed.fragment,
+                          "Download redirect is not an approved GitHub HTTPS blob host")
+                  require(downloads < MAX_DOWNLOADS and api_requests + downloads < MAX_HTTP,
+                          "Fixed unsigned download request cap exhausted")
+                  downloads += 1
+                  # The repository token is never sent to signed storage or printed.
+                  signed = urllib.request.Request(location, method="GET", headers={
+                      "Accept-Encoding": "identity", "User-Agent": "screener-fixed-a13-browser-evidence",
+                  })
+                  try:
+                      with opener.open(signed, timeout=20) as response:
+                          require(response.status == 200, "Unexpected signed download status")
+                          return read_bounded(response, limit)
+                  except (urllib.error.HTTPError, urllib.error.URLError):
+                      raise RuntimeError("Signed evidence download failed; no retry") from None
+              except urllib.error.URLError:
+                  raise RuntimeError("Repository evidence read failed; no retry") from None
+          
+          RUN_PATH = f"/actions/runs/{RUN}"
+          ATTEMPT_PATH = f"{RUN_PATH}/attempts/{ATTEMPT}"
+          JOBS_PATH = f"{RUN_PATH}/jobs?per_page=100&page=1&filter=latest"
+          ATTEMPT_JOBS_PATH = f"{ATTEMPT_PATH}/jobs?per_page=100&page=1"
+          ARTIFACTS_PATH = f"{RUN_PATH}/artifacts?per_page=100&page=1"
+          LOGS_PATH = f"/actions/jobs/{JOB}/logs"
+          ZIP_PATH = f"/actions/artifacts/{ARTIFACT}/zip"
+          ENDPOINTS = {RUN_PATH, ATTEMPT_PATH, JOBS_PATH, ATTEMPT_JOBS_PATH,
+                       ARTIFACTS_PATH, LOGS_PATH, ZIP_PATH}
+          
+          def decode_json(raw):
+              return json.loads(raw.decode("utf-8"), parse_constant=lambda value:
+                  (_ for _ in ()).throw(RuntimeError("Non-finite JSON value")))
+          
+          def api_json(path):
+              return decode_json(api_read(path, MAX_JSON))
+          
+          def complete(path, key):
+              result = api_json(path)
+              values = result.get(key)
+              require(isinstance(values, list) and result.get("total_count") == len(values) == 2
+                      and len({value["id"] for value in values}) == 2,
+                      "Complete fixed collection differs; no pagination or fallback")
+              return values
+          
+          def validate_run(run):
+              expected = {"id": RUN, "head_sha": HEAD, "head_branch": "main",
+                          "workflow_id": WORKFLOW, "run_attempt": ATTEMPT, "event": "workflow_run",
+                          "status": "completed", "conclusion": "failure",
+                          "path": ".github/workflows/research-ui-release.yml"}
+              require(all(run.get(key) == value for key, value in expected.items())
+                      and run.get("repository", {}).get("full_name") == REPO
+                      and run["repository"].get("id") == 1203919607
+                      and run.get("head_repository", {}).get("full_name") == REPO,
+                      "Publisher identity or terminal failed attempt differs")
+          
+          def validate_jobs(jobs):
+              require({job["id"] for job in jobs} == {ROUTE_JOB, JOB}, "Fixed publisher job inventory differs")
+              for job in jobs:
+                  require(job.get("run_id") == RUN and job.get("run_attempt") == ATTEMPT
+                          and job.get("head_sha") == HEAD and job.get("head_branch") == "main"
+                          and job.get("status") == "completed", "Publisher job binding differs")
+              publisher = next(job for job in jobs if job["id"] == JOB)
+              require(publisher.get("name") == "publish" and publisher.get("conclusion") == "failure",
+                      "Publisher job is not the original failed publication")
+              steps = {step["number"]: step for step in publisher["steps"]}
+              require(steps[29].get("name") == "Verify composed finite price browser and CSV surfaces"
+                      and steps[29].get("status") == "completed" and steps[29].get("conclusion") == "success",
+                      "Original browser step did not succeed")
+              failed = [step for step in publisher["steps"] if step.get("conclusion") == "failure"]
+              require(len(failed) == 1 and failed[0].get("number") == 32
+                      and failed[0].get("name") == "Recheck live identity, main and final data before uploading"
+                      and failed[0].get("status") == "completed", "Original pre-upload failure differs")
+              require(steps[35].get("name") == "Run actions/upload-pages-artifact@v4"
+                      and steps[35].get("conclusion") == "skipped"
+                      and steps[37].get("name") == "Deploy to GitHub Pages"
+                      and steps[37].get("conclusion") == "skipped",
+                      "Pages upload/deploy were not skipped")
+          
+          def inspect_zip(raw):
+              require(len(raw) == ZIP_BYTES and hashlib.sha256(raw).hexdigest() == ZIP_SHA,
+                      "Artifact ZIP size or SHA256 differs before parse")
+              inventory, browser_raw = [], None
+              with zipfile.ZipFile(io.BytesIO(raw), "r") as archive:
+                  members = archive.infolist()
+                  require(len(members) == 14 and {member.filename for member in members} == EXPECTED_MEMBERS
+                          and all(not member.is_dir() for member in members),
+                          "Exact closed fourteen-member report ZIP inventory differs")
+                  paths, total = {}, 0
+                  for member in members:
+                      name = member.filename
+                      require(name == member.orig_filename and name and len(name) <= 512
+                              and not name.startswith("/") and "\\" not in name and ":" not in name
+                              and all(ord(char) >= 32 and ord(char) != 127 for char in name),
+                              "Unsafe ZIP member path")
+                      parts = (name[:-1] if name.endswith("/") else name).split("/")
+                      require(all(part and part not in (".", "..") for part in parts), "Unsafe ZIP path component")
+                      path = "/".join(parts).casefold()
+                      require(path not in paths, "Duplicate or colliding ZIP member")
+                      kind = stat.S_IFMT(member.external_attr >> 16)
+                      require(kind in (0, stat.S_IFREG, stat.S_IFDIR) and not (member.flag_bits & 1)
+                              and member.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+                              and (kind != stat.S_IFDIR or member.is_dir()),
+                              "ZIP link, special, encrypted, unsupported or inconsistent member")
+                      require(0 <= member.file_size <= MAX_MEMBER and 0 <= member.compress_size <= ZIP_BYTES
+                              and 0 <= member.header_offset < ZIP_BYTES
+                              and (not member.is_dir() or member.file_size == 0), "ZIP member size/offset differs")
+                      total += member.file_size
+                      require(total <= MAX_TOTAL, "Expanded ZIP aggregate exceeds bound")
+                      paths[path] = member.is_dir()
+                  for path in paths:
+                      parts = path.split("/")
+                      for count in range(1, len(parts)):
+                          parent = "/".join(parts[:count])
+                          require(parent not in paths or paths[parent], "ZIP file/directory prefix collision")
+                  actual_total = 0
+                  for member in members:
+                      digest, size, chunks = hashlib.sha256(), 0, []
+                      with archive.open(member, "r") as stream:
+                          while True:
+                              chunk = stream.read(65536)
+                              if not chunk:
+                                  break
+                              size += len(chunk)
+                              actual_total += len(chunk)
+                              require(size <= MAX_MEMBER and size <= member.file_size and actual_total <= MAX_TOTAL,
+                                      "Streamed ZIP bytes exceed bound")
+                              digest.update(chunk)
+                              # All non-report members, including PNGs, remain opaque hash streams.
+                              if member.filename == REPORT:
+                                  require(size <= MAX_JSON, "Complete browser JSON exceeds bound")
+                                  chunks.append(chunk)
+                      require(size == member.file_size, "Streamed member size differs")
+                      inventory.append({"path": member.filename, "bytes": size, "directory": member.is_dir(),
+                                        "compressed_bytes": member.compress_size, "sha256": digest.hexdigest(),
+                                        "crc32": f"{member.CRC:08x}", "compression": member.compress_type})
+                      if member.filename == REPORT:
+                          require(browser_raw is None and not member.is_dir(), "Browser report is not unique regular JSON")
+                          browser_raw = b"".join(chunks)
+                  require(actual_total == total, "Expanded ZIP total differs")
+              require(browser_raw is not None, "Exact browser report is missing")
+              report = decode_json(browser_raw)
+              require(isinstance(report, dict) and report.get("schema_version") == "retained-price-source-browser-v1"
+                      and report.get("status") == "passed" and isinstance(report.get("cases"), list)
+                      and len(report["cases"]) == 5 and all(isinstance(case, dict) for case in report["cases"])
+                      and {case.get("symbol") for case in report["cases"]} == CASES
+                      and "active_case" not in report and "error" not in report
+                      and report.get("source_artifact") == SOURCE_EXPORT["id"],
+                      "Original complete five-case passed browser proof differs")
+              binding = report.get("publisher_tooling", {}).get("binding", {})
+              source_binding = binding.get("source", {})
+              require(source_binding.get("companion_id") == SOURCE_COMPANION["id"]
+                      and source_binding.get("companion_sha256") == SOURCE_COMPANION["sha256"]
+                      and source_binding.get("artifact_sha256") == SOURCE_EXPORT["sha256"]
+                      and binding.get("caller", {}).get("job", {}).get("id") == JOB
+                      and binding.get("controller", {}).get("head") == HEAD
+                      and binding.get("controller", {}).get("tree") == "ab8e90af023767698eb5cc4229486c23f0aa92f2"
+                      and binding.get("request_sha256") == "f9e31ed17d14bdc71dd54db8b351f9636c7bda8fa264bcb60e425198d240c48c",
+                      "Saved browser tooling/source/companion bindings differ")
+              return inventory, browser_raw.decode("utf-8"), report
+          
+          def own_counts():
+              return {"repository_api_requests": api_requests, "unsigned_storage_requests": downloads,
+                      "total_http_requests": api_requests + downloads, "response_bytes": wire_bytes,
+                      "maximum_repository_api_requests": MAX_API, "maximum_unsigned_storage_requests": MAX_DOWNLOADS,
+                      "maximum_total_http_requests": MAX_HTTP, "maximum_response_bytes": MAX_WIRE}
+          
+          def main():
+              require(len(sys.argv) == 1 and token and os.environ.get("GITHUB_REPOSITORY") == REPO
+                      and os.environ.get("GITHUB_REF") == BRANCH and os.environ.get("GITHUB_EVENT_NAME") == "push"
+                      and os.environ.get("GITHUB_RUN_ATTEMPT") == "1", "Fixed original-attempt trigger differs")
+              # The very first repository response supplies the actual bucket guard.
+              current = api_json(RUN_PATH)
+              validate_run(current)
+              attempt = api_json(ATTEMPT_PATH)
+              validate_run(attempt)
+              current_jobs = complete(JOBS_PATH, "jobs")
+              attempt_jobs = complete(ATTEMPT_JOBS_PATH, "jobs")
+              validate_jobs(current_jobs)
+              validate_jobs(attempt_jobs)
+              require(sorted(current_jobs, key=lambda value: value["id"])
+                      == sorted(attempt_jobs, key=lambda value: value["id"]), "Current/attempt job metadata differs")
+              artifacts = complete(ARTIFACTS_PATH, "artifacts")
+              require({item["id"] for item in artifacts} == {QUALITY_ARTIFACT, ARTIFACT},
+                      "Complete official artifact inventory differs")
+              for item in artifacts:
+                  require(item.get("workflow_run", {}).get("id") == RUN
+                          and item["workflow_run"].get("head_sha") == HEAD
+                          and item["workflow_run"].get("head_branch") == "main" and item.get("expired") is False,
+                          "Official artifact binding/expiry differs")
+              quality = next(item for item in artifacts if item["id"] == QUALITY_ARTIFACT)
+              require(quality.get("name") == f"publication-quality-{RUN}-{ATTEMPT}"
+                      and quality.get("size_in_bytes") == 6253
+                      and quality.get("digest") == "sha256:a104aee544797ec696203921ef16f87c8d9018b491be8606a9f12ab6020b85a3",
+                      "Exact quality artifact metadata differs")
+              target = next(item for item in artifacts if item["id"] == ARTIFACT)
+              require(target.get("name") == ARTIFACT_NAME and target.get("size_in_bytes") == ZIP_BYTES
+                      and target.get("digest") == "sha256:" + ZIP_SHA, "Exact browser evidence artifact differs")
+              log_raw = api_read(LOGS_PATH, MAX_LOG, download=True)
+              require(len(log_raw) == LOG_BYTES and hashlib.sha256(log_raw).hexdigest() == LOG_SHA,
+                      "Original publisher log bytes or SHA256 differ")
+              logs = log_raw.decode("utf-8")
+              candidates = [logs[match.start():match.start() + 2048]
+                            for match in re.finditer(r'"status"\s*:\s*"passed"', logs)]
+              proof = [snippet for snippet in candidates if re.search(r'"cases"\s*:\s*5\b', snippet)]
+              require(len(proof) == 1, "Original literal passed/cases5 browser log proof is not unique")
+              raw = api_read(ZIP_PATH, ZIP_BYTES, download=True)
+              inventory, report_text, report = inspect_zip(raw)
+              final_current = api_json(RUN_PATH)
+              validate_run(final_current)
+              require(final_current.get("updated_at") == current.get("updated_at"),
+                      "Original failed publisher changed during evidence collection")
+              record("scope", "Preserve original verified browser evidence only; publisher remains failed; no publication acceptance")
+              record("publisher_current", current)
+              record("publisher_attempt_1", attempt)
+              record("publisher_current_jobs", current_jobs)
+              record("publisher_attempt_1_jobs", attempt_jobs)
+              record("publisher_artifact_inventory", artifacts)
+              record("original_passed_five_case_log_proof", proof[0])
+              record("verified_zip", {"artifact_id": ARTIFACT, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
+              record("complete_zip_member_inventory", inventory)
+              record("complete_finite_source_browser_report_utf8", report_text)
+              record("typed_browser_summary", {
+                  "schema_version": "retained-price-browser-evidence-summary-v1",
+                  "publisher_run": RUN, "publisher_attempt": ATTEMPT, "publisher_head": HEAD,
+                  "publisher_conclusion": "failure", "browser_step": 29, "browser_conclusion": "success",
+                  "pre_upload_step": 32, "pre_upload_conclusion": "failure", "pages_upload_deploy": "skipped",
+                  "report_status": report["status"], "case_count": len(report["cases"]), "active_case": None,
+                  "source_reference_context": {"source_run": 37867375775, "source_attempt": 1,
+                      "export": SOURCE_EXPORT, "companion": SOURCE_COMPANION,
+                      "verification": "IDs/digests bound in saved browser report; byte sizes supplied by parent; no source requests"},
+                  "actual_report_carry": report.get("carry"),
+                  "actual_report_financial_lineage": report.get("financial_lineage"),
+                  "completed_cases": [{key: case.get(key) for key in
+                      ("symbol", "category", "source", "detail", "retained_history", "undated", "expiry", "csv", "typography")}
+                      for case in report["cases"]],
+                  "network_denials": report.get("network_denials"),
+                  "network_contract": report.get("network_contract"), "network_cases": report.get("network_cases"),
+              })
+          
+          try:
+              main()
+          except Exception as error:
+              record("collector_failure", {"reason": str(error), "no_retry": True}, footer=True)
+              exit_code = 1
+          else:
+              exit_code = 0
+          finally:
+              same_window = len(quota) > 1 and all(item.get("reset") == quota[0].get("reset")
+                  and item.get("resource") == quota[0].get("resource") for item in quota)
+              record("own_request_counts", own_counts(), footer=True)
+              record("actual_repository_rate_limit_observations", {
+                  "responses": quota, "same_reset_window": same_window,
+                  "shared_used_delta_after_first": (quota[-1]["used"] - quota[0]["used"])
+                      if same_window and all(type(item.get("used")) is int for item in quota) else None,
+                  "own_repository_requests_after_first": max(0, api_requests - 1),
+                  "note": "Shared headers can include other activity; own counters describe this collector only.",
+              }, footer=True)
+              sys.stdout.write("".join(records))
+              sys.stdout.flush()
+          sys.exit(exit_code)
+          PY
