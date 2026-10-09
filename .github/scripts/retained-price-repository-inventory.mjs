@@ -97,8 +97,8 @@ export async function collectSnapshot({read,signal,abort,requiredIds}){
   const accept=(page,n,total)=>{
     check(object(page),'invalid-inventory-schema-or-bound');
     const observed=validatePage(page.value,page.link,n);
-    for(const run of page.value.workflow_runs){check(!seen.has(run.id),'invalid-or-duplicate-run');seen.add(run.id);}
     if(total!==null&&observed!==total)throw fault('changing-inventory-total',true);
+    for(const run of page.value.workflow_runs){check(!seen.has(run.id),'invalid-or-duplicate-run');seen.add(run.id);}
     pages[n-1]=page;return observed;
   };
   let total;

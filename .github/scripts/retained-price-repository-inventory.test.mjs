@@ -192,6 +192,38 @@ test('independently valid total drift cancels siblings, waits for settlement and
   const result=await f.pending;matches('changing-inventory-total',true)(result.error);
   assert.equal(f.active,0);assert.deepEqual(f.calls,[1,2,3,4]);
 });
+test('validated changing totals outrank cross-page overlap without accepting or mutating the snapshot',async()=>{
+  for(const changedTotal of[200,202]){
+    const f=await controlledCollection(),p=pageOf(2,changedTotal);
+    p.value.workflow_runs[0]=row(1); // Valid within this page, overlaps page 1.
+    assert.equal(validatePage(p.value,p.link,2),changedTotal);
+    f.gates.get(2).resolve(p);await nextTurn();
+    assert.equal(f.controller.signal.aborted,true);assert.equal(f.settled,false);
+    f.gates.get(3).reject(fault('sibling-aborted'));f.gates.get(4).reject(fault('sibling-aborted'));
+    const result=await f.pending;matches('changing-inventory-total',true)(result.error);
+    assert.equal(result.result,undefined);assert.equal(f.active,0);assert.deepEqual(f.calls,[1,2,3,4]);
+  }
+});
+test('stable-total cross-page overlap stays terminal and discards the whole snapshot',async()=>{
+  const f=await controlledCollection(),p=pageOf(2,201);
+  p.value.workflow_runs[0]=row(1);assert.equal(validatePage(p.value,p.link,2),201);
+  f.gates.get(2).resolve(p);await nextTurn();
+  f.gates.get(3).reject(fault('sibling-aborted'));f.gates.get(4).reject(fault('sibling-aborted'));
+  const result=await f.pending;matches('invalid-or-duplicate-run')(result.error);
+  assert.equal(result.result,undefined);assert.equal(f.active,0);assert.deepEqual(f.calls,[1,2,3,4]);
+});
+test('hard and security siblings outrank a validated overlapping count drift after all settle',async()=>{
+  for(const security of[false,true]){
+    const f=await controlledCollection(),drift=pageOf(2,202);
+    drift.value.workflow_runs[0]=row(1);f.gates.get(2).resolve(drift);await nextTurn();
+    assert.equal(f.controller.signal.aborted,true);assert.equal(f.settled,false);
+    if(security)f.gates.get(3).reject(fault('http-or-security-denial'));
+    else{const bad=pageOf(3,201);bad.value.workflow_runs[0].repository.id=999;f.gates.get(3).resolve(bad);}
+    f.gates.get(4).reject(fault('sibling-aborted'));
+    matches(security?'http-or-security-denial':'foreign-repository-run')((await f.pending).error);
+    assert.equal(f.active,0);assert.deepEqual(f.calls,[1,2,3,4]);
+  }
+});
 test('a shrinking but individually valid empty terminal page is retryable drift',async()=>{
   const f=await controlledCollection();
   f.gates.get(4).resolve(pageOf(4,150));await nextTurn();
@@ -203,7 +235,8 @@ test('semantic invalidity on the drifting page outranks its changed total',async
     p=>p.value.workflow_runs[0].repository.id=999,
     p=>p.value.workflow_runs[0].path='.github/workflows/other.yml',
     p=>p.link=p.link.replace('page=3','page=3&branch=main'),
-    p=>p.value.workflow_runs[0]=row(1),
+    p=>p.value.workflow_runs[0]=row(52),
+    p=>p.value.workflow_runs[0].run_attempt=0,
     p=>p.value.workflow_runs.pop(),
   ]) {
     const f=await controlledCollection(),p=pageOf(2,202);change(p);f.gates.get(2).resolve(p);await nextTurn();
@@ -257,6 +290,25 @@ test('native reader uses one fixed host, no redirects, no cache and a shared abo
   assert.equal(validateSnapshot(value.pages,[1,1324]).total,1324);
   assert.equal(value.body_bytes,value.evidence.reduce((sum,p)=>sum+p.body_bytes,0));
   assert(value.evidence.every(p=>p.status===200&&/^[a-f0-9]{64}$/.test(p.body_sha256)&&/^[a-f0-9]{64}$/.test(p.ids_sha256)));
+});
+test('native drift-plus-overlap returns only safe failed-attempt evidence and no partial pages',async()=>{
+  const calls=[],bodies=new Map();
+  const result=await readSnapshot(async url=>{
+    const n=requestedPage(url);calls.push(n);
+    const p=pageOf(n,n===2?102:101);
+    if(n===2)p.value.workflow_runs[0]=row(1);
+    const raw=JSON.stringify(p.value);bodies.set(n,raw);
+    return responseOf(n,p.value.total_count,{value:p.value,link:p.link,headers:{
+      authorization:'Bearer '+TOKEN,'set-cookie':'fixture-private-payload','x-github-request-id':'SAFE:DRIFT',
+    }});
+  },{requiredIds:[1,101]});
+  failed(result,'changing-inventory-total',true);assert.deepEqual(calls,[1,2,3]);
+  const drift=result.evidence.find(p=>p.page_number===2);
+  assert.equal(drift.status,200);assert.equal(drift.observed_total,102);assert.equal(drift.row_count,50);
+  assert.equal(drift.body_bytes,Buffer.byteLength(bodies.get(2)));
+  assert.equal(drift.body_sha256,digest(bodies.get(2)));
+  assert.equal(drift.ids_sha256,digest(JSON.stringify(JSON.parse(bodies.get(2)).workflow_runs.map(r=>r.id))));
+  assert.deepEqual(drift.safe_headers,{'x-github-request-id':'SAFE:DRIFT'});
 });
 test('invalid native reader config is a bounded failure envelope without network reads',async()=>{
   const variants=[
