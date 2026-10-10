@@ -89,7 +89,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
  appendFileSync(process.env.RELEASE_CLI_TRACE,JSON.stringify({pages:path})+'\\n');
  const bytes=readFileSync(join(config.liveRoot,path));return new Response(bytes);};`);
   write(join(root,'event.json'),{inputs:{}});
-  let now=sourceTime,releaseRoot=null,releaseId=null;
+  let now=sourceTime,releaseRoot=null,releaseId=null,retainedPublicationArtifact=null,seedRecaptured=false;
   const save=()=>write(configPath,config);
   const environment=extra=>({PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:join(releaseRoot||root,'runner'),GITHUB_REPOSITORY:repository,
     GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_EVENT_PATH:join(root,'event.json'),RELEASE_SHA:sha,GITHUB_RUN_ID:String(releaseId),GITHUB_RUN_ATTEMPT:'1',
@@ -108,6 +108,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
     if(history)cpSync(history,join(dataRoot,'candidate-history'),{recursive:true});
     else {write(join(dataRoot,'candidate-history/index.json'),{schema_version:1,snapshots:[]});write(join(dataRoot,'candidate-history/retained-history.json'),'retained original history bytes\n');}
+    write(join(dataRoot,'candidate-performance-history/index.json'),{schema_version:1,cohorts:[]});
     success(invoke(join(frontend,'tools/export-research.mjs'),[],frontend,{FINANCIAL_EVALUATED_AT:now,...extra}),'export fixture');
     return join(frontend,'public');
   }
@@ -123,6 +124,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     api[`${prefix}/actions/runs/${id}/attempts/1`]=run(id,'research-ui-release.yml','workflow_dispatch');
     const start=new Date(Date.parse(now)+60000).toISOString(),end=new Date(Date.parse(now)+120000).toISOString();
     api[`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`]=[{jobs:[{run_attempt:1,started_at:now,steps:[{name:'Deploy to GitHub Pages',conclusion:'success',started_at:start,completed_at:end}]}]}];
+    if(!packedTransport)retainedPublicationArtifact=pack(900000+id,`github-pages-${id}-1`,liveRoot,'artifact.tar',null,id);
     save();return liveRoot;
   }
   function seed(){
@@ -152,6 +154,16 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     }
     return deploy(publicRoot,30);
   }
+  function recaptureSeedPublicationArtifact(){
+    // A derived fixture may intentionally finish constructing its synthetic
+    // activation receipt after seed(). Capture that completed seed exactly once;
+    // ordinary save/advance/invoke must never repair later receipt tampering.
+    assert.equal(releaseId,null);assert.equal(now,sourceTime);assert.equal(seedRecaptured,false);
+    const publication=read(join(config.liveRoot,'publication.json'));
+    assert.equal(publication.run_id,30);assert.equal(publication.run_attempt,1);
+    retainedPublicationArtifact=pack(900030,'github-pages-30-1',config.liveRoot,'artifact.tar',null,30);
+    seedRecaptured=true;save();
+  }
   function advance({id,date,price,time}){
     now=time;releaseId=id;releaseRoot=join(root,`release-${id}`);frontendAt(join(releaseRoot,'release'));
     const output=join(releaseRoot,'output'),envFile=join(releaseRoot,'environment');
@@ -162,9 +174,10 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     const companion=pack(exportId+1,`static-site-data-manifest-${exportId}-1`,null,'source.json',metadata,exportId);
     api[`${prefix}/actions/runs/${exportId}/attempts/1`]=run(exportId,'static-site.yml','schedule');
     api[`${prefix}/actions/runs/${exportId}/attempts/1/jobs?per_page=100`]=[{jobs:[{name:'combine-and-build',run_attempt:1,conclusion:'success',started_at:now,completed_at:now,steps:[{name:'Build static frontend',conclusion:'success'}]}]}];
-    api[`${prefix}/actions/artifacts?per_page=100`]=[{artifacts:[artifact,companion]}];
-    // No predecessor Actions artifact is available: carry must restore the
-    // durable, hash-bound source assets from the verified Pages publication.
+    api[`${prefix}/actions/artifacts?per_page=100`]=[{artifacts:[artifact,companion,...(retainedPublicationArtifact?[retainedPublicationArtifact]:[])]}];
+    // Packed history exercises the pinned live-root fallback without a ZIP.
+    // Unpacked history needs the exact retained publication artifact; financial
+    // source assets still use their existing durable Pages receipt bindings.
     save();
     return {root:releaseRoot,dist:join(releaseRoot,'release/frontend/dist'),frontend:join(releaseRoot,'release/frontend'),output,envFile,
       command(command,{allowFailure=false,env={}}={}){const result=invoke(controllerPath,[command],releaseRoot,{GITHUB_OUTPUT:output,GITHUB_ENV:envFile,...env});return allowFailure?result:success(result,command);},
@@ -174,6 +187,6 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
       state(){return read(join(releaseRoot,'runner/verified-publication/state.json'));},
       deploy(){return deploy(this.dist,id);}};
   }
-  return {root,config,save,original,lineage,seed,advance,invoke,success,environment,get liveRoot(){return config.liveRoot;},setTime(value){now=value;},
+  return {root,config,save,original,lineage,seed,recaptureSeedPublicationArtifact,advance,invoke,success,environment,get liveRoot(){return config.liveRoot;},setTime(value){now=value;},
     cleanup(){certificate.cleanup();rmSync(root,{recursive:true,force:true});}};
 }
