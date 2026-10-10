@@ -872,6 +872,8 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
     await expect(method).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(method).toHaveAttribute('aria-pressed', 'true');
+    // The annual toggle records the current base filters in browser history.
+    await drawer.getByRole('combobox', { name: '業種', exact: true }).selectOption('Technology');
     await annual(drawer).focus();
     await page.keyboard.press('Space');
     await expect(annual(drawer)).toBeChecked();
@@ -879,7 +881,6 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
     await expectNoOverflow(page, drawer);
     const darkDrawerName = `compact-drawer-${viewport.width}x${viewport.height}-dark`;
     await info.attach(darkDrawerName, { body: await page.screenshot({ path: info.outputPath(`${darkDrawerName}.png`) }), contentType: 'image/png' });
-    await drawer.getByRole('combobox', { name: '業種', exact: true }).selectOption('Technology');
     const browse = drawer.getByRole('button', { name: '候補を確認する →', exact: true });
     const drawerBox = await rectangle(drawer);
     await page.mouse.move(drawerBox.left + 8, viewport.height / 2);
@@ -891,6 +892,7 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
     await expect(drawer).toHaveCount(0);
     await expect(board(page)).toBeFocused();
     await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
+    await expect.poll(() => new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('sector')).toBe('Technology');
     const filteredUrl = page.url();
     await page.goBack();
     await expect(candidateSymbols(page)).toHaveText(ALL_SYMBOLS);
@@ -1058,7 +1060,7 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
 import { writeFile as writeFontHealthReport } from 'node:fs/promises';
 
 const FONT_HEALTH_FAMILIES = ['Inter', 'Zen Kaku Gothic New', 'Geist Mono'];
-const FONT_HEALTH_FILE = /^\/s\/(?:inter|zenkakugothicnew|geistmono)\/v\d+\/[A-Za-z0-9_-]+\.woff2$/;
+const FONT_HEALTH_FILE = /^\/s\/(?:inter|zenkakugothicnew|geistmono)\/v\d+\/[A-Za-z0-9_-]+(?:\.[0-9]{1,3})?\.woff2$/;
 
 function fontHealthRequestKind(request) {
   const url = new URL(request.url());
