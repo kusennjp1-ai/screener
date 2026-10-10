@@ -975,6 +975,7 @@ jobs:
         id: build-frontend
         env:
           GH_TOKEN: ${{ github.token }}
+          RETAINED_PRICE_CONDITIONAL_CACHE_MODE: ${{ needs.select-markets.outputs.repair == 'true' && 'initialize' || '' }}
           PRICE_REPAIR: ${{ needs.select-markets.outputs.repair }}
           SEC_USER_AGENT: ${{ needs.select-markets.outputs.repair != 'true' && secrets.SEC_USER_AGENT || '' }}
           VITE_STATIC_SITE: "true"
@@ -1055,6 +1056,11 @@ jobs:
           else
             node .github/scripts/select-release-source.mjs export-metadata
           fi
+      - name: Clean up finite producer historical jobs cache
+        if: always() && needs.select-markets.outputs.repair == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/conditional-deployment-jobs.mjs cleanup
       - name: Preserve dated export provenance for release selection
         uses: actions/upload-artifact@v4
         with:

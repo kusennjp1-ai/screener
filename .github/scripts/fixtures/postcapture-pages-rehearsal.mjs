@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './bounded-gh-cli.mjs';
 // Diagnostic only. Real #99 bytes and the failed producer/successful companion
 // are immutable inputs. Future Git/CI/publisher authority and one price tick
 // exist ONLY in a disposable Git repository. No provider or remote is called.
@@ -75,7 +76,7 @@ export function offlineApiResponse(config,endpoint,paginate,gitRead){
 
 export function installOfflineTransport(f,{python}){
   const bin=join(f.root,'bin'),deny=join(f.root,'python-deny'),configPath=join(f.root,'transport.json');mkdirSync(deny);
-  write(join(bin,'gh'),`#!${process.execPath}\nconst fs=require('node:fs'),cp=require('node:child_process'),assert=require('node:assert/strict');
+  write(join(bin,'gh'),`#!${process.execPath}\n${boundedGhCliPrelude}const fs=require('node:fs'),cp=require('node:child_process'),assert=require('node:assert/strict');
 const prefix=${JSON.stringify(prefix)},args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RENEWAL_FIXTURE_CONFIG));
 if(args[0]!=='api'||args.slice(1,-1).some(arg=>!['--paginate','--slurp'].includes(arg)))throw Error('Only exact offline GitHub reads are allowed');
 const endpoint=args.at(-1);fs.appendFileSync(process.env.RENEWAL_FIXTURE_TRACE,JSON.stringify({api:endpoint})+'\\n');
