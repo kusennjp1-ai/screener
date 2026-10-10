@@ -1,0 +1,14 @@
+{
+  "FUTU/annual_history": {
+    "receipt_id": "ac98b1b8-e947-44b4-8bde-4c129e5baf06",
+    "recheck_after": "2026-10-10T09:30:00.000Z"
+  },
+  "ALH/annual_history": {
+    "receipt_id": "c32890e7-1d15-4547-9232-6520511ad411",
+    "recheck_after": "2026-10-10T09:30:00.000Z"
+  },
+  "AVT/annual_history": {
+    "receipt_id": "24504ad3-59cb-4d72-ae4b-83a559961c13",
+    "recheck_after": "2026-10-10T09:30:00.000Z"
+  }
+}

@@ -278,11 +278,16 @@ def test_full_post_zip_inventory_detects_members_changed_after_packaging(tmp_pat
         guard.verify_final()
 
 
-def test_real_collector_merge_and_final_exact_metadata_binding(collector):
+@pytest.mark.parametrize('restored_without_hidden_lock', [False, True])
+def test_real_collector_merge_and_final_exact_metadata_binding(collector, restored_without_hidden_lock):
     collector.output = collector.root / 'batch'
     cohort = collector.plan['verified_us_cohort']
     root = collector.root / 'archive'
     sha = archive.create_archive(root, base_bytes=collector.base, cohort=cohort, now=collector.now)
+    if restored_without_hidden_lock:
+        # Actions upload-artifact omits hidden files by default. Restoring the
+        # source ZIP therefore loses the empty writer lock, not any receipts.
+        (root / '.archive.lock').unlink()
     cycle = collector.root / 'cycle.json'
     cycle.write_bytes(b'prepared')
     guard = retention.StatementRetentionBudget(collector.root)
@@ -358,7 +363,9 @@ def test_before_merge_reserves_finalization_without_another_provider_step(tmp_pa
     assert guard.last_report['compressed_headroom_bytes'] > 0
 
 
-@pytest.mark.parametrize('attack', ['orphan','wrong_bytes','extra_manifest','missing_object','missing_manifest'])
+@pytest.mark.parametrize('attack', ['orphan','wrong_bytes','extra_manifest','missing_object','missing_manifest',
+                                  'nonempty_lock', 'other_hidden_file', 'linked_lock', 'hardlinked_lock',
+                                  'lock_directory', 'special_lock'])
 def test_final_archive_additions_bind_validated_inventory_and_actual_digests(tmp_path, attack):
     root, guard = budget_tree(tmp_path)
     cycle = root / 'cycle.json'
@@ -383,11 +390,45 @@ def test_final_archive_additions_bind_validated_inventory_and_actual_digests(tmp
         allowed = [expected]
     elif attack == 'extra_manifest':
         (manifests / f'{expected}.json').write_bytes(b'expected')
+    elif attack == 'nonempty_lock':
+        (root / 'archive/.archive.lock').write_bytes(b'unowned source bytes')
+    elif attack == 'other_hidden_file':
+        (root / 'archive/.unowned').write_bytes(b'')
+    elif attack in {'linked_lock', 'hardlinked_lock'}:
+        target = tmp_path / 'outside-lock'
+        target.write_bytes(b'')
+        if attack == 'linked_lock':
+            (root / 'archive/.archive.lock').symlink_to(target)
+        else:
+            os.link(target, root / 'archive/.archive.lock')
+    elif attack == 'lock_directory':
+        (root / 'archive/.archive.lock').mkdir()
+    elif attack == 'special_lock':
+        os.mkfifo(root / 'archive/.archive.lock')
     guard.authorize_finalization(
         archive_manifest_sha256=hashlib.sha256((root/'archive/manifest.json').read_bytes()).hexdigest(),
         cycle_sha256=hashlib.sha256(cycle.read_bytes()).hexdigest(), archive_object_sha256s=allowed)
     with pytest.raises(retention.RetentionIntegrityError):
         guard.verify_final()
+
+
+def test_empty_archive_lock_is_not_owned_during_acquisition(tmp_path):
+    root, guard = budget_tree(tmp_path)
+    guard.check('initial')
+    (root / 'archive/.archive.lock').write_bytes(b'')
+    with pytest.raises(retention.RetentionIntegrityError, match='Unowned retained source addition'):
+        guard.check('getter')
+
+
+def test_finalization_cannot_rewrite_an_existing_lock(tmp_path):
+    root, guard = budget_tree(tmp_path)
+    lock = root / 'archive/.archive.lock'
+    lock.write_bytes(b'original retained evidence')
+    guard.check('initial')
+    guard.before_merge()
+    lock.write_bytes(b'')
+    with pytest.raises(retention.RetentionIntegrityError, match='Retained source bytes changed'):
+        guard._verified_snapshot(force_bytes=True)
 
 
 def test_finalization_keeps_original_unindexed_crash_objects_without_granting_new_ones(tmp_path):

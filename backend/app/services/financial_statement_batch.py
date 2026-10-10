@@ -612,8 +612,10 @@ def make_session(requests, capture, out, events, stop, active, budget):
 def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=None, dry_run=False,
             acquisition_budget_seconds=DEFAULT_ACQUISITION_BUDGET_SECONDS,
             max_statement_getter_calls=MAX_BATCH * 2, max_transport_requests=DEFAULT_MAX_TRANSPORT_REQUESTS,
-            retention_guard=None):
+            retention_guard=None, before_first_provider=None):
     validate_plan(plan, base_bytes)
+    if before_first_provider is not None and not callable(before_first_provider):
+        raise InvalidPlan("First provider admission must be callable")
     if (not finite(acquisition_budget_seconds) or not 0 < acquisition_budget_seconds <= 24 * 3600
             or type(max_statement_getter_calls) is not int or not 1 <= max_statement_getter_calls <= MAX_BATCH * 2
             or type(max_transport_requests) is not int or not 1 <= max_transport_requests <= 10000):
@@ -710,6 +712,13 @@ def collect(plan, base_bytes, output_dir, *, cache_manifest=None, cache_sha256=N
                     counts["not_attempted_attributes"] += 1
                     continue
                 if session is None:
+                    # One-shot admission belongs after all initial/cache/getter
+                    # retention work, at the actual first provider boundary.
+                    # Its elapsed time remains charged to the original deadline.
+                    if before_first_provider is not None:
+                        before_first_provider()
+                    if time.monotonic() >= budget["deadline"]:
+                        raise InvalidPlan("Acquisition budget exhausted before first provider construction")
                     session = stack.enter_context(make_session(requests, capture, out, events, stop, active, budget))
                 if ticker is None:
                     ticker = yf.Ticker(symbol, session=session)

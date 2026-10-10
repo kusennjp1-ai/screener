@@ -181,12 +181,19 @@ class StatementRetentionBudget:
             if not permitted:
                 raise RetentionIntegrityError('Unowned retained source directory addition')
         for name in files.keys() - expected.keys():
+            # Actions omits hidden files on upload, so the atomic archive
+            # writer may recreate its empty advisory lock after ZIP restore.
+            # This exact finalization-only sidecar owns no source bytes.
+            owned_lock = (self.phase == 'finalization' and name == 'archive/.archive.lock'
+                          and files[name].size == 0
+                          and files[name].sha256 == hashlib.sha256(b'').hexdigest())
             permitted = (name.startswith('batch/') if self.phase == 'acquisition' else
                          (name in (self.authorized_object_paths or set())
-                          or name == f"archive/manifests/{mutable.get('archive/manifest.json')}.json"))
+                          or name == f"archive/manifests/{mutable.get('archive/manifest.json')}.json"
+                          or owned_lock))
             if not permitted:
                 raise RetentionIntegrityError('Unowned retained source addition')
-            if self.phase == 'finalization' and Path(name).stem != files[name].sha256:
+            if self.phase == 'finalization' and not owned_lock and Path(name).stem != files[name].sha256:
                 raise RetentionIntegrityError('New archive path does not bind its actual bytes')
         if self.phase == 'finalization' and self.authorized_object_paths is not None:
             actual = {name for name in files if name.startswith('archive/objects/')}

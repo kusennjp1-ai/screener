@@ -1,0 +1,92 @@
+name: Financial Statement Successor
+
+on:
+  push:
+    branches: [improve/financial-retention-successor]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: financial-statement-recovery
+  cancel-in-progress: false
+
+jobs:
+  statement-successor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
+    steps:
+      - name: Start the actual bounded job clock
+        id: budget-clock
+        run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the reviewed anonymous statement transport
+        run: >-
+          python -m pip install
+          yfinance==0.2.66 pandas==2.2.0 numpy==1.26.3
+          curl_cffi==0.16.3 requests==2.31.0 pytest==8.3.5
+      - name: Verify successor bounds and retention offline
+        run: |
+          node --test .github/scripts/restore-successor-statement-source.test.mjs .github/scripts/restore-statement-source.test.mjs
+          python -m pytest --noconftest backend/tests/unit/test_statement_retention_budget.py backend/tests/unit/test_financial_statement_batch.py backend/tests/unit/test_statement_artifact_archive.py backend/tests/unit/test_successor_statement_refresh.py backend/tests/unit/test_successor_artifact_readback.py -q
+      - name: Restore exactly the failed job's verified retained source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node .github/scripts/restore-successor-statement-source.mjs
+          --admission .github/bounded-refresh-successor/admission.json
+          --output "$RUNNER_TEMP/successor-source"
+      - name: Execute the separately admitted bounded successor
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python .github/scripts/successor-statement-refresh.py
+          --admission .github/bounded-refresh-successor/admission.json
+          --restored "$RUNNER_TEMP/successor-source"
+          --output "$RUNNER_TEMP/financial-successor"
+          --inventory "$RUNNER_TEMP/successor-verification/expected-inventory.json"
+          --job-started-at '${{ steps.budget-clock.outputs.started_at }}'
+      - name: Retain all original and partial source bytes, including the lock
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-statement-successor-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/financial-successor/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Download and verify the actual uploaded retained artifact
+        if: always() && steps.upload.outputs.artifact-id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python .github/scripts/verify-successor-artifact.py
+          --inventory "$RUNNER_TEMP/successor-verification/expected-inventory.json"
+          --artifact-id '${{ steps.upload.outputs.artifact-id }}'
+          --artifact-digest '${{ steps.upload.outputs.artifact-digest }}'
+          --output "$RUNNER_TEMP/successor-verification/artifact-readback.json"
+      - name: Retain the exact inventory, fresh preflight and readback result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-statement-successor-readback-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/successor-verification/
+          retention-days: 14
+          if-no-files-found: warn
+
+# Private candidate admission is disabled. No schedule, publication, price fetch,
+# database write, new credentials or provider-denial bypass. Historical run four
+# remains failed; this workflow never rewrites or reuses its expired admission.

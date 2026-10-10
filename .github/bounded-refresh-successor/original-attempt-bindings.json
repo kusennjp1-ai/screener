@@ -1,0 +1,98 @@
+[
+  {
+    "symbol": "FUTU",
+    "attribute": "quarterly_income_stmt",
+    "original_attempt": {
+      "attempt_id": "7d33df63-e77c-4cad-9cfe-9f780fed843c:0233",
+      "attempted_at": "2026-10-04T13:13:36.995Z",
+      "attributes": [
+        "quarterly_income_stmt"
+      ],
+      "http_status": null,
+      "outcome": "succeeded",
+      "source_object_sha256": "f462ce29449af589851fdc119d2dbdc03536beb92eb719a4b1b7a75d60e476cc",
+      "symbol": "FUTU"
+    },
+    "proposed_retry_not_before": "2026-10-10T09:30:00.000Z"
+  },
+  {
+    "symbol": "FUTU",
+    "attribute": "income_stmt",
+    "original_attempt": {
+      "attempt_id": "7d33df63-e77c-4cad-9cfe-9f780fed843c:0234",
+      "attempted_at": "2026-10-04T13:13:38.666Z",
+      "attributes": [
+        "income_stmt"
+      ],
+      "http_status": null,
+      "outcome": "succeeded",
+      "source_object_sha256": "f462ce29449af589851fdc119d2dbdc03536beb92eb719a4b1b7a75d60e476cc",
+      "symbol": "FUTU"
+    },
+    "proposed_retry_not_before": "2026-10-10T09:30:00.000Z"
+  },
+  {
+    "symbol": "ALH",
+    "attribute": "quarterly_income_stmt",
+    "original_attempt": {
+      "attempt_id": "c0d56273-abc5-46fa-9e48-804657057c9f:0145",
+      "attempted_at": "2026-10-04T11:39:34.310Z",
+      "attributes": [
+        "quarterly_income_stmt"
+      ],
+      "http_status": null,
+      "outcome": "succeeded",
+      "source_object_sha256": "a4f31e0141e5a6aa19ffcff03739eda174644326efb3624090e625c287647cb9",
+      "symbol": "ALH"
+    },
+    "proposed_retry_not_before": "2026-10-10T09:30:00.000Z"
+  },
+  {
+    "symbol": "ALH",
+    "attribute": "income_stmt",
+    "original_attempt": {
+      "attempt_id": "c0d56273-abc5-46fa-9e48-804657057c9f:0146",
+      "attempted_at": "2026-10-04T11:39:35.942Z",
+      "attributes": [
+        "income_stmt"
+      ],
+      "http_status": null,
+      "outcome": "succeeded",
+      "source_object_sha256": "a4f31e0141e5a6aa19ffcff03739eda174644326efb3624090e625c287647cb9",
+      "symbol": "ALH"
+    },
+    "proposed_retry_not_before": "2026-10-10T09:30:00.000Z"
+  },
+  {
+    "symbol": "AVT",
+    "attribute": "quarterly_income_stmt",
+    "original_attempt": {
+      "attempt_id": "c0d56273-abc5-46fa-9e48-804657057c9f:0349",
+      "attempted_at": "2026-10-04T11:45:16.015Z",
+      "attributes": [
+        "quarterly_income_stmt"
+      ],
+      "http_status": null,
+      "outcome": "succeeded",
+      "source_object_sha256": "a4f31e0141e5a6aa19ffcff03739eda174644326efb3624090e625c287647cb9",
+      "symbol": "AVT"
+    },
+    "proposed_retry_not_before": "2026-10-10T09:30:00.000Z"
+  },
+  {
+    "symbol": "AVT",
+    "attribute": "income_stmt",
+    "original_attempt": {
+      "attempt_id": "c0d56273-abc5-46fa-9e48-804657057c9f:0350",
+      "attempted_at": "2026-10-04T11:45:17.646Z",
+      "attributes": [
+        "income_stmt"
+      ],
+      "http_status": null,
+      "outcome": "succeeded",
+      "source_object_sha256": "a4f31e0141e5a6aa19ffcff03739eda174644326efb3624090e625c287647cb9",
+      "symbol": "AVT"
+    },
+    "proposed_retry_not_before": "2026-10-10T09:30:00.000Z"
+  }
+]

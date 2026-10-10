@@ -108,6 +108,49 @@ class TestFinancialStatementBatch(unittest.TestCase):
     def run_batch(self, **kwargs):
         return batch.collect(self.plan, self.base, self.output, **kwargs)
 
+    def test_first_provider_admission_runs_once_after_all_initial_setup(self):
+        stages = []
+        class Guard:
+            def check(self, stage):
+                stages.append(stage)
+        def admit():
+            self.assertEqual(stages, ["initial", "getter"])
+            self.assertEqual(self.calls, [])
+            self.assertEqual(self.tickers, [])
+            self.assertTrue((self.output / "plan.json").exists())
+            stages.append("admitted")
+        result, code = self.run_batch(retention_guard=Guard(), before_first_provider=admit)
+        self.assertEqual(code, 0)
+        self.assertEqual(stages.count("admitted"), 1)
+        self.assertEqual(len(self.calls), 6)
+
+    def test_first_provider_admission_failure_constructs_no_provider(self):
+        def reject():
+            raise ValueError("Expired admission")
+        with patch.object(batch, "make_session") as session:
+            with self.assertRaisesRegex(ValueError, "Expired admission"):
+                self.run_batch(before_first_provider=reject)
+        session.assert_not_called()
+        self.assertEqual(self.tickers, [])
+        self.assertEqual(self.calls, [])
+
+    def test_first_provider_admission_is_not_called_for_dry_run(self):
+        with patch.object(batch, "make_session") as session, patch("builtins.print") as admit:
+            _, code = self.run_batch(dry_run=True, before_first_provider=admit)
+        self.assertEqual(code, 0)
+        admit.assert_not_called()
+        session.assert_not_called()
+
+    def test_first_provider_admission_time_cannot_reset_acquisition_deadline(self):
+        monotonic = [10.0]
+        def admit():
+            monotonic[0] = 12.0
+        with patch.object(batch.time, "monotonic", lambda: monotonic[0]), patch.object(batch, "make_session") as session:
+            with self.assertRaisesRegex(batch.InvalidPlan, "budget exhausted before first provider"):
+                self.run_batch(acquisition_budget_seconds=1, before_first_provider=admit)
+        session.assert_not_called()
+        self.assertEqual(self.calls, [])
+
     def result(self, symbol="NVDA"):
         return read(self.output / "results" / f"{symbol}.json")
 
