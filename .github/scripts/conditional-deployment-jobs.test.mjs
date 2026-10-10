@@ -158,6 +158,30 @@ test('inventory counter observes each issued/aborted page once and ignores proje
  assert.equal(m.counts.native_snapshot_status_unknown,1);assert.equal(m.counts.native_snapshot_attempts,1);
  assert.equal(m.counts.gh_returned_pages,2);assert.equal(m.counts.gh_failed_invocations,1);
 });
+test('measurement counts the exact numeric repository alias without admitting foreign IDs or origins',()=>{
+ const b=bridge([]),path='/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100&page=2';
+ withConditionalDeploymentJobsReader(b.reader,()=>{
+  noteScopedApiRead('repos/'+REPO+path,true,[null]);
+  noteScopedApiRead('repositories/'+RID+path,true,[null]);
+  noteScopedApiRead('repositories/'+RID+path,true,null,Error('synthetic failed page'));
+ });
+ const m=b.reports[0];assert.equal(m.measurement_incomplete,false);assert.equal(m.publication_authority,false);
+ assert.equal(m.counts.gh_invocations,3);assert.equal(m.counts.gh_successful_paginated_invocations,2);
+ assert.equal(m.counts.gh_returned_pages,2);assert.equal(m.counts.gh_failed_invocations,1);
+ assert.equal(m.counts.gh_failed_page_count_unknown,1);
+ for(const endpoint of[
+  'repositories/1203919608'+path,'repositories/01203919607'+path,'repositories/12039196070'+path,
+  'repositories/1203919607suffix'+path,'repositories/%31'+String(RID).slice(1)+path,
+  'https://api.github.com/repositories/'+RID+path,'http://api.github.com/repositories/'+RID+path,
+  'https://api.github.com:443/repositories/'+RID+path,'https://evil.invalid/repositories/'+RID+path,
+  '//api.github.com/repositories/'+RID+path,'repos/foreign/screener'+path,
+ ]){
+  const foreign=bridge([]);withConditionalDeploymentJobsReader(foreign.reader,()=>noteScopedApiRead(endpoint,true,[null]));
+  assert.equal(foreign.reports[0].measurement_incomplete,true,endpoint);
+  assert.equal(foreign.reports[0].counts.gh_invocations,0,endpoint);
+  assert.equal(foreign.reports[0].counts.gh_returned_pages,0,endpoint);
+ }
+});
 function environment(work,{file='research-ui-release.yml',event='workflow_run',enabled=true}={}){
  const dir=mkdtempSync(join(tmpdir(),'conditional-bridge-')),old=process.cwd(),prior={...process.env};
  mkdirSync(join(dir,'.github'));const eventPath=join(dir,'event.json'),requestPath=join(dir,'.github/retained-price-oct6-source.json');
@@ -432,3 +456,42 @@ test("exclusive initializer collision cannot adopt or clean a foreign directory"
 test("actual closed cleanup CLI removes initialized state and rejects unknown arguments",()=>{openerChild("\nconst s=initialized(),bridgePath=process.env.OPENER_TEST_BRIDGE_PATH;\nconst bad=cp.spawnSync(process.execPath,[bridgePath,'unknown'],{encoding:'utf8',timeout:10000,maxBuffer:1024**2,env:{...process.env}});\nassert.notEqual(bad.status,0);assert.equal(fs.existsSync(s.directory),true);\nconst result=cp.spawnSync(process.execPath,[bridgePath,'cleanup'],{encoding:'utf8',timeout:10000,maxBuffer:1024**2,env:{...process.env}});\nassert.equal(result.error,undefined);assert.equal(result.status,0,result.stderr);\nassert.equal(JSON.parse(result.stdout).status,'initialized-state-removed');assert.equal(fs.existsSync(s.directory),false);\nassert.equal((result.stdout+result.stderr).includes(token),false);\n");});
 
 test("empty finite cohort fails before the worker and never accepts a phase",()=>{openerChild("\nassert.throws(()=>invoke(()=>history.readScopedDeploymentJobs(repo,noApi,[])),/empty-finite-history-cohort/);\nassert.equal(workerCommands,0);const s=state();assert.equal(s.attempted,'v1');\nassert.equal(JSON.parse(fs.readFileSync(join(s.directory,'lease.json'))).status,'failed');\nassert.equal(cleanup().status,'initialized-state-removed');\n");});
+
+test('finite pager numeric repository Links preserve raw requests and complete owned measurement',()=>{
+ const body=`
+const previousExec=cp.execFileSync,requests=[];
+cp.execFileSync=(command,args,options={})=>{
+ if(command==='gh'&&args[1].includes('/actions/workflows/')){
+  syntheticCommands++;requests.push(args[1]);
+  assert.deepEqual(args.slice(2),['--hostname','github.com','--include','--method','GET']);
+  const url=new URL(args[1]),second=url.searchParams.get('page')==='2',file=url.pathname.split('/').at(-2);
+  assert.ok(['research-ui-release.yml','static-site.yml'].includes(file));
+  assert.equal(url.pathname,(second?'/repositories/'+rid:'/repos/'+repo)+'/actions/workflows/'+file+'/runs');
+  const next='https://api.github.com/repositories/'+rid+'/actions/workflows/'+file+'/runs?branch=main&page=2&per_page=100';
+  const value={total_count:101,workflow_runs:Array.from({length:second?1:100},(_,i)=>({id:second?101:i+1}))};
+  return Buffer.from('HTTP/1.1 200 OK\\r\\ncontent-type: application/json\\r\\nx-ratelimit-limit: 5000\\r\\nx-ratelimit-used: 0\\r\\nx-ratelimit-remaining: 5000\\r\\nx-ratelimit-reset: '+reset+'\\r\\nx-ratelimit-resource: core\\r\\n'+
+   (second?'':'link: <'+next+'>; rel="next", <'+next+'>; rel="last"\\r\\n')+'\\r\\n'+JSON.stringify(value));
+ }
+ return previousExec(command,args,options);
+};syncBuiltinESMExports();
+invoke(()=>{
+ readHistory();
+ for(const file of ['research-ui-release.yml','static-site.yml']){
+  const result=history.readScopedTransportApi('repos/'+repo+'/actions/workflows/'+file+'/runs?branch=main&per_page=100',true);
+  assert.equal(result.handled,true);assert.equal(result.value.length,2);
+  assert.deepEqual(result.value.map(p=>p.workflow_runs.length),[100,1]);active.cursor++;
+ }
+});
+assert.equal(requests.length,4);assert.equal(reports.length,1);
+assert.equal(reports[0].measurement_incomplete,false);
+assert.equal(reports[0].counts.gh_returned_pages,4);
+assert.equal(reports[0].counts.gh_successful_paginated_invocations,4);
+assert.equal(reports[0].counts.gh_invocations,syntheticCommands-workerCommands);
+assert.equal(reports[0].status,'complete');assert.equal(reports[0].publication_authority,false);
+const saved=JSON.parse(fs.readFileSync(join(state().directory,'cache.json'),'utf8')).payload.transport_budget;
+assert.equal(saved.extra_primary_used.ordinary_extra,2);
+assert.equal(saved.last_completed_phase,0);assert.equal(saved.pending_phase,null);
+assert.equal(cleanup().status,'initialized-state-removed');
+`;
+ for(const role of ['publisher','producer-combine'])openerChild(body,role);
+});

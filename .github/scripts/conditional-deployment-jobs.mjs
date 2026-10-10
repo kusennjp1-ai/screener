@@ -41,6 +41,11 @@ function scopeMeasurement(scope,report){
   const critical=new Set([scope.run_id]);
   function api(endpoint,paginate,result,error){
     if(disposed)return;
+    // Measurement only: the pager keeps the raw validated Link URL for its
+    // request and private budget receipt. Bind this one repository alias.
+    const numericPrefix='repositories/'+RID+'/';
+    if(typeof endpoint==='string'&&scope.repository===REPO&&scope.repository_id===RID&&endpoint.startsWith(numericPrefix))
+      endpoint='repos/'+scope.repository+'/'+endpoint.slice(numericPrefix.length);
     if(typeof endpoint!=='string'||(endpoint!=='repos/'+scope.repository&&!endpoint.startsWith('repos/'+scope.repository+'/'))){incomplete=true;return;}
     counts.gh_invocations++;
     if(error){counts.gh_failed_invocations++;if(paginate)counts.gh_failed_page_count_unknown++;return;}

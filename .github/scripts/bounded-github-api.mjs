@@ -201,7 +201,13 @@ function pageLinks(raw, first, current, last) {
     const match = /^\s*<([^<>]+)>;\s*rel="(first|prev|next|last)"\s*$/.exec(item);
     check(match && !relations.has(match[2]), 'duplicate-or-invalid-github-link');
     check(match[1].startsWith(ORIGIN), 'foreign-github-link');
-    const linked = route(match[1]);
+    // GitHub canonicalizes pagination URLs to this immutable repository ID.
+    // Bind only that alias to the already-approved seed; workflow/run identity,
+    // query values and route/profile admission remain unchanged.
+    const numericPrefix = ORIGIN + 'repositories/1203919607/';
+    const equivalent = match[1].startsWith(numericPrefix)
+      ? ORIGIN + PREFIX + '/' + match[1].slice(numericPrefix.length) : match[1];
+    const linked = { ...route(equivalent), requested: match[1] };
     check(linked.path === first.path && linked.parameters.size === first.parameters.size + (first.parameters.has('page') ? 0 : 1),
       'changed-github-link-route');
     for (const [key, value] of first.parameters)

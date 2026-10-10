@@ -18,6 +18,43 @@ function include(value, { status = 200, headers = [], blocks = [], body, type = 
     (body ?? JSON.stringify(value)));
 }
 const next = (endpoint, ordinal) => '<' + ORIGIN + endpoint + '&page=' + ordinal + '>; rel="next"';
+
+test('observed publisher catalogue Links preserve filenames under the fixed numeric repository alias', () => {
+  for (const file of ['research-ui-release.yml', 'static-site.yml']) {
+    const endpoint = PREFIX + '/actions/workflows/' + file + '/runs?branch=main&per_page=100';
+    const link = ORIGIN + 'repositories/1203919607/actions/workflows/' + file + '/runs?branch=main&per_page=100&page=2';
+    const first = page(101, rows(100), 'workflow_runs'), second = page(101, rows(1, 101), 'workflow_runs');
+    const h = harness((_url, count) => count === 1 ? include(first, { headers: ['Link: <' + link + '>; rel="next", <' + link + '>; rel="last"'] }) : include(second));
+    assert.deepEqual(readBoundedGitHubPages(endpoint, h.options), [first, second]);
+    assert.equal(h.calls[1].args[1], link);
+    assert.equal(h.after.every(value => value.page_validated), true);
+  }
+});
+
+test('numeric repository Link aliases cannot change repository, workflow, filters, or authorize seeds', () => {
+  const endpoint = PREFIX + '/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100';
+  const alias = ORIGIN + 'repositories/1203919607/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100&page=2';
+  const invalid = [
+    alias.replace('1203919607', '1203919608'),
+    alias.replace('1203919607', '01203919607'),
+    alias.replace('research-ui-release.yml', 'static-site.yml'),
+    alias.replace('research-ui-release.yml', '364666954'),
+    alias.replace('research-ui-release.yml', 'unknown.yml'),
+    alias.replace('branch=main', 'branch=develop'),
+    alias.replace('per_page=100', 'per_page=10'),
+    alias + '&event=push', alias + '&head_sha=' + 'a'.repeat(40),
+    alias.replace('api.github.com/', 'api.github.com:443/'),
+  ];
+  for (const link of invalid) {
+    const h = harness(() => include(page(101, rows(100), 'workflow_runs'), { headers: ['Link: <' + link + '>; rel="next"'] }));
+    fault(() => readBoundedGitHubPages(endpoint, h.options));
+    assert.equal(h.calls.length, 1);
+  }
+  const seed = 'repositories/1203919607/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100';
+  const h = harness(() => { throw Error('Must not issue'); });
+  fault(() => readBoundedGitHubPages(seed, h.options));
+  assert.equal(h.calls.length, 0);
+});
 function harness(handler) {
   let clock = 0;
   const calls = [], before = [], after = [], sequence = [];
