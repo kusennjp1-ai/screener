@@ -135,6 +135,7 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          RETAINED_PRICE_CONDITIONAL_CACHE_MODE: ${{ needs.renewal_route.outputs.price_source == 'true' && 'initialize' || '' }}
         run: node .github/scripts/select-release-source.mjs plan
       - name: Prepare immutable controller for finite price publication
         if: steps.plan.outputs.publish == 'true' && needs.renewal_route.outputs.price_source == 'true'
@@ -153,6 +154,8 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: release/frontend/package-lock.json
+      # Controller restores authenticated history before enrichment; do not run
+      # the separately approved UI revision's older network history helper.
       - name: Restore the exact selected data artifact
         id: restore
         if: steps.plan.outputs.publish == 'true'
@@ -189,7 +192,6 @@ jobs:
           python tools/test_sec_financials.py
           python tools/test_export_book_benchmark.py
           python tools/export-book-benchmark.py --allow-unavailable
-          python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
           node tools/repair-price-history.mjs
           python tools/test_institutional_holdings.py
@@ -209,7 +211,6 @@ jobs:
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/export-book-benchmark.py --allow-unavailable
-          python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
       - name: Carry the active financial source onto the new price target
         if: steps.plan.outputs.carry == 'true'
@@ -300,6 +301,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs recheck
+      - name: Clean up finite publisher historical jobs cache
+        if: always() && needs.renewal_route.outputs.price_source == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/conditional-deployment-jobs.mjs cleanup
       # The performance exception additionally needs its separate hash-bound
       # release-intent record. A certificate or pin alone never enables it.
       # Correction activation needs a separately reviewed, hash-bound promotion

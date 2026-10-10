@@ -305,3 +305,10 @@ test('bounded original download hashes bytes and refuses changed archives',async
   await downloadOriginalArchive('candidate',pin,path,{spawnProcess:factory});assert.deepEqual(hashFile(path),{bytes:content.length,sha256:sha(content)});
   await assert.rejects(downloadOriginalArchive('candidate',{...pin,sha256:H},join(f.o.runnerTemp,'bad.zip'),{spawnProcess:factory}),/archive changed/);
 });
+
+test('bare source caller transport hook preserves the existing fresh setup reads',async t=>{
+  const f=fixture(t),result=await produceRetainedSource(f.o);
+  assert.equal(result.context.caller.job.id,f.job.id);
+  for(const endpoint of ['actions/runs/123/attempts/1','actions/runs/123','actions/runs/123/attempts/1/jobs?per_page=100','git/commits/'+G])
+    assert.equal(f.calls.filter(value=>value==='api:repos/'+repo+'/'+endpoint).length,2,endpoint);
+});

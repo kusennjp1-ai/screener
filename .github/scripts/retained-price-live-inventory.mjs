@@ -94,32 +94,67 @@ function pagesFor(runs){
   for(let start=0;start<Math.max(1,runs.length);start+=100)pages.push({total_count:runs.length,workflow_runs:runs.slice(start,start+100)});
   return pages;
 }
-export function createRetainedPriceLiveApi(api,{requiredIds,run=execFileSync,monotonic=()=>performance.now(),report=value=>console.error(JSON.stringify(value))}={}){
+
+const ACQUISITION_FACT_BYTES=128*1024;
+const safeAcquisitionNumber=value=>Number.isFinite(value)&&value>=0?value:null;
+const safeAcquisitionReason=value=>typeof value==='string'&&(REASONS.has(value)||[
+  'time-budget-exhausted','ambiguous-http-headers','unclassified-command-failure','invalid-command-output','invalid-worker-result','invalid-worker-evidence',
+  'unclassified-worker-failure','attempt-limit','invalid-acquisition-budget-provider','invalid-acquisition-budget-hooks',
+  'acquisition-budget-facts-bound','acquisition-budget-before','acquisition-budget-attempt','acquisition-budget-after'
+].includes(value))?value:'unclassified-inventory-failure';
+function acquisitionErrorReason(error){
+  try{return safeAcquisitionReason(error?.inventoryReason);}catch{return 'unclassified-inventory-failure';}
+}
+function freezeAcquisitionFacts(value){
+  requireValue(Buffer.byteLength(JSON.stringify(value))<=ACQUISITION_FACT_BYTES,'acquisition-budget-facts-bound');
+  const freeze=item=>{
+    if(Array.isArray(item))return Object.freeze(item.map(freeze));
+    if(object(item))return Object.freeze(Object.fromEntries(Object.entries(item).map(([key,entry])=>[key,freeze(entry)])));
+    return item;
+  };
+  return freeze(value);
+}
+function acquisitionHook(callback,args,reason){
+  try{
+    const value=callback(...args);
+    if(value&&typeof value.then==='function'){Promise.resolve(value).catch(()=>{});throw fault(reason);}
+    requireValue(value!==false,reason);return value;
+  }catch{throw fault(reason);}
+}
+function acquisitionPageFacts(evidence,rawEvidence){
+  return evidence.map((item,index)=>{
+    const resource=rawEvidence[index]?.safe_headers?.['x-ratelimit-resource']==='core'?'core':null;
+    return {...item,safe_headers:{...item.safe_headers,...(resource===null?{}:{'x-ratelimit-resource':resource})},quota_resource:resource};
+  });
+}
+function acquisitionAttemptFacts({attempt,status,reason,retry,start,ended,elapsed,usedMs,exit,signal,evidence}){
+  return freezeAcquisitionFacts({schema_version:'retained-price-live-acquisition-attempt-v1',attempt,status,
+    reason:reason===null?null:safeAcquisitionReason(reason),retry_planned:retry===true,
+    started_ms:safeAcquisitionNumber(start),ended_ms:safeAcquisitionNumber(ended),elapsed_ms:safeAcquisitionNumber(elapsed),
+    inventory_budget_used_ms:safeAcquisitionNumber(usedMs),command_started:true,native_request_issued:null,wire_request_count:null,
+    exit_code:Number.isInteger(exit)?exit:null,signal,page_evidence:evidence});
+}
+
+export function createRetainedPriceLiveApi(api,{requiredIds,run=execFileSync,monotonic=()=>performance.now(),report=value=>console.error(JSON.stringify(value)),budgetProvider}={}){
   const anchors=Object.freeze(validateRequiredIds(requiredIds));
+  requireValue(budgetProvider===undefined||typeof budgetProvider==='function','invalid-acquisition-budget-provider');
   // Each liveFor creates this allowance once; unrelated API/asset time is not
   // charged, and the second post-assets round must perform a fresh snapshot.
-  let usedMs=0,pending=null;
-  return (endpoint,paginate=false)=>{
-    const prior=pending;pending=null;
-    const workflow=paginate===true?ENDPOINTS.get(endpoint):null;
-    if(!workflow)return api(endpoint,paginate);
-    if(workflow.id===STATIC&&prior){
-      const result=JSON.parse(prior.serialized);
-      report({schema_version:'retained-price-live-inventory-read-v2',status:'projected',endpoint,
-        snapshot_id:prior.snapshotId,reused_immediate_snapshot:true,total_count:result[0].total_count,
-        inventory_budget_used_ms:usedMs,inventory_sha256:hash(prior.serialized)});
-      return result;
-    }
+  let usedMs=0,pending=null,budgetRejection=null,budgetPoisoned=false;
+  function acquireSnapshot(endpoint,workflow,operation=null){
     const callId=randomUUID();
     for(let attempt=1;attempt<=LIVE_INVENTORY_LIMITS.attempts;attempt++){
-      const start=monotonic(),remaining=Math.floor(Math.min(LIVE_INVENTORY_LIMITS.totalMs-usedMs,LIVE_INVENTORY_LIMITS.attemptMs));
+      let entered=false,start=null,attemptObservation=null,attemptRejection=null,attemptThrown=null,attemptFailed=false,budgetEvidence=[];
+      try{
+      start=monotonic();const remaining=Math.floor(Math.min(LIVE_INVENTORY_LIMITS.totalMs-usedMs,LIVE_INVENTORY_LIMITS.attemptMs));
       let raw='',failedStdout='',failedStderr='',evidence=[],exit=null,signal=null;
       try{
         requireValue(remaining>0,'time-budget-exhausted');
         try{
-          raw=run(process.execPath,['--max-old-space-size=384',workerPath()],{encoding:'utf8',stdio:['pipe','pipe','pipe'],
+          const command=process.execPath,args=['--max-old-space-size=384',workerPath()],options={encoding:'utf8',stdio:['pipe','pipe','pipe'],
             input:JSON.stringify({timeoutMs:remaining,requiredIds:anchors}),maxBuffer:LIVE_INVENTORY_LIMITS.bytes,
-            timeout:remaining,killSignal:'SIGKILL'});
+            timeout:remaining,killSignal:'SIGKILL'};
+          entered=true;raw=run(command,args,options);
         }catch(error){
           failedStdout=error.stdout??'';failedStderr=error.stderr??'';
           exit=Number.isInteger(error.status)?error.status:null;
@@ -136,6 +171,7 @@ export function createRetainedPriceLiveApi(api,{requiredIds,run=execFileSync,mon
         requireValue(object(result)&&result.schema_version==='retained-price-repository-snapshot-v1'
           &&['complete','failed'].includes(result.status)&&Number.isSafeInteger(result.body_bytes)&&result.body_bytes>=0,'invalid-worker-result');
         evidence=pageFacts(result.evidence);
+        if(operation)budgetEvidence=acquisitionPageFacts(evidence,result.evidence);
         // A denial observed by any sibling takes precedence over EOF/count drift.
         if(denied(evidence))throw fault('http-or-security-denial');
         requireValue(result.body_bytes<=LIMITS.bytes,'byte-limit');
@@ -151,7 +187,8 @@ export function createRetainedPriceLiveApi(api,{requiredIds,run=execFileSync,mon
           &&evidence.reduce((sum,item)=>sum+item.body_bytes,0)===result.body_bytes,'invalid-worker-evidence');
         const projected=new Map([...WORKFLOWS.keys()].map(id=>[id,JSON.stringify(pagesFor(project(snapshot.runs,id)))]));
         requireValue(monotonic()-start<=remaining,'time-budget-exhausted');
-        const elapsed=Math.max(0,Math.ceil(monotonic()-start));usedMs+=elapsed;
+        const ended=monotonic(),elapsed=Math.max(0,Math.ceil(ended-start));usedMs+=elapsed;
+        if(operation)attemptObservation=acquisitionAttemptFacts({attempt,status:'complete',reason:null,retry:false,start,ended,elapsed,usedMs,exit,signal,evidence:budgetEvidence});
         const snapshotId=callId+'/'+attempt,serialized=projected.get(workflow.id);
         report({schema_version:'retained-price-live-inventory-read-v2',call_id:callId,snapshot_id:snapshotId,endpoint,attempt,status:'complete',
           reused_immediate_snapshot:false,fresh_from_page:1,elapsed_ms:elapsed,inventory_budget_used_ms:usedMs,
@@ -167,14 +204,72 @@ export function createRetainedPriceLiveApi(api,{requiredIds,run=execFileSync,mon
         pending=null;
         let failure=error.inventoryReason?error:fault('unclassified-inventory-failure');
         if(denied(evidence))failure=fault('http-or-security-denial');
-        const elapsed=Math.max(0,Math.ceil(monotonic()-start));usedMs+=elapsed;
+        const ended=monotonic(),elapsed=Math.max(0,Math.ceil(ended-start));usedMs+=elapsed;
         const retry=failure.retryable===true&&attempt<LIVE_INVENTORY_LIMITS.attempts&&usedMs<LIVE_INVENTORY_LIMITS.totalMs;
+        if(operation){attemptRejection=fault(failure.inventoryReason);attemptObservation=acquisitionAttemptFacts({attempt,status:'failed',reason:failure.inventoryReason,retry,start,ended,elapsed,usedMs,exit,signal,evidence:budgetEvidence});}
         report({schema_version:'retained-price-live-inventory-read-v2',call_id:callId,endpoint,attempt,status:'failed',reason:failure.inventoryReason,
           fresh_from_page:1,elapsed_ms:elapsed,inventory_budget_used_ms:usedMs,exit_code:exit,signal,page_evidence:evidence,
           stdout:facts(raw),failed_stdout:facts(failedStdout),failed_stderr:facts(failedStderr),retry});
-        if(!retry)throw fault(failure.inventoryReason);
+        if(!retry)throw attemptRejection??fault(failure.inventoryReason);
+      }
+      }catch(error){attemptFailed=true;attemptThrown=error;throw error;}
+      finally{
+        if(entered&&operation){
+          const observation=attemptObservation??acquisitionAttemptFacts({attempt,status:'failed',reason:acquisitionErrorReason(attemptThrown),retry:false,start,ended:null,elapsed:null,usedMs,exit:null,signal:null,evidence:budgetEvidence});
+          try{operation.finishAttempt(observation);}
+          catch(cleanup){budgetPoisoned=true;budgetRejection=attemptFailed?attemptThrown:attemptRejection??cleanup;pending=null;throw budgetRejection;}
+        }
       }
     }
     throw fault('attempt-limit');
+  }
+  function acquire(endpoint,workflow){
+    if(budgetPoisoned)throw budgetRejection;
+    let budget;
+    try{
+      budget=budgetProvider?.();
+      if(budget&&typeof budget.then==='function'){Promise.resolve(budget).catch(()=>{});throw fault('invalid-acquisition-budget-provider');}
+    }catch{budgetPoisoned=true;budgetRejection=fault('invalid-acquisition-budget-provider');pending=null;throw budgetRejection;}
+    if(budget===null||budget===undefined)return acquireSnapshot(endpoint,workflow);
+    let hooks,descriptor,receipt,stage='invalid-acquisition-budget-hooks';
+    try{
+      requireValue(object(budget),'invalid-acquisition-budget-hooks');
+      hooks={before:budget.beforeAcquisition,attempt:budget.afterAttempt,after:budget.afterAcquisition};
+      requireValue(Object.values(hooks).every(value=>typeof value==='function'),'invalid-acquisition-budget-hooks');
+      descriptor=freezeAcquisitionFacts({head:null,requiredIds:anchors,maximumStarts:80,maximumPrimary:160,timeoutMs:60000});
+      stage='acquisition-budget-before';
+      receipt=acquisitionHook(hooks.before,[descriptor],'acquisition-budget-before');
+    }catch{budgetPoisoned=true;budgetRejection=fault(stage);pending=null;throw budgetRejection;}
+    const attempts=[];
+    const operation={finishAttempt:observation=>{
+      attempts.push(observation);
+      acquisitionHook(hooks.attempt,[observation,receipt],'acquisition-budget-attempt');
+    }};
+    let result,rejection,failed=false;
+    try{result=acquireSnapshot(endpoint,workflow,operation);}catch(error){failed=true;rejection=error;}
+    const final=freezeAcquisitionFacts({schema_version:'retained-price-live-acquisition-v1',
+      status:failed?'failed':'complete',head:null,requiredIds:anchors,maximumStarts:80,maximumPrimary:160,timeoutMs:60000,
+      entered_attempts:attempts.length,attempts,inventory_budget_used_ms:safeAcquisitionNumber(usedMs),
+      reason:failed?acquisitionErrorReason(rejection):null,
+      native_request_issued:attempts.length?null:false,wire_request_count:null});
+    try{acquisitionHook(hooks.after,[final,receipt],'acquisition-budget-after');}
+    catch(cleanup){budgetPoisoned=true;budgetRejection=failed?rejection:cleanup;pending=null;if(!failed){failed=true;rejection=cleanup;}}
+    if(failed){pending=null;throw rejection;}
+    return result;
+  }
+  return (endpoint,paginate=false)=>{
+    const prior=pending;pending=null;
+    const workflow=paginate===true?ENDPOINTS.get(endpoint):null;
+    if(!workflow)return api(endpoint,paginate);
+    if(budgetPoisoned)throw budgetRejection;
+    if(workflow.id===STATIC&&prior){
+      const result=JSON.parse(prior.serialized);
+      report({schema_version:'retained-price-live-inventory-read-v2',status:'projected',endpoint,
+        snapshot_id:prior.snapshotId,reused_immediate_snapshot:true,total_count:result[0].total_count,
+        inventory_budget_used_ms:usedMs,inventory_sha256:hash(prior.serialized)});
+      return result;
+    }
+    return acquire(endpoint,workflow);
   };
 }
+

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createConditionalDeploymentJobsReader, withConditionalDeploymentJobsReader } from '../../.github/scripts/conditional-deployment-jobs.mjs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -373,5 +376,126 @@ describe('actual #59 rerun artifact association', () => {
       37078930007: [deployed(1, '2026-10-03T02:18:55Z')],
     } });
     expect(latestDeployment(repository, api)).toMatchObject({ runId: 37078930007, attempt: 1, headSha: oldUi.head_sha });
+  });
+});
+
+
+describe('complete scoped deployment history transport', () => {
+  // These complete rows are synthetic transport fixtures. They create no
+  // genuine source/caller proof and authorize no publication or cache opener.
+  const scope = { repository: 'kusennjp1-ai/screener', repository_id: 1203919607,
+    run_id: 990001, run_attempt: 1, controller_sha: uiSha };
+  const fullRun = (id, file, changes = {}) => ({
+    id, run_attempt: 2, head_sha: uiSha, head_branch: 'main', event: 'workflow_run',
+    workflow_id: file === 'static-site.yml' ? 294257497 : 364666954,
+    path: workflowPath(file), name: 'Synthetic ' + file, status: 'completed', conclusion: 'failure',
+    repository: { id: 1203919607, full_name: scope.repository },
+    head_repository: { id: 1203919607, full_name: scope.repository },
+    created_at: '2026-10-09T01:00:00Z', run_started_at: '2026-10-09T01:00:00Z',
+    updated_at: '2026-10-09T01:10:00Z', ...changes,
+  });
+  const fullJob = (candidate, id, attempt, minute, conclusion = 'success') => ({
+    id, run_id: candidate.id, run_attempt: attempt, head_sha: candidate.head_sha,
+    head_branch: candidate.head_branch, workflow_name: candidate.name, name: 'Synthetic deploy job',
+    run_url: 'https://api.github.com/repos/' + scope.repository + '/actions/runs/' + candidate.id,
+    url: 'https://api.github.com/repos/' + scope.repository + '/actions/jobs/' + id,
+    status: 'completed', conclusion, created_at: '2026-10-09T01:00:01Z',
+    started_at: '2026-10-09T01:' + minute + ':00Z', completed_at: '2026-10-09T01:' + minute + ':40Z',
+    steps: [{ number: 1, name: 'Deploy to GitHub Pages', status: 'completed', conclusion,
+      started_at: '2026-10-09T01:' + minute + ':10Z', completed_at: '2026-10-09T01:' + minute + ':30Z' }],
+  });
+  const publisher = fullRun(710001, 'research-ui-release.yml');
+  const staticRun = fullRun(710002, 'static-site.yml', { run_attempt: 1, conclusion: 'cancelled' });
+  const fixtures = {
+    [publisher.id]: [fullJob(publisher, 710010, 1, '01'), fullJob(publisher, 710011, 2, '03', 'failure')],
+    [staticRun.id]: [fullJob(staticRun, 710020, 1, '05')],
+  };
+  const discovery = ({ allowOrdinaryJobs = false, includeStatic = true } = {}) => vi.fn(endpoint => {
+    if (endpoint.includes('/actions/workflows/research-ui-release.yml/runs?')) return [{ workflow_runs: [clone(publisher)] }];
+    if (endpoint.includes('/actions/workflows/static-site.yml/runs?')) return [{ workflow_runs: includeStatic ? [clone(staticRun)] : [] }];
+    const id = endpoint.match(/\/actions\/runs\/(\d+)\/jobs\?filter=all&per_page=100$/)?.[1];
+    if (allowOrdinaryJobs && id && fixtures[id]) return [{ jobs: clone(fixtures[id]) }];
+    throw Error('Unexpected ordinary history fallback: ' + endpoint);
+  });
+  function nativeWorker(failedProof = false) {
+    const workerUrl = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)),
+      '../../.github/scripts/conditional-deployment-jobs-worker.mjs')).href;
+    const calls = [];
+    const execute = (_command, _args, options) => {
+      const config = JSON.parse(options.input); calls.push(config);
+      const source = [
+        "import {readFileSync} from 'node:fs';import {readConditionalDeploymentJobs} from " + JSON.stringify(workerUrl) + ";",
+        "const config=JSON.parse(readFileSync(0,'utf8')),fixtures=" + JSON.stringify(fixtures) + ";let clock=0,count=0;",
+        "const result=await readConditionalDeploymentJobs(config,{token:'synthetic-state-native-token',monotonic:()=>clock,pause:async ms=>{clock+=ms;},fetcher:async(url,init)=>{count++;const id=Number(new URL(url).pathname.match(/\\/runs\\/(\\d+)\\/jobs$/)[1]);const conditional=Boolean(init.headers['if-none-match']);const etag=conditional?'\"synthetic-'+id+'\"':'W/\"synthetic-'+id+'\"';const response=new Response(conditional?null:JSON.stringify({total_count:fixtures[id].length,jobs:fixtures[id]}),{status:conditional?304:200,headers:{etag,'content-type':'application/json','x-ratelimit-limit':'15000','x-ratelimit-remaining':String(15000-count),'x-ratelimit-used':String(count),'x-ratelimit-reset':'1791514800','x-ratelimit-resource':'core'}});Object.defineProperty(response,'url',{value:url});return response;}});",
+        failedProof ? "result.jobs.pop();" : "",
+        "process.stdout.write(JSON.stringify(result));",
+      ].join('\n');
+      return execFileSync(process.execPath, ['--input-type=module', '-e', source], {
+        input: options.input, encoding: 'utf8', timeout: 20000, maxBuffer: 64 * 1024 * 1024,
+      });
+    };
+    return { calls, execute };
+  }
+  const ownedReader = (worker, reports = []) => createConditionalDeploymentJobsReader({ scope,
+    token: () => 'synthetic-state-native-token', run: worker.execute, report: value => reports.push(value) });
+
+  it('ordinary fallback retains both cohorts and reads every all-attempt route after full discovery', () => {
+    const api = discovery({ allowOrdinaryJobs: true });
+    expect(latestDeployment(scope.repository, api)).toMatchObject({ runId: staticRun.id, attempt: 1 });
+    expect(api.mock.calls.slice(0, 2).map(([endpoint]) => endpoint)).toEqual([
+      'repos/' + scope.repository + '/actions/workflows/research-ui-release.yml/runs?branch=main&per_page=100',
+      'repos/' + scope.repository + '/actions/workflows/static-site.yml/runs?branch=main&per_page=100',
+    ]);
+    expect(api.mock.calls.filter(([endpoint]) => endpoint.includes('/jobs?filter=all&'))).toHaveLength(2);
+  });
+
+  it('passes one complete combined cohort per fresh round through the actual native worker and preserves old attempts', () => {
+    const worker = nativeWorker(), reports = [], reader = ownedReader(worker, reports), api = discovery();
+    withConditionalDeploymentJobsReader(reader, () => {
+      const first = latestDeployment(scope.repository, api);
+      expect(first).toMatchObject({ runId: staticRun.id, attempt: 1 });
+      expect(latestDeployment(scope.repository, api, first)).toMatchObject({ runId: staticRun.id, attempt: 1 });
+      expect(reader.disposed).toBe(false);
+    });
+    expect(worker.calls).toHaveLength(2);
+    expect(worker.calls[0].runs.map(row => row.id)).toEqual([publisher.id, staticRun.id]);
+    // The first anchor bounds the second fresh cohort; it must still include
+    // both runs, whose updated_at remains later than deployment completion.
+    expect(worker.calls[1].runs.map(row => row.id)).toEqual([publisher.id, staticRun.id]);
+    expect(worker.calls[0].cache).toEqual([]);
+    expect(worker.calls[1].cache).toHaveLength(2);
+    expect(api.mock.calls.some(([endpoint]) => endpoint.includes('/jobs?filter=all&'))).toBe(false);
+    expect(reports).toHaveLength(1);
+    expect(reports[0].counts).toMatchObject({ conditional_batch_calls: 2, conditional_requests_issued: 4,
+      conditional_http_200: 2, conditional_http_304: 2, conditional_pages_revalidated: 2 });
+    expect(reader.disposition).toBe('complete');
+  });
+
+  it('the native scoped inventory retains an earlier successful deployment after the later attempt fails', () => {
+    const worker = nativeWorker(), reader = ownedReader(worker), api = discovery({ includeStatic: false });
+    const latest = withConditionalDeploymentJobsReader(reader, () => latestDeployment(scope.repository, api));
+    expect(latest).toMatchObject({ runId: publisher.id, attempt: 1, runAttempt: 2,
+      completed: Date.parse('2026-10-09T01:01:30Z') });
+    expect(worker.calls[0].runs.map(row => row.id)).toEqual([publisher.id]);
+    expect(api.mock.calls.some(([endpoint]) => endpoint.includes('/jobs?filter=all&'))).toBe(false);
+  });
+
+  it('a failed scoped inventory proof is terminal and never falls back to ordinary jobs', () => {
+    const worker = nativeWorker(true), reader = ownedReader(worker), api = discovery({ allowOrdinaryJobs: true });
+    expect(() => withConditionalDeploymentJobsReader(reader, () =>
+      latestDeployment(scope.repository, api))).toThrow(/incomplete-worker-inventories/);
+    expect(worker.calls).toHaveLength(1);
+    expect(api.mock.calls.some(([endpoint]) => endpoint.includes('/jobs?filter=all&'))).toBe(false);
+    expect(reader.disposition).toBe('failed');
+  });
+
+  it('rejects a scoped Map missing any candidate without ordinary fallback', () => {
+    const worker = nativeWorker(), reader = ownedReader(worker), api = discovery({ allowOrdinaryJobs: true });
+    reader.read = () => new Map([[publisher.id, clone(fixtures[publisher.id])]]);
+    expect(() => withConditionalDeploymentJobsReader(reader, () =>
+      latestDeployment(scope.repository, api))).toThrow(/Incomplete scoped deployment job inventory/);
+    expect(worker.calls).toHaveLength(0);
+    expect(api.mock.calls.some(([endpoint]) => endpoint.includes('/jobs?filter=all&'))).toBe(false);
+    expect(reader.disposition).toBe('failed');
   });
 });

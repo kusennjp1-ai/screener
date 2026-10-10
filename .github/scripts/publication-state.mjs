@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { githubApi, sameRepository, workflowPath } from './publication-gate.mjs';
+import { readScopedDeploymentJobs } from './conditional-deployment-jobs.mjs';
 import bootstrapData from './approved-ui-bootstrap.json' with { type: 'json' };
 import { assertPriceObservationBounds, comparePriceObservations, extractPriceObservations, priceObservationDigest } from './price-observations.mjs';
 import {validateTransportDescriptor} from './static-transport-publication.mjs';
@@ -149,12 +150,19 @@ export function deploymentAnchor(reference, repository, api = githubApi) {
 export function latestDeployment(repository, api = githubApi, anchor = null) {
   const candidates = ['research-ui-release.yml', 'static-site.yml'].flatMap(file =>
     api(`repos/${repository}/actions/workflows/${file}/runs?branch=main&per_page=100`, true).flatMap(page => page.workflow_runs));
-  const deployments = anchor ? [anchor] : [];
-  for (const run of candidates.filter(run => sameRepository(run, repository) && run.head_branch === 'main'
+  const selected = candidates.filter(run => sameRepository(run, repository) && run.head_branch === 'main'
     && [workflowPath('research-ui-release.yml'), workflowPath('static-site.yml')].includes(run.path)
-    && Date.parse(run.updated_at) >= (anchor?.completed ?? Date.parse('2026-10-03T01:12:40Z')))) {
+    && Date.parse(run.updated_at) >= (anchor?.completed ?? Date.parse('2026-10-03T01:12:40Z')));
+  // One complete combined cohort preserves every matching run and older attempt.
+  const scopedJobs = readScopedDeploymentJobs(repository, api, selected);
+  if (scopedJobs !== null && (!(scopedJobs instanceof Map) ||
+    selected.some(run => !scopedJobs.has(run.id) || !Array.isArray(scopedJobs.get(run.id))))) {
+    throw Error('Incomplete scoped deployment job inventory');
+  }
+  const deployments = anchor ? [anchor] : [];
+  for (const run of selected) {
     // All attempts are required: a later rerun cannot erase an earlier deployment.
-    const jobs = api(`repos/${repository}/actions/runs/${run.id}/jobs?filter=all&per_page=100`, true).flatMap(page => page.jobs);
+    const jobs = scopedJobs === null ? api(`repos/${repository}/actions/runs/${run.id}/jobs?filter=all&per_page=100`, true).flatMap(page => page.jobs) : scopedJobs.get(run.id);
     for (const job of jobs) for (const step of job.steps || []) {
       if (['Deploy to GitHub Pages', 'Run actions/deploy-pages@v4'].includes(step.name) && step.conclusion === 'success') {
         if (!positive(job.run_attempt) || !Number.isFinite(Date.parse(step.completed_at))) throw Error('Incomplete deployment provenance');

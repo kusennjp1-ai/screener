@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './bounded-gh-cli.mjs';
 import assert from 'node:assert/strict';
 import {chmodSync,closeSync,cpSync,existsSync,mkdirSync,openSync,readFileSync,readdirSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
@@ -141,7 +142,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   if(preflightOnly){report.outcome='preflight-only';checkpoint('stopped before lifecycle execution');return {directory,report};}
   const bin=join(directory,'bin'),configPath=join(directory,'transport.json'),preload=join(directory,'transport.mjs');mkdirSync(bin);
   const config={api:{},zips:{},liveRoot:resolve(input.predecessor_root)},api=config.api;
-  write(join(bin,'gh'),`#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RELEASE_ARCHIVE_TRANSPORT));
+  write(join(bin,'gh'),`#!${process.execPath}\n${boundedGhCliPrelude}const fs=require('node:fs'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RELEASE_ARCHIVE_TRANSPORT));
 if(args[0]!=='api'||args.slice(1,-1).some(arg=>!['--paginate','--slurp'].includes(arg)))throw Error('Unexpected offline command');
 const endpoint=args.at(-1);fs.appendFileSync(process.env.RELEASE_ARCHIVE_TRACE,JSON.stringify({api:endpoint})+'\\n');
 if(Object.hasOwn(config.zips,endpoint)){const fd=fs.openSync(config.zips[endpoint],'r'),buffer=Buffer.alloc(1024*1024);let count;
