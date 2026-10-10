@@ -92,8 +92,9 @@ async function installFixture({ page, context, baseURL }, width) {
     // Fulfill them locally so the browser uses system fallbacks: no Google Fonts
     // request or font download is sent, and the external-data guard stays strict.
     // This fixture does not certify production web-font rendering or geometry.
-    if (request.method() === 'GET' && request.resourceType() === 'stylesheet' && FONT_STYLESHEETS.has(request.url())) {
-      return route.fulfill({ contentType: 'text/css', body: '/* Synthetic no-network font fixture. */' });
+    // Axe's cross-origin stylesheet preloader rereads these exact imports by XHR.
+    if (request.method() === 'GET' && ['stylesheet', 'xhr'].includes(request.resourceType()) && FONT_STYLESHEETS.has(request.url())) {
+      return route.fulfill({ contentType: 'text/css', headers: { 'access-control-allow-origin': origin }, body: '/* Synthetic no-network font fixture. */' });
     }
     if (url.origin !== origin || !['GET', 'HEAD'].includes(request.method())) {
       blockedRequests.push(`${request.method()} ${url.origin}${url.pathname}`);
@@ -225,27 +226,43 @@ for (const width of WIDTHS) {
     await expect(coverage).toContainText('1銘柄：数値充足 1 · 未充足 0 · 未確認 0');
     await drawer.getByRole('combobox', { name: '業種', exact: true }).selectOption('Technology');
     await expect(coverage).toContainText('7銘柄：数値充足 2 · 未充足 2 · 未確認 3');
-    await annual(drawer).scrollIntoViewIfNeeded();
-    await expectNoOverflow(page, drawer);
-    expect((await new AxeBuilder({ page }).include('[role="dialog"][aria-labelledby="research-filter-title"]').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
-    await info.attach(`annual-filter-drawer-${width}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-drawer-${width}.png`) }), contentType: 'image/png' });
-    await showCandidates(page, drawer);
-    await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
-    await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
-    await expect(activeNotice(page)).toContainText('基本手法の通過数・順位・購入条件は別判定');
-    if (width < 700) {
-      await expect(detail(page)).toBeHidden();
-      await candidate(page, 'EPSPASSA').click();
-      await expect(page.locator('main.research-workbench')).toHaveAttribute('data-mobile-view', 'detail');
-      await expect(detail(page)).toBeFocused();
-      await expect(board(page)).toBeHidden();
-      await expect(detail(page).getByRole('heading', { name: 'EPSPASSA', exact: true })).toBeVisible();
-      await returnToList(page, width);
+    for (const theme of ['dark', 'light']) {
+      if (theme === 'light') {
+        await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+        await openFilters(page);
+      }
+      await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expect(annual(drawer)).toBeChecked();
+      await expect(drawer.getByLabel('全条件通過のみ', { exact: true })).toBeChecked();
+      await expect(drawer.getByRole('combobox', { name: '業種', exact: true })).toHaveValue('Technology');
+      await expect(drawer.getByRole('button', { name: '基本と原則', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await annual(drawer).scrollIntoViewIfNeeded();
+      await expectNoOverflow(page, drawer);
+      expect((await new AxeBuilder({ page }).include('[role="dialog"][aria-labelledby="research-filter-title"]').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
+      await info.attach(`annual-filter-drawer-${width}-${theme}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-drawer-${width}-${theme}.png`) }), contentType: 'image/png' });
+      await showCandidates(page, drawer);
       await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
+      await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
+      await expect(activeNotice(page)).toContainText('基本手法の通過数・順位・購入条件は別判定');
+      if (width < 700) {
+        await expect(detail(page)).toBeHidden();
+        await candidate(page, 'EPSPASSA').click();
+        await expect(page.locator('main.research-workbench')).toHaveAttribute('data-mobile-view', 'detail');
+        await expect(detail(page)).toBeFocused();
+        await expect(board(page)).toBeHidden();
+        await expect(detail(page).getByRole('heading', { name: 'EPSPASSA', exact: true })).toBeVisible();
+        await returnToList(page, width);
+        await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
+      }
+      await expectNoOverflow(page, activeNotice(page));
+      expect((await new AxeBuilder({ page }).include('#root').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
+      await info.attach(`annual-filter-results-${width}-${theme}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-results-${width}-${theme}.png`) }), contentType: 'image/png' });
     }
-    await expectNoOverflow(page, activeNotice(page));
-    expect((await new AxeBuilder({ page }).include('#root').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
-    await info.attach(`annual-filter-results-${width}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-results-${width}.png`) }), contentType: 'image/png' });
+    await page.getByRole('button', { name: 'ダークモードに切り替え', exact: true }).click();
+    await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
     verify();
   });
 
