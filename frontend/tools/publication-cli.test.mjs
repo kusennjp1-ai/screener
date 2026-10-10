@@ -50,6 +50,8 @@ const verifiedRow = (day, symbol = 'KEEP') => ({
 const priceObservations = day => ({ '["US","chart","KEEP"]': day, '["US","home","SPY"]': day });
 const observationHash = day => hash(JSON.stringify(priceObservations(day)));
 const researchFiles = (day, priceDay = day) => ({
+  'static-data/candidate-history/index.json': jsonBytes({schema_version: 1, snapshots: []}),
+  'static-data/candidate-performance-history/index.json': jsonBytes({schema_version: 1, cohorts: []}),
   'static-data/research-index.json': jsonBytes({ as_of_date: day, rows: [verifiedRow(day)] }),
   'static-data/data-quality.json': jsonBytes({ as_of_date: day, total: 1, verified: 1, unverified: 0 }),
   'static-data/charts/index.json': jsonBytes({ market: 'US', symbols: [{ symbol: 'KEEP', path: 'charts/KEEP.json' }] }),
@@ -221,6 +223,7 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   cpSync(dirname(cli), scripts, { recursive: true });
   cpSync(join(project, 'contracts'), join(root, 'contracts'), { recursive: true });
   cpSync(join(project, 'frontend/src/static/transport'), join(root, 'frontend/src/static/transport'), { recursive: true });
+  for (const path of ['frontend/package.json', 'frontend/tools/candidate-performance-archive.mjs', 'frontend/src/static/candidatePerformance.js']) write(join(root, path), readFileSync(join(project, path)));
   const pinPath = join(scripts, 'approved-ui-bootstrap.json');
   write(pinPath, jsonBytes({
     site_url: siteUrl, repository, ui_sha: uiSha, ui_files: approvedHashes,
@@ -246,6 +249,7 @@ else throw Error('Unexpected fixture API request: '+endpoint);
   chmodSync(join(bin, 'gh'), 0o755);
   write(preload, `
 import { appendFileSync, readFileSync } from 'node:fs';
+Date.now = () => Date.parse('2026-11-04T23:00:00Z');
 globalThis.fetch = async (input, options) => {
   const config=JSON.parse(readFileSync(process.env.PUBLICATION_FIXTURE,'utf8'));
   const url=new URL(input), base=new URL(config.siteUrl);
@@ -318,7 +322,7 @@ function addExportCharts(f, dates) {
 
 describe('split Pages publication CLI', () => {
   it('holds all new UI with any pending correction but permits proven data advances', () => {
-    const f = fixture({ designPassed: true, expired: true });
+    const f = fixture({ designPassed: true });
     write(join(f.root, '.github/pending-financial-correction.json'), '{ malformed or superseded hold');
     expect(f.success('plan').output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\n`);
     expect(f.state().decision.pendingFinancialCorrection).toBe(true);
@@ -338,14 +342,14 @@ describe('split Pages publication CLI', () => {
   });
 
   it('recheck rejects a UI build when a pending correction appears after planning', () => {
-    const f = fixture({ designPassed: true, expired: true });
+    const f = fixture({ designPassed: true });
     f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose');
     write(join(f.root, '.github/pending-financial-correction.json'), '{}');
     expect(f.invoke('recheck').text).toContain('Current-main publication gates changed');
   });
 
-  it('advances data after the old Pages artifact expires while failing current Design preserves every approved UI byte', () => {
-    const f = fixture({ expired: true });
+  it('advances data with authenticated predecessor history while failing current Design preserves every approved UI byte', () => {
+    const f = fixture();
     const plan = f.success('plan');
     expect(plan.output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\n`);
     expect(f.state()).toMatchObject({ sourceSha: uiSha, controllerSha: mainSha,
@@ -369,11 +373,19 @@ describe('split Pages publication CLI', () => {
     expect(endpoints).toContain(repoApi('/actions/runs/500/attempts/2/jobs?per_page=100'));
     for (const gate of approvedGates) expect(endpoints).toContain(repoApi(`/actions/runs/${gate.id}/attempts/${gate.attempt}`));
     expect(endpoints).toContain(repoApi('/actions/runs/600/attempts/3/jobs?per_page=100'));
-    expect(endpoints).not.toContain(repoApi('/actions/artifacts/700/zip'));
+    expect(endpoints).toContain(repoApi('/actions/artifacts/700/zip'));
+  });
+
+  it('fails closed when the predecessor artifact expired and history cannot be authenticated', () => {
+    const f = fixture({ expired: true });
+    const result = f.invoke('plan');
+    expect(result.status).not.toBe(0);
+    expect(result.text).toMatch(/artifact/i);
+    expect(existsSync(join(f.root, 'release/frontend/public/static-data'))).toBe(false);
   });
 
   it('publishes rebuilt UI only when both exact-main gates pass', () => {
-    const f = fixture({ designPassed: true, expired: true });
+    const f = fixture({ designPassed: true });
     expect(f.success('plan').output).toBe(`publish=true\nsha=${mainSha}\nmode=ui\nmigration=false\n`);
     f.success('restore'); f.simulateBuild();
     const builtUi = uiTree(f.dist);
@@ -518,6 +530,8 @@ describe('split Pages publication CLI', () => {
     const f = fixture({ bootstrapPrices: { ...priceObservations('2026-10-31'), [absent]: '2026-10-30' } });
     f.receipt.known_price_dates[receiptOnly] = '2026-10-31';
     f.config.live['publication.json'] = jsonBytes(f.receipt).toString('base64');
+    f.liveFiles['publication.json'] = jsonBytes(f.receipt);
+    f.liveArtifact.digest = makeArchive(f.config.downloads[repoApi('/actions/artifacts/700/zip')], f.liveFiles);
     addExportCharts(f, { ABSENT: date, NEW: '2026-10-01' });
     f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
     const observed = { ...priceObservations('2026-11-02'), [absent]: date, '["US","chart","NEW"]': '2026-10-01' };
@@ -560,27 +574,17 @@ describe('split Pages publication CLI', () => {
     expect(existsSync(join(f.runner, 'verified-publication/state.json'))).toBe(false);
   });
 
-  it.each(['expired', 'missing'])('refreshes the exact pinned receiptless snapshot when its original artifact is %s', availability => {
+  it.each(['expired', 'missing'])('blocks a receiptless predecessor whose history artifact is %s', availability => {
     const f = fixture({ legacy: true, expired: true });
     if (availability === 'missing') {
       f.config.api[repoApi('/actions/runs/500/artifacts?per_page=100')] = [{ artifacts: [] }];
       const pages = f.config.api[repoApi('/actions/artifacts?per_page=100')];
       pages[0].artifacts = pages[0].artifacts.filter(artifact => artifact.id !== 700);
     }
-    expect(f.success('plan').output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\n`);
-    expect(f.state()).toMatchObject({ decision: { mode: 'data' }, sourceSha: uiSha,
-      live: { receipt: null, legacyArtifact: null, priceObservations: priceObservations('2026-11-01') },
-      source: { runId: 600, attempt: 3, artifact: { id: 800 }, manifestHash: hash(f.freshManifest) } });
-    f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
-    expect(uiTree(f.dist)).toEqual(approvedBytes);
-    expect(readFileSync(join(f.dist, 'static-data/manifest.json'))).toEqual(f.freshManifest);
-    expect(f.finalReceipt()).toMatchObject({ ui_sha: uiSha, approval: { type: 'bootstrap', sha: uiSha },
-      data_source: { artifact_id: 800, run_id: 600, attempt: 3 },
-      price_observations: priceObservations('2026-11-02'), known_price_dates: priceObservations('2026-11-02') });
-    const endpoints = f.requests().filter(item => item.kind === 'gh').map(item => item.args.at(-1));
-    expect(endpoints).not.toContain(repoApi('/actions/artifacts/700/zip'));
-    expect(endpoints).toContain(repoApi('/actions/artifacts/800/zip'));
-    expect(endpoints).toContain(repoApi('/actions/artifacts/801/zip'));
+    const result = f.invoke('plan');
+    expect(result.status).not.toBe(0);
+    expect(result.text).toContain('Legacy approved input expired');
+    expect(existsSync(join(f.root, 'release/frontend/public/static-data'))).toBe(false);
   });
 
   it.each(['changed manifest', 'later deployment'])('rejects an unpinned receiptless %s without its exact artifact despite a fresh export', change => {
@@ -622,7 +626,7 @@ describe('split Pages publication CLI', () => {
   });
 
   it('publishes advancing chart and home observations even when the scan manifest is unchanged', () => {
-    const f = fixture({ expired: true, scanDay: '2026-11-01', priceDay: '2026-11-02' });
+    const f = fixture({ scanDay: '2026-11-01', priceDay: '2026-11-02' });
     expect(f.freshManifest).toEqual(f.liveManifest);
     expect(f.success('plan').output).toBe(`publish=true\nsha=${uiSha}\nmode=data\nmigration=false\n`);
     expect(f.state().source).toMatchObject({ runId: 600, attempt: 3, artifact: { id: 800 } });
@@ -677,6 +681,8 @@ describe('split Pages publication CLI', () => {
     const absent = '["US","chart","ABSENT"]';
     f.receipt.known_price_dates[absent] = '2026-10-30';
     f.config.live['publication.json'] = jsonBytes(f.receipt).toString('base64');
+    f.liveFiles['publication.json'] = jsonBytes(f.receipt);
+    f.liveArtifact.digest = makeArchive(f.config.downloads[repoApi('/actions/artifacts/700/zip')], f.liveFiles);
     f.success('plan'); f.success('restore'); f.simulateBuild(); f.success('compose'); f.success('recheck');
     const receipt = f.finalReceipt();
     expect(receipt.price_observations).not.toHaveProperty(absent);

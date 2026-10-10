@@ -153,6 +153,8 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: release/frontend/package-lock.json
+      # Controller restores authenticated history before enrichment; do not run
+      # the separately approved UI revision's older network history helper.
       - name: Restore the exact selected data artifact
         id: restore
         if: steps.plan.outputs.publish == 'true'
@@ -189,7 +191,6 @@ jobs:
           python tools/test_sec_financials.py
           python tools/test_export_book_benchmark.py
           python tools/export-book-benchmark.py --allow-unavailable
-          python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
           node tools/repair-price-history.mjs
           python tools/test_institutional_holdings.py
@@ -209,7 +210,6 @@ jobs:
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/export-book-benchmark.py --allow-unavailable
-          python tools/restore-candidate-history.py
           python tools/export-sector-prices.py
       - name: Carry the active financial source onto the new price target
         if: steps.plan.outputs.carry == 'true'
@@ -223,8 +223,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs publisher-build-before
+      - name: Build the exact ordinary carry with reviewed controller tooling
+        if: steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
+        run: node .github/scripts/select-release-source.mjs ordinary-carry-build
       - name: Build with daily selection export
-        if: steps.plan.outputs.publish == 'true'
+        if: steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING != 'true'
         working-directory: release/frontend
         env:
           METADATA_MIGRATION: ${{ steps.plan.outputs.migration }}

@@ -20,6 +20,7 @@ import {canonicalPublication,removeCanonical,transportCapable,packPublication,as
 import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
 import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
 import {publisherToolingBoundary,publisherToolingReceipt,validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
+import {ordinaryCarrySelected,assertOrdinaryClock,prepareOrdinaryCarry,bindOrdinaryCarry,checkOrdinaryCarry,withOrdinaryExporter,beginOrdinaryComposition,completeOrdinaryComposition,validateOrdinaryCarryReceipt,assertOrdinaryReceiptBinding} from './ordinary-carry-tooling.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -157,6 +158,43 @@ async function materialize(source, destination, migration = false,frontendRoot=r
     writeFileSync(statePath(), JSON.stringify(state));
   }
 }
+export async function restoreSelectedHistory(state) {
+  if (!state.historyPredecessor) {
+    if (!state.renewal && !state.activation && !state.correction && !state.decision.migration && !state.source.repair && !state.source.receiptHash) throw Error('Selected export is missing its authenticated history predecessor');
+    return;
+  }
+  if (state.source.repair || state.renewal || state.activation || state.correction || state.decision.migration || state.source.receiptHash) throw Error('History reconciliation is limited to ordinary selected exports');
+  const {prepareHistoryReconciliation,writeHistoryPayloads,commitHistoryCatalogs,restorePackedHistory} = await import('./reconcile-candidate-history.mjs');
+  const predecessor = state.historyPredecessor;
+  if (predecessor.receiptHash !== state.live.receiptHash || predecessor.runId !== state.live.latest.runId || predecessor.attempt !== state.live.latest.attempt || predecessor.manifestHash !== state.live.manifestHash) throw Error('History predecessor differs from the publication plan');
+  const root = join(scratch(), 'history-predecessor');
+  if (predecessor.kind === 'packed-live') {
+    if (digest(predecessor.expectedRoot) !== digest(state.live.receipt?.transport?.root)) throw Error('Packed history root differs from the authenticated publication');
+    rmSync(root, {recursive: true, force: true});
+    await restorePackedHistory({expectedRoot: predecessor.expectedRoot, root: join(root, 'static-data')});
+  } else await materialize(predecessor, root, false, resolve('release/frontend'));
+  const selectedRoot = resolve('release/frontend/public/static-data');
+  const plan = await prepareHistoryReconciliation({selectedRoot, publishedRoot: join(root, 'static-data'),
+    selectedAt: state.source.artifact.created_at, publishedAt: new Date(state.live.latest.completed).toISOString()});
+  writeHistoryPayloads(plan);
+  commitHistoryCatalogs(plan);
+  // Keep the exact admitted archive outside the mutable build data. Recheck
+  // requires every admitted/predecessor observation to survive enrichment.
+  const baselineRoot = join(scratch(), 'reconciled-history');
+  rmSync(baselineRoot, {recursive: true, force: true});mkdirSync(baselineRoot, {recursive: true});
+  for (const directory of ['candidate-history', 'candidate-performance-history']) cpSync(join(selectedRoot, directory), join(baselineRoot, directory), {recursive: true});
+  const updated = readState();
+  updated.historyReconciliation = {...plan.summary, baselineRoot, source_artifact_digest: state.source.artifact.digest, predecessor_digest: predecessor.kind === 'packed-live' ? predecessor.expectedRoot.sha256 : predecessor.artifact.digest};
+  writeFileSync(statePath(), JSON.stringify(updated));
+  console.log(`Preserved ${plan.summary.published_observations} published and admitted ${plan.summary.admitted_observations} selected-export performance observations`);
+}
+
+export function publishedHistorySource(live, pages) {
+  const retained = live.receipt && eligibleArtifacts(pages).filter(artifact => artifact.name === live.receipt.artifact_name && artifact.workflow_run.id === live.receipt.run_id);
+  if (retained?.length === 0 && live.receipt.transport) return {kind: 'packed-live', expectedRoot: live.receipt.transport.root, receiptHash: live.receiptHash, manifestHash: live.manifestHash, runId: live.latest.runId, attempt: live.latest.attempt};
+  return publishedSource(live, pages);
+}
+
 function publishedSource(live, pages) {
   if (live.receipt) {
     const artifact = uniqueArtifact(pages, live.receipt.artifact_name, live.receipt.run_id);
@@ -236,8 +274,14 @@ async function plan(design = false) {
   if(source.repair){const request=readRepairRequest(repairControllerRoot());assertRepairPredecessor(live,request.value);decision.mode='data';delete decision.approval;}
   const renewal=renewalControls?await selectRenewalCandidate({live,controls:renewalControls,mainSha:sha,source}):null;
   if(renewal){decision.mode='renewal';delete decision.approval;}
+  // Exact manual price-only repair keeps the retained approved browser even
+  // if both current-main gates pass. This only narrows the accepted UI choice.
+  if(!design&&!migration&&!correction&&!activation&&!renewal&&ordinaryCarrySelected({source})&&(event.inputs?.ui_only===true||event.inputs?.ui_only==='true')&&process.env.GITHUB_EVENT_NAME==='workflow_dispatch'){
+    assertOrdinaryClock(Date.now());decision.mode='data';delete decision.approval;
+  }
   const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
-  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
+  const historyPredecessor = !design && fresh && !migration && !correction && !activation && !renewal && !source.repair ? publishedHistorySource(live, pages) : null;
+  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(historyPredecessor ? {historyPredecessor} : {}), ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
     ...(!renewal&&!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
@@ -268,12 +312,24 @@ async function recheck() {
     await verifyRetainedRestoreBinding({root:repairControllerRoot(),source:state.source,record:state.sourceRecovery,live,authority:authorityExports(),api:githubApi});
   }
   await publisherToolingBoundary(state,'recheck');
+  if(ordinaryCarrySelected(state))await checkOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
   const physical=resolve('release/frontend/dist'),receipt = validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json'))));
   if(state.publisherTooling){validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);if(digest(receipt.publisher_tooling)!==digest(publisherToolingReceipt(state,receipt)))throw Error('Final publisher tooling receipt changed');}
   else if(receipt.publisher_tooling)throw Error('Unexpected publisher tooling receipt');
+  if(state.ordinaryCarryTooling){
+    validateOrdinaryCarryReceipt(receipt.ordinary_carry_tooling,receipt);
+    if(!['composed','rechecked'].includes(state.ordinaryCarryTooling.phase)||digest(receipt.ordinary_carry_tooling)!==digest(state.ordinaryCarryTooling.receipt))throw Error('Ordinary composed receipt changed');
+  }else if(receipt.ordinary_carry_tooling)throw Error('Unexpected ordinary carry tooling receipt');
+  const ordinaryPhysicalBefore=state.ordinaryCarryTooling?ordinaryOutputDigest(physical):null;
+  const ordinaryReceiptBefore=state.ordinaryCarryTooling?sha256(readFileSync(join(physical,'publication.json'))):null;
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
   try {
+  if (state.historyPredecessor) {
+    const history = state.historyReconciliation;
+    if (!history || history.source_artifact_digest !== state.source.artifact.digest || history.predecessor_digest !== (state.historyPredecessor.kind === 'packed-live' ? state.historyPredecessor.expectedRoot.sha256 : state.historyPredecessor.artifact.digest) || sha256(readFileSync(join(history.baselineRoot,'candidate-performance-history/index.json'))) !== history.output_performance_sha256 || sha256(readFileSync(join(history.baselineRoot,'candidate-history/index.json'))) !== history.output_selection_sha256) throw Error('Missing or changed history reconciliation binding');
+    await (await import('./reconcile-candidate-history.mjs')).verifyReconciledPerformance({baselineRoot: history.baselineRoot, finalRoot: join(logical,'static-data'), publishedRoot: join(scratch(),'history-predecessor/static-data'), publishedAt: new Date(state.live.latest.completed).toISOString()});
+  }
   const finalManifest = JSON.parse(readFileSync(join(logical,'static-data/manifest.json'), 'utf8'));
   if (['regression', 'unknown'].includes(compareData(finalManifest, live.manifest))
     || ['regression', 'unknown'].includes(compareData(finalManifest, state.source.manifest))) throw Error('Final data would regress a published or selected market');
@@ -288,6 +344,7 @@ async function recheck() {
   if (state.correction) await verifyPreparedCorrection(state, live,logical);
   if(state.carry&&isPerformanceException(live.approval)&&digest(verifyCorrectionChecks(repository(),state.controllerSha))!==digest(state.carry.controllerChecks))throw Error('Exception carry controller CI changed');
   if(state.activation||state.renewal||state.carry)verifiedRenewalProjection=await verifyPreparedFinancialRelease(state,live,logical);
+  if(state.ordinaryCarryTooling)assertOrdinaryReceiptBinding(state,receipt,verifyFinancialReleaseAssets(logical,receipt.financial_release,receipt));
   if(live.financialRelease&&!state.activation&&!state.renewal&&!state.carry)throw Error('Ordinary release lost required financial carry');
   if (receipt.ui_sha !== state.sourceSha || receipt.ui_digest !== inventoryDigest(uiInventory('release/frontend/dist'))
     || (['data','renewal'].includes(state.decision.mode) && receipt.ui_digest !== live.uiDigest)
@@ -296,7 +353,13 @@ async function recheck() {
   }
   }finally{removeCanonical(physical,logical);}
   if(state.renewal)await checkFinalRenewalPayload(physical,{request:state.renewal.request,projection:verifiedRenewalProjection,frontendRoot:resolve('frontend'),renewalState:state.renewal,expectedLive:live});
-  if(state.publisherTooling)writeFileSync(statePath(),JSON.stringify(state));
+  if(state.ordinaryCarryTooling){
+    await checkOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
+    if(digest(validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json')))).ordinary_carry_tooling)!==digest(state.ordinaryCarryTooling.receipt))throw Error('Ordinary receipt changed during final verification');
+    if(ordinaryReceiptBefore!==sha256(readFileSync(join(physical,'publication.json')))||ordinaryPhysicalBefore!==ordinaryOutputDigest(physical)||inventoryDigest(uiInventory(physical))!==state.live.uiDigest)throw Error('Ordinary physical publication changed during final verification');
+    state.ordinaryCarryTooling.phase='rechecked';state.ordinaryCarryTooling.rechecked_at=assertOrdinaryClock(Date.now());
+  }
+  if(state.publisherTooling||state.ordinaryCarryTooling)writeFileSync(statePath(),JSON.stringify(state));
 }
 async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
   const manifest = JSON.parse(readFileSync(join(dataRoot, 'manifest.json'), 'utf8'));
@@ -322,6 +385,7 @@ async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
 async function compose() {
   const state = readState(), dist = resolve('release/frontend/dist');
   await publisherToolingBoundary(state,'compose');
+  const ordinaryProof=ordinaryCarrySelected(state)?await beginOrdinaryComposition(state,ordinaryContext(state),ordinaryPaths(state),()=>ordinaryOutputDigest(dist)):null;
   if (state.decision.migration) {
     rmSync(dist, { recursive: true, force: true });
     mkdirSync(dist, { recursive: true });
@@ -373,6 +437,13 @@ async function compose() {
     await packPublication({root:dist,frontendRoot:resolve('release/frontend'),publication:receipt,compressFinancialAudit:Boolean(receipt.financial_audit_files),bindings:{
       sourceCommit:state.controllerSha,appCommit:state.sourceSha,candidateId:state.renewal?.record.transport_sha256??state.activation?.record.transport_sha256??sha256(JSON.stringify({artifact:state.source.artifact.digest,run:state.source.runId,attempt:state.source.attempt,manifest:state.source.manifestHash}))}});
   }else assertTransportDeclaration(dist,receipt);
+  if(ordinaryProof){
+    const physicalBefore=ordinaryOutputDigest(dist);
+    receipt.ordinary_carry_tooling=await completeOrdinaryComposition(ordinaryProof,state,ordinaryContext(state),ordinaryPaths(state),receipt,()=>inventoryDigest(uiInventory(dist)));
+    if(physicalBefore!==ordinaryOutputDigest(dist))throw Error('Ordinary packed publication changed during composition verification');
+    assertOrdinaryClock(Date.now());
+    writeFileSync(statePath(),JSON.stringify(state));
+  }
   validateReceipt(receipt);
   writeFileSync(join(dist, 'publication.json'), JSON.stringify(receipt));
   // Audit receipts and their metadata are included in the final physical/TAR guard.
@@ -438,10 +509,49 @@ function copyBundleData(source,destination) {
   mkdirSync(destination,{recursive:true});cpSync(join(source,'static-data'),join(destination,'static-data'),{recursive:true});
   for(const file of dataFiles)cpSync(join(source,file),join(destination,file));
 }
+// The narrow ordinary entrypoint accepts no alternate runtime or caller knobs.
+function ordinaryPaths(state){return {frontend:resolve('release/frontend'),zip:join(artifactDirectory(state.source.artifact),'artifact.zip'),tar:join(artifactDirectory(state.source.artifact),'artifact.tar')};}
+function ordinaryContext(state){
+  if(process.execArgv.length||process.env.NODE_OPTIONS||process.env.NODE_PATH)throw Error('Ordinary carry does not accept runtime hooks');
+  if(repository()!=='kusennjp1-ai/screener'||process.env.GITHUB_EVENT_NAME!=='workflow_dispatch'||process.env.GITHUB_REF!=='refs/heads/main')throw Error('Ordinary carry requires its explicit main dispatch');
+  const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
+  const runId=Number(process.env.GITHUB_RUN_ID),attempt=Number(process.env.GITHUB_RUN_ATTEMPT);
+  const run=githubApi(`repos/${repository()}/actions/runs/${runId}/attempts/${attempt}`);
+  const jobs=githubApi(`repos/${repository()}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,true).flatMap(page=>page.jobs);
+  const active=jobs.filter(job=>job.name==='publish'&&job.run_attempt===attempt&&job.status==='in_progress'&&job.conclusion===null);
+  if(run.id!==runId||run.run_attempt!==1||attempt!==1||!sameRepository(run,repository())||run.event!=='workflow_dispatch'||run.head_branch!=='main'||run.path!==workflowPath('research-ui-release.yml')||run.status!=='in_progress'||active.length!==1)throw Error('Ordinary carry caller is not its active publisher attempt');
+  const head=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),tree=execFileSync('git',['rev-parse','HEAD^{tree}'],{encoding:'utf8'}).trim();
+  if(head!==state.controllerSha)throw Error('Ordinary carry controller checkout changed');
+  execFileSync('git',['diff','--exit-code','HEAD','--','.github','contracts','frontend/tools'],{stdio:'pipe'});
+  if(execFileSync('git',['ls-files','--others','--exclude-standard','--','.github','contracts','frontend/tools'],{encoding:'utf8'}).trim())throw Error('Untracked ordinary controller tooling');
+  return {controller:{head,tree},caller:{run_id:runId,run_attempt:attempt,job_id:active[0].id,started_at:active[0].started_at},event:run.event,ui_only:event.inputs?.ui_only===true||event.inputs?.ui_only==='true',now:Date.now()};
+}
+function ordinaryOutputDigest(root){return sha256(JSON.stringify({data:dataInventoryDigest(root),ui:inventoryDigest(uiInventory(root))}));}
+async function buildOrdinaryCarry(){
+  const state=readState();if(!ordinaryCarrySelected(state))throw Error('No admitted ordinary carry source');
+  const paths=ordinaryPaths(state),context=ordinaryContext(state);
+  await checkOrdinaryCarry(state,context,paths);
+  if(state.ordinaryCarryTooling.phase!=='prepared')throw Error('Ordinary build cannot repeat or resume an interrupted build');
+  const tool=state.ordinaryCarryTooling;tool.phase='building';const started=assertOrdinaryClock(Date.now());writeFileSync(statePath(),JSON.stringify(state));
+  const buildEnv={...process.env};for(const key of ['GH_TOKEN','GITHUB_TOKEN'])delete buildEnv[key];
+  const run=script=>execFileSync(process.execPath,[script],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});
+  await withOrdinaryExporter(paths.frontend,path=>run(path));
+  // The temporary module is gone before recording or browser compilation.
+  run('tools/record-candidate-history.mjs');
+  execFileSync(process.execPath,['node_modules/vite/bin/vite.js','build'],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});
+  run('tools/check-data-quality.mjs');
+  const dist=join(paths.frontend,'dist'),outputDigest=ordinaryOutputDigest(dist);
+  await checkOrdinaryCarry(state,ordinaryContext(state),paths);
+  if(outputDigest!==ordinaryOutputDigest(dist))throw Error('Ordinary build output changed during verification');
+  tool.build={started_at:started,finished_at:assertOrdinaryClock(Date.now()),output_sha256:outputDigest};tool.phase='built';
+  writeFileSync(statePath(),JSON.stringify(state));
+}
 async function prepareCarry() {
   const state=readState();if(!state.carry)throw Error('Missing financial carry plan');
   await publisherToolingBoundary(state,'prepare');
-  const frontend=resolve('release/frontend'),root=join(frontend,'public'),evaluatedAt=new Date().toISOString();
+  const frontend=resolve('release/frontend'),root=join(frontend,'public');
+  if(ordinaryCarrySelected(state))await prepareOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
+  const evaluatedAt=new Date().toISOString();
   const env={...process.env,FINANCIAL_EVALUATED_AT:evaluatedAt};
   for(const key of Object.keys(env))if(key.startsWith('FINANCIAL_CORRECTION_')||key.startsWith('FINANCIAL_GENERATION_CARRY_'))delete env[key];
   // Establish the fully prepared new-price baseline once, including normal
@@ -472,8 +582,9 @@ async function prepareCarry() {
   await helper.loadFinancialGenerationCarry({env:carryEnv,rows:targetInput.rows,asOfDate:targetInput.asOfDate});
   state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt};
   await publisherToolingBoundary(state,'apply');
+  if(ordinaryCarrySelected(state))await bindOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
   writeFileSync(statePath(),JSON.stringify(state));
-  if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
+  if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`${state.ordinaryCarryTooling?'ORDINARY_CARRY_TOOLING=true\n':''}FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
 }
 async function carryAssessment(state,root) {
   const bytes=readFileSync(state.carry.projectionPath);if(sha256(bytes)!==state.carry.projectionSha256)throw Error('Carried projection changed');
@@ -636,8 +747,9 @@ async function runCommand(command) {
   }
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
+  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
   else if(command==='prepare-carry')await prepareCarry();
+  else if(command==='ordinary-carry-build'){if(process.argv.length!==3)throw Error('Ordinary build accepts no caller arguments');await buildOrdinaryCarry();}
   else if(['publisher-build-before','publisher-build-after'].includes(command)){
     if(process.argv.length!==3||process.execArgv.length)throw Error('Publisher build boundary accepts no caller inputs or runtime hooks');
     const state=readState();await publisherToolingBoundary(state,command==='publisher-build-before'?'build-before':'build-after');

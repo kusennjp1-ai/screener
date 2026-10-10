@@ -128,7 +128,9 @@ export async function performanceLifecycleFixture({packedTransport=false,excepti
       await packPublication({root:fixture.liveRoot,frontendRoot:join(repoRoot,'frontend'),publication,
         bindings:{sourceCommit:controllerSha,appCommit:capturedSha,candidateId:approval.preview_receipt_sha256}});
     }
-    fixture.save();
+    // The derived seed now has its final exception receipt and, when requested,
+    // packed transport. Its retained archive must describe these exact bytes.
+    fixture.recaptureSeedPublicationArtifact();
     return {...fixture,codeRoot,policy,approval,pin,request,ui,captured,current,activation,exception,approvalEndpoint,requestEndpoint,
       controllerRun,controllerJobs:api[`${prefix}/actions/runs/90/attempts/1/jobs?per_page=100`][0].jobs,
       get liveRoot(){return fixture.liveRoot;},
