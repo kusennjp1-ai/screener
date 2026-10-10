@@ -852,3 +852,419 @@ for (const width of WIDTHS) {
     verify();
   });
 }
+
+// Short-height coverage reuses the exact annual fixture and strict route guard.
+// The minimum 300px plot may extend below the inner viewport; lower chart panes
+// and evidence stay reachable while the modal header/footer remain fixed.
+for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }]) {
+  test(`annual EPS compact smoke preserves controls, focus, history and scroll at ${viewport.width}x${viewport.height}`, async ({ page, context, baseURL }, info) => {
+    const verify = await installFixture({ page, context, baseURL }, viewport.width);
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await expect(candidateSymbols(page)).toHaveText(ALL_SYMBOLS);
+    const trigger = page.getByRole('button', { name: '候補を絞り込む', exact: true });
+    const drawer = await openFilters(page);
+    await drawer.getByRole('textbox').focus();
+    await page.keyboard.press('Tab');
+    await expect(drawer.getByRole('button', { name: 'ミネルヴィニ', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    const method = drawer.getByRole('button', { name: '基本と原則', exact: true });
+    await expect(method).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(method).toHaveAttribute('aria-pressed', 'true');
+    await annual(drawer).focus();
+    await page.keyboard.press('Space');
+    await expect(annual(drawer)).toBeChecked();
+    await expect(annual(drawer)).toBeFocused();
+    await expectNoOverflow(page, drawer);
+    const darkDrawerName = `compact-drawer-${viewport.width}x${viewport.height}-dark`;
+    await info.attach(darkDrawerName, { body: await page.screenshot({ path: info.outputPath(`${darkDrawerName}.png`) }), contentType: 'image/png' });
+    await drawer.getByRole('combobox', { name: '業種', exact: true }).selectOption('Technology');
+    const browse = drawer.getByRole('button', { name: '候補を確認する →', exact: true });
+    const drawerBox = await rectangle(drawer);
+    await page.mouse.move(drawerBox.left + 8, viewport.height / 2);
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => drawer.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    await expect(browse).toBeInViewport({ ratio: 1 });
+    await browse.focus();
+    await page.keyboard.press('Enter');
+    await expect(drawer).toHaveCount(0);
+    await expect(board(page)).toBeFocused();
+    await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
+    const filteredUrl = page.url();
+    await page.goBack();
+    await expect(candidateSymbols(page)).toHaveText(ALL_SYMBOLS);
+    await expect(activeNotice(page)).toHaveCount(0);
+    await page.goForward();
+    await expect(page).toHaveURL(filteredUrl);
+    await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
+    const reopened = await openFilters(page);
+    await expect(annual(reopened)).toBeChecked();
+    await expect(reopened.getByRole('combobox', { name: '業種', exact: true })).toHaveValue('Technology');
+    await expect(reopened.getByRole('button', { name: '基本と原則', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(reopened).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    // Capture the same compact drawer in light mode through its real controls,
+    // then return to dark before the existing two-theme chart flow.
+    await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+    await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'light');
+    const lightDrawer = await openFilters(page);
+    await expect(annual(lightDrawer)).toBeChecked();
+    await expect(lightDrawer.getByRole('button', { name: '基本と原則', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await annual(lightDrawer).focus();
+    await expect(annual(lightDrawer)).toBeInViewport({ ratio: 1 });
+    await expectNoOverflow(page, lightDrawer);
+    const lightDrawerName = `compact-drawer-${viewport.width}x${viewport.height}-light`;
+    await info.attach(lightDrawerName, { body: await page.screenshot({ path: info.outputPath(`${lightDrawerName}.png`) }), contentType: 'image/png' });
+    const lightDrawerBox = await rectangle(lightDrawer);
+    await page.mouse.move(lightDrawerBox.left + 8, viewport.height / 2);
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => lightDrawer.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    await expect(lightDrawer.getByRole('button', { name: '候補を確認する →', exact: true })).toBeInViewport({ ratio: 1 });
+    await showCandidates(page, lightDrawer);
+    await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
+    await page.getByRole('button', { name: 'ダークモードに切り替え', exact: true }).click();
+    await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'dark');
+
+    for (const theme of ['dark', 'light']) {
+      if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+      await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
+      await candidate(page, 'EPSPASSA').click();
+      await expect(detail(page).getByRole('heading', { name: 'EPSPASSA', exact: true })).toBeVisible();
+      if (viewport.width < 700) {
+        await expect(detail(page)).toBeFocused();
+        await expect(board(page)).toBeHidden();
+      }
+      const opener = detail(page).getByRole('button', { name: '日次チャートを分析', exact: true });
+      await opener.click();
+      const modal = page.getByRole('dialog');
+      const header = modal.getByTestId('expanded-chart-header');
+      const footer = modal.getByTestId('expanded-chart-footer');
+      const scroll = modal.getByTestId('expanded-chart-scroll');
+      const plot = modal.locator('[data-chart-symbol="EPSPASSA"]');
+      const close = modal.getByRole('button', { name: 'チャートを閉じる', exact: true });
+      const next = modal.getByRole('button', { name: '次の銘柄', exact: true });
+      const previous = modal.getByRole('button', { name: '前の銘柄', exact: true });
+      await expect(modal).toHaveAccessibleName('EPSPASSA 1 / 3 銘柄');
+      await expect(plot.locator('canvas').first()).toBeVisible();
+      await expect(header).toHaveCSS('display', 'grid');
+      await expect(modal.locator('.chart-research-meta').getByTestId('mobile-chart-interaction')).toBeVisible();
+      await expect(modal.getByTestId('mobile-chart-readiness')).toContainText('購入条件');
+      await expectNoOverflow(page, modal);
+      await expectNoOverflow(page, scroll);
+      const modalBox = await rectangle(modal);
+      expect(modalBox.left).toBeGreaterThanOrEqual(-.5);
+      expect(modalBox.top).toBeGreaterThanOrEqual(-.5);
+      expect(modalBox.right).toBeLessThanOrEqual(viewport.width + .5);
+      expect(modalBox.bottom).toBeLessThanOrEqual(viewport.height + .5);
+      const headerBox = await rectangle(header), footerBox = await rectangle(footer);
+      expect(overlaps(headerBox, footerBox)).toBe(false);
+      for (const control of [close, previous, next]) await expect(control).toBeInViewport({ ratio: 1 });
+      expect(overlaps(await rectangle(previous), await rectangle(next))).toBe(false);
+      await expect.poll(() => plot.evaluate(node => {
+        const scroll = node.closest('[data-testid="expanded-chart-scroll"]');
+        const offset = node.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
+        const fitted = Math.min(420, Math.max(300, Math.floor(scroll.clientHeight - Math.max(0, offset))));
+        return node.clientHeight === fitted;
+      })).toBe(true);
+      const plotHeight = await plot.evaluate(node => node.clientHeight);
+      expect(plotHeight).toBeGreaterThanOrEqual(300);
+      expect(plotHeight).toBeLessThanOrEqual(420);
+      expect(await scroll.evaluate(node => node.scrollHeight > node.clientHeight && node.clientHeight > 0)).toBe(true);
+
+      // Space on a real control toggles pan mode without also changing symbol.
+      await modal.getByRole('button', { name: 'チャート操作（拡大・移動）', exact: true }).focus();
+      await page.keyboard.press('Space');
+      const pan = modal.getByRole('button', { name: '銘柄スワイプに戻る', exact: true });
+      await expect(pan).toHaveAttribute('aria-pressed', 'true');
+      await expect(pan).toBeFocused();
+      await expect(modal).toHaveAccessibleName('EPSPASSA 1 / 3 銘柄');
+      await page.keyboard.press('Enter');
+      await expect(modal.getByRole('button', { name: 'チャート操作（拡大・移動）', exact: true })).toHaveAttribute('aria-pressed', 'false');
+
+      // Exercise the MUI focus trap in both directions with real navigation.
+      await close.focus();
+      await page.keyboard.press('Shift+Tab');
+      await expect(next).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(modal).toHaveAccessibleName('EPSPASSB 2 / 3 銘柄');
+      await page.keyboard.press('Shift+Tab');
+      await expect(previous).toBeFocused();
+      await page.keyboard.press('Space');
+      await expect(modal).toHaveAccessibleName('EPSPASSA 1 / 3 銘柄');
+      await page.keyboard.press('Tab');
+      await expect(next).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(close).toBeFocused();
+      await expect(plot.locator('canvas').first()).toBeVisible();
+
+      // Scroll with the wheel, never by assigning scrollTop or resizing away
+      // the short-height boundary. Disabled chart interaction leaves it free.
+      const scrollBox = await rectangle(scroll);
+      await page.mouse.move(scrollBox.left + scrollBox.width / 2, scrollBox.top + scrollBox.height / 2);
+      await page.mouse.wheel(0, -10000);
+      await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBe(0);
+      const modalTopName = `compact-modal-top-${viewport.width}x${viewport.height}-${theme}`;
+      await info.attach(modalTopName, { body: await page.screenshot({ path: info.outputPath(`${modalTopName}.png`) }), contentType: 'image/png' });
+      const lowerPlotDelta = await plot.evaluate(node => {
+        const viewport = node.closest('[data-testid="expanded-chart-scroll"]');
+        return Math.max(1, node.getBoundingClientRect().bottom - viewport.getBoundingClientRect().bottom + 8);
+      });
+      await page.mouse.wheel(0, lowerPlotDelta);
+      await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+      await expect.poll(() => plot.evaluate(node => {
+        const bounds = node.getBoundingClientRect();
+        const clip = node.closest('[data-testid="expanded-chart-scroll"]').getBoundingClientRect();
+        return bounds.bottom <= clip.bottom + .5 && bounds.bottom > clip.top;
+      })).toBe(true);
+      expect(await plot.evaluate(node => node.clientHeight)).toBe(plotHeight);
+      const modalLowerName = `compact-modal-lower-plot-${viewport.width}x${viewport.height}-${theme}`;
+      await info.attach(modalLowerName, { body: await page.screenshot({ path: info.outputPath(`${modalLowerName}.png`) }), contentType: 'image/png' });
+      await page.mouse.wheel(0, 10000);
+      const disclosure = modal.locator('summary').filter({ hasText: '選定条件の詳細' });
+      await expect(disclosure).toBeInViewport({ ratio: 1 });
+      await disclosure.click();
+      const evidence = modal.getByRole('region', { name: '年次EPSの追加条件', exact: true });
+      await expect(evidence).toHaveAttribute('data-condition-state', 'pass');
+      await expect(evidence).toContainText('追加絞り込み有効');
+      await expect(evidence).toContainText('25.99%');
+      await evidence.getByRole('heading').scrollIntoViewIfNeeded();
+      await expect(evidence.getByRole('heading')).toBeInViewport({ ratio: 1 });
+      await expectNoOverflow(page, evidence);
+      expect(await plot.evaluate(node => node.clientHeight)).toBe(plotHeight);
+      expect(await rectangle(header)).toEqual(headerBox);
+      expect(await rectangle(footer)).toEqual(footerBox);
+      for (const control of [close, previous, next]) await expect(control).toBeInViewport({ ratio: 1 });
+      const modalEvidenceName = `compact-modal-evidence-${viewport.width}x${viewport.height}-${theme}`;
+      await info.attach(modalEvidenceName, { body: await page.screenshot({ path: info.outputPath(`${modalEvidenceName}.png`) }), contentType: 'image/png' });
+      if (theme === 'dark') await page.keyboard.press('Escape');
+      else await close.click();
+      await expect(modal).toHaveCount(0);
+      await expect(opener).toBeFocused();
+      await expect(activeNotice(page)).toContainText('研究画面のみ · 3銘柄');
+      await returnToList(page, viewport.width);
+      await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
+    }
+    verify();
+  });
+}
+
+// This dedicated production-font diagnostic opts into bounded public font GETs.
+// Every existing test/fixture above remains byte-for-byte unchanged and never
+// fetches fonts. This is not Design, financial,
+// provider or performance certification, and is not an additional release gate.
+import { writeFile as writeFontHealthReport } from 'node:fs/promises';
+
+const FONT_HEALTH_FAMILIES = ['Inter', 'Zen Kaku Gothic New', 'Geist Mono'];
+const FONT_HEALTH_FILE = /^\/s\/(?:inter|zenkakugothicnew|geistmono)\/v\d+\/[A-Za-z0-9_-]+\.woff2$/;
+
+function fontHealthRequestKind(request) {
+  const url = new URL(request.url());
+  if (request.method() !== 'GET' || url.username || url.password || url.hash) return null;
+  if (request.resourceType() === 'stylesheet' && FONT_STYLESHEETS.has(request.url())) return 'stylesheet';
+  if (request.resourceType() === 'font' && url.origin === 'https://fonts.gstatic.com' && !url.search && FONT_HEALTH_FILE.test(url.pathname)) return 'font';
+  return null;
+}
+
+async function installFontHealthRoute(context, playwright, page, health) {
+  // An isolated empty cookie jar and explicit public headers avoid credentials,
+  // cookies, Origin, and private Referer headers on these public GETs. Redirects
+  // are not followed, so a permitted URL cannot redirect around the allowlist.
+  const userAgent = await page.evaluate(() => navigator.userAgent);
+  const inFlight = new Set();
+  const deadline = Date.now() + 60_000;
+  let bytes = 0;
+  await context.route('**/*', async route => {
+    const request = route.request(), kind = fontHealthRequestKind(request);
+    // The original synthetic-data/provider/mutation guard remains authoritative
+    // for every request except these exact stylesheet and family-file GETs.
+    if (!kind) return route.fallback();
+    const asset = { url: request.url(), kind, method: 'GET', status: 'PENDING' };
+    health.assets.push(asset);
+    let transport;
+    try {
+      if (health.assets.length > 256 || Date.now() > deadline || bytes > 25 * 1024 * 1024) throw new Error('Bounded font diagnostic request/time/byte budget exhausted');
+      // A new context per asset cannot reuse a Set-Cookie response from another
+      // concurrent asset. No browser/request fixture credentials are inherited.
+      transport = await playwright.request.newContext({ storageState: { cookies: [], origins: [] } });
+      inFlight.add(transport);
+      const response = await transport.get(request.url(), {
+        headers: { accept: kind === 'stylesheet' ? 'text/css' : 'font/woff2', 'user-agent': userAgent },
+        maxRedirects: 0, timeout: 8000, failOnStatusCode: false,
+      });
+      asset.httpStatus = response.status();
+      asset.failureClass = 'transport';
+      if (response.status() !== 200 || response.url() !== request.url()) throw new Error(`Font asset HTTP ${response.status()}; redirects are forbidden`);
+      const body = await response.body();
+      bytes += body.length;
+      asset.bytes = body.length;
+      asset.contentType = response.headers()['content-type'] || '';
+      asset.failureClass = 'validation';
+      if (body.length > (kind === 'stylesheet' ? 1024 * 1024 : 2 * 1024 * 1024) || bytes > 25 * 1024 * 1024) throw new Error('Font asset exceeds diagnostic byte budget');
+      if (kind === 'stylesheet' && !/^text\/css(?:;|$)/i.test(asset.contentType)) throw new Error('Font stylesheet has unexpected content type');
+      if (kind === 'font' && body.subarray(0, 4).toString('ascii') !== 'wOF2') throw new Error('Font response is not a WOFF2 asset');
+      // Copy no Set-Cookie, refresh, redirect, or authentication response header.
+      await route.fulfill({ status: 200, body, contentType: kind === 'font' ? 'font/woff2' : 'text/css', headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' } });
+      asset.status = 'RETRIEVED';
+      delete asset.failureClass;
+      await response.dispose();
+    } catch (error) {
+      asset.status = asset.failureClass === 'validation' ? 'INVALID' : 'BLOCKED';
+      asset.reason = String(error.message || error);
+      // Missing external assets are a recorded limitation, not a fake font pass.
+      // Geometry and the original guard are still checked before test.skip().
+      await route.abort('blockedbyclient');
+    } finally {
+      await transport?.dispose();
+      inFlight.delete(transport);
+    }
+  });
+  return async () => { await Promise.all([...inFlight].map(transport => transport.dispose())); };
+}
+
+async function readFontHealthSample(page, cdp, locator, family, name) {
+  await expect(locator).toBeVisible();
+  await locator.scrollIntoViewIfNeeded();
+  await expect(locator).toBeInViewport({ ratio: 1 });
+  const sample = await locator.evaluate(async (node, { family, name }) => {
+    node.setAttribute('data-font-health-sample', name);
+    const style = getComputedStyle(node), text = node.textContent.trim();
+    const serialize = face => ({ family: face.family.replace(/["']/g, ''), status: face.status, weight: face.weight, style: face.style, unicodeRange: face.unicodeRange });
+    const load = document.fonts.load(`${style.fontWeight} ${style.fontSize} "${family}"`, text)
+      .then(faces => ({ faces: faces.map(serialize) }), error => ({ faces: [], error: String(error) }));
+    let timer;
+    const loaded = await Promise.race([load, new Promise(resolve => { timer = setTimeout(() => resolve({ faces: [], error: 'FontFace load exceeded 8 seconds' }), 8000); })]);
+    clearTimeout(timer);
+    const covered = (code, range) => range.split(',').some(part => {
+      const match = part.trim().match(/^U\+([\dA-F?]+)(?:-([\dA-F]+))?$/i);
+      if (!match) return false;
+      const start = parseInt(match[1].replace(/\?/g, '0'), 16);
+      const end = parseInt(match[2] || match[1].replace(/\?/g, 'F'), 16);
+      return code >= start && code <= end;
+    });
+    const codepoints = [...new Set([...text].filter(char => !/\s/.test(char)).map(char => char.codePointAt(0)))];
+    return {
+      name, family, text, computedFamily: style.fontFamily, weight: style.fontWeight, size: style.fontSize,
+      ...loaded,
+      uncovered: codepoints.filter(code => !loaded.faces.some(face => face.family === family && face.status === 'loaded' && covered(code, face.unicodeRange))).map(code => `U+${code.toString(16).toUpperCase()}`),
+    };
+  }, { family, name });
+  // Wait for paint after successful FontFace loads; ready alone is not evidence.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const { root } = await cdp.send('DOM.getDocument');
+  const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: `[data-font-health-sample="${name}"]` });
+  expect(nodeId, 'CDP must locate the actual rendered UI node').toBeGreaterThan(0);
+  sample.platformFonts = (await cdp.send('CSS.getPlatformFontsForNode', { nodeId })).fonts;
+  const used = sample.platformFonts.filter(font => font.glyphCount > 0);
+  sample.actualCustomFamily = used.length > 0 && used.every(font => font.isCustomFont && font.familyName.replace(/[\s-]/g, '') === family.replace(/[\s-]/g, ''));
+  sample.renderedGlyphCount = used.reduce((count, font) => count + font.glyphCount, 0);
+  return sample;
+}
+
+test('production-font asset and rendered-glyph health diagnostic', { tag: '@font-health' }, async ({ page, context, baseURL, playwright, browserName }, info) => {
+  test.skip(browserName !== 'chromium', 'BLOCKED: actual rendered font inspection requires Chromium CDP');
+  test.setTimeout(180_000);
+  const health = {
+    diagnostic: 'production-font-health-v1', scope: 'Synthetic fixture only; no financial-provider, Design, or performance certification',
+    fontStatus: 'PENDING', geometry: 'PENDING', assets: [], samples: [], blocked: [], loadIssues: [], decodingErrors: [], renderingFailures: [],
+    importedOnlyFamily: { family: 'Inter', note: 'Imported globally, but not the static shell applied family; asset/FontFace health only' },
+  };
+  page.on('console', message => {
+    if (/Failed to decode downloaded font|OTS parsing error/i.test(message.text())) health.decodingErrors.push(message.text());
+  });
+  const verify = await installFixture({ page, context, baseURL }, 320);
+  const closeTransport = await installFontHealthRoute(context, playwright, page, health);
+  let cdp, failure;
+  try {
+    cdp = await context.newCDPSession(page);
+    await cdp.send('DOM.enable');
+    await cdp.send('CSS.enable');
+    await page.goto('/');
+    await expect(candidateSymbols(page)).toHaveText(ALL_SYMBOLS);
+    const drawer = await openFilters(page);
+    await annual(drawer).check();
+    await showCandidates(page, drawer);
+    // These are unmodified production UI nodes: kanji/kana method labels and
+    // numeric pivot distances. No forced font styling or fake sample replaces UI.
+    for (const [index, name] of [[0, 'japanese-kana'], [1, 'japanese-kanji']]) {
+      health.samples.push(await readFontHealthSample(page, cdp, board(page).getByRole('group', { name: '投資手法', exact: true }).getByRole('button').nth(index), 'Zen Kaku Gothic New', name));
+    }
+    const number = await readFontHealthSample(page, cdp, board(page).locator('.candidate-distance').first(), 'Geist Mono', 'numeric-distance');
+    expect(number.text, 'Numeric production sample must contain digits').toMatch(/\d/);
+    health.samples.push(number);
+    health.importedOnlyFamily.result = await page.evaluate(async () => {
+      let timer;
+      const loaded = document.fonts.load('400 13px "Inter"', '0123456789')
+        .then(faces => ({ faces: faces.map(face => ({ family: face.family.replace(/["']/g, ''), status: face.status, unicodeRange: face.unicodeRange })) }), error => ({ faces: [], error: String(error) }));
+      const result = await Promise.race([loaded, new Promise(resolve => { timer = setTimeout(() => resolve({ faces: [], error: 'Inter load exceeded 8 seconds' }), 8000); })]);
+      clearTimeout(timer);
+      const coversDigit = code => result.faces.some(face => face.family === 'Inter' && face.status === 'loaded' && face.unicodeRange.split(',').some(part => {
+        const match = part.trim().match(/^U\+([\dA-F?]+)(?:-([\dA-F]+))?$/i);
+        return match && code >= parseInt(match[1].replace(/\?/g, '0'), 16) && code <= parseInt(match[2] || match[1].replace(/\?/g, 'F'), 16);
+      }));
+      result.uncoveredDigits = [...'0123456789'].filter(char => !coversDigit(char.codePointAt(0)));
+      return result;
+    });
+    health.fontFaces = await page.evaluate(() => [...document.fonts].map(face => ({ family: face.family.replace(/["']/g, ''), status: face.status, weight: face.weight, unicodeRange: face.unicodeRange })));
+    const unexpectedFamilies = health.fontFaces.filter(face => !FONT_HEALTH_FAMILIES.includes(face.family));
+    if (unexpectedFamilies.length) health.renderingFailures.push({ reason: 'Unexpected returned FontFace family', faces: unexpectedFamilies });
+    for (const sample of health.samples) {
+      if (sample.error || !sample.faces.length || sample.uncovered.length) health.loadIssues.push({ sample: sample.name, family: sample.family, kind: sample.error ? 'load-error' : 'missing-coverage', reason: sample.error || 'No loaded FontFace covers every sample codepoint', uncovered: sample.uncovered });
+      else if (!sample.actualCustomFamily || sample.renderedGlyphCount < [...sample.text].filter(char => !/\s/.test(char)).length) health.renderingFailures.push({ sample: sample.name, reason: 'Loaded family did not render all actual UI glyphs', platformFonts: sample.platformFonts });
+    }
+    const inter = health.importedOnlyFamily.result;
+    if (inter.error || !inter.faces.some(face => face.family === 'Inter' && face.status === 'loaded') || inter.uncoveredDigits.length) health.loadIssues.push({ family: 'Inter', kind: inter.error ? 'load-error' : 'missing-coverage', reason: inter.error || 'Imported Inter FontFace did not load or cover all digits', uncoveredDigits: inter.uncoveredDigits });
+    // Reuse the existing assertions, unsoftened, on production font metrics.
+    // Run even if font transport failed; never skip past detected UI regressions.
+    health.geometry = 'RUNNING';
+    for (const theme of ['dark', 'light']) {
+      if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+      await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
+      for (const width of [320, 390, 1440]) {
+        await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+        await expectMethodLabelsFit(board(page), width, 380);
+        await scrollPageToTop(page, width);
+        await expectHeroControlsFit(page);
+        const name = `production-font-health-${width}-${theme}`;
+        await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`) }), contentType: 'image/png' });
+        const controls = await openFilters(page);
+        await expectMethodLabelsFit(controls, width);
+        await expectNoOverflow(page, controls);
+        await info.attach(`${name}-drawer`, { body: await page.screenshot({ path: info.outputPath(`${name}-drawer.png`) }), contentType: 'image/png' });
+        await showCandidates(page, controls);
+      }
+    }
+    health.geometry = 'PASS';
+  } catch (error) {
+    failure = error;
+    health.geometry = health.geometry === 'RUNNING' ? 'FAIL' : 'INCOMPLETE';
+    health.failure = String(error.stack || error);
+    await info.attach('production-font-health-failure', { body: await page.screenshot({ path: info.outputPath('production-font-health-failure.png') }), contentType: 'image/png' }).catch(() => {});
+  } finally {
+    await cdp?.detach();
+    await closeTransport();
+    for (const asset of health.assets.filter(asset => asset.status !== 'RETRIEVED')) (asset.status === 'INVALID' ? health.renderingFailures : health.blocked).push({ asset: asset.url, reason: asset.reason || asset.status });
+    for (const url of FONT_STYLESHEETS) if (!health.assets.some(asset => asset.url === url)) health.renderingFailures.push({ asset: url, reason: 'Expected production stylesheet import was not requested' });
+    // If retrieval succeeded, invalid CSS/FontFaces/coverage are diagnostic
+    // failures, not an unavailable-host excuse. Only transport failure is BLOCKED.
+    for (const issue of health.loadIssues) {
+      const css = [...FONT_STYLESHEETS][issue.family === 'Inter' ? 0 : 1];
+      const prefix = `/s/${issue.family === 'Inter' ? 'inter' : issue.family === 'Geist Mono' ? 'geistmono' : 'zenkakugothicnew'}/`;
+      const unavailable = health.assets.some(asset => asset.status === 'BLOCKED' && (asset.url === css || (issue.kind === 'load-error' && new URL(asset.url).pathname.startsWith(prefix))));
+      (unavailable ? health.blocked : health.renderingFailures).push(issue);
+    }
+    for (const message of health.decodingErrors) health.renderingFailures.push({ reason: 'Browser rejected downloaded font bytes', message });
+    health.fontStatus = health.renderingFailures.length ? 'FAIL' : health.blocked.length ? 'BLOCKED' : 'VERIFIED';
+    health.overall = failure || health.renderingFailures.length ? 'FAIL' : health.blocked.length ? 'BLOCKED' : 'VERIFIED';
+    try { verify(); health.networkGuard = 'PASS'; } catch (error) { health.networkGuard = 'FAIL'; health.overall = 'FAIL'; failure ||= error; }
+    info.annotations.push({ type: 'production-font-health', description: `${health.overall}; geometry ${health.geometry}; external assets ${health.fontStatus}` });
+    const reportPath = info.outputPath('production-font-health.json');
+    await writeFontHealthReport(reportPath, JSON.stringify(health, null, 2) + '\n');
+    await info.attach('production-font-health.json', { path: reportPath, contentType: 'application/json' });
+  }
+  if (failure) throw failure;
+  expect(health.renderingFailures, 'Available custom fonts must actually render the UI glyphs').toEqual([]);
+  test.skip(health.fontStatus === 'BLOCKED', 'BLOCKED: actual production fonts could not be fully verified; see production-font-health.json. Geometry and request guard were still checked.');
+});
