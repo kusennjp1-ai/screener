@@ -1,0 +1,65 @@
+name: Release40 read-only quota transport crossover
+on:
+  push:
+    branches: [diagnostic/release40-quota-crossover-20261010]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: release40-quota-crossover
+  cancel-in-progress: false
+jobs:
+  measure:
+    name: Read-only quota transport crossover
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      NODE_OPTIONS: ''
+      NODE_DEBUG: ''
+      NODE_DEBUG_NATIVE: ''
+      GH_DEBUG: ''
+      GH_HOST: github.com
+      GH_PROMPT_DISABLED: '1'
+    steps:
+      - name: Check out diagnostic overlay
+        uses: actions/checkout@v4
+        with:
+          path: diagnostic
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Check out exact repaired candidate read-only
+        uses: actions/checkout@v4
+        with:
+          ref: c2b90868d3c9e23b731172d1181345b795963f99
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Token-free crossover safety tests
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --test diagnostic/.github/diagnostics/release40-quota-crossover.test.mjs
+      - name: Measure twelve bounded read-only invocations
+        timeout-minutes: 4
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE40_CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          RELEASE40_REPORT_ROOT: ${{ runner.temp }}/release40-quota-crossover-report
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 210s node diagnostic/.github/diagnostics/release40-quota-crossover-main.mjs
+      - name: Retain sanitized measurement and scope proof
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release40-quota-crossover-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release40-quota-crossover-report/summary.json
+          if-no-files-found: warn
+          retention-days: 3
+          include-hidden-files: false
