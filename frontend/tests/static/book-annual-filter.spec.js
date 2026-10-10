@@ -76,7 +76,12 @@ const MANIFEST = {
 
 test.use({ serviceWorkers: 'block' });
 
-async function installFixture({ page, context, baseURL }, width) {
+async function installFixture({ page, context, baseURL }, width, rows = ROWS) {
+  // Alternate scenarios may only narrow this file's existing synthetic rows.
+  // Research and chart responses share the same bounded subset.
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows.every(row => ROWS.includes(row))).toBe(true);
+  expect(new Set(rows).size).toBe(rows.length);
   const blockedRequests = [], pageErrors = [];
   const origin = new URL(baseURL).origin;
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -106,8 +111,8 @@ async function installFixture({ page, context, baseURL }, width) {
     if (url.pathname.startsWith('/static-data/')) {
       const path = url.pathname.slice('/static-data/'.length);
       if (path === 'manifest.json') return route.fulfill({ json: MANIFEST });
-      if (path === 'research.json') return route.fulfill({ json: { as_of_date: DATE, rows: ROWS } });
-      const row = ROWS.find(item => item.chart_path === path);
+      if (path === 'research.json') return route.fulfill({ json: { as_of_date: DATE, rows } });
+      const row = rows.find(item => item.chart_path === path);
       if (row) return route.fulfill({ json: {
         symbol: row.symbol, as_of_date: DATE, generated_at: NOW, stock_data: row, bars: BARS,
         rs_line: BARS.map((bar, index) => ({ time: bar.date, value: 1 + index * .002 })),
@@ -158,11 +163,11 @@ async function expectNoOverflow(page, scope) {
   expect(await scope.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 }
 
-async function expectMethodLabelsFit(scope, width) {
+async function expectMethodLabelsFit(scope, width, gridBreakpoint = 420) {
   const methods = scope.getByRole('group', { name: '投資手法', exact: true });
   const buttons = methods.getByRole('button');
   await expect(buttons).toHaveText(['ミネルヴィニ', '基本と原則', 'オニール', 'IBD型']);
-  await expect(methods).toHaveCSS('display', width <= 420 ? 'grid' : 'flex');
+  await expect(methods).toHaveCSS('display', width <= gridBreakpoint ? 'grid' : 'flex');
   await methods.scrollIntoViewIfNeeded();
   const boxes = await buttons.evaluateAll(nodes => nodes.map(node => {
     const box = node.getBoundingClientRect(), style = getComputedStyle(node);
@@ -202,7 +207,7 @@ async function expectMethodLabelsFit(scope, width) {
       expect(overlapX > .5 && overlapY > .5, `${box.label} and ${other.label}: disjoint buttons`).toBe(false);
     }
   }
-  if (width <= 420) {
+  if (width <= gridBreakpoint) {
     expect(Math.abs(boxes[0].top - boxes[1].top)).toBeLessThanOrEqual(.5);
     expect(Math.abs(boxes[2].top - boxes[3].top)).toBeLessThanOrEqual(.5);
     expect(boxes[2].top).toBeGreaterThanOrEqual(boxes[0].bottom - .5);
@@ -239,11 +244,15 @@ async function checkMethodKeyboard(page, drawer, width) {
   await expectMethodLabelsFit(drawer, width);
 }
 
-async function captureTopArea(page, info, width, theme) {
+async function scrollPageToTop(page, width) {
   // Scroll over the fixed header, outside canvases that consume wheel gestures.
   await page.mouse.move(width / 2, 20);
   await page.mouse.wheel(0, -10000);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+}
+
+async function captureTopArea(page, info, width, theme) {
+  await scrollPageToTop(page, width);
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
   await expectHeroControlsFit(page);
@@ -253,10 +262,61 @@ async function captureTopArea(page, info, width, theme) {
   await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, clip: { x: 0, y: 0, width, height } }), contentType: 'image/png' });
 }
 
+async function checkNarrowBoundaries(page, info, theme) {
+  const original = page.viewportSize();
+  try {
+    for (const width of [375, 380, 381]) {
+      await page.setViewportSize({ ...original, width });
+      await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
+      await expect(page.locator('main.research-workbench')).toHaveAttribute('data-mobile-view', 'list');
+      await expectMethodLabelsFit(board(page), width, 380);
+      await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
+      await scrollPageToTop(page, width);
+      await expectHeroControlsFit(page);
+      await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
+      const height = await board(page).evaluate(node => Math.ceil(node.getBoundingClientRect().bottom + window.scrollY));
+      const name = `annual-filter-boundary-${width}-${theme}`;
+      await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, clip: { x: 0, y: 0, width, height } }), contentType: 'image/png' });
+    }
+  } finally {
+    await page.setViewportSize(original);
+  }
+  await expectMethodLabelsFit(board(page), original.width, 380);
+  await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
+}
+
 const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > .5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > .5;
 const rectangle = async locator => locator.evaluate(node => {
   const box = node.getBoundingClientRect();
   return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+});
+
+const visibleTextRectangles = async locator => locator.evaluate(root => {
+  const boxes = [], walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    if (!text.textContent.trim() || text.parentElement.closest('button,a,input,select,textarea')) continue;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    for (const rect of range.getClientRects()) {
+      let left = rect.left, right = rect.right, top = rect.top, bottom = rect.bottom;
+      for (let parent = text.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+        if (style.display === 'none' || style.visibility === 'hidden') { right = left; break; }
+        // Company labels intentionally ellipsize. Compare their painted text,
+        // not hidden overflow, with the price and independent touch controls.
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(style.overflowX)) {
+          left = Math.max(left, bounds.left + parent.clientLeft);
+          right = Math.min(right, bounds.left + parent.clientLeft + parent.clientWidth);
+        }
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(style.overflowY)) {
+          top = Math.max(top, bounds.top + parent.clientTop);
+          bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
+        }
+      }
+      if (right > left && bottom > top) boxes.push({ left, right, top, bottom });
+    }
+  }
+  return boxes;
 });
 
 async function expectHeroControlsFit(page) {
@@ -300,6 +360,38 @@ async function captureDetail(page, info, width, theme) {
   await expectNoOverflow(page, panel);
   expect(await head.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   expect(overlaps(await rectangle(heading), await rectangle(watch)), 'Detail symbol and watch action must not overlap').toBe(false);
+  const price = head.locator('.research-symbol-price strong');
+  await expect(price).toHaveText('$102.00');
+  const headBox = await rectangle(head);
+  for (const text of [heading, price]) {
+    await expect(text).toBeInViewport({ ratio: 1 });
+    const raw = await text.evaluate(node => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return [...range.getClientRects()].map(box => ({ left: box.left, right: box.right, top: box.top, bottom: box.bottom }));
+    });
+    expect(raw.length).toBeGreaterThan(0);
+    for (const box of raw) {
+      expect(box.left, 'Complete symbol/price must fit the header').toBeGreaterThanOrEqual(headBox.left - .5);
+      expect(box.right, 'Complete symbol/price must fit the header').toBeLessThanOrEqual(headBox.right + .5);
+      expect(box.top, 'Complete symbol/price must fit the header').toBeGreaterThanOrEqual(headBox.top - .5);
+      expect(box.bottom, 'Complete symbol/price must fit the header').toBeLessThanOrEqual(headBox.bottom + .5);
+    }
+  }
+  const identityText = await visibleTextRectangles(head.locator('.symbol-identity'));
+  const priceText = await visibleTextRectangles(head.locator('.research-symbol-price'));
+  expect(identityText.length).toBeGreaterThan(0);
+  expect(priceText.length).toBeGreaterThan(0);
+  for (const identity of identityText) for (const price of priceText) expect(overlaps(identity, price), 'Visible identity/title/company and price text must be disjoint').toBe(false);
+  const readiness = head.getByRole('button', { name: /^購入条件 \d+\/\d+$/ });
+  const controls = [];
+  for (const control of [watch, readiness]) {
+    await expect(control).toBeInViewport({ ratio: 1 });
+    const box = await rectangle(control);
+    for (const text of [...identityText, ...priceText]) expect(overlaps(text, box), 'Header text must clear watch/readiness controls').toBe(false);
+    controls.push(box);
+  }
+  expect(overlaps(controls[0], controls[1]), 'Watch and readiness controls must be disjoint').toBe(false);
   const panelBox = await rectangle(panel), chartBox = await rectangle(panel.locator('.research-chart'));
   expect(chartBox.left).toBeGreaterThanOrEqual(panelBox.left - .5);
   expect(chartBox.right).toBeLessThanOrEqual(panelBox.right + .5);
@@ -311,6 +403,7 @@ async function captureDetail(page, info, width, theme) {
   await expect(evidence).toHaveAttribute('data-condition-state', 'pass');
   await expect(evidence).toContainText('追加絞り込み有効');
   const name = `annual-filter-detail-${width}-${theme}`;
+  await info.attach(`${name}-header`, { body: await page.screenshot({ path: info.outputPath(`${name}-header.png`) }), contentType: 'image/png' });
   await info.attach(name, { body: await panel.screenshot({ path: info.outputPath(`${name}.png`) }), contentType: 'image/png' });
 }
 
@@ -400,6 +493,61 @@ async function downloadCsv(page, drawer, method) {
   return parseCsv(await readFile(await download.path(), 'utf8'));
 }
 
+test('zero-qualified hero text and actions remain readable at 381/390/420px in both themes', async ({ page, context, baseURL }, info) => {
+  const verify = await installFixture({ page, context, baseURL }, 381, ROWS.filter(row => row.symbol === 'EPSBASEFAIL'));
+  await page.goto('/');
+  // This existing row passes the annual overlay but fails the base RS rule.
+  // Keep it visible to distinguish zero qualified candidates from empty input.
+  await expect(candidateSymbols(page)).toHaveText(['EPSBASEFAIL']);
+  const drawer = await openFilters(page);
+  await expect(drawer.getByTestId('annual-eps-coverage')).toContainText('1銘柄：数値充足 1 · 未充足 0 · 未確認 0');
+  await annual(drawer).check();
+  await showCandidates(page, drawer);
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+    await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    for (const width of [381, 390, 420]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(page.locator('main.research-workbench')).toHaveAttribute('data-mobile-view', 'list');
+      await expect(candidateSymbols(page)).toHaveText(['EPSBASEFAIL']);
+      await expectMethodLabelsFit(board(page), width, 380);
+      await scrollPageToTop(page, width);
+      const hero = page.getByTestId('home-hero');
+      const heading = hero.getByRole('heading', { name: '選定候補はありません。', level: 1, exact: true });
+      await expect(heading).toBeInViewport({ ratio: 1 });
+      await expectHeroControlsFit(page);
+      const rendered = await heading.evaluate(node => {
+        const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        return {
+          left: box.left + parseFloat(style.paddingLeft), right: box.right - parseFloat(style.paddingRight),
+          top: box.top + parseFloat(style.paddingTop), bottom: box.bottom - parseFloat(style.paddingBottom),
+          unclipped: node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight,
+          text: [...range.getClientRects()].filter(rect => rect.width && rect.height).map(rect => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom })),
+        };
+      });
+      expect(rendered.unclipped, 'The complete zero-qualified heading must not be clipped').toBe(true);
+      expect(rendered.text.length).toBeGreaterThan(0);
+      for (const text of rendered.text) {
+        expect(text.left).toBeGreaterThanOrEqual(rendered.left - .5);
+        expect(text.right).toBeLessThanOrEqual(rendered.right + .5);
+        expect(text.top).toBeGreaterThanOrEqual(rendered.top - .5);
+        expect(text.bottom).toBeLessThanOrEqual(rendered.bottom + .5);
+      }
+      await expect(activeNotice(page)).toContainText('研究画面のみ · 1銘柄');
+      const height = await board(page).evaluate(node => Math.ceil(node.getBoundingClientRect().bottom + window.scrollY));
+      const name = `annual-filter-zero-qualified-${width}-${theme}`;
+      await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, clip: { x: 0, y: 0, width, height } }), contentType: 'image/png' });
+    }
+  }
+  await page.getByRole('button', { name: 'ダークモードに切り替え', exact: true }).click();
+  await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  verify();
+});
+
 for (const width of WIDTHS) {
   test(`annual EPS defaults off; repeated keyboard toggles preserve base filters and accessible layout at ${width}px`, async ({ page, context, baseURL }, info) => {
     const verify = await installFixture({ page, context, baseURL }, width);
@@ -452,7 +600,7 @@ for (const width of WIDTHS) {
       expect((await new AxeBuilder({ page }).include('[role="dialog"][aria-labelledby="research-filter-title"]').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
       await info.attach(`annual-filter-drawer-${width}-${theme}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-drawer-${width}-${theme}.png`) }), contentType: 'image/png' });
       await showCandidates(page, drawer);
-      await expectMethodLabelsFit(board(page), width);
+      await expectMethodLabelsFit(board(page), width, 380);
       await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
       await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
       await expect(activeNotice(page)).toContainText('基本手法の通過数・順位・購入条件は別判定');
@@ -470,6 +618,7 @@ for (const width of WIDTHS) {
       expect((await new AxeBuilder({ page }).include('#root').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
       await info.attach(`annual-filter-results-${width}-${theme}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-results-${width}-${theme}.png`) }), contentType: 'image/png' });
       await captureTopArea(page, info, width, theme);
+      if (width === 390) await checkNarrowBoundaries(page, info, theme);
     }
     await page.getByRole('button', { name: 'ダークモードに切り替え', exact: true }).click();
     await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'dark');
