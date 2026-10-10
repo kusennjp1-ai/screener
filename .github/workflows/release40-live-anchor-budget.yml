@@ -1,0 +1,75 @@
+name: Release40 read-only live-anchor cohort and quota
+on:
+  push:
+    branches: [diagnostic/release40-live-anchor-20261010]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: release40-live-anchor-cohort-quota
+  cancel-in-progress: false
+jobs:
+  measure:
+    name: Read-only live-anchor cohort and quota
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    env:
+      NODE_OPTIONS: ''
+      GH_DEBUG: ''
+      GH_HOST: github.com
+      GH_PROMPT_DISABLED: '1'
+    steps:
+      - name: Check out diagnostic overlay
+        uses: actions/checkout@v4
+        with:
+          path: diagnostic
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Check out exact repaired candidate
+        uses: actions/checkout@v4
+        with:
+          ref: c2b90868d3c9e23b731172d1181345b795963f99
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Token-free candidate and diagnostic contracts
+        timeout-minutes: 9
+        env:
+          RELEASE40_CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+        run: |
+          set -euo pipefail
+          test -z "${GH_TOKEN:-}"
+          test -z "${GITHUB_TOKEN:-}"
+          node --test --test-concurrency=2 \
+            diagnostic/.github/diagnostics/release40-budget.test.mjs \
+            candidate/.github/scripts/bounded-github-api.test.mjs \
+            candidate/.github/scripts/conditional-deployment-jobs-worker.test.mjs \
+            candidate/.github/scripts/conditional-deployment-jobs-cache.test.mjs \
+            candidate/.github/scripts/retained-price-repository-inventory.test.mjs \
+            candidate/.github/scripts/retained-price-finite-transport-policy.test.mjs \
+            candidate/.github/scripts/retained-price-finite-transport-controller.test.mjs
+      - name: Measure genuine cold and cross-process warm reads
+        timeout-minutes: 11
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE40_CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          RELEASE40_REPORT_ROOT: ${{ runner.temp }}/release40-reports
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 600s node diagnostic/.github/diagnostics/release40-budget.mjs
+      - name: Retain sanitized diagnostic facts only
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release40-live-anchor-quota-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/release40-reports/summary.json
+            ${{ runner.temp }}/release40-reports/cold.json
+            ${{ runner.temp }}/release40-reports/warm.json
+          if-no-files-found: warn
+          retention-days: 3
+          include-hidden-files: false
