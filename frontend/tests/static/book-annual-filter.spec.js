@@ -855,6 +855,56 @@ for (const width of WIDTHS) {
 
 import { writeFile as writeCompactGeometry } from 'node:fs/promises';
 
+async function expectAnnualLabelAndCoverageFit(drawer, info, name) {
+  const label = drawer.locator('label').filter({ hasText: LABEL });
+  const text = label.locator('.MuiFormControlLabel-label');
+  const coverage = drawer.getByTestId('annual-eps-coverage');
+  await expect(label).toHaveCount(1);
+  await expect(text).toHaveText(LABEL);
+  await expect(coverage).toBeVisible();
+  await label.scrollIntoViewIfNeeded();
+  await expect(label).toBeInViewport({ ratio: 1 });
+  const geometry = await label.evaluate(node => {
+    const span = node.querySelector('.MuiFormControlLabel-label');
+    const coverage = node.closest('[role="dialog"]').querySelector('[data-testid="annual-eps-coverage"]');
+    const box = element => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+    };
+    const textBoxes = element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      // Keep the full text ranges, not overflow-clipped intersections: clipping
+      // or a flex-shrunk label must remain a detectable regression.
+      return [...range.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0).map(rect => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height }));
+    };
+    const style = getComputedStyle(node);
+    return {
+      viewport: { width: innerWidth, height: innerHeight }, theme: document.querySelector('.leader-shell[data-theme]').dataset.theme,
+      label: box(node), labelSpan: box(span), labelText: textBoxes(span),
+      coverage: box(coverage), coverageText: textBoxes(coverage),
+      labelStyle: { minHeight: style.minHeight, flexShrink: style.flexShrink },
+    };
+  });
+  // Persist before assertions so a failure retains the exact measured overlap.
+  const path = info.outputPath(`${name}-annual-label-geometry.json`);
+  await writeCompactGeometry(path, `${JSON.stringify(geometry, null, 2)}\n`);
+  await info.attach(`${name}-annual-label-geometry`, { path, contentType: 'application/json' });
+  expect(geometry.label.width, 'Annual label retains its minimum hit width').toBeGreaterThanOrEqual(44);
+  expect(geometry.label.height, 'Annual label retains its minimum hit height').toBeGreaterThanOrEqual(44);
+  expect(geometry.labelText.length, 'Annual label has rendered text lines').toBeGreaterThan(0);
+  expect(geometry.coverageText.length, 'Annual coverage has rendered text lines').toBeGreaterThan(0);
+  for (const rect of [geometry.labelSpan, ...geometry.labelText]) {
+    expect(rect.left, 'Full annual text stays inside label left edge').toBeGreaterThanOrEqual(geometry.label.left - .5);
+    expect(rect.right, 'Full annual text stays inside label right edge').toBeLessThanOrEqual(geometry.label.right + .5);
+    expect(rect.top, 'Full annual text stays inside label top edge').toBeGreaterThanOrEqual(geometry.label.top - .5);
+    expect(rect.bottom, 'Full annual text stays inside label bottom edge').toBeLessThanOrEqual(geometry.label.bottom + .5);
+  }
+  const fullLabelBottom = Math.max(geometry.label.bottom, geometry.labelSpan.bottom, ...geometry.labelText.map(rect => rect.bottom));
+  expect(geometry.coverage.top, 'Coverage block starts below the complete annual label and text').toBeGreaterThanOrEqual(fullLabelBottom - .5);
+  for (const rect of geometry.coverageText) expect(rect.top, 'Coverage text clears the complete annual label and text').toBeGreaterThanOrEqual(fullLabelBottom - .5);
+}
+
 // Short-height coverage reuses the exact annual fixture and strict route guard.
 // The minimum 300px plot may extend below the inner viewport; lower chart panes
 // and evidence stay reachable while the modal header/footer remain fixed.
@@ -882,6 +932,7 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
     await expect(annual(drawer)).toBeFocused();
     await expectNoOverflow(page, drawer);
     const darkDrawerName = `compact-drawer-${viewport.width}x${viewport.height}-dark`;
+    await expectAnnualLabelAndCoverageFit(drawer, info, darkDrawerName);
     await info.attach(darkDrawerName, { body: await page.screenshot({ path: info.outputPath(`${darkDrawerName}.png`) }), contentType: 'image/png' });
     const browse = drawer.getByRole('button', { name: '候補を確認する →', exact: true });
     const drawerBox = await rectangle(drawer);
@@ -939,6 +990,7 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
     await expectNoOverflow(page, lightAnnualLabel);
     await expectNoOverflow(page, lightDrawer);
     const lightDrawerName = `compact-drawer-${viewport.width}x${viewport.height}-light`;
+    await expectAnnualLabelAndCoverageFit(lightDrawer, info, lightDrawerName);
     await info.attach(lightDrawerName, { body: await page.screenshot({ path: info.outputPath(`${lightDrawerName}.png`) }), contentType: 'image/png' });
     const lightDrawerBox = await rectangle(lightDrawer);
     await page.mouse.move(lightDrawerBox.left + 8, viewport.height / 2);
@@ -1254,6 +1306,7 @@ test('production-font asset and rendered-glyph health diagnostic', { tag: '@font
         const controls = await openFilters(page);
         await expectMethodLabelsFit(controls, width);
         await expectNoOverflow(page, controls);
+        await expectAnnualLabelAndCoverageFit(controls, info, `${name}-drawer`);
         await info.attach(`${name}-drawer`, { body: await page.screenshot({ path: info.outputPath(`${name}-drawer.png`) }), contentType: 'image/png' });
         await showCandidates(page, controls);
       }
