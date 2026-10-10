@@ -157,6 +157,43 @@ async function materialize(source, destination, migration = false,frontendRoot=r
     writeFileSync(statePath(), JSON.stringify(state));
   }
 }
+export async function restoreSelectedHistory(state) {
+  if (!state.historyPredecessor) {
+    if (!state.renewal && !state.activation && !state.correction && !state.decision.migration && !state.source.repair && !state.source.receiptHash) throw Error('Selected export is missing its authenticated history predecessor');
+    return;
+  }
+  if (state.source.repair || state.renewal || state.activation || state.correction || state.decision.migration || state.source.receiptHash) throw Error('History reconciliation is limited to ordinary selected exports');
+  const {prepareHistoryReconciliation,writeHistoryPayloads,commitHistoryCatalogs,restorePackedHistory} = await import('./reconcile-candidate-history.mjs');
+  const predecessor = state.historyPredecessor;
+  if (predecessor.receiptHash !== state.live.receiptHash || predecessor.runId !== state.live.latest.runId || predecessor.attempt !== state.live.latest.attempt || predecessor.manifestHash !== state.live.manifestHash) throw Error('History predecessor differs from the publication plan');
+  const root = join(scratch(), 'history-predecessor');
+  if (predecessor.kind === 'packed-live') {
+    if (digest(predecessor.expectedRoot) !== digest(state.live.receipt?.transport?.root)) throw Error('Packed history root differs from the authenticated publication');
+    rmSync(root, {recursive: true, force: true});
+    await restorePackedHistory({expectedRoot: predecessor.expectedRoot, root: join(root, 'static-data')});
+  } else await materialize(predecessor, root, false, resolve('release/frontend'));
+  const selectedRoot = resolve('release/frontend/public/static-data');
+  const plan = await prepareHistoryReconciliation({selectedRoot, publishedRoot: join(root, 'static-data'),
+    selectedAt: state.source.artifact.created_at, publishedAt: new Date(state.live.latest.completed).toISOString()});
+  writeHistoryPayloads(plan);
+  commitHistoryCatalogs(plan);
+  // Keep the exact admitted archive outside the mutable build data. Recheck
+  // requires every admitted/predecessor observation to survive enrichment.
+  const baselineRoot = join(scratch(), 'reconciled-history');
+  rmSync(baselineRoot, {recursive: true, force: true});mkdirSync(baselineRoot, {recursive: true});
+  for (const directory of ['candidate-history', 'candidate-performance-history']) cpSync(join(selectedRoot, directory), join(baselineRoot, directory), {recursive: true});
+  const updated = readState();
+  updated.historyReconciliation = {...plan.summary, baselineRoot, source_artifact_digest: state.source.artifact.digest, predecessor_digest: predecessor.kind === 'packed-live' ? predecessor.expectedRoot.sha256 : predecessor.artifact.digest};
+  writeFileSync(statePath(), JSON.stringify(updated));
+  console.log(`Preserved ${plan.summary.published_observations} published and admitted ${plan.summary.admitted_observations} selected-export performance observations`);
+}
+
+export function publishedHistorySource(live, pages) {
+  const retained = live.receipt && eligibleArtifacts(pages).filter(artifact => artifact.name === live.receipt.artifact_name && artifact.workflow_run.id === live.receipt.run_id);
+  if (retained?.length === 0 && live.receipt.transport) return {kind: 'packed-live', expectedRoot: live.receipt.transport.root, receiptHash: live.receiptHash, manifestHash: live.manifestHash, runId: live.latest.runId, attempt: live.latest.attempt};
+  return publishedSource(live, pages);
+}
+
 function publishedSource(live, pages) {
   if (live.receipt) {
     const artifact = uniqueArtifact(pages, live.receipt.artifact_name, live.receipt.run_id);
@@ -237,7 +274,8 @@ async function plan(design = false) {
   const renewal=renewalControls?await selectRenewalCandidate({live,controls:renewalControls,mainSha:sha,source}):null;
   if(renewal){decision.mode='renewal';delete decision.approval;}
   const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
-  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
+  const historyPredecessor = !design && fresh && !migration && !correction && !activation && !renewal && !source.repair ? publishedHistorySource(live, pages) : null;
+  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(historyPredecessor ? {historyPredecessor} : {}), ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
     ...(!renewal&&!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
@@ -274,6 +312,11 @@ async function recheck() {
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
   try {
+  if (state.historyPredecessor) {
+    const history = state.historyReconciliation;
+    if (!history || history.source_artifact_digest !== state.source.artifact.digest || history.predecessor_digest !== (state.historyPredecessor.kind === 'packed-live' ? state.historyPredecessor.expectedRoot.sha256 : state.historyPredecessor.artifact.digest) || sha256(readFileSync(join(history.baselineRoot,'candidate-performance-history/index.json'))) !== history.output_performance_sha256 || sha256(readFileSync(join(history.baselineRoot,'candidate-history/index.json'))) !== history.output_selection_sha256) throw Error('Missing or changed history reconciliation binding');
+    await (await import('./reconcile-candidate-history.mjs')).verifyReconciledPerformance({baselineRoot: history.baselineRoot, finalRoot: join(logical,'static-data'), publishedRoot: join(scratch(),'history-predecessor/static-data'), publishedAt: new Date(state.live.latest.completed).toISOString()});
+  }
   const finalManifest = JSON.parse(readFileSync(join(logical,'static-data/manifest.json'), 'utf8'));
   if (['regression', 'unknown'].includes(compareData(finalManifest, live.manifest))
     || ['regression', 'unknown'].includes(compareData(finalManifest, state.source.manifest))) throw Error('Final data would regress a published or selected market');
@@ -636,7 +679,7 @@ async function runCommand(command) {
   }
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
+  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
   else if(command==='prepare-carry')await prepareCarry();
   else if(['publisher-build-before','publisher-build-after'].includes(command)){
     if(process.argv.length!==3||process.execArgv.length)throw Error('Publisher build boundary accepts no caller inputs or runtime hooks');
