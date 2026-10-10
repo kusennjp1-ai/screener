@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './fixtures/bounded-gh-cli.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -27,7 +28,7 @@ function fixture(t, { currentSha = sha, preload = '', systemTools = false } = {}
       [{ workflow_runs: [] }],
     ])),
   };
-  writeFileSync(join(bin, 'gh'), `#!${process.execPath}\n
+  writeFileSync(join(bin, 'gh'), `#!${process.execPath}\n${boundedGhCliPrelude}
 const args = process.argv.slice(2), api = ${JSON.stringify(api)};
 if (args[0] !== 'api' || args.slice(1, -1).some(arg => !['--paginate', '--slurp'].includes(arg))) throw Error('Unexpected fixture command');
 const endpoint = args.at(-1);

@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from '../../.github/scripts/fixtures/bounded-gh-cli.mjs';
 // @vitest-environment node
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
@@ -233,7 +234,7 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   const commandPath = join(scripts, 'select-release-source.mjs');
 
   // No real GitHub executable or network transport is used, even for failures.
-  write(join(bin, 'gh'), `#!${process.execPath}\n` + `
+  write(join(bin, 'gh'), `#!${process.execPath}\n` + boundedGhCliPrelude + `
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.PUBLICATION_REQUEST_LOG, JSON.stringify({kind:'gh',args})+'\\n');

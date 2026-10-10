@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './bounded-gh-cli.mjs';
 // Fully offline integration fixture. Production modules are copied unchanged.
 // Git objects, source journals, archive merges, projections, certificate ZIPs,
 // and publisher outputs are real. Provider, GitHub, and market observations are
@@ -168,7 +169,7 @@ export function renewalLifecycleFixture({directory,runtimeRoot=ownRoot,nodeModul
 
   // Transport substitutes only network reads and the declared evaluation clock.
   // Every Git response is derived from an actual fixture Git object.
-  write(join(bin,'gh'),`#!${process.execPath}\nconst fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RENEWAL_FIXTURE_CONFIG));
+  write(join(bin,'gh'),`#!${process.execPath}\n${boundedGhCliPrelude}const fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RENEWAL_FIXTURE_CONFIG));
 if(JSON.stringify(args)===JSON.stringify(['api','--hostname','github.com','--method','GET','--include','rate_limit','-H','Accept: application/vnd.github+json','-H','X-GitHub-Api-Version: 2022-11-28'])){
   const statePath=process.env.RENEWAL_FIXTURE_CONFIG+'.quota-state.json',invocation=process.env.RENEWAL_FIXTURE_INVOCATION;
   let state=fs.existsSync(statePath)?JSON.parse(fs.readFileSync(statePath)):{invocation:null,count:0};

@@ -7,7 +7,8 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {createRetainedPriceAdmissionApi} from './retained-price-admission-inventory.mjs';
 import {admissionSnapshotResult} from './fixtures/retained-price-admission-inventory.mjs';
-import {PRICE_CI,priceAdmissionDiagnostic,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
+import {withInvocationConditionalDeploymentJobs,hasScopedConditionalJobContext,hasScopedFiniteTransportBudget,createConditionalDeploymentJobsReader,withConditionalDeploymentJobsReader} from './conditional-deployment-jobs.mjs';
+import {PRICE_CI,priceAdmissionDiagnostic,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof,registerPricePublisherTransportCaller} from './retained-price-ci-admission.mjs';
 
 const sha256=b=>createHash('sha256').update(b).digest('hex');
 const repo={id:PRICE_CI.repositoryId,full_name:PRICE_CI.repository,default_branch:'main'};
@@ -351,4 +352,118 @@ test('whole repository CI identity conflicts and later reruns remain fail closed
   f.inventory.transform=result=>result;f.finish();f.route(f.producer);
   f.producer.run_attempt=2;f.sync();assert.throws(()=>f.route(f.producer),/attempt/);
   const g=fixture(t);g.records.producer.push({...copy(g.producer),id:201,run_attempt:2});g.sync();assert.throws(()=>g.produce(),/replayed producer attempt/);
+});
+
+test('publisher transport registration outside an owned scope performs no caller reads',()=>{
+  let reads=0;
+  assert.equal(registerPricePublisherTransportCaller({}, {api:()=>{reads++;throw Error('No scope read');},execution:{},now}),false);
+  assert.equal(reads,0);
+});
+
+function ownedPublisherTransport(t,f,work){
+  const eventPath=join(f.root,'.git','transport-event.json'),runnerTemp=join(f.root,'.git','transport-temp');
+  mkdirSync(runnerTemp);writeFileSync(eventPath,JSON.stringify(f.event(f.producer)));
+  const values={GITHUB_REPOSITORY:PRICE_CI.repository,GITHUB_REPOSITORY_ID:String(PRICE_CI.repositoryId),
+    GITHUB_RUN_ID:'400',GITHUB_RUN_ATTEMPT:'1',GITHUB_SHA:f.head,GITHUB_WORKFLOW_SHA:f.head,GITHUB_REF:'refs/heads/main',
+    GITHUB_EVENT_NAME:'workflow_run',GITHUB_WORKFLOW_REF:PRICE_CI.repository+'/'+PRICE_CI.publisher.path+'@refs/heads/main',
+    GITHUB_JOB:'publish',GITHUB_EVENT_PATH:eventPath,GITHUB_WORKSPACE:f.root,RUNNER_TEMP:runnerTemp,GH_TOKEN:'synthetic-existing-token',
+    RETAINED_PRICE_CONTROLLER_ROOT:undefined};
+  const previous=Object.fromEntries(Object.keys(values).map(key=>[key,process.env[key]])),oldCwd=process.cwd,oldArgv=process.argv,oldExecArgv=[...process.execArgv];
+  for(const [key,value]of Object.entries(values))if(value===undefined)delete process.env[key];else process.env[key]=value;
+  process.cwd=()=>f.root;t.mock.method(console,'error',()=>{});
+  process.execArgv.splice(0);
+  // These proof/API-identity fixtures exercise the real preparation-only owner.
+  // Ledger phase lifecycle is covered by the separate managed-controller suite.
+  process.argv=[process.execPath,join(f.root,'.github/scripts/retained-price-source-admission.mjs'),
+    'prepare-controller','--output',join(runnerTemp,'retained-price-controller')];
+  try{return withInvocationConditionalDeploymentJobs(PRICE_CI.repository,()=>{
+    assert.equal(hasScopedConditionalJobContext(PRICE_CI.repository),true);
+    return work();
+  });}finally{
+    process.cwd=oldCwd;process.argv=oldArgv;process.execArgv.splice(0,Infinity,...oldExecArgv);
+    for(const [key,value]of Object.entries(previous))if(value===undefined)delete process.env[key];else process.env[key]=value;
+  }
+}
+function transportPublishJob(f){
+  const job={id:4001,run_id:400,run_attempt:1,head_sha:f.head,name:'publish',status:'in_progress',conclusion:null,
+    started_at:f.publisher.run_started_at,completed_at:null,steps:[]};
+  f.jobRecords[400].push(job);f.sync();return job;
+}
+test('publisher transport binds only the branded source with exactly fresh caller setup',t=>{
+  const f=fixture(t);f.finish();const proof=f.source();transportPublishJob(f);
+  const start=f.calls.length,snapshots=f.inventory.calls.length;
+  ownedPublisherTransport(t,f,()=>assert.equal(registerPricePublisherTransportCaller(proof,{api:f.api,execution:f.execution(PRICE_CI.publisher),now}),true));
+  assert.deepEqual(f.calls.slice(start),[
+    prefix+'/actions/runs/400/attempts/1',prefix+'/actions/runs/400',prefix+'/actions/runs/400/attempts/1/jobs?per_page=100']);
+  assert.equal(f.inventory.calls.length,snapshots);
+});
+test('owned publisher transport rejects forged or rebound source proofs before caller reads',t=>{
+  const f=fixture(t);f.finish();const proof=f.source();transportPublishJob(f);
+  const start=f.calls.length;
+  ownedPublisherTransport(t,f,()=>{
+    assert.throws(()=>registerPricePublisherTransportCaller(copy(proof),{api:f.api,execution:f.execution(PRICE_CI.publisher),now}),/original verified source proof/);
+    assert.throws(()=>registerPricePublisherTransportCaller(proof,{api:(...args)=>f.api(...args),execution:f.execution(PRICE_CI.publisher),now}),/original verified source proof/);
+  });
+  assert.equal(f.calls.length,start);
+});
+test('publisher transport rejects ambiguous, changed or nonactive current jobs',t=>{
+  for(const mutate of [
+    (f,job)=>f.jobRecords[400].push(copy(job)),
+    (_f,job)=>{job.status='completed';job.conclusion='success';},
+    (_f,job)=>{job.head_sha='f'.repeat(40);},
+    (_f,job)=>{job.run_attempt=2;},
+    (f,_job)=>{f.publisher.run_attempt=2;},
+    (_f,job)=>{job.started_at=timestamp(1);}
+  ]){
+    const f=fixture(t);f.finish();const proof=f.source(),job=transportPublishJob(f);mutate(f,job);f.sync();
+    ownedPublisherTransport(t,f,()=>assert.throws(()=>registerPricePublisherTransportCaller(proof,{api:f.api,execution:f.execution(PRICE_CI.publisher),now})));
+  }
+});
+
+test('ordinary actual constructors preserve the original API and inherited native transport',t=>{
+  const f=fixture(t),original=f.api;
+  assert.equal(hasScopedFiniteTransportBudget(PRICE_CI.repository),false);
+  assert.equal(f.produce().repair,true);assert.equal(f.inventory.calls.length,1);
+  f.finish();const proof=f.source();assert.equal(f.inventory.calls.length,2);
+  assert.equal(isVerifiedPriceSourceProof(proof),true);
+  assert.deepEqual(f.route(f.producer),{price_wait:false,price_source:true,source_run_id:200,source_run_attempt:1});
+  assert.equal(f.inventory.calls.length,3);assert.equal(f.api,original);
+  assert.equal(f.inventory.reports.filter(report=>report.status==='complete').length,3);
+  // The branded proof still binds the same supplied function after each inventory is disposed.
+  transportPublishJob(f);
+  const before=f.calls.length;
+  ownedPublisherTransport(t,f,()=>assert.equal(registerPricePublisherTransportCaller(proof,{api:original,execution:f.execution(PRICE_CI.publisher),now}),true));
+  assert.equal(f.api,original);assert.equal(f.calls.length,before+3);assert.equal(f.inventory.calls.length,3);
+});
+
+test('a generic owned history reader preserves inherited injected native transport',t=>{
+  const f=fixture(t),original=f.api;
+  const reader=createConditionalDeploymentJobsReader({scope:{repository:PRICE_CI.repository,repository_id:PRICE_CI.repositoryId,
+    run_id:400,run_attempt:1,controller_sha:f.head},token:()=> 'synthetic-generic-inherited-token',
+    run:()=>assert.fail('A generic scope must not issue a history worker for constructor projections')});
+  withConditionalDeploymentJobsReader(reader,()=>{
+    assert.equal(hasScopedConditionalJobContext(PRICE_CI.repository),false);
+    assert.equal(hasScopedFiniteTransportBudget(PRICE_CI.repository),false);
+    assert.equal(f.produce().repair,true);f.finish();
+    assert.equal(isVerifiedPriceSourceProof(f.source()),true);assert.equal(f.route(f.producer).price_source,true);
+    assert.equal(f.inventory.calls.length,3);assert.equal(f.api,original);
+  });
+  assert.equal(reader.disposed,true);assert.equal(reader.disposition,'complete');
+  assert.equal(f.inventory.reports.filter(report=>report.status==='complete').length,3);
+});
+
+test('a preparation-only finite owner preserves inherited native transport without a phase controller',t=>{
+  const f=fixture(t),original=f.api,priorArgv=process.argv;f.finish();
+  process.argv=[process.execPath,join(f.root,'.github/scripts/retained-price-source-admission.mjs'),
+    'prepare-controller','--output',join(f.root,'.git/transport-temp/retained-price-controller')];
+  try{
+    ownedPublisherTransport(t,f,()=>{
+      assert.equal(hasScopedConditionalJobContext(PRICE_CI.repository),true);
+      assert.equal(hasScopedFiniteTransportBudget(PRICE_CI.repository),false);
+      assert.equal(isVerifiedPriceSourceProof(f.source()),true);
+      assert.equal(f.route(f.producer).price_source,true);
+      assert.equal(f.inventory.calls.length,2);assert.equal(f.api,original);
+    });
+  }finally{process.argv=priorArgv;}
+  assert.equal(f.inventory.reports.filter(report=>report.status==='complete').length,2);
 });

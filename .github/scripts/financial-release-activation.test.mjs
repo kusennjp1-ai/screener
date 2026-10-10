@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './fixtures/bounded-gh-cli.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {chmodSync,existsSync,mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
@@ -48,7 +49,7 @@ test('design prepare CLI validates a live financial receipt through its lazy sel
     const prefix=`repos/${bootstrap.repository}/actions`,api={
       [`${prefix}/runs/1/attempts/1`]:{id:1,run_attempt:1,head_branch:'main',head_sha:bootstrap.ui_sha,path:'.github/workflows/research-ui-release.yml',
         repository:{full_name:bootstrap.repository},head_repository:{full_name:bootstrap.repository}},
-      [`${prefix}/runs/1/attempts/1/jobs?per_page=100`]:[{jobs:[{run_attempt:1,started_at:'2026-10-03T01:00:00Z',steps:[
+      [`${prefix}/runs/1/attempts/1/jobs?per_page=100`]:[{jobs:[{id:10,run_attempt:1,started_at:'2026-10-03T01:00:00Z',steps:[
         {name:'Deploy to GitHub Pages',conclusion:'success',started_at:'2026-10-03T01:01:00Z',completed_at:'2026-10-03T01:02:00Z'}]}]}],
       [`${prefix}/workflows/research-ui-release.yml/runs?branch=main&per_page=100`]:[{workflow_runs:[]}],
       [`${prefix}/workflows/static-site.yml/runs?branch=main&per_page=100`]:[{workflow_runs:[]}],
@@ -56,7 +57,7 @@ test('design prepare CLI validates a live financial receipt through its lazy sel
     writeFileSync(config,JSON.stringify({api,live:{'publication.json':JSON.stringify(publication),'static-data/manifest.json':manifest,[financialPath]:financialBytes}}));
     // Only the transport is faked. The real publication parser, deployment and
     // approval checks, lazy receipt import and CLI dispatch all execute offline.
-    writeFileSync(join(bin,'gh'),`#!${process.execPath}\n`+`
+    writeFileSync(join(bin,'gh'),`#!${process.execPath}\n`+boundedGhCliPrelude+`
 const fs=require('node:fs'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RELEASE_CLI_FIXTURE));
 if(args[0]!=='api'||args.slice(1,-1).some(arg=>!['--paginate','--slurp'].includes(arg)))throw Error('Unexpected fixture command');
 const endpoint=args.at(-1);if(!Object.hasOwn(config.api,endpoint))throw Error('Unexpected fixture API read '+endpoint);

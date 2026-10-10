@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './fixtures/bounded-gh-cli.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,mkdirSync,readFileSync,rmSync,chmodSync} from 'node:fs';
@@ -215,7 +216,7 @@ test('certifier CLI checks current CI and idempotently skips an existing pin aft
    [`repos/${repo}/actions/runs/99/attempts/1/jobs?per_page=100`]:[{jobs:p.capture_ci_jobs.map((j,i)=>({id:900+i,run_attempt:1,name:j.name,status:'completed',conclusion:'success'}))}],
   };
   const event=join(root,'event.json');writeFileSync(event,JSON.stringify({workflow_run:ci}));writeFileSync(config,JSON.stringify(api));
-  writeFileSync(join(bin,'gh'),`#!${process.execPath}\nconst fs=require('node:fs'),api=JSON.parse(fs.readFileSync(process.env.CERTIFIER_TEST_API)),endpoint=process.argv.at(-1);if(!Object.hasOwn(api,endpoint))throw Error('Unexpected API '+endpoint);process.stdout.write(JSON.stringify(api[endpoint]));\n`);chmodSync(join(bin,'gh'),0o755);
+  writeFileSync(join(bin,'gh'),`#!${process.execPath}\n${boundedGhCliPrelude}const fs=require('node:fs'),api=JSON.parse(fs.readFileSync(process.env.CERTIFIER_TEST_API)),endpoint=process.argv.at(-1);if(!Object.hasOwn(api,endpoint))throw Error('Unexpected API '+endpoint);process.stdout.write(JSON.stringify(api[endpoint]));\n`);chmodSync(join(bin,'gh'),0o755);
   const cli=fileURLToPath(new URL('./financial-performance-exception.mjs',import.meta.url));
   const invoke=()=>spawnSync(process.execPath,[cli,'prepare'],{cwd:root,encoding:'utf8',timeout:10000,env:{PATH:`${bin}:${process.env.PATH}`,CERTIFIER_TEST_API:config,GITHUB_SHA:revision,GITHUB_EVENT_PATH:event,GITHUB_EVENT_NAME:'workflow_run',GITHUB_OUTPUT:output}});
   const result=invoke();assert.equal(result.status,0,result.stderr);assert.equal(readFileSync(output,'utf8'),'candidate=false\n');

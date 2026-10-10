@@ -1,3 +1,4 @@
+import {boundedGhCliPrelude} from './bounded-gh-cli.mjs';
 // Offline controller fixture. Only GitHub/Pages transport and the wall clock
 // are replaced; exports, ZIPs, source assets, ledgers and receipts are real.
 import assert from 'node:assert/strict';
@@ -75,7 +76,7 @@ export function lifecycleFixture({controllerPath=controller,packedTransport=fals
   const checks=verifyCorrectionConsumerChecks({uiSha:sha,approval},repository,endpoint=>api[endpoint]);
   const original=projection(certificate.source);
   const lineage=sourceLineage({source:certificate.source,certificate:certificate.reference,sourceProjectionSha256:sha256(original.bytes),receiptInventorySha256:original.value.receipt_inventory_sha256,projectionPolicy:original.value.policy});
-  write(join(bin,'gh'),`#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RELEASE_CLI_FIXTURE));
+  write(join(bin,'gh'),`#!${process.execPath}\n${boundedGhCliPrelude}const fs=require('node:fs'),args=process.argv.slice(2),config=JSON.parse(fs.readFileSync(process.env.RELEASE_CLI_FIXTURE));
 if(args[0]!=='api'||args.slice(1,-1).some(arg=>!['--paginate','--slurp'].includes(arg)))throw Error('Unexpected fixture command');
 const endpoint=args.at(-1);fs.appendFileSync(process.env.RELEASE_CLI_TRACE,JSON.stringify({api:endpoint})+'\\n');
 if(Object.hasOwn(config.zips,endpoint))process.stdout.write(fs.readFileSync(config.zips[endpoint]));
@@ -122,7 +123,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     const liveRoot=join(root,`deployed-${id}`);cpSync(directory,liveRoot,{recursive:true});config.liveRoot=liveRoot;
     api[`${prefix}/actions/runs/${id}/attempts/1`]=run(id,'research-ui-release.yml','workflow_dispatch');
     const start=new Date(Date.parse(now)+60000).toISOString(),end=new Date(Date.parse(now)+120000).toISOString();
-    api[`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`]=[{jobs:[{run_attempt:1,started_at:now,steps:[{name:'Deploy to GitHub Pages',conclusion:'success',started_at:start,completed_at:end}]}]}];
+    api[`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`]=[{jobs:[{id:id*10,run_attempt:1,started_at:now,steps:[{name:'Deploy to GitHub Pages',conclusion:'success',started_at:start,completed_at:end}]}]}];
     save();return liveRoot;
   }
   function seed(){
@@ -161,7 +162,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     const metadata=join(root,`source-${id}.json`);write(metadata,{run_id:exportId,run_attempt:1,source_sha:sha,artifact_name:artifact.name,manifest_json:manifestBytes.toString(),manifest_sha256:sha256(manifestBytes),price_observations:observed,price_observations_sha256:priceObservationDigest(observed)});
     const companion=pack(exportId+1,`static-site-data-manifest-${exportId}-1`,null,'source.json',metadata,exportId);
     api[`${prefix}/actions/runs/${exportId}/attempts/1`]=run(exportId,'static-site.yml','schedule');
-    api[`${prefix}/actions/runs/${exportId}/attempts/1/jobs?per_page=100`]=[{jobs:[{name:'combine-and-build',run_attempt:1,conclusion:'success',started_at:now,completed_at:now,steps:[{name:'Build static frontend',conclusion:'success'}]}]}];
+    api[`${prefix}/actions/runs/${exportId}/attempts/1/jobs?per_page=100`]=[{jobs:[{id:exportId*10,name:'combine-and-build',run_attempt:1,conclusion:'success',started_at:now,completed_at:now,steps:[{name:'Build static frontend',conclusion:'success'}]}]}];
     api[`${prefix}/actions/artifacts?per_page=100`]=[{artifacts:[artifact,companion]}];
     // No predecessor Actions artifact is available: carry must restore the
     // durable, hash-bound source assets from the verified Pages publication.

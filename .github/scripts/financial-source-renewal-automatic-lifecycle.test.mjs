@@ -69,7 +69,7 @@ test('synthetic quota transport emits exact HTTP metadata and separates probes f
   const sequence=f.invoke(process.execPath,['--input-type=module','-e',code]);assert.equal(sequence.status,0,sequence.stderr);
   row=invocations(f).at(-1);assert.equal(row.total,0);assert.equal(row.quota_reads,2);assert.deepEqual(row.quota_events.map(item=>item.remaining),[800,799]);
   f.config.quota={status:429,headers:{'retry-after':'10'}};const limited=f.invoke('gh',quotaArgs);assert.equal(limited.status,1);assert.match(limited.stdout,/429 Too Many Requests/);
-  failed(f.invoke('gh',['api','--include','rate_limit']),/Unexpected SYNTHETIC GitHub command/);
+  failed(f.invoke('gh',['api','--include','rate_limit']),/Unexpected bounded fixture command/);
 });
 
 // This uses a two-symbol synthetic source and shared frontend dependencies.
