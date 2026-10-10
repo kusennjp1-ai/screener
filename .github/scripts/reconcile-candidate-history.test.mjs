@@ -20,6 +20,23 @@ const now = Date.parse('2026-09-30T23:00:00Z');
 const selectionIndex = 'candidate-history/index.json', performanceIndex = 'candidate-performance-history/index.json';
 const script = fileURLToPath(new URL('./select-release-source.mjs', import.meta.url));
 
+for (const packedTransport of [false, true]) test(`completed ${packedTransport ? 'packed' : 'unpacked'} exception seed never silently refreshes a changed live receipt`, {timeout: 60000}, async () => {
+  const {performanceLifecycleFixture} = await import('./fixtures/financial-performance-lifecycle.mjs');
+  const f = await performanceLifecycleFixture({packedTransport, exceptionVersion: packedTransport ? 2 : 1});
+  try {
+    const zipPath = f.config.zips[`repos/${f.pin.repository}/actions/artifacts/900030/zip`], archived = readFileSync(zipPath);
+    assert.throws(() => f.recaptureSeedPublicationArtifact(), /false/);
+    const publicationPath = join(f.liveRoot, 'publication.json');
+    writeFileSync(publicationPath, `${readFileSync(publicationPath, 'utf8')}\n`);
+    f.save();
+    const release = f.advance({id: 40, date: '2026-10-05', price: 120, time: '2026-10-05T12:00:00.000Z'});
+    release.command('plan');
+    const result = release.command('restore', {allowFailure: true});
+    assert.equal(result.status, 1);assert.match(result.stderr, /Archive and live publication receipt disagree/);
+    assert.deepEqual(readFileSync(zipPath), archived, 'save, advance, plan and restore preserve the sealed predecessor archive');
+  } finally {f.cleanup();}
+});
+
 function inventory(root, prefix = '') {
   return Object.fromEntries(readdirSync(root, {withFileTypes: true}).flatMap(entry => entry.isDirectory() ? Object.entries(inventory(join(root, entry.name), `${prefix}${entry.name}/`)) : [[`${prefix}${entry.name}`, sha(readFileSync(join(root, entry.name)))]]).sort());
 }
