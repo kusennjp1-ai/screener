@@ -222,8 +222,8 @@ export default function ResearchPage({compareOnly=false}) {
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
   const actualView=compareOnly?'charts':view;
-  const freshnessNotice=bundle.data&&freshness.state!=='recent'
-    ? <ResearchFreshnessNotice date={bundle.data.date||entry.as_of_date} freshness={freshness}/>
+  const freshnessNotice=(bundle.data&&freshness.state!=='recent')||stale
+    ? <ResearchFreshnessNotice date={bundle.data?.date||entry.as_of_date} freshness={freshness} publicationStale={stale} generatedAt={manifest.data?.generated_at} checkedAt={now}/>
     : null;
   const detailFreshness=smallScreen&&mobileView==='detail'&&!compareOnly;
   const methodControls=useMemo(()=><div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>,[method]);
@@ -231,7 +231,6 @@ export default function ResearchPage({compareOnly=false}) {
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
     {!compareOnly&&<ResearchHero freshnessNotice={detailFreshness?null:freshnessNotice} loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div className="comparison-page-title"><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div>{freshnessNotice}<Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
-    {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
     {detailFreshness&&freshnessNotice}
     <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>

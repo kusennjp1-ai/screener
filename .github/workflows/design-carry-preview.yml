@@ -1,0 +1,145 @@
+name: Design Carry Preview
+
+# This workflow is deliberately outside Research UI Release's workflow_run
+# watchlist. A successful preview is never Design Acceptance or release approval.
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Baseline code; prices are identical, carried financial input differs'
+        default: 'cd3a6a2'
+        type: string
+      mode:
+        description: 'Read-only immutable active-lineage carry'
+        type: choice
+        options: [active_lineage_carry_v1]
+        default: active_lineage_carry_v1
+  pull_request:
+    paths:
+      - '.github/workflows/design-carry-preview.yml'
+      - '.github/scripts/design-financial-carry-preview*'
+      - '.github/scripts/design-carry-preview-tooling*'
+      - 'frontend/tools/financial-carry-preview-cases*'
+      - 'frontend/tools/design-review.mjs'
+
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: design-carry-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  carry-preview:
+    name: Non-authoritative carried-financial UI preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Check preview integrity, expiry races and rollback contracts
+        run: node --test .github/scripts/design-financial-carry-preview.test.mjs
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Select and restore the ordinary checked source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+          PREVIEW_MODE: ${{ inputs.mode || 'active_lineage_carry_v1' }}
+        run: |
+          set -euo pipefail
+          test "$PREVIEW_MODE" = active_lineage_carry_v1
+          node .github/scripts/select-release-source.mjs design
+      - name: Preserve identical raw input for the comparison baseline
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref || 'cd3a6a2' }}
+        run: |
+          set -euo pipefail
+          git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
+          git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
+          test ! -e "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          test ! -L "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+          if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
+            ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
+          else
+            (cd "$RUNNER_TEMP/design-baseline/frontend" && npm ci --no-audit --no-fund)
+          fi
+      - name: Reconstruct immutable financial carry at the actual preparation clock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/design-financial-carry-preview.mjs prepare
+      - name: Build both versions without regenerating the carried candidate
+        env:
+          VITE_STATIC_SITE: 'true'
+          VITE_BASE_PATH: '/screener/'
+        run: |
+          set -euo pipefail
+          (cd "$RUNNER_TEMP/design-baseline/frontend" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
+          (cd frontend && node tools/check-data-quality.mjs)
+          node .github/scripts/select-release-source.mjs check-design-data
+          for target in baseline current; do
+            if [ "$target" = baseline ]; then source="$RUNNER_TEMP/design-baseline/frontend"; else source="$GITHUB_WORKSPACE/frontend"; fi
+            test ! -e "$RUNNER_TEMP/design-$target-data"
+            test ! -L "$RUNNER_TEMP/design-$target-data"
+            mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
+            (cd "$source" && npx vite build)
+            test ! -e "$source/dist/static-data"
+            test ! -L "$source/dist/static-data"
+            mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+          done
+          (cd frontend && node tools/build-radar-benchmark.mjs)
+      - name: Revalidate exact source, carry, UI and lossless packed inventories
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node .github/scripts/design-financial-carry-preview.mjs pack
+          node .github/scripts/design-financial-carry-preview.mjs verify
+      - name: Capture supplementary evidence and retain all strict Design failures
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_BUILD: dist
+          BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
+          RADAR_BUILD: test-results/radar-build
+          DESIGN_REVIEW_OUTPUT: test-results/design-review
+          DESIGN_INPUT_BASIS: same_prices_carried_financials_preview
+          DESIGN_CARRY_PREVIEW_RECEIPT: ${{ runner.temp }}/design-carry-preview/preview-receipt.json
+          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
+        run: node tools/design-review.mjs
+      - name: Preserve the unchanged screenshot review and score requirements
+        if: always()
+        working-directory: frontend
+        run: node tools/check-design-review.mjs
+      - name: Bind the actual screenshot report to the measured preview
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f "$RUNNER_TEMP/design-carry-preview/preview-receipt.json" ] && [ -f frontend/test-results/design-review/report.json ]; then
+            node .github/scripts/design-financial-carry-preview.mjs record-report
+          fi
+      - name: Retain non-authoritative preview evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-carry-preview-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results/design-review/
+            ${{ runner.temp }}/design-carry-preview/preparation.json
+            ${{ runner.temp }}/design-carry-preview/preview-receipt.json
+            ${{ runner.temp }}/design-carry-preview/report-binding.json
+            ${{ runner.temp }}/verified-publication/state.json
+            ${{ runner.temp }}/verified-publication/retained-universe-report.json
+          retention-days: 14
+          if-no-files-found: error

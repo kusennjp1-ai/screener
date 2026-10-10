@@ -12,6 +12,7 @@ import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
 import { retainProfileSources } from './retain-profile-sources.mjs';
 import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
+import { CARRY_PREVIEW_BASIS, CARRY_PREVIEW_LABEL, readCarryPreviewContext, verifyFinancialCarryPreviewCases, financialCarryPreviewScreens } from './financial-carry-preview-cases.mjs';
 import { verifyDailyObservationCases, dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
 import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
@@ -26,12 +27,16 @@ const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
 const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
 const radarRoot = process.env.RADAR_BUILD && resolve(process.env.RADAR_BUILD);
 const inputBasis = process.env.DESIGN_INPUT_BASIS || 'same_verified_input';
-if (!['same_verified_input', 'same_prices_repaired_financials'].includes(inputBasis)) throw Error('Unknown Design input comparison basis');
-const comparisonMethod = inputBasis === 'same_verified_input'
+if (!['same_verified_input', 'same_prices_repaired_financials', CARRY_PREVIEW_BASIS].includes(inputBasis)) throw Error('Unknown Design input comparison basis');
+const carryPreview = await readCarryPreviewContext({ inputBasis, receiptPath: process.env.DESIGN_CARRY_PREVIEW_RECEIPT, currentRoot, baselineRoot });
+const comparisonMethod = carryPreview ? `${CARRY_PREVIEW_LABEL}; not a UI-only same-data performance comparison` : inputBasis === 'same_verified_input'
   ? 'same-data baseline/current'
   : 'published-financial baseline versus certified-financial candidate; identical verified prices, different financial inputs; not a UI-only speed comparison';
 const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   input_basis: inputBasis,
+  ...(carryPreview ? { release_accepted: false, publication_authority: 'none', comparison_label: CARRY_PREVIEW_LABEL, ui_only_same_data: false,
+    financial_carry_preview: { schema: carryPreview.receipt.schema, receipt_sha256: carryPreview.receipt_sha256, financial: carryPreview.receipt.financial,
+      note: 'Supplementary expired/unknown evidence never replaces strict current-source cases or authorizes release.' } } : {}),
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
@@ -278,13 +283,14 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     }
   }
   await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
+  await verifyFinancialCarryPreviewCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, context: carryPreview });
   await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await verifyDailyObservationCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await context.close();
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme), ...dailyObservationDesignScreens(viewport, theme)];
+  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialCarryPreviewScreens(viewport, theme, carryPreview), ...financialDesignScreens(viewport, theme), ...dailyObservationDesignScreens(viewport, theme)];
   for (const screen of screens) {
     const key = `${screen}/${viewport.width}/${theme}`;
     check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
@@ -348,7 +354,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
       }
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     } catch (error) { report.failures.push(`${label}/${viewport.width}: performance interrupted: ${error.message}`); }
-    const metrics = { label, viewport, runs, candidate_median_ms: runs.length === 3 ? median(runs.map(run => run.candidate_ms)) : null,
+    const metrics = { label, viewport, runs, ...(carryPreview ? { comparison_basis: CARRY_PREVIEW_BASIS, comparison_label: CARRY_PREVIEW_LABEL, ui_only_same_data: false } : {}), candidate_median_ms: runs.length === 3 ? median(runs.map(run => run.candidate_ms)) : null,
       maximum_switch_ms: runs.length ? Math.max(...runs.map(run => run.method_switch_ms)) : null,
       longest_initial_task_ms: runs.length ? Math.max(...runs.map(run => run.longest_initial_task_ms)) : null, cached_response_count: cache.size };
     report.performance.push(metrics);
@@ -407,7 +413,14 @@ if (radar && report.failures.some(failure => failure.includes('D9'))) {
     console.log(`Focused radar diagnostic exited ${error.status ?? 'with an error'}; retain its artifacts alongside the original acceptance failure.`);
   }
 }
+if (carryPreview) {
+  try {
+    const rechecked = await readCarryPreviewContext({ inputBasis, receiptPath: process.env.DESIGN_CARRY_PREVIEW_RECEIPT, currentRoot, baselineRoot });
+    check(rechecked.receipt_sha256 === carryPreview.receipt_sha256, 'Design carry preview receipt changed during measurement');
+    report.financial_carry_preview.reverified_at = new Date().toISOString();
+  } catch (error) { check(false, `Design carry preview final integrity verification failed: ${error.message}`); }
+}
 await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
+await writeFile(resolve(output, 'summary.md'), `# ${carryPreview ? 'Design carry preview (no release authority)' : 'Design and performance acceptance'}\n\n${carryPreview ? `${CARRY_PREVIEW_LABEL}. release_accepted=false; publication_authority=none. Strict acceptance failures remain failures.\n\n` : ''}Commit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
 console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
 if (report.failures.length) process.exitCode = 1;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { publicationDecision } from '../../.github/scripts/publication-gate.mjs';
+import { publicationDecision, withInvocationImmutableGitApi } from '../../.github/scripts/publication-gate.mjs';
+import { execFileSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createConditionalDeploymentJobsReader, withConditionalDeploymentJobsReader } from '../../.github/scripts/conditional-deployment-jobs.mjs';
 const repository = { full_name: 'owner/screener', default_branch: 'main' };
 const sha = 'a'.repeat(40), otherSha = 'b'.repeat(40);
 const run = (file, overrides = {}) => ({ id: 10, run_attempt: 1, path: `.github/workflows/${file}`, event: 'push', head_branch: 'main', head_sha: sha, status: 'completed', conclusion: 'success', repository, head_repository: repository, ...overrides });
@@ -82,5 +86,75 @@ describe('split workflow wiring', () => {
     expect(design).toContain('node tools/check-design-review.mjs');
     expect(design).toContain('select-release-source.mjs design');
     expect(design).not.toContain('--name github-pages');
+  });
+});
+
+
+describe('invocation transport ownership', () => {
+  const scopedRepository = 'kusennjp1-ai/screener';
+  const scope = { repository: scopedRepository, repository_id: 1203919607, run_id: 990001,
+    run_attempt: 1, controller_sha: sha };
+  const syntheticReader = report => createConditionalDeploymentJobsReader({ scope, token: () => 'synthetic-gate-token',
+    report, run: () => { throw Error('Unexpected history worker before a history read'); } });
+
+  it('preserves ordinary synchronous/async results and original rejection identity', async () => {
+    expect(withInvocationImmutableGitApi(repository.full_name, () => 17)).toBe(17);
+    await expect(withInvocationImmutableGitApi(repository.full_name, async () => 18)).resolves.toBe(18);
+    const failure = Error('synthetic ordinary action failure');
+    let caught;
+    try { withInvocationImmutableGitApi(repository.full_name, () => { throw failure; }); } catch (error) { caught = error; }
+    expect(caught).toBe(failure);
+    await expect(withInvocationImmutableGitApi(repository.full_name, async () => { throw failure; })).rejects.toBe(failure);
+  });
+
+  it('reuses a nested owned reader until the outer synchronous/async scope settles', async () => {
+    const reports = [], reader = syntheticReader(value => reports.push(value));
+    await withConditionalDeploymentJobsReader(reader, async () => {
+      expect(withInvocationImmutableGitApi(scopedRepository, () =>
+        withInvocationImmutableGitApi(scopedRepository, () => 19))).toBe(19);
+      expect(reader.disposed).toBe(false);
+      await withInvocationImmutableGitApi(scopedRepository, async () => {
+        await Promise.resolve();
+        expect(withInvocationImmutableGitApi(scopedRepository, () => 20)).toBe(20);
+        expect(reader.disposed).toBe(false);
+      });
+      expect(reader.disposed).toBe(false);
+    });
+    expect(reader.disposition).toBe('complete');
+    expect(reports).toHaveLength(1);
+    expect(reports[0].counts.conditional_batch_calls).toBe(0);
+    const failure = Error('synthetic nested rejection'), rejected = syntheticReader(() => {});
+    await expect(withConditionalDeploymentJobsReader(rejected, () =>
+      withInvocationImmutableGitApi(scopedRepository, async () => { throw failure; }))).rejects.toBe(failure);
+    expect(rejected.disposition).toBe('failed');
+  });
+
+  it('counts each bounded pager command and preserves direct CLI results and native errors', () => {
+    // Native Node fixture replaces the CLI implementation only. It grants no
+    // genuine caller/source proof and performs no GitHub or publication action.
+    const scriptsRoot = join(dirname(fileURLToPath(import.meta.url)), '../../.github/scripts');
+    const gateUrl = pathToFileURL(join(scriptsRoot, 'publication-gate.mjs')).href;
+    const bridgeUrl = pathToFileURL(join(scriptsRoot, 'conditional-deployment-jobs.mjs')).href;
+    const source = [
+      "import cp from 'node:child_process'; import {syncBuiltinESMExports} from 'node:module';",
+      "const failure=new Error('synthetic direct CLI failure'); let calls=0;",
+      "const first={total_count:101,workflow_runs:Array.from({length:100},(_,i)=>({id:i+1}))},second={total_count:101,workflow_runs:[{id:101}]},seed='https://api.github.com/repos/kusennjp1-ai/screener/actions/workflows/static-site.yml/runs?branch=main&per_page=100';",
+      "cp.execFileSync=(command,args)=>{if(command!=='gh')throw Error('Unexpected command');calls++;if(args.at(-1).endsWith('/fail'))throw failure;if(args.includes('--include')){if(args.includes('--paginate')||args.includes('--slurp')||args[args.indexOf('--hostname')+1]!=='github.com')throw Error('Unbounded or foreign CLI command');const next=args[1]===seed,value=next?first:second;if(!next&&args[1]!==seed+'&page=2')throw Error('Unexpected closed pager URL');return Buffer.from('HTTP/2 200 OK\\r\\nContent-Type: application/json\\r\\n'+(next?'Link: <'+seed+'&page=2>; rel=\"next\", <'+seed+'&page=2>; rel=\"last\"\\r\\n':'')+'\\r\\n'+JSON.stringify(value));}return JSON.stringify({full_name:'kusennjp1-ai/screener'});};syncBuiltinESMExports();",
+      "const gate=await import(" + JSON.stringify(gateUrl) + "), bridge=await import(" + JSON.stringify(bridgeUrl) + ");",
+      "const reports=[],reader=bridge.createConditionalDeploymentJobsReader({scope:" + JSON.stringify(scope) + ",token:()=> 'synthetic-native-gate-token',report:v=>reports.push(v)});",
+      "let direct,pages,errorExact=false;bridge.withConditionalDeploymentJobsReader(reader,()=>gate.withInvocationImmutableGitApi('kusennjp1-ai/screener',()=>{direct=gate.githubApi('repos/kusennjp1-ai/screener');pages=gate.githubApi('repos/kusennjp1-ai/screener/actions/workflows/static-site.yml/runs?branch=main&per_page=100',true);try{gate.githubApi('repos/kusennjp1-ai/screener/fail');}catch(error){errorExact=error===failure;}}));",
+      "process.stdout.write(JSON.stringify({calls,direct,pages,errorExact,report:reports[0]}));",
+    ].join('\n');
+    const result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', source],
+      { encoding: 'utf8', timeout: 20000, maxBuffer: 1024 * 1024 }));
+    expect(result.calls).toBe(4); expect(result.errorExact).toBe(true);
+    expect(result.direct).toEqual({ full_name: scopedRepository });
+    expect(result.pages).toEqual([{total_count:101,workflow_runs:Array.from({length:100},(_,i)=>({id:i+1}))},
+      {total_count:101,workflow_runs:[{id:101}]}]);
+    expect(result.report.counts).toMatchObject({ gh_invocations: 4, gh_successful_direct_reads: 1,
+      gh_successful_paginated_invocations: 2, gh_returned_pages: 2, gh_failed_invocations: 1,
+      conditional_batch_calls: 0 });
+    expect(result.report.measurement_incomplete).toBe(false);
+    expect(result.report.gh_http_status_and_internal_retry_accounting).toBe('not_observed_by_json_only_cli');
   });
 });
