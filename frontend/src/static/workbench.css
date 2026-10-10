@@ -62,9 +62,12 @@
 @media(max-width:380px){
  .research-list .method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
  .research-overview .hero-date{min-height:48px}
- .research-symbol-head{height:auto;max-height:none;grid-template-rows:auto auto}
- .research-symbol-head .readiness-chip{position:static}
 }
 @media(min-width:381px) and (max-width:420px){
  .research-overview .hero-copy h1{padding-right:112px}
+}
+/* Mobile identity and price rows must grow with their readable text and controls. */
+@media(max-width:700px){
+ .research-symbol-head{height:auto;max-height:none;grid-template-rows:auto auto}
+ .research-symbol-head .readiness-chip{position:static}
 }
