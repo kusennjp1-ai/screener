@@ -158,8 +158,8 @@ async function expectNoOverflow(page, scope) {
   expect(await scope.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 }
 
-async function expectMethodLabelsFit(drawer, width) {
-  const methods = drawer.getByRole('group', { name: '投資手法', exact: true });
+async function expectMethodLabelsFit(scope, width) {
+  const methods = scope.getByRole('group', { name: '投資手法', exact: true });
   const buttons = methods.getByRole('button');
   await expect(buttons).toHaveText(['ミネルヴィニ', '基本と原則', 'オニール', 'IBD型']);
   await expect(methods).toHaveCSS('display', width <= 420 ? 'grid' : 'flex');
@@ -246,10 +246,125 @@ async function captureTopArea(page, info, width, theme) {
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
+  await expectHeroControlsFit(page);
   const height = await activeNotice(page).evaluate(node => Math.ceil(node.getBoundingClientRect().bottom + window.scrollY));
   expect(height).toBeGreaterThan(0);
   const name = `annual-filter-hero-status-${width}-${theme}`;
   await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, clip: { x: 0, y: 0, width, height } }), contentType: 'image/png' });
+}
+
+const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > .5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > .5;
+const rectangle = async locator => locator.evaluate(node => {
+  const box = node.getBoundingClientRect();
+  return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+});
+
+async function expectHeroControlsFit(page) {
+  const hero = page.getByTestId('home-hero');
+  const actions = hero.locator('.hero-actions').getByRole('button');
+  await expect(actions).toHaveCount(2);
+  await expect(hero.getByRole('heading', { level: 1 })).toBeVisible();
+  const heroBox = await rectangle(hero), controls = [];
+  for (const action of await actions.all()) {
+    await expect(action).toBeInViewport({ ratio: 1 });
+    const box = await rectangle(action);
+    expect(box.height, 'Hero action touch height').toBeGreaterThanOrEqual(44);
+    expect(box.width, 'Hero action touch width').toBeGreaterThanOrEqual(44);
+    expect(box.left).toBeGreaterThanOrEqual(heroBox.left - .5);
+    expect(box.right).toBeLessThanOrEqual(heroBox.right + .5);
+    expect(box.top).toBeGreaterThanOrEqual(heroBox.top - .5);
+    expect(box.bottom).toBeLessThanOrEqual(heroBox.bottom + .5);
+    controls.push(box);
+  }
+  expect(overlaps(controls[0], controls[1]), 'Hero actions must not overlap each other').toBe(false);
+  // Text ranges measure the visible headline/date, rather than an h1 block
+  // whose unused horizontal space can legitimately share the actions' row.
+  const textBoxes = await hero.locator('.hero-copy h1, .hero-date').evaluateAll(nodes => nodes.flatMap(node => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].filter(box => box.width && box.height).map(box => ({ left: box.left, right: box.right, top: box.top, bottom: box.bottom }));
+  }));
+  expect(textBoxes.length).toBeGreaterThan(0);
+  for (const text of textBoxes) for (const control of controls) expect(overlaps(text, control), 'Hero heading/date text must not overlap actions').toBe(false);
+  await expectNoOverflow(page, hero);
+}
+
+async function captureDetail(page, info, width, theme) {
+  const panel = detail(page), head = panel.locator('.research-symbol-head');
+  const heading = panel.getByRole('heading', { name: 'EPSPASSA', exact: true });
+  const watch = panel.getByRole('button', { name: 'EPSPASSA ウォッチに保存', exact: true });
+  await head.scrollIntoViewIfNeeded();
+  await expect(heading).toBeVisible();
+  await expect(watch).toBeVisible();
+  await expect(panel.locator('.research-chart canvas').first()).toBeVisible();
+  await expectNoOverflow(page, panel);
+  expect(await head.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  expect(overlaps(await rectangle(heading), await rectangle(watch)), 'Detail symbol and watch action must not overlap').toBe(false);
+  const panelBox = await rectangle(panel), chartBox = await rectangle(panel.locator('.research-chart'));
+  expect(chartBox.left).toBeGreaterThanOrEqual(panelBox.left - .5);
+  expect(chartBox.right).toBeLessThanOrEqual(panelBox.right + .5);
+  expect(chartBox.width).toBeGreaterThan(0);
+  expect(chartBox.height).toBeGreaterThan(0);
+  const tabs = panel.getByRole('tablist', { name: '銘柄の詳細情報', exact: true });
+  expect(await tabs.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const evidence = panel.getByRole('region', { name: '年次EPSの追加条件', exact: true });
+  await expect(evidence).toHaveAttribute('data-condition-state', 'pass');
+  await expect(evidence).toContainText('追加絞り込み有効');
+  const name = `annual-filter-detail-${width}-${theme}`;
+  await info.attach(name, { body: await panel.screenshot({ path: info.outputPath(`${name}.png`) }), contentType: 'image/png' });
+}
+
+async function captureModal(page, info, width, theme) {
+  const modal = page.getByRole('dialog'), header = modal.getByTestId('expanded-chart-header');
+  const footer = modal.getByTestId('expanded-chart-footer'), scroll = modal.getByTestId('expanded-chart-scroll');
+  const canvas = modal.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  await expectNoOverflow(page, modal);
+  expect(await scroll.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const viewport = page.viewportSize(), modalBox = await rectangle(modal);
+  expect(modalBox.left).toBeGreaterThanOrEqual(-.5);
+  expect(modalBox.top).toBeGreaterThanOrEqual(-.5);
+  expect(modalBox.right).toBeLessThanOrEqual(viewport.width + .5);
+  expect(modalBox.bottom).toBeLessThanOrEqual(viewport.height + .5);
+  const plot = modal.locator('[data-chart-symbol="EPSPASSA"]');
+  await expect(plot).toHaveCount(1);
+  await expect(plot).toBeVisible();
+  // The real ResizeObserver/RAF fitter must contain the entire plot (including
+  // RS, volume and date axis) at these 844/900px heights. Short-height scrolling
+  // is a separate layout contract; the first price canvas alone is insufficient.
+  await expect.poll(() => modal.evaluate(node => {
+    const plot = node.querySelector('[data-chart-symbol="EPSPASSA"]').getBoundingClientRect();
+    const header = node.querySelector('[data-testid="expanded-chart-header"]').getBoundingClientRect();
+    const footer = node.querySelector('[data-testid="expanded-chart-footer"]').getBoundingClientRect();
+    const modal = node.getBoundingClientRect();
+    return {
+      positiveArea: plot.width > 0 && plot.height > 0,
+      fitsWidth: plot.left >= modal.left - .5 && plot.right <= modal.right + .5,
+      clearsHeader: plot.top >= header.bottom - .5,
+      clearsFooter: plot.bottom <= footer.top + .5,
+    };
+  }), { message: 'The whole fitted plot must stay between the fixed modal header and footer' }).toEqual({ positiveArea: true, fitsWidth: true, clearsHeader: true, clearsFooter: true });
+  await expect(plot).toBeInViewport({ ratio: 1 });
+  const headerBox = await rectangle(header), footerBox = await rectangle(footer), canvasBox = await rectangle(canvas);
+  expect(overlaps(headerBox, footerBox), 'Modal header and navigation footer must be disjoint').toBe(false);
+  expect(canvasBox.width).toBeGreaterThan(0);
+  expect(canvasBox.height).toBeGreaterThan(0);
+  expect(canvasBox.left).toBeGreaterThanOrEqual(modalBox.left - .5);
+  expect(canvasBox.right).toBeLessThanOrEqual(modalBox.right + .5);
+  expect(canvasBox.top, 'Initial plot must clear the fixed header').toBeGreaterThanOrEqual(headerBox.bottom - .5);
+  expect(canvasBox.bottom, 'Initial plot must clear the fixed navigation footer').toBeLessThanOrEqual(footerBox.top + .5);
+  for (const [name, container] of [['チャートを閉じる', headerBox], ['前の銘柄', footerBox], ['次の銘柄', footerBox]]) {
+    const button = modal.getByRole('button', { name, exact: true });
+    await expect(button).toBeInViewport({ ratio: 1 });
+    const box = await rectangle(button);
+    expect(box.left).toBeGreaterThanOrEqual(container.left - .5);
+    expect(box.right).toBeLessThanOrEqual(container.right + .5);
+    expect(box.top).toBeGreaterThanOrEqual(container.top - .5);
+    expect(box.bottom).toBeLessThanOrEqual(container.bottom + .5);
+  }
+  expect(overlaps(await rectangle(modal.getByRole('button', { name: '前の銘柄', exact: true })), await rectangle(modal.getByRole('button', { name: '次の銘柄', exact: true }))), 'Modal navigation buttons must not overlap').toBe(false);
+  const name = `annual-filter-modal-${width}-${theme}`;
+  await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`) }), contentType: 'image/png' });
 }
 
 // The exporter quotes every field, including JSON evidence with commas/quotes.
@@ -337,6 +452,7 @@ for (const width of WIDTHS) {
       expect((await new AxeBuilder({ page }).include('[role="dialog"][aria-labelledby="research-filter-title"]').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
       await info.attach(`annual-filter-drawer-${width}-${theme}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-drawer-${width}-${theme}.png`) }), contentType: 'image/png' });
       await showCandidates(page, drawer);
+      await expectMethodLabelsFit(board(page), width);
       await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
       await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
       await expect(activeNotice(page)).toContainText('基本手法の通過数・順位・購入条件は別判定');
@@ -518,7 +634,7 @@ for (const width of WIDTHS) {
     verify();
   });
 
-  test(`annual EPS excludes selected detail and open charts; remaining chart navigation never escapes the subset at ${width}px`, async ({ page, context, baseURL }) => {
+  test(`annual EPS excludes selected detail and open charts; remaining chart navigation never escapes the subset at ${width}px`, async ({ page, context, baseURL }, info) => {
     const verify = await installFixture({ page, context, baseURL }, width);
     await page.goto('/');
     await expect(candidateSymbols(page)).toHaveText(ALL_SYMBOLS);
@@ -542,23 +658,38 @@ for (const width of WIDTHS) {
     await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
     await expect(detail(page).getByRole('heading', { name: 'EPSDOWN', exact: true })).toHaveCount(0);
     await candidate(page, 'EPSPASSA').click();
-    await detail(page).getByRole('button', { name: '日次チャートを分析', exact: true }).click();
-    const modal = page.getByRole('dialog');
-    await expect(modal).toHaveAccessibleName('EPSPASSA 1 / 3 銘柄');
-    await expect(modal.locator('canvas').first()).toBeVisible();
-    for (const [symbol, position] of [['EPSPASSB', 2], ['EPSBASEFAIL', 3], ['EPSPASSA', 1]]) {
-      await modal.getByRole('button', { name: '次の銘柄', exact: true }).click();
-      await expect(modal).toHaveAccessibleName(`${symbol} ${position} / 3 銘柄`);
+    for (const theme of ['dark', 'light']) {
+      if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+      await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await captureDetail(page, info, width, theme);
+      await detail(page).getByRole('button', { name: '日次チャートを分析', exact: true }).click();
+      const modal = page.getByRole('dialog');
+      await expect(modal).toHaveAccessibleName('EPSPASSA 1 / 3 銘柄');
       await expect(modal.locator('canvas').first()).toBeVisible();
+      await captureModal(page, info, width, theme);
+      for (const [symbol, position] of [['EPSPASSB', 2], ['EPSBASEFAIL', 3], ['EPSPASSA', 1]]) {
+        await modal.getByRole('button', { name: '次の銘柄', exact: true }).click();
+        await expect(modal).toHaveAccessibleName(`${symbol} ${position} / 3 銘柄`);
+        await expect(modal.locator('canvas').first()).toBeVisible();
+      }
+      await modal.getByRole('button', { name: '前の銘柄', exact: true }).click();
+      await expect(modal).toHaveAccessibleName('EPSBASEFAIL 3 / 3 銘柄');
+      await modal.locator('summary').filter({ hasText: '選定条件の詳細' }).click();
+      const evidence = modal.getByRole('region', { name: '年次EPSの追加条件', exact: true });
+      await expect(evidence).toHaveAttribute('data-condition-state', 'pass');
+      await expect(evidence).toContainText('追加絞り込み有効');
+      await evidence.scrollIntoViewIfNeeded();
+      await expectNoOverflow(page, evidence);
+      const name = `annual-filter-modal-evidence-${width}-${theme}`;
+      await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`) }), contentType: 'image/png' });
+      await page.keyboard.press('Escape');
+      await expect(modal).toHaveCount(0);
+      await expect(activeNotice(page)).toContainText('研究画面のみ · 3銘柄');
     }
-    await modal.getByRole('button', { name: '前の銘柄', exact: true }).click();
-    await expect(modal).toHaveAccessibleName('EPSBASEFAIL 3 / 3 銘柄');
-    await modal.locator('summary').filter({ hasText: '選定条件の詳細' }).click();
-    await expect(modal.getByRole('region', { name: '年次EPSの追加条件', exact: true })).toHaveAttribute('data-condition-state', 'pass');
-    await expect(modal.getByRole('region', { name: '年次EPSの追加条件', exact: true })).toContainText('追加絞り込み有効');
-    await page.keyboard.press('Escape');
-    await expect(modal).toHaveCount(0);
-    await expect(activeNotice(page)).toContainText('研究画面のみ · 3銘柄');
+    await page.getByRole('button', { name: 'ダークモードに切り替え', exact: true }).click();
+    await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await returnToList(page, width);
     await expect(candidateSymbols(page)).toHaveText(FILTERED_TECH);
     // Direct links to an excluded symbol may legitimately produce no matches;

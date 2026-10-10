@@ -52,8 +52,9 @@
 
 .radar-zone-label{background:var(--ground);padding:0 4px}
 
-/* Keep each method name readable within the narrow filter drawer. */
+/* Keep method names readable and reserve a separate hero action row on narrow screens. */
 @media(max-width:420px){
- [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));height:auto}
- [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs button{min-height:44px}
+ [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs,.research-list .method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));height:auto}
+ [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs button,.research-list .method-tabs button{min-height:44px}
+ .research-overview .hero-date{min-height:48px}
 }
