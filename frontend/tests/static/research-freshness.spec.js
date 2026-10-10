@@ -5,7 +5,7 @@ import { newYorkDate } from '../../src/static/evidenceTime.js';
 
 // Synthetic UI regression fixtures, not retained-publication Design evidence.
 // Use the real current clock; only these explicit fixture dates vary.
-for(const width of [1440,390,900]) for(const theme of ['dark','light']) test.describe(`freshness ${width} ${theme}`,()=>{
+for(const width of [1440,390,320,900]) for(const theme of ['dark','light']) test.describe(`freshness ${width} ${theme}`,()=>{
   test.use({hasTouch:width===900});
   test(`freshness union disclosure ${width} ${theme}`,async({page},info)=>{
   const now=Date.now(),today=newYorkDate(now),oldDate=newYorkDate(now-8*86400000);
@@ -13,7 +13,7 @@ for(const width of [1440,390,900]) for(const theme of ['dark','light']) test.des
   const priceDate=()=>['price','both'].includes(state)?oldDate:today;
   const generated=()=>new Date(now-(['publication','both'].includes(state)?120:1)*3600000).toISOString();
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.setViewportSize({width,height:width===390?844:900});
+  await page.setViewportSize({width,height:width<=700?844:900});
   await page.route('**/publication.json',route=>route.fulfill({status:404,body:'Synthetic legacy fixture: no publication receipt'}));
   await page.route('**/static-data/**',route=>{
     const file=new URL(route.request().url()).pathname.split('/').pop(),date=priceDate();
@@ -37,7 +37,7 @@ for(const width of [1440,390,900]) for(const theme of ['dark','light']) test.des
   }
   const summary=warning.locator('summary');
   const bounds=await summary.boundingBox();
-  expect(bounds.height).toBeGreaterThanOrEqual(width===390||width===900?44:24);
+  expect(bounds.height).toBeGreaterThanOrEqual(width<=700||width===900?44:24);
   await summary.focus();await page.keyboard.press('Shift+Tab');
   await expect(summary).not.toBeFocused();
   await page.keyboard.press('Tab');await expect(summary).toBeFocused();
@@ -52,14 +52,30 @@ for(const width of [1440,390,900]) for(const theme of ['dark','light']) test.des
   await page.screenshot({path:info.outputPath(`synthetic-freshness-details-${width}-${theme}.png`)});
   await page.keyboard.press('Space');await expect(warning.locator('details')).not.toHaveAttribute('open','');
   await expect(summary).toBeFocused();
-  if(width!==390){
+  if(width>700){
     await page.getByRole('button',{name:'概況をたたむ'}).click();await expect(warning).toHaveCount(1);await expect(warning).toBeVisible();
     await page.getByRole('button',{name:'概況を展開'}).click();
   }else{
+    const activeMethod=await page.getByRole('group',{name:'投資手法'}).locator('button[aria-pressed="true"]').textContent();
     await page.getByRole('button',{name:/^TEST の分析を表示/}).click();
     await expect(warning).toHaveCount(1);await expect(warning).toBeVisible();
     await expect(page.locator('.research-hero .research-freshness-notice')).toHaveCount(0);
-    await page.getByRole('button',{name:'← 候補一覧に戻る'}).click();
+    await expect(page.getByRole('main')).toHaveAttribute('data-mobile-view','detail');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const disclosure=warning.locator('.freshness-disclosure');
+    expect(await disclosure.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+    await summary.click();await expect(warning.locator('details')).toHaveAttribute('open','');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(await disclosure.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+    await summary.click();await expect(warning.locator('details')).not.toHaveAttribute('open','');
+    await page.getByRole('banner').getByRole('button',{name:'← 候補一覧',exact:true}).click();
+    await expect(page.getByRole('main')).toHaveAttribute('data-mobile-view','list');
+    await expect(page.getByRole('button',{name:/^TEST の分析を表示/})).toBeVisible();
+    await expect(page.getByRole('button',{name:'候補を絞り込む'})).toBeVisible();
+    await expect(page.getByRole('group',{name:'投資手法'}).locator('button[aria-pressed="true"]')).toHaveText(activeMethod);
+    await expect(page.getByRole('button',{name:'絞り込みを閉じる'})).toHaveCount(0);
+    await expect(page.locator('.research-hero .research-freshness-notice')).toHaveCount(1);
+    await expect(warning.locator('summary')).toContainText('公開データ要確認');
   }
   // A new publication must update the evidence while retaining the stale price.
   state='price';generation++;

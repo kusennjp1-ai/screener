@@ -20,7 +20,7 @@
 .research-freshness-combined summary::-webkit-details-marker { display:none; }
 .research-freshness-combined summary > svg { flex:0 0 18px; width:18px; height:18px; }
 .research-freshness-combined summary > span { min-width:0; }
-.research-freshness-combined .freshness-disclosure { margin-left:auto; white-space:nowrap; }
+.research-freshness-combined .freshness-disclosure { flex-shrink:0; margin-left:auto; white-space:nowrap; }
 .research-freshness-combined summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .freshness-explanation { padding:0 8px 8px; }
 .freshness-explanation p { margin:8px 0; font-size:inherit; color:inherit; }
