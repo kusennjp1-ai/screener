@@ -1,0 +1,177 @@
+{
+  "schema_version": "release40-readonly-config-v1",
+  "candidate_sha": "30a31d680e29059e8b74ad1b3e784e9010e1a489",
+  "candidate_tree": "365a32816ad7750ce9a26f1eabec20043f8d3181",
+  "base_sha": "2e289c42c00e0d0bad05263ab8273a257dc0ae8e",
+  "diagnostic_files": [
+    ".github/diagnostics/release40-logic.mjs",
+    ".github/diagnostics/release40-phase.mjs",
+    ".github/diagnostics/release40-budget.mjs",
+    ".github/diagnostics/release40-budget.test.mjs",
+    ".github/diagnostics/release40-config.json",
+    ".github/diagnostics/release40-README.md",
+    ".github/workflows/release40-readonly-budget.yml"
+  ],
+  "approved_files": [
+    {
+      "path": ".github/scripts/bounded-gh-cli-fixture.test.mjs",
+      "sha256": "356efe7847479d60219b34d845e5c3ed9f023fc87a694f4c16e7500a973b9147"
+    },
+    {
+      "path": ".github/scripts/bounded-github-api.mjs",
+      "sha256": "130992b12bb8a47990b3d0a3af5855e9cefbdca22d1125481f928158e6683b6f"
+    },
+    {
+      "path": ".github/scripts/bounded-github-api.test.mjs",
+      "sha256": "b7dab6b5c11e70abd51ed2e501d4eefe440e3f505a86551aa279fc3e622d325f"
+    },
+    {
+      "path": ".github/scripts/conditional-deployment-jobs-cache.mjs",
+      "sha256": "c88fe86d452828dae7d43eb8b312e451ca5688048d8781d637e26b4a20910205"
+    },
+    {
+      "path": ".github/scripts/conditional-deployment-jobs-cache.test.mjs",
+      "sha256": "88eae39da766b66480e463cbf5a6a356deaf040aa77913a8d7dbb89439a96358"
+    },
+    {
+      "path": ".github/scripts/conditional-deployment-jobs-worker.mjs",
+      "sha256": "048078bf76b69d0954404fa739546ff58536d214d56f9e3c104c414d2131b796"
+    },
+    {
+      "path": ".github/scripts/conditional-deployment-jobs-worker.test.mjs",
+      "sha256": "5ffc66ffe4860677c0ac7a3447ad91fe48174d8a096a1b235f08f767da157921"
+    },
+    {
+      "path": ".github/scripts/conditional-deployment-jobs.mjs",
+      "sha256": "0593fb1a847d0b31e0e8b42f154b0699b7a151da2b28ea2961fe1f834cb1cf44"
+    },
+    {
+      "path": ".github/scripts/conditional-deployment-jobs.test.mjs",
+      "sha256": "6d9f6a3e84433dd92c5d5ef2aace3e1fb1fa2c6f7194ceab6386fea4010a7491"
+    },
+    {
+      "path": ".github/scripts/financial-performance-exception.test.mjs",
+      "sha256": "df6898252e1cefa423ec6d18991c9ba50deadd04ad70fedc57e2462d40ee7fab"
+    },
+    {
+      "path": ".github/scripts/financial-release-activation.test.mjs",
+      "sha256": "8cb4a586a589cbf05507a2b1ccf1fd83de2114affce36ba67f1baec281a57641"
+    },
+    {
+      "path": ".github/scripts/financial-source-renewal-automatic-lifecycle.test.mjs",
+      "sha256": "ad816e5e841d092015b4505e229d1e5fbb925f142dffefe19bb1cb31dcdeaca0"
+    },
+    {
+      "path": ".github/scripts/fixtures/bounded-gh-cli.mjs",
+      "sha256": "38835c37b35b2fed4412a9979a63f2029cc2454aedc2436ac498827285def5db"
+    },
+    {
+      "path": ".github/scripts/fixtures/financial-release-archive-lifecycle.mjs",
+      "sha256": "c1c1cb1a399a5e935d73c70c2ed74ab21217981706f57184bf96a88074278cd4"
+    },
+    {
+      "path": ".github/scripts/fixtures/financial-release-lifecycle.mjs",
+      "sha256": "001dff232e9217985aaefe297d8312253815b1daba7241ec1234e07f98dc7505"
+    },
+    {
+      "path": ".github/scripts/fixtures/financial-source-renewal-lifecycle.mjs",
+      "sha256": "0805394a5761177c616b392ced82bdcc87ecdd7f4896b75ae17f7f2db7f85f2f"
+    },
+    {
+      "path": ".github/scripts/fixtures/postcapture-pages-rehearsal.mjs",
+      "sha256": "e0f5a29189feae7d6b5bd5eb966c63fe4a1ddd768ee1ad210a778ec6e10d5ce1"
+    },
+    {
+      "path": ".github/scripts/publication-gate.mjs",
+      "sha256": "d16988694585d3b8bb17bee8bfa5002ce1e62f0c045e872f4b3ac4b6df06ceaf"
+    },
+    {
+      "path": ".github/scripts/publication-state.mjs",
+      "sha256": "0b0ff6a48e8eb91f3bc3fefa67103eba1988cd60438fe0af73760cf78ba8ef9d"
+    },
+    {
+      "path": ".github/scripts/retained-price-admission-inventory.mjs",
+      "sha256": "2e6adcfa3159e0cfdf884f1bbe2bd544a6072ffbc8e623960424bcc5779857a5"
+    },
+    {
+      "path": ".github/scripts/retained-price-admission-inventory.test.mjs",
+      "sha256": "890ff15e3e7aae705500dcc8bd893525b69a592aa3f1967ad68bed3092c87cf2"
+    },
+    {
+      "path": ".github/scripts/retained-price-ci-admission.mjs",
+      "sha256": "ccd8ac015fdbb768de8bad785a452a21c57bf94365ab561ee0c9dbb09a63a10f"
+    },
+    {
+      "path": ".github/scripts/retained-price-ci-admission.test.mjs",
+      "sha256": "24f7c761da078c5561dc3379ace7c60df5a1302984a72af338b8312e4fd7a889"
+    },
+    {
+      "path": ".github/scripts/retained-price-finite-transport-controller.mjs",
+      "sha256": "fcc41590d53ff71569f7673592a17fc415a6db354e172a1ab2517b2dbd964f0a"
+    },
+    {
+      "path": ".github/scripts/retained-price-finite-transport-controller.test.mjs",
+      "sha256": "031e590da7610c3d10387e79d2d66d20297b617619b9a5f8361f14b1263b0dbf"
+    },
+    {
+      "path": ".github/scripts/retained-price-finite-transport-policy.mjs",
+      "sha256": "a8283b13ee28fe13eb4ef3ac7e28678f56415cf5b5c0d8e38ef3763a077e0291"
+    },
+    {
+      "path": ".github/scripts/retained-price-finite-transport-policy.test.mjs",
+      "sha256": "aeb3727cfb0fe766263d16773e688181e6125317b622f30a550e6ec1047bb05c"
+    },
+    {
+      "path": ".github/scripts/retained-price-live-inventory.mjs",
+      "sha256": "0beb599058afadbd37ecf31d3ae35cdfb724b630d1a28559117b779d12a8536d"
+    },
+    {
+      "path": ".github/scripts/retained-price-live-inventory.test.mjs",
+      "sha256": "6d768dfe0aecede46faa32ca547955affd0e05b80ecf20b2ee8dc1e6d4d7bf51"
+    },
+    {
+      "path": ".github/scripts/retained-price-source-admission.test.mjs",
+      "sha256": "dca85c93b869392a559feb5b1f8d641aba15ae96bf20df28be44815d98e50dcf"
+    },
+    {
+      "path": ".github/scripts/retained-price-source-driver.mjs",
+      "sha256": "4408df2b90bcc7a04b73964dfe0daa05b6b575f769afd2ed3aa1e34e746945a7"
+    },
+    {
+      "path": ".github/scripts/retained-price-source-driver.test.mjs",
+      "sha256": "11070fb18eddfdb240ea3fbadde0fcb9f8b63ae2f14ffd98e03e757ce5fd9674"
+    },
+    {
+      "path": ".github/scripts/select-release-source-cli.test.mjs",
+      "sha256": "9d8a7aa48131e9b8f6dce87439f8be33975980abfa7f79815795719ee2df031b"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "705aa7f072dbc2084df1728920a816083930629b1cd68594c8f5a05aff1b9f72"
+    },
+    {
+      "path": ".github/workflows/research-ui-release.yml",
+      "sha256": "0400f10f6709f37a9637dc5ac52c4b6081579df23ec9f91a0b21da07c8cc9d8e"
+    },
+    {
+      "path": ".github/workflows/static-site.yml",
+      "sha256": "459fbd2f1448a94744e283f974e36f451ade3a4aefa26b79f603ca6826741fdd"
+    },
+    {
+      "path": "frontend/tools/conditional-deployment-jobs-imports.test.mjs",
+      "sha256": "1db62514426f0e07f34e61bce99884bbee46d5eeee7627eeeb6e8be967b6d5b0"
+    },
+    {
+      "path": "frontend/tools/publication-cli.test.mjs",
+      "sha256": "f1f95924eb83db0022968c0627c6c2710361c0d892424a6bd257d52d369d60d9"
+    },
+    {
+      "path": "frontend/tools/publication-gate.test.mjs",
+      "sha256": "9178ec6674ab5ebb776ccb49f821b6ca792cf2e87dc836564acb910971cc505b"
+    },
+    {
+      "path": "frontend/tools/publication-state.test.mjs",
+      "sha256": "17f4c534edc347a30e44baa96c054ae627622cc04c9dec538f05635a0c3f52ad"
+    }
+  ]
+}
