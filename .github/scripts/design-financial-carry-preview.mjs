@@ -137,6 +137,26 @@ print(json.dumps({'tar_sha256':original,'static_data':files},sort_keys=True))`,p
   same(archiveTarSha256,authenticated.tar_sha256,'TAR membership in authenticated artifact ZIP');
   return {archiveTarSha256,staticInventory:authenticated.static_data};
 }
+function historyDerivation(state,rawInventory){
+  const path='static-data/financial-history.json',date=state.source.manifest.markets?.US?.as_of_date;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||''))throw Error('Missing authenticated history container date');
+  const present=Object.hasOwn(rawInventory,path),empty=JSON.stringify({as_of_date:date,results:{}});
+  return {schema:'design-carry-preview-history-derivation-v1',path,source_present:present,source_sha256:present?rawInventory[path]:null,
+    source_artifact_sha256:state.source.artifact.digest.slice(7),as_of_date:date,
+    action:present?'preserve_source_bytes':'materialize_empty_derived_container',baseline_sha256:present?rawInventory[path]:sha256(empty)};
+}
+function prepareHistoryContainer(root,derivation){
+  const path=join(root,derivation.path);
+  if(derivation.source_present)same(sha256(readBytes(path,FINANCIAL_AUDIT_MAX_FILE_BYTES)),derivation.source_sha256,'original history bytes');
+  else{
+    // This is a derived empty container, never a raw statement receipt. The
+    // authenticated source absence remains bound and the comparison raw input
+    // is untouched. Add no financial record, value, clock or generation.
+    if(existsSync(path))throw Error('Authenticated absent history appeared before derivation');
+    freshWrite(path,{as_of_date:derivation.as_of_date,results:{}});
+  }
+  same(sha256(readBytes(path,FINANCIAL_AUDIT_MAX_FILE_BYTES)),derivation.baseline_sha256,'derived history container');
+}
 const defaults={now:()=>Date.now(),revalidate:revalidateDesignCarrySource,restore:restorePublishedFinancialSource,
   run:(script,frontend,env)=>execFileSync(process.execPath,[join(frontend,'tools',script)],{cwd:frontend,env,stdio:'inherit'})};
 
@@ -162,7 +182,9 @@ export async function prepareDesignCarryPreview({repoRoot=process.cwd(),provenan
   // The actual preparation instant affects destination evaluation only. Original
   // source proof/capture clocks and raw financial receipts are immutable.
   const evaluatedAt=new Date(ops.now()).toISOString(),env=cleanEnvironment(evaluatedAt);
+  const history=historyDerivation(state,rawInventory);prepareHistoryContainer(root,history);
   ops.run('export-research.mjs',frontend,env);copyData(root,paths.baseline); // no first daily snapshot yet
+  same(sha256(readBytes(join(paths.baseline,history.path),FINANCIAL_AUDIT_MAX_FILE_BYTES)),history.baseline_sha256,'baseline history bytes');
   const target=await readCarryTargetBase({root,frontendRoot:frontend});freshWrite(paths.target,target.bytes);
   const previous=state.live.financialRelease,sourceProjection=readBytes(join(paths.source,previous.source_projection.path),FINANCIAL_AUDIT_MAX_FILE_BYTES),sourceBase=readBytes(join(paths.source,previous.source_base.path),FINANCIAL_AUDIT_MAX_FILE_BYTES);
   const helper=await import(pathToFileURL(join(frontend,'tools/financial-generation-carry.mjs')).href);
@@ -173,7 +195,7 @@ export async function prepareDesignCarryPreview({repoRoot=process.cwd(),provenan
   const record={schema:preparationSchema,publication_authority:'none',release_accepted:false,mode:DESIGN_CARRY_PREVIEW_MODE,comparison_basis:DESIGN_CARRY_PREVIEW_BASIS,candidate,baseline_input:baselineInput,paths,
     provenance_sha256:sha256(provenance),source:{...sourceBinding(state.source),companion:sourceCompanion,archive_tar_sha256:archive.archiveTarSha256,raw_inventory_sha256:inventoryDigest(rawInventory),price_content_sha256:priceContent},predecessor:liveBinding(state.live),
     financial:{generation:carry.financial_generation,source_generation:carry.source_financial_generation,source_lineage_sha256:previous.lineage_sha256,source_projection_sha256:previous.source_projection.sha256,source_base_sha256:previous.source_base.sha256,target_base_sha256:sha256(target.bytes),evaluated_at:evaluatedAt,projection_sha256:sha256(projection)},
-    source_audit_inventory_sha256:inventoryDigest(audited),baseline_inventory_sha256:inventoryDigest(dataInventory(paths.baseline))};
+    history_derivation:history,source_audit_inventory_sha256:inventoryDigest(audited),baseline_inventory_sha256:inventoryDigest(dataInventory(paths.baseline))};
   const carryEnv=carryEnvironment(record);await helper.loadFinancialGenerationCarry({env:carryEnv,rows:target.rows,asOfDate:target.asOfDate});
   const tooling=designCarryPreviewTooling({repoRoot,candidateSha:expectedSha,provenanceSha256:record.provenance_sha256,predecessorIdentity:record.predecessor.identity,targetBaseSha256:record.financial.target_base_sha256,projectionSha256:record.financial.projection_sha256,generation:record.financial.generation});
   record.tooling=tooling.binding;freshWrite(paths.exporter,tooling.bytes.toString());
@@ -208,6 +230,7 @@ async function verifyPreparation(preparationPath,root,ops){
   const provenance=readBytes(p.paths.provenance);same(sha256(provenance),p.provenance_sha256,'provenance');
   const state=validateDesignCarrySource(JSON.parse(provenance),p.candidate.sha);same(sourceBinding(state.source),Object.fromEntries(Object.keys(sourceBinding(state.source)).map(key=>[key,p.source[key]])),'source binding');same(liveBinding(state.live),p.predecessor,'predecessor binding');
   same(await ops.revalidate(state),p.source.companion,'source manifest companion');const archive=verifyArchiveFiles(state,p.paths);same(archive.archiveTarSha256,p.source.archive_tar_sha256,'archive TAR');same(inventoryDigest(archive.staticInventory),p.source.raw_inventory_sha256,'authenticated raw source inventory');
+  same(historyDerivation(state,archive.staticInventory),p.history_derivation,'authenticated history derivation');same(sha256(readBytes(join(p.paths.baseline,p.history_derivation.path),FINANCIAL_AUDIT_MAX_FILE_BYTES)),p.history_derivation.baseline_sha256,'baseline history bytes');
   const audit=financialAuditInventory(p.paths.source);assertFinancialAuditPreserved(requiredFinancialAuditFiles(state.live),audit);same(inventoryDigest(audit),p.source_audit_inventory_sha256,'source audit');
   const previous=state.live.financialRelease,sourceProjection=readBytes(join(p.paths.source,previous.source_projection.path),FINANCIAL_AUDIT_MAX_FILE_BYTES),sourceBase=readBytes(join(p.paths.source,previous.source_base.path),FINANCIAL_AUDIT_MAX_FILE_BYTES);
   same(sha256(sourceProjection),p.financial.source_projection_sha256,'original projection');same(sha256(sourceBase),p.financial.source_base_sha256,'original base');same(previous.lineage_sha256,p.financial.source_lineage_sha256,'original lineage');
@@ -240,7 +263,7 @@ export async function packDesignCarryPreview({preparationPath=join(process.env.R
   validateTransportPreview(publication);
   const receipt={schema:DESIGN_CARRY_PREVIEW_SCHEMA,publication_authority:'none',release_accepted:false,mode:DESIGN_CARRY_PREVIEW_MODE,comparison_basis:DESIGN_CARRY_PREVIEW_BASIS,
     candidate:{...p.candidate,ui_inventory_sha256:inventoryDigest(ui)},baseline:{...baseline,ui_inventory_sha256:inventoryDigest(baselineUi),data_inventory_sha256:inventoryDigest(baselineData)},
-    provenance_sha256:p.provenance_sha256,source:p.source,predecessor:p.predecessor,financial:p.financial,assessment:p.assessment,tooling:p.tooling,
+    provenance_sha256:p.provenance_sha256,source:p.source,predecessor:p.predecessor,financial:p.financial,assessment:p.assessment,tooling:p.tooling,history_derivation:p.history_derivation,
     before_logical_inventory_sha256:p.baseline_inventory_sha256,after_logical_inventory_sha256:p.final_inventory_sha256,final_manifest_sha256:p.final_manifest_sha256,
     packed_physical_inventory_sha256:inventoryDigest(completeInventory(currentRoot)),publication_sha256:sha256(readBytes(join(currentRoot,'publication.json'))),
     transport:publication.transport,paths:{preparation:resolve(preparationPath),current:currentRoot,baseline:baselineRoot,baseline_repo:baselineRepo},preparation_sha256:sha256(readBytes(preparationPath))};
@@ -264,7 +287,7 @@ export async function verifyDesignCarryPreview({receiptPath,currentRoot,baseline
   let prepared;
   try{
     const p=await verifyPreparation(r.paths.preparation,canonical,ops);prepared=p;
-    for(const key of ['provenance_sha256','source','predecessor','financial','assessment','tooling','final_manifest_sha256'])same(r[key],p[key],`receipt ${key}`);
+    for(const key of ['provenance_sha256','source','predecessor','financial','assessment','tooling','history_derivation','final_manifest_sha256'])same(r[key],p[key],`receipt ${key}`);
     same(r.before_logical_inventory_sha256,p.baseline_inventory_sha256,'receipt baseline inventory');same(r.after_logical_inventory_sha256,p.final_inventory_sha256,'receipt final inventory');
     same(r.candidate,{...p.candidate,ui_inventory_sha256:publication.ui_digest},'receipt candidate');same(publication.transport.root.bindings.candidateId,r.preparation_sha256,'transport preparation');
     same(publication.transport.root.bindings.financialGeneration,p.financial.generation,'transport financial generation');same(publication.transport.root.bindings.financialLineageSha256,p.financial.source_lineage_sha256,'transport financial lineage');

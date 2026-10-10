@@ -17,9 +17,19 @@ const repoRoot=fileURLToPath(new URL('../../',import.meta.url));
 const read=path=>JSON.parse(readFileSync(path));
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,typeof value==='string'||Buffer.isBuffer(value)?value:JSON.stringify(value));};
 const run=(cmd,args,cwd)=>execFileSync(cmd,args,{cwd,encoding:'utf8',stdio:['pipe','pipe','pipe']}).trim();
-function fixture({time=Date.parse('2026-10-10T05:00:00Z'),date='2026-10-09'}={}){
+function fixture({time=Date.parse('2026-10-10T05:00:00Z'),date='2026-10-09',historyPresent=true,historyExtra=null}={}){
   const original=lifecycleFixture();original.seed();
   original.advance({id:40,date,price:125,time:new Date(time).toISOString()});
+  if(!historyPresent||historyExtra){
+    // A separate authenticated synthetic source shape: ordinary exports may
+    // omit this optional asset. Never mutate the established source receipts.
+    const raw=join(original.root,'export-40/frontend/public'),history=join(raw,'static-data/financial-history.json');
+    if(!historyPresent)rmSync(history);else{const prior=read(history);Object.assign(prior.results,historyExtra);write(history,prior);}
+    run('tar',['-cf',join(original.root,'artifact-140.tar'),'-C',raw,'.'],original.root);
+    run('python3',['-c','import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as z:z.write(sys.argv[2],"artifact.tar")',join(original.root,'artifact-140.zip'),join(original.root,'artifact-140.tar')],original.root);
+    const artifact=original.config.api[`${prefix}/actions/artifacts?per_page=100`][0].artifacts[0],bytes=readFileSync(join(original.root,'artifact-140.zip'));
+    artifact.digest=`sha256:${sha256(bytes)}`;artifact.size_in_bytes=bytes.length;
+  }
   const root=join(original.root,'preview-repo'),frontend=join(root,'frontend');mkdirSync(frontend,{recursive:true});
   mkdirSync(join(frontend,'public'),{recursive:true});for(const path of ['src','tools','contracts','package.json','index.html','public/sw.js'])cpSync(join(repoRoot,'frontend',path),join(frontend,path),{recursive:true});
   run('git',['init','-q'],root);run('git',['add','frontend'],root);run('git',['-c','user.name=Synthetic Test','-c','user.email=synthetic@example.invalid','commit','-qm','Synthetic controller fixture'],root);
@@ -55,6 +65,8 @@ function fixture({time=Date.parse('2026-10-10T05:00:00Z'),date='2026-10-09'}={})
 test('real carry preparation and lossless pack keep expired synthetic receipts and all price/history bytes',async t=>{
   const f=fixture();try{
     const p=await f.prepare(),carry=read(p.paths.projection),source=JSON.parse(f.original.original.bytes);
+    assert.equal(p.history_derivation.source_present,true);assert.equal(p.history_derivation.action,'preserve_source_bytes');
+    assert.deepEqual(readFileSync(join(p.paths.baseline,'static-data/financial-history.json')),readFileSync(join(f.rawRoot,'static-data/financial-history.json')));
     assert.notEqual(carry.financial_generation,source.financial_generation);assert.equal(carry.source_projection_json,f.original.original.bytes);assert.equal(carry.source_base_json,f.original.original.base);
     assert.deepEqual(carry.receipt_inventory,source.receipt_inventory);assert.deepEqual(carry.symbols.OWNED.source_receipts,source.symbols.OWNED.source_receipts);
     assert.equal(currentFinancialHistory(carry.symbols.OWNED.financial_history,'OWNED','2026-10-09',Date.parse(p.financial.evaluated_at)).annual.length,0);
@@ -108,6 +120,55 @@ test('real carry preparation and lossless pack keep expired synthetic receipts a
       write(reportPath,base);const result=await recordDesignCarryPreviewReport({receiptPath:f.receiptPath,currentRoot:f.currentRoot,baselineRoot:f.baselineRoot,reportPath,dependencies:f.dependencies});assert.equal(result.report_sha256,sha256(readFileSync(reportPath)));assert.equal(result.release_accepted,false);
     });
   }finally{if(process.env.KEEP_PREVIEW_FIXTURE)console.log('Synthetic retained fixture',f.original.root);else f.cleanup();}
+});
+
+test('authenticated absent history receives only an explicit empty derived carry baseline',async t=>{
+  const f=fixture({historyPresent:false});try{
+    const raw=completeInventory(f.rawRoot),baseline=completeInventory(join(f.original.root,'baseline/frontend/public'));
+    const p=await f.prepare();
+    assert.deepEqual(read(join(p.paths.baseline,'static-data/financial-history.json')),{as_of_date:'2026-10-09',results:{}});
+    assert.equal(p.history_derivation.source_present,false);assert.equal(p.history_derivation.action,'materialize_empty_derived_container');
+    assert.deepEqual(completeInventory(f.rawRoot),raw);assert.deepEqual(completeInventory(join(f.original.root,'baseline/frontend/public')),baseline);
+    const carry=read(p.paths.projection);assert.equal(carry.source_projection_json,f.original.original.bytes);assert.equal(carry.source_base_json,f.original.original.base);
+    assert.deepEqual(read(join(f.publicRoot,'static-data/financial-history.json')).results.OWNED,carry.symbols.OWNED.financial_history);
+    const r=await f.pack();assert.deepEqual(r.history_derivation,p.history_derivation);assert.deepEqual(await f.verify(),r);
+    for(const [label,path,change,pattern]of [
+      ['derived baseline values',join(p.paths.baseline,'static-data/financial-history.json'),v=>({...v,results:{UNOWNED:{annual:[{year:2025,eps:10}],quarterly:[]}}}),/baseline history bytes/],
+      ['source absence claim',f.preparationPath,v=>({...v,history_derivation:{...v.history_derivation,source_present:true}}),/authenticated history derivation/],
+      ['receipt derivation claim',f.receiptPath,v=>({...v,history_derivation:{...v.history_derivation,as_of_date:'2026-10-10'}}),/receipt history_derivation/],
+    ])await t.test(label,async()=>{
+      const before=readFileSync(path),receipt=readFileSync(f.receiptPath);try{
+        write(path,change(JSON.parse(before)));
+        if(path===f.preparationPath){const next=read(f.receiptPath);next.preparation_sha256=sha256(readFileSync(path));write(f.receiptPath,next);}
+        await assert.rejects(()=>f.verify(),pattern);
+      }finally{write(path,before);write(f.receiptPath,receipt);}
+    });
+  }finally{f.cleanup();}
+});
+
+test('absent history derivation rolls back on export failure and never becomes raw evidence',async()=>{
+  const f=fixture({historyPresent:false}),before=completeInventory(f.publicRoot);try{
+    f.dependencies.run=(name,frontend,env)=>{if(name==='.design-carry-preview-export.mjs')throw Error('Synthetic failure after empty history derivation');execFileSync(process.execPath,[join(frontend,'tools',name)],{cwd:frontend,env,stdio:'pipe'});};
+    await assert.rejects(()=>f.prepare(),/Synthetic failure after empty history/);
+    assert.deepEqual(completeInventory(f.publicRoot),before);assert.equal(existsSync(join(f.publicRoot,'static-data/financial-history.json')),false);assert.equal(existsSync(f.work),false);
+  }finally{f.cleanup();}
+});
+
+test('existing noncohort history remains exact through the derived baseline and carry',async()=>{
+  const extra={UNOWNED:{symbol:'UNOWNED',annual:[{year:2025,eps:10}],quarterly:[],retrieved_at:'2026-09-01T01:02:03Z'}},f=fixture({historyExtra:extra});try{
+    const before=readFileSync(join(f.rawRoot,'static-data/financial-history.json')),p=await f.prepare();
+    assert.equal(p.history_derivation.action,'preserve_source_bytes');assert.equal(p.history_derivation.source_sha256,sha256(before));
+    assert.deepEqual(readFileSync(join(p.paths.baseline,'static-data/financial-history.json')),before);
+    assert.deepEqual(read(join(f.publicRoot,'static-data/financial-history.json')).results.UNOWNED,extra.UNOWNED);
+    await f.pack();await f.verify();
+  }finally{f.cleanup();}
+});
+
+test('derived empty history cannot acquire values before the strict carry comparison',async()=>{
+  const f=fixture({historyPresent:false});try{
+    f.dependencies.run=(name,frontend,env)=>{execFileSync(process.execPath,[join(frontend,'tools',name)],{cwd:frontend,env,stdio:'pipe'});if(name==='export-research.mjs')write(join(frontend,'public/static-data/financial-history.json'),{as_of_date:'2026-10-09',results:{UNOWNED:{annual:[],quarterly:[]}}});};
+    await assert.rejects(()=>f.prepare(),/baseline history bytes/);assert.equal(existsSync(f.work),false);
+  }finally{f.cleanup();}
 });
 
 test('workflow cannot deploy, replace ordinary gates, or refresh statement sources',()=>{
