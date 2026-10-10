@@ -853,6 +853,8 @@ for (const width of WIDTHS) {
   });
 }
 
+import { writeFile as writeCompactGeometry } from 'node:fs/promises';
+
 // Short-height coverage reuses the exact annual fixture and strict route guard.
 // The minimum 300px plot may extend below the inner viewport; lower chart panes
 // and evidence stay reachable while the modal header/footer remain fixed.
@@ -915,8 +917,26 @@ for (const viewport of [{ width: 390, height: 600 }, { width: 844, height: 390 }
     const lightDrawer = await openFilters(page);
     await expect(annual(lightDrawer)).toBeChecked();
     await expect(lightDrawer.getByRole('button', { name: '基本と原則', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    // MUI clips its transparent 300%-wide input inside the visible switch.
+    // Check that input's semantics/focus and the actual label/control geometry.
+    const lightAnnualLabel = lightDrawer.locator('label').filter({ hasText: LABEL });
+    await lightAnnualLabel.scrollIntoViewIfNeeded();
     await annual(lightDrawer).focus();
-    await expect(annual(lightDrawer)).toBeInViewport({ ratio: 1 });
+    await expect(annual(lightDrawer)).toBeFocused();
+    await expect(annual(lightDrawer)).toBeChecked();
+    for (const visible of [lightAnnualLabel, lightAnnualLabel.locator('.MuiFormControlLabel-label'),
+      lightAnnualLabel.locator('.MuiSwitch-root'), lightAnnualLabel.locator('.MuiSwitch-track'),
+      lightAnnualLabel.locator('.MuiSwitch-thumb')]) await expect(visible).toBeInViewport({ ratio: 1 });
+    await lightAnnualLabel.click({ trial: true });
+    await expect(annual(lightDrawer)).toBeFocused();
+    const labelBounds = await rectangle(lightAnnualLabel);
+    const hitAreaName = `compact-annual-hit-area-${viewport.width}x${viewport.height}`;
+    const hitAreaPath = info.outputPath(`${hitAreaName}.json`);
+    await writeCompactGeometry(hitAreaPath, `${JSON.stringify(labelBounds, null, 2)}\n`);
+    await info.attach(hitAreaName, { path: hitAreaPath, contentType: 'application/json' });
+    expect(labelBounds.width, 'Visible annual-filter label hit width').toBeGreaterThanOrEqual(44);
+    expect(labelBounds.height, 'Visible annual-filter label hit height').toBeGreaterThanOrEqual(44);
+    await expectNoOverflow(page, lightAnnualLabel);
     await expectNoOverflow(page, lightDrawer);
     const lightDrawerName = `compact-drawer-${viewport.width}x${viewport.height}-light`;
     await info.attach(lightDrawerName, { body: await page.screenshot({ path: info.outputPath(`${lightDrawerName}.png`) }), contentType: 'image/png' });

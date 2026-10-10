@@ -71,3 +71,5 @@
  .research-symbol-head{height:auto;max-height:none;grid-template-rows:auto auto}
  .research-symbol-head .readiness-chip{position:static}
 }
+/* Portaled research filters retain the shell's 44px label hit target. */
+[role="dialog"][aria-labelledby="research-filter-title"] .MuiFormControlLabel-root{min-height:44px}
