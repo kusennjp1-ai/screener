@@ -1,23 +1,26 @@
 import { execFileSync } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createImmutableGitApi } from './immutable-github-api.mjs';
-import {priceControllerRoot,verifyPriceSourceCompletion,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
+import {priceControllerRoot,verifyPriceSourceCompletion,isVerifiedPriceSourceProof,registerPricePublisherTransportCaller} from './retained-price-ci-admission.mjs';
 import {readRepairRequest,validateRepairRequest} from './retained-price-source-admission.mjs';
+import {withInvocationConditionalDeploymentJobs,hasScopedConditionalJobContext,noteScopedApiRead,readScopedTransportApi} from './conditional-deployment-jobs.mjs';
 
 const invocationApi = new AsyncLocalStorage();
 
 export function withInvocationImmutableGitApi(repository, work) {
-  const api = createImmutableGitApi((endpoint, paginate) => invocationApi.run(undefined, () => githubApi(endpoint, paginate)), repository);
-  return invocationApi.run(api, () => {
-    try {
-      const result = work();
-      if (result && typeof result.then === 'function') return Promise.resolve(result).finally(() => api.dispose());
-      api.dispose();
-      return result;
-    } catch (error) {
-      api.dispose();
-      throw error;
-    }
+  return withInvocationConditionalDeploymentJobs(repository, () => {
+    const api = createImmutableGitApi((endpoint, paginate) => invocationApi.run(undefined, () => githubApi(endpoint, paginate)), repository);
+    return invocationApi.run(api, () => {
+      try {
+        const result = work();
+        if (result && typeof result.then === 'function') return Promise.resolve(result).finally(() => api.dispose());
+        api.dispose();
+        return result;
+      } catch (error) {
+        api.dispose();
+        throw error;
+      }
+    });
   });
 }
 
@@ -56,7 +59,13 @@ export function publicationDecision({ eventName, event, sha, currentSha, runs = 
 export function githubApi(endpoint, paginate = false) {
   const scopedApi = invocationApi.getStore();
   if (scopedApi) return scopedApi(endpoint, paginate);
-  return JSON.parse(execFileSync('gh', ['api', ...(paginate ? ['--paginate', '--slurp'] : []), endpoint], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+  const managed = readScopedTransportApi(endpoint, paginate);
+  if (managed.handled) return managed.value;
+  let result;
+  try { result = JSON.parse(execFileSync('gh', ['api', ...(paginate ? ['--paginate', '--slurp'] : []), endpoint], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })); }
+  catch (error) { noteScopedApiRead(endpoint, paginate, null, error); throw error; }
+  noteScopedApiRead(endpoint, paginate, result);
+  return result;
 }
 
 export function checkPublication(event, sha, repository, api = githubApi) {
@@ -76,7 +85,10 @@ export function checkPublication(event, sha, repository, api = githubApi) {
   }
   if(finitePriceSource){
     const finiteDecision=publicationDecision({eventName:process.env.GITHUB_EVENT_NAME,event:normalizedEvent,sha,currentSha,runs:[],finitePriceSource});
-    if(finiteDecision.publish&&finiteDecision.mode==='data'&&finiteDecision.finitePriceSource)return finiteDecision;
+    if(finiteDecision.publish&&finiteDecision.mode==='data'&&finiteDecision.finitePriceSource){
+      if(hasScopedConditionalJobContext(repository))registerPricePublisherTransportCaller(finitePriceSource,{api});
+      return finiteDecision;
+    }
   }
   const runs = gateWorkflows.flatMap(file => api(`repos/${repository}/actions/workflows/${file}/runs?branch=main&event=push&head_sha=${sha}&per_page=100`, true).flatMap(page => page.workflow_runs));
   return publicationDecision({ eventName: process.env.GITHUB_EVENT_NAME, event: normalizedEvent, sha, currentSha, runs,finitePriceSource });

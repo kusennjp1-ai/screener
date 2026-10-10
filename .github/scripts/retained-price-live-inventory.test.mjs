@@ -303,3 +303,244 @@ test('only finite liveFor supplies authenticated anchors, and livePublication ke
   const ci=readFileSync(new URL('../workflows/ci.yml',import.meta.url),'utf8');
   assert(ci.includes('retained-price-live-inventory.test.mjs'));assert(ci.includes('retained-price-repository-inventory.test.mjs'));
 });
+
+function liveBudgetHooks(){
+  const receipt={secret:'synthetic private live receipt',toJSON(){throw Error('Private receipt must never serialize');}};
+  receipt.self=receipt;
+  const descriptors=[],attempts=[],finals=[];
+  const hooks={
+    beforeAcquisition:value=>{descriptors.push(value);return receipt;},
+    afterAttempt:(value,sameReceipt)=>{assert.equal(sameReceipt,receipt);attempts.push(value);},
+    afterAcquisition:(value,sameReceipt)=>{assert.equal(sameReceipt,receipt);finals.push(value);},
+  };
+  return {hooks,receipt,descriptors,attempts,finals};
+}
+function liveBudgetFixture({provider,sequence=[envelope()],clock=()=>0,api=()=>({ordinary:true}),runHook,reportHook,requiredIds=[1,2]}={}){
+  const calls=[],events=[];
+  const run=(command,args,options)=>{
+    calls.push({command,args,options});
+    if(runHook)return runHook(command,args,options);
+    let value=sequence.shift();if(typeof value==='function')value=value();
+    if(value instanceof Error)throw value;
+    return typeof value==='string'?value:JSON.stringify(value);
+  };
+  const read=createRetainedPriceLiveApi(api,{requiredIds,run,monotonic:clock,budgetProvider:provider,
+    report:value=>{events.push(value);if(reportHook)reportHook(value);}});
+  return {read,calls,events,run};
+}
+test('live budget provider is lazy and pairs one private receipt while immediate Static reuses literal projections',()=>{
+  const b=liveBudgetHooks(),anchors=[1,2],hidden='synthetic-private-live-run-extra';let providers=0;
+  const f=liveBudgetFixture({provider:()=>{providers++;return b.hooks;},requiredIds:anchors,
+    sequence:[envelope([row(1,'research-ui-release.yml',{extra:hidden}),row(2,'static-site.yml')]),envelope()]});
+  assert.equal(providers,0);assert.equal(f.calls.length,0);
+  assert.deepEqual(f.read(prefix+'/actions/runs/1/jobs?filter=all&per_page=100',true),{ordinary:true});
+  assert.equal(providers,0);anchors[1]=999;
+  const result=f.read(publisher,true);assert.equal(result[0].workflow_runs[0].extra,hidden);
+  assert.equal(providers,1);assert.equal(f.calls.length,1);
+  assert.deepEqual(b.descriptors[0],{head:null,requiredIds:[1,2],maximumStarts:80,maximumPrimary:160,timeoutMs:60000});
+  assert.equal(Object.isFrozen(b.descriptors[0]),true);assert.equal(Object.isFrozen(b.descriptors[0].requiredIds),true);
+  assert.equal(Object.isFrozen(b.receipt),false);assert.equal(b.receipt.self,b.receipt);
+  assert.equal(b.attempts.length,1);assert.equal(b.finals.length,1);assert.equal(b.finals[0].status,'complete');
+  assert.equal(b.finals[0].head,null);assert.equal(b.finals[0].entered_attempts,1);assert.deepEqual(b.finals[0].attempts,b.attempts);
+  assert.equal(b.attempts[0].schema_version,'retained-price-live-acquisition-attempt-v1');
+  assert.equal(b.finals[0].schema_version,'retained-price-live-acquisition-v1');
+  assert.equal(b.attempts[0].command_started,true);assert.equal(b.attempts[0].native_request_issued,null);
+  assert.equal(b.attempts[0].wire_request_count,null);assert.equal(b.attempts[0].page_evidence[0].quota_resource,null);
+  assert.equal(Object.isFrozen(b.attempts[0].page_evidence[0].safe_headers),true);assert.equal(Object.isFrozen(b.finals[0].attempts),true);
+  assert.doesNotMatch(JSON.stringify(b.attempts)+JSON.stringify(b.finals),new RegExp(hidden+'|workflow_runs|failed_stdout|failed_stderr|toJSON|receipt'));
+  result[0].workflow_runs[0].repository.id=99;
+  assert.deepEqual(f.read(producer,true),[{total_count:1,workflow_runs:[row(2,'static-site.yml')]}]);
+  assert.equal(providers,1);assert.equal(f.calls.length,1);assert.equal(f.events[1].reused_immediate_snapshot,true);
+  assert.equal(f.events[0].snapshot_id,f.events[1].snapshot_id);
+  f.read(publisher,true);assert.equal(providers,2);assert.equal(f.calls.length,2);assert.equal(b.finals.length,2);
+});
+test('inactive live providers preserve the original injected-run retry and report fields',()=>{
+  for(const inactive of [null,undefined]){
+    let providers=0;
+    const f=liveBudgetFixture({provider:()=>{providers++;return inactive;},sequence:[failed('json-eof'),envelope()]});
+    assert.deepEqual(f.read(publisher,true),[{total_count:1,workflow_runs:[row(1)]}]);
+    f.read(producer,true);assert.equal(providers,1);assert.equal(f.calls.length,2);
+    assert.deepEqual(f.events.map(value=>value.status),['failed','complete','projected']);
+    assert.equal(f.events[0].retry,true);assert.equal(f.events[0].call_id,f.events[1].call_id);
+    assert.equal(f.events.every(value=>value.schema_version==='retained-price-live-inventory-read-v2'),true);
+    assert.equal(f.events.some(value=>Object.hasOwn(value,'command_started')||Object.hasOwn(value,'quota_resource')),false);
+    for(const call of f.calls){
+      assert.equal(call.command,process.execPath);assert.deepEqual(call.args.slice(0,1),['--max-old-space-size=384']);
+      assert(call.args[1].endsWith('/retained-price-repository-inventory.mjs'));
+      assert.deepEqual(JSON.parse(call.options.input),{timeoutMs:30000,requiredIds:[1,2]});
+      assert.equal(call.options.timeout,30000);assert.equal(call.options.maxBuffer,64*1024**2);assert.equal(call.options.killSignal,'SIGKILL');
+    }
+  }
+});
+test('two live native attempts share one receipt and keep unknown first entry without exposing command diagnostics',()=>{
+  const b=liveBudgetHooks(),hidden='synthetic private worker stdout and stderr';let providers=0,clock=0;
+  const f=liveBudgetFixture({provider:()=>{providers++;return b.hooks;},clock:()=>clock,
+    sequence:[()=>{clock+=30000;return commandError(hidden,hidden,{code:'ETIMEDOUT',signal:'SIGKILL'});},
+      ()=>{clock+=1000;return envelope();}]});
+  assert.equal(f.read(publisher,true)[0].total_count,1);
+  assert.equal(providers,1);assert.equal(f.calls.length,2);assert.equal(b.descriptors.length,1);assert.equal(b.attempts.length,2);
+  assert.equal(b.finals.length,1);assert.equal(b.finals[0].entered_attempts,2);assert.deepEqual(b.finals[0].attempts,b.attempts);
+  assert.equal(b.attempts[0].status,'failed');assert.equal(b.attempts[0].reason,'transport-timeout');assert.equal(b.attempts[0].retry_planned,true);
+  assert.deepEqual(b.attempts[0].page_evidence,[]);assert.equal(b.attempts[0].native_request_issued,null);assert.equal(b.attempts[0].wire_request_count,null);
+  assert.equal(b.attempts[1].status,'complete');assert.equal(b.attempts[1].retry_planned,false);
+  assert.equal(b.finals[0].inventory_budget_used_ms,31000);
+  assert.doesNotMatch(JSON.stringify(b.attempts)+JSON.stringify(b.finals),new RegExp(hidden+'|failed_stdout|failed_stderr'));
+  f.read(producer,true);assert.equal(providers,1);assert.equal(f.calls.length,2);
+});
+test('an active live receipt settles both timed-out entries within the original sixty-second allowance',()=>{
+  const b=liveBudgetHooks();let clock=0;
+  const f=liveBudgetFixture({provider:()=>b.hooks,clock:()=>clock,runHook:()=>{
+    clock+=30000;throw commandError('fixture timeout','partial',{code:'ETIMEDOUT',signal:'SIGKILL'});
+  }});
+  assert.throws(()=>f.read(publisher,true),/transport-timeout/);
+  assert.equal(f.calls.length,2);assert.equal(b.attempts.length,2);assert.equal(b.finals.length,1);
+  assert.equal(b.attempts[0].retry_planned,true);assert.equal(b.attempts[1].retry_planned,false);
+  assert.equal(b.finals[0].status,'failed');assert.equal(b.finals[0].reason,'transport-timeout');
+  assert.equal(b.finals[0].inventory_budget_used_ms,60000);assert.equal(b.finals[0].wire_request_count,null);
+});
+test('a successful live before receipt settles pre-wrapper clock and exhausted-time failures with no-entry facts',()=>{
+  const b=liveBudgetHooks(),original=Error('synthetic private live clock failure');let clockFails=false;
+  b.hooks.beforeAcquisition=value=>{b.descriptors.push(value);clockFails=true;return b.receipt;};
+  b.hooks.afterAcquisition=(value,receipt)=>{assert.equal(receipt,b.receipt);b.finals.push(value);throw Error('private final cleanup');};
+  const f=liveBudgetFixture({provider:()=>b.hooks,clock:()=>{if(clockFails)throw original;return 0;}});
+  let caught;try{f.read(publisher,true);}catch(error){caught=error;}
+  assert.equal(caught,original);assert.equal(f.calls.length,0);assert.equal(b.attempts.length,0);assert.equal(b.finals.length,1);
+  assert.equal(b.finals[0].entered_attempts,0);assert.equal(b.finals[0].native_request_issued,false);assert.equal(b.finals[0].wire_request_count,null);
+  assert.equal(b.finals[0].reason,'unclassified-inventory-failure');
+  assert.doesNotMatch(JSON.stringify(b.finals),/synthetic private live clock failure|private final cleanup/);
+  const c=liveBudgetHooks();let clock=0,providers=0;
+  const g=liveBudgetFixture({provider:()=>{providers++;return c.hooks;},clock:()=>clock,
+    runHook:()=>{clock+=30000;return JSON.stringify(envelope());}});
+  g.read(publisher,true);g.read(publisher,true);
+  assert.throws(()=>g.read(publisher,true),/time-budget-exhausted/);
+  assert.equal(providers,3);assert.equal(g.calls.length,2);assert.equal(c.attempts.length,2);assert.equal(c.finals.length,3);
+  const final=c.finals[2];assert.equal(final.status,'failed');assert.equal(final.entered_attempts,0);
+  assert.deepEqual(final.attempts,[]);assert.equal(final.native_request_issued,false);assert.equal(final.reason,'time-budget-exhausted');
+});
+test('live hook rejection clears an assigned snapshot, prevents retry and poisons later provider-null reads',()=>{
+  for(const target of ['attempt','after','retry-attempt']){
+    const b=liveBudgetHooks();let providers=0;
+    if(target!=='after')b.hooks.afterAttempt=(value,receipt)=>{assert.equal(receipt,b.receipt);b.attempts.push(value);return false;};
+    else b.hooks.afterAcquisition=(value,receipt)=>{assert.equal(receipt,b.receipt);b.finals.push(value);return false;};
+    const f=liveBudgetFixture({provider:()=>{providers++;return providers===1?b.hooks:null;},
+      sequence:target==='retry-attempt'?[failed('json-eof'),envelope()]:[envelope()]});
+    let caught;try{f.read(publisher,true);}catch(error){caught=error;}
+    assert.equal(caught.inventoryReason,target==='retry-attempt'?'json-eof':target==='attempt'?'acquisition-budget-attempt':'acquisition-budget-after');
+    assert.equal(f.calls.length,1);assert.equal(b.attempts.length,1);assert.equal(b.finals.length,1);assert.equal(b.finals[0].status,target==='after'?'complete':'failed');
+    let later;try{f.read(producer,true);}catch(error){later=error;}
+    assert.equal(later,caught);assert.equal(providers,1);assert.equal(f.calls.length,1);
+    assert.deepEqual(f.read(prefix+'/actions/runs/1/jobs?filter=all&per_page=100',true),{ordinary:true});
+  }
+});
+test('live denial and original report errors win cleanup hook failures without a further retry',()=>{
+  const b=liveBudgetHooks();
+  b.hooks.afterAttempt=(value,receipt)=>{assert.equal(receipt,b.receipt);b.attempts.push(value);throw Error('private attempt cleanup');};
+  b.hooks.afterAcquisition=(value,receipt)=>{assert.equal(receipt,b.receipt);b.finals.push(value);throw Error('private final cleanup');};
+  const f=liveBudgetFixture({provider:()=>b.hooks,sequence:[failed('json-eof',true,[{page_number:1,status:403,body_bytes:0}]),envelope()]});
+  assert.throws(()=>f.read(publisher,true),/http-or-security-denial/);
+  assert.equal(f.calls.length,1);assert.equal(b.attempts.length,1);assert.equal(b.finals.length,1);
+  assert.equal(b.attempts[0].page_evidence[0].status,403);assert.equal(b.finals[0].reason,'http-or-security-denial');
+  const c=liveBudgetHooks(),original=Error('synthetic original live report failure');
+  c.hooks.afterAttempt=()=>{throw Error('private cleanup must not replace original');};
+  c.hooks.afterAcquisition=(value,receipt)=>{assert.equal(receipt,c.receipt);c.finals.push(value);throw Error('private final cleanup');};
+  const g=liveBudgetFixture({provider:()=>c.hooks,reportHook:()=>{throw original;}});
+  let caught;try{g.read(publisher,true);}catch(error){caught=error;}
+  assert.equal(caught,original);assert.equal(g.calls.length,1);assert.equal(c.finals.length,1);
+  assert.equal(c.finals[0].status,'failed');assert.equal(c.finals[0].reason,'unclassified-inventory-failure');
+  assert.doesNotMatch(JSON.stringify(c.finals),/synthetic original live report failure|private cleanup/);
+});
+test('invalid or asynchronous active live providers and before hooks fail closed before wrapper entry',async()=>{
+  for(const mode of ['provider-throw','provider-async','provider-getter','missing-hook','hook-getter','before-false','before-throw','before-async']){
+    const b=liveBudgetHooks();let providers=0;
+    if(mode==='missing-hook')b.hooks.afterAttempt=undefined;
+    if(mode==='hook-getter')Object.defineProperty(b.hooks,'afterAttempt',{get(){throw null;}});
+    if(mode==='before-false')b.hooks.beforeAcquisition=()=>false;
+    if(mode==='before-throw')b.hooks.beforeAcquisition=()=>{throw Error('private live before error');};
+    if(mode==='before-async')b.hooks.beforeAcquisition=()=>Promise.reject(Error('private live before async error'));
+    const f=liveBudgetFixture({provider:()=>{
+      providers++;if(providers>1)return null;
+      if(mode==='provider-throw')throw Error('private live provider error');
+      if(mode==='provider-async')return Promise.reject(Error('private live provider async error'));
+      if(mode==='provider-getter')return Object.defineProperty({},'then',{get(){throw Error('private live provider getter');}});
+      return b.hooks;
+    }});
+    let caught;try{f.read(publisher,true);}catch(error){caught=error;}
+    assert.match(caught.inventoryReason,/^(?:invalid-acquisition-budget-provider|invalid-acquisition-budget-hooks|acquisition-budget-before)$/);
+    assert.doesNotMatch(caught.message,/private /);assert.equal(f.calls.length,0);assert.equal(b.attempts.length,0);assert.equal(b.finals.length,0);
+    let later;try{f.read(producer,true);}catch(error){later=error;}
+    assert.equal(later,caught);assert.equal(providers,1);await new Promise(resolve=>setImmediate(resolve));
+  }
+  for(const budgetProvider of [null,false,0,'provider',{},[]])
+    assert.throws(()=>createRetainedPriceLiveApi(()=>null,{requiredIds:[1,2],budgetProvider}),/invalid-acquisition-budget-provider/);
+});
+test('asynchronous live attempt and final hook rejections settle once and stay sticky',async()=>{
+  for(const stage of ['attempt','after']){
+    const b=liveBudgetHooks();let providers=0;
+    if(stage==='attempt')b.hooks.afterAttempt=(value,receipt)=>{assert.equal(receipt,b.receipt);b.attempts.push(value);return Promise.reject(Error('private attempt async'));};
+    else b.hooks.afterAcquisition=(value,receipt)=>{assert.equal(receipt,b.receipt);b.finals.push(value);return Promise.reject(Error('private final async'));};
+    const f=liveBudgetFixture({provider:()=>{providers++;return providers===1?b.hooks:null;}});
+    let caught;try{f.read(publisher,true);}catch(error){caught=error;}
+    assert.equal(caught.inventoryReason,stage==='attempt'?'acquisition-budget-attempt':'acquisition-budget-after');
+    assert.equal(b.finals.length,1);assert.equal(f.calls.length,1);
+    let later;try{f.read(producer,true);}catch(error){later=error;}
+    assert.equal(later,caught);assert.equal(providers,1);await new Promise(resolve=>setImmediate(resolve));
+  }
+});
+test('live hook evidence preserves only literal core resource and retains forty pages in each bounded attempt',()=>{
+  for(const resource of [undefined,'core','graphql']){
+    const b=liveBudgetHooks(),result=envelope();
+    if(resource!==undefined)result.evidence[0].safe_headers['x-ratelimit-resource']=resource;
+    result.evidence[0].safe_headers['authorization']='synthetic-private-header';
+    const f=liveBudgetFixture({provider:()=>b.hooks,sequence:[result]});f.read(publisher,true);
+    assert.equal(b.attempts[0].page_evidence[0].quota_resource,resource==='core'?'core':null);
+    assert.equal(b.attempts[0].page_evidence[0].safe_headers['x-ratelimit-resource'],resource==='core'?'core':undefined);
+    assert.equal(Object.hasOwn(f.events[0].page_evidence[0].safe_headers,'x-ratelimit-resource'),false);
+    assert.doesNotMatch(JSON.stringify(b.attempts)+JSON.stringify(b.finals),/graphql|synthetic-private-header|authorization/);
+  }
+  const runs=Array.from({length:2000},(_unused,index)=>row(index+1,index%2?'static-site.yml':'research-ui-release.yml'));
+  const first=envelope(runs),b=liveBudgetHooks();
+  first.evidence[39].status=null;first.evidence[39].reason='sibling-aborted';
+  const f=liveBudgetFixture({provider:()=>b.hooks,sequence:[failed('json-eof',true,first.evidence),envelope(runs)]});
+  assert.equal(f.read(publisher,true).flatMap(page=>page.workflow_runs).length,1000);
+  assert.equal(f.calls.length,2);assert.equal(b.attempts.length,2);assert.equal(b.finals.length,1);
+  assert.equal(b.attempts[0].page_evidence.length,40);assert.equal(b.attempts[0].page_evidence[39].status,null);
+  assert.equal(b.attempts[0].page_evidence[39].reason,'sibling-aborted');assert.equal(b.attempts[1].page_evidence.length,40);
+  assert.equal(b.finals[0].attempts.flatMap(value=>value.page_evidence).length,80);
+  assert.equal(Buffer.byteLength(JSON.stringify(b.attempts[0]))<128*1024,true);
+  assert.equal(Buffer.byteLength(JSON.stringify(b.finals[0]))<128*1024,true);
+  assert.equal(b.finals[0].entered_attempts,2);
+});
+test('ordinary injected live run and delegated API retain identity and original closed stdin protocol',()=>{
+  const b=liveBudgetHooks(),calls=[],delegated=[];let providers=0;
+  const api=(endpoint,paginate)=>{delegated.push([endpoint,paginate]);return {literal:delegated.length};},originalApi=api;
+  const run=(command,args,options)=>{
+    calls.push({command,args,options});assert.equal(b.descriptors.length,1);
+    return JSON.stringify(envelope());
+  },originalRun=run;
+  const read=createRetainedPriceLiveApi(api,{requiredIds:[1,2],run,monotonic:()=>0,report:()=>{},
+    budgetProvider:()=>{providers++;return b.hooks;}});
+  assert.equal(api,originalApi);assert.equal(run,originalRun);assert.equal(providers,0);
+  assert.deepEqual(read(prefix+'/actions/runs/1/jobs?filter=all&per_page=100',true),{literal:1});
+  assert.equal(read(publisher,true)[0].workflow_runs[0].untouched_extra.literal,true);read(producer,true);
+  assert.equal(api,originalApi);assert.equal(run,originalRun);assert.equal(calls.length,1);assert.equal(providers,1);
+  assert.deepEqual(JSON.parse(calls[0].options.input),{timeoutMs:30000,requiredIds:[1,2]});
+  assert.equal(calls[0].command,process.execPath);assert.equal(calls[0].options.timeout,30000);
+  assert.equal(calls[0].options.maxBuffer,64*1024**2);assert.deepEqual(calls[0].options.stdio,['pipe','pipe','pipe']);
+  assert.deepEqual(delegated,[[prefix+'/actions/runs/1/jobs?filter=all&per_page=100',true]]);
+  const outer=liveBudgetHooks();let entered=0,nativeInvocationEntered=false;
+  const blocked=createRetainedPriceLiveApi(api,{requiredIds:[1,2],monotonic:()=>0,report:()=>{},budgetProvider:()=>outer.hooks,
+    run:()=>{entered++;throw Error('synthetic outer deadline before stock exec');}});
+  assert.throws(()=>blocked(publisher,true),/unclassified-command-failure/);
+  assert.equal(entered,1);assert.equal(nativeInvocationEntered,false);assert.equal(outer.attempts.length,1);assert.equal(outer.finals.length,1);
+  assert.equal(outer.attempts[0].command_started,true);assert.equal(outer.attempts[0].native_request_issued,null);
+  assert.equal(outer.finals[0].entered_attempts,1);assert.equal(outer.finals[0].wire_request_count,null);
+});
+
+test('active live hook observations retain the original safe ambiguous-header rejection',()=>{
+  const b=liveBudgetHooks();
+  const f=liveBudgetFixture({provider:()=>b.hooks,sequence:[
+    commandError('unexpected EOF','HTTP/2 200 OK\r\n\r\nHTTP/2 200 OK\r\n\r\n{}'),envelope()]});
+  assert.throws(()=>f.read(publisher,true),/ambiguous-http-headers/);
+  assert.equal(f.calls.length,1);assert.equal(b.attempts.length,1);assert.equal(b.finals.length,1);
+  assert.equal(b.attempts[0].reason,'ambiguous-http-headers');assert.equal(b.finals[0].reason,'ambiguous-http-headers');
+});

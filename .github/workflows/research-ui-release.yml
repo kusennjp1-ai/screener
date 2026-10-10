@@ -135,6 +135,7 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          RETAINED_PRICE_CONDITIONAL_CACHE_MODE: ${{ needs.renewal_route.outputs.price_source == 'true' && 'initialize' || '' }}
         run: node .github/scripts/select-release-source.mjs plan
       - name: Prepare immutable controller for finite price publication
         if: steps.plan.outputs.publish == 'true' && needs.renewal_route.outputs.price_source == 'true'
@@ -300,6 +301,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/select-release-source.mjs recheck
+      - name: Clean up finite publisher historical jobs cache
+        if: always() && needs.renewal_route.outputs.price_source == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/conditional-deployment-jobs.mjs cleanup
       # The performance exception additionally needs its separate hash-bound
       # release-intent record. A certificate or pin alone never enables it.
       # Correction activation needs a separately reviewed, hash-bound promotion

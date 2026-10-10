@@ -2,6 +2,7 @@
 // source, financial, UI or publication authority by itself.
 import {execFileSync} from 'node:child_process';
 import {createRetainedPriceAdmissionInventory} from './retained-price-admission-inventory.mjs';
+import {hasScopedConditionalJobContext,bindScopedConditionalCaller,hasScopedFiniteTransportBudget,readScopedTransportApi,scopedNativeInventoryBudgetProvider,runScopedNativeInventory} from './conditional-deployment-jobs.mjs';
 import {createHash} from 'node:crypto';
 import {appendFileSync,lstatSync,readFileSync,realpathSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
@@ -49,7 +50,10 @@ const clock=value=>{require(typeof value==='string'&&/^\d{4}-\d\d-\d\dT.*Z$/.tes
 const pathSafe=value=>typeof value==='string'&&value.length>0&&Buffer.byteLength(value)<=4096&&!/[\x00-\x1f\x7f\\]/.test(value)&&!value.startsWith('/')&&value.split('/').every(x=>x&&x!=='.'&&x!=='..');
 const sameRepo=run=>run?.repository?.full_name===PRICE_CI.repository&&run.repository.id===PRICE_CI.repositoryId&&run.head_repository?.full_name===PRICE_CI.repository&&run.head_repository.id===PRICE_CI.repositoryId;
 const git=(root,...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:32*1024**2}).trim();
-export function priceReadApi(endpoint,paginate=false){return JSON.parse(execFileSync('gh',['api',...(paginate?['--paginate','--slurp']:[]),endpoint],{encoding:'utf8',maxBuffer:64*1024**2}));}
+export function priceReadApi(endpoint,paginate=false){
+  const managed=readScopedTransportApi(endpoint,paginate);if(managed.handled)return managed.value;
+  return JSON.parse(execFileSync('gh',['api',...(paginate?['--paginate','--slurp']:[]),endpoint],{encoding:'utf8',maxBuffer:64*1024**2}));
+}
 export function priceControllerRoot(){
   if(process.env.RETAINED_PRICE_CONTROLLER_ROOT===undefined)return process.cwd();
   const temp=process.env.RUNNER_TEMP,workspace=process.env.GITHUB_WORKSPACE,root=process.env.RETAINED_PRICE_CONTROLLER_ROOT;
@@ -224,7 +228,8 @@ export function verifyPriceCiProducer({root=priceControllerRoot(),event,executio
   verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.producer);
   const ignored=ignoredCiCallback(api,activation,event.workflow_run,own);
   if(ignored)return recordAdmission({status:'noop',repair:false},{reason:'authenticated_predecessor_or_unsuccessful_ci',ci:runObservations.get(ignored),producer:runObservations.get(own)});
-  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[own.id,event.workflow_run.id],head:activation.executing.sha});
+  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[own.id,event.workflow_run.id],head:activation.executing.sha,budgetProvider:hasScopedFiniteTransportBudget(PRICE_CI.repository)?scopedNativeInventoryBudgetProvider:undefined,
+    run:hasScopedFiniteTransportBudget(PRICE_CI.repository)?runScopedNativeInventory:undefined});
   try{
     const ci=verifyCi(scoped,activation,event.workflow_run);
     require(clock(ci.run.updated_at)<=clock(own.created_at),'producer predates CI completion');const winner=verifyWinningProducer(scoped,activation,own,{active:true,root,ci});
@@ -247,8 +252,30 @@ export function verifyPriceSourceCompletion({root=priceControllerRoot(),sourceRu
   if(event){verifyEvent(event);sourceRun=event.workflow_run;}
   if(positive(sourceRun))sourceRun=api(`${prefix}/actions/runs/${sourceRun}`);
   require(positive(sourceRun?.id),'missing source run');
-  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[sourceRun.id,activation.request.predecessor?.run_id],head:activation.executing.sha});
+  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[sourceRun.id,activation.request.predecessor?.run_id],head:activation.executing.sha,budgetProvider:hasScopedFiniteTransportBudget(PRICE_CI.repository)?scopedNativeInventoryBudgetProvider:undefined,
+    run:hasScopedFiniteTransportBudget(PRICE_CI.repository)?runScopedNativeInventory:undefined});
   try{return verifySource(scoped,activation,sourceRun,root,api);}finally{scoped.dispose();}
+}
+export function registerPricePublisherTransportCaller(proof,{api,execution=priceExecution(),now=Date.now()}={}){
+  if(!hasScopedConditionalJobContext(PRICE_CI.repository))return false;
+  const context=proof&&sourceProofs.get(proof);
+  require(context&&typeof api==='function'&&context.api===api,'publisher transport requires the original verified source proof/API');
+  require(resolve(context.root)===resolve(priceControllerRoot()),'publisher transport requires the original source controller root');
+  const request=readRequest(context.root),executing=proof.activation.executing;
+  require(request?.value.enabled&&checksum(request.raw)===proof.activation.request_sha256,'publisher transport source request changed');
+  require(Number.isFinite(now)&&clock(request.value.activation.not_before)<=now&&now<clock(request.value.activation.not_after),'publisher transport activation expired');
+  require(git(context.root,'rev-parse','HEAD')===executing.sha&&git(context.root,'rev-parse','HEAD^{tree}')===executing.tree,'publisher transport source controller changed');
+  const run=verifyContext(api,proof.activation,execution,PRICE_CI.publisher),all=jobs(api,run.id);
+  const found=all.filter(job=>job.name==='publish');require(found.length===1,'publisher transport requires one active publish job');
+  const job=found[0];
+  require(job.head_sha===executing.sha&&job.status==='in_progress'&&job.conclusion===null
+    &&clock(job.started_at)>=clock(run.run_started_at)&&clock(job.started_at)<=now,'publisher transport publish job is not active');
+  // This immutable identity was verified by the branded source activation.
+  // Its projection is sufficient for transport binding; no new commit GET.
+  const controller={head:executing.sha,tree:executing.tree},commit={sha:executing.sha,tree:{sha:executing.tree}};
+  return bindScopedConditionalCaller({repository:PRICE_CI.repository,controller,
+    caller:{run,attempt:1,job,commit,job_started_at:job.started_at},role:'publisher',
+    criticalIds:[proof.producer.id,proof.trigger.id]});
 }
 function priorHold(api,activation,listed,ci){
   if(listed.conclusion!=='success')return preAdmissionCallback(api,activation,listed,PRICE_CI.publisher,ci);
@@ -266,7 +293,8 @@ export function routePricePublication({root=priceControllerRoot(),event,executio
   verifyEvent(event);const own=verifyContext(api,activation,execution,PRICE_CI.publisher);
   if(event.workflow_run?.path!==PRICE_CI.producer.path||event.workflow_run?.event!=='workflow_run'||event.workflow_run?.head_sha!==activation.executing.sha)
     return recordAdmission({price_wait:true,price_source:false},{reason:'finite_publication_hold',publisher:runObservations.get(own)});
-  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[own.id,event.workflow_run.id],head:activation.executing.sha});
+  const scoped=createRetainedPriceAdmissionInventory(api,{requiredIds:[own.id,event.workflow_run.id],head:activation.executing.sha,budgetProvider:hasScopedFiniteTransportBudget(PRICE_CI.repository)?scopedNativeInventoryBudgetProvider:undefined,
+    run:hasScopedFiniteTransportBudget(PRICE_CI.repository)?runScopedNativeInventory:undefined});
   try{
     const proof=verifySource(scoped,activation,event.workflow_run,root,api);require(clock(proof.producer.updated_at)<=clock(own.created_at),'publication caller predates genuine source');
     const all=runs(scoped,PRICE_CI.publisher,activation.executing.sha,'workflow_run');require(all.some(r=>r.id===own.id),'missing publication caller inventory');
