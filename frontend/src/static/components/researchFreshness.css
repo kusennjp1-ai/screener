@@ -9,6 +9,28 @@
 .research-freshness-notice > svg { flex:0 0 18px; width:18px; height:18px; }
 .research-freshness-notice > span { min-width:0; }
 
+/* One disclosure carries both warnings. Its full-width native summary is
+   keyboard/touch accessible; expanded evidence stays in normal document flow. */
+.research-freshness-combined { display:block; padding:0; }
+.research-freshness-combined > details { min-width:0; }
+.research-freshness-combined summary {
+ display:flex; align-items:flex-start; gap:6px; min-height:26px;
+ padding:4px 8px; box-sizing:border-box; cursor:pointer; list-style:none;
+}
+.research-freshness-combined summary::-webkit-details-marker { display:none; }
+.research-freshness-combined summary > svg { flex:0 0 18px; width:18px; height:18px; }
+.research-freshness-combined summary > span { min-width:0; }
+.research-freshness-combined .freshness-disclosure { margin-left:auto; white-space:nowrap; }
+.research-freshness-combined summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.freshness-explanation { padding:0 8px 8px; }
+.freshness-explanation p { margin:8px 0; font-size:inherit; color:inherit; }
+.freshness-explanation dl { margin:8px 0; }
+.freshness-explanation dd { margin:0 0 6px; }
+.freshness-explanation time { overflow-wrap:anywhere; }
+@media (pointer:coarse) {
+ .research-freshness-combined summary { min-height:44px; align-items:center; }
+}
+
 /* The wide overview has spare space under the radar. Share its existing height
    with the caution, retaining the full summary, chart labels, and action targets. */
 @media (min-width:701px) {
@@ -35,6 +57,7 @@
 .comparison-page-heading > .research-freshness-notice { align-self:center; }
 
 @media (max-width:700px) {
+ .research-freshness-combined summary { min-height:44px; align-items:center; }
  /* Reclaim decorative spacing only; the radar plot and all 44px actions retain
     their size. The caution sits above the radar in the first viewport. */
  .research-hero.research-overview.has-freshness { padding-block:4px; }
