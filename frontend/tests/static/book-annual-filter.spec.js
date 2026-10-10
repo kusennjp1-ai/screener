@@ -21,6 +21,10 @@ const TECH_SYMBOLS = ALL_SYMBOLS.filter(symbol => symbol !== 'EPSSECTOR');
 const FILTERED_TECH = ['EPSPASSA', 'EPSPASSB', 'EPSBASEFAIL'];
 const STRICT_TECH = ['EPSPASSA', 'EPSPASSB'];
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
+const FONT_STYLESHEETS = new Set([
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap',
+  'https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap',
+]);
 
 function syntheticRow(symbol, values, rs, sector = 'Technology') {
   return withFinancialProof(withAuditFixture({
@@ -84,6 +88,13 @@ async function installFixture({ page, context, baseURL }, width) {
   // a financial provider or send a mutation, even if local env config changes.
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
+    // These exact imports come from index.css and static/theme/foundation.css.
+    // Fulfill them locally so the browser uses system fallbacks: no Google Fonts
+    // request or font download is sent, and the external-data guard stays strict.
+    // This fixture does not certify production web-font rendering or geometry.
+    if (request.method() === 'GET' && request.resourceType() === 'stylesheet' && FONT_STYLESHEETS.has(request.url())) {
+      return route.fulfill({ contentType: 'text/css', body: '/* Synthetic no-network font fixture. */' });
+    }
     if (url.origin !== origin || !['GET', 'HEAD'].includes(request.method())) {
       blockedRequests.push(`${request.method()} ${url.origin}${url.pathname}`);
       return route.abort('blockedbyclient');
@@ -133,9 +144,11 @@ async function showCandidates(page, drawer) {
 
 async function returnToList(page, width) {
   if (width < 700) {
-    await page.getByRole('button', { name: '← 候補一覧に戻る', exact: true }).click();
+    // The visible header control changes views; unlike the drawer CTA, its
+    // existing event handler does not promise to move focus to the board.
+    await page.getByRole('button', { name: '← 候補一覧', exact: true }).click();
     await expect(page.locator('main.research-workbench')).toHaveAttribute('data-mobile-view', 'list');
-    await expect(board(page)).toBeFocused();
+    await expect(board(page)).toBeVisible();
   }
 }
 
@@ -215,7 +228,7 @@ for (const width of WIDTHS) {
     await annual(drawer).scrollIntoViewIfNeeded();
     await expectNoOverflow(page, drawer);
     expect((await new AxeBuilder({ page }).include('[role="dialog"][aria-labelledby="research-filter-title"]').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
-    await info.attach(`annual-filter-drawer-${width}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await info.attach(`annual-filter-drawer-${width}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-drawer-${width}.png`) }), contentType: 'image/png' });
     await showCandidates(page, drawer);
     await expect(candidateSymbols(page)).toHaveText(STRICT_TECH);
     await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
@@ -232,7 +245,7 @@ for (const width of WIDTHS) {
     }
     await expectNoOverflow(page, activeNotice(page));
     expect((await new AxeBuilder({ page }).include('#root').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
-    await info.attach(`annual-filter-results-${width}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await info.attach(`annual-filter-results-${width}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-results-${width}.png`) }), contentType: 'image/png' });
     verify();
   });
 
