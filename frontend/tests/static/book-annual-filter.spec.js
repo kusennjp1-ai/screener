@@ -158,6 +158,100 @@ async function expectNoOverflow(page, scope) {
   expect(await scope.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 }
 
+async function expectMethodLabelsFit(drawer, width) {
+  const methods = drawer.getByRole('group', { name: '投資手法', exact: true });
+  const buttons = methods.getByRole('button');
+  await expect(buttons).toHaveText(['ミネルヴィニ', '基本と原則', 'オニール', 'IBD型']);
+  await expect(methods).toHaveCSS('display', width <= 420 ? 'grid' : 'flex');
+  await methods.scrollIntoViewIfNeeded();
+  const boxes = await buttons.evaluateAll(nodes => nodes.map(node => {
+    const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return {
+      label: node.textContent, left: box.left, top: box.top, right: box.right, bottom: box.bottom,
+      height: box.height, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+      scrollHeight: node.scrollHeight, clientHeight: node.clientHeight,
+      content: {
+        left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+        right: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+        top: box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop),
+        bottom: box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom),
+      },
+      text: [...range.getClientRects()].map(rect => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height })),
+    };
+  }));
+  for (const [index, box] of boxes.entries()) {
+    await expect(buttons.nth(index)).toBeInViewport({ ratio: 1 });
+    expect(box.scrollWidth, `${box.label}: no horizontal clipping`).toBeLessThanOrEqual(box.clientWidth);
+    expect(box.scrollHeight, `${box.label}: no vertical clipping`).toBeLessThanOrEqual(box.clientHeight);
+    if (width <= 420) expect(box.height, `${box.label}: narrow touch target`).toBeGreaterThanOrEqual(44);
+    expect(box.text.length, `${box.label}: rendered text range`).toBeGreaterThan(0);
+    for (const text of box.text) {
+      expect(text.width).toBeGreaterThan(0);
+      expect(text.height).toBeGreaterThan(0);
+      // Half a CSS pixel allows fractional text metrics, not clipped letters.
+      expect(text.left, `${box.label}: full label left edge`).toBeGreaterThanOrEqual(box.content.left - .5);
+      expect(text.right, `${box.label}: full label right edge`).toBeLessThanOrEqual(box.content.right + .5);
+      expect(text.top, `${box.label}: full label top edge`).toBeGreaterThanOrEqual(box.content.top - .5);
+      expect(text.bottom, `${box.label}: full label bottom edge`).toBeLessThanOrEqual(box.content.bottom + .5);
+    }
+    for (const other of boxes.slice(index + 1)) {
+      const overlapX = Math.min(box.right, other.right) - Math.max(box.left, other.left);
+      const overlapY = Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top);
+      expect(overlapX > .5 && overlapY > .5, `${box.label} and ${other.label}: disjoint buttons`).toBe(false);
+    }
+  }
+  if (width <= 420) {
+    expect(Math.abs(boxes[0].top - boxes[1].top)).toBeLessThanOrEqual(.5);
+    expect(Math.abs(boxes[2].top - boxes[3].top)).toBeLessThanOrEqual(.5);
+    expect(boxes[2].top).toBeGreaterThanOrEqual(boxes[0].bottom - .5);
+    expect(Math.abs(boxes[0].left - boxes[2].left)).toBeLessThanOrEqual(.5);
+  } else {
+    for (const box of boxes) expect(Math.abs(box.top - boxes[0].top)).toBeLessThanOrEqual(.5);
+    for (let index = 1; index < boxes.length; index++) expect(boxes[index].left).toBeGreaterThanOrEqual(boxes[index - 1].right - .5);
+  }
+}
+
+async function checkMethodKeyboard(page, drawer, width) {
+  const methods = drawer.getByRole('group', { name: '投資手法', exact: true });
+  const buttons = methods.getByRole('button');
+  const search = drawer.getByRole('textbox');
+  await expect(search).toHaveCount(1);
+  await search.focus();
+  for (let index = 0; index < 4; index++) {
+    await page.keyboard.press('Tab');
+    await expect(buttons.nth(index)).toBeFocused();
+    await page.keyboard.press(index % 2 ? 'Space' : 'Enter');
+    await expect(buttons.nth(index)).toBeFocused();
+    await expect(buttons.nth(index)).toHaveAttribute('aria-pressed', 'true');
+    await expect(methods.locator('button[aria-pressed="true"]')).toHaveCount(1);
+    await expect(annual(drawer)).toBeChecked();
+    // Measure every full label with each method's selected/bold state as well.
+    await expectMethodLabelsFit(drawer, width);
+  }
+  await page.keyboard.press('Shift+Tab');
+  await expect(buttons.nth(2)).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(buttons.nth(1)).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(buttons.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expectMethodLabelsFit(drawer, width);
+}
+
+async function captureTopArea(page, info, width, theme) {
+  // Scroll over the fixed header, outside canvases that consume wheel gestures.
+  await page.mouse.move(width / 2, 20);
+  await page.mouse.wheel(0, -10000);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(activeNotice(page)).toContainText('研究画面のみ · 2銘柄');
+  const height = await activeNotice(page).evaluate(node => Math.ceil(node.getBoundingClientRect().bottom + window.scrollY));
+  expect(height).toBeGreaterThan(0);
+  const name = `annual-filter-hero-status-${width}-${theme}`;
+  await info.attach(name, { body: await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, clip: { x: 0, y: 0, width, height } }), contentType: 'image/png' });
+}
+
 // The exporter quotes every field, including JSON evidence with commas/quotes.
 // Parse those fields rather than searching CSV substrings for ticker names.
 function parseCsv(text) {
@@ -233,6 +327,7 @@ for (const width of WIDTHS) {
       }
       await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', theme);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await checkMethodKeyboard(page, drawer, width);
       await expect(annual(drawer)).toBeChecked();
       await expect(drawer.getByLabel('全条件通過のみ', { exact: true })).toBeChecked();
       await expect(drawer.getByRole('combobox', { name: '業種', exact: true })).toHaveValue('Technology');
@@ -258,6 +353,7 @@ for (const width of WIDTHS) {
       await expectNoOverflow(page, activeNotice(page));
       expect((await new AxeBuilder({ page }).include('#root').withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
       await info.attach(`annual-filter-results-${width}-${theme}`, { body: await page.screenshot({ path: info.outputPath(`annual-filter-results-${width}-${theme}.png`) }), contentType: 'image/png' });
+      await captureTopArea(page, info, width, theme);
     }
     await page.getByRole('button', { name: 'ダークモードに切り替え', exact: true }).click();
     await expect(page.locator('.leader-shell')).toHaveAttribute('data-theme', 'dark');

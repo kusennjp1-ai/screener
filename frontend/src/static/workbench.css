@@ -51,3 +51,9 @@
 @media(max-width:700px){.research-hero .changes-trigger{display:block;position:absolute;top:4px;right:64px;min-height:44px;min-width:44px;font-size:12px;color:var(--text-2)}.changes-desktop{display:none}.changes-mobile{display:inline}}
 
 .radar-zone-label{background:var(--ground);padding:0 4px}
+
+/* Keep each method name readable within the narrow filter drawer. */
+@media(max-width:420px){
+ [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));height:auto}
+ [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs button{min-height:44px}
+}
