@@ -1,3 +1,4 @@
+import { bookAnnualEpsEvidence } from './bookAnnualEpsEvidence.js';
 import { ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability.js';
 import { projectFinancialRow, currentFinancialHistory } from './financialCurrent.js';
@@ -24,7 +25,7 @@ export function snapshotFreshness(date, now = Date.now()) {
 
 // CSV aggregate semantics are versioned separately from unchanged rule/ranking semantics.
 export const METHOD_STATUS_VERSION = 'research-method-status-v2-logical-and';
-export function researchCsv(ranked, method, date, now = Date.now()) {
+export function researchCsv(ranked, method, date, now = Date.now(), { annualEpsOnly = false } = {}) {
   const cell = value => {
     let text = String(value ?? '');
     // Text that starts with spreadsheet formula syntax must remain literal.
@@ -32,10 +33,12 @@ export function researchCsv(ranked, method, date, now = Date.now()) {
     return `"${text.replaceAll('"', '""')}"`;
   };
   const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version'];
-  const lines = ranked.map(({row})=>({row,assessment:assess(row,method,now)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
+  if (annualEpsOnly) header.push('active_filter_id','active_filter_version','book_source_scope','book_annual_state','book_annual_increase_state','book_annual_cagr_state','book_annual_eps_points','book_annual_currency','book_annual_basis','book_annual_cagr_percent','book_annual_comparisons','book_annual_unknown_reasons','book_annual_provider','book_annual_observed_at','book_annual_valid_until_exclusive','book_annual_evaluated_at','book_annual_receipt_sha256','book_annual_raw_payload_sha256','book_annual_capture_id','book_annual_review_status','book_complete_method_status');
+  const exports = ranked.map(({row}) => ({row, evidence: annualEpsOnly ? bookAnnualEpsEvidence(row,{date,now}) : null})).filter(({evidence}) => !annualEpsOnly || evidence.comparisonState === 'pass');
+  const lines = exports.map(({row,evidence})=>({row,evidence,assessment:assess(row,method,now)})).map(({ row: r, assessment: a, evidence: e }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
     a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication', a.method_status || (a.failed ? 'fail' : a.unknown ? 'unknown' : 'pass'), a.applicability_reason || '', instrumentApplicability(r).version,
     currentFinancialHistory(r.financial_history, r.symbol, date, now, r).annual.length ? r.financial_history.annual_currency || r.financial_history.currency : '',
-    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION]);
+    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION, ...(annualEpsOnly ? [e.id,e.version,e.source.scope,e.comparisonState,e.annualIncreaseState,e.cagrState,JSON.stringify(e.points),e.currency,e.basis,e.cagr,JSON.stringify(e.comparisons),e.unknownReasons.join(' / '),e.provider,e.observedAt,new Date(e.validUntilExclusive).toISOString(),new Date(e.evaluatedAt).toISOString(),e.receiptSha256,e.rawPayloadSha256,e.captureId,e.reviewStatus,e.completeMethodStatus] : [])]);
   return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
 }
 // The feature store exports positive % BELOW the high; the legacy technical

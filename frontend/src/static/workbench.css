@@ -51,3 +51,25 @@
 @media(max-width:700px){.research-hero .changes-trigger{display:block;position:absolute;top:4px;right:64px;min-height:44px;min-width:44px;font-size:12px;color:var(--text-2)}.changes-desktop{display:none}.changes-mobile{display:inline}}
 
 .radar-zone-label{background:var(--ground);padding:0 4px}
+
+/* Keep drawer labels readable and preserve full mobile touch targets. */
+@media(max-width:420px){
+ [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));height:auto}
+ .research-list .method-tabs{height:auto}
+ [role="dialog"][aria-labelledby="research-filter-title"] .method-tabs button,.research-list .method-tabs button{min-height:44px}
+}
+/* Wrap only where needed, preserving the wider phone's first-screen candidate budget. */
+@media(max-width:380px){
+ .research-list .method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .research-overview .hero-date{min-height:48px}
+}
+@media(min-width:381px) and (max-width:420px){
+ .research-overview .hero-copy h1{padding-right:112px}
+}
+/* Mobile identity and price rows must grow with their readable text and controls. */
+@media(max-width:700px){
+ .research-symbol-head{height:auto;max-height:none;grid-template-rows:auto auto}
+ .research-symbol-head .readiness-chip{position:static}
+}
+/* Portaled research filters retain the shell's 44px label hit target. */
+[role="dialog"][aria-labelledby="research-filter-title"] .MuiFormControlLabel-root{min-height:44px;flex-shrink:0}

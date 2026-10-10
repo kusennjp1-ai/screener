@@ -49,7 +49,7 @@ export function bookFinancialEvidence(data, symbol, date) {
   // Original Figure 8.10 shows NET MARGIN LEVELS, not margin YoY growth.
   result.marginImprovement = state(comparable ? rises(last.map(p => p.margin)) : null);
   const trio = [result.epsAcceleration, result.salesAcceleration, result.marginImprovement];
-  result.code33 = trio.includes('unknown') ? 'unknown' : trio.every(s => s === 'pass') ? 'pass' : 'fail';
+  result.code33 = trio.includes('fail') ? 'fail' : trio.every(s => s === 'pass') ? 'pass' : 'unknown';
   result.epsFloor = Object.fromEntries([2, 4].map(count => {
     const selected = result.rows.slice(-count);
     const ready = selected.length === count && !result.stale && selected.every(p => finite(p.epsYoY)) && selected.slice(1).every((p, i) => days(p.end, selected[i].end) >= 70 && days(p.end, selected[i].end) <= 110);

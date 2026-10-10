@@ -1,0 +1,16 @@
+.book-source-comparison { margin: 8px 0 24px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.book-source-comparison h3 { font-size: 15px; margin: 0 0 8px; }
+.book-source-policy { padding: 10px 12px; border-left: 3px solid var(--wait, #d4a25c); background: var(--surface-2, rgba(127,127,127,.06)); }
+.book-source-book { margin-top: 10px; border: 1px solid var(--border, rgba(127,127,127,.3)); border-radius: 8px; padding: 0 12px; }
+.book-source-book > summary { cursor: pointer; min-height: 44px; align-content: center; font-weight: 600; }
+.book-source-book > summary > span { display: inline; margin-left: 8px; font-weight: 400; font-size: 11px; color: var(--text-3); }
+.book-source-book ul { margin: 0; padding: 0; list-style: none; }
+.book-source-rule { border-top: 1px solid var(--border, rgba(127,127,127,.3)); padding: 12px 0; }
+.book-source-rule p { margin: 6px 0; }
+.book-source-rule-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.book-comparison-state { white-space: nowrap; font-size: 11px; }
+.book-comparison-state.state-pass { color: var(--zone); }
+.book-comparison-state.state-fail { color: var(--neg); }
+.book-comparison-state.state-unknown { color: var(--wait); }
+.book-source-meta, .book-source-citation { color: var(--text-3); font-size: 11px; }
+.book-source-evidence { padding: 8px; border-radius: 4px; background: var(--surface-2, rgba(127,127,127,.06)); }

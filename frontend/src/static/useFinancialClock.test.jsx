@@ -74,3 +74,13 @@ it('does not repeatedly wake an expired deadline while its replacement is pendin
   act(()=>vi.advanceTimersByTime(10000));
   expect(renders).toBe(expiredRenders);
 });
+
+it('wakes at the exact optional annual-price midnight without a financial proof deadline', async () => {
+  vi.useFakeTimers();
+  const midnight=Date.parse('2026-11-02T05:00:00Z');vi.setSystemTime(midnight-1);
+  const hook=renderHook(()=>useFinancialClock([], '2026-10-29'));
+  expect(hook.result.current).toBe(midnight-1);
+  await act(async()=>vi.advanceTimersByTimeAsync(1));
+  expect(hook.result.current).toBe(midnight);
+  hook.unmount();vi.useRealTimers();
+});

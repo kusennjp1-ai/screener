@@ -45,7 +45,7 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
   const entry = page.getByRole('region', { name: 'エントリー条件', exact: true });
   await expect(entry.getByText('△ 書籍の追随目安外', { exact: true })).toBeVisible();
   await entry.locator('summary').filter({ hasText: 'アプリ設定と書籍の確認範囲' }).press('Enter');
-  await expect(entry).toContainText('5%はこの資料で裏付けられた書籍指定ではありません');
+  await expect(entry).toContainText('5%をこの書籍の追随許容幅とは扱いません');
   await entry.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath(`source-warning-${width}.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

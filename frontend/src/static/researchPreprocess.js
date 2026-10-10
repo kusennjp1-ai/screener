@@ -1,3 +1,4 @@
+import { bookAnnualEpsEvidence, bookAnnualPriceExpiry, BOOK_ANNUAL_EPS_VERSION } from './bookAnnualEpsEvidence.js';
 import { applicabilityUniverse } from './instrumentApplicability.js';
 import { decodeResearchIndex, RESEARCH_METHODS } from './researchTransport.js';
 import { mergeScanRows } from './qualificationAudit.js';
@@ -24,12 +25,15 @@ export function prepareResearchBundle(payloads, expectedDate, { now = Date.now()
     item.row = bySymbol.get(item.row.symbol);
     const {rules,...summary}=item.assessment; void rules; item.assessment=summary;
   }
-  const metadata = { instrument_applicability_universe: applicabilityUniverse(rows), evaluated_at: now, next_expiry_at: financialNextExpiry(rows, now), generation, evaluation_epoch: evaluationEpoch, assessment_version: RULE_SUMMARY_VERSION };
+  const annual_eps = { version: BOOK_ANNUAL_EPS_VERSION, rows, states: rows.map(row => bookAnnualEpsEvidence(row, { date, now }).comparisonState) };
+  const financialExpiry = financialNextExpiry(rows, now), priceExpiry = bookAnnualPriceExpiry(date);
+  const deadlines = [financialExpiry, priceExpiry].filter(value => validClock(value) && value > now);
+  const metadata = { instrument_applicability_universe: applicabilityUniverse(rows), evaluated_at: now, next_expiry_at: deadlines.length ? Math.min(...deadlines) : null, generation, evaluation_epoch: evaluationEpoch, assessment_version: RULE_SUMMARY_VERSION };
   // Index all rows before delivery, including rows outside the visible page
   // and portfolio sample. These indices share the evaluation's identity and
   // lifetime; published payloads cannot supply an independently trusted index.
   const temporal = { date, rows, session_intervals: prepareSessionIntervals(rows, date), readiness_boundaries: prepareReadinessBoundaries(rows) };
-  return { rows, date, rankings, prepared: preparePortfolioRows(rows, now), temporal, ...metadata };
+  return { rows, date, rankings, annual_eps, prepared: preparePortfolioRows(rows, now), temporal, ...metadata };
 }
 
 // This metadata is produced by prepareResearchBundle after source validation,
@@ -47,3 +51,13 @@ export const researchBundleCurrent = (bundle, now, generation = bundle?.generati
 // Older callers without Worker-produced indices retain the pure-helper path.
 export const researchBundleTemporal = bundle => bundle?.temporal?.rows === bundle?.rows && bundle?.temporal?.date === bundle?.date &&
   Array.isArray(bundle?.temporal?.session_intervals) && Array.isArray(bundle?.temporal?.readiness_boundaries) ? bundle.temporal : null;
+
+// The condition index shares the worker evaluation and exact row ownership.
+// Published cached flags cannot enter this index; prepareResearchBundle rebuilds it.
+export function researchAnnualStates(bundle, now = Date.now()) {
+  const index = bundle?.annual_eps;
+  if (!researchBundleCurrent(bundle, now) || index?.version !== BOOK_ANNUAL_EPS_VERSION || index.rows !== bundle.rows ||
+      !Array.isArray(index.states) || index.states.length !== bundle.rows.length ||
+      !index.states.every(state => ['pass','fail','unknown','not_applicable'].includes(state))) return null;
+  return new Map(bundle.rows.map((row, id) => [row, index.states[id]]));
+}

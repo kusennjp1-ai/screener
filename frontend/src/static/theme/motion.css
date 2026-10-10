@@ -1,5 +1,6 @@
 /* D12: one entrance, no repeating decorative timers or layout animation. */
-@keyframes research-rise { from { opacity:0;transform:translateY(4px) } to { opacity:1;transform:translateY(0) } }
+/* Keep hero text at its accessible contrast throughout the entrance. */
+@keyframes research-rise { from { opacity:1;transform:translateY(4px) } to { opacity:1;transform:translateY(0) } }
 @keyframes research-zone { from { opacity:.35 } to { opacity:1 } }
 .research-hero .hero-copy { animation:research-rise 180ms ease-out both; }
 /* Radar points must be visible at their first painted frame. */
