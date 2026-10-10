@@ -12,9 +12,9 @@ export function radarFrame(g, small) {
   const ys=[70,80,90,100].map(value=>`<span class="radar-y mono" style="left:${percent(g.left-6,g.width)};top:${percent(g.y(value),g.height)}">${value}</span>`).join('');
   return `<header><strong>セットアップ・レーダー</strong><span>横：ピボット比 · 縦：RS推計</span></header>`+
     `<div class="radar-plot" style="aspect-ratio:${g.width}/${g.height}">`+
-    `<canvas data-radar-canvas width="${g.width}" height="${g.height}" style="display:block;width:100%;height:100%" role="img" aria-label="ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。価格位置の0〜+5%はアプリ設定で、第1冊の追随目安は約2〜3%です。購入条件とは別です。"></canvas>`+
+    `<canvas data-radar-canvas width="${g.width}" height="${g.height}" style="display:block;width:100%;height:100%" role="img" aria-label="ミネルヴィニ条件通過のうち有効なピボットがある${g.points.length}銘柄。点の大きさは出来高比。銘柄一覧でも選択できます。価格位置の0〜+5%はアプリ設定で、『ミネルヴィニの成長株投資法』の追随目安は約2〜3%です。購入条件とは別です。"></canvas>`+
     `<svg viewBox="0 0 ${g.width} ${g.height}" preserveAspectRatio="none" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"><g data-radar-selection></g><path d="M${g.x(10)-3} ${g.top+g.ph+4}l3 -8m1 8l3 -8" stroke="var(--text-3)"></path></svg>`+
-    xs+ys+`<span class="radar-zone-label" style="left:${percent((g.x(0)+g.x(5))/2,g.width)}" title="0〜+5%はアプリの価格位置設定。第1冊の追随目安は約2〜3%で、購入条件は別途確認。">アプリ設定 0〜+5%</span><span data-radar-label style="display:contents"></span></div>`+
+    xs+ys+`<span class="radar-zone-label" style="left:${percent((g.x(0)+g.x(5))/2,g.width)}" title="0〜+5%はアプリの価格位置設定。『ミネルヴィニの成長株投資法』の追随目安は約2〜3%で、購入条件は別途確認。">アプリ設定 0〜+5%</span><span data-radar-label style="display:contents"></span></div>`+
     '<footer><span>◔ ピボット待ち</span><span>● ゾーン内</span><span>▲ 超過</span><span>+10%以降は圧縮</span></footer>';
 }
 

@@ -7,6 +7,7 @@ const validDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.tes
 const digest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 export const ANNUAL_REPORTED_LIMITATION = '株式単位・株式分割・ADRの調整は提供元の報告に依存し、独立検証していません（USD履歴も同じ基準）。';
 export const NATIVE_ANNUAL_SCHEMA = nativeContract.history_schema;
+export const ANNUAL_POINT_FIELDS = Object.freeze(['end', 'eps', 'revenue', 'netIncome']);
 
 // This validates the destination's explicit source contract. Original receipt
 // replay/cryptographic binding is performed before publication by the exporter.
@@ -16,7 +17,7 @@ export function nativeAnnualHistoryContract(data, symbol) {
   const observed = evidenceTimestamp(proof?.observed_at), quarter = evidenceTimestamp(data?.quarterly_retrieved_at);
   return data?.schema_version === NATIVE_ANNUAL_SCHEMA && proof &&
     Object.keys(proof).sort().join('|') === ['symbol','metric','currency','unit','share_basis','attribute','receipt_sha256','capture_id','raw_payload_sha256','observed_at'].sort().join('|') && proof.symbol === symbol &&
-    Array.isArray(data.annual) && data.annual.every(point => point && Object.keys(point).every(key => ['end','eps','revenue','netIncome'].includes(key))) &&
+    Array.isArray(data.annual) && data.annual.every(point => point && Object.keys(point).every(key => ANNUAL_POINT_FIELDS.includes(key))) &&
     proof.attribute === 'income_stmt' && proof.metric === nativeContract.provider_metric &&
     proof.unit === nativeContract.unit && proof.share_basis === nativeContract.share_basis &&
     nativeContract.supported_currencies.includes(data.currency) && data.annual_currency === data.currency && proof.currency === data.currency &&
@@ -53,7 +54,7 @@ export function financialHistory(data, symbol, date, now = Date.now()) {
   // Legacy USD histories cannot establish a different per-cell source/basis or
   // currency; ambiguous extensions may not authorize a new partial failure.
   const unambiguousAnnual = native || (data.annual_currency === undefined || data.annual_currency === 'USD') &&
-      data.annual_source === undefined && annual.every(p => Object.keys(p).every(key => ['end','eps','revenue','netIncome'].includes(key)));
+      data.annual_source === undefined && annual.every(p => Object.keys(p).every(key => ANNUAL_POINT_FIELDS.includes(key)));
   if (annualPeriodsValid && unambiguousAnnual) result.annualComparisons = annual.slice(1).map((point, i) => {
     const previous = annual[i];
     const reason = !finite(previous.eps) || !finite(point.eps) ? 'missing_annual_eps' : previous.eps <= 0 ? 'nonpositive_comparison_base' : null;

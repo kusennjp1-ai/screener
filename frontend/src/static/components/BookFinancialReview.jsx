@@ -9,7 +9,7 @@ export default function BookFinancialReview({ row, expanded = false, date = row.
   const blocked = current.applicability.status !== 'unverified';
   const stateLabel = value => blocked ? '対象外・参考記録' : label(value);
   return <details id="book-financial-evidence" tabIndex={-1} open={expanded || undefined} style={{ marginTop: 12 }}><summary>業績の連続性と利益の質を確認</summary>
-    <Typography sx={{ my: 1, fontSize: 12 }}>第1冊の確認資料では4〜8四半期の傾向と年次実績も重視します。1四半期の減速や連続加速の未充足だけで、ミネルヴィニの選定全体を不合格にはしません。以下の連続改善・20%／25%は個別の測定項目です。利益の質は売上の裏付けや一時要因も別途確認します（Kindle表示183/421・194/421）。</Typography>
+    <Typography sx={{ my: 1, fontSize: 12 }}>『ミネルヴィニの成長株投資法』では4〜8四半期の傾向と年次実績も重視します。1四半期の減速や連続加速の未充足だけで、ミネルヴィニの選定全体を不合格にはしません。以下の連続改善・20%／25%は個別の測定項目です。利益の質は売上の裏付けや一時要因も別途確認します（提供PDF 234–247・277–279）。</Typography>
     <Typography sx={{fontSize:12,my:1,overflowWrap:'anywhere'}}>提供元：{e.source || '未確認'} ／ 取得：{row.book_financials?.retrieved_at || '時刻未確認'}。提出日は取得時刻と異なります。</Typography>
     <Typography sx={{fontSize:12,my:1}}>書籍照合の基準日：{date || '未確認'}。以下は基準日時点の測定記録です。現在の業績確認：{instrumentApplicabilityLabel(current.applicability) || (current.current ? '期間内の参考資料' : '未確認')}。</Typography>
     {!e.valid ? <Typography sx={{ my: 1 }}>提出日付きの四半期履歴は未取得です。単期の成長率を連続成長の証拠に置き換えません。</Typography> : <>

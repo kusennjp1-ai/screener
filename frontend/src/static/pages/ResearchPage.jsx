@@ -1,3 +1,4 @@
+import { BOOK_ANNUAL_EPS_LABEL, BOOK_ANNUAL_EPS_NOTE } from '../bookAnnualEpsEvidence';
 import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
 import { useFinancialClock } from '../useFinancialClock';
 import { mergeFinancialDetail } from '../financialCurrent';
@@ -8,10 +9,10 @@ import ResearchHero from '../components/ResearchHero';
 import ResearchFreshnessNotice from '../components/ResearchFreshnessNotice';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
-import { filterRanked, prepareSessionCurrent, sessionCurrentFromIntervals } from '../researchPresentation';
+import { filterRanked, annualEpsCoverage, prepareSessionCurrent, sessionCurrentFromIntervals } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography, useMediaQuery } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
@@ -25,13 +26,15 @@ import { buildPortfolioPlan, preparePortfolioRows } from '../portfolioPlan';
 import { usePersonalQuote } from '../usePersonalQuote';
 import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
-import { prepareResearchBundle, researchBundleCurrent, researchBundleTemporal } from '../researchPreprocess';
+import { prepareResearchBundle, researchBundleCurrent, researchBundleTemporal, researchAnnualStates } from '../researchPreprocess';
 import '../research.css';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
 export default function ResearchPage({compareOnly=false}) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const pendingFilterUrl = useRef(null);
   const smallScreen = useMediaQuery('(max-width:700px)');
   const client = useQueryClient();
   const manifest = useStaticManifest();
@@ -46,6 +49,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [personalKey, setPersonalKey] = useState('');
   const [search, setSearch] = useState(() => params.get('symbol') || '');
   const [strict, setStrict] = useState(false);
+  const [annualEpsOnly, setAnnualEpsOnly] = useState(() => params.get('annualEps') === '1');
   const [nearOnly, setNearOnly] = useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
   const [coverage, setCoverage] = useState('all');
@@ -75,7 +79,10 @@ export default function ResearchPage({compareOnly=false}) {
   }, retry: false });
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
   const evaluated = useMemo(() => bundle.data?.rankings?.[method] || [], [method, bundle.data]);
-  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, nearOnly, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, nearOnly, onlyWatch, watch, liquid, coverage, sector]);
+  const baseRanked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, nearOnly, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, nearOnly, onlyWatch, watch, liquid, coverage, sector]);
+  const annualStates = useMemo(() => researchAnnualStates(bundle.data, bundle.evaluatedNow ?? Date.now()), [bundle.data, bundle.evaluatedNow]);
+  const annualCoverage = useMemo(() => annualEpsCoverage(baseRanked, annualStates), [baseRanked, annualStates]);
+  const ranked = useMemo(() => annualEpsOnly ? filterRanked(baseRanked, { annualEpsOnly, annualEpsStates: annualStates }) : baseRanked, [baseRanked, annualEpsOnly, annualStates]);
   const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
   const radarRanked=useMemo(()=>filterRanked(bundle.data?.rankings?.minervini||[],{liquidOnly:liquid}),[bundle.data,liquid]);
   // Coverage is independent of method; all exported rankings share one universe.
@@ -103,7 +110,10 @@ export default function ResearchPage({compareOnly=false}) {
   useEffect(() => {
     // RouterLink uses pushState, which does not emit hashchange. Restore every
     // supported URL field on navigation, including fields removed by Back.
+    if (pendingFilterUrl.current === location.search) { pendingFilterUrl.current = null; return; }
+    pendingFilterUrl.current = null;
     const ticker = params.get('symbol') || null;
+    setAnnualEpsOnly(params.get('annualEps') === '1');
     setMethod(Object.hasOwn(METHODS, params.get('method')) ? params.get('method') : 'minervini');
     setView(params.get('view') === 'charts' ? 'charts' : 'list');
     setSector(params.get('sector') || '');
@@ -119,7 +129,7 @@ export default function ResearchPage({compareOnly=false}) {
     setChart(null);
     setVerificationSymbol(null);
     initialSymbol.current = ticker;
-  }, [location.key, location.pathname, params]);
+  }, [location.key, location.pathname, location.search, params]);
   useEffect(() => {
     if (!initialSymbol.current || selected?.symbol !== initialSymbol.current) return;
     const frame = requestAnimationFrame(() => {
@@ -210,14 +220,30 @@ export default function ResearchPage({compareOnly=false}) {
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
   }); }
   const selectSymbol = useCallback(ticker => {setSymbol(ticker);if(window.matchMedia?.('(max-width:700px)')?.matches){setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});}},[]);
+  useEffect(() => {
+    if (chart && !navigationSymbols.includes(chart)) setChart(null);
+    if (bundle.data && symbol && !navigationSymbols.includes(symbol)) {
+      setSymbol(navigationSymbols[0] || null); setVerificationSymbol(null);
+      if (!navigationSymbols.length) setMobileView('list');
+    }
+  }, [chart, symbol, navigationSymbols, bundle.data]);
   const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
   const disconnect = useCallback(()=>setPersonalKey(''),[]);
   const openFilters = useCallback(()=>setFiltersOpen(true),[]);
   const toggleNear = useCallback(()=>{setNearOnly(value=>!value);setStrict(false);},[]);
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
   const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
+  function toggleAnnualEps(enabled) {
+    setAnnualEpsOnly(enabled);
+    const next = new URLSearchParams(location.search);
+    if (enabled) next.set('annualEps', '1'); else next.delete('annualEps');
+    next.set('method', method); next.set('view', view);
+    if (sector) next.set('sector', sector); else next.delete('sector');
+    pendingFilterUrl.current = next.size ? `?${next}` : '';
+    navigate({ pathname: location.pathname, search: pendingFilterUrl.current });
+  }
   function download() {
-    const csv = researchCsv(ranked, method, bundle.data?.date, now);
+    const csv = researchCsv(ranked, method, bundle.data?.date, Date.now(), { annualEpsOnly });
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `research-${method}-${bundle.data?.date || 'unknown'}.csv`; a.click(); URL.revokeObjectURL(url);
   }
@@ -240,6 +266,9 @@ export default function ResearchPage({compareOnly=false}) {
       <FormControlLabel control={<Switch checked={strict} onChange={e=>{setStrict(e.target.checked);if(e.target.checked)setNearOnly(false);}}/>} label="全条件通過のみ"/>
       <FormControlLabel control={<Switch checked={nearOnly} onChange={e=>{setNearOnly(e.target.checked);if(e.target.checked)setStrict(false);}}/>} label="あと1条件"/>
       {nearOnly&&<p>通過数が全条件数−1の監視候補です。未達・未確認を区別し、合格には数えません。</p>}
+      <FormControlLabel control={<Switch checked={annualEpsOnly} onChange={e=>toggleAnnualEps(e.target.checked)}/>} label={BOOK_ANNUAL_EPS_LABEL}/>
+      <p aria-live="polite" data-testid="annual-eps-coverage">現在の絞り込み対象 {annualCoverage.total}銘柄：数値充足 {annualCoverage.pass} · 未充足 {annualCoverage.fail} · 未確認 {annualCoverage.unknown} · 対象外 {annualCoverage.not_applicable}。追加条件を適用する前の件数です。</p>
+      <p>{BOOK_ANNUAL_EPS_NOTE}</p>
       <FormControlLabel control={<Switch checked={onlyWatch} onChange={e=>setOnlyWatch(e.target.checked)}/>} label="ウォッチのみ"/>
       <label className="sector-filter">業種 <select value={sector} onChange={e=>setSector(e.target.value)}><option value="">すべての業種</option>{SECTORS.map(([key,label])=><option key={key} value={key}>{label}</option>)}<option value="Unknown">分類不明</option></select></label>
       <p>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。未確認は合格に数えません。</p>
@@ -255,9 +284,10 @@ export default function ResearchPage({compareOnly=false}) {
     {storageError && <Alert severity="warning">ウォッチはこの画面のみ保持されます。端末への保存が制限されています。</Alert>}
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
+    {annualEpsOnly&&<p className="book-annual-active" role="status">追加絞り込み有効：{BOOK_ANNUAL_EPS_LABEL} · 研究画面のみ · {ranked.length}銘柄。基本手法の通過数・順位・購入条件は別判定。上部の概要・配分・日次変化は従来の対象範囲です。</p>}
     <div className="research-grid" data-view={actualView}>
       <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
-      {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
+      {actualView!=='charts' && <ResearchDetail annualEpsOnly={annualEpsOnly} financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">
       <CandidatePerformance entry={entry}/>
@@ -265,12 +295,12 @@ export default function ResearchPage({compareOnly=false}) {
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">{overlap ? `IBD公式リストとの一致：${Math.round(overlap.recall * 100)}%` : '公開ルールに基づく独自スクリーナー'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>資料確認の範囲：今回は『ミネルヴィニの成長株投資法』の一部を照合。ピボット追随は約2〜3%が目安です。第1方式の5%や第2方式の3%は既存アプリ設定で、第2冊の指定値を今回確認したものではありません。第1冊のトレンドテンプレート8条件も確認済み（Kindle表示115/421）。ただし、SMA・21営業日前との上向き比較・252営業日の高安値窓・独自RSの計算はアプリの近似で、原典との完全な同等性は未検証です。</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>4冊の資料を照合し、銘柄詳細の「書籍検証」で条件・著者ごとの差と現在の測定値を比較できます。『ミネルヴィニの成長株投資法』は安値比30%以上（PDF 151–152）、『株式トレード 基本と原則』は25%以上（PDF 221–222）。両書の追随目安は約2〜3%ですが、アプリの5%／3%設定と書籍条件全体の認定は別です。SMA・21営業日前比較・252営業日の高安値窓・独自RSはアプリの近似。4冊の全条件を実装・認定したものではなく、選定・購入条件と保守的なリスク設定は維持しています。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint || personalKey ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : 'エントリー位置の「場中価格を接続する」から自分用APIキーで接続できます。未接続時は日次価格で計算します。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>
       </details>
     </footer>}
-    {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} publication={entry.publication} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
+    {chart && navigationSymbols.includes(chart) && <StaticChartViewerModal annualEpsOnly={annualEpsOnly} method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} publication={entry.publication} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
   </Box>;
 }

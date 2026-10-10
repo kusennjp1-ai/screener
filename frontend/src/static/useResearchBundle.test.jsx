@@ -220,3 +220,30 @@ it.each([undefined,null])('accepts the actual validated snapshot with expected d
   expect(worker.loadResearchBundle).toHaveBeenCalledTimes(1);
   hook.unmount();client.clear();
 });
+
+it.each(['annual_source','new_york_age'])('withdraws the optional annual condition at %s expiry and rejects the preceding generation result',async boundary=>{
+  const deadline=boundary==='annual_source'?start+1000:Date.parse('2026-10-06T04:00:00Z');
+  let clock=deadline-1000;vi.spyOn(Date,'now').mockImplementation(()=>clock);
+  const buildRow=(day,isNew=false)=>({symbol:'ANNUAL',market:'US',as_of_date:day,financial_history:{
+    symbol:'ANNUAL',as_of_date:day,status:'available',basis:'reported_diluted_eps',currency:'USD',source:'Synthetic provider',
+    retrieved_at:new Date(boundary==='annual_source'&&!isNew?deadline-72*3600000-1:clock-1000).toISOString(),
+    annual:[1,1.2,1.6,2].map((eps,i)=>({end:`${2022+i}-12-31`,eps})),quarterly:[],
+  }});
+  worker.loadResearchBundle.mockImplementation((_path,day,_fetch,_signal,options)=>Promise.resolve(prepareResearchBundle([{as_of_date:day,rows:[buildRow(day,options.generation==='new')]}],day,options)));
+  let finish,signal;
+  worker.refreshResearchBundle.mockImplementation((rows,day,options)=>new Promise(resolve=>{signal=options.signal;finish=()=>resolve(prepareResearchBundle([{as_of_date:day,rows}],day,options));}));
+  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const wrapper=({children})=><QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const hook=renderHook(({generation,day})=>useResearchBundle(`research-${generation}.json`,day,generation),{wrapper,initialProps:{generation:'old',day:date}});
+  await waitFor(()=>expect(hook.result.current.data?.annual_eps.states).toEqual(['pass']));
+  expect(hook.result.current.data.next_expiry_at).toBe(deadline);
+  clock=deadline;act(()=>window.dispatchEvent(new Event('focus')));
+  await waitFor(()=>expect(finish).toBeTypeOf('function'));expect(hook.result.current.data).toBeUndefined();
+  hook.rerender({generation:'new',day:boundary==='new_york_age'?'2026-10-05':date});
+  await waitFor(()=>expect(hook.result.current.data?.generation).toBe('new'));
+  expect(hook.result.current.data.annual_eps.states).toEqual(['pass']);expect(signal.aborted).toBe(true);
+  await act(async()=>finish());
+  expect(hook.result.current.data.generation).toBe('new');expect(hook.result.current.data.annual_eps.states).toEqual(['pass']);
+  expect(hook.result.current.data.annual_eps.rows).toBe(hook.result.current.data.rows);
+  hook.unmount();client.clear();
+});

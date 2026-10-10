@@ -156,6 +156,6 @@ it('does not report or select undrawn points when a canvas context is unavailabl
 it.each([false,true])('labels the app-only five-percent range before interaction (mobile=%s)',small=>{
  const {container}=render(<SetupRadar ranked={ranked} small={small}/>);
  expect(container.querySelector('.radar-zone-label')).toHaveTextContent('アプリ設定 0〜+5%');
- expect(container.querySelector('.radar-zone-label')).toHaveAttribute('title',expect.stringContaining('第1冊の追随目安は約2〜3%'));
- expect(screen.getByRole('img')).toHaveAccessibleName(/0〜\+5%はアプリ設定.*第1冊の追随目安は約2〜3%.*購入条件とは別/);
+ expect(container.querySelector('.radar-zone-label')).toHaveAttribute('title',expect.stringContaining('『ミネルヴィニの成長株投資法』の追随目安は約2〜3%'));
+ expect(screen.getByRole('img')).toHaveAccessibleName(/0〜\+5%はアプリ設定.*『ミネルヴィニの成長株投資法』の追随目安は約2〜3%.*購入条件とは別/);
 });
