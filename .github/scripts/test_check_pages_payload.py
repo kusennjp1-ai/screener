@@ -330,7 +330,8 @@ class WorkflowScopeTests(unittest.TestCase):
                     continue
                 self.assertEqual(workflow.name, "research-ui-release.yml")
                 # Finite guards authenticate using separate token-scoped steps.
-                # The ordinary build and quality step keeps its original environment.
+                # The legacy build keeps its original token-free environment.
+                # The exact ordinary carry has a complementary controller step.
                 build_steps = [(i, s) for i, s in enumerate(steps)
                                if field(s, "name") == "Build with daily selection export"]
                 self.assertEqual(len(build_steps), 1)
@@ -338,13 +339,48 @@ class WorkflowScopeTests(unittest.TestCase):
                 self.assertLess(build_index, index)
                 self.assertEqual(field(build, "working-directory"), "release/frontend")
                 self.assertIsNone(input_field(build, "GH_TOKEN"))
-                self.assertEqual(field(build, "if"), "steps.plan.outputs.publish == 'true'")
+                self.assertEqual(field(build, "if"), "steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING != 'true'")
                 self.assertNotIn("continue-on-error:", build)
                 commands = [line.strip() for line in build.split("        run: |\n", 1)[1].splitlines() if line.strip()]
                 self.assertEqual(commands, [
                     'if [ "$METADATA_MIGRATION" != true ] && [ "$FINANCIAL_ACTIVATION" != true ] && [ "$FINANCIAL_SOURCE_RENEWAL" != true ]; then npm run build; fi',
                     "node tools/check-data-quality.mjs",
                 ])
+                ordinary_steps = [(i, s) for i, s in enumerate(steps)
+                                  if field(s, "name") == "Build the exact ordinary carry with reviewed controller tooling"]
+                self.assertEqual(len(ordinary_steps), 1)
+                ordinary_index, ordinary = ordinary_steps[0]
+                self.assertLess(ordinary_index, build_index)
+                self.assertEqual(field(ordinary, "if"), "steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING == 'true'")
+                self.assertEqual(field(ordinary, "run"), "node .github/scripts/select-release-source.mjs ordinary-carry-build")
+                self.assertEqual(input_field(ordinary, "GH_TOKEN"), "${{ github.token }}")
+                self.assertIsNone(input_field(ordinary, "GITHUB_TOKEN"))
+                self.assertIsNone(field(ordinary, "working-directory"))
+                self.assertNotIn("continue-on-error:", ordinary)
+                compose_steps = [(i, s) for i, s in enumerate(steps)
+                                 if field(s, "run") == "node .github/scripts/select-release-source.mjs compose"]
+                self.assertEqual(len(compose_steps), 1)
+                compose_index, compose = compose_steps[0]
+                self.assertLess(build_index, compose_index)
+                self.assertLess(compose_index, index)
+                self.assertEqual(field(compose, "if"), "steps.plan.outputs.publish == 'true'")
+                self.assertNotIn("continue-on-error:", compose)
+                controller = (REPO / ".github/scripts/select-release-source.mjs").read_text()
+                body = re.search(r"async function buildOrdinaryCarry\(\)\{\n(.*?)\n\}\nasync function prepareCarry", controller, re.S)
+                self.assertIsNotNone(body)
+                body = body.group(1)
+                self.assertIn("for(const key of ['GH_TOKEN','GITHUB_TOKEN'])delete buildEnv[key];", body)
+                self.assertIn("const run=script=>execFileSync(process.execPath,[script],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});", body)
+                ordinary_commands = [
+                    "await withOrdinaryExporter(paths.frontend,path=>run(path));",
+                    "run('tools/record-candidate-history.mjs');",
+                    "execFileSync(process.execPath,['node_modules/vite/bin/vite.js','build'],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});",
+                    "run('tools/check-data-quality.mjs');",
+                    "await checkOrdinaryCarry(state,ordinaryContext(state),paths);",
+                ]
+                positions = [body.index(command) if command in body else -1 for command in ordinary_commands]
+                self.assertNotIn(-1, positions)
+                self.assertEqual(positions, sorted(positions))
                 for name, command, relation in [
                     ("Verify publisher tooling before finite build", "publisher-build-before", "before"),
                     ("Verify publisher tooling after finite build", "publisher-build-after", "after"),
@@ -464,6 +500,44 @@ class WorkflowScopeTests(unittest.TestCase):
         for reason, changed in mutations.items():
             with self.subTest(reason=reason):
                 self.assert_publisher_mutation_rejected(text, changed)
+
+    def test_ordinary_build_partition_quality_and_token_mutations_fail_closed(self):
+        text = (REPO / ".github/workflows/research-ui-release.yml").read_text()
+        ordinary = re.search(r'(?m)^      - name: Build the exact ordinary carry with reviewed controller tooling\n'
+                             r'[\s\S]*?(?=^      - )', text).group(0)
+        compose = re.search(r'(?m)^      - name: Preserve approved UI bytes or record verified new UI\n'
+                            r'[\s\S]*?(?=^      - )', text).group(0)
+        mutations = {
+            "missing ordinary": text.replace(ordinary, "", 1),
+            "overlapping branches": text.replace(" && env.ORDINARY_CARRY_TOOLING != 'true'", "", 1),
+            "ordinary branch gap": text.replace(ordinary, ordinary.replace("env.ORDINARY_CARRY_TOOLING == 'true'", "env.ORDINARY_CARRY_TOOLING == 'false'"), 1),
+            "unchecked command": text.replace(ordinary, ordinary.replace("run: node", "run: echo node"), 1),
+            "ignored failure": text.replace(ordinary, ordinary.replace("        env:", "        continue-on-error: true\n        env:"), 1),
+            "missing token": text.replace(ordinary, ordinary.replace("          GH_TOKEN: ${{ github.token }}\n", ""), 1),
+            "wrong token": text.replace(ordinary, ordinary.replace("${{ github.token }}", "${{ secrets.EXTRA_TOKEN }}"), 1),
+            "wrong cwd": text.replace(ordinary, ordinary.replace("        env:", "        working-directory: release/frontend\n        env:"), 1),
+            "build after compose": text.replace(ordinary, "", 1).replace(compose, compose + ordinary, 1),
+        }
+        for reason, changed in mutations.items():
+            with self.subTest(reason=reason):
+                self.assert_publisher_mutation_rejected(text, changed)
+
+        controller = REPO / ".github/scripts/select-release-source.mjs"
+        source = controller.read_text()
+        read_text = Path.read_text
+        for before, after in [
+            ("run('tools/check-data-quality.mjs');", ""),
+            ("await withOrdinaryExporter(paths.frontend,path=>run(path));", ""),
+            ("['GH_TOKEN','GITHUB_TOKEN']", "['GH_TOKEN']"),
+            ("env:buildEnv", "env:process.env"),
+        ]:
+            changed = source.replace(before, after, 1)
+            self.assertNotEqual(changed, source)
+            with self.subTest(controller_mutation=before):
+                def mutated_read(path, *args, **kwargs):
+                    return changed if path == controller else read_text(path, *args, **kwargs)
+                with patch.object(Path, "read_text", mutated_read), self.assertRaises(AssertionError):
+                    self.test_every_final_pages_upload_is_guarded_and_intermediate_is_separate()
 
 
 
