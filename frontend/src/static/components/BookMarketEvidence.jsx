@@ -46,7 +46,10 @@ export default function BookMarketEvidence({ evidence, expectedDate }) {
     {!cohort ? <Typography sx={{ fontSize: 13 }}>同日のRS比較母集団100銘柄以上が必要です。</Typography> : <>
       <Typography sx={{ fontSize: 13, mt: 1 }}>{cohort.selectedAt} に選んだ {cohort.size}銘柄を固定して追跡。観測 {cohort.observed}、欠測 {cohort.missing}。現在の候補を過去の先導株として扱いません。</Typography>
       <Typography sx={{ fontSize: 13 }}>固定した母集団全体：50日線割れ {n(cohort.missing === 0 && cohort.observed === cohort.size ? cohort.below50 : null)} ／ 先導条件から外れた銘柄 {n(cohort.missing === 0 && cohort.observed === cohort.size ? cohort.lostLeaderStatus : null)}。</Typography>
-      {cohort.missing > 0 && <Typography sx={{ fontSize: 13 }}>欠測があるため全体件数は未確認です。観測できた {n(cohort.observed)}銘柄だけの内訳：50日線割れ {n(cohort.observedBelow50)} ／ 先導条件外 {n(cohort.observedLostLeaderStatus)}。この部分集計の0件は、欠測銘柄も問題がないことを示しません。</Typography>}
+      {cohort.missing > 0 && <Typography sx={{ fontSize: 13 }}>欠測があるため全体件数は未確認です。観測できた {n(cohort.observed)}銘柄だけの内訳：50日線割れ {n(cohort.observedBelow50)} ／ 先導条件外 {n(cohort.observedLostLeaderStatus)}。
+        {cohort.observed === 0 ? '対象日の構成銘柄データを取得できていないため、部分集計も未確認です。' :
+          cohort.observed > 0 && (cohort.observedBelow50 === 0 || cohort.observedLostLeaderStatus === 0) ? 'この部分集計の0件は、欠測銘柄も問題がないことを示しません。' : '部分集計から欠測銘柄の状態は判断できません。'}
+      </Typography>}
       <Typography sx={{ fontSize: 13 }}>観測できた構成銘柄の平均騰落 {pct(cohort.meanReturnPct)} ／ 指数 {pct(cohort.indexReturnPct)}</Typography>
     </>}
     <details style={{ marginTop: 20 }}><summary>候補数とカバレッジの推移</summary>

@@ -1,4 +1,9 @@
 .market-workbench { --market-card:var(--surface); --market-ink:var(--text); padding:28px 24px; max-width:1440px; margin:auto; font-variant-numeric:tabular-nums; }
+/* Reserve sticky chrome during native focus and scrollIntoView on market pages. */
+html:has(.market-workbench) { scroll-padding-top:72px; }
+@media(max-width:700px) {
+  html:has(.market-workbench) { scroll-padding-top:64px; scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom,0px)); }
+}
 .market-workbench[data-theme="dark"] { --market-card:var(--panel); --market-ink:var(--text); }
 .market-page-head,.market-section-head { display:flex; justify-content:space-between; gap:24px; align-items:center; margin-bottom:24px; }
 .market-date { display:flex; flex-direction:column; align-items:flex-end; gap:4px; font-size:12px; }
@@ -35,6 +40,13 @@
 .market-disclosure > summary { padding:20px 24px; cursor:pointer; font-size:14px; font-weight:600; min-height:48px; }
 .market-disclosure > summary:focus-visible { outline:2px solid var(--accent); outline-offset:-4px; }
 .market-disclosure .MuiTableCell-root { white-space:nowrap; font-size:13px; padding:14px; }
+.market-indicator-history { min-width:0; overflow-wrap:anywhere; }
+.market-history-cards { list-style:none; margin:8px 0; padding:0; }
+.market-history-cards li { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:8px; }
+.market-history-cards dl { margin:0; }
+.market-history-cards dt { font-size:12px; color:var(--text-2); margin-top:8px; }
+.market-history-cards dt:first-child { margin-top:0; }
+.market-history-cards dd { margin:2px 0 0; font-size:14px; white-space:normal; overflow-wrap:anywhere; }
 .market-footnote { margin-top:24px; font-size:12px; opacity:.8; line-height:2; }
 .market-footnote a { color:var(--accent); display:inline-block; margin-top:12px; font-size:14px; }
 @media(max-width:700px) {

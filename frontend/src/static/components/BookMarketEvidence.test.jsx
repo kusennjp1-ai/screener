@@ -32,6 +32,20 @@ describe('book market evidence display', () => {
     expect(screen.getByText(/この期間の発生件数は未確認/)).toBeInTheDocument();
     expect(screen.getByText(/未確認を0件として扱いません/)).toBeInTheDocument();
   });
+  it.each([
+    { observed: 0, missing: 12, observedBelow50: null, observedLostLeaderStatus: null },
+    { observed: 10, missing: 2, observedBelow50: null, observedLostLeaderStatus: null },
+    { observed: 10, missing: 2, observedBelow50: 2, observedLostLeaderStatus: 1 },
+  ])('does not use the zero warning without an observed zero: %j', counts => {
+    const partial = { ...latest, cohort: { ...latest.cohort, ...counts } };
+    render(<BookMarketEvidence evidence={{ ...evidence, latest: partial }} expectedDate={date} />);
+    expect(screen.queryByText(/この部分集計の0件は/)).not.toBeInTheDocument();
+    if (counts.observed === 0) {
+      expect(screen.getByText(/対象日の構成銘柄データを取得できていない/)).toHaveTextContent('50日線割れ 未確認 ／ 先導条件外 未確認');
+    } else {
+      expect(screen.getByText(/部分集計から欠測銘柄の状態は判断できません/)).toBeInTheDocument();
+    }
+  });
   it('labels measured zero as applying only to the observed population', () => {
     render(<BookMarketEvidence evidence={{ ...evidence, series: [{ ...latest, breakoutProxyCount: 0 }] }} expectedDate={date} />);
     expect(screen.getByText(/観測できた母集団では.*0件/)).toBeInTheDocument();

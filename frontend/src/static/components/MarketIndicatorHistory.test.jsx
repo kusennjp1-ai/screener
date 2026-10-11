@@ -6,7 +6,18 @@ import { observation, series, payload } from '../../../tools/fixtures/market-his
 const props = { market: 'US', asOfDate: '2026-10-09' };
 describe('market history display without fabricated observations', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-11T12:00:00Z')); });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  it('uses one labeled card per observation on narrow screens, preserving unknowns and zero', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    render(<MarketIndicatorHistory {...props} history={payload(series('new_highs', { observations: [observation(0, '2026-10-08'), observation(null)] }))} />);
+    const history = screen.getByRole('list', { name: '新高値の履歴' });
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    const cards = within(history).getAllByRole('listitem');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent('対象日2026-10-09値未確認状態・未確認理由');
+    expect(cards[0]).toHaveTextContent('取得日時（UTC）2026-10-10T01:00:00Z');
+    expect(cards[1]).toHaveTextContent('対象日2026-10-08値0状態・未確認理由観測値');
+  });
   it('shows all six requested categories and nine missing series', () => {
     render(<MarketIndicatorHistory {...props} />);
     expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(6);
