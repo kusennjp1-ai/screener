@@ -1,0 +1,127 @@
+{
+  "cffi_backend": {
+    "filename": "_cffi_backend.cpython-311-x86_64-linux-gnu.so",
+    "sha256": "192828af4429c83d5cd92c40275ffd3c71459c3dc7a58e43cf4b5c346d78dc8e"
+  },
+  "counting": "conservative_native_request_admissions_before_http_do",
+  "maximum_admissions_per_perform": 1,
+  "maximum_native_admissions": 1000,
+  "native_source": {
+    "curl_cffi_commit": "d7302948771801955bcef0d5288c137d7b74f49d",
+    "curl_commit": "68720b4837284335b2d63cb358f8f6ce65f5bc55",
+    "impersonate_commit": "107d67f9f7a518334b1b11e4810637e70b2671a7",
+    "official_wheel_sha256": "a875a661e2f9a949be29454880bbb9553307a487c4c08819738298cf5c1622e2"
+  },
+  "packages": {
+    "certifi": {
+      "files": {
+        "certifi/__init__.py": "7a52e5f4205f9b3d12a31898ceaa7e3f6837d19cc230700bcae1a9d91d1486c1",
+        "certifi/__main__.py": "c410688fdd394d45812d118034e71fee88ba7beddd30fe1c1281bd3b232cd758",
+        "certifi/cacert.pem": "9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f",
+        "certifi/core.py": "5c55f2727746e697f7edac9e17c377d8752e0da7ecca191531b3b80403d61dad",
+        "certifi/tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "certifi/tests/test_certify.py": "7c179d1edf37f7e912b133663735fb46c6338d5d0e5f8915d11c3bc287d227b8"
+      },
+      "version": "2026.7.22"
+    },
+    "cffi": {
+      "files": {
+        "cffi/__init__.py": "c47b2db28c5f197e242d4dd4af95b7ebb0da65763fc76972cafd06f93e942cda",
+        "cffi/_cffi_gen_src.py": "c94479de91526ec6b7b2c17bfd53aa5d368a78be402531ccfddc99f48198f6cc",
+        "cffi/_imp_emulation.py": "4714441bccc06c8d913c6070c3dd2eff97e2f2c59d6a1a5d8a93a83f3929ec2d",
+        "cffi/_shimmed_dist_utils.py": "0638f6c26f3265bbc5bd6131e4011f9aa6aa6726458587e8c8b2d01e45d9b9aa",
+        "cffi/api.py": "7165f5665b1c98ec9392fb61881a5458b712441b6a9699fe9a806ee1eb019b32",
+        "cffi/backend_ctypes.py": "4fb092735e0fe6fca5a22e61ca8c7af2a841597d3bf68c075da1836d8fd4edba",
+        "cffi/cffi_opcode.py": "e7ed5c53aa691c6cecb2d17f7a88250fff2d08393bebf6619338f77d6e1289cd",
+        "cffi/commontypes.py": "ecdeb33ed08596fc57316847574f29b148dd6082b65e0b0ddf2a39760b9afefe",
+        "cffi/cparser.py": "598fa8c785064ae552613b609b4d8598681b99cb9a6812b79a816591d1529ac5",
+        "cffi/error.py": "bfac53892e14d24bc3732e21fc10d1a39bf7f5942e8fe20c4582efe444dd759b",
+        "cffi/ffiplatform.py": "6afc458dd8a460626812d9893bb7b0566c06fd511597a119fd668d859602aafe",
+        "cffi/gen_src.py": "4d4fd9543c282e71cf95a97cfe63e6a71ab2589ed4ef9da34dcdd4b13984d502",
+        "cffi/lock.py": "97d4d37703083298ba8c39091a742013d72f4c847b0809ed209afc1061edde96",
+        "cffi/model.py": "700f9b10089b70751bb5ba9f80cab408b42314f02357425247333229588d805e",
+        "cffi/pkgconfig.py": "bb2b75d7b4d079e6b77636a03355b9828f11a67c921938280b337c407c997657",
+        "cffi/recompiler.py": "4c9545d3b985cd819357ab33a76ccfac977674928737e781fd2ba22621a5f4ac",
+        "cffi/setuptools_ext.py": "a59ae74ea54290632abbc37123191d6c8b65eb981e84c3f52e8ada51d4fbfb85",
+        "cffi/vengine_cpy.py": "ad1a2e610e819650085cd8d91933d45b9e2b07de76aa2de0726d7a4965d628b7",
+        "cffi/vengine_gen.py": "67f2aa685eabe789f98b886341385975bfb50c14c48a69d4e32e04fcac520838",
+        "cffi/verifier.py": "c48cd5f220cc859d7eaa15f74515f80d6a36934ed6a5c271761840157023ae66"
+      },
+      "version": "2.1.1"
+    },
+    "curl_cffi": {
+      "files": {
+        "curl_cffi/__init__.py": "e9827081dfedf066ee1e4da6a9eecf58daa69185538e15fd802571cd323261d7",
+        "curl_cffi/__main__.py": "2f4007fb1c839609ac3ccf874de70f55bd7f855f57df941fd4cc3b87b2559f1d",
+        "curl_cffi/__version__.py": "15d3aff5ca472141a41647160383bd82d7b4b2e9f5420248ebdac8833524b30a",
+        "curl_cffi/_asyncio_selector.py": "77128e0ba07c9a546edd6622d2dad2ab42fe16c595ea5fe983d4cfdf93a90c8e",
+        "curl_cffi/_wrapper.abi3.so": "79c9faa1630b25a5c0b7bd3d8fd19356fb3e98aa7ebf594a8fe3809ac65b75f0",
+        "curl_cffi/aio.py": "0716e2588dae81eb0beac1df2a4ff7e00db98734d6032e267f61b89112aadbd4",
+        "curl_cffi/cli/__init__.py": "ea2b3b0f8138e97b0e6066149df7b2f666921b80eb011c04937238909bf577ef",
+        "curl_cffi/cli/doctor.py": "5ddbaa279d6ef7dc8e6769e3c80208a694d2a9926777f67c2a7b063975248a9f",
+        "curl_cffi/cli/output.py": "20605ad9c3788dd49eec449cbad8210577bd99c1dc8f9f51b1f233ccf2e9c7eb",
+        "curl_cffi/cli/parse.py": "3b3a861193ea3ab1f69ead7850a9da5f02806e5030e95f3aeed0c4a7d5d22dda",
+        "curl_cffi/cli/pro.py": "a6eda59d9503f754f4a1ac893203eceb0e9e2d828ce991658472c4fa0ef951a3",
+        "curl_cffi/cli/request.py": "8b11491211e8ca6645ba473876ac3f02036e47b7c4b5291ddd165a1d97713a79",
+        "curl_cffi/cli/run.py": "cebc43a4f7d93e6798dc00e18d1d88b76c23de1b0ea6a6b187cf297b5d7e54c5",
+        "curl_cffi/const.py": "ba46c35b545168fd46170859a6d853ef8487c94066d93915f9c167f7292a9afb",
+        "curl_cffi/curl.py": "5d0bb4f8fd99446c3a99edf145ab935252fad7c3d074c0800921d9e96fc4dd52",
+        "curl_cffi/fingerprints.py": "efb956bf261786e937c445b1ab0b46a8fc95f3b695cf68fc8eb8523bb8250384",
+        "curl_cffi/requests/__init__.py": "8edf26c1254b3a61604d4390a31ad7123faaa6cb7c7096cb75541756af94eabc",
+        "curl_cffi/requests/cache.py": "b0c641ec103ae808a7d95519eea58d37edc599dd9388f35ac730b26c78272f16",
+        "curl_cffi/requests/cookies.py": "ef94cbcf6c13708cfb3671130a955565493c96fa34db2fd6173c0e6bb0376991",
+        "curl_cffi/requests/errors.py": "47a379966393751ba44e190d1948a10c0411bbc1d2876eccf04df37d42495fbe",
+        "curl_cffi/requests/exceptions.py": "58cdc40210032cf7ff2a1e27cd93ad269953c3d370bfebc2232797c7b1554fd8",
+        "curl_cffi/requests/headers.py": "4358eb45d27660c2ce725e56dd605a29901d2db3c63cf11127a318ce8b376179",
+        "curl_cffi/requests/impersonate.py": "e998ded6ad02853a2e9fd5cb98aeb9a2e43a5dbc67d4db90a1d604e85806ab48",
+        "curl_cffi/requests/models.py": "8b3e64f7b38baceb61c40b3003d69b350c62583490e25589aee8d401900c688a",
+        "curl_cffi/requests/session.py": "ff3152f6e1c37078c21f9cca11da1adbed8ce7bbb67d88846597df329b940c55",
+        "curl_cffi/requests/streams.py": "e03114c82c74c11e3ba5b49d38b92c7312e2e9210b378511efbea0d297838b56",
+        "curl_cffi/requests/utils.py": "bb61f6493a70f0524a10d27a74983ef85de92526ad873bc226a55c69ebb749d4",
+        "curl_cffi/requests/websockets.py": "1e7d99e89a9fe52289faac90ca2b2bf48bb8bd51d062bfa24fdc2cffb8cf1c32",
+        "curl_cffi/utils.py": "c62c2c39dfb95b720636f3bac9e0dba0e930f702cf0f6871fd2603f62e12a955"
+      },
+      "version": "0.16.3"
+    },
+    "yfinance": {
+      "files": {
+        "yfinance/__init__.py": "cb66662efcf8e961c6cebd229b6cabedf13c13cbd4a0614057b238f41cb1e828",
+        "yfinance/base.py": "beb2b7020a99a75bf9bf960e57efc76bbd634ae998e926034e9eb3e84671dba0",
+        "yfinance/cache.py": "9d78cf4439d607142f7683fac28e1c2e98953be6a300355dd843f896a36e3bba",
+        "yfinance/const.py": "b6400e77ae0f5db7c13bc78aa438697b24e22b1dc7097d1748236ab8b42f8d87",
+        "yfinance/data.py": "9524cded3e57db2198fce9c54db64dc654e456a19d9ccf028f29434b732405d5",
+        "yfinance/domain/__init__.py": "bd9b81ad072161230f12f4d3f142b092e2df0b37450654fb1db76c6eda1eedbe",
+        "yfinance/domain/domain.py": "fff473f23c5553a4831bb069097baa5f75fb7c59f9ec2774a310e9443b3d7767",
+        "yfinance/domain/industry.py": "e96f3a43e5a4c6d7038bd91cf4e5f3521b1606659c11f5bceff3f6fcbc884cc5",
+        "yfinance/domain/market.py": "cfba08ba0339d130b3ebd61c5d01cf3c061b18e34e45067e582f0f057bb3263d",
+        "yfinance/domain/sector.py": "578ba172b20b9342e78f5fcb32b0867651aacd186f936b378247d1e1082947f5",
+        "yfinance/exceptions.py": "16241e89d10c6317825d3387fa96cb5f20b4dd0a2a15636fa41d28ae9c8e48e3",
+        "yfinance/live.py": "412eef828a3be1c5a3a1fa45ae2daf8054f7a3d89e1701f8d1a9e5d6ed9455ab",
+        "yfinance/lookup.py": "2910163ee15aee9f6750e71da7f445b2241e1a6fd413d97805e7eea212b47a9d",
+        "yfinance/multi.py": "e80bd1cdcfb8fae1fabfeab346fa8084e3ce7f8ea501ea52eeb8ba4a151571c9",
+        "yfinance/pricing_pb2.py": "f898c023ef8a8d9fb38acc9f6e3c37fe9f13d4624db2270e4a9f65adbd9c4dd4",
+        "yfinance/scrapers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "yfinance/scrapers/analysis.py": "9040d76975c741a6ad8090beda49c16e16639ed7eb28b5acb8acfb7b33f1d275",
+        "yfinance/scrapers/fundamentals.py": "f89b8e3215ca8ff76b8a7c604d74622582bdfe10f4873dd1e92de9f8ff02bdd7",
+        "yfinance/scrapers/funds.py": "f74226567873882dbc5a2fb665e39fc6c3c9c40aabf8302a01ee9c8db6a9fd0b",
+        "yfinance/scrapers/history.py": "c7eee0df3fe8ee6d8473f8acf2a0239f3c7f1a005959919968f5a8bac579d85b",
+        "yfinance/scrapers/holders.py": "71110b41a794d6bc3eda2fa159e0405ba95d53fc32b3baa407cdbffdd4d9e697",
+        "yfinance/scrapers/quote.py": "445ba5a77b40f852a5a2ffbcefe706d8e0f1262383a22fdb2ebc09548020a2e4",
+        "yfinance/screener/__init__.py": "6f7c998c18e66819dd93d7fb027ae08d65e9035695714bbc335ac5f0d9083119",
+        "yfinance/screener/query.py": "a26bf9f98c28d7c7a451ca377fe69241a85166b8106f3f58c9d6ea5616357e19",
+        "yfinance/screener/screener.py": "d437bf755c9fab42d5255c742e357426d03ecc0346f15a86ae4a0ff32dc242f7",
+        "yfinance/search.py": "bb5362d98602e96fd367bb977e07caff033eb6d79f59f2368591a84d2a53e02b",
+        "yfinance/shared.py": "8badd803f3a646e36a3540d8207b9bd69bae0483adc03750b7a1d4b1f50bc191",
+        "yfinance/ticker.py": "5159378c27fdb02c88e891538a35c2cd14d65c539de77c72c33e6b9c7d54481e",
+        "yfinance/tickers.py": "8ee2c0ded286722dd4143e7c86969e21c4c994b99485e0cf77844125eac3ddfd",
+        "yfinance/utils.py": "e50df954e0b552a68329a2c06bdfa2ed7d0a02a5bf1fe976f419a4c1e3074b6e",
+        "yfinance/version.py": "c1d391899ab1881e6527279f0cd7e3208c4729f35921935bc7ad36f433373ddb"
+      },
+      "version": "0.2.66"
+    }
+  },
+  "platform": "linux-x86_64",
+  "python": "3.11",
+  "redirect_policy": "reject_all_3xx",
+  "schema_version": "statement-capture-transport-lock-v1"
+}

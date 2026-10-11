@@ -1,0 +1,22 @@
+{
+  "schema_version": "financial-statement-capture-admission-v1",
+  "request_id": "first-cnh-esta-annual-history",
+  "execution_enabled": true,
+  "repository": "kusennjp1-ai/screener",
+  "repository_id": 1203919607,
+  "workflow": ".github/workflows/financial-statement-capture.yml",
+  "workflow_id": null,
+  "branch": "improve/financial-statement-capture",
+  "event": "push",
+  "expected_run_number": 1,
+  "first_attempt_only": true,
+  "request_sha256": "c6f32b4ad7c86dddfbab1e47fcf22b340799a656d531bb71168aab27594eb190",
+  "runtime_lock_sha256": "71e8c90555f47fc46c3e9318d2ffcd9c6bb4adc68a18aaf2c419b476258b6481",
+  "code_tree_sha256": "4d198b467cbe76d8f562eb5ce5397d0e4d9bd6c19fe2719e863a28052213c381",
+  "dispatch_not_before": "2026-10-11T12:50:00Z",
+  "dispatch_not_after": "2026-10-11T13:20:00Z",
+  "required_valid_through": "2026-10-11T13:50:00Z",
+  "maximum_job_seconds": 1500,
+  "finalization_reserve_seconds": 420,
+  "maximum_preflight_age_seconds": 30
+}
