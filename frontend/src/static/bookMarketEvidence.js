@@ -126,8 +126,12 @@ export function buildBookMarketEvidence({ charts = [], asOfDate, benchmark = nul
       benchmark: index,
       leadersPositiveWhileIndexNegative: ranked.count >= 100 && finite(index?.return20) ? leaders.filter(r => r.return20 > 0 && index.return20 < 0).length : null,
       cohort: cohort ? { selectedAt: cohort.date, size: cohort.members.length, observed: activeCohort.length,
-        below50: activeCohort.length || !cohort.members.length ? activeCohort.filter(m => m.current.below50).length : null,
-        lostLeaderStatus: ranked.count >= 100 ? activeCohort.filter(m => !m.current.leader).length : null,
+        // Whole-cohort counts require complete observation. A zero among only
+        // the surviving observations does not certify the missing members.
+        below50: activeCohort.length === cohort.members.length ? activeCohort.filter(m => m.current.below50).length : null,
+        lostLeaderStatus: activeCohort.length === cohort.members.length && ranked.count >= 100 ? activeCohort.filter(m => !m.current.leader).length : null,
+        observedBelow50: activeCohort.length ? activeCohort.filter(m => m.current.below50).length : null,
+        observedLostLeaderStatus: activeCohort.length && ranked.count >= 100 ? activeCohort.filter(m => !m.current.leader).length : null,
         meanReturnPct: activeCohort.length ? mean(activeCohort.map(m => change(m.current.close, m.original.close))) : null,
         indexReturnPct: index && positive(cohort.indexClose) ? change(index.close, cohort.indexClose) : null,
         // Missing members stay missing, never silently counted as healthy.
@@ -152,8 +156,22 @@ export function buildBookMarketEvidence({ charts = [], asOfDate, benchmark = nul
 export function breakoutHistoryStatus(evidence) {
   const series = evidence?.series;
   if (!Array.isArray(series) || !series.length || !Array.isArray(evidence?.breakoutEvents)) return 'unknown';
+  const days = new Map(), eventCounts = new Map(), eventKeys = new Set();
+  for (const row of series) {
+    if (!dateValid(row?.date) || days.has(row.date)) return 'inconsistent';
+    if (row.breakoutProxyCount != null && (!Number.isSafeInteger(row.breakoutProxyCount) || row.breakoutProxyCount < 0)) return 'inconsistent';
+    days.set(row.date, row);
+  }
+  for (const event of evidence.breakoutEvents) {
+    if (!dateValid(event?.date) || !days.has(event.date) || typeof event.symbol !== 'string' || !event.symbol.trim()) return 'inconsistent';
+    const key = JSON.stringify([event.date, event.symbol]);
+    if (eventKeys.has(key)) return 'inconsistent';
+    eventKeys.add(key);
+    eventCounts.set(event.date, (eventCounts.get(event.date) || 0) + 1);
+  }
   const known = series.filter(row => Number.isSafeInteger(row?.breakoutProxyCount) && row.breakoutProxyCount >= 0);
+  if (known.some(row => row.breakoutProxyCount !== (eventCounts.get(row.date) || 0))) return 'inconsistent';
   if (known.length !== series.length) return known.length ? 'partial' : 'unknown';
   if (evidence.breakoutEvents.length) return 'events';
-  return known.every(row => row.breakoutProxyCount === 0) ? 'none' : 'unknown';
+  return 'none';
 }

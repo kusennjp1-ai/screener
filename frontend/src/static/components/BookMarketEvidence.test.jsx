@@ -14,6 +14,19 @@ const latest = { date, coverage: 100, expectedUniverseSize: 1000, coveragePct: 1
 const evidence = { version: BOOK_MARKET_VERSION, as_of_date: date, currentSnapshotComplete: true, latest,
   series: [latest], breakoutEvents: [], methods: {}, unknowns: [] };
 describe('book market evidence display', () => {
+  it('hides unrelated old events instead of accepting a nonempty event array', () => {
+    render(<BookMarketEvidence evidence={{ ...evidence, series: [{ ...latest, breakoutProxyCount: 0 }], breakoutEvents: [{ date: '2025-01-02', symbol: 'UNRELATED' }] }} expectedDate={date} />);
+    expect(screen.getByText(/日別件数が履歴と一致しません/)).toBeInTheDocument();
+    expect(screen.queryByText('UNRELATED')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: '上放れ代理条件の発生履歴' })).not.toBeInTheDocument();
+  });
+  it('masks legacy whole-cohort zeros when some members are missing and labels observed zeros', () => {
+    const partial = { ...latest, cohort: { ...latest.cohort, below50: 0, lostLeaderStatus: 0, observedBelow50: 0, observedLostLeaderStatus: 0 } };
+    render(<BookMarketEvidence evidence={{ ...evidence, latest: partial }} expectedDate={date} />);
+    expect(screen.getByText(/固定した母集団全体/)).toHaveTextContent('50日線割れ 未確認 ／ 先導条件から外れた銘柄 未確認');
+    expect(screen.getByText(/観測できた 10銘柄だけの内訳/)).toHaveTextContent('50日線割れ 0 ／ 先導条件外 0');
+    expect(screen.getByText(/この部分集計の0件は/)).toBeInTheDocument();
+  });
   it('does not describe missing proxy evaluations as no events', () => {
     render(<BookMarketEvidence evidence={{ ...evidence, series: [{ ...latest, breakoutProxyCount: null }] }} expectedDate={date} />);
     expect(screen.getByText(/この期間の発生件数は未確認/)).toBeInTheDocument();

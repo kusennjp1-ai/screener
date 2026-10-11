@@ -160,11 +160,49 @@ test('complete loss of a fixed cohort is unknown, not zero below its moving aver
   assert.equal(data.latest.cohort.below50, null);
   assert.equal(data.latest.cohort.missing, data.latest.cohort.size);
 });
+test('missing the fixed cohort alone stays unknown even with sufficient remaining RS coverage', () => {
+  const fixture = priceFixture(150);
+  const members = new Set(buildBookMarketEvidence(fixture).cohortMembers);
+  assert.equal(members.size, 45);
+  fixture.charts.filter(chart => members.has(chart.symbol)).forEach(chart => chart.bars.pop());
+  const data = buildBookMarketEvidence(fixture);
+  assert.equal(data.latest.rsUniverseSize, 105);
+  assert.equal(data.latest.cohort.observed, 0);
+  for (const key of ['below50', 'lostLeaderStatus', 'observedBelow50', 'observedLostLeaderStatus']) assert.equal(data.latest.cohort[key], null, key);
+});
+test('partial cohort zeros describe the observed subset only; complete cohort zeros remain valid', () => {
+  const fixture = priceFixture(150);
+  const complete = buildBookMarketEvidence(fixture).latest.cohort;
+  assert.equal(complete.missing, 0);
+  assert.equal(complete.below50, 0);
+  fixture.charts.at(-1).bars.pop();
+  const partial = buildBookMarketEvidence(fixture).latest.cohort;
+  assert.equal(partial.observed, 44);
+  assert.equal(partial.missing, 1);
+  assert.equal(partial.below50, null);
+  assert.equal(partial.lostLeaderStatus, null);
+  assert.equal(partial.observedBelow50, 0);
+  assert.equal(typeof partial.observedLostLeaderStatus, 'number');
+});
 test('empty breakout events are unknown, partial, or measured zero according to coverage', () => {
-  for (const data of [null, {}, { series: [], breakoutEvents: [] }, { series: [{ breakoutProxyCount: null }], breakoutEvents: [] }, { series: [{ breakoutProxyCount: 1 }], breakoutEvents: [] }]) assert.equal(breakoutHistoryStatus(data), 'unknown');
-  assert.equal(breakoutHistoryStatus({ series: [{ breakoutProxyCount: 0 }, { breakoutProxyCount: null }], breakoutEvents: [] }), 'partial');
-  assert.equal(breakoutHistoryStatus({ series: [{ breakoutProxyCount: 0 }], breakoutEvents: [] }), 'none');
-  assert.equal(breakoutHistoryStatus({ series: [{ breakoutProxyCount: 1 }], breakoutEvents: [{ symbol: 'SYNTH' }] }), 'events');
+  const row = (count, date = '2026-10-09') => ({ date, breakoutProxyCount: count });
+  for (const data of [null, {}, { series: [], breakoutEvents: [] }, { series: [row(null)], breakoutEvents: [] }]) assert.equal(breakoutHistoryStatus(data), 'unknown');
+  assert.equal(breakoutHistoryStatus({ series: [row(0, '2026-10-08'), row(null)], breakoutEvents: [] }), 'partial');
+  assert.equal(breakoutHistoryStatus({ series: [row(0)], breakoutEvents: [] }), 'none');
+  assert.equal(breakoutHistoryStatus({ series: [row(1)], breakoutEvents: [{ date: '2026-10-09', symbol: 'SYNTH' }] }), 'events');
+});
+test('breakout events must match the history dates and daily counts, not just be nonempty', () => {
+  const row = (count, date = '2026-10-09') => ({ date, breakoutProxyCount: count });
+  const event = { date: '2026-10-09', symbol: 'SYNTH' };
+  for (const data of [
+    { series: [row(0)], breakoutEvents: [{ ...event, date: '2025-01-02' }] },
+    { series: [row(0)], breakoutEvents: [event] },
+    { series: [row(1)], breakoutEvents: [] },
+    { series: [row(2)], breakoutEvents: [event, event] },
+    { series: [row(0, '2026-10-08'), row(1)], breakoutEvents: [{ ...event, date: '2026-10-08' }] },
+    { series: [row(1)], breakoutEvents: [{ ...event, symbol: '' }] },
+    { series: [row(0), row(0)], breakoutEvents: [] },
+  ]) assert.equal(breakoutHistoryStatus(data), 'inconsistent');
 });
 test('existing 13F comparator remains unchanged: missing stays unknown, unchanged count delta is zero', () => {
   const evidence = { symbol: 'SYNTH', status: 'available', unit: '13f_reporting_manager_cik', publication_cutoff: '2026-08-31', observations: [

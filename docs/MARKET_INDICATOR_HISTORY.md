@@ -15,7 +15,7 @@
 | ベースカウント | `bookExitEvidence.js` と `BookExitEvidence.jsx` の銘柄別手動文脈 | 自動認定・市場集計履歴なし |
 | エントリー突破・接近数 | 固定20本窓の上放れ proxy とイベント履歴 | 完成VCP・初回エントリーとは異なる。接近件数なし。未知の代理件数でも空イベント配列を「記録なし」としていた |
 
-`frontend/public/static-data` と必要な実市場履歴ファイルはこの checkout に存在しない。外部市場データを取得せず、合成 fixture のみで検証した。`/workspace/.agents` は空、repo の `.agents/skills` は存在しない。関連 `.claude/skills/minervini-dev-loop/SKILL.md` と `sandbox-e2e/SKILL.md` を確認。`bd` は未導入。push/full-stack/auth変更を伴う手順は今回の明示スコープにより実施しない。
+`frontend/public/static-data` と必要な実市場履歴ファイルはこの checkout に存在しない。市場履歴の追加検証は合成 fixture、backend/golden は既存 checkout の fixture を使用し、外部市場データは取得しない。`/workspace/.agents` は空、repo の `.agents/skills` は存在しない。関連 `.claude/skills/minervini-dev-loop/SKILL.md` と `sandbox-e2e/SKILL.md` を確認。`bd` は未導入。push/full-stack/auth変更を伴う手順は今回の明示スコープにより実施しない。
 
 ## 任意の履歴入力
 
@@ -70,8 +70,9 @@
 
 - 既知の benchmark 営業日で全銘柄が欠測した場合、その日を履歴に残し、件数/出来高は null、coverage は観測数として0とする。benchmark のない期間に未知の取引カレンダーは作らない。
 - 同じ価格日付の重複は、その日以降を rolling window に採用しない。それ以前の有効な prefix は残す。
-- 固定した先導株 cohort を全件観測できない場合、50日線割れを0件にしない。
-- 空のイベント配列だけで上放れ0件と判断しない。評価不能な日や不足のある記録を明示する。実測0も観測できた母集団に限定して表示する。
+- 固定した先導株 cohort の `observed < size` では、全体件数 `below50` / `lostLeaderStatus` は null。観測部分だけの `observedBelow50` / `observedLostLeaderStatus` を別に持ち、UIは分母と「部分集計の0件は欠測銘柄も問題がないことを示さない」と明記する。観測数0の場合は部分件数もnull。旧payloadに全体0があっても欠測時は表示しない。
+- 独立レビューの再現条件（150銘柄のうち固定45銘柄だけ欠測し、他105銘柄のRS観測は十分）と1銘柄だけ欠測するケースを追加した。完全観測の実測0は保持する。
+- 空のイベント配列だけで上放れ0件と判断しない。対象日が履歴内にあること、銘柄が明記され同日同銘柄の重複がないこと、日別イベント件数と既知のproxy件数が一致することを検査する。不整合な一覧は非表示。全日を確認した0件だけ観測母集団内の実測0として表示する。
 - 古い latest を completeness フラグだけで最新扱いしない。既存 proxy の取得日時と母集団構成IDが不明であることを明示する。
 
 ## 検証と次の作業
@@ -79,8 +80,25 @@
 追加依存なし：`cd frontend && node --test tools/market-history.node.mjs`。
 既存13F合成テスト：`cd frontend/tools && python3 -m unittest test_institutional_holdings -v`。
 
-結果：追加の合成回帰33件と既存13F集計5件が成功。ローカル Chromium 154 で ES module の計算を実行し、9系列、四半期差分、重複矛盾、全欠測を確認した（外部リクエスト0）。これは React の実画面検証ではない。`node --check` と `git diff --check` も成功。
+初回環境は `node_modules` / pytest 未導入で、`vitest: not found`、`eslint: not found`、`vite: not found`、`No module named pytest`。`npm ci --offline` は ENOTCACHED だった。追加依頼に従い、通常の npm registry 接続による `npm ci`（575 packages）と通常の PyPI 接続による `requirements-runtime.txt` + `requirements-test.txt` のvenvインストールで復旧した。認証/ネットワーク許可の追加、アクセス拒否の回避、lockfile/依存定義の変更はない。
 
-Vitest/ESLint/ビルド、backend redline、golden gate は依存未導入により実行不能。`npm ci --offline` もキャッシュ不足（ENOTCACHED）。外部依存のダウンロードは実施しない。React実画面の確認は未実施：ローカル Chromium は存在するが、React/Vite/MUI/Recharts がなく実アプリを起動できない。追加の JSX テストは、依存が揃う環境で実行する必要がある。
+ローカルは Node 24.19.0 / npm 11.9.0 / Python 3.12.14 / Chromium 154。CI定義はNode22/Python3.11であり、この実行と同一runtimeではない。Pythonにはlockfileがなく既存の下限指定を含むrequirementsをそのまま解決した。実際の全バージョンを検証パッケージに記録し、`pip check` は成功。backend対象に不要なtheme ML依存は導入していない。
 
-残作業：出典と公開時点が確認できる実データ契約、指数別履歴 producer、市場全体P/C producer、過去の母集団記録、銘柄別13F/手動ベースの履歴連携、エントリー突破/接近の確認済み定義と producer、実データ検証、全必須ゲートと実画面検証。今回のパッケージは公開準備完了の証明ではない。
+| 検証 | 結果 |
+|---|---|
+| 追加依存不要の合成回帰 | 36 passed |
+| 既存13F集計 | 5 passed |
+| 最終コードの関連Vitest / exporter順序 | 55 passed（7 files） |
+| 全Vitest | 最終コードを固定して232 files / 2931 passed |
+| ESLint | 0 errors / 6 warnings。6警告はbaselineでも同一 |
+| Vite build | 成功。1000kB超chunk警告はbaselineでも再現。static-data不在のためデータexportはskip |
+| Golden `make gate-5` | 43 passed |
+| backend redline | 262 passed / 1 failed。baselineでも262 passed / 同じ1 failed |
+| backend市場regime配線・静的export | 61 passed |
+| React実画面（Playwright） | 375px / 1440pxの2 tests成功、両方で明暗テーマを確認。画面キャプチャもローカルで確認 |
+
+backendの既存失敗は `tests/unit/services/test_vcp_footprint.py::test_well_formed_on_real_fixtures`（`ftnt.csv` の `tight_near_highs` がTrueである期待に対しFalse）。別worktreeのbaseline `8cf7d9b` で同じ環境・同じ全redlineコマンドを実行して再現し、今回の変更から切り分けた。期待値・ルールは変更しない。このゲート全体がgreenとは扱わない。
+
+React実画面はローカルViteと合成ルート応答だけで確認した。外部リクエストは遮断し、既存CSSのGoogle Fonts取得も遮断して代替フォントで描画。新規履歴の未取得9系列、実測0と欠損、四半期と取得日時、重複矛盾、別母集団、古い値、部分cohortの全体不明/観測部分0を確認。ページの横はみ出し・pageerrorはなし。スクリーンショットは内部確認用で、Libraryへは保存しない。
+
+残作業：出典と公開時点が確認できる実データ契約、指数別履歴 producer、市場全体P/C producer、過去の母集団記録、銘柄別13F/手動ベースの履歴連携、エントリー突破/接近の確認済み定義と producer、実データ検証。契約と欠損表示の改善が完成した段階で、実データ機能や公開準備が完成したという意味ではない。
