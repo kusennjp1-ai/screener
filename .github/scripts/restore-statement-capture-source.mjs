@@ -13,7 +13,36 @@ export const captureWorkflow = '.github/workflows/financial-statement-capture.ym
 export const captureBranch = 'improve/financial-statement-capture';
 export const requestId = 'first-cnh-esta-annual-history';
 export const requestSha256 = 'c6f32b4ad7c86dddfbab1e47fcf22b340799a656d531bb71168aab27594eb190';
-export const admissionSchema = 'financial-statement-capture-admission-v1';
+export const admissionSchema = 'financial-statement-capture-run2-admission-v1';
+export const failedCapture = Object.freeze({
+  "schema_version": "financial-statement-capture-failed-run-binding-v1",
+  "repository": "kusennjp1-ai/screener",
+  "workflow": ".github/workflows/financial-statement-capture.yml",
+  "workflow_id": 381262768,
+  "run_id": 38140913503,
+  "run_number": 1,
+  "run_attempt": 1,
+  "job_id": 114474425321,
+  "head_branch": "improve/financial-statement-capture",
+  "head_sha": "34a3a4fa9d975a45df899032bde05c673d921da9",
+  "tree_sha": "cdb8f1129548d33c50f19ac4f149a908591d1860",
+  "parent_sha": "a3e16ad6176e89d87714d30200f9d836523d441a",
+  "status": "completed",
+  "conclusion": "failure",
+  "run_created_at": "2026-10-11T12:52:10Z",
+  "run_started_at": "2026-10-11T12:52:10Z",
+  "run_updated_at": "2026-10-11T12:52:43Z",
+  "attempt_created_at": "2026-10-11T12:52:11Z",
+  "attempt_updated_at": "2026-10-11T12:52:44Z",
+  "job_started_at": "2026-10-11T12:52:13Z",
+  "job_completed_at": "2026-10-11T12:52:43Z",
+  "job_steps_sha256": "efa23e0c0a853db3822ff01ac7cf7e3eba3dfabbadba59b70cf47835ec6800d9",
+  "restore_step_number": 8,
+  "capture_step_number": 9,
+  "capture_step_started_at": "2026-10-11T12:52:40Z",
+  "capture_step_completed_at": "2026-10-11T12:52:40Z",
+  "artifact_count": 0
+});
 export const source = Object.freeze({
   repository, run_id: 38044324870, run_attempt: 1, run_number: 1, job_id: 114190671543,
   head_branch: 'improve/financial-retention-successor', status: 'completed', conclusion: 'success',
@@ -62,12 +91,14 @@ function nowValue(clock) {
 
 export function validateAdmission(value, { now = new Date(), dryRun = false } = {}) {
   const fixed = { schema_version: admissionSchema, request_id: requestId, repository, repository_id: repositoryId,
-    workflow: captureWorkflow, branch: captureBranch, event: 'push', expected_run_number: 1, first_attempt_only: true,
+    workflow: captureWorkflow, workflow_id: failedCapture.workflow_id, branch: captureBranch, event: 'push', expected_run_number: 2, first_attempt_only: true,
+    expected_parent_sha: failedCapture.head_sha,
     maximum_job_seconds: 1500, finalization_reserve_seconds: 420, maximum_preflight_age_seconds: 30 };
-  keys(value, [...Object.keys(fixed), 'execution_enabled', 'workflow_id', 'request_sha256', 'runtime_lock_sha256',
-    'code_tree_sha256', 'dispatch_not_before', 'dispatch_not_after', 'required_valid_through'], 'capture admission');
+  keys(value, [...Object.keys(fixed), 'execution_enabled', 'request_sha256', 'runtime_lock_sha256',
+    'code_tree_sha256', 'dispatch_not_before', 'dispatch_not_after', 'required_valid_through', 'recovery'], 'capture admission');
   require(Object.entries(fixed).every(([key, expected]) => value[key] === expected), 'Capture admission identity or scope changed');
-  require(typeof value.execution_enabled === 'boolean' && (value.workflow_id === null || positive(value.workflow_id)), 'Invalid capture activation or workflow identity');
+  checkedFailedBinding(value.recovery);
+  require(typeof value.execution_enabled === 'boolean', 'Invalid capture activation or workflow identity');
   require(value.request_sha256 === requestSha256 && ['runtime_lock_sha256', 'code_tree_sha256'].every(key => digest(value[key])), 'Invalid reviewed capture digest');
   if (!value.execution_enabled) {
     require(dryRun === true, 'Capture execution is disabled pending separate approval');
@@ -91,7 +122,7 @@ export function contextFromEnvironment(env = process.env) {
     repository_id: number('GITHUB_REPOSITORY_ID'), job_started_at: env.CAPTURE_JOB_STARTED_AT, workflow_ref: env.GITHUB_WORKFLOW_REF, workflow_sha: env.GITHUB_WORKFLOW_SHA };
 }
 function checkedContext(context) {
-  require(object(context) && positive(context.id) && context.id > source.run_id && context.attempt === 1 && context.run_number === 1 &&
+  require(object(context) && positive(context.id) && context.id > failedCapture.run_id && context.attempt === 1 && context.run_number === 2 &&
     sha1(context.sha) && context.repository === repository && context.repository_id === repositoryId && context.branch === captureBranch &&
     context.event === 'push' && context.workflow_sha === context.sha &&
     context.workflow_ref === `${repository}/${captureWorkflow}@refs/heads/${captureBranch}`, 'Invalid capture context, workflow ref or replayed attempt');
@@ -99,9 +130,9 @@ function checkedContext(context) {
 }
 function checkedCheckout(checkout, admission, context) {
   require(object(checkout) && checkout.sha === context.sha && sha1(checkout.tree) &&
-    equal(checkout.parents, [source.head_sha]) && checkout.code_tree_sha256 === admission.code_tree_sha256 &&
+    equal(checkout.parents, [failedCapture.head_sha]) && checkout.code_tree_sha256 === admission.code_tree_sha256 &&
     checkout.request_sha256 === admission.request_sha256 && checkout.runtime_lock_sha256 === admission.runtime_lock_sha256 &&
-    digest(checkout.admission_sha256), 'Checkout, reviewed code tree, runtime lock or direct producer parent changed');
+    digest(checkout.admission_sha256), 'Checkout, reviewed code tree, runtime lock or direct failed-capture parent changed');
 }
 
 function safePath(relative) {
@@ -151,7 +182,7 @@ export function verifyCheckout(root, admission, context, { git = args => execFil
   const sha = git(['rev-parse', '--verify', 'HEAD']).trim();
   const tree = git(['rev-parse', '--verify', 'HEAD^{tree}']).trim();
   const parents = git(['show', '--format=%P', '--no-patch', 'HEAD']).trim().split(' ');
-  require(sha === context.sha && sha1(tree) && equal(parents, [source.head_sha]), 'Checked-out revision or producer parent changed');
+  require(sha === context.sha && sha1(tree) && equal(parents, [failedCapture.head_sha]), 'Checked-out revision or failed-capture parent changed');
   const listing = git(['ls-tree', '-rz', '--full-tree', 'HEAD']);
   require(listing.endsWith('\0'), 'Incomplete committed tree listing');
   const records = listing.slice(0, -1).split('\0').map(line => {
@@ -193,13 +224,34 @@ function checkedWorkflow(value, path, id = null) {
     'Workflow numeric identity, active state or path changed');
   return value.id;
 }
-function checkedRun(run, workflow, workflowId, now) {
+function checkedRun(run, workflow, workflowId, now, currentAttemptOf = null) {
   require(object(run) && run.repository?.full_name === repository && run.head_repository?.full_name === repository &&
     run.repository.id === repositoryId && run.head_repository.id === repositoryId && positive(run.id) && positive(run.run_number) &&
     positive(run.run_attempt) && sha1(run.head_sha) && run.path === workflow && run.workflow_id === workflowId &&
     typeof run.head_branch === 'string' && run.head_branch.length > 0 && typeof run.event === 'string', 'Malformed workflow or repository run identity');
   const created = utc(run.created_at, 'run creation'), started = utc(run.run_started_at, 'run start'), updated = utc(run.updated_at, 'run update');
-  require(created <= started && started <= updated && updated <= now.getTime(), 'Future or out-of-order workflow clocks');
+  // Current and pinned failed attempts/1 resources have separate record-creation clocks.
+  // It can be created after the canonical run starts. Never use it to reset
+  // dispatch, job, metadata freshness, or historical-source time anchors.
+  const checks = currentAttemptOf === null ? {
+    created_not_after_start: created <= started,
+    start_not_after_update: started <= updated,
+    update_not_after_observation: updated <= now.getTime(),
+  } : {
+    created_not_after_observation: created <= now.getTime(),
+    start_not_after_observation: started <= now.getTime(),
+    update_not_after_observation: updated <= now.getTime(),
+    created_not_after_update: created <= updated,
+    start_not_after_update: started <= updated,
+    canonical_creation_not_after_attempt_creation: utc(currentAttemptOf.created_at, 'canonical run creation') <= created,
+  };
+  const failed = Object.keys(checks).filter(key => !checks[key]);
+  require(failed.length === 0, `Future or out-of-order workflow clocks: ${JSON.stringify({
+    resource: currentAttemptOf === null ? 'workflow_run' : currentAttemptOf.id === failedCapture.run_id ? 'failed_capture_attempt_1' : 'current_attempt_1',
+    run_id: run.id, run_attempt: run.run_attempt, created_at: run.created_at,
+    run_started_at: run.run_started_at, updated_at: run.updated_at,
+    observed_at: now.toISOString(), canonical_created_at: currentAttemptOf?.created_at ?? null, failed,
+  })}`);
   return run;
 }
 function checkedHistorical(run, expected, now) {
@@ -209,12 +261,12 @@ function checkedHistorical(run, expected, now) {
     run.status === expected.status && run.conclusion === expected.conclusion, 'Reviewed historical source attempt changed or is nonterminal');
   return run;
 }
-function checkedCurrent(run, context, admission, workflowId, checkout, now) {
-  checkedRun(run, captureWorkflow, workflowId, now);
-  require(run.id === context.id && run.run_number === 1 && run.run_attempt === 1 && run.head_sha === context.sha &&
+function checkedCurrent(run, context, admission, workflowId, checkout, now, currentAttemptOf = null) {
+  checkedRun(run, captureWorkflow, workflowId, now, currentAttemptOf);
+  require(run.id === context.id && run.run_number === 2 && run.run_attempt === 1 && run.head_sha === context.sha &&
     run.head_branch === captureBranch && run.event === 'push' && run.status === 'in_progress' && run.conclusion === null &&
     run.head_commit?.id === context.sha && run.head_commit?.tree_id === checkout.tree, 'Untrusted capture current run, tree or replayed attempt');
-  const created = utc(run.created_at, 'current creation'), started = utc(run.run_started_at, 'current start');
+  const created = utc((currentAttemptOf ?? run).created_at, 'canonical current creation'), started = utc(run.run_started_at, 'current start');
   require(created >= utc(admission.dispatch_not_before, 'dispatch_not_before') &&
     created <= utc(admission.dispatch_not_after, 'dispatch_not_after') && now.getTime() - started < 1500000,
     'Current run exceeds its admitted creation window or whole-job deadline');
@@ -222,6 +274,95 @@ function checkedCurrent(run, context, admission, workflowId, checkout, now) {
 }
 const sameRun = (a, b) => ['id', 'run_attempt', 'run_number', 'head_sha', 'head_branch', 'workflow_id', 'path',
   'event', 'status', 'conclusion', 'created_at', 'run_started_at'].every(key => a[key] === b[key]);
+// Keep canonical run/inventory and historical equality strict. Only the current
+// and pinned failed attempt resources may have their own created_at; their exact starts still bind.
+const sameCurrentAttempt = (run, attempt) => ['id', 'run_attempt', 'run_number', 'head_sha', 'head_branch', 'workflow_id', 'path',
+  'event', 'status', 'conclusion', 'run_started_at'].every(key => run[key] === attempt[key]);
+function checkedFailedBinding(value) {
+  keys(value, Object.keys(failedCapture), 'failed capture recovery binding');
+  require(Object.entries(failedCapture).every(([key, expected]) => value[key] === expected), 'Reviewed failed capture recovery binding changed');
+}
+const failedRunFields = ['id', 'run_number', 'run_attempt', 'repository', 'head_repository', 'workflow_id', 'path', 'event',
+  'head_branch', 'head_sha', 'head_commit', 'status', 'conclusion', 'created_at', 'run_started_at', 'updated_at'];
+const failedJobFields = ['id', 'run_id', 'run_attempt', 'head_sha', 'name', 'status', 'conclusion', 'started_at', 'completed_at', 'steps'];
+const failedStepFields = ['number', 'name', 'status', 'conclusion', 'started_at', 'completed_at'];
+const pick = (value, fields) => Object.fromEntries(fields.map(key => [key, value[key]]));
+const canonical = value => Array.isArray(value) ? value.map(canonical) : object(value)
+  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+function checkedFailedRun(run, now, canonical = null) {
+  checkedRun(run, captureWorkflow, failedCapture.workflow_id, now, canonical);
+  require(run.id === failedCapture.run_id && run.run_number === failedCapture.run_number && run.run_attempt === 1 &&
+    run.head_sha === failedCapture.head_sha && run.head_branch === failedCapture.head_branch && run.event === 'push' &&
+    run.status === failedCapture.status && run.conclusion === failedCapture.conclusion &&
+    run.head_commit?.id === failedCapture.head_sha && run.head_commit?.tree_id === failedCapture.tree_sha &&
+    run.created_at === (canonical === null ? failedCapture.run_created_at : failedCapture.attempt_created_at) &&
+    run.run_started_at === failedCapture.run_started_at &&
+    run.updated_at === (canonical === null ? failedCapture.run_updated_at : failedCapture.attempt_updated_at),
+    'Pinned failed capture identity, state, tree or clocks changed');
+  if (canonical !== null) require(sameCurrentAttempt(canonical, run), 'Pinned failed capture differs from its first attempt');
+  return run;
+}
+function checkedFailedJob(jobs, now) {
+  require(jobs.length === 1, 'Missing or unexpected failed capture job inventory');
+  const job = jobs[0];
+  require(object(job) && job.id === failedCapture.job_id && job.run_id === failedCapture.run_id && job.run_attempt === 1 &&
+    job.head_sha === failedCapture.head_sha && job.name === 'statement-capture' && job.status === 'completed' && job.conclusion === 'failure' &&
+    job.started_at === failedCapture.job_started_at && job.completed_at === failedCapture.job_completed_at,
+    'Pinned failed capture job identity, state or clocks changed');
+  const started = utc(job.started_at, 'failed capture job start'), completed = utc(job.completed_at, 'failed capture job completion');
+  require(utc(failedCapture.run_started_at, 'failed capture run start') <= started && started <= completed &&
+    completed <= utc(failedCapture.run_updated_at, 'failed capture run completion') && completed <= now.getTime(),
+    'Failed capture job is outside the pinned attempt');
+  require(Array.isArray(job.steps) && job.steps.length === 16, 'Missing or extra failed capture job steps');
+  let previous = 0;
+  for (const step of job.steps) {
+    keys(step, failedStepFields, 'failed capture step');
+    require(positive(step.number) && step.number > previous && typeof step.name === 'string' && step.name.length > 0 && step.name.length <= 256 &&
+      step.status === 'completed' && ['success', 'failure', 'skipped'].includes(step.conclusion), 'Malformed, duplicate or reordered failed capture steps');
+    previous = step.number;
+    const stepStarted = utc(step.started_at, 'failed capture step start'), stepCompleted = utc(step.completed_at, 'failed capture step completion');
+    require(started <= stepStarted && stepStarted <= stepCompleted && stepCompleted <= completed && stepCompleted <= now.getTime(),
+      'Failed capture step is outside the pinned job');
+  }
+  const restore = job.steps.find(step => step.number === failedCapture.restore_step_number);
+  const capture = job.steps.find(step => step.number === failedCapture.capture_step_number);
+  // GitHub records timestamps for skipped steps. Exact completed/skipped state,
+  // both reviewed timestamps and the entire step fingerprint prove nonexecution.
+  require(restore?.status === 'completed' && restore.conclusion === 'failure' && capture?.status === 'completed' && capture.conclusion === 'skipped' &&
+    capture.started_at === failedCapture.capture_step_started_at && capture.completed_at === failedCapture.capture_step_completed_at,
+    'Failed capture restore or skipped capture step changed');
+  require(hash(Buffer.from(JSON.stringify(job.steps.map(step => failedStepFields.map(key => step[key]))), 'utf8')) === failedCapture.job_steps_sha256,
+    'Failed capture whole step fingerprint changed');
+  return job;
+}
+function checkedFailedProof(proof, now) {
+  keys(proof, ['schema_version', 'binding', 'run', 'attempt', 'commit', 'job', 'artifact_inventory'], 'failed capture proof');
+  require(proof.schema_version === 'financial-statement-capture-recovery-proof-v1', 'Invalid failed capture proof schema');
+  checkedFailedBinding(proof.binding);
+  for (const run of [proof.run, proof.attempt]) {
+    keys(run, failedRunFields, 'failed capture run proof');
+    keys(run.repository, ['id', 'full_name'], 'failed capture repository proof');
+    keys(run.head_repository, ['id', 'full_name'], 'failed capture head repository proof');
+    keys(run.head_commit, ['id', 'tree_id'], 'failed capture head commit proof');
+  }
+  checkedFailedRun(proof.run, now); checkedFailedRun(proof.attempt, now, proof.run);
+  keys(proof.commit, ['sha', 'tree_sha', 'parents'], 'failed capture commit proof');
+  require(proof.commit.sha === failedCapture.head_sha && proof.commit.tree_sha === failedCapture.tree_sha &&
+    equal(proof.commit.parents, [source.head_sha]), 'Failed capture commit proof changed');
+  keys(proof.job, failedJobFields, 'failed capture job proof'); checkedFailedJob([proof.job], now);
+  keys(proof.artifact_inventory, ['total_count', 'artifacts'], 'failed capture artifact proof');
+  require(proof.artifact_inventory.total_count === 0 && equal(proof.artifact_inventory.artifacts, []), 'Failed capture produced artifacts');
+  require(Buffer.byteLength(JSON.stringify(canonical(proof)), 'utf8') <= 65536, 'Oversized failed capture proof');
+  return proof;
+}
+function failedProof(run, attempt, commit, job, now) {
+  const runProof = value => ({ ...pick(value, failedRunFields), repository: pick(value.repository, ['id', 'full_name']),
+    head_repository: pick(value.head_repository, ['id', 'full_name']), head_commit: pick(value.head_commit, ['id', 'tree_id']) });
+  return checkedFailedProof({ schema_version: 'financial-statement-capture-recovery-proof-v1', binding: { ...failedCapture },
+    run: runProof(run), attempt: runProof(attempt), commit: { sha: commit.sha, tree_sha: commit.tree.sha, parents: commit.parents.map(item => item.sha) },
+    job: { ...pick(job, failedJobFields), steps: job.steps.map(step => pick(step, failedStepFields)) },
+    artifact_inventory: { total_count: 0, artifacts: [] } }, now);
+}
 function checkedCurrentJob(jobs, context, current, now) {
   require(jobs.length === 1, 'Missing or unexpected capture job inventory');
   const job = jobs[0];
@@ -281,8 +422,8 @@ export async function validateCaptureSource(admission, context, { api = githubRe
   const workflowId = checkedWorkflow(await read(`${prefix}/actions/workflows/financial-statement-capture.yml`), captureWorkflow, admission.workflow_id);
   require(![recovery.workflow_id, source.workflow_id].includes(workflowId), 'Capture and historical workflow identities collide');
   const current = checkedCurrent(await read(`${prefix}/actions/runs/${context.id}`), context, admission, workflowId, checkout, last);
-  const currentAttempt = checkedCurrent(await read(`${prefix}/actions/runs/${context.id}/attempts/1`), context, admission, workflowId, checkout, last);
-  require(sameRun(current, currentAttempt), 'Current run differs from its first attempt');
+  const currentAttempt = checkedCurrent(await read(`${prefix}/actions/runs/${context.id}/attempts/1`), context, admission, workflowId, checkout, last, current);
+  require(sameCurrentAttempt(current, currentAttempt), 'Current run differs from its first attempt');
   const currentJobs = completeInventory(await read(`${prefix}/actions/runs/${context.id}/attempts/1/jobs?per_page=100`), 'jobs', 'current job');
   const currentJob = checkedCurrentJob(currentJobs, context, current, last);
   const ref = await read(`${prefix}/git/ref/heads/${captureBranch}`);
@@ -290,7 +431,19 @@ export async function validateCaptureSource(admission, context, { api = githubRe
     'Capture branch has moved or does not bind the actual current SHA');
   const commit = await read(`${prefix}/git/commits/${context.sha}`);
   require(commit?.sha === context.sha && commit.tree?.sha === checkout.tree &&
-    Array.isArray(commit.parents) && equal(commit.parents.map(item => item.sha), [source.head_sha]), 'Hosted current commit, tree or direct producer parent changed');
+    Array.isArray(commit.parents) && equal(commit.parents.map(item => item.sha), [failedCapture.head_sha]), 'Hosted current commit, tree or direct failed-capture parent changed');
+  const failedCommit = await read(`${prefix}/git/commits/${failedCapture.head_sha}`);
+  require(failedCommit?.sha === failedCapture.head_sha && failedCommit.tree?.sha === failedCapture.tree_sha &&
+    Array.isArray(failedCommit.parents) && equal(failedCommit.parents.map(item => item.sha), [source.head_sha]),
+    'Pinned failed capture commit, tree or sole source parent changed');
+  const failedRun = checkedFailedRun(await read(`${prefix}/actions/runs/${failedCapture.run_id}`), last);
+  const failedAttempt = checkedFailedRun(await read(`${prefix}/actions/runs/${failedCapture.run_id}/attempts/1`), last, failedRun);
+  const failedJobs = completeInventory(await read(`${prefix}/actions/runs/${failedCapture.run_id}/attempts/1/jobs?per_page=100`), 'jobs', 'failed capture job');
+  const failedJob = checkedFailedJob(failedJobs, last);
+  const failedArtifacts = completeInventory(await read(`${prefix}/actions/runs/${failedCapture.run_id}/artifacts?per_page=100`), 'artifacts', 'failed capture artifact');
+  require(failedArtifacts.length === 0, 'Failed capture produced artifacts');
+  require(utc(failedAttempt.updated_at, 'failed capture attempt completion') < utc(current.created_at, 'current creation'),
+    'Pinned failed capture overlaps current recovery');
   const sourceCommit = await read(`${prefix}/git/commits/${source.head_sha}`);
   require(sourceCommit?.sha === source.head_sha && sourceCommit.tree?.sha === source.tree_sha, 'Reviewed source commit or tree changed');
   const run = checkedHistorical(await read(`${prefix}/actions/runs/${source.run_id}`), source, last);
@@ -319,9 +472,16 @@ export async function validateCaptureSource(admission, context, { api = githubRe
   checkedHistorical(successorRuns[0], source, last);
   require(sameRun(run, successorRuns[0]), 'Successor inventory differs from exact successful source');
   const captureRuns = completeInventory(await read(`${prefix}/actions/workflows/${workflowId}/runs?per_page=100`), 'workflow_runs', 'capture');
-  require(captureRuns.length === 1 && captureRuns[0].id === current.id, 'Prior, missing, newer or concurrent capture run; no replay');
-  checkedCurrent(captureRuns[0], context, admission, workflowId, checkout, last);
-  require(sameRun(current, captureRuns[0]), 'Capture inventory differs from first current attempt');
+  require(captureRuns.length === 2 && captureRuns.some(item => item.id === current.id) && captureRuns.some(item => item.id === failedCapture.run_id),
+    'Prior, missing, newer or concurrent capture run; no replay');
+  const currentInventory = captureRuns.find(item => item.id === current.id), failedInventory = captureRuns.find(item => item.id === failedCapture.run_id);
+  checkedCurrent(currentInventory, context, admission, workflowId, checkout, last);
+  checkedFailedRun(failedInventory, last);
+  require(sameRun(current, currentInventory), 'Capture inventory differs from first current attempt');
+  require(sameRun(failedRun, failedInventory) && failedRun.updated_at === failedInventory.updated_at,
+    'Capture inventory differs from pinned failed capture');
+  require(utc(run.updated_at, 'source completion') < utc(failedRun.created_at, 'failed capture creation'),
+    'Pinned failed capture overlaps original source');
   const artifacts = completeInventory(await read(`${prefix}/actions/runs/${source.run_id}/artifacts?per_page=100`), 'artifacts', 'source artifact');
   const artifact = checkedSourceArtifact(artifacts, run, current, last);
   // Re-read the actual fixed inputs and all committed working bytes after I/O.
@@ -330,11 +490,12 @@ export async function validateCaptureSource(admission, context, { api = githubRe
   const finished = checkpoint();
   checkedCurrent(current, context, admission, workflowId, checkout, finished);
   checkedSourceArtifact(artifacts, run, current, finished); checkedJob(job, run, finished); checkedCurrentJob(currentJobs, context, current, finished);
-  return { schema_version: 'financial-statement-capture-source-check-v1', request_id: requestId,
+  return { schema_version: 'financial-statement-capture-run2-source-check-v1', request_id: requestId,
+    recovery: { ...failedCapture }, expected_parent_sha: failedCapture.head_sha, failed_capture: failedProof(failedRun, failedAttempt, failedCommit, failedJob, finished),
     checked_at: finished.toISOString(), metadata_started_at: begun.toISOString(), repository, repository_id: repositoryId,
     workflow_id: workflowId, admission_sha256: checkout.admission_sha256, request_sha256: checkout.request_sha256,
     runtime_lock_sha256: checkout.runtime_lock_sha256, code_tree_sha256: checkout.code_tree_sha256,
-    current_tree: checkout.tree, current, current_job: currentJob, source: run, source_job: job, artifact,
+    current_tree: checkout.tree, current, current_attempt: currentAttempt, current_job: currentJob, source: run, source_job: job, artifact,
     inventories: { recovery: recoveryRuns, successor: successorRuns, capture: captureRuns, artifacts, current_jobs: currentJobs },
     inventory_counts: { recovery: recoveryRuns.length, successor: successorRuns.length, capture: captureRuns.length, artifacts: artifacts.length, current_jobs: currentJobs.length },
     source_admission: 'authenticated_unadmitted', publication_authority: 'none' };
@@ -407,10 +568,11 @@ module.verify_archive(Path(sys.argv[2]),json.load(sys.stdin),sys.argv[3])
   return { retained_files: Object.keys(before.files).length, zip_sha256: source.artifact_sha256, inventory_sha256: hash(Buffer.from(JSON.stringify(before))), source_admission: 'authenticated_unadmitted' };
 }
 function checkedRestoreProof(verified, now) {
-  require(verified?.schema_version === 'financial-statement-capture-source-check-v1' && verified.request_id === requestId &&
+  require(verified?.schema_version === 'financial-statement-capture-run2-source-check-v1' && verified.expected_parent_sha === failedCapture.head_sha && verified.request_id === requestId &&
     verified.artifact?.id === source.artifact_id && verified.artifact?.digest === `sha256:${source.artifact_sha256}` &&
     verified.source?.id === source.run_id && verified.source?.run_attempt === 1 && verified.source?.head_sha === source.head_sha &&
     verified.source_admission === 'authenticated_unadmitted', 'Missing authenticated capture source check');
+  checkedFailedBinding(verified.recovery); checkedFailedProof(verified.failed_capture, now);
   require(now.getTime() >= utc(verified.checked_at, 'source check completion') &&
     now.getTime() - utc(verified.metadata_started_at, 'source metadata start') <= 30000,
     'Restored source metadata is stale or future');
@@ -474,8 +636,8 @@ export async function restoreCaptureSource(verified, output, { download = (id, d
     checkDirectories();
   };
   assertReady(); checkOutput(); checkedRestoreProof(fresh, time());
-  const provenance = { schema_version: 'financial-statement-capture-source-restore-v1', kind: 'authenticated_unadmitted_successor',
-    ...source, request_id: requestId, source_admission: 'authenticated_unadmitted', publication_authority: 'none' };
+  const provenance = { schema_version: 'financial-statement-capture-run2-source-restore-v1', kind: 'authenticated_unadmitted_successor',
+    ...source, request_id: requestId, recovery: { ...failedCapture }, expected_parent_sha: failedCapture.head_sha, source_admission: 'authenticated_unadmitted', publication_authority: 'none' };
   const checkBytes = Buffer.from(JSON.stringify(fresh, null, 2));
   const provenanceBytes = Buffer.from(JSON.stringify(provenance, null, 2));
   // Keep the directory and both owned marker inodes open until all callbacks,

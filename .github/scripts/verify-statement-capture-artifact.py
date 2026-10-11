@@ -16,6 +16,7 @@ import stat
 import subprocess
 import tempfile
 import time
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 _SPEC = importlib.util.spec_from_file_location(
@@ -35,6 +36,42 @@ REQUEST_ID = 'first-cnh-esta-annual-history'
 INPUT_ROOT = Path('.github/financial-statement-capture')
 MAX_JOB_SECONDS = 1500
 EMPTY_SHA = hashlib.sha256(b'').hexdigest()
+WORKFLOW_ID = 381262768
+MAX_METADATA_SECONDS = 30
+MAX_RECOVERY_BYTES = 65536
+RECOVERY_BINDING = {'schema_version': 'financial-statement-capture-failed-run-binding-v1',
+ 'repository': 'kusennjp1-ai/screener',
+ 'workflow': '.github/workflows/financial-statement-capture.yml',
+ 'workflow_id': 381262768,
+ 'run_id': 38140913503,
+ 'run_number': 1,
+ 'run_attempt': 1,
+ 'job_id': 114474425321,
+ 'head_branch': 'improve/financial-statement-capture',
+ 'head_sha': '34a3a4fa9d975a45df899032bde05c673d921da9',
+ 'tree_sha': 'cdb8f1129548d33c50f19ac4f149a908591d1860',
+ 'parent_sha': 'a3e16ad6176e89d87714d30200f9d836523d441a',
+ 'status': 'completed',
+ 'conclusion': 'failure',
+ 'run_created_at': '2026-10-11T12:52:10Z',
+ 'run_started_at': '2026-10-11T12:52:10Z',
+ 'run_updated_at': '2026-10-11T12:52:43Z',
+ 'attempt_created_at': '2026-10-11T12:52:11Z',
+ 'attempt_updated_at': '2026-10-11T12:52:44Z',
+ 'job_started_at': '2026-10-11T12:52:13Z',
+ 'job_completed_at': '2026-10-11T12:52:43Z',
+ 'job_steps_sha256': 'efa23e0c0a853db3822ff01ac7cf7e3eba3dfabbadba59b70cf47835ec6800d9',
+ 'restore_step_number': 8,
+ 'capture_step_number': 9,
+ 'capture_step_started_at': '2026-10-11T12:52:40Z',
+ 'capture_step_completed_at': '2026-10-11T12:52:40Z',
+ 'artifact_count': 0}
+RUN_FIELDS = ('id', 'run_number', 'run_attempt', 'repository', 'head_repository', 'workflow_id',
+              'path', 'event', 'head_branch', 'head_sha', 'head_commit', 'status', 'conclusion',
+              'created_at', 'run_started_at', 'updated_at')
+JOB_FIELDS = ('id', 'run_id', 'run_attempt', 'head_sha', 'name', 'status', 'conclusion',
+              'started_at', 'completed_at', 'steps')
+STEP_FIELDS = ('number', 'name', 'status', 'conclusion', 'started_at', 'completed_at')
 
 
 def utc_now():
@@ -171,12 +208,173 @@ class GitHubTransport:
 def expected_context(environment):
     fixed = {'GITHUB_REPOSITORY': REPOSITORY, 'GITHUB_REPOSITORY_ID': str(REPOSITORY_ID),
              'GITHUB_REF_NAME': BRANCH, 'GITHUB_REF': 'refs/heads/' + BRANCH,
-             'GITHUB_EVENT_NAME': 'push', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '1',
+             'GITHUB_EVENT_NAME': 'push', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '2',
              'GITHUB_JOB': JOB, 'GITHUB_WORKFLOW_REF': REPOSITORY + '/' + WORKFLOW + '@refs/heads/' + BRANCH}
     require(all(environment.get(key) == value for key, value in fixed.items()), 'Wrong capture readback context')
     require(re.fullmatch(r'[1-9][0-9]*', environment.get('GITHUB_RUN_ID', ''))
             and re.fullmatch(r'[a-f0-9]{40}', environment.get('GITHUB_SHA', '')), 'Unbound capture run or commit')
+    require(int(environment['GITHUB_RUN_ID']) > RECOVERY_BINDING['run_id']
+            and environment['GITHUB_SHA'] != RECOVERY_BINDING['head_sha'], 'Failed capture replay is forbidden')
     return {'id': int(environment['GITHUB_RUN_ID']), 'head_sha': environment['GITHUB_SHA']}
+
+
+def canonical(value):
+    """Type-preserving equality for closed JSON identities, including int/bool."""
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode('utf-8')
+
+
+class MetadataPass:
+    """A fresh, independently bounded authority pass, never an acquisition gate."""
+    def __init__(self, budget):
+        self.budget = budget
+        self.started, self.last_wall = budget.now(), budget.now()
+        self.monotonic_started = self.last_monotonic = budget.monotonic()
+
+    def check(self):
+        self.budget.check()
+        observed, monotonic = self.budget.now(), self.budget.monotonic()
+        wall = (observed - self.started).total_seconds()
+        elapsed = monotonic - self.monotonic_started
+        require(self.started <= self.last_wall <= observed and self.last_monotonic <= monotonic
+                and 0 <= wall <= MAX_METADATA_SECONDS and 0 <= elapsed <= MAX_METADATA_SECONDS,
+                'Capture metadata pass exceeded 30-second freshness or clock regressed')
+        self.last_wall, self.last_monotonic = observed, monotonic
+        return min(MAX_METADATA_SECONDS - wall, MAX_METADATA_SECONDS - elapsed)
+
+
+def project_run(value):
+    require(isinstance(value, dict) and all(key in value for key in RUN_FIELDS), 'Incomplete capture run metadata')
+    result = {key: value[key] for key in RUN_FIELDS}
+    for key in ('repository', 'head_repository'):
+        nested = value[key]
+        require(isinstance(nested, dict) and type(nested.get('id')) is int
+                and nested['id'] == REPOSITORY_ID and nested.get('full_name') == REPOSITORY,
+                'Capture run repository changed')
+        result[key] = {name: nested[name] for name in ('id', 'full_name')}
+    commit = value['head_commit']
+    require(isinstance(commit, dict) and commit.get('id') == value['head_sha']
+            and isinstance(commit.get('tree_id'), str) and re.fullmatch(r'[a-f0-9]{40}', commit['tree_id']),
+            'Capture run head commit or tree changed')
+    result['head_commit'] = {key: commit[key] for key in ('id', 'tree_id')}
+    return result
+
+
+def validate_run_clocks(value, observed, *, attempt=False):
+    created, started, updated = (clock(value[key]) for key in ('created_at', 'run_started_at', 'updated_at'))
+    # GitHub's attempt creation can be later than its run start. These are
+    # separate records; do not falsely require created_at <= run_started_at.
+    require(created <= updated <= observed and started <= updated and started <= observed
+            and (attempt or created <= started),
+            'Capture run record has future or inconsistent clocks')
+
+
+def validate_commit(value, head_sha, parent_sha, *, tree_sha=None):
+    require(isinstance(value, dict) and value.get('sha') == head_sha
+            and isinstance(value.get('tree'), dict) and isinstance(value['tree'].get('sha'), str)
+            and re.fullmatch(r'[a-f0-9]{40}', value['tree']['sha'])
+            and isinstance(value.get('parents'), list) and len(value['parents']) == 1
+            and isinstance(value['parents'][0], dict) and value['parents'][0].get('sha') == parent_sha
+            and (tree_sha is None or value['tree']['sha'] == tree_sha),
+            'Capture hosted commit tree or sole parent changed')
+    return {'sha': value['sha'], 'tree_sha': value['tree']['sha'], 'parents': [parent_sha]}
+
+
+def validate_failed_recovery(run, attempt, commit, jobs, artifacts, observed):
+    binding = RECOVERY_BINDING
+    projected = [project_run(value) for value in (run, attempt)]
+    for index, value in enumerate(projected):
+        fixed = {'id': binding['run_id'], 'run_number': 1, 'run_attempt': 1,
+                 'workflow_id': WORKFLOW_ID, 'path': WORKFLOW, 'event': 'push', 'head_branch': BRANCH,
+                 'head_sha': binding['head_sha'], 'head_commit': {'id': binding['head_sha'], 'tree_id': binding['tree_sha']},
+                 'status': 'completed', 'conclusion': 'failure', 'run_started_at': binding['run_started_at'],
+                 'created_at': binding['attempt_created_at' if index else 'run_created_at'],
+                 'updated_at': binding['attempt_updated_at' if index else 'run_updated_at']}
+        require(all(canonical(value[key]) == canonical(expected) for key, expected in fixed.items()),
+                'Pinned failed capture run or attempt changed')
+        validate_run_clocks(value, observed, attempt=bool(index))
+    require(clock(projected[0]['created_at']) <= clock(projected[1]['created_at']),
+            'Failed attempt creation predates canonical run creation')
+    committed = validate_commit(commit, binding['head_sha'], binding['parent_sha'], tree_sha=binding['tree_sha'])
+    require(isinstance(jobs, dict) and type(jobs.get('total_count')) is int and jobs['total_count'] == 1
+            and isinstance(jobs.get('jobs'), list) and len(jobs['jobs']) == 1,
+            'Incomplete or unexpected failed capture job inventory')
+    job = jobs['jobs'][0]
+    require(isinstance(job, dict) and all(key in job for key in JOB_FIELDS), 'Incomplete failed capture job')
+    fixed_job = {'id': binding['job_id'], 'run_id': binding['run_id'], 'run_attempt': 1,
+                 'head_sha': binding['head_sha'], 'name': JOB, 'status': 'completed', 'conclusion': 'failure',
+                 'started_at': binding['job_started_at'], 'completed_at': binding['job_completed_at']}
+    require(all(canonical(job[key]) == canonical(value) for key, value in fixed_job.items()),
+            'Pinned failed capture job changed')
+    require(clock(binding['run_started_at']) <= clock(job['started_at']) <= clock(job['completed_at']) <= observed,
+            'Failed capture job clocks are inconsistent or future')
+    steps = job['steps']
+    require(isinstance(steps, list) and len(steps) == 16
+            and all(isinstance(step, dict) and set(step) == set(STEP_FIELDS) for step in steps),
+            'Incomplete or unexpected failed capture step inventory')
+    require(all(type(step['number']) is int for step in steps)
+            and len({step['number'] for step in steps}) == 16, 'Duplicate failed capture step')
+    for step in steps:
+        require(clock(job['started_at']) <= clock(step['started_at']) <= clock(step['completed_at'])
+                <= clock(job['completed_at']) <= observed, 'Failed capture step clocks changed')
+    fingerprint = sha(json.dumps([[step[key] for key in STEP_FIELDS] for step in steps],
+                                separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode('utf-8'))
+    require(fingerprint == binding['job_steps_sha256'], 'Pinned failed capture step fingerprint changed')
+    capture = next(step for step in steps if step['number'] == binding['capture_step_number'])
+    require(capture['status'] == 'completed' and capture['conclusion'] == 'skipped'
+            and capture['started_at'] == binding['capture_step_started_at']
+            and capture['completed_at'] == binding['capture_step_completed_at'],
+            'Failed attempt capture step was not skipped')
+    require(isinstance(artifacts, dict) and type(artifacts.get('total_count')) is int
+            and artifacts['total_count'] == 0 and artifacts.get('artifacts') == [],
+            'Failed capture has unexpected or incomplete artifact inventory')
+    return {'schema_version': 'financial-statement-capture-recovery-proof-v1', 'binding': dict(binding),
+            'run': projected[0], 'attempt': projected[1], 'commit': committed,
+            'job': {key: ([{name: step[name] for name in STEP_FIELDS} for step in steps] if key == 'steps'
+                          else job[key]) for key in JOB_FIELDS},
+            'artifact_inventory': {'total_count': 0, 'artifacts': []}}
+
+
+def validate_capture_inventory(inventory, failed, current, admission, observed):
+    require(isinstance(inventory, dict) and type(inventory.get('total_count')) is int
+            and inventory['total_count'] == 2 and isinstance(inventory.get('workflow_runs'), list)
+            and len(inventory['workflow_runs']) == 2, 'Incomplete or unexpected capture workflow inventory')
+    runs = inventory['workflow_runs']
+    require(all(isinstance(run, dict) and type(run.get('id')) is int for run in runs)
+            and {run['id'] for run in runs} == {failed['id'], current['id']},
+            'Capture workflow inventory is not exactly failed run 1 and current run 2')
+    expected = {failed['id']: failed, current['id']: project_run(current)}
+    for run in runs:
+        projected = project_run(run)
+        validate_run_clocks(projected, observed)
+        reference = expected[run['id']]
+        if run['id'] == current['id']:
+            require(clock(admission['dispatch_not_before']) <= clock(projected['created_at'])
+                    <= clock(admission['dispatch_not_after']),
+                    'Current capture inventory creation is outside the admission dispatch window')
+            # A live canonical record may update while sequential API reads are
+            # in flight. Its identity, creation and start remain exact; only the
+            # independently validated update clock may differ. Failed clocks stay pinned.
+            projected = {key: value for key, value in projected.items() if key != 'updated_at'}
+            reference = {key: value for key, value in reference.items() if key != 'updated_at'}
+        require(canonical(projected) == canonical(reference),
+                'Capture workflow inventory differs from authenticated run records')
+
+
+def verify_recovery_bytes(path, retained, proof):
+    # The unchanged ZIP validator authenticates every retained byte first. Read
+    # the same actual upload here, never a reconstructed or local proof file.
+    with zipfile.ZipFile(path) as reader:
+        member = reader.getinfo('capture-recovery.json')
+        require(0 < member.file_size <= MAX_RECOVERY_BYTES, 'Oversized retained recovery proof')
+        with reader.open(member) as stream:
+            content = stream.read(MAX_RECOVERY_BYTES + 1)
+    require(len(content) == retained['files']['capture-recovery.json']['bytes'] <= MAX_RECOVERY_BYTES
+            and sha(content) == retained['files']['capture-recovery.json']['sha256'],
+            'Uploaded recovery proof original bytes changed')
+    value = parse(content)
+    require(content == canonical(value)
+            and canonical(value) == canonical(proof), 'Uploaded recovery proof differs from fresh failed capture authority')
+    return sha(content)
 
 
 def validate_inputs(envelope, request, admission, lock, hashes, context):
@@ -192,18 +390,19 @@ def validate_inputs(envelope, request, admission, lock, hashes, context):
             and envelope['head_sha'] == context['head_sha'], 'Retained inventory belongs to another attempt')
     require(isinstance(request, dict) and request.get('request_id') == REQUEST_ID,
             'Wrong capture request identity')
-    fixed = {'schema_version': 'financial-statement-capture-admission-v1', 'request_id': REQUEST_ID,
+    fixed = {'schema_version': 'financial-statement-capture-run2-admission-v1', 'request_id': REQUEST_ID,
              'execution_enabled': True, 'repository': REPOSITORY, 'repository_id': REPOSITORY_ID,
-             'workflow': WORKFLOW, 'branch': BRANCH, 'event': 'push', 'expected_run_number': 1,
+             'workflow': WORKFLOW, 'branch': BRANCH, 'event': 'push', 'expected_run_number': 2,
+             'workflow_id': WORKFLOW_ID, 'expected_parent_sha': RECOVERY_BINDING['head_sha'],
              'first_attempt_only': True, 'request_sha256': hashes['request'],
              'runtime_lock_sha256': hashes['runtime_lock'], 'maximum_job_seconds': MAX_JOB_SECONDS,
              'finalization_reserve_seconds': 420, 'maximum_preflight_age_seconds': 30}
-    extras = {'workflow_id', 'code_tree_sha256', 'dispatch_not_before', 'dispatch_not_after', 'required_valid_through'}
+    extras = {'recovery', 'code_tree_sha256', 'dispatch_not_before', 'dispatch_not_after', 'required_valid_through'}
     require(isinstance(admission, dict) and set(admission) == set(fixed) | extras
             and all(type(admission[key]) is type(value) and admission[key] == value for key, value in fixed.items()),
             'Capture admission identity, permission or bounds changed')
-    require(admission['workflow_id'] is None or (type(admission['workflow_id']) is int and admission['workflow_id'] > 0),
-            'Invalid capture workflow identity')
+    require(canonical(admission['recovery']) == canonical(RECOVERY_BINDING),
+            'Exact failed-run recovery binding required')
     hex_digest(admission['code_tree_sha256'])
     require(clock(admission['dispatch_not_before']) < clock(admission['dispatch_not_after'])
             <= clock(admission['required_valid_through']), 'Invalid capture admission clocks')
@@ -216,6 +415,11 @@ def validate_inputs(envelope, request, admission, lock, hashes, context):
     require(isinstance(retained, dict) and isinstance(retained.get('files'), dict)
             and retained['files'].get('archive/.archive.lock') == {'bytes': 0, 'sha256': EMPTY_SHA},
             'Exact empty hidden archive lock must be retained')
+    recovery = retained['files'].get('capture-recovery.json')
+    require(isinstance(recovery, dict) and set(recovery) == {'bytes', 'sha256'}
+            and type(recovery['bytes']) is int and 0 < recovery['bytes'] <= MAX_RECOVERY_BYTES,
+            'Bounded capture recovery proof must be retained')
+    hex_digest(recovery['sha256'])
     for key, filename in (('request', 'capture-request.json'), ('admission', 'capture-admission.json'),
                           ('runtime_lock', 'capture-runtime-lock.json')):
         binding = retained['files'].get(filename, {})
@@ -231,17 +435,17 @@ def validate_hosted(repository, workflow, run, attempt, jobs, context, admission
             and (admission['workflow_id'] is None or admission['workflow_id'] == workflow['id']),
             'Hosted workflow identity changed')
     compared = ('id', 'head_sha', 'run_attempt', 'run_number', 'workflow_id', 'path', 'head_branch',
-                'event', 'status', 'conclusion', 'run_started_at', 'repository', 'head_repository')
+                'event', 'status', 'conclusion', 'run_started_at', 'repository', 'head_repository', 'head_commit')
     require(all(run.get(key) == attempt.get(key) for key in compared), 'Current run and attempt endpoint disagree')
     for value in (run, attempt):
         require(type(value.get('id')) is int and value['id'] == context['id']
                 and value.get('head_sha') == context['head_sha']
                 and type(value.get('run_attempt')) is int and value['run_attempt'] == 1
-                and type(value.get('run_number')) is int and value['run_number'] == 1
+                and type(value.get('run_number')) is int and value['run_number'] == 2
                 and value.get('workflow_id') == workflow['id'] and value.get('path') == WORKFLOW
                 and value.get('head_branch') == BRANCH and value.get('event') == 'push'
                 and value.get('status') == 'in_progress' and value.get('conclusion') is None,
-                'Hosted capture is not this first in-progress attempt')
+                'Hosted capture is not this run-2 first in-progress attempt')
         for key in ('repository', 'head_repository'):
             require(value.get(key, {}).get('id') == REPOSITORY_ID
                     and value.get(key, {}).get('full_name') == REPOSITORY, 'Hosted run repository changed')
@@ -256,7 +460,8 @@ def validate_hosted(repository, workflow, run, attempt, jobs, context, admission
     require(clock(run.get('run_started_at')) <= clock(job.get('started_at')), 'Hosted job predates current attempt')
     budget.authenticate_start(job.get('started_at'))
     return {'job_id': job['id'], 'workflow_id': workflow['id'],
-            'actual_job_started_at': job['started_at'], 'run_started_at': run['run_started_at']}
+            'actual_job_started_at': job['started_at'], 'run_started_at': run['run_started_at'],
+            'run_created_at': run['created_at']}
 
 
 def validate_artifact(artifact, context, artifact_id, digest, budget):
@@ -283,6 +488,13 @@ def git_identity(repo, context, admission, *, timeout, checkpoint=None, runtime_
     if checkpoint:
         timeout = min(timeout, checkpoint())
     require(head == context['head_sha'], 'Checkout does not match authenticated capture commit')
+    parents = subprocess.run(['git', '-C', str(repo), 'show', '-s', '--format=%P', 'HEAD'], check=True,
+                             capture_output=True, timeout=timeout).stdout.decode().strip().split()
+    if checkpoint:
+        timeout = min(timeout, checkpoint())
+    require(parents == [RECOVERY_BINDING['head_sha']]
+            and admission['expected_parent_sha'] == RECOVERY_BINDING['head_sha'],
+            'Checkout must have the sole pinned failed capture parent')
     raw = subprocess.run(['git', '-C', str(repo), 'ls-tree', '-rz', '--full-tree', 'HEAD'], check=True,
                          capture_output=True, timeout=timeout).stdout
     if checkpoint:
@@ -344,9 +556,12 @@ def run_readback(inventory_path, artifact_id, artifact_digest, output_path, uplo
         require(sha(snapshot[0]) == digest, 'Capture runtime bytes differ from reviewed lock')
         runtime_snapshots[relative] = snapshot
     transport = transport or GitHubTransport()
+    final_freshness = None
 
     def checkpoint(*, result_created=False):
         budget.check()
+        if final_freshness is not None:
+            final_freshness.check()
         require(expected_context(live_environment) == context
                 and live_environment.get('CAPTURE_JOB_STARTED_AT') == values['inventory']['job_started_at'],
                 'Readback context changed')
@@ -356,12 +571,17 @@ def run_readback(inventory_path, artifact_id, artifact_digest, output_path, uplo
             require(read_input(path, maxima[key]) == snapshots[key], 'Capture input changed during readback')
         for relative, snapshot in runtime_snapshots.items():
             require(read_input(repo / relative, 32 * 1024 * 1024) == snapshot, 'Capture runtime changed during readback')
+        if final_freshness is not None:
+            final_freshness.check()
         return budget.check()
 
-    def api(path):
+    def api(path, freshness):
         checkpoint()
-        result = transport.api(path, timeout=min(60, budget.check()))
+        remaining = freshness.check()
+        require(remaining > 0, 'No 30-second metadata freshness remains for another read')
+        result = transport.api(path, timeout=min(60, budget.check(), remaining))
         checkpoint()
+        freshness.check()
         require(isinstance(result, dict), 'Malformed GitHub metadata response')
         return result
 
@@ -372,18 +592,48 @@ def run_readback(inventory_path, artifact_id, artifact_digest, output_path, uplo
     base = f'repos/{REPOSITORY}'
 
     def hosted():
-        repository = api(base)
-        workflow = api(base + '/actions/workflows/financial-statement-capture.yml')
-        current = api(base + f"/actions/runs/{context['id']}")
-        attempt = api(base + f"/actions/runs/{context['id']}/attempts/1")
-        jobs = api(base + f"/actions/runs/{context['id']}/attempts/1/jobs?per_page=100")
+        freshness = MetadataPass(budget)
+        get = lambda suffix: api(base + suffix, freshness)
+        repository = get('')
+        workflow = get('/actions/workflows/financial-statement-capture.yml')
+        current = get(f"/actions/runs/{context['id']}")
+        attempt = get(f"/actions/runs/{context['id']}/attempts/1")
+        jobs = get(f"/actions/runs/{context['id']}/attempts/1/jobs?per_page=100")
+        current_commit = get(f"/git/commits/{context['head_sha']}")
+        prior = str(RECOVERY_BINDING['run_id'])
+        failed_run = get('/actions/runs/' + prior)
+        failed_attempt = get('/actions/runs/' + prior + '/attempts/1')
+        failed_commit = get('/git/commits/' + RECOVERY_BINDING['head_sha'])
+        failed_jobs = get('/actions/runs/' + prior + '/attempts/1/jobs?per_page=100')
+        failed_artifacts = get('/actions/runs/' + prior + '/artifacts?per_page=100')
+        inventory = get(f'/actions/workflows/{WORKFLOW_ID}/runs?per_page=100')
+        artifact = get(f'/actions/artifacts/{artifact_id}')
+        # Validate against the clock after every metadata await, never the clock
+        # sampled before fetching GitHub's distinct canonical/attempt records.
+        freshness.check()
+        observed = now()
         hosted_identity = validate_hosted(repository, workflow, current, attempt, jobs, context, values['admission'], budget)
-        artifact = api(base + f'/actions/artifacts/{artifact_id}')
+        projected_current, projected_attempt = project_run(current), project_run(attempt)
+        validate_run_clocks(projected_current, observed)
+        validate_run_clocks(projected_attempt, observed, attempt=True)
+        require(clock(values['admission']['dispatch_not_before']) <= clock(current['created_at'])
+                <= clock(values['admission']['dispatch_not_after']),
+                'Current capture creation is outside the admission dispatch window')
+        require(clock(current['created_at']) <= clock(attempt['created_at']),
+                'Current attempt creation predates canonical run creation')
+        validate_commit(current_commit, context['head_sha'], RECOVERY_BINDING['head_sha'],
+                        tree_sha=projected_current['head_commit']['tree_id'])
+        proof = validate_failed_recovery(failed_run, failed_attempt, failed_commit, failed_jobs,
+                                         failed_artifacts, observed)
+        require(clock(proof['attempt']['updated_at']) < clock(current['created_at']),
+                'Current capture must be created after the pinned failed attempt completed')
+        validate_capture_inventory(inventory, proof['run'], current, values['admission'], observed)
         digest = validate_artifact(artifact, context, artifact_id, artifact_digest, budget)
         checkpoint()
-        return hosted_identity, artifact, digest
+        freshness.check()
+        return hosted_identity, artifact, digest, proof, freshness
 
-    hosted_identity, artifact, digest = hosted()
+    hosted_identity, artifact, digest, recovery_proof, _ = hosted()
     with tempfile.TemporaryDirectory(prefix='capture-upload-readback-') as directory:
         path = Path(directory) / 'actual-actions.zip'
         checkpoint()
@@ -393,15 +643,19 @@ def run_readback(inventory_path, artifact_id, artifact_digest, output_path, uplo
         result = verify_archive(path, retained, digest)
         checkpoint()
         require(result['hidden_lock_retained'] is True, 'Uploaded capture lost its hidden lock')
-    final_identity, final_artifact, final_digest = hosted()
-    require(final_identity == hosted_identity and final_artifact == artifact and final_digest == digest,
+        recovery_digest = verify_recovery_bytes(path, retained, recovery_proof)
+        checkpoint()
+    final_identity, final_artifact, final_digest, final_proof, final_freshness = hosted()
+    require(final_identity == hosted_identity and final_artifact == artifact and final_digest == digest
+            and canonical(final_proof) == canonical(recovery_proof),
             'Hosted capture or artifact changed during readback')
     git_identity(repo, context, values['admission'], timeout=min(30, budget.check()), checkpoint=checkpoint,
                  runtime_files=runtime_snapshots)
     checkpoint()
     result = {'schema_version': 'financial-statement-capture-artifact-readback-v1', 'request_id': REQUEST_ID,
               'artifact_id': artifact_id, 'artifact_name': artifact['name'], 'artifact_digest': 'sha256:' + digest,
-              'run_id': context['id'], 'run_attempt': 1, 'head_sha': context['head_sha'], **hosted_identity,
+              'run_id': context['id'], 'run_number': 2, 'run_attempt': 1, 'head_sha': context['head_sha'], **hosted_identity,
+              'recovery_proof_sha256': recovery_digest, 'failed_capture_run_id': RECOVERY_BINDING['run_id'],
               'repository': REPOSITORY, 'repository_id': REPOSITORY_ID, 'workflow': WORKFLOW,
               'branch': BRANCH, 'event': 'push', 'code_tree_sha256': values['admission']['code_tree_sha256'],
               'request_sha256': hashes['request'], 'admission_sha256': hashes['admission'],
@@ -432,7 +686,7 @@ def run_readback(inventory_path, artifact_id, artifact_digest, output_path, uplo
         checkpoint(result_created=True)
         require(read_input(output_path, 2 * 1024 * 1024) == (content, created_identity),
                 'Readback output identity changed')
-        budget.check()
+        checkpoint(result_created=True)
     except BaseException:
         if descriptor is not None:
             owned = os.fstat(descriptor)

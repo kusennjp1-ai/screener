@@ -305,10 +305,39 @@ from app.services.statement_retention_budget import StatementRetentionBudget
 REQUEST_SHA256 = 'c6f32b4ad7c86dddfbab1e47fcf22b340799a656d531bb71168aab27594eb190'
 REQUEST_BYTES = 42472
 VERSIONS = {'yfinance':'0.2.66','curl_cffi':'0.16.3','pandas':'2.2.0','numpy':'1.26.3','requests':'2.31.0'}
-ADMISSION_FIXED = {'schema_version':'financial-statement-capture-admission-v1',
+RECOVERY_BINDING = {'schema_version': 'financial-statement-capture-failed-run-binding-v1',
+ 'repository': 'kusennjp1-ai/screener',
+ 'workflow': '.github/workflows/financial-statement-capture.yml',
+ 'workflow_id': 381262768,
+ 'run_id': 38140913503,
+ 'run_number': 1,
+ 'run_attempt': 1,
+ 'job_id': 114474425321,
+ 'head_branch': 'improve/financial-statement-capture',
+ 'head_sha': '34a3a4fa9d975a45df899032bde05c673d921da9',
+ 'tree_sha': 'cdb8f1129548d33c50f19ac4f149a908591d1860',
+ 'parent_sha': 'a3e16ad6176e89d87714d30200f9d836523d441a',
+ 'status': 'completed',
+ 'conclusion': 'failure',
+ 'run_created_at': '2026-10-11T12:52:10Z',
+ 'run_started_at': '2026-10-11T12:52:10Z',
+ 'run_updated_at': '2026-10-11T12:52:43Z',
+ 'attempt_created_at': '2026-10-11T12:52:11Z',
+ 'attempt_updated_at': '2026-10-11T12:52:44Z',
+ 'job_started_at': '2026-10-11T12:52:13Z',
+ 'job_completed_at': '2026-10-11T12:52:43Z',
+ 'job_steps_sha256': 'efa23e0c0a853db3822ff01ac7cf7e3eba3dfabbadba59b70cf47835ec6800d9',
+ 'restore_step_number': 8,
+ 'capture_step_number': 9,
+ 'capture_step_started_at': '2026-10-11T12:52:40Z',
+ 'capture_step_completed_at': '2026-10-11T12:52:40Z',
+ 'artifact_count': 0}
+RECOVERY_PROOF_LIMIT = 64*1024
+ADMISSION_FIXED = {'schema_version':'financial-statement-capture-run2-admission-v1',
     'request_id':'first-cnh-esta-annual-history','repository':'kusennjp1-ai/screener','repository_id':1203919607,
-    'workflow':'.github/workflows/financial-statement-capture.yml','workflow_id':None,
-    'branch':'improve/financial-statement-capture','event':'push','expected_run_number':1,'first_attempt_only':True,
+    'workflow':'.github/workflows/financial-statement-capture.yml','workflow_id':381262768,
+    'expected_parent_sha':RECOVERY_BINDING['head_sha'],'recovery':RECOVERY_BINDING,
+    'branch':'improve/financial-statement-capture','event':'push','expected_run_number':2,'first_attempt_only':True,
     'request_sha256':REQUEST_SHA256,'maximum_job_seconds':1500,'finalization_reserve_seconds':420,
     'maximum_preflight_age_seconds':30}
 ADMISSION_VARIABLE = {'execution_enabled','runtime_lock_sha256','code_tree_sha256','dispatch_not_before',
@@ -364,7 +393,7 @@ def validate_request(value, content):
 
 def validate_admission(value, *, now, dry_run, environment):
     require(isinstance(value,dict) and set(value) == set(ADMISSION_FIXED) | ADMISSION_VARIABLE, 'Closed capture admission required')
-    require(all(type(value[k]) is type(v) and value[k] == v for k,v in ADMISSION_FIXED.items()), 'Capture admission identity changed')
+    require(all(type(value[k]) is type(v) and canonical(value[k]) == canonical(v) for k,v in ADMISSION_FIXED.items()), 'Capture admission identity changed')
     require(type(value['execution_enabled']) is bool, 'Boolean capture admission required')
     for key in ('runtime_lock_sha256','code_tree_sha256'):
         require(isinstance(value[key],str) and re.fullmatch('[a-f0-9]{64}',value[key]), 'Missing exact code/lock binding')
@@ -379,12 +408,14 @@ def validate_admission(value, *, now, dry_run, environment):
     require(after-before <= timedelta(hours=1), 'Capture window exceeds one hour')
     require(after+timedelta(seconds=1500) <= horizon <= before+timedelta(hours=72), 'Capture horizon does not cover bounded job or exceeds source policy')
     fixed = {'GITHUB_REPOSITORY':value['repository'],'GITHUB_REPOSITORY_ID':str(value['repository_id']),
-        'GITHUB_REF_NAME':value['branch'],'GITHUB_EVENT_NAME':'push','GITHUB_RUN_ATTEMPT':'1','GITHUB_RUN_NUMBER':'1',
+        'GITHUB_REF_NAME':value['branch'],'GITHUB_EVENT_NAME':'push','GITHUB_RUN_ATTEMPT':'1','GITHUB_RUN_NUMBER':'2',
         'GITHUB_WORKFLOW_REF':value['repository']+'/'+value['workflow']+'@refs/heads/'+value['branch'],
         'GITHUB_JOB':'statement-capture'}
     require(all(environment.get(k) == v for k,v in fixed.items()), 'Wrong capture caller context')
     require(re.fullmatch('[a-f0-9]{40}',environment.get('GITHUB_SHA','')) is not None
             and re.fullmatch('[1-9][0-9]*',environment.get('GITHUB_RUN_ID','')) is not None, 'Missing actual capture revision/run')
+    require(int(environment['GITHUB_RUN_ID']) > RECOVERY_BINDING['run_id']
+            and environment['GITHUB_SHA'] != RECOVERY_BINDING['head_sha'], 'Failed capture replay or predecessor caller is forbidden')
 
 
 def verify_runtime(repo, lock, admission, *, check_versions=True):
@@ -622,6 +653,128 @@ def reserve_native_journal(report):
         'member_headroom_after_native_reserve':report['member_headroom']-reservation['members']}
 
 
+
+def validate_recovery_proof(value, *, now=None):
+    """Consume only the bounded exact failed-capture proof from the locked checker."""
+    fields = {'schema_version','binding','run','attempt','commit','job','artifact_inventory'}
+    require(type(value) is dict and set(value) == fields
+            and value['schema_version'] == 'financial-statement-capture-recovery-proof-v1'
+            and canonical(value['binding']) == canonical(RECOVERY_BINDING), 'Closed run-2 failure proof required')
+    require(len(canonical(value)) <= RECOVERY_PROOF_LIMIT, 'Recovery proof exceeds retained byte bound')
+    b = RECOVERY_BINDING
+    require(value['commit'] == {'sha':b['head_sha'],'tree_sha':b['tree_sha'],'parents':[b['parent_sha']]}
+            and canonical(value['artifact_inventory']) == canonical({'total_count':0,'artifacts':[]}), 'Failed capture commit/artifact binding changed')
+    identity = {'id':ADMISSION_FIXED['repository_id'],'full_name':b['repository']}
+    common = {'id':b['run_id'],'run_number':1,'run_attempt':1,'repository':identity,'head_repository':identity,
+        'workflow_id':b['workflow_id'],'path':b['workflow'],'event':'push','head_branch':b['head_branch'],
+        'head_sha':b['head_sha'],'head_commit':{'id':b['head_sha'],'tree_id':b['tree_sha']},
+        'status':'completed','conclusion':'failure','run_started_at':b['run_started_at']}
+    for role in ('run','attempt'):
+        expected = {**common,'created_at':b['run_created_at' if role == 'run' else 'attempt_created_at'],
+            'updated_at':b['run_updated_at' if role == 'run' else 'attempt_updated_at']}
+        require(type(value[role]) is dict and canonical(value[role]) == canonical(expected),
+                'Failed capture run/attempt proof changed')
+    job = value['job']
+    expected_job = {'id':b['job_id'],'run_id':b['run_id'],'run_attempt':1,'head_sha':b['head_sha'],
+        'name':'statement-capture','status':'completed','conclusion':'failure',
+        'started_at':b['job_started_at'],'completed_at':b['job_completed_at']}
+    require(type(job) is dict and set(job) == set(expected_job)|{'steps'}
+            and canonical({k:job[k] for k in expected_job}) == canonical(expected_job),
+            'Failed capture job proof changed')
+    step_fields = ('number','name','status','conclusion','started_at','completed_at')
+    steps = job.get('steps')
+    require(type(steps) is list and len(steps) == 16
+            and all(type(step) is dict and set(step) == set(step_fields) for step in steps), 'Incomplete failed step evidence')
+    require(sha(canonical([[step[k] for k in step_fields] for step in steps])) == b['job_steps_sha256'],
+            'Failed capture step evidence changed')
+    if now is not None:
+        require(all(batch.clock(value[role][key]) <= now for role in ('run','attempt')
+                    for key in ('created_at','run_started_at','updated_at'))
+                and batch.clock(job['completed_at']) <= now, 'Failed capture proof has future clocks')
+    return value
+
+
+def reserve_recovery_proof(report):
+    """Separate reservation; never shrink or relabel the native journal reserve."""
+    reservation = {'maximum_proof_bytes':RECOVERY_PROOF_LIMIT,'expanded_bytes':256*1024,
+        'compressed_bytes':256*1024,'members':4}
+    require(report['expanded_headroom_after_native_reserve'] >= reservation['expanded_bytes']
+            and report['compressed_headroom_after_native_reserve'] >= reservation['compressed_bytes']
+            and report['member_headroom_after_native_reserve'] >= reservation['members'],
+            'Recovery proof reservation exhausted')
+    return {**report,'recovery_proof_reservation':reservation,
+        'expanded_headroom_after_all_capture_reserves':report['expanded_headroom_after_native_reserve']-reservation['expanded_bytes'],
+        'compressed_headroom_after_all_capture_reserves':report['compressed_headroom_after_native_reserve']-reservation['compressed_bytes'],
+        'member_headroom_after_all_capture_reserves':report['member_headroom_after_native_reserve']-reservation['members']}
+
+
+def persist_recovery_proof(path,value,guard,*,offline=False):
+    if offline:
+        require(type(value) is dict and value == {'schema_version':'financial-statement-capture-recovery-fixture-v1',
+            'genuine_hosted_caller':False,'live_prior_failure_authenticated':False,'binding':RECOVERY_BINDING},
+            'Offline recovery proof cannot claim live authentication')
+    else:
+        validate_recovery_proof(value)
+    raw = canonical(value)
+    require(len(raw) <= RECOVERY_PROOF_LIMIT, 'Recovery proof exceeds retained byte bound')
+    require(not path.exists(), 'Recovery proof output must be new')
+    require(path == guard.root/'capture-recovery.json' and guard.original_files is None
+            and guard.phase == 'acquisition', 'Recovery proof must precede retention baseline')
+    # Capacity is measured before the one bounded preparation addition. Do not
+    # freeze the inherited guard baseline until that immutable member exists.
+    before = guard.snapshot()
+    reserve_recovery_proof(reserve_native_journal(guard._capacity(before,'initial')))
+    archive._write_immutable(path,raw)
+    proof_identity = recovery_proof_snapshot(path)
+    require(proof_identity[-1] == sha(raw), 'Recovery proof persistence changed bytes')
+    after = guard.snapshot()
+    require(after['_directory_ids'] == before['_directory_ids']
+            and set(after['files']) == set(before['files'])|{'capture-recovery.json'}
+            and all(after['files'][name] == item for name,item in before['files'].items())
+            and after['files']['capture-recovery.json'].sha256 == sha(raw),
+            'Prepared source changed while retaining recovery proof')
+    reserve_recovery_proof(reserve_native_journal(guard.check('initial')))
+    require(guard.original_files == after['files']
+            and guard.original_directories == after['_directory_ids']
+            and recovery_proof_snapshot(path) == proof_identity,
+            'Prepared source changed while establishing retention baseline')
+    return proof_identity
+
+
+def recovery_proof_snapshot(path):
+    """Read one owned no-follow inode and verify its name/parent after the read."""
+    path = archive._safe(path)
+    identity = lambda info:(info.st_dev,info.st_ino,info.st_mode,info.st_nlink,info.st_size,
+        info.st_mtime_ns,info.st_ctime_ns)
+    directory = os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    descriptor = None
+    try:
+        parent = os.fstat(directory)
+        require(stat.S_ISDIR(parent.st_mode) and (path.parent.lstat().st_dev,path.parent.lstat().st_ino)
+                == (parent.st_dev,parent.st_ino), 'Recovery proof parent identity changed')
+        descriptor = os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW,dir_fd=directory)
+        before = os.fstat(descriptor)
+        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_size <= RECOVERY_PROOF_LIMIT,
+                'Recovery proof ownership or byte bound changed')
+        chunks=[]; size=0
+        while True:
+            chunk=os.read(descriptor,min(65536,RECOVERY_PROOF_LIMIT+1-size))
+            if not chunk:break
+            chunks.append(chunk);size+=len(chunk)
+            require(size <= RECOVERY_PROOF_LIMIT, 'Recovery proof grew beyond byte bound')
+        raw=b''.join(chunks); after=os.fstat(descriptor)
+        named=os.stat(path.name,dir_fd=directory,follow_symlinks=False)
+        named_parent=path.parent.lstat(); open_parent=os.fstat(directory)
+        require(len(raw) == before.st_size and identity(before) == identity(after) == identity(named)
+                and after.st_nlink == 1 and stat.S_ISDIR(named_parent.st_mode)
+                and (named_parent.st_dev,named_parent.st_ino) == (open_parent.st_dev,open_parent.st_ino)
+                    == (parent.st_dev,parent.st_ino), 'Recovery proof changed or detached during snapshot')
+        return (*identity(after),parent.st_dev,parent.st_ino,sha(raw))
+    finally:
+        if descriptor is not None:os.close(descriptor)
+        os.close(directory)
+
+
 def whole_job_remaining(started_at, *, now):
     require(isinstance(started_at,str) and started_at, 'Actual bounded job-start clock required')
     elapsed = (now-batch.clock(started_at)).total_seconds()
@@ -648,8 +801,17 @@ def validate_restored(restored, request, *, now, offline=False):
             'source':s,'capture_authority':'none'})
     else:
         provenance, provenance_bytes = read(restored/'restored.json')
-        require(provenance.get('schema_version') == 'financial-statement-capture-source-restore-v1'
+        require(provenance.get('schema_version') == 'financial-statement-capture-run2-source-restore-v1'
                 and provenance.get('kind') == 'authenticated_unadmitted_successor', 'Wrong capture restore provenance')
+        require(canonical(provenance.get('recovery')) == canonical(RECOVERY_BINDING)
+                and provenance.get('expected_parent_sha') == RECOVERY_BINDING['head_sha'],
+                'Restored source lacks the exact run-2 recovery binding')
+        source_check,_ = read(restored/'source-check.json')
+        require(source_check.get('schema_version') == 'financial-statement-capture-run2-source-check-v1'
+                and canonical(source_check.get('recovery')) == canonical(RECOVERY_BINDING)
+                and source_check.get('expected_parent_sha') == RECOVERY_BINDING['head_sha'],
+                'Restored metadata lacks the exact run-2 recovery proof')
+        validate_recovery_proof(source_check.get('failed_capture'),now=now)
         for key in ('repository','run_id','run_attempt','head_sha','artifact_id','artifact_sha256'):
             require(provenance.get(key) == s[key], 'Restored source identity changed: '+key)
     base = archive._safe(files/'base.json').read_bytes()
@@ -711,12 +873,28 @@ def live_preflight(contents, *, environment):
     result = subprocess.run(['node',str(ROOT/'.github/scripts/restore-statement-capture-source.mjs'),'--check-only'],
         check=True,capture_output=True,text=True,timeout=90)
     value = json.loads(result.stdout,object_pairs_hook=batch._pairs)
-    require(value.get('schema_version') == 'financial-statement-capture-source-check-v1', 'Wrong live capture metadata proof')
+    require(value.get('schema_version') == 'financial-statement-capture-run2-source-check-v1'
+            and canonical(value.get('recovery')) == canonical(RECOVERY_BINDING)
+            and value.get('expected_parent_sha') == RECOVERY_BINDING['head_sha'], 'Wrong live capture metadata proof')
+    validate_recovery_proof(value.get('failed_capture'),now=utc_now())
     for field,name in [('request_sha256','capture-request.json'),('admission_sha256','capture-admission.json'),
                        ('runtime_lock_sha256','capture-runtime-lock.json')]:
         require(value.get(field) == sha(contents[name]), 'Live preflight binds different controls')
-    require(str(value.get('current',{}).get('id')) == environment['GITHUB_RUN_ID']
-            and value.get('current',{}).get('head_sha') == environment['GITHUB_SHA'], 'Live preflight binds another caller')
+    current = value.get('current',{})
+    require(type(current) is dict and type(current.get('id')) is int
+            and current['id'] > RECOVERY_BINDING['run_id'] and str(current['id']) == environment['GITHUB_RUN_ID']
+            and current.get('head_sha') == environment['GITHUB_SHA']
+            and current.get('head_sha') != RECOVERY_BINDING['head_sha']
+            and type(current.get('run_number')) is int and current['run_number'] == 2
+            and type(current.get('run_attempt')) is int and current['run_attempt'] == 1
+            and type(current.get('workflow_id')) is int and current['workflow_id'] == RECOVERY_BINDING['workflow_id']
+            and value.get('workflow_id') == RECOVERY_BINDING['workflow_id']
+            and current.get('path') == ADMISSION_FIXED['workflow']
+            and current.get('head_branch') == ADMISSION_FIXED['branch'] and current.get('event') == 'push'
+            and current.get('status') == 'in_progress' and current.get('conclusion') is None,
+            'Live preflight binds another caller or recovery attempt')
+    require(batch.clock(RECOVERY_BINDING['attempt_updated_at']) < batch.clock(current.get('created_at')),
+            'Live preflight current creation overlaps the pinned failed attempt')
     require(0 <= (utc_now()-batch.clock(value.get('checked_at'))).total_seconds() <= 30, 'Live preflight is stale')
     return value
 
@@ -764,10 +942,14 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
     request,admission,lock,contents = load_bundle(dry_run=dry_run,environment=environment)
     now = utc_now()
     effective_start = [job_started_at]
+    prior_failure = {'schema_version':'financial-statement-capture-recovery-fixture-v1',
+        'genuine_hosted_caller':False,'live_prior_failure_authenticated':False,'binding':deepcopy(RECOVERY_BINDING)}
     job_deadline = None
     if not dry_run:
         acquisition_allowance(job_started_at,now=now)
         initial_preflight = live_preflight(contents,environment=environment)
+        prior_failure = deepcopy(initial_preflight['failed_capture'])
+        validate_recovery_proof(prior_failure)
         effective_start[0] = initial_preflight['current_job']['started_at']
         require(0 <= (batch.clock(job_started_at)-batch.clock(effective_start[0])).total_seconds() <= 60,
                 'Declared job clock differs from authenticated current job')
@@ -804,7 +986,11 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
     result = None
     code = 3
     try:
-        capacity = reserve_native_journal(guard.check('initial'))
+        recovery_proof_identity = persist_recovery_proof(output/'capture-recovery.json',prior_failure,guard,offline=dry_run)
+        def check_recovery_evidence():
+            require(recovery_proof_snapshot(output/'capture-recovery.json') == recovery_proof_identity,
+                    'Retained recovery proof bytes or ownership changed')
+        capacity = reserve_recovery_proof(reserve_native_journal(guard.check('initial')))
         ensure_bundle_unchanged(contents)
         if dry_run:
             # Offline review validates exact cache and capacity without importing
@@ -826,6 +1012,7 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
         first_native_preflight = [None]
         first_native_response = [False]
         def native_boundary():
+            check_recovery_evidence()
             ensure_bundle_unchanged(contents)
             verify_runtime(ROOT,lock,admission)
             verify_transport_runtime(contents['capture-transport-lock.json'])
@@ -841,7 +1028,7 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
             require(check_job() > 420 and acquisition_allowance(effective_start[0],now=utc_now()) > 0
                     and time.monotonic() < acquisition_end, 'Native request would use finalization reserve')
         def native_retention():
-            reserve_native_journal(guard.check('transport'))
+            reserve_recovery_proof(reserve_native_journal(guard.check('transport')))
         def record_native(event):
             require(len(native_events) < 2001, 'Native audit event bound exhausted')
             native_events.append(deepcopy(event))
@@ -858,6 +1045,7 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
         policy = load_transport_policy(symbols=plan['batch_allowlist'],deadline_monotonic=acquisition_end,
             boundary_check=native_boundary,retention_check=native_retention,record=record_native)
         def first_provider():
+            check_recovery_evidence()
             ensure_bundle_unchanged(contents)
             verify_runtime(ROOT,lock,admission)
             validate_admission(admission,now=utc_now(),dry_run=False,environment=environment)
@@ -866,6 +1054,8 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
             checked = archive.load_archive(output/'archive',original.sha256,base_bytes=base,cohort=cohort,now=utc_now())
             revalidate_selected(request,checked,base=base,cohort=cohort,now=utc_now(),horizon=batch.clock(plan['required_valid_through']))
             preflight = live_preflight(contents,environment=environment)
+            require(canonical(preflight['failed_capture']) == canonical(prior_failure),
+                    'Pinned failed capture evidence changed before provider construction')
             api_start = preflight['current_job']['started_at']
             require(0 <= (batch.clock(job_started_at)-batch.clock(api_start)).total_seconds() <= 60,
                     'Declared job clock differs from authenticated current job')
@@ -917,8 +1107,10 @@ def run(restored, output, inventory_path, *, dry_run=False, job_started_at=None)
             'statement_getter_calls':result['statement_getter_calls'],'transport_calls':result['transport_calls'],
             'transport_calls_semantics':'inherited_session_request_invocations',
             'native_http_accounting':native_summary,
+            'recovery_binding':RECOVERY_BINDING,'recovery_proof_sha256':sha((output/'capture-recovery.json').read_bytes()),
             'acquisition_counts':result.get('counts')}
         cycle_sha = batch.write_json(output/'cycle.json',cycle)
+        check_recovery_evidence()
         guard.authorize_finalization(archive_manifest_sha256=digest,cycle_sha256=cycle_sha,archive_object_sha256s=checked.manifest['objects'])
         retention = guard.verify_final()
         check_job()

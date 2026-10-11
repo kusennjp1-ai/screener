@@ -1,9 +1,9 @@
 # Exact annual-history capture controller
 
 This is a private, disabled candidate. The sole requested outcome is a retained
-artifact from one finite capture. It grants no financial source admission,
+artifact from the separately reviewed run-2, attempt-1 recovery capture. It grants no financial source admission,
 certification, publication, recurrent scheduling, price lookup, identity lookup,
-retry, source recheck or provider-resume authority. A push to the proposed branch
+generic retry, source recheck or provider-resume authority. A push to the proposed branch
 is execution, including a push of a disabled version. No branch/push/run is
 permitted by private implementation review.
 
@@ -14,7 +14,11 @@ f883834d9d33c95b7816eecdfa9a2dda5b450645. All historical files, including its
 consumed one-shot admission, workflow, collector, archive, retention guard and
 pure extraction/readback functions, remain unchanged. Local reconstruction uses
 a separately recorded synthetic commit; it is not the hosted producer commit.
-A future hosted capture commit must have that producer as its sole parent.
+The recovery commit must be a normal non-force child of failed capture head
+34a3a4fa9d975a45df899032bde05c673d921da9. That failed commit is separately
+verified as the sole child of the original producer, with tree
+cdb8f1129548d33c50f19ac4f149a908591d1860. The original producer and archive
+remain the acquisition source; the failed capture is only the reviewed Git parent.
 
 Pure inherited restore helpers transitively load publication-gate.mjs and
 publication-state.mjs utilities, their price-observation helper and pinned
@@ -53,17 +57,70 @@ The fresh admission is disabled and its execution clocks null in this candidate.
 It binds the exact request and runtime lock. code_tree_sha256 is SHA-256 over
 compact JSON of path-sorted [path, Git mode, Git blob SHA] records for the whole
 tracked candidate tree except admission.json itself. Runtime-lock.json is
-included. The actual current GitHub commit/tree, sole producer parent, checkout
+included. The actual current GitHub commit/tree, sole failed-capture parent, checkout
 HEAD, every tracked working byte/mode, live branch, numeric repository/workflow,
 current run/attempt and complete job metadata must agree. Environment variables
 alone do not establish a genuine caller.
 
 Complete unfiltered recovery, successor and capture inventories must be fresh,
 complete and free of concurrent, repeated or newer producer work. The capture
-workflow permits only first run/attempt 1. The current source must remain exact
+workflow identity remains 381262768 on improve/financial-statement-capture and
+permits only run number 2, attempt 1. The complete capture inventory must contain
+exactly the pinned failed run 1 and the current run 2. The current source must remain exact
 successful successor run 38044324870/1 and artifact 11667642359. Source auth here
 is explicitly unadmitted provenance and does not invoke the blocked downstream
 successful-source consumer.
+
+## Closed recovery authority and preserved failure
+
+The admission schema is financial-statement-capture-run2-admission-v1. Its
+expected_parent_sha and closed recovery object bind exactly failed run
+38140913503, run number 1, attempt 1, job 114474425321, completed/failure,
+head 34a3a4fa9d975a45df899032bde05c673d921da9 and the reviewed tree/producer
+parent above. It is disabled with null activation clocks. There is no attempt-2,
+run-3, new workflow identity, alternate branch or generic retry authority.
+
+Every restore and before-provider preflight freshly authenticates that failed
+run, its attempt-1 resource, the complete one-job inventory, all 16 ordered
+steps, zero artifacts, and the failed commit's exact tree/sole parent. The
+capture inventory must be exactly failed run 1 plus current run 2. Extra,
+missing, duplicate, rerun, active or drifted evidence stops execution.
+
+The capture step is exactly number 9, completed/skipped, with started_at and
+completed_at both 2026-10-11T12:52:40Z. Those non-null GitHub bookkeeping timestamps
+do not establish execution. Every non-skipped or nonterminal state, changed
+timestamp, altered or extra step fails. Restore step 8 must have failed. The
+step fingerprint hashes compact UTF-8 JSON of the entire ordered array of
+[number,name,status,conclusion,started_at,completed_at] tuples, without a newline:
+efa23e0c0a853db3822ff01ac7cf7e3eba3dfabbadba59b70cf47835ec6800d9.
+
+Current and pinned-failed attempt records use the reviewed separate record-clock
+contract: creation and start are individually no later than update, every time
+is at or before the post-await observation, and canonical creation is no later
+than attempt creation. Identity, state and start bind exactly. Canonical run
+creation remains the dispatch/source chronology anchor. Original producer and
+recovery history retain their strict clock contracts. No skew tolerance is added.
+
+The source-check and restore schemas are explicitly run-2-specific and require
+the closed recovery binding. A whitelisted capture-recovery.json retains the
+complete authoritative failed run/attempt identity and clocks, commit, job and
+16 step records, and complete-zero artifact inventory. It is recursively sorted,
+compact UTF-8 JSON without a newline, at most 64 KiB; no raw API actor metadata,
+headers or credentials enter that proof. An additional reservation of 256 KiB
+expanded, 256 KiB compressed and four members covers the proof, any mirrored
+bytes and conservative persistence overhead within the unchanged package limits.
+The existing native journal reservation is unchanged. Preparation measures capacity
+before proof persistence, verifies every preexisting file and directory unchanged
+with only the single proof added, then freezes the inherited retention baseline.
+The proof is read through a no-follow descriptor with pre/post identity checks.
+Persistence failures keep available partial evidence and cannot produce a true
+retention result. The proof
+is included in the complete uploaded inventory and rechecked before provider I/O.
+
+Five extra failed-evidence reads make each complete source preflight 24 metadata
+reads plus checkout verification. All remain inside the existing 30-second age
+limit; slow metadata fails rather than extending freshness. Recovery is not
+permission to erase the original failure or rewrite its clocks.
 
 ## Time and transport ceilings
 
@@ -162,9 +219,13 @@ final_retention_verified=false even when its available bytes can be checked.
 
 Upload is unconditional, includes hidden files and fails if missing. Independent
 Python producer readback downloads the actual uploaded Actions artifact and
-checks current caller/run/attempt/artifact metadata, ZIP digest/size, every member
+checks current caller/run-2/attempt-1/artifact metadata, ZIP digest/size, every member
 and exact external inventory. Readback rechecks actual clocks and input/output
-identities after external operations. Missing readback, timeout or incomplete
+identities after external operations. Before and after ZIP verification it freshly
+reauthenticates the failed run/attempt/job/steps/zero artifacts, exact two-run
+inventory, both hosted parent relations and the retained recovery proof. Each
+metadata pass stays within 30 seconds and the existing 25-minute whole-job bound;
+readback does not apply the acquisition-only 18-minute ceiling. Missing readback, timeout or incomplete
 retention is failure, never a completed capture. Hard termination may prevent
 retention; only surviving verified evidence can be reported.
 

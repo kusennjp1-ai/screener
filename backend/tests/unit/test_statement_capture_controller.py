@@ -16,7 +16,7 @@ SPEC.loader.exec_module(capture)
 NOW = capture.batch.clock('2026-10-11T11:00:00Z')
 ENV = {'GITHUB_REPOSITORY':'kusennjp1-ai/screener','GITHUB_REPOSITORY_ID':'1203919607',
     'GITHUB_REF_NAME':'improve/financial-statement-capture','GITHUB_EVENT_NAME':'push','GITHUB_RUN_ATTEMPT':'1',
-    'GITHUB_RUN_NUMBER':'1','GITHUB_RUN_ID':'99999999999','GITHUB_SHA':'a'*40,'GITHUB_JOB':'statement-capture',
+    'GITHUB_RUN_NUMBER':'2','GITHUB_RUN_ID':'99999999999','GITHUB_SHA':'a'*40,'GITHUB_JOB':'statement-capture',
     'GITHUB_WORKFLOW_REF':'kusennjp1-ai/screener/.github/workflows/financial-statement-capture.yml@refs/heads/improve/financial-statement-capture'}
 
 
@@ -32,6 +32,120 @@ def admission(active=False):
         value.update(dispatch_not_before='2026-10-11T10:55:00Z',dispatch_not_after='2026-10-11T11:10:00Z',
                      required_valid_through='2026-10-11T12:00:00Z')
     return value
+
+
+def recovery_proof():
+    b=capture.RECOVERY_BINDING
+    identity={'id':capture.ADMISSION_FIXED['repository_id'],'full_name':b['repository']}
+    common={'id':b['run_id'],'run_number':1,'run_attempt':1,'repository':identity,'head_repository':identity,
+        'workflow_id':b['workflow_id'],'path':b['workflow'],'event':'push','head_branch':b['head_branch'],
+        'head_sha':b['head_sha'],'head_commit':{'id':b['head_sha'],'tree_id':b['tree_sha']},
+        'status':'completed','conclusion':'failure','run_started_at':b['run_started_at']}
+    return {'schema_version':'financial-statement-capture-recovery-proof-v1','binding':deepcopy(b),
+        'run':{**common,'created_at':b['run_created_at'],'updated_at':b['run_updated_at']},
+        'attempt':{**common,'created_at':b['attempt_created_at'],'updated_at':b['attempt_updated_at']},
+        'commit':{'sha':b['head_sha'],'tree_sha':b['tree_sha'],'parents':[b['parent_sha']]},
+        'job':{'id':b['job_id'],'run_id':b['run_id'],'run_attempt':1,'head_sha':b['head_sha'],
+            'name':'statement-capture','status':'completed','conclusion':'failure',
+            'started_at':b['job_started_at'],'completed_at':b['job_completed_at'],'steps':deepcopy(PRIOR_STEPS)},
+        'artifact_inventory':{'total_count':0,'artifacts':[]}}
+
+PRIOR_STEPS = [{'name': 'Set up job',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 1,
+  'started_at': '2026-10-11T12:52:14Z',
+  'completed_at': '2026-10-11T12:52:16Z'},
+ {'name': 'Start the actual bounded job clock',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 2,
+  'started_at': '2026-10-11T12:52:16Z',
+  'completed_at': '2026-10-11T12:52:16Z'},
+ {'name': 'Run actions/checkout@v4',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 3,
+  'started_at': '2026-10-11T12:52:16Z',
+  'completed_at': '2026-10-11T12:52:18Z'},
+ {'name': 'Run actions/setup-node@v4',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 4,
+  'started_at': '2026-10-11T12:52:18Z',
+  'completed_at': '2026-10-11T12:52:19Z'},
+ {'name': 'Run actions/setup-python@v5',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 5,
+  'started_at': '2026-10-11T12:52:19Z',
+  'completed_at': '2026-10-11T12:52:19Z'},
+ {'name': 'Install the reviewed anonymous statement transport',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 6,
+  'started_at': '2026-10-11T12:52:19Z',
+  'completed_at': '2026-10-11T12:52:27Z'},
+ {'name': 'Verify capture boundaries with offline fixtures',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 7,
+  'started_at': '2026-10-11T12:52:27Z',
+  'completed_at': '2026-10-11T12:52:37Z'},
+ {'name': 'Restore the exact authenticated unadmitted predecessor',
+  'status': 'completed',
+  'conclusion': 'failure',
+  'number': 8,
+  'started_at': '2026-10-11T12:52:37Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Capture the exact separately admitted annual-history batch',
+  'status': 'completed',
+  'conclusion': 'skipped',
+  'number': 9,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Retain all original and partial evidence including the empty lock',
+  'status': 'completed',
+  'conclusion': 'failure',
+  'number': 10,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Read back the actual uploaded artifact or fail closed',
+  'status': 'completed',
+  'conclusion': 'failure',
+  'number': 11,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Retain external inventory preflight and readback proof',
+  'status': 'completed',
+  'conclusion': 'failure',
+  'number': 12,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Post Run actions/setup-python@v5',
+  'status': 'completed',
+  'conclusion': 'skipped',
+  'number': 22,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Post Run actions/setup-node@v4',
+  'status': 'completed',
+  'conclusion': 'skipped',
+  'number': 23,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:40Z'},
+ {'name': 'Post Run actions/checkout@v4',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 24,
+  'started_at': '2026-10-11T12:52:40Z',
+  'completed_at': '2026-10-11T12:52:41Z'},
+ {'name': 'Complete job',
+  'status': 'completed',
+  'conclusion': 'success',
+  'number': 25,
+  'started_at': '2026-10-11T12:52:41Z',
+  'completed_at': '2026-10-11T12:52:41Z'}]
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +189,7 @@ def test_every_request_mutation_rejected(change):
     with pytest.raises(ValueError):capture.validate_request(value,capture.canonical(value)+b'\n')
 
 
-@pytest.mark.parametrize('key,value',[('expected_run_number',2),('first_attempt_only',False),('repository_id',1),
+@pytest.mark.parametrize('key,value',[('expected_run_number',1),('first_attempt_only',False),('repository_id',1),
     ('branch','main'),('workflow','.github/workflows/financial-statement-successor.yml'),('event','workflow_dispatch'),
     ('maximum_job_seconds',1501),('finalization_reserve_seconds',419),('maximum_preflight_age_seconds',31),
     ('request_sha256','0'*64),('runtime_lock_sha256','x'),('code_tree_sha256','x'),('execution_enabled','true'),
@@ -92,7 +206,7 @@ def test_disabled_is_not_genuine_caller_or_execution_authority():
     with pytest.raises(ValueError,match='disabled admission'):capture.validate_admission(admission(True),now=NOW,dry_run=True,environment={})
 
 
-@pytest.mark.parametrize('key,value',[('GITHUB_RUN_ATTEMPT','2'),('GITHUB_RUN_NUMBER','2'),('GITHUB_RUN_ID','0'),
+@pytest.mark.parametrize('key,value',[('GITHUB_RUN_ATTEMPT','2'),('GITHUB_RUN_NUMBER','1'),('GITHUB_RUN_ID','0'),
     ('GITHUB_SHA','bad'),('GITHUB_REPOSITORY_ID','1'),('GITHUB_EVENT_NAME','pull_request'),
     ('GITHUB_REF_NAME','main'),('GITHUB_JOB','publish'),('GITHUB_WORKFLOW_REF','other'),('GITHUB_REPOSITORY','other/repo')])
 def test_wrong_hosted_context_rejected(key,value):
@@ -205,17 +319,29 @@ def test_runtime_closure_mutation(change):
 
 def test_live_metadata_bindings_and_post_await_clocks():
     contents={'capture-request.json':b'request','capture-admission.json':b'admission','capture-runtime-lock.json':b'lock'}
-    proof={'schema_version':'financial-statement-capture-source-check-v1','request_sha256':capture.sha(b'request'),
+    proof={'schema_version':'financial-statement-capture-run2-source-check-v1',
+        'recovery':deepcopy(capture.RECOVERY_BINDING),'expected_parent_sha':capture.RECOVERY_BINDING['head_sha'],
+        'failed_capture':recovery_proof(),'request_sha256':capture.sha(b'request'),
         'admission_sha256':capture.sha(b'admission'),'runtime_lock_sha256':capture.sha(b'lock'),
-        'checked_at':'2026-10-11T11:00:00Z','current':{'id':int(ENV['GITHUB_RUN_ID']),'head_sha':ENV['GITHUB_SHA']}}
-    for mutation in ('none','stale','future','run','sha','request','admission','lock','schema'):
-        p=deepcopy(proof);now=NOW
+        'checked_at':'2026-10-11T13:10:00Z','workflow_id':381262768,
+        'current':{'id':int(ENV['GITHUB_RUN_ID']),'head_sha':ENV['GITHUB_SHA'],'run_number':2,'run_attempt':1,
+            'workflow_id':381262768,'path':capture.ADMISSION_FIXED['workflow'],'head_branch':capture.ADMISSION_FIXED['branch'],
+            'event':'push','status':'in_progress','conclusion':None,'created_at':'2026-10-11T13:09:00Z'}}
+    for mutation in ('none','stale','future','run','sha','request','admission','lock','schema','number','attempt','workflow','state','overlap','binding','proof'):
+        p=deepcopy(proof);now=capture.batch.clock('2026-10-11T13:10:00Z')
         if mutation=='stale':now+=timedelta(seconds=31)
         elif mutation=='future':now-=timedelta(seconds=1)
         elif mutation=='run':p['current']['id']+=1
         elif mutation=='sha':p['current']['head_sha']='b'*40
         elif mutation in ('request','admission','lock'):p[{'lock':'runtime_lock_sha256'}.get(mutation,mutation+'_sha256')]='0'*64
         elif mutation=='schema':p['schema_version']='financial-successor-source-check-v1'
+        elif mutation=='number':p['current']['run_number']=1
+        elif mutation=='attempt':p['current']['run_attempt']=2
+        elif mutation=='workflow':p['current']['workflow_id']+=1
+        elif mutation=='state':p['current']['status']='completed'
+        elif mutation=='overlap':p['current']['created_at']=capture.RECOVERY_BINDING['attempt_updated_at']
+        elif mutation=='binding':p['recovery']['run_id']+=1
+        elif mutation=='proof':p['failed_capture']['artifact_inventory']['artifacts']=[{'id':1}]
         with patch.object(capture.subprocess,'run',return_value=SimpleNamespace(stdout=json.dumps(p))),patch.object(capture,'utc_now',return_value=now):
             if mutation=='none':assert capture.live_preflight(contents,environment=ENV)==p
             else:
@@ -676,3 +802,152 @@ print('verified without provider construction')
 
 def test_imported_controller_has_no_provider_execution_without_cli_bootstrap():
     with pytest.raises(ValueError,match='source-only CLI'):capture.verify_executed_runtime()
+
+
+def test_run2_admission_binds_exact_failure_without_generic_retry():
+    a=admission()
+    assert a['expected_run_number']==2 and a['first_attempt_only'] is True
+    assert a['workflow_id']==381262768 and a['expected_parent_sha']==capture.RECOVERY_BINDING['head_sha']
+    capture.validate_admission(a,now=NOW,dry_run=True,environment={})
+    for key in capture.RECOVERY_BINDING:
+        changed=deepcopy(a)
+        changed['recovery'][key]=True if isinstance(changed['recovery'][key],int) else 'changed'
+        with pytest.raises(ValueError):capture.validate_admission(changed,now=NOW,dry_run=True,environment={})
+    for key,value in [('workflow_id',None),('expected_parent_sha','a'*40),('schema_version','financial-statement-capture-admission-v1')]:
+        changed=deepcopy(a);changed[key]=value
+        with pytest.raises(ValueError):capture.validate_admission(changed,now=NOW,dry_run=True,environment={})
+
+
+def test_exact_recovery_proof_keeps_distinct_attempt_creation_and_skipped_step_metadata():
+    proof=recovery_proof()
+    assert capture.validate_recovery_proof(proof,now=capture.batch.clock('2026-10-11T13:00:00Z')) is proof
+    assert proof['run']['created_at']=='2026-10-11T12:52:10Z'
+    assert proof['attempt']['created_at']=='2026-10-11T12:52:11Z'
+    step=next(s for s in proof['job']['steps'] if s['number']==9)
+    assert step['conclusion']=='skipped' and step['started_at']==step['completed_at']=='2026-10-11T12:52:40Z'
+    with pytest.raises(ValueError,match='future'):
+        capture.validate_recovery_proof(proof,now=capture.batch.clock('2026-10-11T12:52:43Z'))
+
+
+@pytest.mark.parametrize('mutation',['extra','binding','run','attempt','bool_attempt','parent','tree','job','artifact_count','artifact','capture_started','capture_success','step_extra','step_missing','step_duplicate','step_time','oversize'])
+def test_recovery_proof_mutations_fail_closed(mutation):
+    p=recovery_proof()
+    if mutation=='extra':p['extra']=True
+    elif mutation=='binding':p['binding']['run_id']+=1
+    elif mutation=='run':p['run']['head_sha']='a'*40
+    elif mutation=='attempt':p['attempt']['run_attempt']=2
+    elif mutation=='bool_attempt':p['attempt']['run_attempt']=True
+    elif mutation=='parent':p['commit']['parents']=['a'*40]
+    elif mutation=='tree':p['commit']['tree_sha']='a'*40
+    elif mutation=='job':p['job']['id']+=1
+    elif mutation=='artifact_count':p['artifact_inventory']['total_count']=1
+    elif mutation=='artifact':p['artifact_inventory']['artifacts']=[{'id':1}]
+    elif mutation=='capture_started':p['job']['steps'][8]['status']='in_progress'
+    elif mutation=='capture_success':p['job']['steps'][8]['conclusion']='success'
+    elif mutation=='step_extra':p['job']['steps'].append(deepcopy(p['job']['steps'][8]))
+    elif mutation=='step_missing':p['job']['steps'].pop()
+    elif mutation=='step_duplicate':p['job']['steps'][9]=deepcopy(p['job']['steps'][8])
+    elif mutation=='step_time':p['job']['steps'][8]['completed_at']='2026-10-11T12:52:41Z'
+    elif mutation=='oversize':p['job']['steps'][8]['name']='x'*capture.RECOVERY_PROOF_LIMIT
+    with pytest.raises(ValueError):capture.validate_recovery_proof(p)
+
+
+def recovery_capacity(extra=0):
+    return {'expanded_headroom_bytes':4*1024*1024+256*1024+extra,
+        'compressed_headroom_bytes':3*1024*1024+256*1024+extra,'member_headroom':12+extra}
+
+
+def test_recovery_reserve_is_additional_and_does_not_shrink_native_journal_reserve():
+    report=capture.reserve_recovery_proof(capture.reserve_native_journal(recovery_capacity()))
+    assert report['native_journal_reservation']['expanded_bytes']==4*1024*1024
+    assert report['native_journal_reservation']['compressed_bytes']==3*1024*1024
+    assert report['native_journal_reservation']['members']==8
+    assert report['recovery_proof_reservation']=={'maximum_proof_bytes':65536,'expanded_bytes':262144,'compressed_bytes':262144,'members':4}
+    assert report['expanded_headroom_after_all_capture_reserves']==0
+    assert report['compressed_headroom_after_all_capture_reserves']==0
+    assert report['member_headroom_after_all_capture_reserves']==0
+    for field in ('expanded_headroom_bytes','compressed_headroom_bytes','member_headroom'):
+        report=recovery_capacity();report[field]-=1
+        with pytest.raises(ValueError,match='Recovery proof reservation'):
+            capture.reserve_recovery_proof(capture.reserve_native_journal(report))
+
+
+def real_recovery_guard(root):
+    (root/'archive').mkdir(exist_ok=True)
+    (root/'archive/manifest.json').write_text('{}')
+    (root/'original.json').write_text('{"original":true}')
+    return capture.StatementRetentionBudget(root,selected_symbols=200,max_transport_requests=1000)
+
+
+def test_recovery_proof_persistence_is_canonical_bounded_and_owned(tmp_path):
+    guard=real_recovery_guard(tmp_path)
+    path=tmp_path/'capture-recovery.json';p=recovery_proof()
+    snapshot=capture.persist_recovery_proof(path,p,guard)
+    assert path.read_bytes()==capture.canonical(p) and path.stat().st_size<=65536
+    assert capture.recovery_proof_snapshot(path)==snapshot
+    old=tmp_path/'original.json';path.rename(old);path.write_bytes(old.read_bytes())
+    assert capture.recovery_proof_snapshot(path)!=snapshot
+    with pytest.raises(ValueError,match='new'):
+        capture.persist_recovery_proof(path,p,guard)
+
+
+def test_partial_recovery_persistence_keeps_available_evidence_and_propagates_failure(tmp_path,monkeypatch):
+    guard=real_recovery_guard(tmp_path)
+    path=tmp_path/'capture-recovery.json'
+    def partial(target,raw):
+        target.write_bytes(raw[:100]);raise OSError('synthetic persistence failure')
+    monkeypatch.setattr(capture.archive,'_write_immutable',partial)
+    with pytest.raises(OSError):capture.persist_recovery_proof(path,recovery_proof(),guard)
+    assert path.read_bytes()==capture.canonical(recovery_proof())[:100]
+
+
+def test_offline_recovery_fixture_cannot_claim_genuine_prior_authentication(tmp_path):
+    guard=real_recovery_guard(tmp_path)
+    p={'schema_version':'financial-statement-capture-recovery-fixture-v1','genuine_hosted_caller':False,
+       'live_prior_failure_authenticated':False,'binding':deepcopy(capture.RECOVERY_BINDING)}
+    capture.persist_recovery_proof(tmp_path/'capture-recovery.json',p,guard,offline=True)
+    p['live_prior_failure_authenticated']=True
+    with pytest.raises(ValueError):capture.persist_recovery_proof(tmp_path/'bad.json',p,guard,offline=True)
+
+
+def test_recovery_snapshot_rejects_named_inode_swap_during_descriptor_read(tmp_path,monkeypatch):
+    path=tmp_path/'capture-recovery.json';raw=capture.canonical(recovery_proof());path.write_bytes(raw)
+    detached=tmp_path/'owned-detached.json';read=capture.os.read;swapped=False
+    def race(fd,count):
+        nonlocal swapped
+        if not swapped:
+            swapped=True;path.rename(detached);path.write_bytes(raw)
+        return read(fd,count)
+    monkeypatch.setattr(capture.os,'read',race)
+    with pytest.raises(ValueError,match='changed or detached'):capture.recovery_proof_snapshot(path)
+    assert detached.read_bytes()==raw and path.read_bytes()==raw
+
+
+def test_recovery_snapshot_rejects_hardlink_and_symlink(tmp_path):
+    import os
+    path=tmp_path/'proof.json';path.write_bytes(capture.canonical(recovery_proof()))
+    link=tmp_path/'link.json';os.link(path,link)
+    with pytest.raises(ValueError):capture.recovery_proof_snapshot(path)
+    link.unlink();link.symlink_to(path)
+    with pytest.raises(Exception):capture.recovery_proof_snapshot(link)
+
+@pytest.mark.parametrize('mutation',['bytes','same_byte_inode','addition','directory','removal'])
+def test_recovery_preparation_rejects_source_mutation_with_real_retention_guard(tmp_path,monkeypatch,mutation):
+    guard=real_recovery_guard(tmp_path);original=tmp_path/'original.json';writer=capture.archive._write_immutable
+    def mutate(path,raw):
+        writer(path,raw)
+        if mutation=='bytes':original.write_text('{"changed":true}')
+        elif mutation=='same_byte_inode':
+            raw_original=original.read_bytes();original.unlink();original.write_bytes(raw_original)
+        elif mutation=='addition':(tmp_path/'foreign.json').write_text('{}')
+        elif mutation=='directory':(tmp_path/'foreign').mkdir()
+        elif mutation=='removal':original.unlink()
+    monkeypatch.setattr(capture.archive,'_write_immutable',mutate)
+    with pytest.raises(ValueError,match='Prepared source changed'):
+        capture.persist_recovery_proof(tmp_path/'capture-recovery.json',recovery_proof(),guard)
+    assert (tmp_path/'capture-recovery.json').exists()
+
+@pytest.mark.parametrize('count',[False,0.0])
+def test_recovery_proof_rejects_noninteger_zero_artifacts(count):
+    proof=recovery_proof();proof['artifact_inventory']['total_count']=count
+    with pytest.raises(ValueError):capture.validate_recovery_proof(proof)
