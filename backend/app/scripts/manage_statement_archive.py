@@ -48,7 +48,7 @@ def main(argv=None):
             resume = archive._read(args.provider_resume)[0] if args.provider_resume else None
             if resume:
                 resume = archive.planning.ProviderResume(resume["blocked_attempt_id"], batch.clock(resume["decided_at"]))
-            planned, exported, _ = archive.plan_archive(current, base_bytes=base, cohort=cohort, now=now,
+            planned, exported, projections = archive.plan_archive(current, base_bytes=base, cohort=cohort, now=now,
                 batch_limit=args.batch_limit, refresh_through=batch.clock(args.refresh_through) if args.refresh_through else None,
                 retry_decisions=decisions, source_rechecks=rechecks, provider_resume=resume)
             if not args.output_directory:
@@ -57,6 +57,14 @@ def main(argv=None):
             if output.exists():
                 raise archive.InvalidArchive("Plan output must be new")
             report = asdict(planned)
+            # Scheduling groups unsupported currency/basis with missing periods.
+            # Preserve the current source reason for diagnosis without treating
+            # it as availability or changing the collector's retry decisions.
+            report["annual_history_source_reasons"] = {
+                symbol: projections[symbol]["history_source_diagnostics"]["reasons"]["annual"]
+                if symbol in projections else "fetch_gap"
+                for symbol in planned.eligible_symbols
+            }
             serialized = json.loads(json.dumps(report, default=lambda v: batch.timestamp(v) if isinstance(v, datetime) else v))
             archive._write_immutable(output / "plan.json", batch._json_bytes(exported))
             archive._write_immutable(output / "report.json", batch._json_bytes(serialized))
