@@ -20,7 +20,7 @@ import {canonicalPublication,removeCanonical,transportCapable,packPublication,as
 import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
 import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
 import {publisherToolingBoundary,publisherToolingReceipt,validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
-import {ordinaryCarrySelected,assertOrdinaryClock,prepareOrdinaryCarry,bindOrdinaryCarry,checkOrdinaryCarry,withOrdinaryExporter,beginOrdinaryComposition,completeOrdinaryComposition,validateOrdinaryCarryReceipt,assertOrdinaryReceiptBinding} from './ordinary-carry-tooling.mjs';
+import {ordinaryCarrySelected,selectOrdinaryCarryAdmission,assertOrdinaryClock,prepareOrdinaryCarry,bindOrdinaryCarry,checkOrdinaryCarry,withOrdinaryExporter,beginOrdinaryComposition,completeOrdinaryComposition,validateOrdinaryCarryReceipt,assertOrdinaryReceiptBinding} from './ordinary-carry-tooling.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -283,6 +283,7 @@ async function plan(design = false) {
   const historyPredecessor = !design && fresh && !migration && !correction && !activation && !renewal && !source.repair ? publishedHistorySource(live, pages) : null;
   const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(historyPredecessor ? {historyPredecessor} : {}), ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
     ...(!renewal&&!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
+  if(state.carry&&ordinaryCarrySelected(state))state.ordinaryCarryAdmission=selectOrdinaryCarryAdmission(state,Date.now());
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
   if (design && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN=${source.runId}\n`);

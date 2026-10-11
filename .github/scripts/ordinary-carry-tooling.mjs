@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,readFileSync,realpathSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 const freeze=value=>{for(const child of Object.values(value))if(child&&typeof child==='object')freeze(child);return Object.freeze(value);};
-export const ORDINARY_CARRY=freeze({
+export const OCT10_ORDINARY_CARRY=freeze({
   schema_version:'ordinary-carry-tooling-identity-v1',amendment_id:'oct9-carry-single-projection-v1',repository:'kusennjp1-ai/screener',
   role:'ordinary_data_only',not_before:'2026-10-10T00:00:00Z',not_after:'2026-10-10T14:59:00Z',
   ui_sha:'1e1943e1d5f78a738a05baa69eb9f2e8508e32ac',ui_tree:'1c0219a170dcbdeb1af539e4cf7a04018251ca02',
@@ -16,6 +16,25 @@ export const ORDINARY_CARRY=freeze({
   source:{artifact_id:11659250929,artifact_bytes:300364092,artifact_sha256:'de47f97f7c713ce70627ca9507f5cbece64ac6e441f581aee3fadb1be9c46a45',run_id:38017220147,run_attempt:1,head_sha:'2e289c42c00e0d0bad05263ab8273a257dc0ae8e',created_at:'2026-10-10T04:22:09Z',manifest_sha256:'da830e8202fe9a7cd4cc9c9d383c9069ccb5e13fb3db564ac46ee52a8d4a60a9',price_observations_sha256:'e8107f9b61d4de7f25a81367b0e94b3367d0b9124f9838b647ea1a4f8462deb7',as_of_date:'2026-10-09'},
   predecessor:{identity:'37456692717/1/0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a/ab65c8bb05f33cadd1eec71c858ed67a6ba7578ed9772c7d9ccbf24873161dd0',receipt_sha256:'0e5b6b58fb3f501d8121ff1d77b026652207a4289fa018b8049ae099e346434a',transport_root_sha256:'12e0304288a72e92f1efbe7bd59aa0b3b16272b1f0c201412d3b4870a4481d11',lineage_sha256:'2828fbf2d497ae32c29ddb46a34903a9c1c8494862e127ba67dff9880e356a13',generation:'69c80cd8bfa2a4bedf891aea1e82229b4d6768e59914f15fb9ef9e09b51c7de7',source_projection_sha256:'a93042a6f6ad40c9bbf0f518bf5580d1a1a014e2fc70380569edcde76c965b9a',source_base_sha256:'94d3f1f08869fe625c678e64c1699bf024050c7a5208847168a67c3c0e2b8b27'}
 });
+// Published historical receipts keep their exact dated identity. A later
+// reviewed execution identity must not rewrite the expired Oct 10 contract.
+export const OCT11_ORDINARY_CARRY_V2=freeze({
+  ...OCT10_ORDINARY_CARRY,
+  amendment_id:'oct11-oct9-carry-single-projection-v2',
+  not_before:'2026-10-11T00:00:00Z',admit_before:'2026-10-11T09:00:00Z',not_after:'2026-10-11T10:30:00Z',
+  source:{artifact_id:11688992276,artifact_bytes:304495007,artifact_sha256:'de6df9c0ce6d571278edb0cf8e0ab505d6eed7f1ed680a6130d7ea994c27f640',run_id:38095197679,run_attempt:1,head_sha:'3165566f0dd1216c2b869dbf0db887ea7494b8d4',created_at:'2026-10-11T02:03:12Z',manifest_sha256:'463fb0d332be33eb4f31aec99cef794258e5c9c69facb78f29a0c5f981982859',price_observations_sha256:'9e752e56a0eab1b9151302e49d02fc98e4f4eb8598e3fa8a1166e4e6489ff26a',as_of_date:'2026-10-09'}
+});
+
+// Superseded identities remain immutable, recognized, and readable in receipts.
+// Only the independently reviewed v3 identity may admit a new execution.
+export const OCT11_ORDINARY_CARRY_V3=freeze({
+  ...OCT11_ORDINARY_CARRY_V2,
+  amendment_id:'oct11-oct9-carry-single-projection-v3',
+  source:{artifact_id:11691660552,artifact_bytes:304482110,artifact_sha256:'28a3086136e50450827c14c1b5d58caea668e9c0c24304288520d3b5606959a6',run_id:38103802893,run_attempt:1,head_sha:'3165566f0dd1216c2b869dbf0db887ea7494b8d4',created_at:'2026-10-11T04:10:38Z',manifest_sha256:'c50ac416be6d9bb1aa5388689f4f3bf59b5fbb4a66df92db35b4b2cc38c537ea',price_observations_sha256:'9e752e56a0eab1b9151302e49d02fc98e4f4eb8598e3fa8a1166e4e6489ff26a',as_of_date:'2026-10-09'}
+});
+export const ORDINARY_CARRY=OCT11_ORDINARY_CARRY_V3;
+const KNOWN_ORDINARY_CARRIES=Object.freeze([OCT10_ORDINARY_CARRY,OCT11_ORDINARY_CARRY_V2,OCT11_ORDINARY_CARRY_V3]);
+
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 const same=(a,b,message)=>assert.deepEqual(ordered(a),ordered(b),message);
@@ -28,9 +47,22 @@ const closed=(v,keys,message)=>{assert(v&&typeof v==='object'&&!Array.isArray(v)
 export const ORDINARY_ENTRY='.ordinary-carry-oct9-export.mjs';
 export const HISTORY_PATH='static-data/financial-history.json';
 function regular(path,cap=128*1024**2){assert(realpathSync(path)===resolve(path),'Linked ordinary tooling input');const st=lstatSync(path);assert(st.isFile()&&!st.isSymbolicLink()&&st.size<=cap,'Unsafe ordinary tooling input');return readFileSync(path);}
-export function ordinaryCarrySelected(state){return state.source?.artifact?.id===ORDINARY_CARRY.source.artifact_id||Boolean(state.ordinaryCarryTooling);}
+// Recognition is deliberately independent of execution eligibility: an expired
+// known source must fail closed, never fall through to generic publication.
+export function ordinaryCarrySelected(state){return KNOWN_ORDINARY_CARRIES.some(identity=>state.source?.artifact?.id===identity.source.artifact_id)||Boolean(state.ordinaryCarryAdmission)||Boolean(state.ordinaryCarryTooling);}
+export function selectOrdinaryCarryAdmission(state,now){
+  if(!ordinaryCarrySelected(state))return null;
+  assert(!state.ordinaryCarryAdmission&&!state.ordinaryCarryTooling,'Ordinary admission cannot replace an existing immutable plan');
+  const candidates=[ORDINARY_CARRY].filter(identity=>identity.source.artifact_id===state.source?.artifact?.id&&Number.isFinite(now)&&now>=Date.parse(identity.not_before)&&now>=Date.parse(identity.source.created_at)&&now<=Date.parse(identity.admit_before??identity.not_after));
+  assert.equal(candidates.length,1,'Known ordinary source has no unique active execution identity');
+  return {identity:structuredClone(candidates[0]),admitted_at:new Date(now).toISOString()};
+}
 export function assertOrdinaryClock(now){assert(Number.isFinite(now)&&now>=Date.parse(ORDINARY_CARRY.not_before)&&now<=Date.parse(ORDINARY_CARRY.not_after),'Ordinary carry execution window is closed');return new Date(now).toISOString();}
 export function validateOrdinaryContext(state,context){
+  closed(state.ordinaryCarryAdmission,['identity','admitted_at'],'Missing exact ordinary execution admission');
+  same(state.ordinaryCarryAdmission.identity,ORDINARY_CARRY,'Ordinary execution identity differs from its immutable plan');
+  const admitted=Date.parse(state.ordinaryCarryAdmission.admitted_at);
+  assert(iso(state.ordinaryCarryAdmission.admitted_at)&&admitted>=Date.parse(ORDINARY_CARRY.not_before)&&admitted<=Date.parse(ORDINARY_CARRY.admit_before??ORDINARY_CARRY.not_after)&&admitted<=context.now,'Ordinary admission is outside its reviewed start window');
   assert(state.decision?.publish&&state.decision.mode==='data'&&state.carry&&!state.source?.receiptHash&&!state.source?.publication&&!state.source?.repair&&!state.publisherTooling&&!state.sourceRecovery&&!state.correction&&!state.activation&&!state.renewal&&!state.decision.migration&&!state.designCarryPreview,'Ordinary carry is an exclusive data-only route');
   const p=ORDINARY_CARRY.source,s=state.source,a=s.artifact,live=state.live,prior=live.financialRelease;
   same({artifact_id:a.id,artifact_bytes:a.size_in_bytes,artifact_sha256:a.digest?.slice(7),run_id:s.runId,run_attempt:s.attempt,head_sha:a.workflow_run?.head_sha,created_at:a.created_at,manifest_sha256:s.manifestHash,price_observations_sha256:s.priceObservationsDigest,as_of_date:s.manifest.markets?.US?.as_of_date},p,'Ordinary carry selected source changed');
@@ -43,6 +75,11 @@ export function validateOrdinaryContext(state,context){
   closed(context.controller,['head','tree'],'Ordinary controller fields');closed(context.caller,['run_id','run_attempt','job_id','started_at'],'Ordinary caller fields');
   assert(context.event==='workflow_dispatch'&&context.ui_only===true&&context.controller.head===state.controllerSha&&gitHash(context.controller.head)&&gitHash(context.controller.tree),'Ordinary carry requires explicit current-controller UI-only dispatch');
   assert(positive(context.caller.run_id)&&context.caller.run_attempt===1&&positive(context.caller.job_id)&&iso(context.caller.started_at)&&Date.parse(context.caller.started_at)<=context.now,'Invalid ordinary carry caller/clock');
+  assert(Date.parse(context.caller.started_at)<=admitted,'Ordinary admission predates its caller');
+  if(ORDINARY_CARRY.admit_before){
+    assert(Date.parse(context.caller.started_at)>=Date.parse(ORDINARY_CARRY.not_before),'Ordinary caller predates this dated execution identity');
+    assert(admitted>=Date.parse(ORDINARY_CARRY.source.created_at),'Ordinary admission predates its selected artifact');
+  }
   assertOrdinaryClock(context.now);
   return true;
 }
@@ -81,7 +118,7 @@ print(json.dumps({'zip_sha256':zsha,'zip_bytes':pathlib.Path(z).stat().st_size,'
   assert(!Object.hasOwn(report.files,HISTORY_PATH),'Ordinary empty history requires authenticated source absence');
   return {artifact_sha256:report.zip_sha256,tar_sha256:report.tar_sha256,raw_static_inventory_sha256:digest(report.files),source_history_present:false,manifest_sha256:report.files['static-data/manifest.json']};
 }
-const emptyHistory=()=>JSON.stringify({as_of_date:ORDINARY_CARRY.source.as_of_date,results:{}});
+const emptyHistory=(identity=ORDINARY_CARRY)=>JSON.stringify({as_of_date:identity.source.as_of_date,results:{}});
 export function materializeOrdinaryHistory(root){
   const path=join(root,HISTORY_PATH);assert(!existsSync(path),'Authenticated absent history appeared before derivation');
   assert(realpathSync(dirname(path))===resolve(dirname(path)),'Linked ordinary history parent');
@@ -132,12 +169,14 @@ export async function verifyOrdinaryInputs(state,context,paths){
     // Reuse only this immutable full-source byte validator, not finite authority.
     verifyPublisherToolingCheckout(paths.frontend,{amended:false});
     const {dataInventoryDigest}=await import('./publication-state.mjs');
-    return {controller:structuredClone(context.controller),caller:structuredClone(context.caller),source:authenticateOrdinaryArchive(paths),predecessor_identity:state.live.identity,history_reconciliation:portableHistory(state),history_reconciliation_sha256:digest(portableHistory(state)),baseline_sha256:state.carry.baseline?dataInventoryDigest(state.carry.baseline):null,carry:state.carry.projectionPath?carryIdentity(state):null};
+    return {...(ORDINARY_CARRY.admit_before?{admitted_at:state.ordinaryCarryAdmission.admitted_at}:{}),controller:structuredClone(context.controller),caller:structuredClone(context.caller),source:authenticateOrdinaryArchive(paths),predecessor_identity:state.live.identity,history_reconciliation:portableHistory(state),history_reconciliation_sha256:digest(portableHistory(state)),baseline_sha256:state.carry.baseline?dataInventoryDigest(state.carry.baseline):null,carry:state.carry.projectionPath?carryIdentity(state):null};
   });
 }
 export async function prepareOrdinaryCarry(state,context,paths){
   assert(!state.ordinaryCarryTooling,'Ordinary carry preparation may occur only once');
+  if(ORDINARY_CARRY.admit_before)assert(Date.now()<=Date.parse(ORDINARY_CARRY.admit_before),'Ordinary preparation start window is closed');
   const inputs=await verifyOrdinaryInputs(state,context,paths);assert.equal(inputs.carry,null,'Ordinary baseline must precede carry evaluation');
+  if(ORDINARY_CARRY.admit_before)assert(Date.now()<=Date.parse(ORDINARY_CARRY.admit_before),'Ordinary preparation start window closed during verification');
   const history=materializeOrdinaryHistory(join(paths.frontend,'public'));
   state.ordinaryCarryTooling={phase:'baseline',inputs,history,prepared_at:assertOrdinaryClock(Date.now())};
   return state.ordinaryCarryTooling;
@@ -178,35 +217,39 @@ export async function completeOrdinaryComposition(proof,state,context,paths,publ
   assert(state.financialPrepared?.receipt?.mode==='carry'&&state.financialPrepared.receipt.evaluation_projection.sha256===state.carry.projectionSha256,'Ordinary receipt lacks verified carried bundle');
   same(publication.financial_release,state.financialPrepared.reference,'Ordinary final financial reference changed');
   const tool=state.ordinaryCarryTooling;
-  const receipt={schema_version:'ordinary-carry-tooling-receipt-v1',identity:ORDINARY_CARRY,inputs:tool.inputs,history:tool.history,prepared_at:tool.prepared_at,bound_at:tool.bound_at,build:tool.build,composed_at:assertOrdinaryClock(Date.now()),financial_release:publication.financial_release,financial_generation:publication.financial_generation,financial_lineage_sha256:publication.financial_lineage_sha256,ui_sha:publication.ui_sha,ui_digest:publication.ui_digest};
+  const receipt={schema_version:ORDINARY_CARRY.admit_before?'ordinary-carry-tooling-receipt-v2':'ordinary-carry-tooling-receipt-v1',identity:ORDINARY_CARRY,inputs:tool.inputs,history:tool.history,prepared_at:tool.prepared_at,bound_at:tool.bound_at,build:tool.build,composed_at:assertOrdinaryClock(Date.now()),financial_release:publication.financial_release,financial_generation:publication.financial_generation,financial_lineage_sha256:publication.financial_lineage_sha256,ui_sha:publication.ui_sha,ui_digest:publication.ui_digest};
   validateOrdinaryCarryReceipt(receipt,publication);tool.phase='composed';tool.receipt=receipt;return receipt;
 }
 export function validateOrdinaryCarryReceipt(v,publication){
   closed(v,['schema_version','identity','inputs','history','prepared_at','bound_at','build','composed_at','financial_release','financial_generation','financial_lineage_sha256','ui_sha','ui_digest'],'Unknown ordinary tooling receipt field');
-  assert.equal(v.schema_version,'ordinary-carry-tooling-receipt-v1');same(v.identity,ORDINARY_CARRY,'Unreviewed ordinary identity');
-  closed(v.inputs,['controller','caller','source','predecessor_identity','history_reconciliation','history_reconciliation_sha256','baseline_sha256','carry'],'Unknown ordinary inputs');
+  const identity=KNOWN_ORDINARY_CARRIES.find(candidate=>candidate.amendment_id===v.identity?.amendment_id);
+  assert(identity,'Unreviewed ordinary identity');same(v.identity,identity,'Unreviewed ordinary identity');
+  assert.equal(v.schema_version,identity.admit_before?'ordinary-carry-tooling-receipt-v2':'ordinary-carry-tooling-receipt-v1');
+  closed(v.inputs,['controller','caller','source','predecessor_identity','history_reconciliation','history_reconciliation_sha256','baseline_sha256','carry',...(identity.admit_before?['admitted_at']:[])],'Unknown ordinary inputs');
   closed(v.inputs.controller,['head','tree'],'Unknown ordinary receipt controller');closed(v.inputs.caller,['run_id','run_attempt','job_id','started_at'],'Unknown ordinary receipt caller');
   closed(v.inputs.source,['artifact_sha256','tar_sha256','raw_static_inventory_sha256','source_history_present','manifest_sha256'],'Unknown ordinary source proof');
   closed(v.inputs.carry,['projection_sha256','target_base_sha256','generation','evaluated_at'],'Unknown ordinary carry proof');
   assert(gitHash(v.inputs.controller.head)&&gitHash(v.inputs.controller.tree)&&positive(v.inputs.caller.run_id)&&v.inputs.caller.run_attempt===1&&positive(v.inputs.caller.job_id),'Invalid ordinary controller/caller');
-  assert(v.inputs.source.artifact_sha256===ORDINARY_CARRY.source.artifact_sha256&&v.inputs.source.manifest_sha256===ORDINARY_CARRY.source.manifest_sha256&&v.inputs.source.source_history_present===false&&hash(v.inputs.source.tar_sha256)&&hash(v.inputs.source.raw_static_inventory_sha256),'Invalid ordinary raw source proof');
+  assert(v.inputs.source.artifact_sha256===identity.source.artifact_sha256&&v.inputs.source.manifest_sha256===identity.source.manifest_sha256&&v.inputs.source.source_history_present===false&&hash(v.inputs.source.tar_sha256)&&hash(v.inputs.source.raw_static_inventory_sha256),'Invalid ordinary raw source proof');
   closed(v.inputs.history_reconciliation,HISTORY_KEYS,'Unknown ordinary history reconciliation');
   const history=v.inputs.history_reconciliation;
-  assert(history.schema_version==='candidate-history-reconciliation-v1'&&history.admitted_observations===650&&history.published_observations===0&&history.cohorts===4&&history.selections===5&&history.source_artifact_digest==='sha256:'+ORDINARY_CARRY.source.artifact_sha256&&HISTORY_KEYS.filter(k=>k.endsWith('_sha256')).every(k=>hash(history[k]))&&digest(history)===v.inputs.history_reconciliation_sha256,'Invalid ordinary preserved-history proof');
-  assert(v.inputs.predecessor_identity===ORDINARY_CARRY.predecessor.identity&&hash(v.inputs.history_reconciliation_sha256)&&hash(v.inputs.baseline_sha256)&&['projection_sha256','target_base_sha256','generation'].every(k=>hash(v.inputs.carry[k])),'Invalid ordinary projection proof');
-  same(v.history,{schema_version:'ordinary-empty-history-derivation-v1',path:HISTORY_PATH,source_present:false,action:'materialize_empty_derived_container',as_of_date:ORDINARY_CARRY.source.as_of_date,baseline_sha256:sha(emptyHistory())},'Invalid ordinary history derivation');
+  assert(history.schema_version==='candidate-history-reconciliation-v1'&&history.admitted_observations===650&&history.published_observations===0&&history.cohorts===4&&history.selections===5&&history.source_artifact_digest==='sha256:'+identity.source.artifact_sha256&&HISTORY_KEYS.filter(k=>k.endsWith('_sha256')).every(k=>hash(history[k]))&&digest(history)===v.inputs.history_reconciliation_sha256,'Invalid ordinary preserved-history proof');
+  assert(v.inputs.predecessor_identity===identity.predecessor.identity&&hash(v.inputs.history_reconciliation_sha256)&&hash(v.inputs.baseline_sha256)&&['projection_sha256','target_base_sha256','generation'].every(k=>hash(v.inputs.carry[k])),'Invalid ordinary projection proof');
+  same(v.history,{schema_version:'ordinary-empty-history-derivation-v1',path:HISTORY_PATH,source_present:false,action:'materialize_empty_derived_container',as_of_date:identity.source.as_of_date,baseline_sha256:sha(emptyHistory(identity))},'Invalid ordinary history derivation');
   closed(v.build,['started_at','finished_at','output_sha256'],'Unknown ordinary build proof');assert(hash(v.build.output_sha256));
-  const dates=[v.inputs.caller.started_at,v.prepared_at,v.inputs.carry.evaluated_at,v.bound_at,v.build.started_at,v.build.finished_at,v.composed_at];
+  const dates=[v.inputs.caller.started_at,...(identity.admit_before?[v.inputs.admitted_at]:[]),v.prepared_at,v.inputs.carry.evaluated_at,v.bound_at,v.build.started_at,v.build.finished_at,v.composed_at];
   assert(dates.every(iso)&&dates.slice(1).every((d,i)=>Date.parse(d)>=Date.parse(dates[i])),'Ordinary lifecycle chronology changed');
-  assert(dates.slice(1).every(d=>Date.parse(d)>=Date.parse(ORDINARY_CARRY.not_before)&&Date.parse(d)<=Date.parse(ORDINARY_CARRY.not_after)),'Ordinary historical execution outside reviewed window');
-  assert(!publication.publisher_tooling&&publication.controller_sha===v.inputs.controller.head&&publication.run_id===v.inputs.caller.run_id&&publication.run_attempt===1&&publication.data_source?.artifact_id===ORDINARY_CARRY.source.artifact_id&&publication.data_source.run_id===ORDINARY_CARRY.source.run_id&&publication.data_source.attempt===1,'Ordinary publication caller/source mismatch');
+  if(identity.admit_before)assert(Date.parse(v.inputs.admitted_at)>=Date.parse(identity.source.created_at)&&Date.parse(v.inputs.admitted_at)<=Date.parse(identity.admit_before)&&Date.parse(v.prepared_at)<=Date.parse(identity.admit_before),'Ordinary historical start outside reviewed admission window');
+  assert(dates.slice(identity.admit_before?0:1).every(d=>Date.parse(d)>=Date.parse(identity.not_before)&&Date.parse(d)<=Date.parse(identity.not_after)),'Ordinary historical execution outside reviewed window');
+  assert(!publication.publisher_tooling&&publication.controller_sha===v.inputs.controller.head&&publication.run_id===v.inputs.caller.run_id&&publication.run_attempt===1&&publication.data_source?.artifact_id===identity.source.artifact_id&&publication.data_source.run_id===identity.source.run_id&&publication.data_source.attempt===1,'Ordinary publication caller/source mismatch');
   for(const key of ['financial_release','financial_generation','financial_lineage_sha256','ui_sha','ui_digest'])same(v[key],publication[key],'Ordinary receipt '+key+' changed');
-  assert(v.ui_sha===ORDINARY_CARRY.ui_sha&&v.ui_digest===ORDINARY_CARRY.ui_digest&&v.financial_lineage_sha256===ORDINARY_CARRY.predecessor.lineage_sha256&&v.financial_generation===v.inputs.carry.generation,'Ordinary final identity changed');return v;
+  assert(v.ui_sha===identity.ui_sha&&v.ui_digest===identity.ui_digest&&v.financial_lineage_sha256===identity.predecessor.lineage_sha256&&v.financial_generation===v.inputs.carry.generation,'Ordinary final identity changed');return v;
 }
 
 export function assertOrdinaryReceiptBinding(state,publication,financialReceipt){
   const v=validateOrdinaryCarryReceipt(publication.ordinary_carry_tooling,publication),tool=state.ordinaryCarryTooling;
   assert(tool&&['composed','rechecked'].includes(tool.phase),'Ordinary receipt before completed composition');
+  same(v.identity,ORDINARY_CARRY,'Non-active historical identity cannot authorize active execution');
   for(const key of ['inputs','history','prepared_at','bound_at','build'])same(v[key],tool[key],'Ordinary final '+key+' is not the authenticated state');
   same(v,tool.receipt,'Ordinary composed receipt changed');
   assert(financialReceipt?.mode==='carry'&&financialReceipt.evaluation_projection.sha256===v.inputs.carry.projection_sha256&&financialReceipt.evaluated_at===v.inputs.carry.evaluated_at&&financialReceipt.financial_generation===v.inputs.carry.generation&&financialReceipt.lineage_sha256===ORDINARY_CARRY.predecessor.lineage_sha256&&financialReceipt.previous_publication_identity===ORDINARY_CARRY.predecessor.identity,'Ordinary receipt differs from verified financial release');
