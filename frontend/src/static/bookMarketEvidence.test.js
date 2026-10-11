@@ -87,7 +87,10 @@ describe('historical market evidence without hindsight membership', () => {
     f.charts[1].bars.at(-1).volume = -1;
     const d = buildBookMarketEvidence(f);
     expect(d.universe.duplicateSymbolsExcluded).toEqual(['S000']);
-    expect(d.latest.date).not.toBe(f.asOfDate);
+    expect(d.latest.date).toBe(f.asOfDate);
+    expect(d.latest.coverage).toBe(0);
+    expect(d.latest.newHighs).toBeNull();
+    expect(d.latest.upVolume).toBeNull();
     expect(d.currentSnapshotComplete).toBe(false);
     expect(d.universe.survivorshipBias).toBe(true);
   });

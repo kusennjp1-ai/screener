@@ -14,6 +14,19 @@ const latest = { date, coverage: 100, expectedUniverseSize: 1000, coveragePct: 1
 const evidence = { version: BOOK_MARKET_VERSION, as_of_date: date, currentSnapshotComplete: true, latest,
   series: [latest], breakoutEvents: [], methods: {}, unknowns: [] };
 describe('book market evidence display', () => {
+  it('does not describe missing proxy evaluations as no events', () => {
+    render(<BookMarketEvidence evidence={{ ...evidence, series: [{ ...latest, breakoutProxyCount: null }] }} expectedDate={date} />);
+    expect(screen.getByText(/この期間の発生件数は未確認/)).toBeInTheDocument();
+    expect(screen.getByText(/未確認を0件として扱いません/)).toBeInTheDocument();
+  });
+  it('labels measured zero as applying only to the observed population', () => {
+    render(<BookMarketEvidence evidence={{ ...evidence, series: [{ ...latest, breakoutProxyCount: 0 }] }} expectedDate={date} />);
+    expect(screen.getByText(/観測できた母集団では.*0件/)).toBeInTheDocument();
+  });
+  it('warns on old latest dates even if the payload completeness flag is true', () => {
+    render(<BookMarketEvidence evidence={{ ...evidence, latest: { ...latest, date: '2026-09-18' } }} expectedDate={date} />);
+    expect(screen.getByText(/表示は 2026-09-18 時点/)).toBeInTheDocument();
+  });
   it('does not show old evidence as matching a newer manifest', () => {
     render(<BookMarketEvidence evidence={evidence} expectedDate="2026-09-22" />);
     expect(screen.getByText(/分析日が一致しません/)).toBeInTheDocument();
