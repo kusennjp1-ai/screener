@@ -619,3 +619,12 @@
 - **③ 前サイクルの説明訂正**: 「敗因は現金保有の機会損失」は誤り（強気年にマイナス＝機会損失では説明不能）。真因の大半は上記②で、残る劣後は「乗り切れない」であって「負ける」ではない。OBJECTIVE.md/scorecard.jsonを訂正値に更新（スマホにも訂正注記を表示）。
 - **④ CIスモークの根本原因（07d1c7c）**: 3PR連続で全6件が「画面が描画されない」で失敗。`webServer.port`＝TCP接続で準備完了と誤判定していたため`url`待ちに変更＋CI用に30s。**ただし修正後も同症状が継続＝仮説は反証**（30s適用済み・サーバー起動正常・12/12失敗）。手元はCI=trueでも通過するため環境依存。調査継続（次: 失敗時のerror-context/traceとdev-server stdoutの採取）。
 - **教訓（恒久）**: 戦略の優劣を語る前に**計測系を疑う**。今回は結論の6割が計測由来だった。
+
+
+### 2026-10-11 — VCP footprint の経路別契約（ローカルのみ）
+- 基準 `8cf7d9b` で FTNT の既存テスト失敗を再現。終値151.350006、legacy高値87.820000、ATR比0.65465095。legacy false / MAなし / vol_contract true は正しい共存。
+- `legacy_detected` を追加し legacy 根拠と集約判定を明文化。既存キー、判定優先順位、pivot、閾値、fixture は変更しない。テストは legacy gates を legacy 判定に結び、全経路・非検出・経路重複・FTNTの実データを検証。
+- 対象＋legacy 32 passed。関連は変更前262 passed/1 failed → 272 passed。golden 43 passed。既存13 fixtureの既存フィールド完全一致。908 harnessの前後JSON完全一致（588 analyzable、FIRE87.2%、control61.4%、判別+25.8pp、SETUP判別+52.0pp）。right-edge P82/BR92/TPR100%、overall91%。
+- 既存消費側: Markets360 scannerのdetails、quality_rankのsource tier、static exportのbuy項目は従来の集約/sourceを使用。TechnicalIndicatorsのtightness表示は別legacy API。新キーは追加互換だが、未知の外部strict-key consumerは要確認。
+- 全体unit検証の最終結果・環境制約・ソース差分・生ログはLibrary検証パッケージで報告。bdは未インストール。push/PR/merge/公開/認証変更/外部市場データ取得なし。
+- 全unitの分割確認: 5590 passed / 80 failed / 2 skipped、Celery/Redis接続待ちの12件未完了。80失敗は同一環境の基準コミットでも全件再現。backend全体の収集はintegrationのlocalhost:8000接続拒否→SystemExitで停止。制限回避なし。

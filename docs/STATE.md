@@ -3,7 +3,16 @@
 **目的**: 新しいセッション/コンテキストが30秒で再開できること。
 **規律**: 各サイクル末尾に**全面上書き**する（追記しない）。履歴は PROGRESS.md、仕様は SPEC.md、ここは「今」だけ。
 
-## 現在
+## 現在（2026-10-11 ローカル契約修正）
+
+- 基準: `8cf7d9b231a5926696d261da51a4bab531f33cfa`、独立ブランチ `fix/vcp-footprint-contract`。
+- footprint の集約 `detected` と legacy 固有根拠を区別する `legacy_detected` を追加。閾値・検出結果・既存フィールドは不変。
+- 対象＋legacy 回帰 32 passed、関連 272 passed、golden 43 passed。908検証は前後 JSON 完全一致（FIRE 87.2%、control 61.4%、判別 +25.8pp）。下記の過去値とは基準が異なるため今回の改善とは扱わない。
+- 全unit: 5590 passed / 80 failed（全件基準でも再現）/ 2 skipped、Redis接続待ち12件未完了。backend全体収集は実サーバー不在で停止。
+- 外部市場データ取得・push・PR・merge・公開は未実施。全体検証と生ログの詳細は今回の検証パッケージに保存。
+- 次: ローカル差分のレビュー。今回の変更は本番未反映。
+
+## 以前の状態（今回の本番状態の主張ではない）
 
 - **サイクル**: C97完了・**本番反映済**（**売り常時表示＋9年バックテスト＋スコアカード両窓化＋バックテスト準拠リスト。PR #61 squash merged=542034f・static-site full US rebuild成功=run 30096553153でスマホ反映済**）。売り必ず表示: `compute_sell_plan`常時`stop_level`+`targets`／export常時sell／共有`SellTiming`を全4面配線（凍結非接触・backend77+front547 green）。9年窓実測(run 30064735759)=CAGR+4.3% vs SPY+14.7%＝**ほぼ上げ相場ではB&Hに大敗**（現金規律の機会損失・C60再確認）→スコアカードに両窓＋caveat表示（flatteringな6年だけ見せない）。スクリーニング一致調査(wf_6a4bbf56)=バックテストは素の技術戦略(RS≥70・ファンダ/group gateなし)、製品はC93で品質ゲート追加＝**厳密一致はC93を外すことになりユーザー判断案件**。以下は旧C96要点↓。C96完了（**「約束」＝目的関数の確定＋実測完成・88a385a**）。ユーザーと**長期優先順位を合意**: (1)CAGR (2)最大DD (3)リスク調整後(**Sortino主・Sharpe従**＝Sharpeは大勝ちも罰する→右テール保存と矛盾) (4)期待値/トレード (5)勝率。`docs/OBJECTIVE.md`に約束として明文化（上位優先・上位犠牲の下位改善は不採用）。C95監査で利確固定・利益上限は不在＝思想は既存戦略と一致。**実測(6y run 30051701118・full_tactics・2021-08〜2026-07・1576銘柄)**: CAGR+15.2%(SPY+12.4%)・最大DD-13.9%(SPY-24.5%)・Sortino1.28(1.06)・期待値+0.53R/payoff3.4・勝率36.7%・**右テール=上位10%が総利益68.4%/最大+12.23R**＝**5指標すべてでSPY B&H超え**(2022ベア含む窓ゆえ防御が効く。強気5年窓ではB&H未勝は不変)。`backtest`に`payoff_distribution`+`sortino`追加(純レポート・凍結非接触)。スマホ: `StrategyScorecardCard`が5指標＋右テールバー表示・**375px実レンダ確認済**・`strategy-scorecard.json`(publicルート・tracked)。build/lint/5テストgreen。**次: 本番反映(main merge＋静的再ビルド=ユーザー判断待ち)／10y窓でも同計測／inspectorを新スキーマfixtureで全4面＋CIゲート化**。C86-C94は本番反映済(PR#60)。
 - **モデル**: Opus 4.8（Fable従量課金/上限で停止→Opus継続、が恒久ルール。C86はsession上限でsubagent不可→mainループ単独遂行）。
