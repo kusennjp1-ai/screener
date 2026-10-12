@@ -47,7 +47,7 @@ def _sqlite_session():
 
 
 @pytest_asyncio.fixture
-async def client(_sqlite_session):
+async def client(_sqlite_session, server_auth_headers):
     # Seed a watchlist + a handful of symbols spanning US + Asia markets.
     watchlist = UserWatchlist(name="Test")
     _sqlite_session.add(watchlist)
@@ -69,7 +69,7 @@ async def client(_sqlite_session):
     fastapi_app.dependency_overrides[get_db] = _override_get_db
     try:
         transport = httpx.ASGITransport(app=fastapi_app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", headers=server_auth_headers) as c:
             c.watchlist_id = watchlist_id
             yield c
     finally:
