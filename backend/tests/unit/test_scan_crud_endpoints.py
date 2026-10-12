@@ -101,8 +101,10 @@ class TestListScans:
             assert data["scans"][0]["universe_def"] == {
                 "type": "all",
                 "market": None,
+                "mic": None,
                 "exchange": None,
                 "index": None,
+                "listing_tier": None,
                 "symbols": None,
                 "allow_inactive_symbols": False,
             }
