@@ -1,4 +1,4 @@
-import { NATIVE_ANNUAL_SCHEMA, nativeAnnualHistoryContract } from './financialHistory.js';
+import { annualHistoryMetadataValid } from './financialHistory.js';
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
 import { encodeResearchFloat64, decodeResearchFloat64 } from './researchFloat64.js';
@@ -36,7 +36,7 @@ export function researchListRow(row) {
   if (row.financial_history) out.financial_history = {
     ...pick(row.financial_history, ['symbol', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source', 'schema_version', 'annual_currency', 'quarterly_currency', 'quarterly_retrieved_at', 'annual_source']),
     // Do not strip contradictory per-cell currency/unit metadata into valid proof.
-    annual: row.financial_history.schema_version === NATIVE_ANNUAL_SCHEMA && !nativeAnnualHistoryContract(row.financial_history, row.symbol) ? []
+    annual: !annualHistoryMetadataValid(row.financial_history, row.symbol) ? row.financial_history.annual
       : Array.isArray(row.financial_history.annual) ? row.financial_history.annual.map(item => pick(item, ['end', 'eps'])) : row.financial_history.annual,
   };
   return out;

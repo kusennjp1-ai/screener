@@ -1,7 +1,7 @@
 import { instrumentApplicability, instrumentApplicabilityLabel, INSTRUMENT_IDENTITY_FIELDS } from './instrumentApplicability.js';
 import { assess, annualGrowthRule } from './researchEngine.js';
 import { projectFinancialRow } from './financialCurrent.js';
-import { financialHistory, financialHistoryDeadlines, ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
+import { financialHistory, financialHistoryDeadlines, ANNUAL_REPORTED_LIMITATION, ANNUAL_METADATA_UNKNOWN, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
 import { validClock, validEvidenceDay } from './evidenceTime.js';
 
 // Presentation of the shared current-use projection and existing assessment.
@@ -66,6 +66,7 @@ export const financialUnknownReason = reason => ({
   value_mismatch: '実数値と選定条件の判定値が一致しません。',
   missing_value: '実数値が未取得です。',
   invalid_history: '有効な報告希薄化EPS履歴がありません（取得後72時間・銘柄・日付などを確認）。',
+  inconsistent_annual_metadata: ANNUAL_METADATA_UNKNOWN,
   incomplete_annual_history: '3年の成長履歴に必要な連続4期の年次EPSが揃っていません。',
   incomparable_annual_growth: '年次成長率を比較できません（欠損・ゼロ／赤字基準年・期間不整合など）。',
 }[reason] || '現在の判定に使える根拠を確認できません。');
@@ -141,7 +142,7 @@ const metadata = data => ({
 function annualRow(history, context, required, condition) {
   const { symbol, date, now, method } = context;
   const report = financialHistory(history, symbol, date, now);
-  const reason = !report.valid ? 'invalid_history' : !sourceLabel(history.source) ? 'missing_source' : !finite(timestamp(history.retrieved_at)) ? 'missing_observed_at' : null;
+  const reason = report.annualReason || (!report.valid ? 'invalid_history' : !sourceLabel(history.source) ? 'missing_source' : !finite(timestamp(history.retrieved_at)) ? 'missing_observed_at' : null);
   const unavailable = !report.annualComplete ? 'incomplete_annual_history' : method !== 'ibd' && !report.annualGrowth ? 'incomparable_annual_growth' : null;
   const value = method === 'ibd' ? report.annualComplete : report.annualGrowth ? Math.min(...report.annualGrowth) : null;
   const knownFailure = method === 'oneil' && annualGrowthRule(report).state === 'fail';

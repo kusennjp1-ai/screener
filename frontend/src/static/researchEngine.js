@@ -129,7 +129,7 @@ export function assess(input, method = 'minervini', now = Date.now()) {
 
 // Generated from the same rule function; unresolved inputs remain explicit. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v7-financial-current-three-state-conjunction';
+export const RULE_SUMMARY_VERSION = 'research-summary-v8-annual-decimal-metadata';
 export function assessmentSummary(row, method, now = Date.now()) {
   // Packed summaries and orders from legacy bundles are observations, not
   // authority for current decisions. Preparation recomputes once per epoch.

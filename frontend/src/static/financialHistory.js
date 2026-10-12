@@ -27,6 +27,15 @@ export function nativeAnnualHistoryContract(data, symbol) {
     evidenceTimestamp(data.retrieved_at) === Math.min(observed, finite(quarter) ? quarter : Infinity);
 }
 
+export function annualHistoryMetadataValid(data, symbol) {
+  if (data?.schema_version === NATIVE_ANNUAL_SCHEMA) return Boolean(nativeAnnualHistoryContract(data, symbol));
+  return data?.schema_version === undefined && data?.currency === 'USD' &&
+    (data.annual_currency === undefined || data.annual_currency === 'USD') && data.annual_source === undefined &&
+    Array.isArray(data.annual) && data.annual.every(point => point &&
+      Object.keys(point).every(key => ['end', 'eps', 'revenue', 'netIncome'].includes(key)));
+}
+export const ANNUAL_METADATA_UNKNOWN = '年次EPSの通貨・出典・単位の整合性を確認できません。異なる基準の値を変換せず比較しません。';
+
 export function financialHistoryDeadlines(data) {
   return (data?.schema_version === NATIVE_ANNUAL_SCHEMA
     ? [data.annual_source?.observed_at, data.quarterly_retrieved_at] : [data?.retrieved_at])
@@ -37,12 +46,14 @@ export function financialHistoryDeadlines(data) {
 export function financialHistory(data, symbol, date, now = Date.now()) {
   const result = { valid: false, annualComplete: null, annualGrowth: null, annualComparisons: [], epsYoY: null, salesYoY: null, annual: [], quarterly: [] };
   const native = data?.schema_version === NATIVE_ANNUAL_SCHEMA;
+  const annualMetadataValid = annualHistoryMetadataValid(data, symbol);
+  if (data?.annual?.length && !annualMetadataValid) result.annualReason = 'inconsistent_annual_metadata';
   const fresh = value => { const age = validClock(now) ? now - evidenceTimestamp(value) : NaN; return finite(age) && age >= -5000 && age <= 72 * 3600000; };
   if (!data || data.symbol !== symbol || data.as_of_date !== date || !validDay(date) ||
       data.status !== 'available' || data.basis !== 'reported_diluted_eps' ||
       (native ? !nativeAnnualHistoryContract(data, symbol) : data.schema_version !== undefined || data.currency !== 'USD' || !fresh(data.retrieved_at))) return result;
   const clean = values => Array.isArray(values) && values.every((p, i) => p && validDay(p.end) && p.end <= date && (!i || p.end > values[i-1].end)) ? values : [];
-  result.annual = !native || fresh(data.annual_source.observed_at) ? clean(data.annual) : [];
+  result.annual = annualMetadataValid && (!native || fresh(data.annual_source.observed_at)) ? clean(data.annual) : [];
   result.quarterly = !native || fresh(data.quarterly_retrieved_at) ? clean(data.quarterly) : [];
   result.valid = result.annual.length > 0 || result.quarterly.length > 0;
   const annual = result.annual.slice(-4);
@@ -51,11 +62,8 @@ export function financialHistory(data, symbol, date, now = Date.now()) {
   result.annualComplete = annualPeriodsValid && annual.every(p => finite(p.eps)) ? true : null;
   // Partial comparisons need the entire dated four-period window. Never skip a
   // missing year, fill a null cell, or derive a rate from a nonpositive baseline.
-  // Legacy USD histories cannot establish a different per-cell source/basis or
-  // currency; ambiguous extensions may not authorize a new partial failure.
-  const unambiguousAnnual = native || (data.annual_currency === undefined || data.annual_currency === 'USD') &&
-      data.annual_source === undefined && annual.every(p => Object.keys(p).every(key => ['end','eps','revenue','netIncome'].includes(key)));
-  if (annualPeriodsValid && unambiguousAnnual) result.annualComparisons = annual.slice(1).map((point, i) => {
+  // The same source/currency contract governs complete and partial histories.
+  if (annualPeriodsValid) result.annualComparisons = annual.slice(1).map((point, i) => {
     const previous = annual[i];
     const reason = !finite(previous.eps) || !finite(point.eps) ? 'missing_annual_eps' : previous.eps <= 0 ? 'nonpositive_comparison_base' : null;
     const growth = reason ? null : reportedGrowth(previous.eps, point.eps);
@@ -83,5 +91,6 @@ export function annualComparisonText(comparison) {
   return `${comparison.from} → ${comparison.to}: ${result}`;
 }
 export function annualAvailabilityText(report) {
+  if (report.annualReason === 'inconsistent_annual_metadata') return ANNUAL_METADATA_UNKNOWN;
   return report.annualComplete ? '年次EPS履歴：連続4期取得済み' : '年次EPS履歴：不完全（4期不足・欠損・期間不整合など）';
 }

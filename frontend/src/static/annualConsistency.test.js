@@ -7,6 +7,7 @@ import { buildFinancialEvidencePresentation, financialEvidencePresentation } fro
 import { withFinancialProof } from './testFinancialFixture.js';
 import { withAuditFixture } from './testAuditFixture.js';
 import { nativeAnnualFixture } from '../test/fixtures/nativeAnnual.js';
+import { financialHistory } from './financialHistory.js';
 
 const date = '2026-10-02', now = Date.parse('2026-10-04T12:00:00Z');
 const context = { date, now, generation: 'synthetic', method: 'oneil', symbol: 'TEST' };
@@ -57,4 +58,44 @@ it('compares decimal scientific notation without a tolerance or an overflowing i
   }
   expect(reportedGrowth(Number.MIN_VALUE, 1)).toBeNull();
   expect(reportedGrowthAtLeast(1, 1.2499999999999998, 25)).toBe(false);
+});
+
+it.each([
+  ['root annual currency', data => { data.annual_currency = 'JPY'; }],
+  ['root reporting currency', data => { data.currency = 'CAD'; }],
+  ['cell currency', data => { data.annual[0].currency = 'JPY'; }],
+  ['cell share unit', data => { data.annual[1].unit = 'per_ADR'; }],
+  ['cell source', data => { data.annual[2].source = 'Other'; }],
+  ['unsupported annual source', data => { data.annual_source = { currency: 'USD' }; }],
+])('keeps legacy %s conflicts unknown across every surface', (_label, mutate) => {
+  for (const values of [[1, 2, 4, 8], [8, 4, 2, null], [8, 4, 2, 1]]) {
+    const row = input(values, true); mutate(row.financial_history);
+    const before = structuredClone(row);
+    sameDecision(row, 'unknown'); sameDecision(row, 'unknown', 'ibd');
+    for (const candidate of surfaces(row)) {
+      expect(candidate.financial_history.annual).toEqual(row.financial_history.annual);
+      expect(annualRule(candidate).evidence).toContain('通貨・出典・単位の整合性');
+      expect(financialHistory(candidate.financial_history, 'TEST', date, now)).toMatchObject({
+        annualComplete: null, annualGrowth: null, annualComparisons: [], annualReason: 'inconsistent_annual_metadata' });
+    }
+    expect(row).toEqual(before);
+  }
+});
+it('retains invalid native cell metadata, while coherent native currencies remain usable', () => {
+  for (const currency of ['USD', 'CAD', 'EUR', 'GBP', 'CNY']) {
+    const row = input([0.28, 0.35, 0.45, 0.57]);
+    row.financial_history = nativeAnnualFixture(currency, [0.28, 0.35, 0.45, 0.57]);
+    sameDecision(row, 'pass');
+    row.financial_history.annual[0].currency = currency === 'USD' ? 'CAD' : 'USD';
+    sameDecision(row, 'unknown'); sameDecision(row, 'unknown', 'ibd');
+    for (const candidate of surfaces(row)) expect(candidate.financial_history.annual).toEqual(row.financial_history.annual);
+  }
+});
+it('keeps independent comparable USD quarterly history when only annual metadata is inconsistent', () => {
+  const row = input([1, 2, 4, 8], true);
+  row.financial_history.annual_currency = 'JPY';
+  row.financial_history.quarterly = [{ end: '2025-06-30', eps: 1, revenue: 100 }, { end: '2026-06-30', eps: 2, revenue: 200 }];
+  const report = financialHistory(row.financial_history, 'TEST', date, now);
+  expect(report).toMatchObject({ valid: true, annualGrowth: null, epsYoY: 100, salesYoY: 100 });
+  sameDecision(row, 'unknown');
 });
