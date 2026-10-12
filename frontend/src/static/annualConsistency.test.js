@@ -8,6 +8,8 @@ import { withFinancialProof } from './testFinancialFixture.js';
 import { withAuditFixture } from './testAuditFixture.js';
 import { nativeAnnualFixture } from '../test/fixtures/nativeAnnual.js';
 import { financialHistory } from './financialHistory.js';
+import { filterStaticScanRows } from './scanClient.js';
+import { buildActiveFilters } from '../features/scan/components/filterPanel/utils.js';
 
 const date = '2026-10-02', now = Date.parse('2026-10-04T12:00:00Z');
 const context = { date, now, generation: 'synthetic', method: 'oneil', symbol: 'TEST' };
@@ -98,4 +100,18 @@ it('keeps independent comparable USD quarterly history when only annual metadata
   const report = financialHistory(row.financial_history, 'TEST', date, now);
   expect(report).toMatchObject({ valid: true, annualGrowth: null, epsYoY: 100, salesYoY: 100 });
   sameDecision(row, 'unknown');
+});
+it('keeps the explicitly labelled QoQ filters separate from YoY selection conditions', () => {
+  const row = withFinancialProof({ ...input([1, 2, 4, 8]), eps_growth_qq: 40, sales_growth_qq: 35,
+    eps_growth_yy: -10, sales_growth_yy: -5 }, now, date);
+  const filters = { epsGrowth: { min: 25 }, salesGrowth: { min: 25 } };
+  expect(buildActiveFilters(filters)).toEqual([
+    { key: 'epsGrowth', label: 'EPS 前四半期比: ≥25%' }, { key: 'salesGrowth', label: '売上 前四半期比: ≥25%' },
+  ]);
+  expect(filterStaticScanRows([row], filters, { now })).toHaveLength(1);
+  for (const candidate of surfaces(row)) {
+    const rules = assess(candidate, 'oneil', now).rules;
+    expect(rules.find(item => /四半期 EPS/.test(item.label))).toMatchObject({ value: -10, state: 'fail' });
+    expect(rules.find(item => /売上高/.test(item.label))).toMatchObject({ value: -5, state: 'fail' });
+  }
 });

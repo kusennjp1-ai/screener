@@ -52,6 +52,17 @@ const defaultProps = {
 };
 
 describe('ResultsTable', () => {
+  it('labels displayed growth as previous-quarter percentages, independently of YoY', () => {
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} results={[{ ...fullSeRow,
+      eps_growth_qq: 40, sales_growth_qq: 35, eps_growth_yy: -10, sales_growth_yy: -5 }]} />);
+    const headers = [...container.querySelectorAll('thead th')];
+    const row = [...container.querySelectorAll('tbody tr')].find(item => item.textContent.includes(fullSeRow.symbol));
+    for (const [field, label, value] of [['eps_growth_qq', 'EPS 前四半期比 (%)', '+40%'], ['sales_growth_qq', '売上 前四半期比 (%)', '+35%']]) {
+      const header = container.querySelector(`th[data-column="${field}"]`);
+      expect(header).toHaveTextContent(label);
+      expect(row.children[headers.indexOf(header)]).toHaveTextContent(value);
+    }
+  });
   it.each([[false,false],[true,false],[false,true],[true,true]])('keeps header/data parity while hiding absent sparkline columns: RS %s price %s', (rs,price) => {
     const {container}=renderWithProviders(<ResultsTable {...defaultProps} results={[{...fullSeRow,rs_sparkline_data:rs?[1,1.1]:null,price_sparkline_data:price?[1,1.2]:null}]} />);
     const headers=[...container.querySelectorAll('thead th')];
