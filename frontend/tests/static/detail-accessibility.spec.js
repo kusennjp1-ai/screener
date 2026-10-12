@@ -79,8 +79,9 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   await expect(numeric).toHaveAttribute('open');
   const dates=numeric.getByRole('combobox',{name:'SYNTH の日付'});
   await dates.focus();await page.keyboard.press('ArrowDown');
-  await expect(dates).toHaveValue('1');await expect(numeric).toContainText('対象日 2026-10-01');
-  await page.keyboard.press('Home');await expect(dates).toHaveValue('0');await page.keyboard.press('Tab');
+  await expect(dates).toHaveValue('2026-10-01');await expect(numeric).toContainText('対象日 2026-10-01');
+  await page.keyboard.press('Home');await expect(dates).toHaveValue(date);await page.keyboard.press('Tab');
+  await expect(detail.locator('[data-chart-asof]')).toHaveAttribute('data-chart-asof',date);
   await expect(numeric.getByText('出来高',{exact:true}).locator('..')).toHaveText('出来高0');
   await numeric.evaluate(e=>e.scrollIntoView({block:'center'}));await visibleFocus(numeric,'daily-numeric-values');
   await page.screenshot({path:info.outputPath(`daily-numeric-${width}-${theme}.png`)});

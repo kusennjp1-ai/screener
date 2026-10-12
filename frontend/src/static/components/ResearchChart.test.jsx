@@ -1,18 +1,67 @@
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchChart from './ResearchChart';
 const fetchPayload = vi.hoisted(() => vi.fn());
 vi.mock('../chartClient', () => ({ fetchStaticChartPayload: fetchPayload, staticChartKeys: { payload: (symbol, path) => ['chart', symbol, path] } }));
-vi.mock('../../components/Charts/CandlestickChart', () => ({ default: ({ symbol, priceData, pivotPrice, buyCeiling, stopPrice, rsLineData, epsLine, vcpBoxes }) => <div data-testid="chart" data-levels={JSON.stringify([pivotPrice,buyCeiling,stopPrice])} data-guides={JSON.stringify([rsLineData,epsLine,vcpBoxes])}>{symbol}:{priceData.length}:{pivotPrice}</div> }));
+vi.mock('../../components/Charts/CandlestickChart', () => ({ default: ({ symbol, priceData, pivotPrice, buyCeiling, stopPrice, rsLineData, epsLine, vcpBoxes }) => <div data-testid="chart" data-bars={JSON.stringify(priceData)} data-levels={JSON.stringify([pivotPrice,buyCeiling,stopPrice])} data-guides={JSON.stringify([rsLineData,epsLine,vcpBoxes])}>{symbol}:{priceData.length}:{pivotPrice}</div> }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function setup(props) {
   props={date:'2026-09-21',...props};
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0, placeholderData: previous => previous } } });
   const wrap = p => <QueryClientProvider client={client}><ResearchChart date="2026-09-21" {...p} /></QueryClientProvider>;
   const view = render(wrap(props));
-  return { ...view, update: p => view.rerender(wrap(p)) };
+  return { ...view, client, update: p => view.rerender(wrap(p)) };
 }
+
+it('keeps the selected date aligned with chart bars when the same cached publication changes length', async () => {
+  const first = {date:'2026-09-18',close:98};
+  const last = {date:'2026-09-21',close:101};
+  const payload = {symbol:'AAA',as_of_date:'2026-09-21',bars:[first,last]};
+  fetchPayload.mockResolvedValue(payload);
+  const view = setup({entry:{path:'a.json'},symbol:'AAA',generation:'1'});
+  await screen.findByTestId('chart');
+  fireEvent.change(screen.getByLabelText('AAA の日付'), {target:{value:first.date}});
+  await act(async () => view.client.setQueryData(['chart','AAA','a.json','1'], {...payload,bars:[first,{date:'2026-09-19',close:99},last]}));
+  await waitFor(() => expect(screen.getByTestId('chart')).toHaveTextContent('AAA:3:'));
+  expect(screen.getByLabelText('AAA の日付')).toHaveValue(first.date);
+  const drawnBars = JSON.parse(screen.getByTestId('chart').dataset.bars);
+  expect(drawnBars.find(bar => bar.date === screen.getByLabelText('AAA の日付').value)).toEqual(first);
+  expect(screen.getByText('終値').parentElement).toHaveTextContent('終値98');
+  await act(async () => view.client.setQueryData(['chart','AAA','a.json','1'], {...payload,bars:[last]}));
+  await waitFor(() => expect(screen.getByLabelText('AAA の日付')).toHaveValue(last.date));
+  expect(screen.getByText(/戻しました/)).toHaveTextContent('2026-09-21');
+});
+
+it('resets numeric selection when switching symbols through the keyed chart surface', async () => {
+  fetchPayload.mockImplementation(async path => ({symbol:path==='a.json'?'AAA':'BBB',as_of_date:'2026-09-21',bars:[
+    {date:'2026-09-18',close:path==='a.json'?98:198}, {date:'2026-09-21',close:path==='a.json'?101:201},
+  ]}));
+  const view = setup({entry:{path:'a.json'},symbol:'AAA',generation:'1'});
+  await screen.findByTestId('chart');
+  fireEvent.change(screen.getByLabelText('AAA の日付'), {target:{value:'2026-09-18'}});
+  view.update({entry:{path:'b.json'},symbol:'BBB',generation:'1'});
+  expect(await screen.findByLabelText('BBB の日付')).toHaveValue('2026-09-21');
+  expect(screen.getByText('終値').parentElement).toHaveTextContent('終値201');
+  expect(screen.queryByLabelText('AAA の日付')).not.toBeInTheDocument();
+});
+
+it('rejects an added later session until the expected analysis date also matches', async () => {
+  const payload = {symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:101}]};
+  fetchPayload.mockResolvedValue(payload);
+  const props = {entry:{path:'a.json'},symbol:'AAA',generation:'1'};
+  const view = setup(props);
+  await screen.findByTestId('chart');
+  const updated = {...payload,bars:[...payload.bars,{date:'2026-09-22',close:102}]};
+  await act(async () => view.client.setQueryData(['chart','AAA','a.json','1'], updated));
+  await screen.findByText('チャートを取得できません。');
+  expect(screen.queryByText('日足の数値を確認')).not.toBeInTheDocument();
+  expect(screen.getByTestId('chart')).not.toBeVisible();
+  await act(async () => view.client.setQueryData(['chart','AAA','a.json','1'], {...updated,as_of_date:'2026-09-22'}));
+  view.update({...props,date:'2026-09-22'});
+  await waitFor(() => expect(screen.getByLabelText('AAA の日付')).toHaveValue('2026-09-22'));
+  expect(JSON.parse(screen.getByTestId('chart').dataset.bars).at(-1).date).toBe('2026-09-22');
+});
 describe('inline chart integration', () => {
   it('loads static bars, then replaces the symbol without reusing previous data', async () => {
     fetchPayload.mockImplementation(async path=>({ symbol:path==='a.json'?'AAA':'BBB',as_of_date:'2026-09-21',bars: [{ date: '2026-09-21', close: 100 }], signal: { trigger_price: 120 }, stock_data: {vcp_pivot:110} }));

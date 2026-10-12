@@ -629,3 +629,12 @@
 - 最終全Vitest233 files/2938 passed。関連81、Playwright詳細4/市場履歴2、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43passed。redline262passed/既存1failed（ftnt.csv tight_near_highs、前段baselineと同じ）。期待値の緩和なし。
 - 合成fixtureのみ、375/1440px×明暗の最終画像20枚。実音声screen reader未試聴、実データ精度・全履歴・投資性能は未検証。新規ライブラリなし。最初のCLIはcwd誤りでnpxがregistry解決を試み失敗、その後は既存frontendバイナリのみ。
 - ローカル私有ブランチと検証ZIPに保存。Library接続再試行・push・PR・公開・通信設定変更なし。次：実音声読み上げの確認、実データproducerは別作業として残る。
+
+
+### 2026-10-12 — 日足数値の選択日を配列更新から保護（ローカル限定・別コミット）
+
+- 基点a665631を保持。回帰テストを先に追加（関連28件中12失敗）、逆順indexによる選択を日付保持へ変更した。実装変更はChartNumericDataのみ。
+- 初期は配信内の最新日、選択後は同じ日。消えた日付は理由付きで最新日にリセットし、空→再配信で古い選択を復活させない。未来日を補完しない。配列を変更せず、銘柄/分析基準日/末尾日の既存照合と0/欠損を維持。
+- 関連28成功（追加11件）、全Vitest233 files/2949成功。Playwright詳細4＋市場履歴2成功、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功。redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
+- 合成データのみ。375/1440×明暗の通常の数値選択と最新日のチャート属性一致を実画面確認。動的配列差し替えのブラウザ検証、独立画像レビュー、実音声screen readerは未実施。順序不正/重複日付payloadの修復は対象外。
+- 前回成果物を保持し、今回分はchart-date-selection-verificationへ分離。Library保存再試行・外部取得・公開なし。次：独立画像レビューと実音声確認。市場履歴producer、財務capture/admissionには触れない。
