@@ -511,3 +511,48 @@ def test_retry_cooldown_accepts_newer_stale_cache_quote(monkeypatch, fx_clock, t
     assert svc.get_usd_rate("JPY") is newer
     fetcher.assert_not_called()
     assert svc._stale_fallback_retry_after["JPY"][1] == deadline
+
+
+@pytest.mark.parametrize("boundary", ["retry-deadline", "trading-day-change"])
+def test_stale_fallback_is_retried_when_suppression_boundary_changes(monkeypatch, boundary):
+    import app.services.fx_service as fx_module
+
+    clock = {"today": date(2026, 6, 8), "monotonic": 100.0}
+
+    class MovingDate(date):
+        @classmethod
+        def today(cls):
+            return clock["today"]
+
+    monkeypatch.setattr(fx_module, "date", MovingDate)
+    monkeypatch.setattr(fx_module.time, "monotonic", lambda: clock["monotonic"])
+    old = FXQuote("JPY", "USD", 0.0060, date(2026, 6, 4), "old-cache")
+    fetcher = MagicMock(side_effect=[None, 0.0065])
+    svc = _make_service(rate_fetcher=fetcher)
+    monkeypatch.setattr(svc, "_read_redis", lambda _: old)
+    monkeypatch.setattr(svc, "_read_database", lambda _: None)
+    monkeypatch.setattr(svc, "_write_redis", MagicMock())
+    persist = MagicMock()
+    monkeypatch.setattr(svc, "_persist_database", persist)
+
+    assert svc.get_usd_rate("JPY") is old
+    deadline = svc._stale_fallback_retry_after["JPY"][1]
+    clock["monotonic"] = deadline - 1
+    assert svc.get_usd_rate("JPY") is old
+    fetcher.assert_called_once_with("JPY")
+
+    if boundary == "retry-deadline":
+        clock["monotonic"] = deadline
+    else:
+        clock["today"] = date(2026, 6, 9)
+        assert clock["monotonic"] < deadline
+
+    quote = svc.get_usd_rate("JPY")
+    assert fetcher.call_count == 2
+    assert [call.args for call in fetcher.call_args_list] == [("JPY",), ("JPY",)]
+    assert quote.rate == 0.0065
+    assert quote.as_of_date == clock["today"]
+    assert "JPY" not in svc._stale_fallback_retry_after
+    persist.assert_called_once_with(quote)
+    assert svc.get_usd_rate("JPY") is quote
+    assert fetcher.call_count == 2
