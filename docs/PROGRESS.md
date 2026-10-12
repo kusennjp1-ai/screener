@@ -659,3 +659,14 @@
 - 同じidentityの履歴増減、選択日消失、空→復帰、同一as-ofでの末尾日変更拒否、重複/不正日/不正数値、前銘柄の遅延応答、数値と日付の一致を確認。数値欠損時の全11系列消去と復帰は描画APIの単体回帰で確認。日付選択の単体での並べ替え耐性と、受信契約の順序不正拒否を混同しない。
 - ブラウザではテスト専用に実QueryClientの参照だけを公開してHTTP再取得を指示。既存query key、fetch、選出/公開条件は変更なし。外部リクエストは遮断。描画エラーへの対処として条件ゲートを緩めていない。
 - 新しい検証ZIPはchart-payload-browser-verificationに保存。Library再試行、外部データ取得、push/PR/公開なし。次：未実施の独立画像レビュー/実音声確認、実データproducerは別作業。詳細はCHART_PAYLOAD_BROWSER_AUDIT.md。
+
+
+### 2026-10-12 — 年次EPS境界・通貨整合・Q/Qラベル修正（ローカル限定）
+
+- bb090658と元ブランチを保持し、private/financial-consistency-20261012で3項目を分離。25%ちょうどの浮動小数誤差を、受信数値の十進表記を用いた整数比比較で解消。直下・直上・ゼロ/負の比較元を固定し、epsilonや閾値緩和を使わない。丸めて25%と表示する直下ケースは未達の理由を追加表示。
+- legacy年次履歴のroot/cellの通貨・出典・単位不整合を完全/部分履歴で共通拒否。一覧変換で情報を消さず、raw/list/decoded/detailの未確認状態を一致させた。native通貨USD/CAD/EUR/GBP/CNYと独立した四半期履歴を維持。
+- 詳細スキャンの表・入力・適用チップに前四半期比を明記。Q/Q40/35とYoY−10/−5の合成入力で、補助フィルター通過と主画面EPS/売上条件未達の違いを確認。戦略やフィールド/保存キー/売買条件を統一しない。
+- 初回全Vitest236 files/2,995 testsは2,977成功・18失敗。新ヘルパーを公開処理テストの仮想checkoutへコピーする修正17件、版名のfinancial-current識別語復元1件で解消。該当2ファイルを含む最終6 files/273 tests成功。全体一括再走は未実施。公開処理本体・公開条件の変更なし。
+- 合成9例×4経路が一致。Python Decimalの独立計算2,708例一致。Playwright最終18成功（375/1440、dark）。作者が画面を抜き取り確認し、独立レビューは未実施。初回のブラウザ準備誤りと外部フォントの遮断記録も残す。外部取得は行わない。
+- lint0 errors/既存6 warnings、build成功/既存chunk警告、Golden43成功。backend redline262成功/前段からのftnt.csv tight_near_highs 1失敗。全ゲートgreenとは記録しない。実データbundleなし/export skip。
+- 旧バックエンド隔離・capture/admission・公開条件・認証・閾値を保持。原文/230ルール表は未確認のため書籍準拠を断言しない。外部取得・Library再試行・push/PR/merge/Actions/公開なし。本文diff/入力/期待値/出力はFINANCIAL_CONSISTENCY_REVIEW.md、ローカル検証パッケージはfinancial-consistency-fix-20261012。
