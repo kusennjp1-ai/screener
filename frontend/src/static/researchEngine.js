@@ -1,4 +1,5 @@
 import { ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
+import { reportedGrowthAtLeast } from './reportedGrowth.js';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability.js';
 import { projectFinancialRow, currentFinancialHistory } from './financialCurrent.js';
 import { canonicalPivot } from './researchPresentation.js';
@@ -54,7 +55,7 @@ export function annualGrowthRule(report, fallbackMinimum = null) {
   const item = rule('A：直近3年の各年 EPS 成長率 ≥ 25%（最小値）', report?.annualGrowth?.length === 3 && report.annualGrowth.every(finite) ? Math.min(...report.annualGrowth) : fallbackMinimum, value => value >= 25, '%');
   if (!report) return item;
   item.comparisons = report.annualComparisons.map(comparison => ({ ...comparison,
-    state: !finite(comparison.growth) ? 'unknown' : comparison.growth >= 25 ? 'pass' : 'fail' }));
+    state: !finite(comparison.growth) ? 'unknown' : reportedGrowthAtLeast(comparison.previous, comparison.latest, 25) ? 'pass' : 'fail' }));
   if (item.comparisons.length === 3) {
     const result = threeStateAnd(item.comparisons.map(comparison => comparison.state === 'unknown' ? null : comparison.state === 'pass'));
     item.state = result === null ? 'unknown' : result ? 'pass' : 'fail';

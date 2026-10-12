@@ -1,4 +1,5 @@
 import { evidenceTimestamp, validClock } from './evidenceTime.js';
+import { reportedGrowth } from './reportedGrowth.js';
 import nativeContract from '../../contracts/native_annual_history_v1.json' with { type: 'json' };
 
 const finite = n => typeof n === 'number' && Number.isFinite(n);
@@ -57,12 +58,12 @@ export function financialHistory(data, symbol, date, now = Date.now()) {
   if (annualPeriodsValid && unambiguousAnnual) result.annualComparisons = annual.slice(1).map((point, i) => {
     const previous = annual[i];
     const reason = !finite(previous.eps) || !finite(point.eps) ? 'missing_annual_eps' : previous.eps <= 0 ? 'nonpositive_comparison_base' : null;
-    const growth = reason ? null : (point.eps / previous.eps - 1) * 100;
+    const growth = reason ? null : reportedGrowth(previous.eps, point.eps);
     return { from: previous.end, to: point.end, previous: previous.eps, latest: point.eps,
       growth: finite(growth) ? growth : null, reason: reason || (finite(growth) ? null : 'invalid_annual_growth') };
   });
   if (result.annualComplete && annual.slice(0,3).every(p => p.eps > 0)) {
-    const growth = annual.slice(1).map((p,i) => (p.eps / annual[i].eps - 1) * 100);
+    const growth = annual.slice(1).map((p,i) => reportedGrowth(annual[i].eps, p.eps));
     result.annualGrowth = growth.every(finite) ? growth : null;
   }
   const latest = result.quarterly.at(-1);
