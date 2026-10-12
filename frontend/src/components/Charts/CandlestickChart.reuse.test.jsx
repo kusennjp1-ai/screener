@@ -53,6 +53,19 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it.each([null,undefined,'not-a-number',NaN,Infinity])('clears every plotted series and legend for invalid numeric %s, then recovers',value=>{
+    const props={priceData:longBars,bookAnnotations:false,epsLine:[{time:'2026-09-22',value:123}]};
+    const view=setup(props),instance=instances[0];
+    expect(instance.candlestickSeries.setData.mock.lastCall[0]).toHaveLength(260);
+    view.update({...props,priceData:[...longBars.slice(0,-1),{...longBars.at(-1),close:value}]});
+    expect(screen.getByText(/チャートは未表示/)).toBeInTheDocument();
+    for(const key of seriesKeys)expect(instance[key].setData.mock.lastCall[0]).toEqual([]);
+    expect(instance.candlestickSeries.removePriceLine).toHaveBeenCalled();
+    view.update(props);
+    expect(instance.candlestickSeries.setData.mock.lastCall[0]).toHaveLength(260);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
   it('shares the mobile metadata row without losing the MA disclosure or rebuilding a selected chart',()=>{
     const actions=<button type="button">拡大・移動</button>;
     const props={priceData:longBars,smallScreen:true,researchMetaActions:actions};

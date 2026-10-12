@@ -648,3 +648,14 @@
 - 全Vitest234 files/2964成功、関連65成功（追加15件）。Playwright詳細4＋市場履歴2成功、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功、redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
 - 最初のブラウザ実行は候補順に対するテスト操作の誤りで1失敗し、操作を修正して6件再成功。合成fixtureのみ。参照情報8枚・対象外1枚を今回ZIPに含める。作者画像抜き取り確認と独立レビュー/音声screen reader未実施を区別。
 - 財務capture/admission/閾値・公開条件・missing-data規則は変更なし。複数比較/新依存/ピボット100は保留。Library保存再試行、外部取得、push/PR/公開なし。詳細はEVIDENCE_CONTEXT_AUDIT.md。
+
+
+### 2026-10-12 — 配列更新・異常値・前銘柄遅延応答の実画面検証（ローカル限定・別コミット）
+
+- 基点a7ece14と3dc0da7を保持。既存fixtureで375/1440pxの実画面を検査。最初の有効な20ケースの結果は7成功/13失敗。不正日付4種×2幅、不正数値2種×2幅の計12件で制御された欠損表示に到達せず、画面が失われた。残る1件はテスト側のOTHER既存キャッシュを消していなかった準備誤りで、製品の遅延応答バグとは扱わない。
+- 受信payloadの日付を既存validEvidenceDayで検証し、欠損/存在しない日/重複/順序逆転を拒否。既存の銘柄/as-of/末尾日照合を維持。並べ替え・重複解消・未来日の補完はしない。
+- 既存のOHLCV妥当性条件を共有関数へ分離。不正時は全描画系列を空にし、日足数値欄の未確認と実測0を維持。財務計算やEPS取得には触れず、EPS補助線の描画だけを旧系列とともに消去する。
+- 最終Playwright22成功（各幅11件、dark）。拡大画面も追加確認。既存詳細4＋市場履歴2成功、既存axe0。関連79/全Vitest2977成功（235 files、追加13件）。lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功、redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
+- 同じidentityの履歴増減、選択日消失、空→復帰、同一as-ofでの末尾日変更拒否、重複/不正日/不正数値、前銘柄の遅延応答、数値と日付の一致を確認。数値欠損時の全11系列消去と復帰は描画APIの単体回帰で確認。日付選択の単体での並べ替え耐性と、受信契約の順序不正拒否を混同しない。
+- ブラウザではテスト専用に実QueryClientの参照だけを公開してHTTP再取得を指示。既存query key、fetch、選出/公開条件は変更なし。外部リクエストは遮断。描画エラーへの対処として条件ゲートを緩めていない。
+- 新しい検証ZIPはchart-payload-browser-verificationに保存。Library再試行、外部データ取得、push/PR/公開なし。次：未実施の独立画像レビュー/実音声確認、実データproducerは別作業。詳細はCHART_PAYLOAD_BROWSER_AUDIT.md。
