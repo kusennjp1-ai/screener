@@ -62,6 +62,10 @@ export function annualGrowthRule(report, fallbackMinimum = null) {
   }
   item.annualComplete = report.annualComplete;
   item.evidence = [annualAvailabilityText(report), ...item.comparisons.map(comparison => `${annualComparisonText(comparison)}（${comparison.state === 'pass' ? '通過' : comparison.state === 'fail' ? '未達' : '未確認'}）`)].join('。');
+  if (item.comparisons.some(comparison => comparison.state === 'fail' && comparison.growth.toFixed(2) === '25.00')) {
+    item.precisionNote = '表示では25%に丸まりますが、元のEPSで比較すると25%未満の年があります。';
+    item.evidence += `。${item.precisionNote}`;
+  }
   return item;
 }
 export function assess(input, method = 'minervini', now = Date.now()) {
@@ -129,7 +133,7 @@ export function assess(input, method = 'minervini', now = Date.now()) {
 
 // Generated from the same rule function; unresolved inputs remain explicit. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v8-annual-decimal-metadata';
+export const RULE_SUMMARY_VERSION = 'research-summary-v8-financial-current-annual-decimal-metadata';
 export function assessmentSummary(row, method, now = Date.now()) {
   // Packed summaries and orders from legacy bundles are observations, not
   // authority for current decisions. Preparation recomputes once per epoch.

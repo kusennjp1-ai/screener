@@ -33,6 +33,7 @@ function sameDecision(row, state, method = 'oneil') {
     const view = financialEvidencePresentation({ ...bound, history: candidate.financial_history,
       evidence: buildFinancialEvidencePresentation(candidate, bound) }).rows.find(item => item.id === 'annual_eps_growth_3y');
     expect(view.state).toBe(state);
+    if (annualRule(candidate, method).precisionNote) expect(view.calculationNote).toContain('25%未満');
   }
 }
 
