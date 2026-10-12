@@ -638,3 +638,13 @@
 - 関連28成功（追加11件）、全Vitest233 files/2949成功。Playwright詳細4＋市場履歴2成功、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功。redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
 - 合成データのみ。375/1440×明暗の通常の数値選択と最新日のチャート属性一致を実画面確認。動的配列差し替えのブラウザ検証、独立画像レビュー、実音声screen readerは未実施。順序不正/重複日付payloadの修復は対象外。
 - 前回成果物を保持し、今回分はchart-date-selection-verificationへ分離。Library保存再試行・外部取得・公開なし。次：独立画像レビューと実音声確認。市場履歴producer、財務capture/admissionには触れない。
+
+
+### 2026-10-12 — 選出/購入条件の参照情報と対象外の表示（ローカル限定・別コミット）
+
+- 基点3dc0da7の日付選択修正を保持。既存UIを監査し、拡大画面の選出/購入の区別と、根拠の対象日/画面基準日/表示用配信版の対応表示を追加。
+- 条件state/合格数を変更せず、pass/fail/unknown/not_applicable/referenceを維持。モバイル要約で対象外を未達・未確認から分離し、購入条件の対象外に「?」を付けないよう修正。
+- 出典やas-ofを補作しない。source対応不整合や欠損は既存の未確認理由を表示。generationは表示用envelopeであり提供元の原データ版ではないと明記。全ルールの構造化source/as-ofは未整備のまま。
+- 全Vitest234 files/2964成功、関連65成功（追加15件）。Playwright詳細4＋市場履歴2成功、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功、redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
+- 最初のブラウザ実行は候補順に対するテスト操作の誤りで1失敗し、操作を修正して6件再成功。合成fixtureのみ。参照情報8枚・対象外1枚を今回ZIPに含める。作者画像抜き取り確認と独立レビュー/音声screen reader未実施を区別。
+- 財務capture/admission/閾値・公開条件・missing-data規則は変更なし。複数比較/新依存/ピボット100は保留。Library保存再試行、外部取得、push/PR/公開なし。詳細はEVIDENCE_CONTEXT_AUDIT.md。

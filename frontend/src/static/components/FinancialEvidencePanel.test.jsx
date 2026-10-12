@@ -14,6 +14,39 @@ const evidence = { schema: FINANCIAL_PRESENTATION_SCHEMA, symbol: 'TEST', as_of_
   evaluated_at: '2026-10-03T12:00:00Z', valid_until: '2026-10-10T11:00:00Z', metrics: { eps_growth_yy: observation },
   historical: [{ ...observation, id: 'eps_growth_yy', value: 282.48, observed_at: '2026-06-13T12:00:00Z', reason: 'stale_source' }] };
 
+it('retains financial not-applicable states with provenance displayed', () => {
+  const fund={symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF'};
+  render(<FinancialEvidencePanel {...props} symbol={fund.symbol} evidence={{...evidence,symbol:fund.symbol,instrument_identity:fund}}/>);
+  const current=screen.getByRole('heading',{name:'四半期 EPS 前年同期比',exact:true}).closest('li');
+  expect(current).toHaveAttribute('data-state','not_applicable');
+  expect(current).toHaveTextContent('対象外');
+  expect(current).not.toHaveTextContent('? 未確認');
+  expect(screen.getByRole('group',{name:'財務根拠の参照情報'})).toHaveTextContent('配信版の対応 一致');
+});
+
+it.each([{as_of_date:'2026-10-01'},{generation:'older-fixture'}])('explains the exact envelope mismatch while preserving unknown financial results: %j', change => {
+  render(<FinancialEvidencePanel {...props} evidence={{...evidence,...change}}/>);
+  const context = screen.getByRole('group', {name:'財務根拠の参照情報'});
+  expect(context).toHaveTextContent('不一致');
+  expect(context).toHaveTextContent(change.as_of_date || change.generation);
+  const current = screen.getByRole('heading', {name:'四半期 EPS 前年同期比',exact:true}).closest('li');
+  expect(current).toHaveAttribute('data-state','unknown');
+  expect(current).toHaveTextContent('銘柄・分析日・方式・配信版の対応を確認できません');
+  expect(current).not.toHaveTextContent('30%');
+  expect(current).toHaveTextContent('提供元 未確認');
+});
+
+it.each([
+  [{source:undefined},'この値に対応する提供元が未確認'],
+  [{availability:'unknown',reason:'invalid_source_inputs'},'計算元の値と提供元の対応を確認できません'],
+])('preserves source absence or conflict without promoting the original value: %j', (change, reason) => {
+  render(<FinancialEvidencePanel {...props} evidence={{...evidence,metrics:{eps_growth_yy:{...observation,...change}}}}/>);
+  const current = screen.getByRole('heading', {name:'四半期 EPS 前年同期比',exact:true}).closest('li');
+  expect(current).toHaveAttribute('data-state','unknown');
+  expect(current).toHaveTextContent(reason);
+  expect(current).not.toHaveTextContent('30%');
+});
+
 it('shows actual, threshold, period, source, acquisition time and result without opening disclosures', () => {
   render(<FinancialEvidencePanel {...props} evidence={evidence}/>);
   const row = screen.getByRole('heading', { name: '四半期 EPS 前年同期比', exact: true }).closest('li');

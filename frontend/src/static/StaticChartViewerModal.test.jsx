@@ -1,6 +1,6 @@
 vi.mock('./staticPublication', async importOriginal => ({ ...await importOriginal(), resolveStaticPublication: async ({ publication, generation } = {}) => publication || { mode: 'legacy', baseURL: new URL('/', location.href).href, generation } }));
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -55,6 +55,37 @@ const renderModal = (props, cachedPayload = null) => {
   const view = render(element(props));
   return { ...view, rerenderModal: nextProps => view.rerender(element(nextProps)) };
 };
+
+it('separates expanded selection evidence from purchase readiness and discloses its actual date', async () => {
+  const date='2026-10-02', row={symbol:'SYNTH',as_of_date:'2026-10-01',current_price:100};
+  const payload={symbol:row.symbol,as_of_date:date,bars:[{date,close:100}],stock_data:row};
+  const view=renderModal({open:true,onClose:vi.fn(),initialSymbol:row.symbol,date,now:Date.parse('2026-10-03T12:00:00Z'),
+    researchRows:[row],chartIndex:{symbols:[{symbol:row.symbol,path:'synthetic.json'}]}},payload);
+  await screen.findByTestId('static-candlestick-chart');
+  fireEvent.click(screen.getByText('選定条件の詳細（0/9）'));
+  expect(screen.getByText(/選出の一次条件です/)).toHaveTextContent('購入条件とは別に確認');
+  const context=screen.getByRole('group',{name:'選出データの参照情報'});
+  expect(context).toHaveTextContent('分析基準日 2026-10-02 ／ 画面の配信版 未確認');
+  expect(context).toHaveTextContent('選出データの対象日 2026-10-01 ／ 日付の対応 不一致');
+  expect(screen.getByText(/条件ごとの提供元/)).toHaveTextContent('記載がない提供元・対象日は未確認');
+  view.unmount();
+});
+
+it('keeps not-applicable rules out of the mobile failed-or-unknown summary', async () => {
+  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+  const date='2026-10-02', row={symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF',as_of_date:date,current_price:100};
+  const payload={symbol:row.symbol,as_of_date:date,bars:[{date,close:100}],stock_data:row};
+  const view=renderModal({open:true,onClose:vi.fn(),initialSymbol:row.symbol,date,now:Date.parse('2026-10-03T12:00:00Z'),method:'oneil',
+    researchRows:[row],chartIndex:{symbols:[{symbol:row.symbol,path:'synthetic-fund.json'}]}},payload);
+  await screen.findByTestId('static-candlestick-chart');
+  const readiness=screen.getByTestId('mobile-chart-readiness');
+  expect(readiness).toHaveTextContent('対象外：共通購入モデルへの適合');
+  expect(within(readiness).getByText(/^未達・未確認：/)).not.toHaveTextContent('共通購入モデルへの適合');
+  expect(readiness).not.toHaveTextContent('日次条件を確認済み');
+  const rules=screen.getByRole('list',{name:'選定条件の判定内訳',hidden:true});
+  expect(within(rules).getByText(/C：四半期 EPS/).textContent).toContain('対象外');
+  view.unmount();vi.unstubAllGlobals();
+});
 
 describe('StaticChartViewerModal', () => {
   it('does not assess a missing selection while the global scan list loads', () => {

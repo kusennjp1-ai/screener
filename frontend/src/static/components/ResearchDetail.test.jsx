@@ -4,11 +4,36 @@ import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } fro
 import { withSyntheticFinancialProof, financialFixtureDate, financialFixtureNow } from '../../test/fixtures/financialCurrent';
 import { assess } from '../researchEngine';
 import { entryReadiness } from '../entryReadiness';
+import { withAuditFixture } from '../testAuditFixture';
 import ResearchDetail from './ResearchDetail';
 vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>}));
 afterEach(cleanup);
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
+it('distinguishes selection and purchase evidence dates without inventing a missing source', () => {
+ const selected={...row,as_of_date:'2026-09-30',entry_evidence:{as_of_date:'2026-09-29'}};
+ render(<ResearchDetail {...props} selected={selected} version="g2"/>);
+ const selection=screen.getByRole('group',{name:'選出データの参照情報'});
+ expect(selection).toHaveTextContent('選出データの対象日 2026-09-30 ／ 日付の対応 不一致');
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('記載がない提供元・対象日は未確認');
+ fireEvent.click(screen.getByRole('tab',{name:'購入条件'}));
+ expect(screen.getByRole('group',{name:'購入条件の根拠の参照情報'})).toHaveTextContent('購入条件の根拠の対象日 2026-09-29 ／ 日付の対応 不一致');
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('分析基準日 2026-10-01・検証基準日 2026-09-29 が不一致');
+});
+
+it('keeps not-applicable selection and purchase states distinct from unknown', () => {
+ const fund=withAuditFixture({...row,symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF'},props.date);
+ render(<ResearchDetail {...props} selected={fund} method="oneil"/>);
+ const eps=screen.getByText('C：四半期 EPS 前年同期比 ≥ 25%').closest('li');
+ expect(eps).toHaveTextContent('対象外');
+ expect(eps).not.toHaveTextContent('? 未確認');
+ fireEvent.click(screen.getByRole('tab',{name:'購入条件'}));
+ const selection=screen.getByText(/— 共通購入モデルへの適合/).closest('li');
+ expect(selection).toHaveTextContent('対象外');
+ expect(selection).not.toHaveTextContent('未確認');
+ const readiness=entryReadiness(fund,props.date,props.market,props.now,'oneil');
+ expect(screen.getByRole('heading',{name:new RegExp(`購入条件 ${readiness.passed}/${readiness.total} · 未達 ${readiness.failed} · 未確認 ${readiness.unknown}`)})).toBeInTheDocument();
+});
 it('moves focus from the purchase shortcut to its selected tab and supports arrow navigation', async () => {
  const onVerificationToggle=vi.fn();
  const {container}=render(<ResearchDetail {...props} selected={row} onVerificationToggle={onVerificationToggle}/>);

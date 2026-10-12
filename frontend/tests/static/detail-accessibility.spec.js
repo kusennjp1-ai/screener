@@ -12,6 +12,9 @@ const rows = ['SYNTH', 'OTHER'].map(symbol => withFinancialProof(withAuditFixtur
   current_price:102, se_pivot_price:100, adv_usd:5e7, rs_rating:95, eps_rating:null, composite_rating:null,
   eps_growth_yy:30, sales_growth_yy:-4, annual_eps_growth_3y:null, financial_history:symbol==='SYNTH'?history:undefined,
   ibd_group_rank:null, market_above_50dma:true, market_above_200dma:true, chart_path:`${symbol}.json` }, date)));
+// Synthetic prices for a registry-known fund exercise the existing N/A state.
+rows.push(withAuditFixture({symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF',as_of_date:date,
+  current_price:102,se_pivot_price:100,adv_usd:5e7,rs_rating:95,chart_path:'BITU.json'},date));
 const bars = Array.from({length:280}, (_,i) => ({ date:new Date(Date.parse(date)-(279-i)*86400000).toISOString().slice(0,10),
   open:90+i*.04, high:91+i*.04, low:89+i*.04, close:90.5+i*.04, volume:i===279?0:1e6+i*1000 }));
 
@@ -56,6 +59,13 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const financialTab=detail.getByRole('tab',{name:'財務・機関'});
   await expect(financialTab).toBeFocused();await expect(financialTab).toHaveAttribute('aria-selected','true');
   const financial=detail.getByRole('region',{name:'財務の判定根拠'});
+  const financialContext=financial.getByRole('group',{name:'財務根拠の参照情報'});
+  await expect(financialContext).toContainText('画面の配信版 synthetic-accessibility');
+  await expect(financialContext).toContainText('財務根拠の対象日 2026-10-02 ／ 日付の対応 一致');
+  await expect(financialContext).toContainText('財務根拠の配信版 synthetic-accessibility ／ 配信版の対応 一致');
+  await financialContext.evaluate(e=>e.scrollIntoView({block:'center'}));
+  await visibleFocus(financialContext,'financial-evidence-context');
+  await page.screenshot({path:info.outputPath(`financial-context-${width}-${theme}.png`)});
   const eps=financial.getByRole('heading',{name:'四半期 EPS 前年同期比',exact:true}).locator('..').locator('..').locator('..');
   await expect(eps).toContainText('通過');await expect(eps).toContainText('30%');await expect(eps).toContainText('≥ 25%');
   await expect(eps).toContainText('2026-06-30');await expect(eps).toContainText('2025-06-30');await expect(eps).toContainText('2026-10-03');
@@ -90,6 +100,10 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
   const conditions=dialog.getByText(/選定条件の詳細（/);
   await conditions.focus();await page.keyboard.press('Space');
+  await expect(dialog.getByText(/選出の一次条件です/)).toContainText('購入条件とは別に確認');
+  await expect(dialog.getByRole('group',{name:'選出データの参照情報'})).toContainText('選出データの対象日 2026-10-02 ／ 日付の対応 一致');
+  await dialog.getByRole('group',{name:'選出データの参照情報'}).evaluate(e=>e.scrollIntoView({block:'center'}));
+  await page.screenshot({path:info.outputPath(`selection-context-${width}-${theme}.png`)});
   const rules=dialog.getByRole('list',{name:'選定条件の判定内訳'});
   await expect(rules).toContainText('EPS 前年同期比 ≥ 25%：✓ 通過 · 30%');
   await expect(rules).toContainText('売上高 前年同期比 ≥ 25%：× 未達 · -4%');
@@ -103,6 +117,15 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   await modalNumeric.evaluate(e=>e.scrollIntoView({block:'center'}));
   await page.screenshot({path:info.outputPath(`expanded-numeric-${width}-${theme}.png`)});
   expect((await new AxeBuilder({page}).include('[role="dialog"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
+  if(width===375 && theme==='dark'){
+    await dialog.getByRole('button',{name:'次の銘柄',exact:true}).click();
+    await expect(dialog).toHaveAccessibleName(/BITU/);
+    const readiness=dialog.getByTestId('mobile-chart-readiness');
+    await expect(readiness).toContainText('対象外：共通購入モデルへの適合');
+    await expect(readiness.getByText(/^未達・未確認：/)).not.toContainText('共通購入モデルへの適合');
+    await visibleFocus(readiness,'not-applicable-mobile-summary');
+    await page.screenshot({path:info.outputPath('not-applicable-375-dark.png')});
+  }
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();await visibleFocus(opener,'expanded-chart-focus-return');
   await financialTab.focus();await page.keyboard.press('End');await expect(detail.getByRole('tab',{name:'メモ'})).toBeFocused();
