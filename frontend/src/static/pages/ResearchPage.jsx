@@ -52,7 +52,7 @@ export default function ResearchPage({compareOnly=false}) {
   const deferredSearch = useDeferredValue(search);
   useEffect(()=>{
     const searchEvent=e=>setSearch(e.detail||'');
-    const backEvent=()=>setMobileView('list');
+    const backEvent=()=>{setMobileView('list');requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
     window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);
     return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};
   },[]);

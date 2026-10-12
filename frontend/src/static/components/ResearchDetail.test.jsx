@@ -1,4 +1,4 @@
-import { render,screen,cleanup,within,fireEvent } from '@testing-library/react';
+import { render,screen,cleanup,within,fireEvent,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
 import { withSyntheticFinancialProof, financialFixtureDate, financialFixtureNow } from '../../test/fixtures/financialCurrent';
@@ -9,6 +9,19 @@ vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>
 afterEach(cleanup);
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
+it('moves focus from the purchase shortcut to its selected tab and supports arrow navigation', async () => {
+ const onVerificationToggle=vi.fn();
+ const {container}=render(<ResearchDetail {...props} selected={row} onVerificationToggle={onVerificationToggle}/>);
+ fireEvent.click(container.querySelector('.readiness-chip'));
+ const tab=screen.getByRole('tab',{name:'購入条件',exact:true});
+ await waitFor(()=>expect(tab).toHaveFocus());
+ expect(tab).toHaveAttribute('aria-selected','true');
+ fireEvent.keyDown(tab,{key:'ArrowRight'});
+ expect(screen.getByRole('tab',{name:'財務・機関'})).toHaveFocus();
+ expect(onVerificationToggle).toHaveBeenCalledWith(row.symbol);
+ fireEvent.keyDown(screen.getByRole('tab',{name:'財務・機関'}),{key:'Home'});
+ expect(screen.getByRole('tab',{name:'判定根拠'})).toHaveFocus();
+});
 it.each([103.2,112.7])('shows the first-book caution beside the company before the inline chart at %s',price=>{
  const {container}=render(<ResearchDetail {...props} selected={{...row,current_price:price}}/>);
  const header=container.querySelector('.research-symbol-head');

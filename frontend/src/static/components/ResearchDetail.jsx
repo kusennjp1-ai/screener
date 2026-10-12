@@ -25,7 +25,7 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
  const checks=selected?assess(selected,method,now):null,plan=selected?entryPlan(selected,usableQuote,method):null,readiness=selected?entryReadiness(selected,date,market,now,method):null;
  const trendSource=trendTemplateSourceContext(method);
  const choose=value=>{setTab(value);if(['financial','book'].includes(value))onVerificationToggle(selected.symbol);};
- const showConditions=()=>{choose('conditions');requestAnimationFrame(()=>document.getElementById('research-detail-tabs')?.scrollIntoView({block:'nearest'}));};
+ const showConditions=()=>{choose('conditions');requestAnimationFrame(()=>{const target=document.getElementById('detail-tab-conditions');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'nearest'});});};
  return <div role="region" className="research-detail" ref={detailRef} tabIndex={-1} aria-label="銘柄詳細">
   {selected&&<>
    <header className="research-symbol-head">

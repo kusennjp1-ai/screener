@@ -40,6 +40,7 @@ describe('inline chart integration', () => {
     expect(screen.getByTestId('chart')).toHaveAttribute('data-levels', '[null,null,null]');
     expect(screen.getByTestId('chart')).toHaveAttribute('data-guides', '[null,null,null]');
     expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByText('日足の数値を確認')).not.toBeInTheDocument();
   });
   it('does not request a live backend when a static chart is absent', () => {
     setup({ symbol: 'NONE' });
@@ -59,6 +60,7 @@ describe('inline chart integration', () => {
     expect(chart).toHaveTextContent('BBB:0:');
     expect(chart).toHaveAttribute('data-levels','[null,null,null]');
     expect(chart).toHaveAttribute('data-guides','[null,null,null]');
+    expect(screen.queryByText('日足の数値を確認')).not.toBeInTheDocument();
   });
   it('recovers after a failed chart download', async () => {
     fetchPayload.mockRejectedValueOnce(Error('offline')).mockResolvedValue({symbol:'AAA',as_of_date:'2026-09-21',bars:[{date:'2026-09-21',close:100}]});

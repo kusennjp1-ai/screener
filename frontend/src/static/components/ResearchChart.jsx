@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Button, CircularProgress, Typography, useMediaQuery } from '@mui/material';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
+import ChartNumericData from './ChartNumericData';
 
 const EMPTY_BARS = Object.freeze([]);
 
@@ -38,6 +39,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
         pivotPrice={ready ? canonicalPivot(row || data.stock_data).price : null}
         buyCeiling={ready ? plan.upper : null} stopPrice={ready ? plan.stopExample : null} pivotLabel="共通ピボット" vcpBoxes={ready ? data.vcp_boxes || null : null} />
     </div>}
+    {ready && <ChartNumericData key={JSON.stringify([symbol, date, generation, entry?.path])} symbol={symbol} bars={data.bars} asOfDate={date} generatedAt={data.generated_at} currency={data.stock_data?.currency} />}
 
   </Box>;
 }

@@ -5,6 +5,7 @@ import { useFinancialClock } from './useFinancialClock';
 import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
+import ChartNumericData from './components/ChartNumericData';
 import { EntrySourceBadge } from './components/EntrySourceNote';
 import { assess, entryPlan } from './researchEngine';
 import { entryReadiness } from './entryReadiness';
@@ -325,7 +326,11 @@ function StaticChartViewerModal({
               }}
             >
               {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{instrumentApplicabilityLabel(instrumentApplicability(stockData)) || (rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,method || 'minervini',now).passed}/${assess(stockData,method || 'minervini',now).total}）`)}</summary>
-                {assess(stockData,method || 'minervini',now).rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'対象外':'?'} {r.label}</Typography>)}
+                <Typography sx={{fontSize:12}}>分析基準日 {expectedDate || '未確認'}。未確認は通過に数えません。</Typography>
+                <Box component="ul" aria-label="選定条件の判定内訳" sx={{pl:2.5}}>{assess(stockData,method || 'minervini',now).rules.map(r=><Typography component="li" key={r.label} sx={{fontSize:13,my:1}}>
+                  {r.label}：{r.state==='pass'?'✓ 通過':r.state==='fail'?'× 未達':r.state==='not_applicable'?'対象外':'? 未確認'}{Number.isFinite(r.value)?` · ${r.value.toLocaleString('ja-JP',{maximumFractionDigits:2})}${r.unit || ''}`:''}
+                  {r.evidence && <Typography component="span" sx={{display:'block',fontSize:12}}>{r.evidence}</Typography>}
+                </Typography>)}</Box>
               </Box> : <><StockMetricsSidebar currentFinancialOnly date={expectedDate} now={now} stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
@@ -389,6 +394,7 @@ function StaticChartViewerModal({
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                     />
                   </Box>
+                  {chartPayload?.bars?.length > 0 && <ChartNumericData key={JSON.stringify([currentSymbol, expectedDate, generation, currentEntry?.path])} symbol={currentSymbol} bars={chartPayload.bars} asOfDate={expectedDate} generatedAt={chartPayload.generated_at} currency={stockData?.currency} />}
                   {isMobile && <>
                     <Box component="details" data-testid="mobile-chart-legend" sx={{px:1.5,fontSize:12,borderBottom:1,borderColor:'divider'}}>
                       <summary style={{cursor:'pointer',minHeight:44,lineHeight:'24px',padding:'10px 0',boxSizing:'border-box'}}>チャートの凡例（移動平均線・RS）</summary>

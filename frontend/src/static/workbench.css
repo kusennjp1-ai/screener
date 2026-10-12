@@ -10,6 +10,9 @@
 .header-dates{display:flex;gap:12px;font-size:12px;color:var(--text-3);font-family:var(--font-mono);white-space:nowrap}.header-dates span:last-child{max-width:205px;overflow:hidden;text-overflow:ellipsis}
 .leader-header>.MuiIconButton-root{width:44px;height:44px;border:1px solid var(--line-2);border-radius:12px;color:var(--text-2)}
 .leader-mobile-nav,.mobile-header-back,.mobile-back{display:none}.leader-content{max-width:1920px;margin:auto;min-width:0}
+/* Keep native focus/scroll targets outside the sticky header and mobile nav. */
+html:has(.research-workbench){scroll-padding-top:72px}
+@media(max-width:700px){html:has(.research-workbench){scroll-padding-top:64px;scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}}
 .research-workbench{padding:0;min-width:0}.research-grid{display:grid;grid-template-columns:452px minmax(0,1fr);gap:0;align-items:start}
 .research-hero{position:relative;display:grid;grid-template-columns:minmax(410px,.65fr) minmax(0,1fr);gap:28px;height:310px;padding:20px 24px;border-bottom:1px solid var(--line);background:radial-gradient(ellipse at 78% 0,var(--glow),transparent 62%)}
 .hero-copy{min-width:0}.hero-date{font-size:12px;color:var(--text-3);margin:0 0 8px}.hero-copy h1{font-size:42px;line-height:1.25;margin:0;font-weight:900;letter-spacing:-.04em}.hero-subtitle{font-size:20px;font-weight:700;color:var(--text-2);margin:10px 0 14px}
