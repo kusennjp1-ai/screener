@@ -628,3 +628,10 @@
 - 既存消費側: Markets360 scannerのdetails、quality_rankのsource tier、static exportのbuy項目は従来の集約/sourceを使用。TechnicalIndicatorsのtightness表示は別legacy API。新キーは追加互換だが、未知の外部strict-key consumerは要確認。
 - 全体unit検証の最終結果・環境制約・ソース差分・生ログはLibrary検証パッケージで報告。bdは未インストール。push/PR/merge/公開/認証変更/外部市場データ取得なし。
 - 全unitの分割確認: 5590 passed / 80 failed / 2 skipped、Celery/Redis接続待ちの12件未完了。80失敗は同一環境の基準コミットでも全件再現。backend全体の収集はintegrationのlocalhost:8000接続拒否→SystemExitで停止。制限回避なし。
+
+
+### 2026-10-12 — 全体80失敗の初回分類・欠損価格によるclimax誤検出修正（ローカル）
+- VCPレビュー済みcb90cf2、unit隔離f8801abを親として保持。保存済み80失敗を暫定6群へ分類: API認証テスト前提29、同期/非同期契約12、rating/スキーマ/fixture契約22、参照資産/市場メタデータ11、時系列/キャッシュ5、依存境界1。分類は原因確定や全件修正を意味しない。
+- 実装不具合: climax判定の暗黙forward-fillで、欠損の前後にまたがる騰落を1日の上昇と誤認。合成データで偽のup-day frenzyとlargest-up-dayを再現し、sell_into_strengthが誤発火。既存pct_change方針に合わせfill_method=Noneを明示。閾値・score重み・既存fixture不変。
+- 欠損2ケースは修正前sell_into_strength→修正後hold。隣接する実測値の正例はsell_into_strength維持。新規3ケース＋既存を含む対象は修正前23 passed/3 failed→26 passed。関連302 passed（VCP/隔離修正含む）、golden43 passed、ネットワーク試行0。元の80失敗のうちpct_change policyの1件を解消。
+- 他79件は今回未対応。仕様根拠の不足や参照ファイル欠落を期待値変更/skip/閾値緩和で隠さない。全体suiteの再実行・本番反映なし。生ログ・node別分類・差分はローカル検証パッケージに保存。
