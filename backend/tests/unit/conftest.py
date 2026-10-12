@@ -132,3 +132,15 @@ def _stub_external_data(monkeypatch):
     redis_pool._bulk_pool = None
 
     yield
+
+
+@pytest.fixture
+def server_auth_headers(monkeypatch):
+    """Opt-in synthetic server user; exercise the real auth dependency."""
+    from app.services import server_auth
+
+    monkeypatch.setattr(server_auth.settings, "server_auth_enabled", True)
+    monkeypatch.setattr(server_auth.settings, "server_auth_password", "unit-test-server-only")
+    monkeypatch.setattr(server_auth.settings, "server_auth_session_secret", "unit-test-signing-only")
+    monkeypatch.setattr(server_auth.settings, "admin_api_key", "unit-test-admin-only")
+    return {"X-Server-Auth": "unit-test-server-only"}

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import fnmatch
 import json
 import pickle
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
@@ -203,21 +204,42 @@ def test_price_cache_invalidate_uses_market_scoped_keys():
 
 
 def test_price_cache_batch_pipeline_fallback_preserves_market(monkeypatch):
-    service = PriceCacheService(redis_client=_FailingPipelineRedis(), session_factory=lambda: None)
+    redis = MagicMock(spec=_FailingPipelineRedis)
+    pipeline = MagicMock(wraps=_FailingPipeline())
+    redis.pipeline.return_value = pipeline
+    service = PriceCacheService(redis_client=redis, session_factory=lambda: None)
+    # The cache rejects incomplete history before attempting Redis. Use a
+    # coherent bar here so this test reaches the failed-pipeline fallback.
     data = pd.DataFrame(
-        {"Close": [100.0]},
-        index=pd.to_datetime(["2026-05-04"]),
+        {"Open": [100.0], "High": [101.0], "Low": [99.0],
+         "Close": [100.0], "Volume": [1_000_000.0]},
+        index=pd.DatetimeIndex([pd.Timestamp.now().normalize()]),
     )
-    calls = []
-    monkeypatch.setattr(
-        service,
-        "_store_recent_in_redis",
-        lambda symbol, payload, market=None: calls.append((symbol, market)),
-    )
+    def fallback_after_execute(symbol, payload, market=None):
+        pipeline.execute.assert_called_once_with()
+        assert symbol == "0700.HK"
+        assert payload is data
+        assert market == "HK"
+
+    fallback = MagicMock(side_effect=fallback_after_execute)
+    monkeypatch.setattr(service, "_store_recent_in_redis", fallback)
 
     service.store_batch_in_cache({"0700.HK": data}, also_store_db=False, market="HK")
 
-    assert calls == [("0700.HK", "HK")]
+    redis.pipeline.assert_called_once_with()
+    pipeline.execute.assert_called_once_with()
+    assert pipeline.setex.call_count == 3
+    writes = [entry.args for entry in pipeline.setex.call_args_list]
+    assert [entry[0] for entry in writes] == [
+        "price:HK:0700.HK:recent", "price:HK:0700.HK:last_update",
+        "price:HK:0700.HK:fetch_meta",
+    ]
+    assert all(entry[1] == service._cache_policy.ttl_seconds("price", market="HK") for entry in writes)
+    pd.testing.assert_frame_equal(pickle.loads(writes[0][2]), data)
+    assert writes[1][2] == data.index[-1].strftime("%Y-%m-%d")
+    assert "fetch_timestamp" in json.loads(writes[2][2])
+    assert pipeline.mock_calls[-1][0] == "execute"
+    fallback.assert_called_once()
 
 
 def test_price_cache_freshness_scans_new_and_legacy_fetch_meta_keys(monkeypatch):
@@ -262,3 +284,26 @@ def test_benchmark_cache_invalidate_deletes_each_market_scope():
     assert "benchmark:IN:^NSEI:2y" in redis.deleted
     assert "benchmark:US:SPY:2y" in redis.deleted
     assert "benchmark:US:^HSI:2y" not in redis.deleted
+
+
+@pytest.mark.parametrize("invalid", ["missing_ohlv", "non_finite_close"])
+def test_price_cache_batch_rejects_invalid_history_before_writes(monkeypatch, invalid):
+    redis = MagicMock()
+    session_factory = MagicMock()
+    service = PriceCacheService(redis_client=redis, session_factory=session_factory)
+    data = pd.DataFrame(
+        {"Open": [100.0], "High": [101.0], "Low": [99.0],
+         "Close": [100.0], "Volume": [1_000_000.0]},
+        index=pd.DatetimeIndex([pd.Timestamp.now().normalize()]),
+    )
+    if invalid == "missing_ohlv":
+        data = data[["Close"]]  # The former fallback-test input is invalid.
+    else:
+        data["Close"] = float("nan")
+    fallback = MagicMock()
+    monkeypatch.setattr(service, "_store_recent_in_redis", fallback)
+
+    assert service.store_batch_in_cache({"0700.HK": data}, market="HK") == 0
+    redis.pipeline.assert_not_called()
+    fallback.assert_not_called()
+    session_factory.assert_not_called()

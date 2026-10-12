@@ -670,3 +670,26 @@
 - 合成9例×4経路が一致。Python Decimalの独立計算2,708例一致。Playwright最終18成功（375/1440、dark）。作者が画面を抜き取り確認し、独立レビューは未実施。初回のブラウザ準備誤りと外部フォントの遮断記録も残す。外部取得は行わない。
 - lint0 errors/既存6 warnings、build成功/既存chunk警告、Golden43成功。backend redline262成功/前段からのftnt.csv tight_near_highs 1失敗。全ゲートgreenとは記録しない。実データbundleなし/export skip。
 - 旧バックエンド隔離・capture/admission・公開条件・認証・閾値を保持。原文/230ルール表は未確認のため書籍準拠を断言しない。外部取得・Library再試行・push/PR/merge/Actions/公開なし。本文diff/入力/期待値/出力はFINANCIAL_CONSISTENCY_REVIEW.md、ローカル検証パッケージはfinancial-consistency-fix-20261012。
+
+
+### 2026-10-11 — VCP footprint の経路別契約（ローカルのみ）
+- 基準 `8cf7d9b` で FTNT の既存テスト失敗を再現。終値151.350006、legacy高値87.820000、ATR比0.65465095。legacy false / MAなし / vol_contract true は正しい共存。
+- `legacy_detected` を追加し legacy 根拠と集約判定を明文化。既存キー、判定優先順位、pivot、閾値、fixture は変更しない。テストは legacy gates を legacy 判定に結び、全経路・非検出・経路重複・FTNTの実データを検証。
+- 対象＋legacy 32 passed。関連は変更前262 passed/1 failed → 272 passed。golden 43 passed。既存13 fixtureの既存フィールド完全一致。908 harnessの前後JSON完全一致（588 analyzable、FIRE87.2%、control61.4%、判別+25.8pp、SETUP判別+52.0pp）。right-edge P82/BR92/TPR100%、overall91%。
+- 既存消費側: Markets360 scannerのdetails、quality_rankのsource tier、static exportのbuy項目は従来の集約/sourceを使用。TechnicalIndicatorsのtightness表示は別legacy API。新キーは追加互換だが、未知の外部strict-key consumerは要確認。
+- 全体unit検証の最終結果・環境制約・ソース差分・生ログはLibrary検証パッケージで報告。bdは未インストール。push/PR/merge/公開/認証変更/外部市場データ取得なし。
+- 全unitの分割確認: 5590 passed / 80 failed / 2 skipped、Celery/Redis接続待ちの12件未完了。80失敗は同一環境の基準コミットでも全件再現。backend全体の収集はintegrationのlocalhost:8000接続拒否→SystemExitで停止。制限回避なし。
+
+
+### 2026-10-12 — 全体80失敗の初回分類・欠損価格によるclimax誤検出修正（ローカル）
+- VCPレビュー済みcb90cf2、unit隔離f8801abを親として保持。保存済み80失敗を暫定6群へ分類: API認証テスト前提29、同期/非同期契約12、rating/スキーマ/fixture契約22、参照資産/市場メタデータ11、時系列/キャッシュ5、依存境界1。分類は原因確定や全件修正を意味しない。
+- 実装不具合: climax判定の暗黙forward-fillで、欠損の前後にまたがる騰落を1日の上昇と誤認。合成データで偽のup-day frenzyとlargest-up-dayを再現し、sell_into_strengthが誤発火。既存pct_change方針に合わせfill_method=Noneを明示。閾値・score重み・既存fixture不変。
+- 欠損2ケースは修正前sell_into_strength→修正後hold。隣接する実測値の正例はsell_into_strength維持。新規3ケース＋既存を含む対象は修正前23 passed/3 failed→26 passed。関連302 passed（VCP/隔離修正含む）、golden43 passed、ネットワーク試行0。元の80失敗のうちpct_change policyの1件を解消。
+- 他79件は今回未対応。仕様根拠の不足や参照ファイル欠落を期待値変更/skip/閾値緩和で隠さない。全体suiteの再実行・本番反映なし。生ログ・node別分類・差分はローカル検証パッケージに保存。
+
+
+### 2026-10-12 — PR #98 exact head と財務UIのローカル統合候補
+- UI `134737f901bc5a3847fc50ceaac2ad59bda935de` と PR #98 `2de4270a0fb7608f3a892b6b04bfd2f1a5b4229d` のみを統合。共通祖先 `8cf7d9b231a5926696d261da51a4bab531f33cfa`。元ブランチを保持し、通常HTTPS git fetchで指定headの一致を確認。
+- 競合はSTATE/PROGRESSの2文書のみ。PROGRESSは共通本文と両側の追記を全保持、STATEは統合候補の現状に更新。コード・テスト・SPECは双方の差分をそのまま保持。83009c0等の別候補・保留境界修正は取り込まない。
+- UI単独の最終全体Vitestは236ファイル/2995件成功（exit 0、504.46秒）。追加の独立ソースレビューで主経路のブロッカーなし。これらは統合候補の検証結果とは区別する。
+- 統合候補のFTNT/関連backend/Golden/frontend全体/重要browser回帰をこれから検証。生ログと入力差分は `/workspace/pr98-ui-integration-20261012/` に保存。push/PR変更/main merge/Actions/公開なし。

@@ -1,34 +1,31 @@
-# STATE — 現在地（ローカル作業）
+# STATE — 現在地（ローカル統合候補）
 
-更新：2026-10-12。財務条件の整合性監査から、年次EPS境界・通貨情報・期間ラベルを修正。公開済み状態とは区別する。
+更新：2026-10-12。PR #98 exact headと現在UIの共存検証。公開済み状態とは区別する。
 
-## 完了
+## 入力と保存ブランチ
 
-- 基点 `bb090658` と元ブランチ `private/detail-accessibility-20261012` を保持。専用ブランチ `private/financial-consistency-20261012` で作業。
-- 年次EPSの25%ちょうどを、受信EPSの十進表記による厳密比較で判定。25%直下は未達、ゼロ/負の比較元は未確認。任意のepsilonや閾値変更なし。
-- 表示上25%に丸まる直下のケースには、元EPSでは25%未満と説明する。既存O’Neil/IBD/Minerviniの異なる条件を統一しない。
-- 旧形式の年次通貨/出典/セル単位の不整合を、完全履歴でも部分履歴でも未確認とする。一覧の軽量化で不整合情報を削除せず、raw/list/decoded/detailで同じ状態を保持。
-- 詳細スキャンの表・入力欄・適用チップを「EPS 前四半期比」「売上 前四半期比」と表示。従来のQ/Qフィールド/保存キー/下限判定を維持し、主画面の前年同期比と区別。
-- 判定版は `research-summary-v8-financial-current-annual-decimal-metadata`。旧版との差を市場変化として比較しない。
-- 旧バックエンドのscore/pass/bonus隔離を維持。財務capture/admission、閾値、公開条件、認証は無変更。
+- UI: `134737f901bc5a3847fc50ceaac2ad59bda935de`、`private/financial-consistency-20261012`を保持。
+- PR #98: `2de4270a0fb7608f3a892b6b04bfd2f1a5b4229d`、`private/pr98-exact-20261012`に保存。
+- 共通祖先: `8cf7d9b231a5926696d261da51a4bab531f33cfa`。
+- 統合先: `private/integrate-pr98-ui-20261012`。指定remote/branchから通常HTTPS git fetchで取得し、exact head一致を確認。
+- 別のbackend夜間候補83009c0や保留中の境界修正は取り込まない。
 
-## 検証
+## 統合内容
 
-- 合成9例×4経路が期待状態と一致。Python Decimalの独立計算2,708例がJS比較と一致。
-- ブラウザ最終18成功（375/1440px、dark、実一覧/詳細/条件/財務/一部拡大画面）。最終画像を作者が抜き取り確認。外部要求は遮断。
-- 初回全Vitestは236 files / 2,995 tests中2,977成功、18失敗。追加ヘルパーの仮想checkoutへのコピー漏れ17件、判定版名の既存識別語の欠落1件を修正。
-- 修正後は該当2ファイルを含む6 files / 273 tests成功。初回全体と対象再試験を区別し、最終状態での全体一括再走は未実施。関連の境界224/通貨457/ラベル52/表示補足279も成功（重複あり）。
-- lint 0 errors / 既存6 warnings、build成功 / 既存chunk警告。実データbundle不在でexportはskip。
-- Golden43成功。backend redline262成功/既知1失敗：`test_vcp_footprint.py::test_well_formed_on_real_fixtures` のftnt.csv tight_near_highs。期待値は緩めず全ゲートgreenとは扱わない。
+- UIの市場履歴・詳細アクセシビリティ・日付/異常チャート・年次EPS十進境界・通貨不整合unknown保持・前四半期比ラベルを保持。
+- PR #98の8コミットをそのまま統合。VCPの集約detectedとlegacy_detectedを区別、欠損closeをclimaxの日次上昇へ補完しない、FX stale fallbackで新しいcache値を保持。unit fixtureの認証・同期API・cache/wrapper隔離の修正を保持。
+- 競合はdocs/STATE.mdとdocs/PROGRESS.mdのみ。PROGRESSは両側の追記を全保持。STATEは現状に更新し、両元文書は元commitとローカル証拠へ保持。
+- 売買閾値・公開条件・実認証ガードは緩めない。財務capture/admissionは非対象。
 
-## 次・未確認
+## 検証状況
 
-- 独立した第三者レビューは未実施。レビュー本文（本番diff/入力/期待値/試験出力）は `docs/FINANCIAL_CONSISTENCY_REVIEW.md`。
-- 230ルール表と4冊の原文は今回確認できず、書籍準拠、公式IBD同等性、実銘柄の発生率は未検証。
-- 旧バックエンドの別基準、一覧で年次履歴プロパティ自体を省略した場合の詳細補完は前回監査の範囲外残件。通常research exportは明示nullを持つ。
-- 実データ取得・財務capture/admissionは他作業。今回のローカル証拠は `/workspace/financial-consistency-fix-20261012/`。
-- 前段の市場履歴/詳細アクセシビリティ/日付選択/参照情報/異常チャート対応を保持。実音声screen reader、独立画像レビュー等の前段残件を完了扱いしない。
+- UI単独134737fの全体Vitest: 236ファイル/2995件成功、exit 0、504.46秒。以前の18失敗は全体再走で解消確認済み。独立ソースレビューで現在の主経路にブロッカーなしとの親レビュー結果を受領。
+- 統合候補のFTNT、関連backend、Golden、frontend全体、重要browser回帰は検証中。結果をUI単独やPR単独の記録で代用しない。
+- 既知のFTNT失敗はPR #98の経路別契約修正で解消することを実測する。過去のbackend全unit未対応や実サーバー不在の制約まで解消済みとは扱わない。
+- 生ログ・両入力差分・元文書: `/workspace/pr98-ui-integration-20261012/`。
 
-## 制約
+## 制約・残件
 
-ローカル実装と合成データ検証のみ。外部データ取得、Library再試行、push/PR/merge/Actions/公開、認証変更なし。新しい依存パッケージなし。公開条件や売買基準を緩めない。
+- ローカル統合のみ。push、PR変更、main merge、Actions実行、公開、Library再試行なし。外部市場データ取得なし。指定GitHubコード取得だけ許可。
+- 実データbundle不在でのexport検証、書籍原文との全230ルール照合、実音声screen reader等の以前の残件は完了扱いしない。
+- 検証完了後は根拠となるhead・ログ・既知失敗を報告。元branchは保持。
