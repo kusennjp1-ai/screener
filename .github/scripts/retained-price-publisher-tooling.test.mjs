@@ -12,6 +12,21 @@ const clone=v=>structuredClone(v),hash='a'.repeat(64),other='b'.repeat(64),head=
 const original={ [PUBLISHER_TOOLING.files[0].path]:{mode:'100644',sha:PUBLISHER_TOOLING.files[0].before.git_blob_sha},'frontend/src/static/financialCurrent.js':{mode:'100644',sha:'e'.repeat(40)},'frontend/package-lock.json':{mode:'100644',sha:'f'.repeat(40)} };
 const amended={...original,[PUBLISHER_TOOLING.files[0].path]:{mode:'100644',sha:PUBLISHER_TOOLING.files[0].after.git_blob_sha}};
 const start=Date.parse('2026-10-08T09:00:00.000Z'),stamp=n=>new Date(start+n).toISOString();
+function assertExporterPin(raw,pin){
+  assert.equal(raw.length,pin.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),pin.sha256);
+  assert.equal(createHash('sha1').update('blob '+raw.length+'\0').update(raw).digest('hex'),pin.git_blob_sha);
+}
+function originalExporterFixture(){
+  // Recover the approved original from the existing pinned one-file amendment,
+  // not the moving workspace exporter or history unavailable in shallow CI.
+  // Its bytes match 1e1943e:frontend/tools/export-research.mjs (blob dac7f878).
+  const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..'),pin=PUBLISHER_TOOLING.files[0];
+  const raw=readFileSync(resolve(root,PUBLISHER_EXPORT_ARTIFACT));assertExporterPin(raw,pin.after);
+  const before='    canonicalChart=projectFinancialPayload(overlayFinancialChart(await read(paths.get(symbol)),correction,symbol),{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});';
+  const after='    canonicalChart=overlayFinancialChart(await read(paths.get(symbol)),correction,symbol);\n    if (!carry) canonicalChart=projectFinancialPayload(canonicalChart,{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});';
+  assert.equal(raw.toString('utf8').split(after).length,2,'Pinned exporter amendment must occur exactly once');
+  const original=Buffer.from(raw.toString('utf8').replace(after,before));assertExporterPin(original,pin.before);return original;
+}
 function fixture(){
   const previous='9/1/'+hash+'/'+other,source={repair:{},artifact:{id:31,digest:'sha256:'+hash},companion:{id:32,digest:'sha256:'+other}};
   const state={source,sourceSha:PUBLISHER_TOOLING.base.sha,controllerSha:head,live:{identity:previous,uiSha:PUBLISHER_TOOLING.base.sha,uiDigest:hash},decision:{mode:'data'},carry:{projectionSha256:hash,evaluatedAt:stamp(2000)}};
@@ -33,14 +48,16 @@ test('default and disabled ordinary source route does not create tooling state',
   }
   await assert.rejects(()=>publisherToolingBoundary({source:{},publisherTooling:{}},'apply'),/Ordinary route/);
 });
-test('exact immutable one-file identity and artifact preserve original main exporter',()=>{
+test('exact immutable one-file identity binds approved original and amended fixtures',()=>{
   validatePublisherToolingIdentity(clone(PUBLISHER_TOOLING));
   const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..'),pin=PUBLISHER_TOOLING.files[0];
-  for(const [path,expected]of [[PUBLISHER_EXPORT_ARTIFACT,pin.after],[pin.path,pin.before]]){
-    const raw=readFileSync(resolve(root,path));assert.equal(raw.length,expected.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),expected.sha256);
-    assert.equal(createHash('sha1').update('blob '+raw.length+'\0').update(raw).digest('hex'),expected.git_blob_sha);
-  }
+  for(const [raw,expected]of [[readFileSync(resolve(root,PUBLISHER_EXPORT_ARTIFACT)),pin.after],[originalExporterFixture(),pin.before]])assertExporterPin(raw,expected);
   assert.equal(PUBLISHER_TOOLING.files.length,1);assert.equal(PUBLISHER_TOOLING.source_compiler,'unchanged_approved_ui');assert.equal(PUBLISHER_TOOLING.browser_assets,'equal_approved_predecessor_only');
+});
+test('current candidate checkout cannot inherit the approved publisher UI identity',()=>{
+  const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
+  assert.notEqual(execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),PUBLISHER_TOOLING.base.sha);
+  for(const amended of [false,true])assert.throws(()=>verifyPublisherToolingCheckout(join(root,'frontend'),{amended}),/Wrong selected UI source/);
 });
 for(const [name,change]of [
   ['wrong source sha',x=>{x.base.sha=head;}],['wrong source tree',x=>{x.base.tree=head;}],['wrong frontend tree',x=>{x.base.frontend_tree=head;}],
@@ -108,7 +125,7 @@ function diskFixture(t){
   const source=resolve(dirname(fileURLToPath(import.meta.url)),'../..'),pin=PUBLISHER_TOOLING.files[0];
   const write=(path,raw,mode=0o644)=>{const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,raw,{mode});return file;};
   write('.gitignore','frontend/public/static-data/\nfrontend/public/qualification-audit.json\nfrontend/dist/\nfrontend/node_modules/\n.env*\nfrontend/.env*\n*.tmp\n');
-  write(pin.path,readFileSync(resolve(source,pin.path)));
+  write(pin.path,originalExporterFixture());
   write('frontend/src/static/financialCurrent.js','export const current = true;\n');
   write('frontend/tools/native-fixture.sh','#!/bin/sh\nexit 0\n',0o755);
   const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe'],env:{...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}});
