@@ -693,3 +693,13 @@
 - 競合はSTATE/PROGRESSの2文書のみ。PROGRESSは共通本文と両側の追記を全保持、STATEは統合候補の現状に更新。コード・テスト・SPECは双方の差分をそのまま保持。83009c0等の別候補・保留境界修正は取り込まない。
 - UI単独の最終全体Vitestは236ファイル/2995件成功（exit 0、504.46秒）。追加の独立ソースレビューで主経路のブロッカーなし。これらは統合候補の検証結果とは区別する。
 - 統合候補のFTNT/関連backend/Golden/frontend全体/重要browser回帰をこれから検証。生ログと入力差分は `/workspace/pr98-ui-integration-20261012/` に保存。push/PR変更/main merge/Actions/公開なし。
+
+
+### 2026-10-13 — carry chart projection 所有境界の最小修正（ローカル限定）
+- 承認済みPR #99 head `32ee9c2116f8d8d42c70ed4607a94a7b311c0aa6`と元ブランチを保持し、private/projection-idempotence-20261013へ分離。remote操作・実データ取得なし。
+- 合成A/US、対象日2026-10-12、EPS YoY40、build2026-10-13T05:12:49.746Z、observed2026-10-04T11:00Z、expiry2026-10-10T12:00Zでstale_source→missing_or_invalid_valueを再現。aliasの新規objectに対する二重projectionがnullを期限より先に判定する。実際の失敗A bytesは不在で本番原因確定とは扱わない。
+- 通常exporterの1行を2行へ置換し、carry-owned chartはoverlayの一度のprojectionを保持。全ファイルが既存固定publisher fixtureのSHA-256 f9e0ad58f7bbaf911eab2943fcfb18df32f6ee881c3847272f5201e448d9cf40と一致。carryなしの出力を保持。一般projector、proof、理由コード、capture/admission、期限、generation、verifier、公開条件は変更しない。
+- 既存固定fixtureのテストを実exporterとも比較し、完全export/JSON/再exportの追加回帰を作成。修正前24成功/4失敗（verified-charts/.../fundamentals/.../state mismatch含む）→修正後28成功。raw/list/detail/chartの値・proof・generation・保存state一致、stale/missing/identity mismatch/current、値復活/状態偽装/改変拒否を確認。
+- 関連9 files/386成功、全Vitest236 files/2,996成功（exit0、501.94秒）、backend redline275成功、Golden43成功。lint0errors/既存6warnings、build成功/既存chunk警告。実bundleなしのbuild export skipを合成完全export検証と区別。UI component変更なし、ブラウザ未実施。
+- 追加controller203成功/1失敗はumask0077によるmode0600/期待0644。基点と同じcontroller/testを子プロセスのumask0022で対象全111成功。権限assertion/製品設定は変更せず、無条件greenとは記録しない。
+- 一般のコピー後の診断変化は残り、nullからの値復活は認めない。旧exporter hash固定helperは新候補を引き続き拒否。公開承認/条件の更新は今回の対象外。外部取得・archive/Library再試行・push・PR変更・merge・Actions・公開なし。生ログ/差分/入力/hashはprojection-idempotence-20261013へ保存。

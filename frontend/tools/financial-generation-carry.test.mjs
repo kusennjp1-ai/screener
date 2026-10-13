@@ -616,9 +616,9 @@ it('rejects postbinding issuer, price and universe substitutions against the bou
   } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
 
-// Execute the canonical-chart statements from the exact separately pinned
-// publisher exporter fixture. The approved UI exporter remains unchanged;
-// these regressions exercise the explicit publisher tooling amendment.
+// Compare the actual exporter's canonical-chart statements with the separately
+// pinned publisher amendment. Full export fixtures below also exercise the
+// surrounding file, serialization and unchanged compatibility verifier.
 async function exportChartProjection(chart, { carry = null, correction = carry, symbol = chart.symbol ?? chart.stock_data?.symbol, now = buildTime, date = targetDate, market = 'US' } = {}) {
   const fixturePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../.github/scripts/fixtures/publisher-export-research-oct6-carry-v1.mjs');
   const source = await readFile(fixturePath, 'utf8');
@@ -629,7 +629,16 @@ async function exportChartProjection(chart, { carry = null, correction = carry, 
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   const run = new AsyncFunction('read', 'paths', 'symbol', 'correction', 'carry', 'evaluatedAt', 'scan', 'row', 'overlayFinancialChart', 'projectFinancialPayload',
     'let canonicalChart=null;\n' + source.slice(start, end) + '\nreturn canonicalChart;');
-  return run(async () => structuredClone(chart), new Map([[symbol, 'fixture.json']]), symbol, correction, carry, now, { as_of_date: date }, { market }, overlayFinancialChart, projectFinancialPayload);
+  const args = [async () => structuredClone(chart), new Map([[symbol, 'fixture.json']]), symbol, correction, carry, now, { as_of_date: date }, { market }, overlayFinancialChart, projectFinancialPayload];
+  const expected = await run(...args);
+  const actualSource = await readFile(new URL('./export-research.mjs', import.meta.url), 'utf8');
+  const actualStart = actualSource.indexOf('    canonicalChart='), actualEnd = actualSource.indexOf('    Object.assign(canonicalChart,', actualStart);
+  expect(actualStart).toBeGreaterThan(0); expect(actualEnd).toBeGreaterThan(actualStart);
+  const actualRun = new AsyncFunction('read', 'paths', 'symbol', 'correction', 'carry', 'evaluatedAt', 'scan', 'row', 'overlayFinancialChart', 'projectFinancialPayload',
+    'let canonicalChart=null;\n' + actualSource.slice(actualStart, actualEnd) + '\nreturn canonicalChart;');
+  const actual = await actualRun(...args);
+  expect(actual).toEqual(expected);
+  return actual;
 }
 
 it('keeps carried stale-reporting-period reasons through the source-bound exporter and repeated serialization', async () => {
@@ -717,4 +726,60 @@ it('preserves the exact original non-carry projection for ordinary exports and c
     const result = await exportChartProjection(chart, { carry: null, correction: projection, symbol, now: originalTime, date: originalDate });
     expect(result).toEqual(expected); expect(JSON.stringify(result)).toBe(JSON.stringify(expected)); expect(JSON.stringify(chart)).toBe(before);
   }
+});
+
+it('exports stale, missing, identity-mismatch and current fields consistently across persisted carry aliases', async () => {
+  const now = originalTime + 2 * day, date = '2026-10-06';
+  const options = inputs({ now, date, quarterAgeHours: 6 * 24 });
+  const { directory, frontend, root, carry, env } = await exportFixture(options);
+  try {
+    const check = async () => {
+      await verifyCarryCompatibility({ root, carry, evaluatedAt: now + 1000 });
+      const manifest = await read(join(root, 'manifest.json'));
+      const index = decodeResearchIndex(await read(join(root, manifest.markets.US.assets.research.path)));
+      const snapshots = [];
+      for (const symbol of ['OWNED', 'NULL', 'MISMATCH', 'NEW']) {
+        const expected = projected(carry, targetRows(options).find(row => row.symbol === symbol), now);
+        const listed = index.rows.find(row => row.symbol === symbol);
+        const detail = await read(join(root, listed.research_detail_path));
+        const charts = await Promise.all([`raw/${symbol}.json`, `charts/${symbol}.json`, listed.chart_path].map(path => read(join(root, path))));
+        const rows = [listed, detail, ...charts.flatMap(chart => [chart.stock_data, chart.fundamentals])];
+        for (const row of rows) {
+          for (const field of FINANCIAL_FIELDS) expect(row[field]).toEqual(expected[field]);
+          expect(row.financial_current).toEqual(expected.financial_current);
+          expect(row.financial_generation).toBe(carry.financial_generation);
+          if (row.financial_current_state) expect(row.financial_current_state).toEqual(expected.financial_current_state);
+          // A copied/serialized current view cannot restore withheld scalars.
+          // Reprojection of a null ordinary scalar still fails as missing; the
+          // exporter preserves its source-owned diagnosis by projecting once.
+          for (const copy of [{ ...row }, JSON.parse(JSON.stringify(row))]) {
+            const again = projectFinancialRow({ ...copy, symbol }, { now, asOfDate: date, market: 'US' });
+            for (const field of FINANCIAL_FIELDS) expect(again[field]).toEqual(expected[field]);
+            if (symbol === 'OWNED') expect(again.financial_current_state.fields.eps_growth_yy.source_validated).not.toBe(true);
+          }
+        }
+        snapshots.push(rows.map(row => ({ values: FINANCIAL_FIELDS.map(field => row[field]), proof: row.financial_current, state: row.financial_current_state })));
+      }
+      return snapshots;
+    };
+    const before = await check();
+    expect(before[0][1].state.fields.eps_growth_yy.reason).toBe('stale_source');
+    expect(before[0][1].state.fields.eps_5yr_cagr.source_validated).toBe(true);
+    expect(before[1][1].state.fields.eps_growth_yy.reason).toBe('missing_evidence');
+    expect(before[2][1].state.fields.eps_growth_yy.reason).toBe('identity_mismatch');
+    execFileSync(process.execPath, [fileURLToPath(new URL('./export-research.mjs', import.meta.url))], { cwd: frontend, env, encoding: 'utf8' });
+    expect(await check()).toEqual(before);
+    const path = join(root, 'raw/OWNED.json'), original = await readFile(path, 'utf8');
+    for (const mutate of [
+      row => { row.eps_growth_yy = 40; },
+      row => { row.financial_current_state.fields.eps_growth_yy = { value: 40, availability: 'current', source_validated: true }; },
+      row => { row.financial_generation = '0'.repeat(64); },
+      row => { row.symbol = 'DIFFERENT'; },
+    ]) {
+      const changed = JSON.parse(original); mutate(changed.fundamentals); await write(path, changed);
+      await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: now + 1000 })).rejects.toThrow('Financial correction');
+      await writeFile(path, original);
+    }
+    await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: originalTime + 8 * day })).rejects.toThrow('expired');
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

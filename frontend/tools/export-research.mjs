@@ -146,7 +146,8 @@ for (const row of rows.values()) {
 for (const [symbol, row] of rows) {
   let canonicalChart=null;
   if (availableCharts.has(symbol)) {
-    canonicalChart=projectFinancialPayload(overlayFinancialChart(await read(paths.get(symbol)),correction,symbol),{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
+    canonicalChart=overlayFinancialChart(await read(paths.get(symbol)),correction,symbol);
+    if (!carry) canonicalChart=projectFinancialPayload(canonicalChart,{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
     Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
     const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
     const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
