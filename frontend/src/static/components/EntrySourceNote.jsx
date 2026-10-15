@@ -1,4 +1,6 @@
-const warningDetail=plan=>`${plan.state==='買いゾーン内'?'アプリの範囲内ですが、':plan.state==='買いゾーン超過'?'アプリの買い上限と、':''}第1冊の約2〜3%目安を超えています。`;
+import { BOOK_SOURCE_PAGE_NOTE, entryUseSourceContext, PIVOT_FOLLOW_SOURCE_TITLE } from '../bookSourceContext';
+
+const warningDetail=plan=>`${plan.state==='買いゾーン内'?'アプリの範囲内ですが、':plan.state==='買いゾーン超過'?'アプリの買い上限と、':''}『${PIVOT_FOLLOW_SOURCE_TITLE}』のピボット追随目安（約2〜3%）を超えています。`;
 
 // Reuse a header's existing text line so the caution is visible before scrolling.
 export function EntrySourceBadge({plan}) {
@@ -10,7 +12,7 @@ export function EntrySourceBadge({plan}) {
 export function EntrySourceDetails({plan}) {
  const source=plan?.sourceContext;
  if(!source)return null;
- return <><p>{source.model} {source.detail}</p><p>書籍目安との比較は価格位置だけです。ベースの成立・売買の適否・全書籍条件の認定ではありません。</p></>;
+ return <><p>{source.model} {source.detail}</p><p>{entryUseSourceContext()}</p><p>{BOOK_SOURCE_PAGE_NOTE}</p><p>書籍目安との比較は価格位置だけです。ベースの成立・売買の適否・全書籍条件の認定ではありません。</p></>;
 }
 
 export default function EntrySourceNote({plan, compact=false, showDetails=true}) {

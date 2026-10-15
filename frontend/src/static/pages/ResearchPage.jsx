@@ -27,6 +27,7 @@ import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
 import { prepareResearchBundle, researchBundleCurrent, researchBundleTemporal } from '../researchPreprocess';
 import '../research.css';
+import { BOOK_SOURCE_PAGE_NOTE, BOOK_SOURCE_SCOPE_NOTE } from '../bookSourceContext';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
@@ -265,7 +266,7 @@ export default function ResearchPage({compareOnly=false}) {
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">{overlap ? `IBD公式リストとの一致：${Math.round(overlap.recall * 100)}%` : '公開ルールに基づく独自スクリーナー'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>資料確認の範囲：今回は『ミネルヴィニの成長株投資法』の一部を照合。ピボット追随は約2〜3%が目安です。第1方式の5%や第2方式の3%は既存アプリ設定で、第2冊の指定値を今回確認したものではありません。第1冊のトレンドテンプレート8条件も確認済み（Kindle表示115/421）。ただし、SMA・21営業日前との上向き比較・252営業日の高安値窓・独自RSの計算はアプリの近似で、原典との完全な同等性は未検証です。</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{BOOK_SOURCE_SCOPE_NOTE} {BOOK_SOURCE_PAGE_NOTE}</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint || personalKey ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : 'エントリー位置の「場中価格を接続する」から自分用APIキーで接続できます。未接続時は日次価格で計算します。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>

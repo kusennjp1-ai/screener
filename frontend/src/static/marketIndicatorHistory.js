@@ -20,28 +20,40 @@ export const MARKET_HISTORY_METRICS = {
   entry_approaches: { label: 'エントリー接近', unit: 'stocks', frequency: 'daily', scope: 'universe' },
 };
 const IDENTITY = ['metric', 'market', 'population', 'method', 'source', 'unit', 'frequency', 'scope', 'instrument', 'approximate'];
+const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const nonempty = s => typeof s === 'string' && s.trim().length > 0;
 export const validHistoryDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
 const validTimestamp = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString() === s.replace(/Z$/, s.includes('.') ? 'Z' : '.000Z');
 const quarterEnd = s => validHistoryDate(s) && /-(03-31|06-30|09-30|12-31)$/.test(s);
 const quarterNumber = s => Number(s.slice(0, 4)) * 4 + Number(s.slice(5, 7)) / 3;
 const validValue = (value, metric) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && (metric === 'put_call_ratio' || Number.isSafeInteger(value));
+const observationsMatch = input => {
+  if (!Array.isArray(input.observations)) return false;
+  // Array.some skips holes. Validate every own slot before accepting any point
+  // in this input series; inherited entries and array-shaped records are not evidence.
+  for (let index = 0; index < input.observations.length; index++) {
+    if (!Object.hasOwn(input.observations, index)) return false;
+    const observation = input.observations[index];
+    if (!record(observation) || IDENTITY.some(key => Object.hasOwn(observation, key) && observation[key] !== input[key])) return false;
+  }
+  return true;
+};
 
 /** A series has one market, population, method and source. Never join unlike histories. */
 export function marketIndicatorHistory(payload, { market, asOfDate, now = Date.now() } = {}) {
   const result = { series: [], issues: [] };
   if (payload == null) return result;
-  if (payload.version !== MARKET_HISTORY_VERSION || !Array.isArray(payload.series) || !nonempty(market) || !validHistoryDate(asOfDate) || !Number.isFinite(now)) {
+  if (!record(payload) || payload.version !== MARKET_HISTORY_VERSION || !Array.isArray(payload.series) || !nonempty(market) || !validHistoryDate(asOfDate) || !Number.isFinite(now)) {
     result.issues.push('履歴の形式または分析基準日を確認できません。');
     return result;
   }
   const grouped = new Map();
-  for (const input of payload.series) {
+  for (let index = 0; index < payload.series.length; index++) {
+    const input = Object.hasOwn(payload.series, index) ? payload.series[index] : null;
     const spec = MARKET_HISTORY_METRICS[input?.metric];
-    if (!spec || !IDENTITY.filter(k => k !== 'approximate').every(k => nonempty(input[k])) ||
+    if (!record(input) || !spec || !IDENTITY.filter(k => k !== 'approximate').every(k => nonempty(input[k])) ||
       typeof input.approximate !== 'boolean' || !['unit', 'frequency', 'scope'].every(k => input[k] === spec[k]) ||
-      (spec.instrument && input.instrument !== spec.instrument) || !Array.isArray(input.observations) ||
-      input.observations.some(o => !o || IDENTITY.some(k => Object.hasOwn(o, k) && o[k] !== input[k]))) {
+      (spec.instrument && input.instrument !== spec.instrument) || !observationsMatch(input)) {
       result.issues.push('市場・母集団・方法・頻度・単位が不明または混在する系列を除外しました。');
       continue;
     }

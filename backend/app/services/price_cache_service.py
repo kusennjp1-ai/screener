@@ -241,12 +241,20 @@ class PriceCacheService:
     def get_many_cached_only(
         self,
         symbols: List[str],
-        period: str = "2y"
+        period: str = "2y",
+        *,
+        miss_reasons: dict[str, str] | None = None,
     ) -> Dict[str, Optional[pd.DataFrame]]:
         """
         Get price data for multiple symbols from cache ONLY.
 
         Efficient bulk operation that doesn't trigger Yahoo API calls.
+
+        ``miss_reasons`` optionally receives per-symbol cache-read omissions:
+        no_rows_in_window, insufficient_rows, incoherent_history, or
+        bulk_read_error. Hits remove any previous reason for that symbol.
+        The mapping is observational only; it never changes returned data,
+        performs another query, or requests provider data.
 
         Args:
             symbols: List of stock symbols
@@ -255,7 +263,10 @@ class PriceCacheService:
         Returns:
             Dict mapping symbol to DataFrame (or None if not cached)
         """
-        results = self._get_many_from_database(symbols, period)
+        if miss_reasons is None:
+            results = self._get_many_from_database(symbols, period)
+        else:
+            results = self._get_many_from_database(symbols, period, miss_reasons=miss_reasons)
         return {symbol: data for symbol, (data, _) in results.items()}
 
     def get_many_cached_only_fresh(
@@ -351,7 +362,9 @@ class PriceCacheService:
     def _get_many_from_database(
         self,
         symbols: list[str],
-        period: str
+        period: str,
+        *,
+        miss_reasons: dict[str, str] | None = None,
     ) -> Dict[str, tuple[Optional[pd.DataFrame], Optional[date]]]:
         """
         Bulk fetch from database for multiple symbols.
@@ -424,6 +437,8 @@ class PriceCacheService:
 
                     if not prices or len(prices) < 50:
                         results[symbol] = (None, None)
+                        if miss_reasons is not None:
+                            miss_reasons[symbol] = "no_rows_in_window" if not prices else "insufficient_rows"
                         continue
 
                     data = {
@@ -440,7 +455,13 @@ class PriceCacheService:
                     df.set_index('Date', inplace=True)
 
                     last_date = prices[-1].date
-                    results[symbol] = (df, last_date) if coherent_history(df) else (None, None)
+                    coherent = coherent_history(df)
+                    results[symbol] = (df, last_date) if coherent else (None, None)
+                    if miss_reasons is not None:
+                        if coherent:
+                            miss_reasons.pop(symbol, None)
+                        else:
+                            miss_reasons[symbol] = "incoherent_history"
 
                 logger.debug(
                     "Bulk DB query chunk %d/%d: %d symbols, %d rows",
@@ -457,6 +478,10 @@ class PriceCacheService:
 
         except Exception as e:
             logger.error(f"Error in bulk database query: {e}", exc_info=True)
+            if miss_reasons is not None:
+                # The existing failure contract discards even earlier chunks.
+                # Reasons must describe the all-None result, not partial hits.
+                miss_reasons.update({symbol: "bulk_read_error" for symbol in symbols})
             return {symbol: (None, None) for symbol in symbols}
 
         finally:

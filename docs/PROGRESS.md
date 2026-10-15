@@ -703,3 +703,76 @@
 - 関連9 files/386成功、全Vitest236 files/2,996成功（exit0、501.94秒）、backend redline275成功、Golden43成功。lint0errors/既存6warnings、build成功/既存chunk警告。実bundleなしのbuild export skipを合成完全export検証と区別。UI component変更なし、ブラウザ未実施。
 - 追加controller203成功/1失敗はumask0077によるmode0600/期待0644。基点と同じcontroller/testを子プロセスのumask0022で対象全111成功。権限assertion/製品設定は変更せず、無条件greenとは記録しない。
 - 一般のコピー後の診断変化は残り、nullからの値復活は認めない。旧exporter hash固定helperは新候補を引き続き拒否。公開承認/条件の更新は今回の対象外。外部取得・archive/Library再試行・push・PR変更・merge・Actions・公開なし。生ログ/差分/入力/hashはprojection-idempotence-20261013へ保存。
+
+
+## 2026-10-13 市場履歴再監査・表示だけの追加修正
+
+基点c789647、private/market-history-audit-20261013。6項目9系列の表示契約が実装済みであることを確認。本番producer/exporter・実データbundleは不在。外部取得なし。
+
+小さい正のP/Cが0表示になる問題を科学表記で防御。既存銘柄別13F表示の欠損TypeError、空欄・文字列・取得不能0の数値らしい表示を未確認へ修正。四半期・購入者数との違いと銘柄identityを明示。institutionalGrowth/集計・財務ルール・公開gateは無変更。
+
+修正前：P/C4失敗、機関19/22失敗。修正後：関連44＋機関31成功（既存9重複）、全Vitest237 files/3023成功、node36成功、独立fixture36成功、13F合成5成功、backend275成功、Golden43成功、lint0 errors/既存6 warnings、build成功/実bundleなしexport skip。ブラウザ市場2＋機関2成功、375/1440px・明暗、外部遮断・合成のみ。画像目視・独立レビューblockingなし。
+
+残件は実producer・当時の母集団・確認済み方法・実データ検証、上流comparatorのnull観測オブジェクト防御（componentまで届く前の問題）、同瞬間Z/.000Zの保守的重複扱い。push/PR/merge/Actions/公開/認証変更なし。検証パッケージ `/workspace/market-history-audit-20261013/`。
+
+
+## 2026-10-13 13F履歴の上流入力防御
+
+68aedd0を保存しprivate/13f-history-guard-20261013で継続。null/非object/誤型/NaN/無効日付/重複期/逆順/疎配列・継承slotを未確認として拒否し、値補完・0化・合格化なし。transportによるarray→recordの正当化も防止。件数safe integer、通常増加/同数0/減少を保持。公表期限/期間日数/財務capture-admission/公開gate/exporterは不変。
+
+修正前node113中18失敗、consumer113中18失敗。後13Fnode114＋市場node36、独立コピー150、関連Vitest293、全Vitest238 files/3137（273.55秒）、backend275、Golden43、13F集計5成功。lint0 errors/既存6 warnings、build成功/実bundle不在export skip。ブラウザ6成功、375/1440px・明暗の全入力は合成で、retained財務データや本番Design実データ検証は未使用/未実施。前回画面確認も同じ区分。独立レビューblockingなし。
+
+PR99はc789647/draft/open/未mergeをread-only確認。68aedd0と今回修正はローカルのみ、push等なし。新market_indicator_history producerは未接続だが既存銘柄別13F producerは別途接続済み。pinned exporterの先行mapはmalformed sourceで引き続き停止するため公開経路全体の修復完了とは扱わない。詳細証拠 `/workspace/13f-history-guard-20261013/`。
+
+
+## 2026-10-13 — 市場履歴の疎配列と13F期間契約の追加修正（ローカルのみ）
+
+基点e02309a、branch private/history-period-contract-20261013。市場履歴のown slot/非配列record検証と、13Fの厳密な暦四半期末・隣接性を追加。通常市場の日付条件、財務capture/admission/判定、fixed exporter、公開条件は変更なし。入力の欠損補完・並べ替えによる救済なし。raw継承slotはJSON化で由来が失われるため対照を区別した。
+
+最終Nodeテストを基点で実行すると183中16失敗、修正後および独立コピー183成功。複数銘柄のraw/list/wire順位とqualifiedOnly、解析したCSVの状態/件数を検証（consumer120成功）。対象コンポーネント43成功。全Vitest238 files/3154成功（271.55秒）、backend275、Golden43、13F集計5成功。lint0 errors/既存6 warnings、build成功・実bundle不在でexport skip。独立15,351期間ペア/156疎配列/40通常日付対照成功。ブラウザ6成功（375/1440px明暗、合成のみ、外部遮断）；非四半期末の100→110社も前期比未確認のまま。実retained data/Design gate検証ではない。
+
+次：新market_indicator_history producerと実データ・当時母集団/出典/確認済み算定方法の接続。既存銘柄別13F producerとは区別する。未知値を合格やゼロに補わない。今回remote操作・外部市場データ取得・公開・認証変更なし。検証パッケージは /workspace/history-period-contract-20261013/ に保存。
+
+
+### 2026-10-13 — 保存済み13Fから市場履歴へのオフラインproducer接続
+
+- 検証済み95ba865と元branchを保持し、private/market-history-producer-20261013へ分離。6項目を再監査し、十分な保存入力がある13Fだけ新契約へ接続。市場全体P/C、当時母集団付き高安、2指数正式履歴、手動ベース、確認済み突破/接近は入力/定義不足のまま。外部取得なし。
+- 明示CLI→provenance付きsnapshot→SHA別immutable保存/catalog→未公開ローカルmanifest→市場ページを追加。取得日/対象期/as-of/cutoff/方法/部分母集団を分離し、銘柄別selectorで市場全体件数との混同を避ける。合成CLI経路で同一参照の手動再試行も検証。
+- null/空欄/0など不明な13F件数はnull、既知同数差分は0。逆順・重複・非四半期末・曖昧CUSIP・疎配列を拒否。元マイクロ秒取得文字列を保持し、表示時刻のみ遅い方の入力取得をミリ秒へ切捨てる。生成日時は取得日に流用しない。
+- 保存済み実集計でAAPL/AMD/NVDA/TSMの全8観測と入力SHAをroot/独立reviewが照合。TGLSは2CUSIPで除外。実snapshot6784b430…f73bf。原SEC ZIP/完全OpenFIGI応答がなく再集計未検証、実manifest attachなし。四半期3月/6月末・cutoff8月31日・9月28日取得であり現在保有とはしない。
+- 全Vitest241 files/3256、Node198、redline275、Golden43成功。関連127・独立対照36も成功し、範囲は重複。lint0errors/既存6warnings、build成功/既存chunk警告、static-data不在でexport skip。Node24/Python3.12はCI版と異なる。
+- ブラウザ新規2＋既存6成功、375/1440px・明暗。すべて合成fixture、外部通信遮断。root/UI担当が画像を目視、独立reviewはコード/対照検証のみ。reviewで検出した逆順観測と再試行不足は修正して再確認。最終blockingなし。
+- 財務capture/admission/ルール、固定exporter、publisher pin、認証、公開条件は変更なし。継続収集/workflow未接続。ファイル毎のatomic書込みであり跨file電源断transactionではない。stale lockは自動削除しない。公開済みreceipt付きbundleへのattach拒否を維持。
+- 次：不足5項目の正式入力/定義と実bundle確認、原資料再集計、catalog世代選択・自動更新は別作業。bd未導入。push/PR/merge/Actions/公開なし。差分・証跡・再現用コピーはmarket-history-producer-20261013へ保存し、既存成果物とは別のLibraryパッケージで報告。
+
+
+### 2026-10-13 — 市場履歴producerの報告数上限・曖昧公開マーカー対策
+
+- ac82cffと前回Library versionを保持し、private/market-history-hardening-20261013へ分離。同じexecutorの切断後復旧と差分保持を確認し継続。別環境移行・新provider取得なし。
+- 原集計のselected[accession]→(CIK,period)、reports_selected=len(selected)、manager_count=distinctCIK、filings=distinctaccession集合を確認。count<=reports_selected、provided count<=filings.length、filings.length<=reports_selectedを必要条件として検証。超過はclampせずhistory/provenanceともnull/unknown。accession prefixからCIK推定なし。
+- filingsはadapterの任意項目。欠落時は旧契約で全報告数上限を適用、存在時は非空/dense/unique/nonblank文字列を必須にする。不正配列・不明/0を既知値へ戻さない。これらは必要条件のみで、selected membershipや原ZIP再集計の証明ではない。
+- nested markets.USの既存5markerをrootと同様に拒否し、拒否時のsnapshot/catalog/manifest全file bytes不変を確認。正式bindingは外部publication.json＋manifestSHA/transportで、元から拒否が有効。nested文字列はruntimeが信頼するauthorityではなく、今回の変更は曖昧入力の保守的hardening。正式公開検証の突破を修正したとは主張しない。
+- 修正前producer67中12失敗、store36中7失敗。修正後producer68/store36、全Vitest241 files/3274、Node219、redline275、Golden43、既存13F集計5成功。fullsuiteは最終producer68を含む。lint0errors/既存6warnings、最終変更ファイルlint0。関連テスト数は重複。独立review追加対照も成功。
+- 合成CLI→保存→manifest→browser2成功（375/1440・明暗）、代表2画像をroot目視。実キャッシュ45987観測に両上限超過0/filings不正0。4銘柄8観測sampleを再生成し前回SHA6784b430…f73bfと同一。原SEC ZIP/原OpenFIGI不在なので再集計未検証。実bundle/Design/admission未検証。
+- UI/元集計/財務capture・admission・ルール/固定exporter/publisherpin/認証/公開gateは無変更。buildと旧browser6はac82cff時点の結果を継承し今回再実行とはしない。公開条件・対象scopeを拡張しない。残る5指標producer、継続収集、世代選択UIは前回のまま未完。
+- 証拠と差分はmarket-history-hardening-20261013、同じLibrary項目の次versionとしてpackage更新。前回ZIP/versionは保持。bd未導入、push/PR/merge/Actions/公開なし。
+
+
+### 2026-10-13 — 書籍出典とアプリ条件の表示訂正（判定不変）
+
+- 基点4e9f8efを保存してprivate/book-source-explanations-20261013へ分離。親の原本確認済み要旨に基づきTT25/30の書名・PDF物理頁、オニールのCAGR/各年増益と現行各年25の違い、売上25 OR 3期加速と現行直近25の違いを表示。CAGR/ORの実装は追加しない。
+- 約2–3%のピボット追随/価格損切り/買増し間隔を各書名・頁に対応づけ、口座リスク率/VCP深度/全冊共通条件との混同を避ける。既存警告state/model/label/境界不変。PDF頁は先頭1で、既存Kindle locatorは無断換算しない。非公開Drive情報や原文は追加なし。
+- 全Vitest241 files/3283、独立比較7752、backend275、Golden43成功。226合成fixture×4方式・順位・CSV32組の全bytes・購入位置/条件等を基点と比較。出典detailだけを除外し判定や数値は保持。最小27files×2でも同digest、他26依存byte一致。IBD完全合格/配分ありportfolio未到達は明記。
+- 関連UI184/共通20は重複範囲。初回全体1失敗は新規testの既存年次条件ラベル誤記であり、期待値だけ訂正して全体再実行成功。lint0errors/既存6warnings、build成功/既存chunk警告・実static-dataなしexport skip。
+- 合成browser4成功、375/1440明暗、20画像、UI担当5枚/root3枚目視。初回の非表示モバイル操作はtestだけ実ヘッダーへ修正。保護1974files一致、build24filesに指定privateID混入なし。独立内容/UI/invarianceレビューにblockingなし。
+- このexecutorでPDF再取得/全文精読、実bundle/本番Design/CI検証なし。Node24/Python3.12はCI版と異なる。財務capture/admission、数値ルール、固定exporter、publisher pin、公開条件は維持。push/PR/merge/Actions/公開/provider取得なし。差分・比較再現copy・生ログ・画像を独立Library検証パッケージへ保存。
+
+
+### 2026-10-13 — オニール原典との比較診断（既存判定不変）
+
+- 327bを保持しprivate/oneil-source-diagnostics-20261013へ分離。同じ環境の復旧・作業保存を確認、別環境/制限迂回なし。銘柄詳細にPDF197のCAGR25＋各年増益、PDF66の売上25 OR 3期加速の診断を追加。現行各年EPS25/最新売上25と並列表示し、既存選定・順位・CSV・購入判定に反映しない。
+- 年次4期はcommon validatorを再利用、正の有限EPSだけを既存decimal/BigInt方針で比較。非正/欠損/重複/不明基準は未確認。72h/550日期限の最終有効msと次msを新欄の局所時計で更新し、共有ルールは変更しない。
+- 最新売上は認証済み正規2桁値の>25 pass/<25 fail/=25 unknown。3期加速は既存admitted系列が不足し本番unknownを維持。合成5→10→20等のpure kernelと三値ORは検証し、raw/scalar救済や新admissionは加えない。
+- 最終全Vitest244files/3429（226.39秒）、core122、UI64、独立9556＋940、backend275、Golden43成功。28依存と保護1975files一致。独立可搬copyで再現。関連件数は重複。lint0errors/既存6warnings、build成功/既存chunk警告。旧中断suiteの重複logは最終証拠に使わず別logで再実行。既存fund testのcount対象だけ元7行へ限定しpass/failなしassert維持。
+- browser4成功、375/1440明暗・合成のみ・外部遮断、32画像。UI4枚/root2枚目視。実static-data不在、実series/本番Design/CI未検証。Node24/Python3.12はCI版と異なる。PDF要旨は親確認済みのものを使い原本再取得なし。
+- 財務capture/admission/ルール・固定exporter・publisher pin・公開条件・認証は不変。原典全体再現とはしない。本番加速枝、実データ検証、既存市場履歴の不足producerは残件。bd不在、push/PR/merge/Actions/provider取得/公開なし。成果物はoneil-source-diagnostics-20261013の新Library項目として保存。

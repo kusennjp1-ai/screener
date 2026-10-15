@@ -12,15 +12,20 @@ export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version', 'summary_storage', 'financial_generation', 'financial_knowledge_basis', 'financial_point_in_time', 'financial_source_publication_date', 'financial_policy_version', 'instrument_applicability_universe'];
 
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
+const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function researchListRow(row) {
   const out = { ...row };
   // Evidence envelopes and raw history belong to immutable on-demand detail.
   delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
-  if (row.institutional_evidence) {
+  if (record(row.institutional_evidence)) {
     // Preserve the validator's dates/unit, not just a precomputed pass flag.
     out.institutional_evidence = pick(row.institutional_evidence, ['symbol', 'status', 'unit', 'publication_cutoff']);
     out.institutional_evidence.observations = Array.isArray(row.institutional_evidence.observations)
-      ? row.institutional_evidence.observations.map(item => pick(item, ['period', 'filing_date_first', 'filing_date_last', 'manager_count'])) : row.institutional_evidence.observations;
+      ? row.institutional_evidence.observations.map((item, index, observations) =>
+        // Do not turn array-shaped records or inherited missing slots into
+        // valid own records. Missing slots remain missing (null on JSON wire).
+        Object.hasOwn(observations, index) ? record(item) ? pick(item, ['period', 'filing_date_first', 'filing_date_last', 'manager_count']) : item : undefined)
+      : row.institutional_evidence.observations;
   }
   if (row.entry_evidence) out.entry_evidence = {
     as_of_date: row.entry_evidence.as_of_date,

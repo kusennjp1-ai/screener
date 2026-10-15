@@ -5,11 +5,14 @@ import { observation, series, payload } from '../../tools/fixtures/market-histor
 // Synthetic route responses only. No market-data providers or live application APIs.
 const date = '2026-10-09';
 const history = payload(
-  series('put_call_ratio', { observations: [observation(.72, '2026-10-08'), observation(null)] }),
+  series('put_call_ratio', { observations: [observation(.0000001, '2026-10-07'), observation(.72, '2026-10-08'), observation(null)] }),
   series('new_highs', { observations: [observation(0), observation(1)] }),
   series('new_highs', { population: 'second-synthetic-universe', observations: [observation(2)] }),
   series('new_lows'), series('new_lows', { market: 'HK' }),
   series('distribution_sp500', { observations: [observation(3, '2026-10-08')] }),
+  // JSON replaces a sparse array hole with null; inherited slots and named
+  // array properties are exercised as raw props in the component tests.
+  series('distribution_nasdaq', { observations: [null] }),
   series('institutional_holders', { observations: [observation(100, '2026-03-31'), observation(110, '2026-06-30')] }),
   series('base_count', { observations: [observation(2, '2026-09-30')] }),
   series('entry_breakouts'), series('entry_approaches', { observations: [{ ...observation(4), collected_at: null }] }),
@@ -52,6 +55,7 @@ for (const width of [1440, 375]) test(`market history missing, zero, quarterly a
   await expect(region.getByRole('heading', { level: 3 })).toHaveCount(6);
   await expect(region.getByText(/Nasdaq Composite 売り抜け日：比較可能な履歴は未取得/)).toBeVisible();
   await expect(region.getByText(/選択市場と異なる履歴を除外/)).toBeVisible();
+  await expect(region.getByText('市場・母集団・方法・頻度・単位が不明または混在する系列を除外しました。', { exact: true })).toBeVisible();
   await expect(region.getByText('同一対象日の重複が矛盾', { exact: true })).toBeVisible();
   await expect(region.getByRole(width === 375 ? 'list' : 'table', { name: '新高値の履歴', exact: true })).toHaveCount(2);
   await expect(region.getByRole(width === 375 ? 'list' : 'table', { name: '新安値の履歴', exact: true }).getByText('0', { exact: true })).toBeVisible();
@@ -88,6 +92,11 @@ for (const width of [1440, 375]) test(`market history missing, zero, quarterly a
     await setTheme(theme);
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(theme, 'before-scroll');
+    const smallRatio = region.getByRole(width === 375 ? 'list' : 'table', { name: 'プットコールレシオの履歴', exact: true }).getByText('1E-7', { exact: true });
+    await expect(smallRatio).toBeVisible();
+    await smallRatio.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await safeBox(smallRatio, `${theme}-small-positive-ratio`);
+    await capture(theme, 'history-small-positive-after-scroll');
     const approach = region.getByRole(width === 375 ? 'list' : 'table', { name: 'エントリー接近の履歴', exact: true });
     await approach.evaluate(el => el.scrollIntoView({ block: 'start' }));
     await safeBox(approach, `${theme}-status-reason`);

@@ -119,3 +119,58 @@ React実画面はローカルViteと合成ルート応答だけで確認した�
 
 
 追加修正後の最終検証：全Vitest 232 files / 2935 passed、関連2 files / 15 passed、依存不要node 36 passed、Playwright 2 passed（各375/1440pxでdark/light）。lint 0 errors / 既存6 warnings、build成功／既存chunk警告。内部表幅・カード欄・上下ナビとfocusの実測も成功。backend/13F/goldenは上記91e1495時点の結果を引き継ぎ、表示修正後の再実行結果とは区別する。Libraryにはこの差分・ログと、別項目に最終32枚＋修正前2枚を保存する。
+
+
+## 2026-10-13 再監査（c789647 基点・ローカルのみ）
+
+6項目9系列の表示契約・欠損処理は現コードに存在するが、`payload.market_indicator_history` を生成する本番producer/exporterは依然としてない。実データbundleもこの環境にはない。上記の初回監査表の「実装なし」は当時のbaselineの説明であり、現在は表示の受け口と未取得表示が実装済みである。市場全体P/C、指数別売り抜け履歴、突破/接近の確認済み定義と継続収集、銘柄別13F/手動ベースの履歴連携は未完了。
+
+表示だけの追加修正：
+
+- 許可された小さい正のP/C（例 `0.0000001`）が小数4桁の丸めで「0」になっていた。0に丸められる正数だけ科学表記（`1E-7`）にし、実測0と整数件数の表示を維持。数値契約・閾値・算定方法は変えない。
+- 既存銘柄詳細の `InstitutionalEvidence` は `manager_count.toLocaleString()` を無条件で呼んでいたため、null/欠落でエラー、空文字で「社」、文字列0で「0社」と表示された。正の整数以外を未確認にし、既存13F producer/comparatorの意味（報告なしは不明、同数の差分0は有効）を維持。四半期の報告運用会社数であり実際の購入者数ではないことを明示。
+- 別銘柄の資料は表示せず、コンポーネント入口の壊れた観測配列は比較不能として扱う。既存 `institutionalGrowth`、13F集計、財務capture/admission/ルール、公開gateは無変更。
+
+今回の画面検証はローカルViteと外部リクエストを遮断した合成応答のみ。375px/1440px、明暗テーマで実画面を確認。公開用design承認や実市場データの正しさを認定するものではない。
+
+残る境界：既存 `institutionalGrowth` 自体へ `observations:[null,...]` を直接渡すと例外になり得る。今回のUI入口guardは上流の全consumerの修復を意味しない。新しい市場履歴契約の同一時刻 `Z` と `.000Z` は厳密文字列の違いとして競合扱いを維持し、false missingになり得る。いずれも値を合格・ゼロへ補う方向には変更していない。
+
+今回の検証ログ・差分・画像は `/workspace/market-history-audit-20261013/` の検証パッケージに記録する。以前の実行結果と今回の実行結果は分ける。
+
+
+## 2026-10-13 追加：13F観測オブジェクトの上流防御
+
+前項のnull観測による実行時consumerの例外は追加修正で対処した。`institutionalGrowth` は非object/配列型のenvelope・観測、own要素が揃わない長さ2の配列、空symbol、安全な正整数でない件数を比較不能として拒否する。既存の日付実在性、公表期限、89–92日の期間間隔、45–180日の年齢条件は変更しない。未知値は `increasing:null / delta:null` のまま。期間の並べ替え、重複排除、補間、欠損からの0・合格生成は行わない。
+
+`researchListRow` でも配列型の偽装recordを通常objectへ変換せず、継承された欠落slotを有効なown観測に変換しない。raw/list/wire JSON後のassessment、順位付け、CSVで拒否を確認する。コンポーネントの社数表示も安全な正整数に揃える。
+
+境界：固定された `export-research.mjs` は変更していない。同exporterの観測分解はcomparatorより先に実行されるため、malformed sourceでは依然としてexportが例外で停止する。これはゼロや合格を出力する挙動ではなく、この追加修正でproducerから公開まで全面修復したという主張はしない。既存の銘柄別13F producerは接続済みで、**未接続なのは新しい `market_indicator_history` producer**。
+
+前回68aedd0と今回の375/1440px・明暗ブラウザ画像はすべてコード内の合成fixtureに由来する。実retained財務archiveやLibraryの金融captureを入力に使用していない。本番Designゲートの実データ検証、公開承認、財務admissionを実施したものではない。PR99は読み取り時点でc789647/draft/open/未merge。68aedd0と後続の修正はローカル私有ブランチにのみ保存し、pushは行わない。
+
+
+## 2026-10-13 追加：市場履歴の配列境界・13F暦四半期
+
+前項で維持していた13Fの89–92日差条件は、03-30→06-29などを誤受理したため今回修正した。`institutionalGrowth` は実在する暦四半期末と隣接四半期番号を必須とする。これは13Fの報告期間契約の検証であり、新しい金融閾値の追加ではない。45–180日の年齢・公表集計期限・提出日などは維持し、通常市場のdaily/manualやEPS会計期間へ規則を拡張しない。
+
+新しい市場履歴の受け口は、envelope/series/observationの配列擬似recordと、own slotのないseries/observationsを拒否する。不正fragmentの正常そうな前半も取り込まず、独立した正常fragmentは元の日付で残す。疎配列による例外はなくなり、欠損からゼロを作らない。配列にnamed propertyを付けた値は通常のJSONでは保持されず、普通のholeはnullになる。一方、継承された数値indexはJSON化時にown値として実体化するため、元の所有関係を後から復元できない。この違いをraw/JSON対照で明示する。
+
+機関保有者のconsumerテストは、1銘柄の出力ラベル確認から、複数銘柄の順位・qualifiedOnly・CSV解析後のqualified/passed/unknown/failed_count/unknown_count/method_status/ルール値の確認へ拡張した。CSVに存在しない13F差分カラムは追加せず、差分値は実comparatorで別途検証する。
+
+最終検証はNode183（基点では16失敗）、consumer120、component43、全Vitest3154/238 files、backend275、Golden43、13F集計5、ブラウザ6成功。独立レビューの15,351期間ペア・156疎配列・40通常市場日付も成功。ブラウザ画像と金融proofはすべて合成fixture、実retained archiveや本番Design gateは未検証。固定exporter、財務capture/admission、公開gateは変更しない。新market_indicator_historyの実producer接続が未完了である範囲も変わらない。
+
+
+## 2026-10-13 追加：保存済み13Fのオフラインproducer接続
+
+前節の未接続範囲のうち、保存済みSEC/OpenFIGI入力がある銘柄別保有者履歴を、新しい明示CLI・SHA別保存・未公開manifest参照・市場画面へ接続した。既存の固定exporterとworkflowは変更しない。詳細・6項目監査・実行方法は [MARKET_HISTORY_PRODUCER.md](MARKET_HISTORY_PRODUCER.md)。
+
+市場全体P/C、当時母集団付き高安、S&P500/Nasdaqそれぞれの正式履歴、手動ベース、確認済み突破/接近は引き続き未接続。取得できない数を0にせず、既存proxyを正確なIBD式へ昇格しない。13Fも報告運用会社CIKの四半期数であり、実購入者数ではない。
+
+全Vitest3256/241 files、Node198、redline275、Golden43、合成browser2＋既存6成功。保存済み実集計の4銘柄8観測は元入力と一致し、曖昧CUSIPのTGLSは未確認。原ZIP再集計、実bundle attach、実データ画面、本番Design/admissionは未検証。UI画像は合成入力に限定する。
+
+
+## 2026-10-13 追加：報告件数の必要上限
+
+オフライン13F producerは原集計のselected accession総数と、提供された任意のfilings配列に基づく必要上限を検証する。超過/矛盾はnull/unknown、欠落は0にしない。filings一覧の実在・selected所属や元CIK再集計を保証するものではない。詳細契約は [MARKET_HISTORY_PRODUCER.md](MARKET_HISTORY_PRODUCER.md)。保存先のnested publication marker拒否は曖昧入力への保守的対処で、正式な外部receipt保護を破った問題の修正という主張ではない。
+
+今回全Vitest3274/241 files、Node219、redline275、Golden43、13F集計5、合成browser2成功。UIコードと財務/公開条件は無変更。前回build/旧browser6件の結果とは区別する。

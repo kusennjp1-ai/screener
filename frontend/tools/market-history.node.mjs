@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { marketIndicatorHistory, MARKET_HISTORY_GROUPS } from '../src/static/marketIndicatorHistory.js';
 import { buildBookMarketEvidence, breakoutHistoryStatus } from '../src/static/bookMarketEvidence.js';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
-import { options, observation, series, payload, allMetricsFixture, priceFixture } from './fixtures/market-history.mjs';
+import { options, observation, series, payload, allMetricsFixture, priceFixture, invalidMarketObservationCases } from './fixtures/market-history.mjs';
 
 const inspect = input => marketIndicatorHistory(input, options);
 const latest = input => inspect(payload(input)).series[0].latest;
@@ -12,6 +12,54 @@ const latest = input => inspect(payload(input)).series[0].latest;
 test('covers six requested groups, with each index and entry state separate', () => {
   assert.equal(MARKET_HISTORY_GROUPS.length, 6);
   assert.equal(inspect(allMetricsFixture()).series.length, 9);
+});
+for (const entry of invalidMarketObservationCases()) test(`rejects malformed observations without adopting their values: ${entry.name}`, () => {
+  const raw = payload(series('new_highs', { observations: entry.observations }));
+  const inputs = entry.rawOnly ? [raw] : [raw, JSON.parse(JSON.stringify(raw))];
+  for (const input of inputs) {
+    const result = inspect(input);
+    assert.equal(result.series.length, 0);
+    assert.ok(result.issues.length > 0);
+  }
+});
+test('array-shaped payloads and series never become record evidence', () => {
+  for (const input of [Object.assign([], payload(series('new_highs', { observations: [observation(7)] }))), payload(Object.assign([], series('new_highs', { observations: [observation(7)] })))]) {
+    assert.equal(inspect(input).series.length, 0);
+    assert.ok(inspect(input).issues.length > 0);
+    assert.equal(inspect(JSON.parse(JSON.stringify(input))).series.length, 0);
+  }
+});
+test('an inherited series is rejected while independent own series remain intact', () => {
+  const input = payload(series('new_lows'));
+  input.series.length = 2;
+  Object.setPrototypeOf(input.series, Object.assign(Object.create(Array.prototype), { 1: series('new_highs', { observations: [observation(7)] }) }));
+  const result = inspect(input);
+  assert.deepEqual(result.series.map(item => item.metric), ['new_lows']);
+  assert.equal(result.series[0].latest.value, 0);
+  assert.ok(result.issues.length > 0);
+});
+test('a malformed fragment is excluded in full without erasing a valid fragment', () => {
+  const observations = [observation(7)]; observations.length = 2;
+  const good = series('new_highs', { observations: [observation(0, '2026-10-08')] });
+  const bad = series('new_highs', { observations });
+  for (const input of [payload(good, bad, series('new_lows')), payload(bad, good, series('new_lows'))]) {
+    const result = inspect(input), highs = result.series.find(item => item.metric === 'new_highs');
+    assert.equal(highs.latest.value, 0);
+    assert.equal(highs.latest.date, '2026-10-08');
+    assert.equal(highs.historical, true);
+    assert.equal(highs.points.length, 1);
+    assert.equal(result.series.length, 2);
+    assert.ok(result.issues.length > 0);
+  }
+  assert.equal(observations.length, 2);
+  assert.equal(Object.hasOwn(observations, 1), false);
+});
+test('daily and manual dates do not inherit 13F quarter-end restrictions', () => {
+  for (const metric of ['put_call_ratio', 'new_highs', 'new_lows', 'distribution_sp500', 'distribution_nasdaq', 'entry_breakouts', 'entry_approaches', 'base_count']) {
+    const result = inspect(payload(series(metric, { observations: [observation(7, '2026-06-29')] }))).series[0];
+    assert.equal(result.latest.value, 7, metric);
+    assert.equal(result.latest.date, '2026-06-29', metric);
+  }
 });
 test('missing payload, unsupported version and bad analysis dates never produce values', () => {
   assert.deepEqual(inspect(null), { series: [], issues: [] });

@@ -6,10 +6,31 @@ import { assess } from '../researchEngine';
 import { entryReadiness } from '../entryReadiness';
 import { withAuditFixture } from '../testAuditFixture';
 import ResearchDetail from './ResearchDetail';
+import { financialSourceContext, trendTemplateSourceContext } from '../bookSourceContext';
+import { nativeAnnualFixture } from '../../test/fixtures/nativeAnnual';
+import { withFinancialProof } from '../testFinancialFixture';
 vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>}));
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
+it('passes the selected full row to the diagnostic panel without changing selection or purchase results', () => {
+ const date='2026-10-02',now=Date.parse('2026-10-04T12:00:00Z');
+ vi.useFakeTimers(); vi.setSystemTime(now);
+ const selected=withFinancialProof({...row,symbol:'TEST',financial_history:nativeAnnualFixture('CAD',[1,1.2,1.5,2]),eps_growth_yy:30,sales_growth_yy:20},now,date);
+ const input={...props,method:'oneil',date,now,selected,version:'diagnostics',onVerificationToggle:vi.fn()};
+ const financialEvidence=buildFinancialEvidencePresentation(selected,{...input,generation:input.version});
+ const before=structuredClone(selected),checks=assess(selected,'oneil',now),purchase=entryReadiness(selected,date,props.market,now,'oneil');
+ const {rerender}=render(<ResearchDetail {...input} financialEvidence={financialEvidence}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
+ fireEvent.click(screen.getByText('原典との比較（診断のみ）'));
+ expect(screen.getByRole('region',{name:'原典の年次EPS条件'})).toHaveTextContent('25.99%');
+ expect(assess(selected,'oneil',now)).toEqual(checks);
+ expect(entryReadiness(selected,date,props.market,now,'oneil')).toEqual(purchase);
+ expect(selected).toEqual(before);
+ rerender(<ResearchDetail {...input} selected={{...selected,symbol:'OTHER'}} financialEvidence={financialEvidence}/>);
+ expect(screen.getByRole('region',{name:'原典の年次EPS条件'})).toHaveAttribute('data-state','unknown');
+ expect(screen.getByRole('region',{name:'原典の年次EPS条件'})).not.toHaveTextContent('25.99%');
+});
 it('distinguishes selection and purchase evidence dates without inventing a missing source', () => {
  const selected={...row,as_of_date:'2026-09-30',entry_evidence:{as_of_date:'2026-09-29'}};
  render(<ResearchDetail {...props} selected={selected} version="g2"/>);
@@ -47,7 +68,7 @@ it('moves focus from the purchase shortcut to its selected tab and supports arro
  fireEvent.keyDown(screen.getByRole('tab',{name:'財務・機関'}),{key:'Home'});
  expect(screen.getByRole('tab',{name:'判定根拠'})).toHaveFocus();
 });
-it.each([103.2,112.7])('shows the first-book caution beside the company before the inline chart at %s',price=>{
+it.each([103.2,112.7])('shows the named pivot-follow source caution beside the company before the inline chart at %s',price=>{
  const {container}=render(<ResearchDetail {...props} selected={{...row,current_price:price}}/>);
  const header=container.querySelector('.research-symbol-head');
  const warning=within(header).getByRole('note',{name:/書籍の追随目安外/});
@@ -59,7 +80,7 @@ it.each([103.2,112.7])('shows the first-book caution beside the company before t
  expect(screen.getByText('アプリ設定と書籍の確認範囲')).toBeInTheDocument();
  if(price>105)expect(warning).not.toHaveAttribute('aria-label',expect.stringContaining('アプリの範囲内'));
 });
-it.each([[103,'minervini'],[104,'minervini2'],[104,'oneil']])('does not add a first-book header warning at %s for %s',(price,method)=>{
+it.each([[103,'minervini'],[104,'minervini2'],[104,'oneil']])('preserves the existing source-warning scope at %s for %s',(price,method)=>{
  const {container}=render(<ResearchDetail {...props} method={method} selected={{...row,current_price:price}}/>);
  expect(within(container.querySelector('.research-symbol-head')).queryByRole('note')).not.toBeInTheDocument();
 });
@@ -68,11 +89,24 @@ it.each(['minervini','minervini2'])('explains the checked source and implementat
  render(<ResearchDetail {...props} method={method} selected={row}/>);
  const disclosure=screen.getByText('トレンド条件の出典とアプリの近似').closest('details');
  expect(disclosure).not.toHaveAttribute('open');
- expect(disclosure).toHaveTextContent(method==='minervini'?'近似判定8件と独自の日足品質確認1件':'第2冊の25%指定は未確認');
+ expect(disclosure).toHaveTextContent(trendTemplateSourceContext(method));
+ expect(disclosure).toHaveTextContent(method==='minervini'?'PDF 151–152頁':'PDF 221–222頁');
+ expect(disclosure).not.toHaveTextContent(/第[12]冊|Kindle表示/);
 });
 it.each(['oneil','ibd'])('keeps source disclosure scoped away from %s',method=>{
  render(<ResearchDetail {...props} method={method} selected={row}/>);
  expect(screen.queryByText('トレンド条件の出典とアプリの近似')).not.toBeInTheDocument();
+});
+it('explains the O’Neil source and unchanged app conditions in both evidence tabs',()=>{
+ render(<ResearchDetail {...props} method="oneil" selected={row} onVerificationToggle={vi.fn()}/>);
+ const source=screen.getByText('オニール財務条件の出典とアプリの範囲').closest('details');
+ expect(source).not.toHaveAttribute('open');
+ expect(source).toHaveTextContent(financialSourceContext('oneil'));
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('A：直近3年の各年 EPS 成長率 ≥ 25%（最小値）');
+ fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
+ const panel=screen.getByRole('region',{name:'財務の判定根拠'});
+ expect(within(panel).getByText('オニール財務条件の出典とアプリの範囲').closest('details')).toHaveTextContent(financialSourceContext('oneil'));
+ expect(panel).toHaveTextContent('年率複利や加速とのOR条件へ判定を切り替えたものではありません');
 });
 
 it('keeps financial evidence inside the existing financial tab and retains the chart and entry arrangement', () => {

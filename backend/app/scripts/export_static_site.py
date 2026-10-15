@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Literal
 
 from app.config import settings
@@ -45,6 +46,10 @@ STATIC_EXPORT_MARKETS = market_registry.supported_market_codes()
 STATIC_DEFAULT_MARKET = "US"
 STATIC_EXPORT_SKIPPED_EXIT_CODE = 78
 STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE = 79
+CHART_OMISSION_REASONS = (
+    "no_rows_in_window", "insufficient_rows", "incoherent_history",
+    "bulk_read_error", "no_serializable_bars",
+)
 
 
 def _default_output_dir() -> Path:
@@ -177,6 +182,75 @@ def _write_market_diagnostics(output_dir: Path, market: str, snapshot: dict[str,
         encoding="utf-8",
     )
     return diagnostics_path
+
+
+def _write_chart_omission_diagnostics(
+    output_dir: Path,
+    market: str,
+    chart_omissions: dict[str, dict[str, str]],
+    *,
+    export_completed: bool,
+) -> Path:
+    """Write a separate CI diagnostic, never a published market asset.
+
+    A failed export may have only partial observations, or none if chart
+    processing never began. Do not infer coverage from an empty failure report.
+    """
+    market = market.upper()
+    if market not in STATIC_EXPORT_MARKETS:
+        raise ValueError("Unsupported chart diagnostic market")
+    reasons = dict(chart_omissions.get(market, {}))
+    if any(reason not in CHART_OMISSION_REASONS for reason in reasons.values()):
+        raise ValueError("Unsupported chart omission reason")
+    diagnostics_root = Path(output_dir) / "diagnostics"
+    diagnostics_dir = diagnostics_root / market.lower()
+    destination = diagnostics_dir / "cache-only-chart-omissions.json"
+    # --no-clean may encounter existing paths. Never follow a diagnostic
+    # symlink into the published market subtree or another destination.
+    if any(path.is_symlink() for path in (diagnostics_root, diagnostics_dir, destination)):
+        raise ValueError("Chart diagnostic path must not be a symlink")
+    payload = {
+        "schema_version": "cache-only-chart-omissions-v1",
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "market": market,
+        "export_completed": export_completed,
+        "chart_bundle_started": market in chart_omissions,
+        "omitted_symbols_count": len(reasons),
+        "counts_by_reason": {reason: sum(value == reason for value in reasons.values())
+                             for reason in CHART_OMISSION_REASONS},
+        "omissions": reasons,
+    }
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=diagnostics_dir,
+                                prefix=".chart-omissions-", suffix=".tmp", delete=False) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        temporary_path.replace(destination)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    return destination
+
+
+def _try_write_chart_omission_diagnostics(
+    output_dir: Path,
+    market: str,
+    chart_omissions: dict[str, dict[str, str]],
+    *,
+    export_completed: bool,
+) -> None:
+    """Keep diagnostic I/O failures independent of the export's outcome."""
+    try:
+        _write_chart_omission_diagnostics(
+            output_dir, market, chart_omissions, export_completed=export_completed,
+        )
+    except Exception:
+        try:
+            print("  - warning: chart omission diagnostics could not be written")
+        except Exception:
+            pass  # A broken output stream must not mask export errors either.
 
 
 def _refresh_static_daily_prices(
@@ -724,6 +798,15 @@ def main() -> int:
             clean=not args.no_clean,
         )
     else:
+        chart_omissions: dict[str, dict[str, str]] = {}
+        export_completed = False
+        if args.market:
+            # Invalidate an older successful report before runtime/refresh can
+            # fail or return early (including --no-clean and non-trading days).
+            _try_write_chart_omission_diagnostics(
+                Path(args.output_dir), args.market, chart_omissions,
+                export_completed=False,
+            )
         prepare_runtime()
 
         if args.prices_only:
@@ -756,14 +839,18 @@ def main() -> int:
                 )
                 return STATIC_EXPORT_SKIPPED_EXIT_CODE
 
-        service = StaticSiteExportService(SessionLocal)
         try:
+            service = (
+                StaticSiteExportService(SessionLocal, chart_omissions=chart_omissions)
+                if args.market else StaticSiteExportService(SessionLocal)
+            )
             result = service.export(
                 Path(args.output_dir),
                 clean=not args.no_clean,
                 markets=((args.market,) if args.market else None),
                 write_manifest=args.market is None,
             )
+            export_completed = True
         except NoPublishedStaticMarketArtifact:
             if args.prices_only:
                 print(
@@ -788,6 +875,12 @@ def main() -> int:
                 )
                 return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
             raise
+        finally:
+            if args.market:
+                _try_write_chart_omission_diagnostics(
+                    Path(args.output_dir), args.market, chart_omissions,
+                    export_completed=export_completed,
+                )
 
     print("Static site export complete:")
     print(f"  - output_dir: {result.output_dir}")

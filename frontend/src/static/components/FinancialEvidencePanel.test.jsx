@@ -1,11 +1,12 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import FinancialEvidencePanel from './FinancialEvidencePanel';
 import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
 import { nativeAnnualFixture } from '../../test/fixtures/nativeAnnual';
 import { withFinancialProof } from '../testFinancialFixture';
+import { financialSourceContext } from '../bookSourceContext';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 const props = { symbol: 'TEST', date: '2026-10-02', generation: 'fixture', method: 'oneil', now: Date.parse('2026-10-03T12:00:00Z') };
 const observation = { value: 30, unit: 'percent_points', availability: 'current', source: 'Test provider', basis: 'selected-quarter-yoy',
   period_end: '2026-06-30', comparable_period_end: '2025-06-30', observed_at: '2026-10-03T11:00:00Z', valid_until: '2026-10-10T11:00:00Z',
@@ -13,6 +14,39 @@ const observation = { value: 30, unit: 'percent_points', availability: 'current'
 const evidence = { schema: FINANCIAL_PRESENTATION_SCHEMA, symbol: 'TEST', as_of_date: props.date, generation: 'fixture', method: 'oneil',
   evaluated_at: '2026-10-03T12:00:00Z', valid_until: '2026-10-10T11:00:00Z', metrics: { eps_growth_yy: observation },
   historical: [{ ...observation, id: 'eps_growth_yy', value: 282.48, observed_at: '2026-06-13T12:00:00Z', reason: 'stale_source' }] };
+
+it('adds diagnostics only for O’Neil without changing the existing financial rows or required counts', () => {
+  const now = Date.parse('2026-10-04T12:00:00Z');
+  vi.useFakeTimers(); vi.setSystemTime(now);
+  const row = withFinancialProof({ eps_growth_yy: 30, sales_growth_yy: 20, technical_audit: { as_of_date: props.date }, financial_history: nativeAnnualFixture('CAD', [1, 1.2, 1.5, 2]) }, now, props.date);
+  const input = { ...props, now, row, history: row.financial_history, evidence: buildFinancialEvidencePresentation(row, { ...props, now }) };
+  const { container, rerender } = render(<FinancialEvidencePanel {...input}/>);
+  const summary = screen.getByText('財務の必須条件 3件 · 未達 2件 · 未確認 0件');
+  const originalRows = container.querySelector('.financial-evidence-rows').innerHTML;
+  fireEvent.click(screen.getByText('原典との比較（診断のみ）'));
+  expect(screen.getByRole('region', { name: '原典の年次EPS条件' })).toHaveAttribute('data-state', 'pass');
+  expect(summary).toHaveTextContent('未達 2件');
+  expect(container.querySelector('.financial-evidence-rows').innerHTML).toBe(originalRows);
+  expect(container.querySelector('.financial-evidence-rows').children).toHaveLength(7);
+  for (const method of ['minervini', 'minervini2', 'ibd']) {
+    rerender(<FinancialEvidencePanel {...input} method={method}/>);
+    expect(screen.queryByText('原典との比較（診断のみ）')).not.toBeInTheDocument();
+  }
+});
+
+it('shows the confirmed O’Neil financial source separately from observations and scopes it to that method',()=>{
+ const {rerender}=render(<FinancialEvidencePanel {...props} evidence={evidence}/>);
+ const source=screen.getByText('オニール財務条件の出典とアプリの範囲').closest('details');
+ expect(source).not.toHaveAttribute('open');
+ expect(source).toHaveTextContent(financialSourceContext('oneil'));
+ expect(source).toHaveTextContent('より厳しい独自条件');
+ expect(source).toHaveTextContent('より狭い独自条件');
+ expect(source).not.toHaveTextContent(/drive\.google|https?:|第[12]冊/);
+ for(const method of ['minervini','minervini2','ibd']){
+  rerender(<FinancialEvidencePanel {...props} method={method}/>);
+  expect(screen.queryByText('オニール財務条件の出典とアプリの範囲')).not.toBeInTheDocument();
+ }
+});
 
 it('retains financial not-applicable states with provenance displayed', () => {
   const fund={symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF'};
