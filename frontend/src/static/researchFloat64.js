@@ -9,7 +9,11 @@ const bytesFromBase64 = (text, expected) => {
   if (typeof text !== 'string' || text.length !== 4 * Math.ceil(expected / 3) || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) throw Error('Invalid Float64 encoding');
   const binary = atob(text);
   if (binary.length !== expected || btoa(binary) !== text) throw Error('Invalid Float64 byte count');
-  return Uint8Array.from(binary, character => character.charCodeAt(0));
+  // atob returns one code unit per byte. Fill the typed array directly rather
+  // than materializing the string iterator and calling a mapper per byte.
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 };
 export { base64 as encodeResearchBytes, bytesFromBase64 as decodeResearchBytes };
 

@@ -1,4 +1,4 @@
-const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+import { validEvidenceDay as validDate } from './evidenceTime.js';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 // 13F period_end is the calendar reporting quarter, not a filing date or a
 // fiscal quarter. Keep this restriction out of ordinary daily/manual histories.

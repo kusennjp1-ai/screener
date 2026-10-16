@@ -1,8 +1,8 @@
+import { validEvidenceDay as validDate } from './evidenceTime.js';
 // Independent verification from published daily OHLCV, never from pass flags.
 export const AUDIT_VERSION = 'ohlcv-v1';
 const number = v => typeof v === 'number' && Number.isFinite(v);
 const positive = v => number(v) && v > 0;
-const validDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
 export function auditDailyBars(row, payload, date) {
   const errors = [];
   if (!validDate(date)) errors.push('分析基準日が不正');

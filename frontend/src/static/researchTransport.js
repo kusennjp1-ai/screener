@@ -258,10 +258,12 @@ export function decodeResearchIndex(value) {
     // Restore signs before dependent copy/factor columns consume this vector.
     for (const [row, path] of negativeZeros.get(column) || []) cells[row] = restoreNegativeZero(cells[row], path);
     decoded.push(cells);
+    // A column has one path: avoid allocating a prefix array for every row.
+    const parentPath = path.slice(0, -1), key = path.at(-1);
     rows.forEach((row, i) => {
       if (cells[i] === undefined) return;
       let target = row;
-      for (const key of path.slice(0, -1)) {
+      for (const key of parentPath) {
         if (!Object.hasOwn(target, key)) {
           target[key] = {};
           branches.add(target[key]);
@@ -271,7 +273,6 @@ export function decodeResearchIndex(value) {
       // Only decoder-created branches may be traversed. A cell is atomic,
       // including arrays and empty objects. Prefixes can occur on different
       // rows, but cannot merge with or overwrite a cell in the same row.
-      const key = path.at(-1);
       if (Object.hasOwn(target, key)) throw Error('Conflicting research fields');
       target[key] = cells[i];
     });

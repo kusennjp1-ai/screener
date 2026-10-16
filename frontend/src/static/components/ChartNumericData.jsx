@@ -2,7 +2,8 @@ import { useId, useMemo, useState } from 'react';
 import './chartNumericData.css';
 
 const fields = [['open', '始値'], ['high', '高値'], ['low', '安値'], ['close', '終値'], ['volume', '出来高']];
-const value = n => typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString('ja-JP', { maximumFractionDigits: 6 }) : '未確認';
+const valueFormatter = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 6 });
+const value = n => typeof n === 'number' && Number.isFinite(n) ? valueFormatter.format(n) : '未確認';
 
 // Presentation only: use the same identity-checked daily payload as the chart.
 // The caller keys this view by symbol/publication so a selection cannot leak.

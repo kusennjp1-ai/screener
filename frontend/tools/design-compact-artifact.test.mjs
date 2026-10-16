@@ -6,7 +6,7 @@ const workflow = readFileSync(new URL('../../.github/workflows/design-acceptance
 const compact = workflow.split('      - name: Preserve compact Design review screenshots and report\n')[1];
 
 describe('compact Design review artifact', () => {
-  it('retains only top-level reports and screenshots, including failed runs', () => {
+  it('retains only top-level reports, screenshots and two named CPU profiles, including failed runs', () => {
     expect(compact).toBeDefined();
     expect(compact).toContain('        if: always()\n');
     expect(compact).toContain('        uses: actions/upload-artifact@v4\n');
@@ -18,6 +18,8 @@ describe('compact Design review artifact', () => {
       'frontend/test-results/design-review/summary.md',
       'frontend/test-results/design-review/financial-carry-evidence.json',
       'frontend/test-results/design-review/*.png',
+      'frontend/test-results/design-review/diagnostic-initial-1440.cpuprofile',
+      'frontend/test-results/design-review/diagnostic-method-1440.cpuprofile',
     ]);
     expect(compact).toContain('          retention-days: 7\n');
     expect(compact).toContain('          if-no-files-found: warn\n');

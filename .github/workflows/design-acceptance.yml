@@ -232,7 +232,7 @@ jobs:
             ${{ runner.temp }}/design-transport.log
           retention-days: 14
       # Keep the normal review download separate from large profiling/source evidence.
-      # Only top-level report files and the harness's bounded PNG captures belong here.
+      # Only reports, bounded PNG captures and the two named CPU profiles belong here.
       - name: Preserve compact Design review screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
@@ -243,5 +243,7 @@ jobs:
             frontend/test-results/design-review/summary.md
             frontend/test-results/design-review/financial-carry-evidence.json
             frontend/test-results/design-review/*.png
+            frontend/test-results/design-review/diagnostic-initial-1440.cpuprofile
+            frontend/test-results/design-review/diagnostic-method-1440.cpuprofile
           retention-days: 7
           if-no-files-found: warn
