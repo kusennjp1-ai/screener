@@ -2,7 +2,8 @@
 // used by publication. This preview carries no release or financial authority.
 import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,mkdtempSync,readFileSync,realpathSync,rmSync} from 'node:fs';
-import {dirname,join,resolve} from 'node:path';
+import {join,resolve,sep} from 'node:path';
+import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {dataInventoryDigest,inventoryDigest,sha256,uiInventory} from './publication-state.mjs';
 import {canonicalPublication,packPublication,previewPublication,transportCapable,validateTransportPreview} from './static-transport-publication.mjs';
@@ -73,8 +74,12 @@ export async function prepareDesignTransport({dist,provenancePath,repoRoot=proce
   await packPublication({root:dist,frontendRoot,publication,bindings:{sourceCommit:revision,appCommit:revision,candidateId:sha256(provenanceBytes),financialGeneration:generation,financialLineageSha256:lineage}});
   if(sha256(readFileSync(provenancePath))!==sha256(provenanceBytes))throw Error('Design input provenance changed during packing');
   validateTransportPreview(publication);
-  const temporary=mkdtempSync(join(dirname(dist),'.design-transport-roundtrip-'));
+  // Canonical data is verifier-owned output, not checkout code. Keep it out of
+  // codeIdentity's untracked-input scope without exempting any checkout path.
+  const temporary=mkdtempSync(join(tmpdir(),'.design-transport-roundtrip-'));
   try{
+    const checkout=realpathSync(repoRoot),scratch=realpathSync(temporary);
+    if(scratch===checkout||scratch.startsWith(checkout+sep))throw Error('Design transport scratch must stay outside the checked repository');
     const canonical=await canonicalPublication({root:dist,frontendRoot,publication,restore:join(temporary,'logical')});
     if(publication.transport.logical_data_inventory_sha256!==logicalDigest||dataInventoryDigest(canonical)!==logicalDigest)throw Error('Packed Design round-trip logical data inventory changed');
     if(comparison&&(dataInventoryDigest(comparison.root)!==comparison.digest||dataInventoryDigest(canonical)!==comparison.digest))throw Error('Packed Design differs from the raw comparison baseline');

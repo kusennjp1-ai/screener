@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
-import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -9,7 +9,7 @@ import {prepareDesignTransport} from './design-transport.mjs';
 import {bootstrap,dataInventoryDigest,sha256,validateReceipt} from './publication-state.mjs';
 import {completeInventory} from './financial-release-activation.mjs';
 import {canonicalPublication,verifyTransportPublication} from './static-transport-publication.mjs';
-import {validateDesignCarryPreview} from './design-financial-carry.mjs';
+import {validateDesignCarryPreview,verifyDesignCarryPreview} from './design-financial-carry.mjs';
 
 const frontend=fileURLToPath(new URL('../../frontend',import.meta.url)),H='a'.repeat(64);
 const write=(path,bytes)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,typeof bytes==='string'?bytes:JSON.stringify(bytes));};
@@ -146,6 +146,43 @@ test('ordinary Design CLI binds its actual current checkout and rejects a mismat
   const result=spawnSync(process.execPath,[command,f.dist,f.provenance],{cwd:f.repo,encoding:'utf8',env:{PATH:process.env.PATH,GITHUB_SHA:'b'.repeat(40)}});
   assert.equal(result.status,1);assert.match(result.stderr,/exact current tested checkout/);
   symlinkSync(join(frontend,'tools'),join(f.repo,'frontend/tools'));
-  const valid=spawnSync(process.execPath,[command,f.dist,f.provenance],{cwd:f.repo,encoding:'utf8',env:{PATH:process.env.PATH,GITHUB_SHA:f.revision},timeout:15000});
+  const scratch=join(f.root,'temporary');mkdirSync(scratch);
+  const valid=spawnSync(process.execPath,[command,f.dist,f.provenance],{cwd:f.repo,encoding:'utf8',env:{PATH:process.env.PATH,GITHUB_SHA:f.revision,TMPDIR:scratch},timeout:15000});
   assert.equal(valid.status,0,valid.stderr);assert.equal(JSON.parse(valid.stdout).publication_authority,'none');
+  assert.deepEqual(readdirSync(scratch),[],'successful canonical roundtrip removes owned outside scratch');
+});
+
+
+test('large owned roundtrip inside checkout reproduces ENOBUFS; outside output leaves code checks active',async t=>{
+  const f=fixture(t);completePreviewBinding(f);
+  const inside=mkdtempSync(join(f.repo,'frontend/.design-transport-roundtrip-'));
+  // A small-content fixture with >1MiB of path output reproduces the actual
+  // ls-files buffer failure without downloading or manufacturing source proof.
+  for(let i=0;i<6000;i++)writeFileSync(join(inside,`${String(i).padStart(5,'0')}-${'x'.repeat(190)}.json`),'{}');
+  const verify=()=>verifyDesignCarryPreview({provenancePath:f.provenance,root:f.dist,repoRoot:f.repo});
+  await assert.rejects(verify,error=>error.code==='ENOBUFS');
+  const outside=join(f.root,'owned-roundtrip');renameSync(inside,outside);
+  await assert.rejects(verify,error=>error.code==='ENOENT'&&/design-carry-evidence\/state\.json/.test(error.message),'clean checkout still requires independently retained evidence');
+  // Genuine untracked controller files remain rejected, even with output too
+  // large to buffer. The repair must never ignore a filename prefix or path.
+  mkdirSync(join(f.repo,'.github'));renameSync(outside,join(f.repo,'.github/untracked-controller'));
+  await assert.rejects(verify,error=>error.code==='ENOBUFS');
+});
+
+test('large tracked controller changes remain rejected by the unchanged code guard',async t=>{
+  const f=fixture(t),path=join(f.repo,'frontend/controller.mjs');writeFileSync(path,'// original\n');
+  const git=args=>execFileSync('git',['-C',f.repo,...args],{encoding:'utf8',stdio:'pipe'}).trim();
+  git(['add','frontend/controller.mjs']);git(['-c','user.name=fixture','-c','user.email=fixture@example.invalid','commit','-qm','controller fixture']);f.revision=git(['rev-parse','HEAD']);completePreviewBinding(f);
+  writeFileSync(path,'// altered '+ 'x'.repeat(2*1024*1024)+'\n');
+  await assert.rejects(()=>verifyDesignCarryPreview({provenancePath:f.provenance,root:f.dist,repoRoot:f.repo}),error=>error.code==='ENOBUFS'||error.status===1);
+});
+
+for(const linked of [false,true])test(`transport rejects ${linked?'linked':'direct'} temp directory inside checkout and removes owned scratch`,t=>{
+  const f=fixture(t),command=fileURLToPath(new URL('./design-transport.mjs',import.meta.url));
+  symlinkSync(join(frontend,'tools'),join(f.repo,'frontend/tools'));
+  let temporary=join(f.repo,'frontend');
+  if(linked){const alias=join(f.root,'temp-link');symlinkSync(temporary,alias);temporary=alias;}
+  const result=spawnSync(process.execPath,[command,f.dist,f.provenance],{cwd:f.repo,encoding:'utf8',env:{PATH:process.env.PATH,GITHUB_SHA:f.revision,TMPDIR:temporary},timeout:15000});
+  assert.equal(result.status,1);assert.match(result.stderr,/scratch must stay outside the checked repository/);
+  assert.deepEqual(readdirSync(join(f.repo,'frontend')).filter(name=>name.startsWith('.design-transport-roundtrip-')),[]);
 });
