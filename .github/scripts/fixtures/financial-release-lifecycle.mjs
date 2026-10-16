@@ -94,7 +94,8 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
   const environment=extra=>({PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:join(releaseRoot||root,'runner'),GITHUB_REPOSITORY:repository,
     GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_EVENT_PATH:join(root,'event.json'),RELEASE_SHA:sha,GITHUB_RUN_ID:String(releaseId),GITHUB_RUN_ATTEMPT:'1',
     RELEASE_CLI_FIXTURE:configPath,RELEASE_CLI_TRACE:join(root,'trace.jsonl'),RELEASE_FIXTURE_NOW:now,NODE_OPTIONS:`--import=${preload}`,...extra});
-  function invoke(path,args=[],cwd=releaseRoot,extra={}){save();return spawnSync(process.execPath,[path,...args],{cwd,encoding:'utf8',timeout:30000,env:environment(extra)});}
+  // Real deployed receipts include raw historical evidence; keep capture bounded above Node's 1 MiB default.
+  function invoke(path,args=[],cwd=releaseRoot,extra={}){save();return spawnSync(process.execPath,[path,...args],{cwd,encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,env:environment(extra)});}
   function success(result,label){assert.ifError(result.error);assert.equal(result.status,0,`${label}\n${result.stdout}\n${result.stderr}`);return result;}
   function frontendAt(directory){mkdirSync(join(directory,'frontend'),{recursive:true});for(const name of ['src','tools','package.json'])symlinkSync(join(repoRoot,'frontend',name),join(directory,'frontend',name));mkdirSync(join(directory,'data/ibd_reference/ibd50'),{recursive:true});return join(directory,'frontend');}
   function exportBundle(directory,date,price,history=null,extra={}){

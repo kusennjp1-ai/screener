@@ -16,7 +16,11 @@ import {assertCertificationSourceTrustPreserved,renewalCandidateMembers,restoreP
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'../..');
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,value);};
 const fixture=()=>mkdtempSync(join(tmpdir(),'renewal-certification-'));
-const fixtureContracts=directory=>{cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});resetRenewalFixtureControls(directory);};
+const fixtureContracts=directory=>{
+  cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});resetRenewalFixtureControls(directory);
+  // Load the real controller's complete frontend module closure in isolated CLI fixtures.
+  for(const name of ['src','tools','contracts','package.json'])cpSync(join(root,'frontend',name),join(directory,'frontend',name),{recursive:true});
+};
 function bundle(root,html){
   write(join(root,'index.html'),html);write(join(root,'sw.js'),`worker ${html}`);
   write(join(root,'assets/chunk.js'),`chunk ${html}`);write(join(root,'static-data/manifest.json'),'{}');
@@ -130,7 +134,6 @@ function automaticFixture(){
   const directory=fixture(),registryPath='contracts/financial_source_renewal_v1.json',repositoryId=1203919607;
   cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
   cpSync(join(root,'.github/workflows'),join(directory,'.github/workflows'),{recursive:true});
-  cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
   const git=(...args)=>execFileSync('git',['-C',directory,...args],{encoding:'utf8'}).trim();
   const commit=()=>{git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Committed automatic fixture');return {head_sha:git('rev-parse','HEAD'),tree:git('rev-parse','HEAD^{tree}')};};
   let registry={...JSON.parse(readFileSync(join(directory,registryPath))),ci_admission:null};
@@ -272,7 +275,6 @@ test('certification controller records the exact successful CI attempt and rejec
 test('controls resolve committed request before fetching a missing captured UI Git object, while prepare remains closed',()=>{
   const directory=fixture();try{
     cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
-    cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
     const h='a'.repeat(64),s='b'.repeat(40),source=JSON.parse(readFileSync(join(root,'contracts/financial_source_certification_trust_v1.json'))).reviewed_requests[0].request.source;
     const previous=`1/1/${h}/${h}`,ref={schema_version:'financial-release-receipt-v1',path:`static-data/financial-corrections/release-${h}.json`,sha256:h};
     const certificate={schema_version:'financial-source-certificate-reference-v1',repository:bootstrap.repository,workflow:'.github/workflows/financial-source-certification.yml',head_sha:s,run_id:22,run_attempt:1,job_id:41,artifact_id:199,artifact_name:`financial-source-certification-${s}-1`,artifact_sha256:h,certificate_sha256:h};
@@ -306,7 +308,6 @@ test('controls resolve committed request before fetching a missing captured UI G
 test('surface and seal compatibility preflight authenticates retained origin and rejects changed code before large candidate replay',async()=>{
   const directory=fixture();try{
     cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
-    cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
     write(join(directory,'frontend/package-lock.json'),'{}');
     const projector='backend/app/scripts/export_native_annual_projection.py',originalProjector='# Original fixture projector\n';
     write(join(directory,projector),originalProjector);
