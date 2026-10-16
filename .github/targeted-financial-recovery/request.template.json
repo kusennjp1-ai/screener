@@ -1,0 +1,87 @@
+{
+  "schema_version": "financial-targeted-recovery-execution-v1",
+  "operation_id": "targeted-nvda-aaoi-REVIEW-NEW-OPERATION",
+  "created_at": null,
+  "expires_at": null,
+  "controller": {
+    "parent_sha": null,
+    "parent_tree": null
+  },
+  "expected_run_number": 5,
+  "source": {
+    "run_id": 37478731832,
+    "run_attempt": 1,
+    "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+    "artifact_id": 11420873789,
+    "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+    "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+    "base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+    "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
+  },
+  "price_source": {
+    "run_id": 38835669174,
+    "run_attempt": 1,
+    "head_sha": "8cf7d9b231a5926696d261da51a4bab531f33cfa",
+    "artifact_id": 12024303013,
+    "artifact_sha256": "1deb7c0d947563f5dd185b9b25b72efe669cb03f44e22aa12250b4de729c405a",
+    "companion_id": 12024153503,
+    "companion_sha256": "cb4b0abfc55abd22555cd294c8cac7a1d3b7ac5c6e95e68ed0a50e56ea536fa2",
+    "manifest_sha256": "9c0456ac49abdd293073fc1869b4c53ec2b07d4e4e24415edf03ca40a6fdf627",
+    "research_sha256": "88fb66f9410a46c81c72cb7b9218fbd234624f7ac410308a305a38c57e6bf2f0"
+  },
+  "selection": [
+    {
+      "symbol": "NVDA",
+      "targets": [
+        "eps",
+        "sales",
+        "annual_history"
+      ],
+      "receipts": [
+        {
+          "attempt_id": "287ce483-5db1-47e6-9bbc-3b3dfb9633f8:0001",
+          "attempt_object_sha256": "aa54d8ac376e38b6159fda69208b7fee42ad288b3e6d07c527b8eab28ed05943",
+          "attribute": "quarterly_income_stmt",
+          "receipt_sha256": "f6377d5e77eada3c89e3acb03252cc82a1b91f84156600db29cb5009455af4b0"
+        },
+        {
+          "attempt_id": "287ce483-5db1-47e6-9bbc-3b3dfb9633f8:0002",
+          "attempt_object_sha256": "aa54d8ac376e38b6159fda69208b7fee42ad288b3e6d07c527b8eab28ed05943",
+          "attribute": "income_stmt",
+          "receipt_sha256": "ad63d783091c4ab71649d6eaf6793172f3bd1e19078388f5cb1035e43e077c18"
+        }
+      ]
+    },
+    {
+      "symbol": "AAOI",
+      "targets": [
+        "eps",
+        "sales",
+        "annual_history"
+      ],
+      "receipts": [
+        {
+          "attempt_id": "287ce483-5db1-47e6-9bbc-3b3dfb9633f8:0015",
+          "attempt_object_sha256": "aa54d8ac376e38b6159fda69208b7fee42ad288b3e6d07c527b8eab28ed05943",
+          "attribute": "quarterly_income_stmt",
+          "receipt_sha256": "0bcd678d99651fb6cc0cfd1c931911a3b1dad16a70c6bfe1765ea27e137bb395"
+        },
+        {
+          "attempt_id": "287ce483-5db1-47e6-9bbc-3b3dfb9633f8:0016",
+          "attempt_object_sha256": "aa54d8ac376e38b6159fda69208b7fee42ad288b3e6d07c527b8eab28ed05943",
+          "attribute": "income_stmt",
+          "receipt_sha256": "f8f89634cde637fee50de7466c553b94822a40c5b5b1678131e1f6f6562186f8"
+        }
+      ]
+    }
+  ],
+  "limits": {
+    "max_symbols": 2,
+    "max_statement_getter_calls": 4,
+    "max_transport_requests": 1000,
+    "acquisition_budget_seconds": 1080,
+    "caller_retries": 0
+  },
+  "publication_authority": "none",
+  "financial_admission": false
+}

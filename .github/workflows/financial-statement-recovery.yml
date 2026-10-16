@@ -3,6 +3,9 @@ name: Financial Statement Recovery
 on:
   push:
     branches: [improve/mandatory-financial-source-recovery]
+    # Controller-only updates cannot acquire. A separately reviewed request-only
+    # child commit is the sole activation, authenticated again by the caller.
+    paths: [.github/targeted-financial-recovery/request.json]
 
 permissions:
   contents: read
@@ -18,6 +21,7 @@ jobs:
     timeout-minutes: 25
     env:
       PYTHONPATH: ${{ github.workspace }}/backend
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Start the bounded job clock
         id: budget-clock
@@ -25,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -38,36 +43,27 @@ jobs:
           curl_cffi==0.16.3 requests==2.31.0 pytest==8.3.5
       - name: Check acquisition bounds and source restoration offline
         run: |
-          node --test .github/scripts/prepare-statement-cohort.test.mjs .github/scripts/restore-statement-source.test.mjs
-          python -m pytest --noconftest backend/tests/unit/test_financial_statement_batch.py backend/tests/unit/test_statement_refresh_planning.py backend/tests/unit/test_statement_refresh_collection.py backend/tests/unit/test_statement_artifact_archive.py backend/tests/unit/test_quarterly_eps_pair_selection.py backend/tests/unit/test_bounded_statement_refresh_bridge.py backend/tests/unit/test_statement_retention_budget.py -q
-      - name: Restore original acquisition receipts
+          node --test .github/scripts/prepare-statement-cohort.test.mjs .github/scripts/restore-statement-source.test.mjs .github/scripts/prepare-statement-recovery-preflight.test.mjs .github/scripts/run-statement-targeted-recovery.test.mjs
+          python -m pytest --noconftest backend/tests/unit/test_financial_statement_batch.py backend/tests/unit/test_statement_refresh_planning.py backend/tests/unit/test_statement_refresh_collection.py backend/tests/unit/test_statement_artifact_archive.py backend/tests/unit/test_quarterly_eps_pair_selection.py backend/tests/unit/test_statement_retention_budget.py backend/tests/unit/test_statement_targeted_preflight.py backend/tests/unit/test_statement_targeted_cycle.py -q
+      - name: Authenticate the new finite request and collect only due NVDA and AAOI
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node .github/scripts/restore-statement-source.mjs "$RUNNER_TEMP/recovery-source"
-      - name: Verify the frozen first-200 request and original cohort
         run: >-
-          python .github/scripts/bounded-statement-refresh-plan.py
-          --reviewed-plan .github/bounded-refresh-first-200/dispatch-review.json
-          --restored "$RUNNER_TEMP/recovery-source"
-          --output-inputs "$RUNNER_TEMP/recovery-input"
-      - name: Continue one bounded source batch from original receipts
-        run: >-
-          python .github/scripts/run-statement-recovery-cycle.py
-          --inputs "$RUNNER_TEMP/recovery-input"
-          --restored "$RUNNER_TEMP/recovery-source"
-          --output "$RUNNER_TEMP/financial-recovery"
-          --reviewed-plan .github/bounded-refresh-first-200/dispatch-review.json
-          --job-started-at '${{ steps.budget-clock.outputs.started_at }}'
+          node .github/scripts/run-statement-targeted-recovery.mjs
+          "$RUNNER_TEMP/targeted-recovery"
+          '${{ steps.budget-clock.outputs.started_at }}'
       - name: Retain partial source progress and original pilot receipts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: financial-statement-recovery-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/financial-recovery/
+          path: ${{ runner.temp }}/targeted-recovery/financial-recovery/
           retention-days: 14
           if-no-files-found: warn
 
 # Artifact-only bounded continuation. No schedule, release, database, Pages deployment,
 # changed public values, new credentials or bypass of publication acceptance.
+# Two-symbol request only: four getters, 1080s maximum acquisition, 1000 transport calls.
+# No activation request is committed with the controller. No retry/hold override.
 # Every continuation restores and validates the cumulative original receipts.
 # Archive failure stops acquisition; it never restarts a cold first-200 sweep.
