@@ -1,3 +1,4 @@
+import {isLimitedPreviewApproval,verifyLimitedPreviewUiApproval,verifyLimitedPreviewFinancialScope} from './limited-research-approval.mjs';
 import {validateOrdinaryCarryReceipt} from './ordinary-carry-tooling.mjs';
 import {validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
 import {validateFinancialAuditFiles,requiredFinancialAuditFiles,parsePublicationReceipt,PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
@@ -172,6 +173,7 @@ export function latestDeployment(repository, api = githubApi, anchor = null) {
 
 export function verifyApproval(receipt, repository, api = githubApi) {
   const approval = receipt.approval;
+  if(isLimitedPreviewApproval(approval)){if(!receipt.financial_release)throw Error('Limited UI requires frozen financial lineage');return verifyLimitedPreviewUiApproval(receipt,repository,api);}
   if(isPerformanceException(approval)){
     if(!receipt.financial_release)throw Error('Exception publication requires financial lineage');
     if(approval.type===packedExceptionType&&!receipt.transport)throw Error('Packed exception publication requires its captured transport representation');
@@ -253,9 +255,10 @@ export async function livePublication({ repository = bootstrap.repository, fetch
         const admitted=renewed.transitions.at(-1).publisher.ci_admission;
         if(financialRelease.mode==='renewal'&&admitted&&(receipt.run_id!==admitted.caller.run_id||receipt.run_attempt!==admitted.caller.run_attempt))throw Error('Live renewal differs from its exact admitted publisher attempt');
       }else if(isPerformanceException(receipt.approval))verifyExceptionFinancialScope(financialRelease,verifiedApproval);
+      if(isLimitedPreviewApproval(receipt.approval))verifyLimitedPreviewFinancialScope(financialRelease,receipt.approval);
       if(financialRelease.financial_generation!==receipt.financial_generation||financialRelease.lineage_sha256!==receipt.financial_lineage_sha256
         ||financialRelease.ui.approved_sha!==receipt.ui_sha||financialRelease.ui.digest!==receipt.ui_digest
-        ||(isPerformanceException(receipt.approval)||isPerformanceException(financialRelease.ui.approval))&&JSON.stringify(financialRelease.ui.approval)!==JSON.stringify(receipt.approval))throw Error('Live financial release and publication disagree');
+        ||(isPerformanceException(receipt.approval)||isPerformanceException(financialRelease.ui.approval)||isLimitedPreviewApproval(receipt.approval)||isLimitedPreviewApproval(financialRelease.ui.approval))&&JSON.stringify(financialRelease.ui.approval)!==JSON.stringify(receipt.approval))throw Error('Live financial release and publication disagree');
     }
   } else if (latest.headSha !== bootstrap.ui_sha) throw Error('Legacy Pages is no longer the approved a9 UI');
   const uiFiles = receipt?.ui_files || bootstrap.ui_files;
@@ -279,7 +282,7 @@ export async function livePublication({ repository = bootstrap.repository, fetch
   const finalDeployment = latestDeployment(repository, api, latest);
   if (latest.runId !== finalDeployment.runId || latest.attempt !== finalDeployment.attempt) throw Error('A new deployment completed while reading Pages');
   return { identity: `${latest.runId}/${latest.attempt}/${sha256(receiptBytes || '')}/${sha256(manifestBytes)}`, latest,
-    receipt, financialCorrection, financialRelease, ...(financialOrigin?{financialOrigin}:{}), legacyArtifact: legacy?.artifact || null, priceObservations, knownPriceDates, manifest, manifestHash: sha256(manifestBytes), uiSha: receipt?.ui_sha || bootstrap.ui_sha,
+    receipt, receiptBytes:receiptBytes?.toString('utf8')??null, financialCorrection, financialRelease, ...(financialOrigin?{financialOrigin}:{}), legacyArtifact: legacy?.artifact || null, priceObservations, knownPriceDates, manifest, manifestHash: sha256(manifestBytes), uiSha: receipt?.ui_sha || bootstrap.ui_sha,
     verificationUniverse: receipt?.verification_universe || bootstrap.verification_universe, receiptHash: sha256(receiptBytes || ''), uiFiles, uiDigest: inventoryDigest(uiFiles), approval: receipt?.approval || { type: 'bootstrap', sha: bootstrap.ui_sha } };
 }
 

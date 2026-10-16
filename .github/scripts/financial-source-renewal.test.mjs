@@ -19,6 +19,7 @@ import {performanceLifecycleFixture} from './fixtures/financial-performance-life
 import {lifecycleFixture,read} from './fixtures/financial-release-lifecycle.mjs';
 import {disabledRenewalRegistry} from './fixtures/financial-renewal-policy.mjs';
 import {createFinancialGenerationCarry} from '../../frontend/tools/financial-generation-carry.mjs';
+import {frozenFinancial,LIMITED_APPROVAL_PATH,LIMITED_WORKFLOW,LIMITED_JOB} from './limited-research-approval.mjs';
 
 const repo=bootstrap.repository,prefix=`repos/${repo}`,H='a'.repeat(64),S='b'.repeat(40),C='c'.repeat(40),T='d'.repeat(40),CT='e'.repeat(40),P='f'.repeat(40),PT='1'.repeat(40);
 const now=Date.parse('2026-10-06T12:00:00Z'),sealed='2026-10-04T13:30:00.000Z';
@@ -437,5 +438,27 @@ test('renewal reuses only exact originally reviewed v2 harness pairs without exc
     assert.throws(()=>helper.verifyRenewalInitialCapturePolicy(options),/approval changed/);
     api[f.approvalEndpoint]=f.content(Buffer.from(JSON.stringify(f.approval)));
     assert.throws(()=>helper.verifyRenewalInitialCapturePolicy({...options,originBytes:Buffer.from('{}')}),/exact retained anchor/);
+  }finally{f.cleanup();}
+});
+
+test('limited frozen UI carry preserves and independently verifies existing renewal authority',async()=>{
+  const f=fixture();try{
+    const first=await writeRenewalRelease({dist:f.root,live:f.live,transition:f.transition,sourceProjectionBytes:f.bytes,sourceBaseBytes:f.base,priceInput:f.transition.request.price_input});
+    const prior=liveFrom(f.root,first.receipt,first.reference,31);
+    const checks=[...contract.required_ci_jobs,LIMITED_JOB].map((name,index)=>({name,job_id:510+index,run_id:name===LIMITED_JOB?52:51,run_attempt:1,
+      head_sha:T,workflow:name===LIMITED_JOB?LIMITED_WORKFLOW:'.github/workflows/ci.yml',conclusion:'success'}));
+    const approval={type:'limited-research-preview-v1',sha:T,ui_digest:H,controller_sha:T,approval_sha256:H,approval_path:LIMITED_APPROVAL_PATH,
+      financial:frozenFinancial(prior),checks};
+    const next=writeFinancialReleaseReceipt({dist:f.root,mode:'carry',previousIdentity:prior.identity,lineage:{id:first.receipt.lineage_sha256,value:first.receipt.lineage},
+      sourceProjectionBytes:f.bytes,sourceBaseBytes:f.base,evaluationBytes:f.bytes,generation:first.receipt.financial_generation,evaluatedAt:first.receipt.evaluated_at,
+      ui:{approved_sha:T,captured_sha:T,digest:H,approval,checks},priceInput:first.receipt.price_input,renewal:first.receipt.renewal});
+    assertFinancialLineageContinuity(prior,next.receipt);
+    assert.deepEqual(verifyFinancialReleaseAssets(f.root,next.reference).renewal,first.receipt.renewal);
+    const options={readAsset:path=>readFileSync(join(f.root,path)),api:f.evidence.read,reviewedControllers:[f.evidence.review],now};
+    const history=await verifyPublishedRenewal(next.receipt,options);
+    assert.equal(history.origin.lineage_sha256,f.live.financialRelease.lineage_sha256);
+    assert.equal(history.transitions.length,1);
+    f.evidence.job.head_sha=C;
+    await assert.rejects(()=>verifyPublishedRenewal(next.receipt,options),/job/);
   }finally{f.cleanup();}
 });

@@ -1,0 +1,23 @@
+import { expect, it, vi } from 'vitest';
+import { assess, rankCandidates, researchCsv } from './researchEngine.js';
+import { limitedResearchPreviewCsvMetadata, LIMITED_RESEARCH_PREVIEW_NOTICE } from './limitedResearchPreview.js';
+vi.mock('./limitedResearchPreview.js', async importOriginal => ({...await importOriginal(),limitedResearchPreviewCsvMetadata:vi.fn()}));
+const now=Date.parse('2026-10-16T12:00:00Z');
+it('adds preview metadata without changing any original CSV cell, rule, ranking, or input',()=>{
+  const rows=[{symbol:'UNKNOWN',market:'US',eps_growth_yy:99,sales_growth_yy:99},{symbol:'OTHER',market:'US'}];
+  const original=structuredClone(rows);
+  const before=rows.map(row=>assess(row,'oneil',now));
+  const ranked=rankCandidates(rows,'oneil',{now});
+  limitedResearchPreviewCsvMetadata.mockReturnValue({headers:[],values:[]});
+  const ordinary=researchCsv(ranked,'oneil','2026-10-16',now);
+  limitedResearchPreviewCsvMetadata.mockReturnValue({headers:['release_scope','release_scope_version','release_scope_notice'],values:['limited_research_preview','limited-research-preview-v1',LIMITED_RESEARCH_PREVIEW_NOTICE]});
+  const preview=researchCsv(ranked,'oneil','2026-10-16',now);
+  const ordinaryLines=ordinary.split('\r\n');
+  preview.split('\r\n').forEach((line,index)=>expect(line.startsWith(ordinaryLines[index]+',')).toBe(true));
+  expect(preview).toContain('"release_scope","release_scope_version","release_scope_notice"');
+  expect(preview).toContain(LIMITED_RESEARCH_PREVIEW_NOTICE);
+  expect(rows.map(row=>assess(row,'oneil',now))).toEqual(before);
+  expect(before.every(a=>a.unknown>0 && !a.qualified)).toBe(true);
+  expect(rankCandidates(rows,'oneil',{now})).toEqual(ranked);
+  expect(rows).toEqual(original);
+});

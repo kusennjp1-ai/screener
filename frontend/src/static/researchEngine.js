@@ -1,3 +1,4 @@
+import { limitedResearchPreviewCsvMetadata } from './limitedResearchPreview.js';
 import { ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityText } from './financialHistory.js';
 import { reportedGrowthAtLeast } from './reportedGrowth.js';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability.js';
@@ -37,7 +38,8 @@ export function researchCsv(ranked, method, date, now = Date.now()) {
     a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication', a.method_status || (a.failed ? 'fail' : a.unknown ? 'unknown' : 'pass'), a.applicability_reason || '', instrumentApplicability(r).version,
     currentFinancialHistory(r.financial_history, r.symbol, date, now, r).annual.length ? r.financial_history.annual_currency || r.financial_history.currency : '',
     a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION]);
-  return [header, ...lines].map(line => line.map(cell).join(',')).join('\r\n');
+  const preview = limitedResearchPreviewCsvMetadata();
+  return [[...header, ...preview.headers], ...lines.map(line => [...line, ...preview.values])].map(line => line.map(cell).join(',')).join('\r\n');
 }
 // The feature store exports positive % BELOW the high; the legacy technical
 // calculator exports negative distance. Normalize magnitude at this boundary.

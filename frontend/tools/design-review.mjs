@@ -20,8 +20,17 @@ import { financialViewportGeometry, checkFinancialViewportGeometry } from './fin
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 import { recordProductionBootstrapDiagnostic } from './production-bootstrap-diagnostic.mjs';
 
+import { buildLimitedResearchAssessment, LIMITED_RESEARCH_SCOPE } from './limited-research-assessment.mjs';
+
+const limitedAssessment = process.argv.includes('--limited-research-preview');
+const limitationArguments = process.argv.slice(2).filter(value => value.startsWith('--limited-performance-limitations='));
+if (limitationArguments.length > 1 || (!limitedAssessment && limitationArguments.length)) throw Error('Performance limitation input requires one explicit limited assessment mode');
+const approvedLimitations = limitationArguments.length
+  ? JSON.parse(await readFile(resolve(limitationArguments[0].slice('--limited-performance-limitations='.length)), 'utf8')) : [];
+if (!Array.isArray(approvedLimitations) || approvedLimitations.some(value => typeof value !== 'string')) throw Error('Expected exact performance limitation strings');
+
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
-const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
+const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || (limitedAssessment ? 'test-results/limited-research-preview' : 'test-results/design-review'));
 await mkdir(output, { recursive: true });
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
@@ -36,6 +45,7 @@ const comparisonMethod = inputBasis === 'same_verified_input'
 const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   input_basis: inputBasis,
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
+if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
 const carryProvenancePath = process.env.DESIGN_CARRY_PREVIEW_PROVENANCE;
 let carryBinding;
@@ -444,4 +454,10 @@ if (carryBinding) {
 }
 await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
 console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
+if (limitedAssessment) {
+  const assessment = buildLimitedResearchAssessment(report, approvedLimitations);
+  await writeFile(resolve(output, 'limited-assessment.json'), JSON.stringify(assessment, null, 2));
+  // Local classification is never a Design pass or publication permission.
+  if (assessment.blocking_failures.length) process.exitCode = 1;
+}
 if (report.failures.length) process.exitCode = 1;

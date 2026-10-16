@@ -1,3 +1,4 @@
+import {isLimitedPreviewApproval} from './limited-research-approval.mjs';
 import {FINANCIAL_AUDIT_MAX_FILE_BYTES,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
 import {selectRenewalControls,selectRenewalCandidate,verifyRenewalSelection,restoreRenewalCandidate,prepareRenewalReceipt,verifyPreparedRenewalRelease,checkFinalRenewalPayload} from './financial-source-renewal-publisher.mjs';
 import {verifyPublishedRenewal,verifyPreparedAutomaticRenewal} from './financial-source-renewal.mjs';
@@ -110,7 +111,7 @@ with tarfile.open(sys.argv[1]) as t:
 `, archive], { stdio: 'pipe' });
   if (sha256(archiveMember(archive, 'static-data/manifest.json')) !== source.manifestHash) throw Error('Archive and dated manifest disagree');
 }
-async function materialize(source, destination, migration = false,frontendRoot=resolve('release/frontend'),repairLive=null) {
+export async function materialize(source, destination, migration = false,frontendRoot=resolve('release/frontend'),repairLive=null) {
   const directory = downloadArtifact(source.artifact, artifactDirectory(source.artifact), repository(),'artifact.tar',source.repair?2*1024**3:null);
   const archive = join(directory, 'artifact.tar');
   verifyArchive(source, archive);
@@ -195,7 +196,7 @@ export function publishedHistorySource(live, pages) {
   return publishedSource(live, pages);
 }
 
-function publishedSource(live, pages) {
+export function publishedSource(live, pages) {
   if (live.receipt) {
     const artifact = uniqueArtifact(pages, live.receipt.artifact_name, live.receipt.run_id);
     if (artifact.workflow_run.head_sha !== live.latest.headSha || Date.parse(artifact.created_at) < live.latest.jobStarted
@@ -221,6 +222,11 @@ export function isFinancialRequestActive(request,live){
 async function plan(design = false) {
   mkdirSync(scratch(), { recursive: true });
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  if(!design&&event.inputs?.limited_research_preview){
+    const {planLimited}=await import('./limited-research-publisher.mjs');
+    const state=await planLimited({event,mainSha:process.env.RELEASE_SHA});writeFileSync(statePath(),JSON.stringify(state));
+    output({publish:true,sha:state.sourceSha,mode:'limited',limited_research_preview:true,published_input:true});return;
+  }
   const renewalControls=selectRenewalControls({input:event.inputs?.financial_source_renewal,event,design,correction:Boolean(event.inputs?.financial_correction),uiOnly:event.inputs?.ui_only});
   const sha = process.env.RELEASE_SHA;
   const intent = parseCorrectionIntent(event.inputs?.financial_correction);
@@ -231,6 +237,7 @@ async function plan(design = false) {
   const uiDirectory = join(scratch(), 'live-ui');
   rmSync(uiDirectory, { recursive: true, force: true });
   const live = await livePublication({ repository: repository(), downloadTo: uiDirectory });
+  if(!design&&isLimitedPreviewApproval(live.approval)&&decision.mode!=='ui')throw Error('Limited preview freezes data until a fully gated UI release');
   const pages = githubApi(`repos/${repository()}/actions/artifacts?per_page=100`, true);
   const releaseRequest=!design&&!intent&&!renewalControls?readFinancialReleaseRequest():null;
   const alreadyActive=isFinancialRequestActive(releaseRequest,live);
@@ -292,6 +299,7 @@ async function plan(design = false) {
 }
 async function recheck() {
   const state = readState();
+  if(state.limited){const {recheckLimited}=await import('./limited-research-publisher.mjs');await recheckLimited(state);return;}
   let verifiedRenewalProjection;
   // Queued runs can retain older workflow YAML while checking out current main.
   // Enforce the same physical payload bound through their existing recheck too.
@@ -362,7 +370,7 @@ async function recheck() {
   }
   if(state.publisherTooling||state.ordinaryCarryTooling)writeFileSync(statePath(),JSON.stringify(state));
 }
-async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
+export async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
   const manifest = JSON.parse(readFileSync(join(dataRoot, 'manifest.json'), 'utf8'));
   const researchPath = manifest.markets?.US?.assets?.research?.path;
   if (!safePath(researchPath)) throw Error('Missing safe research index for retained-universe verification');
@@ -385,6 +393,7 @@ async function verifyCoverage(frontendRoot, dataRoot, previousSymbols) {
 }
 async function compose() {
   const state = readState(), dist = resolve('release/frontend/dist');
+  if(state.limited){const {composeLimited}=await import('./limited-research-publisher.mjs');await composeLimited(state);writeFileSync(statePath(),JSON.stringify(state));return;}
   await publisherToolingBoundary(state,'compose');
   const ordinaryProof=ordinaryCarrySelected(state)?await beginOrdinaryComposition(state,ordinaryContext(state),ordinaryPaths(state),()=>ordinaryOutputDigest(dist)):null;
   if (state.decision.migration) {
@@ -765,7 +774,7 @@ async function runCommand(command) {
   }
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
+  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
   else if(command==='prepare-carry')await prepareCarry();
   else if(command==='ordinary-carry-build'){if(process.argv.length!==3)throw Error('Ordinary build accepts no caller arguments');await buildOrdinaryCarry();}
   else if(['publisher-build-before','publisher-build-after'].includes(command)){

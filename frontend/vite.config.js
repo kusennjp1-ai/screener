@@ -1,3 +1,4 @@
+import { previewBuildMetadata } from './src/static/limitedResearchPreview.js';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
+    define: { __LIMITED_RESEARCH_PREVIEW__: JSON.stringify(previewBuildMetadata(env.VITE_LIMITED_RESEARCH_PREVIEW)) },
     plugins: [react(), precacheManifest(base)],
     resolve: {
       alias: [

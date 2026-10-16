@@ -6,7 +6,8 @@ import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {financialReleasePolicy as policy,readFinancialReleaseRequest,parseFinancialReleaseRequest,parseFinancialActivationCandidate,readFinancialActivationCandidate,verifyPinnedCandidateAttempt,verifyPinnedCandidateBindings,restorePinnedCandidateArchive,selectActivationCandidate,protectedCodeInventory,validateCandidateRecord,verifyCandidateAttempt,extractCandidateTar,completeInventory,sourceLineage,writeFinancialReleaseReceipt,verifyFinancialReleaseAssets,assertFinancialLineageContinuity,validateFinancialReleaseReceipt,restorePublishedFinancialSource} from './financial-release-activation.mjs';
-import {digest,contract} from './financial-correction.mjs';
+import {digest,contract,verifyCorrectionConsumerChecks} from './financial-correction.mjs';
+import {verifyRenewalPredecessor} from './financial-source-renewal.mjs';
 import {bootstrap,sha256,inventoryDigest} from './publication-state.mjs';
 import {certifiedSourceFixture} from './fixtures/certified-source-preview.mjs';
 
@@ -172,3 +173,92 @@ test('active source restoration uses exact live immutable bytes without an expir
 }finally{f.cleanup();rmSync(out,{recursive:true,force:true});}});
 test('workflow measures corrected dist directly and seals only after both unchanged design checks',()=>{const text=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8');assert.match(text,/ln -s "\$FINANCIAL_CANDIDATE_DIR\/corrected" "\$source\/dist"/);assert.ok(text.indexOf('name: Seal the exact tested financial candidate')>text.indexOf('name: Require reviewed screenshots and four design scores of at least 8.0'));assert.match(text,/name: Seal the exact tested financial candidate\n\s+if: success\(\)/);assert.match(text,/permissions:\n  contents: read\n  actions: read/);});
 test('financial receipt composition has read-only GitHub API authentication and no provider preparation',()=>{const text=readFileSync(new URL('../workflows/research-ui-release.yml',import.meta.url),'utf8');assert.match(text,/name: Preserve approved UI bytes or record verified new UI\n\s+if:.*\n\s+env:\n\s+GH_TOKEN: \$\{\{ github.token \}\}\n\s+run: node .github\/scripts\/select-release-source.mjs compose/);assert.match(text,/FINANCIAL_ACTIVATION: \$\{\{ steps.plan.outputs.activation \}\}/);assert.match(text,/\[ "\$FINANCIAL_ACTIVATION" != true \]/);});
+
+// A limited preview changes UI authority only. These synthetic fixtures retain
+// the source bytes, evaluation clock and generation from the existing receipt.
+function limitedReceiptBundle(){
+  const f=receiptBundle(),previous=f.result.receipt;
+  const checks=[...contract.required_ci_jobs,'Limited research preview assessment'].map((name,index)=>({
+    workflow:`.github/workflows/${name==='Limited research preview assessment'?'limited-research-assessment.yml':'ci.yml'}`,
+    run_id:name==='Limited research preview assessment'?52:51,run_attempt:1,job_id:510+index,name,head_sha:T,conclusion:'success'}));
+  const approval={type:'limited-research-preview-v1',sha:T,ui_digest:'e'.repeat(64),controller_sha:T,approval_sha256:'f'.repeat(64),
+    approval_path:'.github/limited-research-preview/approval.json',financial:{previous_publication_identity:P,lineage_sha256:previous.lineage_sha256,
+      financial_generation:previous.financial_generation,evaluated_at:previous.evaluated_at,source_projection:previous.source_projection,source_base:previous.source_base,
+      evaluation_sha256:previous.evaluation_projection.sha256,price_input:previous.price_input},checks};
+  try{
+    const limited=writeFinancialReleaseReceipt({dist:f.root,mode:'carry',previousIdentity:P,lineage:f.lineage,
+      sourceProjectionBytes:readFileSync(join(f.root,previous.source_projection.path)),sourceBaseBytes:readFileSync(join(f.root,previous.source_base.path)),
+      evaluationBytes:readFileSync(join(f.root,previous.evaluation_projection.path)),generation:previous.financial_generation,evaluatedAt:previous.evaluated_at,
+      ui:{approved_sha:T,captured_sha:T,digest:approval.ui_digest,approval,checks},priceInput:previous.price_input});
+    const publication={financial_generation:limited.receipt.financial_generation,financial_lineage_sha256:limited.receipt.lineage_sha256,
+      financial_release:limited.reference,ui_sha:T,ui_digest:approval.ui_digest,approval:structuredClone(approval),data_inventory_sha256:inventoryDigest(completeInventory(f.root))};
+    return {...f,previous,limited,approval,publication};
+  }catch(error){f.cleanup();throw error;}
+}
+test('limited preview carries the exact frozen financial generation with distinct UI authority',()=>{
+  const f=limitedReceiptBundle();try{
+    assert.deepEqual(verifyFinancialReleaseAssets(f.root,f.limited.reference,f.publication),f.limited.receipt);
+    assertFinancialLineageContinuity({financialRelease:f.previous},f.limited.receipt);
+    assert.equal(f.limited.receipt.mode,'carry');assert.equal(f.limited.receipt.candidate,null);
+    assert.equal(f.limited.receipt.financial_generation,f.previous.financial_generation);
+    assert.equal(f.limited.receipt.evaluated_at,f.previous.evaluated_at);
+    assert.equal(f.limited.receipt.evaluation_projection.sha256,f.previous.evaluation_projection.sha256);
+    assert.deepEqual(f.limited.receipt.price_input,f.previous.price_input);
+    assert.equal(readFileSync(join(f.root,f.limited.receipt.evaluation_projection.path),'utf8'),readFileSync(join(f.root,f.previous.evaluation_projection.path),'utf8'));
+    assert.equal(readFileSync(join(f.root,f.result.reference.path),'utf8'),JSON.stringify(f.previous));
+  }finally{f.cleanup();}
+});
+test('limited preview rejects changed frozen finance, UI, checks and extra authority',()=>{
+  const f=limitedReceiptBundle();try{
+    const edits=[
+      v=>v.previous_publication_identity=`9/1/${H}/${H}`,v=>v.financial_generation='9'.repeat(64),v=>v.evaluated_at='2026-10-05T12:00:00Z',
+      v=>{v.source_base.sha256='9'.repeat(64);v.source_base.path=`static-data/financial-corrections/source-base-${v.source_base.sha256}.json`;},
+      v=>{v.evaluation_projection.sha256='9'.repeat(64);v.evaluation_projection.path=`static-data/financial-corrections/carry-projection-${v.evaluation_projection.sha256}.json`;},
+      v=>v.price_input.artifact_id++,v=>v.price_input.price_observations_sha256='9'.repeat(64),v=>v.ui.approved_sha=S,
+      v=>v.ui.captured_sha=S,v=>v.ui.digest=H,v=>v.ui.checks.pop(),v=>v.ui.checks[0].conclusion='skipped',
+      v=>v.ui.checks.at(-1).name=policy.candidate_job,v=>v.ui.approval.financial.source_admission_allowed=true,
+      v=>v.candidate=f.previous.candidate,
+    ];
+    for(const [index,edit]of edits.entries()){const value=JSON.parse(JSON.stringify(f.limited.receipt));edit(value);assert.throws(()=>validateFinancialReleaseReceipt(value),`limited mutation ${index}`);}
+  }finally{f.cleanup();}
+});
+test('limited preview cannot become activation or renewal authority',()=>{
+  const f=limitedReceiptBundle();try{
+    for(const mode of ['activation','renewal']){
+      const value=structuredClone(f.limited.receipt);value.mode=mode;value.evaluation_projection=structuredClone(value.source_projection);
+      if(mode==='activation')value.candidate=structuredClone(f.previous.candidate);
+      else{
+        value.schema_version='financial-release-receipt-v2';
+        value.renewal={schema_version:'financial-source-renewal-chain-v1',origin:f.result.reference,
+          transitions:[{schema_version:'financial-source-renewal-transition-v1',path:`static-data/financial-corrections/renewal-${H}.json`,sha256:H}]};
+      }
+      assert.throws(()=>validateFinancialReleaseReceipt(value),/only carry frozen/);
+    }
+    const live={uiSha:T,approval:f.approval,financialRelease:f.limited.receipt};
+    let calls=0;
+    assert.throws(()=>verifyCorrectionConsumerChecks(live,bootstrap.repository,()=>{calls++;throw Error('unexpected remote read');}),/explicit CI and Design/);
+    assert.equal(calls,0);
+    assert.throws(()=>verifyRenewalPredecessor({},live),/cannot authorize financial source renewal/);
+    assert.throws(()=>verifyRenewalPredecessor({}, {...live,approval:{type:'gates',sha:T}}),/cannot authorize financial source renewal/);
+  }finally{f.cleanup();}
+});
+test('limited preview requires identical top-level and financial UI approvals',()=>{
+  const f=limitedReceiptBundle();try{
+    for(const edit of [v=>delete v.approval,v=>v.approval.approval_sha256=H,v=>v.approval={type:'gates',sha:T,runs:[]},v=>v.approval.type='performance-exception-v2']){
+      const value=structuredClone(f.publication);edit(value);assert.throws(()=>verifyFinancialReleaseAssets(f.root,f.limited.reference,value));
+    }
+  }finally{f.cleanup();}
+});
+
+test('a separately full-gated carry can leave limited scope without changing source lineage',()=>{
+  const f=limitedReceiptBundle();try{
+    const previous=f.limited.receipt;
+    const next=writeFinancialReleaseReceipt({dist:f.root,mode:'carry',previousIdentity:`9/1/${H}/${H}`,lineage:f.lineage,
+      sourceProjectionBytes:readFileSync(join(f.root,previous.source_projection.path)),sourceBaseBytes:readFileSync(join(f.root,previous.source_base.path)),
+      evaluationBytes:JSON.stringify({financial_generation:'9'.repeat(64),financial_evaluated_at:'2026-10-05T12:00:00Z'}),
+      generation:'9'.repeat(64),evaluatedAt:'2026-10-05T12:00:00Z',ui:f.previous.ui,priceInput:f.previous.price_input});
+    assertFinancialLineageContinuity({financialRelease:previous},next.receipt);
+    assert.equal(verifyFinancialReleaseAssets(f.root,next.reference).ui.approval.type,'gates');
+    assert.equal(next.receipt.financial_generation,'9'.repeat(64));
+  }finally{f.cleanup();}
+});
