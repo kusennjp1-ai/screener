@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       baseline_ref:
-        description: 'Baseline source revision; both builds use exactly the same checked input bundle'
-        default: 'cd3a6a2'
+        description: 'Reviewed full baseline commit SHA; both builds use exactly the same checked input bundle'
+        default: '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac'
         type: string
   push:
     branches: [main]
@@ -67,7 +67,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          BASELINE_REF: ${{ inputs.baseline_ref || 'cd3a6a2' }}
+          BASELINE_REF: ${{ inputs.baseline_ref || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' }}
           RELEASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
@@ -85,12 +85,36 @@ jobs:
             cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
             echo "DESIGN_INPUT_BASIS=same_verified_input" >> "$GITHUB_ENV"
           fi
+          # Explicitly reviewed receipt-linked UI; cd3a6a2 predates research-table-v2.
+          # No historical performance exception is reused for this comparison.
+          # Synthetic PR-merge commits may be absent from the branch checkout.
+          if [[ ! "$BASELINE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Design baseline requires a reviewed full commit SHA" >&2
+            exit 1
+          fi
+          git fetch --no-tags -- origin "$BASELINE_REF"
+          test "$(git rev-parse --verify 'FETCH_HEAD^{commit}')" = "$BASELINE_REF"
           git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
           git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
+          test "$(git -C "$RUNNER_TEMP/design-baseline" rev-parse HEAD)" = "$BASELINE_REF"
           if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
             mv "$FINANCIAL_CANDIDATE_DIR/predecessor/static-data" "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
           else
+            # Prepare one logical dataset before either UI build. The preview
+            # adapter retains the original source/audit/history and never seals
+            # or admits a financial source. No later exporter may rewrite it.
+            node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare "$RUNNER_TEMP/design-input-provenance.json" "$RUNNER_TEMP/design-baseline" 2>&1 | tee "$RUNNER_TEMP/design-carry-prepare.log"
+            if ! node --input-type=module -e 'import fs from "node:fs"; process.exit(JSON.parse(fs.readFileSync(process.argv[1])).schema === "design-financial-carry-preview-v1" ? 0 : 1)' "$RUNNER_TEMP/design-input-provenance.json"; then
+              (cd frontend && node tools/export-research.mjs && node tools/record-candidate-history.mjs && node tools/check-data-quality.mjs)
+            fi
+            node .github/scripts/select-release-source.mjs check-design-data
+            rm -rf "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
             cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
+            for file in research-daily.json portfolio-model.json qualification-audit.json ibd-reference.json; do
+              cp "frontend/public/$file" "$RUNNER_TEMP/design-baseline/frontend/public/$file"
+            done
+            # Includes top-level logical JSON, not merely static-data/.
+            node --input-type=module -e 'import {dataInventoryDigest} from "./.github/scripts/publication-state.mjs"; if (dataInventoryDigest(process.argv[1]) !== dataInventoryDigest(process.argv[2])) throw Error("Design comparison data differs before build")' frontend/public "$RUNNER_TEMP/design-baseline/frontend/public"
           fi
           if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
             ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
@@ -99,6 +123,7 @@ jobs:
           fi
       - name: Build both production versions without duplicating the large data tree
         env:
+          GH_TOKEN: ${{ github.token }}
           VITE_STATIC_SITE: 'true'
           VITE_BASE_PATH: '/screener/'
         shell: bash
@@ -117,20 +142,20 @@ jobs:
               ln -s "$FINANCIAL_CANDIDATE_DIR/corrected" "$source/dist"
               continue
             fi
-            (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
-            if [ "$target" = current ]; then
-              (cd "$source" && node tools/check-data-quality.mjs)
-              node .github/scripts/select-release-source.mjs check-design-data
+            if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
+              # Existing correction comparisons retain their separate baseline.
+              (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
             fi
+            # Ordinary/carry comparisons are Vite-only after the identical copy.
             mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
             (cd "$source" && npx vite build)
             if [ "$target" = current ] && [ -f "$source/dist/static-transport-capability.json" ]; then
               # The new decoder must be measured with its actual physical
               # representation. The old comparison UI remains raw.
               mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
-              node .github/scripts/design-transport.mjs "$source/dist" "$RUNNER_TEMP/design-input-provenance.json"
+              node --max-old-space-size=4096 .github/scripts/design-transport.mjs "$source/dist" "$RUNNER_TEMP/design-input-provenance.json" 2>&1 | tee "$RUNNER_TEMP/design-transport.log"
             else
-              ln -s "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+              mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
             fi
           done
           (cd frontend && node tools/build-radar-benchmark.mjs)
@@ -167,10 +192,10 @@ jobs:
           retention-days: 14
           if-no-files-found: error
       - name: Seal the exact tested financial candidate
-        if: success() && steps.financial.outputs.candidate == 'true'
+        if: success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == ''
         run: node .github/scripts/financial-release-activation.mjs design-seal
       - name: Retain the exact tested financial candidate
-        if: success() && steps.financial.outputs.candidate == 'true'
+        if: success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == ''
         uses: actions/upload-artifact@v4
         with:
           name: financial-release-candidate-${{ github.run_id }}-${{ github.run_attempt }}
@@ -186,4 +211,8 @@ jobs:
             frontend/test-results/design-review/
             ${{ runner.temp }}/design-input-provenance.json
             ${{ runner.temp }}/verified-publication/retained-universe-report.json
+            ${{ runner.temp }}/design-carry-evidence/
+            ${{ runner.temp }}/design-carry-verifier-reports/
+            ${{ runner.temp }}/design-carry-prepare.log
+            ${{ runner.temp }}/design-transport.log
           retention-days: 14

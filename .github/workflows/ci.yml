@@ -197,7 +197,7 @@ jobs:
         run: node --test .github/scripts/export-source-promotion-inputs.test.mjs
 
       - name: Lossless transport and publication boundary contracts
-        run: node --test --test-concurrency=2 frontend/tools/static-transport/contracts.node.mjs frontend/tools/static-transport/browser-harness.node.mjs .github/scripts/financial-audit-transport.test.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs .github/scripts/design-transport.test.mjs
+        run: node --test --test-concurrency=2 frontend/tools/static-transport/contracts.node.mjs frontend/tools/static-transport/browser-harness.node.mjs .github/scripts/financial-audit-transport.test.mjs .github/scripts/static-transport-publication.test.mjs .github/scripts/static-transport-carry.test.mjs .github/scripts/design-transport.test.mjs .github/scripts/design-financial-carry.test.mjs .github/scripts/design-carry-workflow.test.mjs
 
       - name: Test
         run: cd frontend && npm run test:run

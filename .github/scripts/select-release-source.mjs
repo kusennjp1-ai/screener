@@ -747,7 +747,17 @@ function exportMetadata() {
   writeFileSync(join(directory, 'source.json'), JSON.stringify({ price_observations: observations, price_observations_sha256: priceObservationDigest(observations), run_id: runId, run_attempt: attempt, source_sha: process.env.GITHUB_SHA,
     artifact_name: `static-site-data-${runId}-${attempt}`, manifest_json: bytes.toString('utf8'), manifest_sha256: sha256(bytes) }));
 }
+const publisherCommands=new Set(['restore','prepare-carry','ordinary-carry-build','publisher-build-before','publisher-build-after','compose','recheck']);
+function assertPublisherState(state) {
+  const preview=value=>value&&typeof value==='object'&&(Object.hasOwn(value,'publication_authority')||Object.hasOwn(value,'financial_admission')
+    ||[value.schema,value.schema_version].some(schema=>typeof schema==='string'&&schema.includes('preview')));
+  if(state?.decision?.mode==='design'||[state,state?.carry,state?.activation,state?.activation?.record,state?.renewal,state?.renewal?.record,state?.correction,state?.correction?.record,state?.source?.publication].some(preview)
+    ||['designCarryPreview','design_carry_preview','designPreview'].some(key=>Object.hasOwn(state||{},key)))throw Error('Design preview state cannot enter publisher commands');
+}
 async function runCommand(command) {
+  // Reject Design/preview provenance before quota records, downloads, exporter
+  // boundaries, payload composition, or any publication recheck can run.
+  if(publisherCommands.has(command))assertPublisherState(readState());
   if(process.env.GITHUB_EVENT_NAME==='workflow_run'&&['plan','restore','compose','recheck'].includes(command)){
     const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
     const automatic=event.workflow_run?.path==='.github/workflows/ci.yml'&&(command==='plan'||Boolean(readState().renewal));
