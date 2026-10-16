@@ -1,4 +1,3 @@
-import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
 import { useFinancialClock } from '../useFinancialClock';
 import { mergeFinancialDetail } from '../financialCurrent';
 import ConnectionStatus from '../components/ConnectionStatus';
@@ -162,7 +161,6 @@ export default function ResearchPage({compareOnly=false}) {
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
-  const financialEvidence = useMemo(()=>selected ? buildFinancialEvidencePresentation(selected,{method,date:bundle.data?.date,generation:version,now}) : undefined,[selected,method,bundle.data?.date,version,now]);
   const portfolioPlan = useMemo(() => buildPortfolioPlan(rows, bundle.data?.date, 100000, now, portfolioPrepared, sessionCurrentAt), [rows, bundle.data?.date, now, portfolioPrepared, sessionCurrentAt]);
   const activeQuote = personalKey ? personal.quote : quote.data;
   const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, now);
@@ -258,7 +256,7 @@ export default function ResearchPage({compareOnly=false}) {
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
       <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
-      {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
+      {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">
       <CandidatePerformance entry={entry}/>

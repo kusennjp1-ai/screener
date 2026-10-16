@@ -21,6 +21,8 @@ it('keeps the selected date aligned with chart bars when the same cached publica
   fetchPayload.mockResolvedValue(payload);
   const view = setup({entry:{path:'a.json'},symbol:'AAA',generation:'1'});
   await screen.findByTestId('chart');
+  const disclosure=screen.getByText('日足の数値を確認').closest('details');
+  disclosure.open=true;fireEvent(disclosure,new Event('toggle'));
   fireEvent.change(screen.getByLabelText('AAA の日付'), {target:{value:first.date}});
   await act(async () => view.client.setQueryData(['chart','AAA','a.json','1'], {...payload,bars:[first,{date:'2026-09-19',close:99},last]}));
   await waitFor(() => expect(screen.getByTestId('chart')).toHaveTextContent('AAA:3:'));
@@ -39,6 +41,8 @@ it('resets numeric selection when switching symbols through the keyed chart surf
   ]}));
   const view = setup({entry:{path:'a.json'},symbol:'AAA',generation:'1'});
   await screen.findByTestId('chart');
+  const disclosure=screen.getByText('日足の数値を確認').closest('details');
+  disclosure.open=true;fireEvent(disclosure,new Event('toggle'));
   fireEvent.change(screen.getByLabelText('AAA の日付'), {target:{value:'2026-09-18'}});
   view.update({entry:{path:'b.json'},symbol:'BBB',generation:'1'});
   expect(await screen.findByLabelText('BBB の日付')).toHaveValue('2026-09-21');

@@ -231,3 +231,17 @@ jobs:
             ${{ runner.temp }}/design-carry-prepare.log
             ${{ runner.temp }}/design-transport.log
           retention-days: 14
+      # Keep the normal review download separate from large profiling/source evidence.
+      # Only top-level report files and the harness's bounded PNG captures belong here.
+      - name: Preserve compact Design review screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-review-compact-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results/design-review/report.json
+            frontend/test-results/design-review/summary.md
+            frontend/test-results/design-review/financial-carry-evidence.json
+            frontend/test-results/design-review/*.png
+          retention-days: 7
+          if-no-files-found: warn

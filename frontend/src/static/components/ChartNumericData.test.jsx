@@ -14,6 +14,7 @@ it('labels each daily value and preserves unknowns separately from observed zero
   expect(screen.getByText(/分析基準日/)).toHaveTextContent('2026-10-02 ／ 配信データ作成日時 2026-10-03T10:00:00Z');
   expect(screen.getAllByText('未確認')).toHaveLength(3);
   expect(within(screen.getByText('出来高').parentElement).getByText('0')).toBeInTheDocument();
+  openHistory();
   fireEvent.change(screen.getByLabelText('SYNTH の日付'), { target: { value:'2026-10-01' } });
   expect(disclosure).toHaveTextContent('対象日 2026-10-01');
   expect(within(screen.getByText('終値').parentElement).getByText('101')).toBeInTheDocument();
@@ -26,7 +27,8 @@ const dailyBars = [
   { date:'2026-10-01', close:101, volume:30 },
 ];
 const props = { symbol:'SYNTH', asOfDate:'2026-10-02', generatedAt:'same-publication' };
-const choose = date => fireEvent.change(screen.getByLabelText('SYNTH の日付'), { target:{value:date} });
+const openHistory = () => { const disclosure=screen.getByText('日足の数値を確認').closest('details'); disclosure.open=true; fireEvent(disclosure,new Event('toggle')); };
+const choose = date => { openHistory(); fireEvent.change(screen.getByLabelText('SYNTH の日付'), { target:{value:date} }); };
 const expectPoint = (date, close) => {
   expect(screen.getByLabelText('SYNTH の日付')).toHaveValue(date);
   expect(screen.getByText(/価格の通貨/)).toHaveTextContent(`対象日 ${date}`);
@@ -118,4 +120,30 @@ it('does not fabricate currency, generation time or absent daily observations', 
   expect(screen.getByText(/配信データ作成日時/)).toHaveTextContent('分析基準日 未確認 ／ 配信データ作成日時 未確認');
   expect(screen.getByText(/価格の通貨/)).toHaveTextContent('価格の通貨 未確認');
   expect(within(screen.getByText('終値').parentElement).getByText('0')).toBeInTheDocument();
+});
+
+it('mounts history options only while expanded and preserves the selected day across close and reopen', () => {
+ render(<ChartNumericData {...props} bars={dailyBars}/>);
+ const disclosure=screen.getByText('日足の数値を確認').closest('details');
+ expect(disclosure.querySelectorAll('option')).toHaveLength(1);
+ openHistory();
+ expect(disclosure.querySelectorAll('option')).toHaveLength(dailyBars.length);
+ choose('2026-09-30');
+ disclosure.open=false;fireEvent(disclosure,new Event('toggle'));
+ expect(disclosure.querySelectorAll('option')).toHaveLength(1);
+ expectPoint('2026-09-30',100);
+ openHistory();
+ expect(disclosure.querySelectorAll('option')).toHaveLength(dailyBars.length);
+ expectPoint('2026-09-30',100);
+});
+
+it('does not remount hidden history options after an empty payload interrupts an expanded disclosure', () => {
+ const view=render(<ChartNumericData {...props} bars={dailyBars}/>);
+ openHistory();
+ view.rerender(<ChartNumericData {...props} bars={[]}/>);
+ view.rerender(<ChartNumericData {...props} bars={dailyBars}/>);
+ const disclosure=screen.getByText('日足の数値を確認').closest('details');
+ expect(disclosure).not.toHaveAttribute('open');
+ expect(disclosure.querySelectorAll('option')).toHaveLength(1);
+ openHistory();expect(disclosure.querySelectorAll('option')).toHaveLength(dailyBars.length);
 });
