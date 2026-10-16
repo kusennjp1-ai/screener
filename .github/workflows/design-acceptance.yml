@@ -23,7 +23,9 @@ jobs:
   design-acceptance:
     name: Real-data design and performance budgets
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Authentic carry preparation plus two independent replays precede browser gates.
+    # Keep a finite job cap; this changes runtime headroom, never acceptance budgets.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -103,7 +105,9 @@ jobs:
             # Prepare one logical dataset before either UI build. The preview
             # adapter retains the original source/audit/history and never seals
             # or admits a financial source. No later exporter may rewrite it.
+            echo "Design stage: $(date -u +%FT%TZ) carry-prepare start"
             node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare "$RUNNER_TEMP/design-input-provenance.json" "$RUNNER_TEMP/design-baseline" 2>&1 | tee "$RUNNER_TEMP/design-carry-prepare.log"
+            echo "Design stage: $(date -u +%FT%TZ) carry-prepare complete"
             if ! node --input-type=module -e 'import fs from "node:fs"; process.exit(JSON.parse(fs.readFileSync(process.argv[1])).schema === "design-financial-carry-preview-v1" ? 0 : 1)' "$RUNNER_TEMP/design-input-provenance.json"; then
               (cd frontend && node tools/export-research.mjs && node tools/record-candidate-history.mjs && node tools/check-data-quality.mjs)
             fi
@@ -148,17 +152,23 @@ jobs:
             fi
             # Ordinary/carry comparisons are Vite-only after the identical copy.
             mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
+            echo "Design stage: $(date -u +%FT%TZ) vite-$target start"
             (cd "$source" && npx vite build)
+            echo "Design stage: $(date -u +%FT%TZ) vite-$target complete"
             if [ "$target" = current ] && [ -f "$source/dist/static-transport-capability.json" ]; then
               # The new decoder must be measured with its actual physical
               # representation. The old comparison UI remains raw.
               mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
+              echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip start"
               node --max-old-space-size=4096 .github/scripts/design-transport.mjs "$source/dist" "$RUNNER_TEMP/design-input-provenance.json" 2>&1 | tee "$RUNNER_TEMP/design-transport.log"
+              echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip complete"
             else
               mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
             fi
           done
+          echo "Design stage: $(date -u +%FT%TZ) radar-build start"
           (cd frontend && node tools/build-radar-benchmark.mjs)
+          echo "Design stage: $(date -u +%FT%TZ) radar-build complete"
       - name: Measure all routes, screenshots, accessibility and CPU 4x
         working-directory: frontend
         env:
@@ -167,7 +177,12 @@ jobs:
           RADAR_BUILD: test-results/radar-build
           DESIGN_REVIEW_OUTPUT: test-results/design-review
           DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
-        run: node tools/design-review.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Design stage: $(date -u +%FT%TZ) browser-measurements start"
+          node tools/design-review.mjs
+          echo "Design stage: $(date -u +%FT%TZ) browser-measurements complete"
       - name: Require reviewed screenshots and four design scores of at least 8.0
         if: always()
         working-directory: frontend

@@ -34,3 +34,30 @@ test('preview cannot enter seal/candidate output, and failure evidence is retain
 test('adapter uses unchanged carry/history/quality gates and no provider acquisition',()=>{for(const token of ['checkedExport','verifyArchive','livePublication','restorePublishedFinancialSource','prepareHistoryReconciliation','writeHistoryPayloads','commitHistoryCatalogs','restorePackedHistory','prepareCarryHistory','readCarryTargetBase','loadFinancialGenerationCarry','verifyCarriedBundle','verifyReconciledPerformance','check-data-quality.mjs','assessRetainedUniverse'])assert.ok(adapter.includes(token),token);assert.doesNotMatch(adapter,/export-financial-history\.py|yfinance|requests\.get|FINANCIAL_EVALUATED_AT:process.env/);assert.match(adapter,/evaluatedAt:Date.now\(\)/);});
 
 test('real carry replay uses one fixed memory budget without allowing runtime hooks',()=>{assert.match(workflow,/node --max-old-space-size=4096 \.github\/scripts\/design-financial-carry.mjs prepare/);assert.match(workflow,/node --max-old-space-size=4096 \.github\/scripts\/design-transport.mjs/);assert.match(adapter,/process.execArgv.length===1&&process.execArgv\[0\]==='--max-old-space-size=4096'/);assert.match(adapter,/process.env.NODE_OPTIONS\|\|process.env.NODE_PATH/);});
+
+
+test('Design allows a finite 90-minute job without changing runner or acceptance gates',()=>{
+  assert.match(workflow,/runs-on: ubuntu-latest\n(?:\s*#[^\n]*\n)*\s+timeout-minutes: 90\n/);
+  assert.equal((workflow.match(/timeout-minutes:/g)||[]).length,1);
+  assert.doesNotMatch(workflow,/continue-on-error:/);
+  assert.match(workflow,/name: Require reviewed screenshots and four design scores of at least 8\.0\n\s+if: always\(\)/);
+  assert.match(workflow,/run: node tools\/check-design-review\.mjs/);
+});
+test('UTC stage markers bracket preparation, builds, full transport and browser work',()=>{
+  const pairs=[['carry-prepare','node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare'],['vite-$target','(cd "$source" && npx vite build)'],['transport-verify-pack-roundtrip','node --max-old-space-size=4096 .github/scripts/design-transport.mjs'],['radar-build','(cd frontend && node tools/build-radar-benchmark.mjs)'],['browser-measurements','node tools/design-review.mjs']];
+  for(const [stage,command]of pairs){
+    const start=workflow.indexOf(`echo "Design stage: $(date -u +%FT%TZ) ${stage} start"`),run=workflow.indexOf(command,start),complete=workflow.indexOf(`echo "Design stage: $(date -u +%FT%TZ) ${stage} complete"`);
+    assert.ok(start>=0&&run>start&&complete>run,stage);
+  }
+});
+test('browser timing preserves nonzero exit and never logs false completion',()=>{
+  const start=workflow.indexOf('      - name: Measure all routes'),end=workflow.indexOf('      - name: Require reviewed screenshots',start);
+  assert.ok(start>=0&&end>start);
+  const step=workflow.slice(start,end);assert.match(step,/shell: bash\n\s+run: \|\n\s+set -euo pipefail/);
+  const script=step.slice(step.indexOf('          set -euo pipefail')).replace(/^          /gm,'');
+  // Shell-only fixture: no browser, provider, source authentication or real Node process runs.
+  const stub='date() { printf "2026-10-16T05:00:00Z\\n"; }; node() { printf "browser fixture\\n"; return "$BROWSER_STATUS"; };\n';
+  const run=status=>execFileSync('bash',['-euo','pipefail','-c',stub+script],{env:{...process.env,BROWSER_STATUS:String(status)},encoding:'utf8',stdio:'pipe'});
+  assert.match(run(0),/browser-measurements start[^]*browser fixture[^]*browser-measurements complete/);
+  assert.throws(()=>run(17),error=>error.status===17&&/browser-measurements start/.test(String(error.stdout))&&!/browser-measurements complete/.test(String(error.stdout)));
+});
