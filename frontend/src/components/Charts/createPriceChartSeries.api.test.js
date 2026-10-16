@@ -1,5 +1,6 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {createPriceChartSeries} from './createPriceChartSeries';
+import {createChart} from 'lightweight-charts';
 
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('Lightweight Charts final-pane construction',()=>{
@@ -12,6 +13,7 @@ describe('Lightweight Charts final-pane construction',()=>{
     const container=document.createElement('div');
     document.body.appendChild(container);
     const result=createPriceChartSeries(container,{width:800,height:440,isDarkMode:true,interactive:true,researchView:true,bookAnnotations,compact});
+    expect(result.chart.options().addDefaultPane).toBe(false);
     expect(result.chart.panes()).toHaveLength(3);
     expect(result.candlestickSeries.getPane().paneIndex()).toBe(0);
     expect(result.rsLineSeries.getPane().paneIndex()).toBe(1);
@@ -32,4 +34,20 @@ describe('Lightweight Charts final-pane construction',()=>{
     }
     result.chart.remove();container.remove();
   });
+});
+
+it('avoids allocating the library’s temporary empty-pane canvases before explicit panes',()=>{
+  vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}});
+  vi.stubGlobal('requestAnimationFrame',()=>1);
+  vi.stubGlobal('cancelAnimationFrame',()=>{});
+  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);
+  const counts=[];
+  for(const addDefaultPane of [true,false]){
+    const container=document.createElement('div');document.body.appendChild(container);
+    const chart=createChart(container,{width:800,height:440,addDefaultPane});
+    counts.push(container.querySelectorAll('canvas').length);
+    expect(chart.panes()).toHaveLength(addDefaultPane?1:0);
+    chart.remove();container.remove();
+  }
+  expect(counts[1]).toBeLessThan(counts[0]);
 });
