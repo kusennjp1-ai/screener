@@ -3,10 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync,symlinkSync,linkSync,renameSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {DESIGN_CARRY_SCHEMA,assertDesignCarryState,validateDesignCarryPreview,verifyDesignCarryPreview,readDesignHistoryResponse} from './design-financial-carry.mjs';
+import {fileURLToPath} from 'node:url';
+import {DESIGN_CARRY_SCHEMA,assertDesignCarryState,validateDesignCarryPreview,verifyDesignCarryPreview,readDesignHistoryResponse,stageDesignReplayReferences} from './design-financial-carry.mjs';
 import {bootstrap,validateReceipt} from './publication-state.mjs';
 import {validateCandidateRecord,validateFinancialReleaseReceipt} from './financial-release-activation.mjs';
 const H='a'.repeat(64),S='b'.repeat(40),identity=`1/1/${H}/${H}`;
@@ -35,3 +36,54 @@ test('a well-shaped preview cannot be used without exact checkout and retained e
 test('history response retention preserves bytes within the existing encoded bound',async()=>{const budget={bytes:0},bytes=Buffer.from('authentic-bytes-fixture');assert.deepEqual(await readDesignHistoryResponse(new Response(bytes),budget),bytes);assert.equal(budget.bytes,bytes.length);});
 test('history response rejects an oversized declared body before buffering',async()=>{await assert.rejects(readDesignHistoryResponse(new Response('x',{headers:{'content-length':String(128*1024*1024+1)}}),{bytes:0}),/encoded cap/);});
 test('history response enforces a total bounded capture budget while streaming',async()=>{await assert.rejects(readDesignHistoryResponse(new Response('ab'),{bytes:512*1024*1024-1}),/retention budget/);});
+
+function referenceFixture(t){
+  const directory=mkdtempSync(join(tmpdir(),'design-reference-replay-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const repo=join(directory,'repo'),scratch=join(directory,'scratch'),refs=join(repo,'data/ibd_reference/ibd50');
+  mkdirSync(refs,{recursive:true});mkdirSync(scratch);
+  const reference={verified:true,as_of_date:'2026-10-15',source:'Synthetic unit fixture only',constituents:[{symbol:'TEST',rank:1}]};
+  const path=join(refs,'2026-10-15.json');writeFileSync(path,JSON.stringify(reference));
+  writeFileSync(join(repo,'.gitignore'),'data/ibd_reference/ignored.json\n');
+  const git=args=>execFileSync('git',['-C',repo,...args],{encoding:'utf8',stdio:'pipe'}).trim();
+  git(['init','-q']);git(['add','.']);git(['-c','user.name=fixture','-c','user.email=fixture@example.invalid','commit','-qm','reference fixture']);
+  return {directory,repo,scratch,refs,path,reference,git};
+}
+test('scratch replay reproduces missing reference failure and stages exact source bytes for the actual exporter',t=>{
+  const f=referenceFixture(t),frontend=join(f.scratch,'replay'),data=join(frontend,'public/static-data');mkdirSync(data,{recursive:true});
+  const write=(name,value)=>writeFileSync(join(data,name),JSON.stringify(value));
+  write('manifest.json',{generated_at:'2026-10-15T20:00:00Z',markets:{US:{market:'US',as_of_date:'2026-10-15',pages:{scan:{path:'scan.json'}},assets:{charts:{path:'charts.json'}}}}});
+  write('scan.json',{as_of_date:'2026-10-15',initial_rows:[{symbol:'TEST',market:'US',as_of_date:'2026-10-15',current_price:20,adv_usd:30000000}],chunks:[]});write('charts.json',{symbols:[]});
+  const sourceBytes=readFileSync(f.path),env={...process.env,FINANCIAL_EVALUATED_AT:'2026-10-16T04:00:00.000Z'};
+  for(const key of Object.keys(env))if(/^(?:FINANCIAL_CORRECTION_|FINANCIAL_GENERATION_CARRY_)/.test(key))delete env[key];
+  const script=fileURLToPath(new URL('../../frontend/tools/export-research.mjs',import.meta.url));
+  const run=()=>execFileSync(process.execPath,[script],{cwd:frontend,env,encoding:'utf8',stdio:'pipe'});
+  assert.throws(run,error=>error.status===1&&/ENOENT[^]*ibd_reference\/ibd50/.test(String(error.stderr)));
+  assert.match(stageDesignReplayReferences(f.repo,f.scratch),/^[a-f0-9]{64}$/);
+  assert.deepEqual(readFileSync(join(f.scratch,'data/ibd_reference/ibd50/2026-10-15.json')),sourceBytes);
+  assert.match(run(),/Daily research exported/);
+  assert.deepEqual(JSON.parse(readFileSync(join(frontend,'public/ibd-reference.json'))),f.reference);
+  assert.deepEqual(readFileSync(f.path),sourceBytes);
+});
+for(const name of ['missing','missing-source','linked','hard-linked','linked-source','linked-parent','linked-repo','linked-scratch','untracked','ignored','modified','destination-exists','destination-linked'])test(`reference replay rejects ${name} input without an empty fallback`,t=>{
+  const f=referenceFixture(t);
+  if(name==='missing')rmSync(f.refs,{recursive:true});
+  if(name==='missing-source')rmSync(join(f.repo,'data/ibd_reference'),{recursive:true});
+  if(name==='linked'){rmSync(f.path);symlinkSync(join(f.repo,'.gitignore'),f.path);}
+  if(name==='hard-linked')linkSync(f.path,join(f.directory,'hard-link.json'));
+  for(const [kind,path]of [['linked-source',join(f.repo,'data/ibd_reference')],['linked-parent',join(f.repo,'data')]])if(name===kind){const moved=join(f.directory,kind);renameSync(path,moved);symlinkSync(moved,path);}
+  if(name==='linked-repo'){const alias=join(f.directory,'repo-link');symlinkSync(f.repo,alias);f.repo=alias;}
+  if(name==='linked-scratch'){const alias=join(f.directory,'scratch-link');symlinkSync(f.scratch,alias);f.scratch=alias;}
+  if(name==='untracked')writeFileSync(join(f.refs,'2026-10-16.json'),'{}');
+  if(name==='ignored')writeFileSync(join(f.repo,'data/ibd_reference/ignored.json'),'{}');
+  if(name==='modified')writeFileSync(f.path,'{}');
+  if(name==='destination-exists')mkdirSync(join(f.scratch,'data'));
+  if(name==='destination-linked')symlinkSync(join(f.repo,'data'),join(f.scratch,'data'));
+  assert.throws(()=>stageDesignReplayReferences(f.repo,f.scratch));
+});
+test('actual verifier stages checked references before replay export without changing its code identity scope',()=>{
+  const source=readFileSync(new URL('./design-financial-carry.mjs',import.meta.url),'utf8');
+  const verifier=source.slice(source.indexOf('export async function verifyDesignCarryPreview'));
+  const stage=verifier.indexOf('stageDesignReplayReferences(repoRoot,scratch)'),prepare=verifier.indexOf('const prepared=await prepareBaseline');
+  assert.ok(stage>=0&&prepare>stage);
+  assert.ok(source.includes("'data/ibd_reference'"));
+});

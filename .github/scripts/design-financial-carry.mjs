@@ -100,6 +100,25 @@ function exporter(frontend,root,env,script='export-research.mjs'){
   if(root!==join(dirname(root),'public'))throw Error('Design data execution root must be named public');
   return execFileSync(process.execPath,['--max-old-space-size=4096',join(frontend,'tools',script)],{cwd:dirname(root),env,encoding:'utf8',maxBuffer:8*1024*1024});
 }
+// The exporter resolves ../data/ibd_reference relative to its execution cwd.
+// Replay must receive the same checked reference bytes, never an empty fallback.
+export function stageDesignReplayReferences(repoRoot,scratch){
+  const source=join(repoRoot,'data/ibd_reference'),target=join(scratch,'data/ibd_reference');
+  for(const path of [repoRoot,scratch,join(repoRoot,'data'),source,join(source,'ibd50')]){
+    const info=lstatSync(path);if(!info.isDirectory()||info.isSymbolicLink())throw Error('Linked or missing Design reference directory');
+  }
+  git(repoRoot,['diff','--exit-code','HEAD','--','data/ibd_reference']);
+  if(git(repoRoot,['ls-files','--others','--','data/ibd_reference']))throw Error('Untracked Design reference input');
+  const expected=completeInventory(source);
+  for(const path of Object.keys(expected)){
+    const info=lstatSync(join(source,path));if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1)throw Error('Linked or special Design reference file');
+  }
+  mkdirSync(join(scratch,'data'));
+  cpSync(source,target,{recursive:true,errorOnExist:true,force:false});
+  equal(completeInventory(source),expected,'original replay references');
+  equal(completeInventory(target),expected,'copied replay references');
+  return inventoryDigest(expected);
+}
 async function prepareBaseline({root,frontend,evidence,state,evaluatedAt}){
   const plan=await prepareHistoryReconciliation({selectedRoot:join(root,'static-data'),publishedRoot:join(evidence,'predecessor/static-data'),selectedAt:state.source.artifact.created_at,publishedAt:new Date(state.live.latest.completed).toISOString()});
   writeHistoryPayloads(plan);commitHistoryCatalogs(plan);
@@ -270,6 +289,7 @@ export async function verifyDesignCarryPreview({provenancePath,root,baselineRoot
   replaySource(state,evidence);
   const scratch=mkdtempSync(join(tmpdir(),'verify-design-carry-'));
   try{
+    stageDesignReplayReferences(repoRoot,scratch);
     const replay=join(scratch,'replay/public');extractData(state.source,join(evidence,'source/artifact.tar'),replay);
     if(dataInventoryDigest(replay)!==record.evidence.source_input_sha256)throw Error('Design original input inventory changed');
     await replayHistory(state,evidence,join(scratch,'history'));
