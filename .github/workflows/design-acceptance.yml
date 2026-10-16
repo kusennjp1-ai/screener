@@ -232,18 +232,16 @@ jobs:
             ${{ runner.temp }}/design-transport.log
           retention-days: 14
       # Keep the normal review download separate from large profiling/source evidence.
-      # Only reports, bounded PNG captures and the two named CPU profiles belong here.
-      - name: Preserve compact Design review screenshots and report
+      # Stage all reports/screenshots and only explicitly named, size-bounded diagnostics.
+      - name: Stage bounded compact Design evidence
+        id: compact
         if: always()
+        run: node frontend/tools/prepare-compact-design.mjs frontend/test-results/design-review "${{ runner.temp }}/design-review-compact"
+      - name: Preserve compact Design review screenshots and report
+        if: always() && steps.compact.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: design-review-compact-${{ github.sha }}-${{ github.run_attempt }}
-          path: |
-            frontend/test-results/design-review/report.json
-            frontend/test-results/design-review/summary.md
-            frontend/test-results/design-review/financial-carry-evidence.json
-            frontend/test-results/design-review/*.png
-            frontend/test-results/design-review/diagnostic-initial-1440.cpuprofile
-            frontend/test-results/design-review/diagnostic-method-1440.cpuprofile
+          path: ${{ runner.temp }}/design-review-compact/
           retention-days: 7
           if-no-files-found: warn
