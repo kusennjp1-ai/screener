@@ -36,7 +36,8 @@ it('allows missing optional diagnostics but rejects stale nonempty destinations'
 });
 it('uses finite caps below the connector download ceiling',()=>{
  expect(COMPACT_TOTAL_LIMIT).toBe(128*1024*1024);expect(COMPACT_FILE_LIMIT).toBe(32*1024*1024);expect(DIAGNOSTIC_FILE_LIMIT).toBe(16*1024*1024);
- expect(COMPACT_DIAGNOSTICS).toHaveLength(9);expect(COMPACT_DIAGNOSTICS.every(path=>!path.includes('*')&&!path.includes('..'))).toBe(true);
+ expect(COMPACT_DIAGNOSTICS.filter(path=>path.startsWith('diagnostic-continuous-'))).toEqual(['diagnostic-continuous-1440.cpuprofile','diagnostic-continuous-1440.trace.json','diagnostic-continuous-390.cpuprofile','diagnostic-continuous-390.trace.json']);
+ expect(COMPACT_DIAGNOSTICS).toHaveLength(13);expect(COMPACT_DIAGNOSTICS.every(path=>!path.includes('*')&&!path.includes('..'))).toBe(true);
 });
 
 it('keeps missing early-failure evidence nonfatal, matching the existing warn-only upload',async()=>{

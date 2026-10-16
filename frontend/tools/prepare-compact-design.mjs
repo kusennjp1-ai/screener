@@ -9,6 +9,8 @@ export const COMPACT_REPORTS = ['report.json', 'summary.md', 'financial-carry-ev
 export const COMPACT_DIAGNOSTICS = [
   'diagnostic-initial-1440.cpuprofile', 'diagnostic-method-1440.cpuprofile',
   'diagnostic-initial-1440.trace.json', 'diagnostic-method-1440.trace.json',
+  'diagnostic-continuous-1440.cpuprofile', 'diagnostic-continuous-1440.trace.json',
+  'diagnostic-continuous-390.cpuprofile', 'diagnostic-continuous-390.trace.json',
   'radar-diagnostic/report.json',
   'radar-diagnostic/radar-1440.cpuprofile', 'radar-diagnostic/radar-1440.trace.json',
   'radar-diagnostic/radar-390.cpuprofile', 'radar-diagnostic/radar-390.trace.json',

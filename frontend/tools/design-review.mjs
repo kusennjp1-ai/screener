@@ -10,6 +10,7 @@ import { gzipSync } from 'node:zlib';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
+import { recordContinuousSwitchDiagnostic } from './continuous-switch-diagnostic.mjs';
 import { retainProfileSources } from './retain-profile-sources.mjs';
 import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
 import { verifyFinancialCarryCases, financialCarryDesignScreens, financialCarrySha256, prepareFinancialCarryDesignBinding,
@@ -365,6 +366,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
             await page.getByRole('button', { name: /^オニール/ }).click();
             await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           } }));
+          report.profile_diagnostics.push(await recordContinuousSwitchDiagnostic({ cdp, page, output, url:server.url, readySelector, visible, width:viewport.width }));
         } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
       }
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
