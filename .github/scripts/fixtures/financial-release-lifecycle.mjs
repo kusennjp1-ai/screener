@@ -58,7 +58,7 @@ function bars(date,price) {
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
-export function lifecycleFixture({controllerPath=controller,packedTransport=false}={}) {
+export function lifecycleFixture({controllerPath=controller,packedTransport=false,omitAcquiredHistory=false}={}) {
   const root=mkdtempSync(join(tmpdir(),'financial-release-lifecycle-')),certificate=certifiedSourceFixture();
   const configPath=join(root,'remote.json'),preload=join(root,'transport.mjs'),bin=join(root,'bin');mkdirSync(bin);
   const config={api:{},zips:{},liveRoot:null},api=config.api,prefix=`repos/${repository}`;
@@ -105,7 +105,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     write(join(dataRoot,'charts-index.json'),{market:'US',symbols:[{symbol:'OWNED',path:'charts/OWNED.json'}]});
     const chart={symbol:'OWNED',market:'US',as_of_date:date,bars:bars(date,price),stock_data:value,fundamentals:{...value},eps_line:[]};
     write(join(dataRoot,'charts/OWNED.json'),chart);write(join(dataRoot,'raw/OWNED.json'),chart);
-    write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
+    if(!omitAcquiredHistory)write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
     if(history)cpSync(history,join(dataRoot,'candidate-history'),{recursive:true});
     else {write(join(dataRoot,'candidate-history/index.json'),{schema_version:1,snapshots:[]});write(join(dataRoot,'candidate-history/retained-history.json'),'retained original history bytes\n');}
     write(join(dataRoot,'candidate-performance-history/index.json'),{schema_version:1,cohorts:[]});

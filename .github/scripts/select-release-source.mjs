@@ -564,8 +564,15 @@ async function prepareCarry() {
     const {assertFinitePriceBaseline}=await import('./retained-price-source-baseline.mjs');
     state.carry.priceSourceProof=assertFinitePriceBaseline({sourceRoot:proof.sourceRoot,targetRoot:root,replayRoot:proof.replayRoot,request:readRepairRequest(repairControllerRoot()).value});
   }
-  const baseline=join(scratch(),'carry-baseline');rmSync(baseline,{recursive:true,force:true});copyBundleData(root,baseline);
   const targetInput=await readCarryTargetBase({root,frontendRoot:frontend}),target=targetInput.bytes;
+  // Provider-free/UI-only ordinary preparation still needs the standard
+  // derived container before the immutable baseline is captured. Do not
+  // reinterpret the separately pinned dated or finite-source preparations.
+  if(!ordinaryCarrySelected(state)&&!state.source.repair){
+    const {prepareCarryHistory}=await import('./prepare-carry-history.mjs');
+    prepareCarryHistory({root,targetInput});
+  }
+  const baseline=join(scratch(),'carry-baseline');rmSync(baseline,{recursive:true,force:true});copyBundleData(root,baseline);
   const previous=state.live.financialRelease;
   const sourceProjection=readFileSync(join(state.carry.sourceRoot,previous.source_projection.path));
   const sourceBase=readFileSync(join(state.carry.sourceRoot,previous.source_base.path));
