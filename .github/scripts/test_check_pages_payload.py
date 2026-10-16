@@ -339,7 +339,7 @@ class WorkflowScopeTests(unittest.TestCase):
                 self.assertLess(build_index, index)
                 self.assertEqual(field(build, "working-directory"), "release/frontend")
                 self.assertIsNone(input_field(build, "GH_TOKEN"))
-                self.assertEqual(field(build, "if"), "steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING != 'true'")
+                self.assertEqual(field(build, "if"), "steps.plan.outputs.limited_research_preview != 'true' && steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING != 'true'")
                 self.assertNotIn("continue-on-error:", build)
                 commands = [line.strip() for line in build.split("        run: |\n", 1)[1].splitlines() if line.strip()]
                 self.assertEqual(commands, [
@@ -351,7 +351,7 @@ class WorkflowScopeTests(unittest.TestCase):
                 self.assertEqual(len(ordinary_steps), 1)
                 ordinary_index, ordinary = ordinary_steps[0]
                 self.assertLess(ordinary_index, build_index)
-                self.assertEqual(field(ordinary, "if"), "steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING == 'true'")
+                self.assertEqual(field(ordinary, "if"), "steps.plan.outputs.limited_research_preview != 'true' && steps.plan.outputs.publish == 'true' && env.ORDINARY_CARRY_TOOLING == 'true'")
                 self.assertEqual(field(ordinary, "run"), "node .github/scripts/select-release-source.mjs ordinary-carry-build")
                 self.assertEqual(input_field(ordinary, "GH_TOKEN"), "${{ github.token }}")
                 self.assertIsNone(input_field(ordinary, "GITHUB_TOKEN"))
