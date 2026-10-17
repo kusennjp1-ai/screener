@@ -100,6 +100,11 @@ it('never presents a stale positive value as a current pass', () => {
   expect(current).toHaveTextContent('有効期限を過ぎています');
   expect(current).not.toHaveTextContent('30%');
   expect(screen.queryByText('✓ 通過')).not.toBeInTheDocument();
+  expect(current.closest('details')).toBeNull();
+  expect(within(current).getByText(/有効期限を過ぎています/).closest('details')).toBeNull();
+  const provenance=screen.getByText('配信版・照合情報').closest('details');
+  expect(provenance).not.toHaveAttribute('open');
+  expect(current.querySelector('.financial-evidence-metadata').closest('details')).toBeNull();
 });
 
 it('keeps absent evidence honest and references out of the pass/fail count', () => {

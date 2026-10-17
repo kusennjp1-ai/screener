@@ -23,7 +23,7 @@ export default function FinancialEvidencePanel(props) {
   const requiredFailed = view.rows.filter(row => row.required && row.state === 'fail').length;
   return <section className="financial-evidence-panel" aria-label="財務の判定根拠">
     <header><h3>財務の判定根拠</h3><p>{view.applicabilityLabel || (view.requiredCount ? `財務の必須条件 ${view.requiredCount}件 · 未達 ${requiredFailed}件 · 未確認 ${view.requiredUnknown}件` : '財務は参考確認・トレンド選定の点数には含めません')}</p></header>
-    <EvidenceContext date={props.date} generation={props.generation} evidence={props.evidence} label="財務根拠" compareGeneration/>
+    <EvidenceContext date={props.date} generation={props.generation} evidence={props.evidence} label="財務根拠" compareGeneration compact/>
     <p className="financial-evidence-intro">価格の基準日 {props.date || '未確認'} · 財務の確認時刻 {Number.isFinite(props.now) ? new Date(props.now).toISOString() : '未確認'}。基準日より後に取得した情報を含む場合があります。基準日当時に公表済みだったことの証明ではありません。</p>
     <p className="financial-evidence-intro">実数値と条件、対象期、提供元を並べて確認します。参考値の取得だけでSEPA全体を認定しません。</p>
     {sourceContext && <details className="research-disclosure"><summary>オニール財務条件の出典とアプリの範囲</summary><p>{sourceContext}</p><p>{BOOK_SOURCE_PAGE_NOTE}</p></details>}

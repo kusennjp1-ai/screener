@@ -1,4 +1,5 @@
-import { memo, forwardRef, useMemo, useState } from 'react';
+import { memo, forwardRef, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
 import { Alert, Button } from '@mui/material';
 import { assess, entryPlan, finite } from '../researchEngine';
@@ -24,6 +25,8 @@ function SymbolNotes({symbol}) {
 }
 const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,usableQuote,date,market,now,chartEntry,version,onExpand,watch,onWatch,liveStatus,personalKey,personal,onConnect,onDisconnect,onVerificationToggle,detail,onVerified,financialEvidence}, detailRef) {
  const [tab,setTab]=useState('evidence'),[connecting,setConnecting]=useState(false);
+ const [mobileHeader,setMobileHeader]=useState(null);
+ useEffect(()=>{setMobileHeader(document.getElementById('research-mobile-instrument-context'));},[]);
  // Presentation is needed only when its panel is visible. Keep current-use
  // assessment and readiness checks above the fold unchanged.
  const panelEvidence=useMemo(()=>financialEvidence ?? (tab==='financial' && selected
@@ -36,10 +39,12 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
  const showConditions=()=>{choose('conditions');requestAnimationFrame(()=>{const target=document.getElementById('detail-tab-conditions');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'nearest'});});};
  return <div role="region" className="research-detail" ref={detailRef} tabIndex={-1} aria-label="銘柄詳細">
   {selected&&<>
+   {mobileHeader && createPortal(<div role="group" aria-label="表示中の銘柄と分析基準日"><strong>{selected.symbol}</strong><span>分析 {date||'未確認'}</span></div>,mobileHeader)}
    <header className="research-symbol-head">
     <div className="symbol-identity"><div className="symbol-title"><h2 className="mono">{selected.symbol}</h2><span className="exchange-tag">{selected.exchange||'US'}</span><StateChip state={plan.state}/><button className="readiness-chip" onClick={showConditions}>購入条件 {readiness.passed}/{readiness.total}</button></div><p className="symbol-context"><EntrySourceBadge plan={plan}/><span className="symbol-company" title={selected.company_name}>{selected.company_name||'企業名未配信'} <span>· {selected.ibd_industry_group||'業種未確認'}</span></span></p></div>
     <div className="research-symbol-price"><strong className="mono">{money(plan.price)}</strong><span style={{color:finite(selected.price_change_1d)?`var(--${selected.price_change_1d>=0?'zone':'neg'})`:'var(--text-3)'}}>{signed(selected.price_change_1d)} <em>前日比 · {usableQuote?.as_of?new Date(usableQuote.as_of).toLocaleString('ja-JP'):`${date||'未確認'} 終値`}</em></span></div>
     <button className="watch-button" onClick={()=>onWatch(selected.symbol)} aria-label={`${selected.symbol} ${watch.includes(selected.symbol)?'ウォッチ解除':'ウォッチに保存'}`} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol)?'★':'☆'}</button>
+    <p className="symbol-qualification-context" aria-label="価格位置と購入条件">価格位置は購入可否と別です。<span>未達 {readiness.failed}・未確認 {readiness.unknown}{readiness.notApplicable>0?`・対象外 ${readiness.notApplicable}`:''}</span></p>
    </header>
    <ResearchChart method={method} quote={usableQuote} date={date} market={market} now={now} row={selected} rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={onExpand}/>
    <EntryCard plan={plan} readiness={readiness} onConditions={showConditions} onConnect={()=>{setConnecting(!connecting);choose('conditions');}}/>

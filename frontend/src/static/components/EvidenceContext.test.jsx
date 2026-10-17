@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import EvidenceContext from './EvidenceContext';
 
@@ -26,4 +26,27 @@ it('shows same-day version changes separately and does not infer a missing expec
   view.rerender(<EvidenceContext evidence={evidence} label="財務根拠" compareGeneration/>);
   expect(screen.getByText(/分析基準日/)).toHaveTextContent('分析基準日 未確認 ／ 画面の配信版 未確認');
   expect(screen.getByText(/財務根拠の対象日/)).toHaveTextContent('日付の対応 未確認');
+});
+
+it.each([
+  [{as_of_date:'2026-10-02',generation:'b'.repeat(64)},'一致','不一致'],
+  [{as_of_date:'2026-10-01',generation:'a'.repeat(64)},'不一致','一致'],
+  [{},'未確認','未確認'],
+])('collapses identifiers while keeping date and version correspondence visible: %j',(evidence,dateState,versionState)=>{
+  const {container}=render(<EvidenceContext date="2026-10-02" generation={'a'.repeat(64)} evidence={evidence} label="財務根拠" compareGeneration compact/>);
+  const context=screen.getByRole('group',{name:'財務根拠の参照情報'}),summary=screen.getByText('配信版・照合情報');
+  const visible=context.querySelector(':scope > p'),disclosure=summary.closest('details');
+  expect(visible).toHaveTextContent(`日付の対応 ${dateState}`);
+  expect(visible).toHaveTextContent(`配信版の対応 ${versionState}`);
+  expect(visible.closest('details')).toBeNull();
+  expect(screen.getByText('配信版は画面と表示用データの対応を示します。提供元の版や取得日時とは別です。').closest('details')).toBeNull();
+  expect(visible).not.toHaveTextContent('a'.repeat(64));
+  expect(disclosure).not.toHaveAttribute('open');
+  expect(disclosure).toHaveTextContent('a'.repeat(64));
+  if(evidence.generation)expect(disclosure).toHaveTextContent(evidence.generation);
+  for(let i=0;i<2;i++){
+    fireEvent.click(summary);expect(disclosure).toHaveAttribute('open');
+    fireEvent.click(summary);expect(disclosure).not.toHaveAttribute('open');
+    expect(container.querySelector(':scope > div > p')).toBe(visible);
+  }
 });

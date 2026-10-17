@@ -14,6 +14,30 @@ vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
+it.each(['MSM','ADI'])('keeps price-position context and the actual incomplete counts visible before the chart for %s',symbol=>{
+ const selected={...row,symbol},readiness=entryReadiness(selected,props.date,props.market,props.now,props.method);
+ const {container}=render(<ResearchDetail {...props} selected={selected}/>);
+ const header=container.querySelector('.research-symbol-head'),context=within(header).getByLabelText('価格位置と購入条件');
+ expect(context).toHaveTextContent('価格位置は購入可否と別です。');
+ expect(context).toHaveTextContent(`未達 ${readiness.failed}・未確認 ${readiness.unknown}`);
+ expect(context.closest('details')).toBeNull();
+ expect(header.nextElementSibling).toBe(screen.getByTestId('research-chart'));
+});
+it('keeps the actual selected symbol and analysis date in the mobile header across detail tabs and clears it on exit',()=>{
+ const host=document.createElement('div');host.id='research-mobile-instrument-context';document.body.append(host);
+ const onVerificationToggle=vi.fn(),input={...props,selected:row,onVerificationToggle};
+ const view=render(<ResearchDetail {...input}/>);
+ const context=within(host).getByRole('group',{name:'表示中の銘柄と分析基準日'});
+ expect(context).toHaveTextContent('MSM');expect(context).toHaveTextContent('分析 2026-10-01');
+ for(const name of ['財務・機関','購入条件','判定根拠']){
+  fireEvent.click(screen.getByRole('tab',{name}));expect(context).toHaveTextContent('MSM');
+ }
+ view.rerender(<ResearchDetail {...input} selected={{...row,symbol:'OTHER'}} date="2026-10-02"/>);
+ expect(context).toHaveTextContent('OTHER');expect(context).toHaveTextContent('分析 2026-10-02');expect(context).not.toHaveTextContent('MSM');
+ view.rerender(<ResearchDetail {...input} selected={undefined}/>);expect(host).toBeEmptyDOMElement();
+ view.rerender(<ResearchDetail {...input}/>);expect(host).toHaveTextContent('MSM');
+ view.unmount();expect(host).toBeEmptyDOMElement();host.remove();
+});
 it('passes the selected full row to the diagnostic panel without changing selection or purchase results', () => {
  const date='2026-10-02',now=Date.parse('2026-10-04T12:00:00Z');
  vi.useFakeTimers(); vi.setSystemTime(now);
@@ -54,6 +78,7 @@ it('keeps not-applicable selection and purchase states distinct from unknown', (
  expect(selection).toHaveTextContent('対象外');
  expect(selection).not.toHaveTextContent('未確認');
  const readiness=entryReadiness(fund,props.date,props.market,props.now,'oneil');
+ expect(screen.getByLabelText('価格位置と購入条件')).toHaveTextContent(`対象外 ${readiness.notApplicable}`);
  expect(screen.getByRole('heading',{name:new RegExp(`購入条件 ${readiness.passed}/${readiness.total} · 未達 ${readiness.failed} · 未確認 ${readiness.unknown}`)})).toBeInTheDocument();
 });
 it('moves focus from the purchase shortcut to its selected tab and supports arrow navigation', async () => {

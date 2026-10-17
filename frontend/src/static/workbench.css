@@ -9,7 +9,7 @@
 .header-search{margin-left:auto}.header-search .MuiInputBase-root{height:38px;border-radius:12px;font-size:13px}.header-search label{font-size:13px}
 .header-dates{display:flex;gap:12px;font-size:12px;color:var(--text-3);font-family:var(--font-mono);white-space:nowrap}.header-dates span:last-child{max-width:205px;overflow:hidden;text-overflow:ellipsis}
 .leader-header>.MuiIconButton-root{width:44px;height:44px;border:1px solid var(--line-2);border-radius:12px;color:var(--text-2)}
-.leader-mobile-nav,.mobile-header-back,.mobile-back{display:none}.leader-content{max-width:1920px;margin:auto;min-width:0}
+.leader-mobile-nav,.mobile-header-back,.mobile-back,.mobile-instrument-context{display:none}.leader-content{max-width:1920px;margin:auto;min-width:0}
 /* Keep native focus/scroll targets outside the sticky header and mobile nav. */
 html:has(.research-workbench){scroll-padding-top:72px}
 @media(max-width:700px){html:has(.research-workbench){scroll-padding-top:64px;scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}}
@@ -54,3 +54,21 @@ html:has(.research-workbench){scroll-padding-top:72px}
 @media(max-width:700px){.research-hero .changes-trigger{display:block;position:absolute;top:4px;right:64px;min-height:44px;min-width:44px;font-size:12px;color:var(--text-2)}.changes-desktop{display:none}.changes-mobile{display:inline}}
 
 .radar-zone-label{background:var(--ground);padding:0 4px}
+
+/* Price-zone color does not establish purchase qualification. Keep the actual
+   incomplete counts alongside the badge, before the chart, without truncation. */
+.research-symbol-head{height:auto;min-height:88px;row-gap:6px}
+.symbol-qualification-context{grid-column:1/-1;margin:0;color:var(--text-2);font-size:12px;line-height:1.6}
+.symbol-qualification-context span{display:inline-block;margin-left:4px}
+@media(max-width:1279px){.research-symbol-head{min-height:120px;max-height:none;grid-template-rows:48px 44px auto}}
+
+/* Keep the selected instrument in the existing mobile header while evidence
+   scrolls; no additional sticky row takes space from the chart. */
+@media(max-width:700px){
+ .mobile-instrument-context:not(:empty){display:block;min-width:0;margin-left:auto}
+ .mobile-instrument-context>div{display:grid;gap:0;font-size:12px;line-height:1.4}
+ .mobile-instrument-context strong{font-family:var(--font-mono);font-size:14px;overflow-wrap:anywhere}
+ .mobile-instrument-context span{color:var(--text-2);white-space:nowrap}
+ .leader-header:has(.mobile-instrument-context:not(:empty)) .header-dates{display:none}
+ .leader-header:has(.mobile-instrument-context:not(:empty))>.MuiIconButton-root{flex-shrink:0}
+}

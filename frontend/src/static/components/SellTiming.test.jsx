@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import SellTiming, { ACTION_META, normalizeSell } from './SellTiming';
 import { observationFreshness } from '../technicalObservation';
@@ -62,4 +62,30 @@ it('preserves a future-date warning even for a saved model record', () => {
   expect(el).toHaveAttribute('data-freshness', 'future');
   expect(el).toHaveTextContent('前回の保存記録・鮮度未確認');
   expect(el).toHaveTextContent('基準日が未来・鮮度未確認');
+});
+
+it.each([false, true])('explains the loss-cap code while preserving model values and warnings (compact=%s)', compact => {
+  const sell = { action: 'hold', stop: 82.52, stop_basis: 'max_loss_cap', stop_pct: 8 };
+  const before = JSON.stringify(sell);
+  const freshness = observationFreshness('2026-10-01', Date.parse('2026-10-02T22:00:00Z'));
+  renderWithProviders(<SellTiming sell={sell} compact={compact} freshness={freshness} />);
+  expect(screen.getByText('モデル停止水準 82.52 · モデルの損失率上限を基準')).toBeVisible();
+  expect(screen.getByText('売却条件の検出なし（モデル記録）')).toBeVisible();
+  expect(screen.getByText(/配信基準日 2026-10-01 · 基準日から1暦日・最新取引日は未確認/)).toBeVisible();
+  const details = screen.getByText('売却モデルの説明・元の値').closest('details');
+  expect(details).not.toHaveAttribute('open');
+  expect(within(details).getByText('stop_basis: max_loss_cap')).not.toBeVisible();
+  fireEvent.click(within(details).getByText('売却モデルの説明・元の値'));
+  expect(within(details).getByText('stop_basis: max_loss_cap')).toBeVisible();
+  expect(within(details).getByText('action: hold')).toBeVisible();
+  expect(JSON.stringify(sell)).toBe(before);
+});
+
+it('keeps unsupported action and stop-basis codes unconfirmed and inspectable', () => {
+  renderWithProviders(<SellTiming sell={{ action: 'future_action', stop: 82.52, stop_basis: 'future_basis' }} compact />);
+  expect(screen.getByText('売却モデル未計算')).toBeVisible();
+  expect(screen.getByText('モデル停止水準 82.52 · 未確認')).toBeVisible();
+  expect(screen.getByText('action: future_action')).not.toBeVisible();
+  expect(screen.getByText('stop_basis: future_basis')).not.toBeVisible();
+  expect(screen.getByText('実際の保有・注文は未確認')).toBeVisible();
 });

@@ -1,4 +1,10 @@
 .financial-evidence-panel { min-width:0; }
+.compact-evidence-context { font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.compact-evidence-context > p { margin:6px 0; }
+.compact-evidence-context .research-disclosure { margin:0; }
+.compact-evidence-context summary { min-height:44px; display:flex; align-items:center; cursor:pointer; color:var(--text-2); }
+.compact-evidence-context summary::before { content:'▸'; margin-right:8px; }
+.compact-evidence-context details[open] > summary::before { content:'▾'; }
 .financial-evidence-panel header h3 { margin-bottom:6px; }
 .financial-evidence-panel header p,.financial-evidence-intro { color:var(--text-3); margin:6px 0 14px; font-size:12px; line-height:1.7; }
 .financial-evidence-rows { list-style:none; padding:0; margin:0; }
