@@ -13,6 +13,9 @@
 /* Keep native focus/scroll targets outside the sticky header and mobile nav. */
 html:has(.research-workbench){scroll-padding-top:72px}
 @media(max-width:700px){html:has(.research-workbench){scroll-padding-top:64px;scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}}
+/* Keep the focused tab and its outline above the lower viewport edge even when
+   native nearest scrolling rounds a fractional layout position to whole pixels. */
+.detail-tabs button{scroll-margin-bottom:8px}
 .research-workbench{padding:0;min-width:0}.research-grid{display:grid;grid-template-columns:452px minmax(0,1fr);gap:0;align-items:start}
 .research-hero{position:relative;display:grid;grid-template-columns:minmax(410px,.65fr) minmax(0,1fr);gap:28px;height:310px;padding:20px 24px;border-bottom:1px solid var(--line);background:radial-gradient(ellipse at 78% 0,var(--glow),transparent 62%)}
 .hero-copy{min-width:0}.hero-date{font-size:12px;color:var(--text-3);margin:0 0 8px}.hero-copy h1{font-size:42px;line-height:1.25;margin:0;font-weight:900;letter-spacing:-.04em}.hero-subtitle{font-size:20px;font-weight:700;color:var(--text-2);margin:10px 0 14px}

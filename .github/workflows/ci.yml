@@ -162,6 +162,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Main image metadata contracts
+        run: node --test .github/scripts/main-image-metadata.test.mjs
+
       - name: Install dependencies
         run: cd frontend && npm ci
 
@@ -279,6 +282,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Main image metadata from the immutable push event
+        id: main-meta
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node .github/scripts/main-image-metadata.mjs
+
       - name: Normalize GHCR owner
         id: registry
         shell: bash
@@ -295,6 +303,7 @@ jobs:
 
       - name: Backend image metadata
         id: backend-meta
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ steps.registry.outputs.owner }}/stockscreenclaude-backend
@@ -312,13 +321,14 @@ jobs:
           context: .
           file: backend/Dockerfile
           push: true
-          tags: ${{ steps.backend-meta.outputs.tags }}
-          labels: ${{ steps.backend-meta.outputs.labels }}
+          tags: ${{ steps.main-meta.outputs.backend_tags }}${{ steps.backend-meta.outputs.tags }}
+          labels: ${{ steps.main-meta.outputs.labels }}${{ steps.backend-meta.outputs.labels }}
           cache-from: type=gha,scope=backend-image
           cache-to: type=gha,mode=max,scope=backend-image
 
       - name: Frontend image metadata
         id: frontend-meta
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ steps.registry.outputs.owner }}/stockscreenclaude-frontend
@@ -338,8 +348,8 @@ jobs:
           push: true
           build-args: |
             VITE_API_URL=/api
-          tags: ${{ steps.frontend-meta.outputs.tags }}
-          labels: ${{ steps.frontend-meta.outputs.labels }}
+          tags: ${{ steps.main-meta.outputs.frontend_tags }}${{ steps.frontend-meta.outputs.tags }}
+          labels: ${{ steps.main-meta.outputs.labels }}${{ steps.frontend-meta.outputs.labels }}
           cache-from: type=gha,scope=frontend-image
           cache-to: type=gha,mode=max,scope=frontend-image
 
