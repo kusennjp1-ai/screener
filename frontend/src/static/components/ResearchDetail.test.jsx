@@ -5,6 +5,7 @@ import { withSyntheticFinancialProof, financialFixtureDate, financialFixtureNow 
 import { assess } from '../researchEngine';
 import { entryReadiness } from '../entryReadiness';
 import ResearchDetail from './ResearchDetail';
+vi.mock('./QualificationVerification',()=>({default:()=> <div data-testid="qualification-verification"/>}));
 vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>}));
 afterEach(cleanup);
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
@@ -21,7 +22,7 @@ it.each([103.2,112.7])('shows the first-book caution beside the company before t
  expect(screen.getByText('アプリ設定と書籍の確認範囲')).toBeInTheDocument();
  if(price>105)expect(warning).not.toHaveAttribute('aria-label',expect.stringContaining('アプリの範囲内'));
 });
-it.each([[103,'minervini'],[104,'minervini2'],[104,'oneil']])('does not add a first-book header warning at %s for %s',(price,method)=>{
+it.each([[103,'minervini'],[103,'minervini2'],[104,'oneil']])('does not add a first-book header warning at %s for %s',(price,method)=>{
  const {container}=render(<ResearchDetail {...props} method={method} selected={{...row,current_price:price}}/>);
  expect(within(container.querySelector('.research-symbol-head')).queryByRole('note')).not.toBeInTheDocument();
 });
@@ -30,7 +31,7 @@ it.each(['minervini','minervini2'])('explains the checked source and implementat
  render(<ResearchDetail {...props} method={method} selected={row}/>);
  const disclosure=screen.getByText('トレンド条件の出典とアプリの近似').closest('details');
  expect(disclosure).not.toHaveAttribute('open');
- expect(disclosure).toHaveTextContent(method==='minervini'?'近似判定8件と独自の日足品質確認1件':'第2冊の25%指定は未確認');
+ expect(disclosure).toHaveTextContent(method==='minervini'?'近似判定8件と独自の日足品質確認1件':'PDF 221–222');
 });
 it.each(['oneil','ibd'])('keeps source disclosure scoped away from %s',method=>{
  render(<ResearchDetail {...props} method={method} selected={row}/>);
@@ -110,4 +111,21 @@ it('shows both failed and unknown counts while keeping purchase readiness separa
  expect(screen.getByRole('heading',{name:'購入条件 2/7 · 未達 1 · 未確認 4 · 未接続'})).toBeInTheDocument();
  expect(screen.getByRole('tabpanel')).toHaveTextContent('選択中の手法とは別に、ミネルヴィニとIBD型の両方を確認');
  expect(within(screen.getByRole('tabpanel')).getAllByRole('listitem')).toHaveLength(7);
+});
+
+
+it('reaches the four-book comparison from the existing book tab and drops it during a new detail load', () => {
+ const input={...props,onVerificationToggle:vi.fn(),selected:row};
+ const {rerender}=render(<ResearchDetail {...input}/>);
+ expect(screen.queryByRole('region',{name:'4冊の条件と現行判定'})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('tab',{name:'書籍検証'}));
+ expect(screen.getByRole('region',{name:'4冊の条件と現行判定'})).toHaveTextContent('未確認');
+ expect(screen.getByTestId('qualification-verification')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('tab',{name:'判定根拠'}));
+ expect(screen.queryByRole('region',{name:'4冊の条件と現行判定'})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('tab',{name:'書籍検証'}));
+ rerender(<ResearchDetail {...input} selected={{...row,research_detail_path:'next.json'}} detail={{isLoading:true}}/>);
+ expect(screen.queryByRole('region',{name:'4冊の条件と現行判定'})).not.toBeInTheDocument();
+ rerender(<ResearchDetail {...input} selected={{...row,research_detail_path:'next.json'}} detail={{isError:true,refetch:vi.fn()}}/>);
+ expect(screen.queryByRole('region',{name:'4冊の条件と現行判定'})).not.toBeInTheDocument();
 });

@@ -193,3 +193,8 @@
 .comparison-foot { display:flex; justify-content:space-between; gap:12px; padding:8px 16px; font-size:12px; }
 .comparison-foot a { color:inherit; text-underline-offset:3px; }
 @media(max-width:700px) { .comparison-grid {grid-template-columns:1fr;} .candidate-comparison {padding:0 6px 8px;} .comparison-state {gap:4px;} .daily-changes {padding:10px 12px;} }
+
+.book-annual-active,.book-annual-condition { padding: 12px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+.book-annual-active { color: var(--text-1); background: var(--surface); }
+.book-annual-condition { margin: 12px 0; font-size: 12px; line-height: 1.6; }
+.book-annual-condition h3 { font-size: 13px; }

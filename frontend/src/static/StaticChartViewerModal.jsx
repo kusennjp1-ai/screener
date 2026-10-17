@@ -1,3 +1,4 @@
+import BookAnnualCondition from './components/BookAnnualCondition';
 import { publicationQueryIdentity } from './staticPublication';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability';
 import { projectFinancialRow, mergeFinancialDetail } from './financialCurrent';
@@ -56,7 +57,7 @@ function StaticChartViewerModal({
   navigationSymbols = null,
   researchRows = null,
   generation, publication,
-  method, date, market, now: suppliedNow, quote,
+  method, date, market, now: suppliedNow, quote, annualEpsOnly = false,
 }) {
   const queryClient = useQueryClient();
   const [visibleRange, setVisibleRange] = useState(null);
@@ -82,17 +83,21 @@ function StaticChartViewerModal({
     [entries]
   );
   const symbols = useMemo(() => {
-    if (Array.isArray(navigationSymbols) && navigationSymbols.length > 0) {
+    if (Array.isArray(navigationSymbols) && (annualEpsOnly || navigationSymbols.length > 0)) {
       return navigationSymbols.filter((symbol) => entryBySymbol.has(symbol));
     }
     return entries.map((entry) => entry.symbol);
-  }, [entries, entryBySymbol, navigationSymbols]);
+  }, [entries, entryBySymbol, navigationSymbols, annualEpsOnly]);
 
-  const { currentIndex, currentSymbol, totalCount, goNext, goPrevious } = useChartNavigation(
+  const { currentIndex, currentSymbol: navigatedSymbol, totalCount, goNext, goPrevious } = useChartNavigation(
     symbols,
     initialSymbol,
     open
   );
+
+  // An active subset cannot inherit the hook's initial/previous symbol after
+  // that symbol leaves the subset. Legacy callers retain their existing flow.
+  const currentSymbol = annualEpsOnly && !symbols.includes(navigatedSymbol) ? null : navigatedSymbol;
 
   function startSwipe(event) {
     if (!isMobile || panMode || event.touches.length !== 1 || event.target.closest('button,a,input,select,textarea,summary')) { swipeStart.current = null; return; }
@@ -210,7 +215,7 @@ function StaticChartViewerModal({
   });
   const detailResponse = rowDetail.data;
   const clockRows = useMemo(() => [researchRow, chartPayload?.fundamentals, detailResponse?.value].filter(Boolean), [researchRow, chartPayload?.fundamentals, detailResponse]);
-  const clockNow = useFinancialClock(clockRows);
+  const clockNow = useFinancialClock(clockRows, annualEpsOnly ? expectedDate : null);
   const now = Number.isFinite(suppliedNow) ? Math.max(suppliedNow, clockNow) : clockNow;
   const stockData = researchRow ? mergeFinancialDetail(researchRow, detailResponse?.value, {
     now, asOfDate: expectedDate, generation, detailGeneration: detailResponse?.generation,
@@ -293,7 +298,7 @@ function StaticChartViewerModal({
           {rowDetail.isError && <Alert severity="warning" sx={{flexShrink:0}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>}
           <Box data-testid="expanded-chart-header" sx={{display:compactMobileChrome ? 'grid' : 'flex',gridTemplateColumns:'minmax(0, 1fr) auto',flexShrink:0,alignItems:'center',justifyContent:'space-between',px:2,py:compactMobileChrome ? .5 : 1,borderBottom:1,borderColor:'divider'}}>
             <Box sx={{display:compactMobileChrome ? 'contents' : 'block',minWidth:0,flex:1}}>
-              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
+              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{annualEpsOnly&&!currentSymbol?0:currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
                 <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
               </Box>
               {isMobile && <Box data-testid="mobile-chart-readiness" sx={{gridColumn:compactMobileChrome ? '1 / -1' : '1',gridRow:2,fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
@@ -325,6 +330,7 @@ function StaticChartViewerModal({
               }}
             >
               {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{instrumentApplicabilityLabel(instrumentApplicability(stockData)) || (rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,method || 'minervini',now).passed}/${assess(stockData,method || 'minervini',now).total}）`)}</summary>
+                {annualEpsOnly&&<BookAnnualCondition row={stockData} date={expectedDate} now={now} active/>}
                 {assess(stockData,method || 'minervini',now).rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'対象外':'?'} {r.label}</Typography>)}
               </Box> : <><StockMetricsSidebar currentFinancialOnly date={expectedDate} now={now} stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />

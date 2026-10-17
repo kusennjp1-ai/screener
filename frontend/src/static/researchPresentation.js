@@ -10,9 +10,10 @@ export function canonicalPivot(row) {
   return { price: raw, reason: row.se_pivot_price != null ? 'Setup Engine（日次）' : 'VCP（日次）' };
 }
 
-export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearOnly = false, watchlist = null, liquidOnly = false, coverage = 'all', sector = '' } = {}) {
+export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearOnly = false, watchlist = null, liquidOnly = false, coverage = 'all', sector = '', annualEpsOnly = false, annualEpsStates = null } = {}) {
   const query = search.trim().toUpperCase();
   return ranked.filter(({row:r, assessment:a}) =>
+    (!annualEpsOnly || annualEpsStates?.get(r) === 'pass') &&
     (!sector || sectorKey(r.gics_sector)===sector) &&
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || (corporateFinancialsAllowed(r) && a.qualified)) && (!watchlist || watchlist.includes(r.symbol)) &&
@@ -65,4 +66,11 @@ export function formatPublished(value) {
   const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`;
   const date = new Date(normalized);
   return Number.isFinite(date.getTime()) ? `${date.toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})} JST` : '未確認';
+}
+
+// Coverage is measured after the ordinary filters, before this optional AND.
+export function annualEpsCoverage(ranked, states) {
+  const counts = { total: ranked.length, pass: 0, fail: 0, unknown: 0, not_applicable: 0 };
+  for (const { row } of ranked) counts[states?.get(row) || 'unknown']++;
+  return counts;
 }

@@ -10,7 +10,10 @@ export function* researchPackets(bundle, size = 150) {
   for (const [method, ranked] of Object.entries(bundle.rankings)) for (let offset=0;offset<ranked.length;offset+=size) {
     yield {kind:'ranking',method,items:ranked.slice(offset,offset+size).map(({row,assessment})=>({id:ids.get(row),assessment}))};
   }
-  yield {kind:'complete',instrument_applicability_universe:bundle.instrument_applicability_universe,date:bundle.date,evaluated_at:bundle.evaluated_at,next_expiry_at:bundle.next_expiry_at,generation:bundle.generation,evaluation_epoch:bundle.evaluation_epoch,assessment_version:bundle.assessment_version,temporal,prepared:{...bundle.prepared,candidates:bundle.prepared.candidates.map(row=>ids.get(row))}};
+  if (bundle.annual_eps?.rows === bundle.rows) for (let offset=0;offset<bundle.rows.length;offset+=size) {
+    yield {kind:'annual-eps',offset,states:bundle.annual_eps.states.slice(offset,offset+size)};
+  }
+  yield {kind:'complete',...(bundle.annual_eps ? {annual_eps_version:bundle.annual_eps.version} : {}),instrument_applicability_universe:bundle.instrument_applicability_universe,date:bundle.date,evaluated_at:bundle.evaluated_at,next_expiry_at:bundle.next_expiry_at,generation:bundle.generation,evaluation_epoch:bundle.evaluation_epoch,assessment_version:bundle.assessment_version,temporal,prepared:{...bundle.prepared,candidates:bundle.prepared.candidates.map(row=>ids.get(row))}};
 }
 
 // Workbench history has thousands of change records, independent of the row
@@ -26,12 +29,16 @@ export function* workbenchPackets(value, size = 150) {
 }
 
 export function createResearchReceiver() {
-  const rows=[],rankings={};
+  const rows=[],rankings={},annualStates=[];
   let workbench;
   return packet => {
     if(packet.kind==='rows') rows.push(...packet.rows);
     else if(packet.kind==='ranking') (rankings[packet.method] ||= []).push(...packet.items.map(({id,assessment})=>({row:rows[id],assessment})));
-    else if(packet.kind==='complete') return {rows,rankings,instrument_applicability_universe:packet.instrument_applicability_universe,date:packet.date,evaluated_at:packet.evaluated_at,next_expiry_at:packet.next_expiry_at,generation:packet.generation,evaluation_epoch:packet.evaluation_epoch,assessment_version:packet.assessment_version,temporal:packet.temporal && {...packet.temporal,rows},prepared:{...packet.prepared,candidates:packet.prepared.candidates.map(id=>rows[id])}};
+    else if(packet.kind==='annual-eps') {
+      if (packet.offset !== annualStates.length || !Array.isArray(packet.states) || packet.states.length > 150 || packet.offset + packet.states.length > rows.length) throw Error('Invalid annual EPS packet');
+      annualStates.push(...packet.states);
+    }
+    else if(packet.kind==='complete') return {rows,rankings,...(packet.annual_eps_version ? {annual_eps:{version:packet.annual_eps_version,rows,states:annualStates}} : {}),instrument_applicability_universe:packet.instrument_applicability_universe,date:packet.date,evaluated_at:packet.evaluated_at,next_expiry_at:packet.next_expiry_at,generation:packet.generation,evaluation_epoch:packet.evaluation_epoch,assessment_version:packet.assessment_version,temporal:packet.temporal && {...packet.temporal,rows},prepared:{...packet.prepared,candidates:packet.prepared.candidates.map(id=>rows[id])}};
     else if(packet.kind==='workbench-start') workbench=packet.value;
     else if(packet.kind==='workbench-items') {
       if(!workbench || !Object.hasOwn(workbench.changes,packet.method)) throw Error('Invalid workbench packet');

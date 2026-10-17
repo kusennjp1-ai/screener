@@ -1,3 +1,4 @@
+import { bookAnnualPriceExpiry } from './bookAnnualEpsEvidence';
 // @vitest-environment node
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createHash, webcrypto } from 'node:crypto';
@@ -88,7 +89,7 @@ it('prepares identical worker and no-Worker bundles from authenticated scan chun
   expect(worker).toEqual(fallback);
   expect(worker.rows[0]).toMatchObject({ symbol: 'SAFE', eps_growth_yy: 0, sales_growth_yy: -12.123456789, current_price: 1 / 7 });
   expect(worker.rankings.minervini[0].row).toBe(worker.rows[0]);
-  expect(worker).toMatchObject({ generation, evaluation_epoch: 7, evaluated_at: now, next_expiry_at: now + 6 * 86400000 + 1 });
+  expect(worker).toMatchObject({ generation, evaluation_epoch: 7, evaluated_at: now, next_expiry_at: Math.min(now + 6 * 86400000 + 1, bookAnnualPriceExpiry(date)) });
 });
 
 it('rejects corrupt encoded bytes in page, fallback and worker paths without retrying raw source assets', async () => {

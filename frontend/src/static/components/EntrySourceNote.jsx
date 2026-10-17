@@ -1,4 +1,4 @@
-const warningDetail=plan=>`${plan.state==='買いゾーン内'?'アプリの範囲内ですが、':plan.state==='買いゾーン超過'?'アプリの買い上限と、':''}第1冊の約2〜3%目安を超えています。`;
+const warningDetail=plan=>`${plan.state==='買いゾーン内'?'アプリの範囲内ですが、':plan.state==='買いゾーン超過'?'アプリの買い上限と、':''}『${plan.sourceContext?.bookTitle || '対応する書籍'}』の約2〜3%目安を超えています。`;
 
 // Reuse a header's existing text line so the caution is visible before scrolling.
 export function EntrySourceBadge({plan}) {

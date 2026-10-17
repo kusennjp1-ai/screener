@@ -1,4 +1,4 @@
-import { NATIVE_ANNUAL_SCHEMA, nativeAnnualHistoryContract } from './financialHistory.js';
+import { ANNUAL_POINT_FIELDS, NATIVE_ANNUAL_SCHEMA, nativeAnnualHistoryContract } from './financialHistory.js';
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
 import { encodeResearchFloat64, decodeResearchFloat64 } from './researchFloat64.js';
@@ -12,6 +12,11 @@ export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version', 'summary_storage', 'financial_generation', 'financial_knowledge_basis', 'financial_point_in_time', 'financial_source_publication_date', 'financial_policy_version', 'instrument_applicability_universe'];
 
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
+// Annual eligibility depends on unsupported metadata being absent. Preserve
+// those keys, plus a rejection-only marker: JSON may erase an undefined-valued
+// key, but must never turn that rejected evidence into a comparable EPS series.
+const annualPoint = point => point && Object.keys(point).some(key => !ANNUAL_POINT_FIELDS.includes(key))
+  ? { ...point, invalid_transport_metadata: true } : pick(point, ['end', 'eps']);
 export function researchListRow(row) {
   const out = { ...row };
   // Evidence envelopes and raw history belong to immutable on-demand detail.
@@ -34,10 +39,10 @@ export function researchListRow(row) {
     values: pick(row.technical_audit.values, ['close', 'sma50', 'sma150', 'sma200', 'sma200_21ago', 'aboveLow', 'belowHigh', 'volumeRatio', 'change', 'momentum']),
   };
   if (row.financial_history) out.financial_history = {
-    ...pick(row.financial_history, ['symbol', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source', 'schema_version', 'annual_currency', 'quarterly_currency', 'quarterly_retrieved_at', 'annual_source']),
+    ...pick(row.financial_history, ['symbol', 'market', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source', 'schema_version', 'annual_currency', 'quarterly_currency', 'quarterly_retrieved_at', 'annual_source']),
     // Do not strip contradictory per-cell currency/unit metadata into valid proof.
     annual: row.financial_history.schema_version === NATIVE_ANNUAL_SCHEMA && !nativeAnnualHistoryContract(row.financial_history, row.symbol) ? []
-      : Array.isArray(row.financial_history.annual) ? row.financial_history.annual.map(item => pick(item, ['end', 'eps'])) : row.financial_history.annual,
+      : Array.isArray(row.financial_history.annual) ? row.financial_history.annual.map(annualPoint) : row.financial_history.annual,
   };
   return out;
 }

@@ -43,7 +43,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
     </div>
     <dl className="comparison-metrics"><div><dt>アプリ上限</dt><dd className="comparison-upper">{money(plan.upper)}</dd></div><div><dt>損切り例</dt><dd className="comparison-stop">{money(plan.stopExample)}</dd></div><div><dt>RS / 出来高</dt><dd>{Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '—'} · {times(volume)}</dd></div><div><dt>購入条件</dt><dd>{ready.passed}/{ready.total}</dd></div></dl>
     {applicabilityLabel && <p>{applicabilityLabel}。価格・テクニカルは参考表示です。</p>}
-    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? '書籍の追随目安外：第1冊の約2〜3%目安を超えています。' : ''}損切り例 {money(plan.stopExample)}。{applicabilityLabel || `選定 ${item.assessment.passed}/${item.assessment.total}`}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
+    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? `書籍の追随目安外：『${plan.sourceContext.bookTitle}』の約2〜3%目安を超えています。` : ''}損切り例 {money(plan.stopExample)}。{applicabilityLabel || `選定 ${item.assessment.passed}/${item.assessment.total}`}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
   </Paper>;
 });
 

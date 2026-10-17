@@ -70,6 +70,16 @@ describe('StaticChartViewerModal', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([false,true])('keeps legacy empty navigation unchanged and rejects an active empty subset: %s', async annualEpsOnly => {
+    vi.stubGlobal('fetch',vi.fn(async()=>({ok:false,status:404,json:async()=>({})})));
+    renderModal({open:true,onClose:vi.fn(),initialSymbol:'NVDA',annualEpsOnly,navigationSymbols:[],date:'2026-04-02',
+      chartIndex:{symbols:[{symbol:'NVDA',path:'charts/NVDA.json'},{symbol:'MSFT',path:'charts/MSFT.json'}]}},
+      {symbol:'NVDA',as_of_date:'2026-04-02',bars:[{date:'2026-04-02',close:100}],stock_data:{symbol:'NVDA'}});
+    expect(screen.getByText(annualEpsOnly?'0 / 0 銘柄':'1 / 2 銘柄')).toBeInTheDocument();
+    if(annualEpsOnly){expect(screen.queryByTestId('static-candlestick-chart')).not.toBeInTheDocument();expect(fetch).not.toHaveBeenCalled();}
+    else expect(await screen.findByTestId('static-candlestick-chart')).toHaveAttribute('data-chart-symbol','NVDA');
+  });
+
   it('renders exported bars and sidebar metadata without live API calls', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
     globalThis.fetch = vi.fn(async (url) => {
@@ -385,7 +395,7 @@ it('applies the selected 3% buy limit to the mobile expanded-chart checklist',as
  await screen.findByTestId('static-candlestick-chart');
  unmount();clock.mockRestore();vi.unstubAllGlobals();
 });
-it.each([[103.2,'minervini',true],[112.7,'minervini',true],[103,'minervini',false],[104,'minervini2',false]])('keeps the mobile first-book warning with readiness at %s for %s',async(price,method,warns)=>{
+it.each([[103.2,'minervini',true],[112.7,'minervini',true],[103,'minervini',false],[104,'minervini2',true]])('keeps the mobile source-specific warning with readiness at %s for %s',async(price,method,warns)=>{
  const row={symbol:'SOURCE',company_name:'Source Test',current_price:price,se_pivot_price:100};
  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({symbol:'SOURCE',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:price}],stock_data:row})})));

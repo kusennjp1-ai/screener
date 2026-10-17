@@ -1,3 +1,4 @@
+import { bookAnnualPriceExpiry } from './bookAnnualEpsEvidence.js';
 import { useEffect, useMemo, useState } from 'react';
 import { financialNextExpiry } from './financialCurrent.js';
 
@@ -15,9 +16,13 @@ function useClockWake(next, now, setNow) {
   }, [next, now, setNow]);
 }
 
-export function useFinancialClock(rows = []) {
+export function useFinancialClock(rows = [], annualPriceDate = null) {
   const [now, setNow] = useState(Date.now);
-  const next = useMemo(() => financialNextExpiry(rows, Math.max(now, Date.now())), [rows, now]);
+  const next = useMemo(() => {
+    const current = Math.max(now, Date.now());
+    const dates = [financialNextExpiry(rows, current), bookAnnualPriceExpiry(annualPriceDate)].filter(value => value !== null && value > current);
+    return dates.length ? Math.min(...dates) : null;
+  }, [rows, now, annualPriceDate]);
   useClockWake(next, now, setNow);
   // A newly loaded publication can have a later evidence evaluation than the
   // previous render. Re-evaluate it immediately using the current clock.

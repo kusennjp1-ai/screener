@@ -23,7 +23,7 @@ describe('chart decision summary',()=>{
     expect(screen.getByText(/未達・未確認：/).closest('details')).toBeNull();
     expect(screen.getByText(/2026-10-01 日次終値/).closest('details')).toBeNull();
     expect(screen.getByRole('note').closest('details')).toBeNull();
-    expect(screen.getByRole('note')).toHaveTextContent('アプリの範囲内ですが、第1冊の約2〜3%目安を超えています');
+    expect(screen.getByRole('note')).toHaveTextContent('アプリの範囲内ですが、『ミネルヴィニの成長株投資法』の約2〜3%目安を超えています');
     for(let i=0;i<2;i++){
       fireEvent.click(summary);
       expect(disclosure).toHaveAttribute('open');
