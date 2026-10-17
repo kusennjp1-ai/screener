@@ -1,22 +1,27 @@
 # Bounded artifact-only financial recovery
 
-This controller is disabled: `request.json` is deliberately absent. Committing
-controller code does not match the recovery workflow's activation path filter.
+This repair does not activate acquisition. It preserves the exact consumed
+run-5 `request.json`; a code-only commit does not match the workflow's activation
+path filter. Do not delete that request or rerun its workflow.
 The original recovery branch, workflow identity, read-only token permissions,
 non-cancelling global serial group, pinned free transport and 25-minute job cap
 are preserved. The expired first-200 request/admission is not consulted.
 
 ## Separate review before activation
 
-1. Save and review this controller as a child of the existing recovery branch
-   head, currently `4715b218cc25720d1d3be455930554e1e6282136`. Never replace that
+1. Save and review this controller as one code-only child of the existing recovery
+   head `afba716470995a59c41043f982e1c09f987b1c53`. Never replace that
    branch with a PR99 UI tree. Run the offline caller/collector/archive/planner/
    retention tests. No provider call is needed for this review.
-2. Re-read the complete recovery inventory and exact predecessor artifact. The
-   template records run `37478731832/1`, artifact `11420873789`; the run failed,
-   although its cycle and original receipts were retained. A different latest
-   predecessor, expired/missing artifact, blocked provider or changed receipts
-   requires a new review. Do not leapfrog or fall back to a cold batch.
+2. Re-read the complete recovery inventory. The only supported continuation is
+   run 6 -> exact pre-provider abort `38991458566/1` (run 5) -> retained source
+   `37478731832/1` (run 4), artifact `11420873789`. Run 5 failed before its only
+   provider-child call; its pinned complete job log, immutable head/request,
+   exact terminal attempt/job/steps and empty artifact inventory must all agree.
+   Empty artifacts or an arbitrary failure alone never permit skipping a run.
+   Run 4 also failed, although its cycle and original receipts were retained.
+   Any rerun, intervening/newer execution, changed proof, missing original source
+   or blocked provider stops. There is no recursive skip or cold fallback.
 3. Re-authenticate the currently selectable ordinary price export. The template
    records run `38835669174/1`, artifact `12024303013`, and its checked companion.
    `research_sha256` comes from the companion-bound manifest's
@@ -29,14 +34,35 @@ are preserved. The expired first-200 request/admission is not consulted.
    and the freshly verified next workflow run number. Never retime an old
    request or reuse the preflight/first-200 intent. Do not alter target receipts,
    hold states or limits to make a request pass.
-5. Review and save a single child commit that **only adds** `request.json`.
+5. Review and save a single child commit that **only modifies** `request.json`
+   with the new closed v2 request. The repair parent must retain the exact old
+   request bytes and have the aborted activation as its sole parent.
    This push is the consequential acquisition activation. It must be separately
    authorized. The caller checks its exact clean checkout, single parent/tree,
-   addition-only diff, genuine in-progress push run and attempt 1, expected run
+   replacement-only diff, genuine in-progress push run and attempt 1, expected run
    number, unique run for that head, current branch head and serial predecessor.
    Any run/rerun consumes this activation; a failure is not retry permission.
 
-No activation request is supplied by this patch. Missing controls fail closed.
+No new activation request is supplied by this repair. The v2 template deliberately
+has missing current clocks/controller identity and cannot execute. Missing controls
+fail closed. The old v1 ordinary predecessor path still rejects absent artifacts.
+
+## Existing publication-verifier compatibility
+
+Run 5's inherited verifier only understood bootstrap/gates approvals and rejected
+the already published `performance-exception-v2` receipt. The repair fetches the
+existing main verifier from exact commit
+`8cf7d9b231a5926696d261da51a4bab531f33cfa`, tree
+`82d9278408ebdb927a5124453d5c004ebf0306b8`, into a new temporary checkout outside
+the controller. Commit/tree and clean tracked/untracked status are checked before
+import and around every invocation. Fetch is finite (120 seconds), read-only and
+uses the public repository without adding credentials. Setup consumes the existing
+job budget. A missing, dirty or different verifier has no alternate fallback.
+
+All live-publication reads use that verifier's existing complete performance
+certificate, financial-lineage, deployment, byte and chronology checks. Recognizing
+the receipt type is not acceptance by itself. This repair adds no approval type,
+new financial authority or exemption from those checks.
 
 ## Acquisition and retention bounds
 

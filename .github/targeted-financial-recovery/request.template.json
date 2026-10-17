@@ -1,5 +1,5 @@
 {
-  "schema_version": "financial-targeted-recovery-execution-v1",
+  "schema_version": "financial-targeted-recovery-execution-v2",
   "operation_id": "targeted-nvda-aaoi-REVIEW-NEW-OPERATION",
   "created_at": null,
   "expires_at": null,
@@ -7,7 +7,7 @@
     "parent_sha": null,
     "parent_tree": null
   },
-  "expected_run_number": 5,
+  "expected_run_number": 6,
   "source": {
     "run_id": 37478731832,
     "run_attempt": 1,
@@ -83,5 +83,15 @@
     "caller_retries": 0
   },
   "publication_authority": "none",
-  "financial_admission": false
+  "financial_admission": false,
+  "abort_continuity": {
+    "schema_version": "financial-pre-provider-abort-v1",
+    "run_id": 38991458566,
+    "run_attempt": 1,
+    "run_number": 5,
+    "head_sha": "afba716470995a59c41043f982e1c09f987b1c53",
+    "request_sha256": "7f0bd22ed8fcedb703c9c851b0891512d52dd8c7b781bb2ab8a85c3b6fd06c1d",
+    "job_id": 117274547210,
+    "job_log_sha256": "acf29622ccbd3933c1e220ca8f41b1c77beae3320a4f63bdb580a07078066f87"
+  }
 }

@@ -1,0 +1,167 @@
+{
+  "abort": {
+    "id": 38991458566,
+    "run_attempt": 1,
+    "run_number": 5,
+    "head_sha": "afba716470995a59c41043f982e1c09f987b1c53",
+    "head_branch": "improve/mandatory-financial-source-recovery",
+    "path": ".github/workflows/financial-statement-recovery.yml",
+    "event": "push",
+    "workflow_id": 374552819,
+    "status": "completed",
+    "conclusion": "failure",
+    "run_started_at": "2026-10-17T01:34:42Z",
+    "repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    },
+    "head_repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    }
+  },
+  "source": {
+    "id": 37478731832,
+    "run_attempt": 1,
+    "run_number": 4,
+    "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+    "head_branch": "improve/mandatory-financial-source-recovery",
+    "path": ".github/workflows/financial-statement-recovery.yml",
+    "event": "push",
+    "workflow_id": 374552819,
+    "status": "completed",
+    "conclusion": "failure",
+    "run_started_at": "2026-10-06T14:24:45Z",
+    "repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    },
+    "head_repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    }
+  },
+  "jobs": {
+    "total_count": 1,
+    "jobs": [
+      {
+        "id": 117274547210,
+        "run_id": 38991458566,
+        "run_attempt": 1,
+        "head_sha": "afba716470995a59c41043f982e1c09f987b1c53",
+        "head_branch": "improve/mandatory-financial-source-recovery",
+        "name": "statement-recovery",
+        "status": "completed",
+        "conclusion": "failure",
+        "started_at": "2026-10-17T01:34:45Z",
+        "completed_at": "2026-10-17T01:37:34Z",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-17T01:34:45Z",
+            "completed_at": "2026-10-17T01:34:46Z"
+          },
+          {
+            "name": "Start the bounded job clock",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-17T01:34:46Z",
+            "completed_at": "2026-10-17T01:34:46Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-17T01:34:46Z",
+            "completed_at": "2026-10-17T01:34:48Z"
+          },
+          {
+            "name": "Run actions/setup-node@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-17T01:34:48Z",
+            "completed_at": "2026-10-17T01:34:49Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-17T01:34:49Z",
+            "completed_at": "2026-10-17T01:34:49Z"
+          },
+          {
+            "name": "Install the reviewed statement transport",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-17T01:34:49Z",
+            "completed_at": "2026-10-17T01:34:57Z"
+          },
+          {
+            "name": "Check acquisition bounds and source restoration offline",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-17T01:34:57Z",
+            "completed_at": "2026-10-17T01:35:30Z"
+          },
+          {
+            "name": "Authenticate the new finite request and collect only due NVDA and AAOI",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8,
+            "started_at": "2026-10-17T01:35:30Z",
+            "completed_at": "2026-10-17T01:37:31Z"
+          },
+          {
+            "name": "Retain partial source progress and original pilot receipts",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-17T01:37:31Z",
+            "completed_at": "2026-10-17T01:37:31Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 16,
+            "started_at": "2026-10-17T01:37:31Z",
+            "completed_at": "2026-10-17T01:37:31Z"
+          },
+          {
+            "name": "Post Run actions/setup-node@v4",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 17,
+            "started_at": "2026-10-17T01:37:31Z",
+            "completed_at": "2026-10-17T01:37:31Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 18,
+            "started_at": "2026-10-17T01:37:31Z",
+            "completed_at": "2026-10-17T01:37:31Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 19,
+            "started_at": "2026-10-17T01:37:31Z",
+            "completed_at": "2026-10-17T01:37:31Z"
+          }
+        ]
+      }
+    ]
+  }
+}

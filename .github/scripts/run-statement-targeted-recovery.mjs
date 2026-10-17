@@ -4,13 +4,15 @@ import {closeSync,lstatSync,mkdirSync,openSync,readFileSync,writeFileSync} from 
 import {dirname,join,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {githubApi} from './publication-gate.mjs';
-import {sha256,downloadArtifact,livePublication} from './publication-state.mjs';
+import {sha256,downloadArtifact} from './publication-state.mjs';
+import {preparePublicationVerifier} from './targeted-publication-verifier.mjs';
 import {chooseExport,verifyArchive} from './select-release-source.mjs';
 import {uniqueArtifact} from './select-published-runs.mjs';
 import {assertPriceObservationBounds,extractPriceObservations,priceObservationDigest} from './price-observations.mjs';
 import {repository,recoveryWorkflow,recoverySource,checkedArtifact,extractSourceArchive} from './restore-statement-source.mjs';
 import {researchPath} from './prepare-statement-cohort.mjs';
 import {prepareRecoveryPreflightInputs} from './prepare-statement-recovery-preflight.mjs';
+import {replacementSchema,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
 
 export const branch='improve/mandatory-financial-source-recovery';
 export const requestPath='.github/targeted-financial-recovery/request.json';
@@ -27,9 +29,11 @@ export function boundedFile(path,maximum){
   return readFileSync(path);
 }
 export function validateRequest(value,now=Date.now()){
-  exact(value,['schema_version','operation_id','created_at','expires_at','controller','expected_run_number','source','price_source','selection','limits','publication_authority','financial_admission'],'execution request');
-  if(value.schema_version!=='financial-targeted-recovery-execution-v1'||value.publication_authority!=='none'||value.financial_admission!==false
+  const replacement=value?.schema_version===replacementSchema;
+  exact(value,['schema_version','operation_id','created_at','expires_at','controller','expected_run_number','source','price_source','selection','limits','publication_authority','financial_admission',...(replacement?['abort_continuity']:[])],'execution request');
+  if(!['financial-targeted-recovery-execution-v1',replacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
     ||typeof value.operation_id!=='string'||!/^targeted-nvda-aaoi-[a-z0-9-]{1,64}$/.test(value.operation_id))throw Error('Invalid artifact-only operation');
+  if(replacement)validateAbortContinuity(value);
   const start=Date.parse(value.created_at),end=Date.parse(value.expires_at);
   if(!value.created_at.endsWith('Z')||!value.expires_at.endsWith('Z')||!Number.isFinite(start)||!Number.isFinite(end)
     ||start>now||now>=end||end-start<=0||end-start>2*60*60*1000)throw Error('A new finite current execution request is required');
@@ -58,7 +62,8 @@ export function verifyActivation(request,context,cwd=root){
   if(git(['rev-list','--parents','-n','1','HEAD'],cwd)!==`${context.sha} ${request.controller.parent_sha}`
     ||git(['rev-parse',`${request.controller.parent_sha}^{tree}`],cwd)!==request.controller.parent_tree)throw Error('Activation is not a single child of the reviewed controller');
   // A code change must receive a separate review before a request-only activation.
-  if(git(['diff','--name-status',request.controller.parent_sha,context.sha],cwd)!==`A\t${requestPath}`)throw Error('Activation may only add the new execution request');
+  if(request.schema_version===replacementSchema)verifyReplacementActivation(request,context,cwd);
+  else if(git(['diff','--name-status',request.controller.parent_sha,context.sha],cwd)!==`A\t${requestPath}`)throw Error('Activation may only add the new execution request');
   const bytes=boundedFile(join(cwd,requestPath),16384);
   if(!same(JSON.parse(bytes),request)||sha256(execFileSync('git',['show',`${context.sha}:${requestPath}`],{cwd,maxBuffer:16384}))!==sha256(bytes))throw Error('Request bytes differ from the committed activation');
   return bytes;
@@ -68,8 +73,10 @@ function sourceInventory(run,api){
   if(!Number.isSafeInteger(list.total_count)||list.total_count<0||list.total_count>100||!Array.isArray(list.artifacts)||list.artifacts.length!==list.total_count)throw Error('Incomplete source artifacts');
   return list.artifacts;
 }
-export function authenticateRecovery(request,context,api=githubApi){
-  const state=recoverySource(context,api),{current,run,initial}=state;
+export function authenticateRecovery(request,context,api=githubApi,readLog=readAbortJobLog){
+  let state=recoverySource(context,api);
+  if(request.schema_version===replacementSchema)state=authenticateAbortContinuity(request,state,api,readLog);
+  const {current,run,initial}=state;
   const attempt=api(`repos/${repository}/actions/runs/${context.id}/attempts/1`);
   if(initial||current.run_number!==request.expected_run_number||!same([attempt.id,attempt.run_attempt,attempt.head_sha,attempt.head_branch,attempt.path,attempt.event,attempt.status,attempt.workflow_id,attempt.repository?.id,attempt.head_repository?.id,attempt.repository?.full_name,attempt.head_repository?.full_name,attempt.run_number],
     [current.id,1,current.head_sha,branch,recoveryWorkflow,'push','in_progress',current.workflow_id,current.repository.id,current.head_repository.id,repository,repository,request.expected_run_number]))throw Error('Current attempt or one-shot run number changed');
@@ -78,7 +85,7 @@ export function authenticateRecovery(request,context,api=githubApi){
     ||inventory.workflow_runs.filter(item=>item.id===context.id).length!==1
     ||inventory.workflow_runs.filter(item=>item.head_sha===context.sha).length!==1)throw Error('Activation was previously consumed or inventory is incomplete');
   if(api(`repos/${repository}/git/ref/heads/${branch}`).object?.sha!==context.sha)throw Error('Recovery branch advanced during activation');
-  const artifact=checkedArtifact(sourceInventory(run,api),run,false,current),source=request.source;
+  const artifact=checkedArtifact(sourceInventory(run,api),run,false,state.abort??current),source=request.source;
   if(!same([run.id,run.run_attempt,run.head_sha,artifact.id,artifact.digest],
     [source.run_id,source.run_attempt,source.head_sha,source.artifact_id,`sha256:${source.artifact_sha256}`]))throw Error('Latest serial predecessor differs from request');
   return {...state,artifact};
@@ -149,6 +156,7 @@ export async function run({workspace,jobStartedAt,context,api=githubApi}){
   if(workspace===root||workspace.startsWith(root+sep)||root.startsWith(workspace+sep))throw Error('Acquisition workspace must be outside controller');
   for(let part=dirname(workspace);;part=dirname(part)){if(lstatSync(part).isSymbolicLink())throw Error('Linked workspace');if(part===dirname(part))break;}
   mkdirSync(workspace,{recursive:false});
+  const livePublication=await preparePublicationVerifier(join(workspace,'publication-verifier'));
   const restored=join(workspace,'source');mkdirSync(restored);const zip=join(restored,'source.zip'),fd=openSync(zip,'wx');
   try{execFileSync('gh',['api',`repos/${repository}/actions/artifacts/${recovery.artifact.id}/zip`],{stdio:['ignore',fd,'pipe'],timeout:120000});}finally{closeSync(fd);}
   if(lstatSync(zip).size!==recovery.artifact.size_in_bytes||sha256(boundedFile(zip,128*1024**2))!==request.source.artifact_sha256)throw Error('Original source ZIP mismatch');

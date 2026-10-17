@@ -117,6 +117,46 @@ def update_request(case):
     write(case.inputs / "invocation.json", case.invocation)
 
 
+def replacement_request():
+    path = Path(__file__).resolve().parents[3] / ".github/scripts/fixtures/targeted-abort-run5/request.json"
+    request = json.loads(path.read_bytes())
+    request.update(schema_version=cycle.REPLACEMENT_REQUEST_SCHEMA, operation_id="targeted-nvda-aaoi-new-run6",
+                   created_at="2026-10-17T01:50:00Z", expires_at="2026-10-17T02:50:00Z", expected_run_number=6,
+                   abort_continuity=dict(cycle.REVIEWED_ABORT))
+    return request
+
+
+def test_v2_request_binds_only_reviewed_abort_and_original_source():
+    request = replacement_request()
+    selected = cycle.validate_request(request, now=batch.clock("2026-10-17T02:00:00Z"))
+    assert list(selected) == ["NVDA", "AAOI"]
+    assert request["source"] == cycle.REVIEWED_SOURCE
+    assert request["limits"] == cycle.LIMITS
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda r: r.update(expected_run_number=7),
+    lambda r: r.update(schema_version=cycle.REQUEST_SCHEMA),
+    lambda r: r.pop("abort_continuity"),
+    lambda r: r["abort_continuity"].update(extra=True),
+    lambda r: r["abort_continuity"].update(run_attempt=2),
+    lambda r: r["abort_continuity"].update(run_attempt=True),
+    lambda r: r["abort_continuity"].update(job_id=117274547211),
+    lambda r: r["abort_continuity"].update(job_log_sha256="f" * 64),
+    lambda r: r["source"].update(artifact_id=11420873790),
+    lambda r: r["source"].update(cohort_sha256="f" * 64),
+    lambda r: r.update(created_at="2026-10-17T01:37:34Z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t013151z"),
+    lambda r: r["limits"].update(caller_retries=1),
+    lambda r: r.update(financial_admission=True),
+])
+def test_v2_request_rejects_skipping_renewal_expanded_work_or_evidence_changes(mutation):
+    request = replacement_request()
+    mutation(request)
+    with pytest.raises((ValueError, KeyError)):
+        cycle.validate_request(request, now=batch.clock("2026-10-17T02:00:00Z"))
+
+
 def test_full_cycle_uses_only_four_getters_and_retains_complete_source(case, capsys):
     seen = []
     def injected(plan, base, output, **kwargs):
