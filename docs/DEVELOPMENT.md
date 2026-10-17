@@ -2,6 +2,10 @@
 
 Full from-source setup for contributors and developers on any platform.
 
+For CI-aligned preflight checks, local source checkpoints and a no-new-paid-service
+workflow, start with [Reproducible development](FREE_DEVELOPMENT.md). That workflow
+does not require starting the full backend or adding API keys.
+
 ## Prerequisites
 
 - Python 3.11+

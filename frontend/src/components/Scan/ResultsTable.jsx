@@ -137,8 +137,8 @@ const columns = [
   { id: 'market_cap', label: '時価総額', sortable: true, width: 75 },
   { id: 'adv_usd', label: '平均売買代金', sortable: true, width: 70 },
   { id: 'ipo_date', label: '上場から', sortable: true, width: 70 },
-  { id: 'eps_growth_qq', label: 'EPS', sortable: true, width: 50 },
-  { id: 'sales_growth_qq', label: '売上成長', sortable: true, width: 50 },
+  { id: 'eps_growth_qq', label: 'EPS 前四半期比 (%)', sortable: true, width: 115 },
+  { id: 'sales_growth_qq', label: '売上 前四半期比 (%)', sortable: true, width: 115 },
   { id: 'adr_percent', label: 'ADR', sortable: true, width: 50 },
   { id: 'ma_alignment', label: '移動平均整列', sortable: false, width: 35 },
   // The VCP header sorts by quality_rank (VCP-detected setups first, ties by
@@ -463,11 +463,11 @@ const VirtualTableRow = memo(function VirtualTableRow({
         {formatIpoAge(row.ipo_date).replace('mo','か月').replace('y','年')}
       </TableCell>
 
-      <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.eps_growth_qq == null ? 'text.secondary' : row.eps_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
+      <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.eps_growth_qq == null ? 'text.secondary' : row.eps_growth_qq >= 0 ? 'success.main' : 'error.main', width: 115, minWidth: 115 }}>
         {row.eps_growth_qq != null ? signed(row.eps_growth_qq,0) : '-'}
       </TableCell>
 
-      <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.sales_growth_qq == null ? 'text.secondary' : row.sales_growth_qq >= 0 ? 'success.main' : 'error.main', width: 50, minWidth: 50 }}>
+      <TableCell align="center" sx={{ fontFamily: 'monospace', color: row.sales_growth_qq == null ? 'text.secondary' : row.sales_growth_qq >= 0 ? 'success.main' : 'error.main', width: 115, minWidth: 115 }}>
         {row.sales_growth_qq != null ? signed(row.sales_growth_qq,0) : '-'}
       </TableCell>
 

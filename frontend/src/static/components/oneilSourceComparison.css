@@ -1,0 +1,12 @@
+.oneil-source-comparison { margin:18px 0; }
+.oneil-source-comparison p { font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.oneil-source-comparison h4 { margin:18px 0 8px; font-size:13px; }
+.oneil-source-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.oneil-source-card { min-width:0; border:1px solid var(--line); border-radius:8px; padding:12px; }
+.oneil-source-card h5 { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; margin:0; font-size:12px; }
+.oneil-source-state { white-space:nowrap; }
+.oneil-source-value { font-variant-numeric:tabular-nums; font-weight:600; }
+.oneil-source-periods { padding:0; list-style:none; font-size:11px; line-height:1.7; }
+.oneil-source-periods li { display:flex; flex-direction:column; margin:8px 0; overflow-wrap:anywhere; }
+.oneil-source-card .financial-evidence-metadata { grid-template-columns:minmax(0,1fr); }
+@media (max-width:600px) { .oneil-source-grid { grid-template-columns:minmax(0,1fr); } }

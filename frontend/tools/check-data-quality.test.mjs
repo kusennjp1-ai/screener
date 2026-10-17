@@ -1,3 +1,4 @@
+import { calendarAt } from '../src/static/testMarketCalendarFixture.js';
 // @vitest-environment node
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
@@ -57,8 +58,8 @@ describe('publication summaries and current canonical decisions', () => {
       const frontend = join(root, 'frontend'), data = join(frontend, 'public/static-data');
       await mkdir(data, { recursive: true }); await mkdir(join(root, 'data/ibd_reference/ibd50'), { recursive: true });
       const write = (name, value) => writeFile(join(data, name), JSON.stringify(value));
-      const days = [];
-      for (let day = Date.parse(date); days.length < 280; day -= 86400000) if (![0, 6].includes(new Date(day).getUTCDay())) days.unshift(new Date(day).toISOString().slice(0, 10));
+      const days = calendarAt(date).sessions.slice(-280);
+      await write('trading-calendar.json', calendarAt(date));
       const bars = days.map((date, index) => { const close = 50 + index * .25; return { date, open: close, close, low: close - 1, high: close + 1, volume: 1e6 }; });
       const row = sample({ current_price: bars.at(-1).close, se_pivot_price: null, vcp_pivot: null, se_setup_ready: false });
       await write('manifest.json', { generated_at: '2026-10-02T20:00:00Z', markets: { US: { market: 'US', as_of_date: date, pages: { scan: { path: 'scan.json' } }, assets: { charts: { path: 'charts-index.json' } } } } });

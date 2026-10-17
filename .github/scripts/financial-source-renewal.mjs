@@ -1,3 +1,4 @@
+import {isLimitedPreviewApproval} from './limited-research-approval.mjs';
 import {financialAuditInventory} from './financial-audit-history.mjs';
 export {financialAuditInventory} from './financial-audit-history.mjs';
 // A separate, closed authority for an independently acquired source generation.
@@ -155,6 +156,7 @@ const originalReviewedHarnessPaths=Object.freeze([
   'frontend/tools/publication-cli.test.mjs',
 ]);
 export function verifyRenewalPredecessor(request,live){
+  if(isLimitedPreviewApproval(live?.approval)||isLimitedPreviewApproval(live?.financialRelease?.ui?.approval))throw Error('Limited preview cannot authorize financial source renewal');
   parseRenewalRequest(request);
   if(!live.financialRelease||!live.receipt||live.identity!==request.previous_publication_identity)throw Error('Renewal predecessor missing or superseded');
   equal(live.receipt.financial_release,request.previous_release,'previous release');

@@ -151,14 +151,14 @@ export function buildActiveFilters(filters) {
     const { min, max } = filters.epsGrowth;
     active.push({
       key: 'epsGrowth',
-      label: `EPS: ${min != null ? `≥${min}%` : ''}${max != null ? ` ≤${max}%` : ''}`,
+      label: `EPS 前四半期比: ${min != null ? `≥${min}%` : ''}${max != null ? ` ≤${max}%` : ''}`,
     });
   }
   if (hasRangeValue(filters.salesGrowth)) {
     const { min, max } = filters.salesGrowth;
     active.push({
       key: 'salesGrowth',
-      label: `売上成長: ${min != null ? `≥${min}%` : ''}${max != null ? ` ≤${max}%` : ''}`,
+      label: `売上 前四半期比: ${min != null ? `≥${min}%` : ''}${max != null ? ` ≤${max}%` : ''}`,
     });
   }
 

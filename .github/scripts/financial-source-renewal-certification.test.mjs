@@ -17,7 +17,11 @@ import {assertCertificationSourceTrustPreserved,renewalCandidateMembers,restoreP
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'../..');
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,value);};
 const fixture=()=>mkdtempSync(join(tmpdir(),'renewal-certification-'));
-const fixtureContracts=directory=>{cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});resetRenewalFixtureControls(directory);};
+const fixtureContracts=directory=>{
+  cpSync(join(root,'contracts'),join(directory,'contracts'),{recursive:true});resetRenewalFixtureControls(directory);
+  // Load the real controller's complete frontend module closure in isolated CLI fixtures.
+  for(const name of ['src','tools','contracts','package.json'])cpSync(join(root,'frontend',name),join(directory,'frontend',name),{recursive:true});
+};
 // Renewal lifecycles archive committed HEAD. Keep its unrelated dated ordinary
 // control out of the disposable renewal input, without touching the source or
 // changing the production guard that reserves a real disabled request.
@@ -152,8 +156,8 @@ function automaticFixture(){
   const directory=fixture(),registryPath='contracts/financial_source_renewal_v1.json',repositoryId=1203919607;
   cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
   cpSync(join(root,'.github/workflows'),join(directory,'.github/workflows'),{recursive:true});
-  cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
-  const git=(...args)=>execFileSync('git',['-C',directory,...args],{encoding:'utf8'}).trim();
+  // Disposable fixtures must not leave detached Git writers racing strict cleanup.
+  const git=(...args)=>execFileSync('git',['-C',directory,'-c','maintenance.auto=false','-c','gc.auto=0',...args],{encoding:'utf8'}).trim();
   const commit=()=>{git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Committed automatic fixture');return {head_sha:git('rev-parse','HEAD'),tree:git('rev-parse','HEAD^{tree}')};};
   let registry={...JSON.parse(readFileSync(join(directory,registryPath))),ci_admission:null};
   const request=JSON.stringify({parsed_by:'the existing renewal request validator after admission'});
@@ -192,6 +196,18 @@ function withAutomaticEnvironment(env,body){
   const previous=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));
   try{Object.assign(process.env,env);return body();}finally{for(const [key,value]of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 }
+
+
+test('automatic fixture Git disables detached maintenance under forced auto thresholds',()=>{
+  const directory=fixture(),trace=join(directory,'trace.jsonl');let f;
+  try{
+    f=withAutomaticEnvironment({GIT_TRACE2_EVENT:trace,GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'maintenance.auto',GIT_CONFIG_VALUE_0:'true',GIT_CONFIG_KEY_1:'gc.auto',GIT_CONFIG_VALUE_1:'1'},()=>automaticFixture());
+    const events=readFileSync(trace,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+    assert.equal(events.filter(event=>event.event==='cmd_name'&&event.name==='commit').length,2,'both real fixture commits must still execute');
+    const detached=events.filter(event=>event.event==='child_start'&&event.argv?.some(arg=>['maintenance','gc','repack','pack-objects'].includes(arg)));
+    assert.deepEqual(detached,[],'fixture setup must not launch Git maintenance writers');
+  }finally{if(f)rmSync(f.directory,{recursive:true,force:true});rmSync(directory,{recursive:true,force:true});}
+});
 
 test('automatic controller retains exact closed admission proof alongside the unchanged CI checks',()=>{
   const f=automaticFixture();try{
@@ -294,7 +310,6 @@ test('certification controller records the exact successful CI attempt and rejec
 test('controls resolve committed request before fetching a missing captured UI Git object, while prepare remains closed',()=>{
   const directory=fixture();try{
     cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
-    cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
     const h='a'.repeat(64),s='b'.repeat(40),source=JSON.parse(readFileSync(join(root,'contracts/financial_source_certification_trust_v1.json'))).reviewed_requests[0].request.source;
     const previous=`1/1/${h}/${h}`,ref={schema_version:'financial-release-receipt-v1',path:`static-data/financial-corrections/release-${h}.json`,sha256:h};
     const certificate={schema_version:'financial-source-certificate-reference-v1',repository:bootstrap.repository,workflow:'.github/workflows/financial-source-certification.yml',head_sha:s,run_id:22,run_attempt:1,job_id:41,artifact_id:199,artifact_name:`financial-source-certification-${s}-1`,artifact_sha256:h,certificate_sha256:h};
@@ -328,7 +343,6 @@ test('controls resolve committed request before fetching a missing captured UI G
 test('surface and seal compatibility preflight authenticates retained origin and rejects changed code before large candidate replay',async()=>{
   const directory=fixture();try{
     cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
-    cpSync(join(root,'frontend/src/static/transport'),join(directory,'frontend/src/static/transport'),{recursive:true});
     write(join(directory,'frontend/package-lock.json'),'{}');
     const projector='backend/app/scripts/export_native_annual_projection.py',originalProjector='# Original fixture projector\n';
     write(join(directory,projector),originalProjector);

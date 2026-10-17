@@ -12,6 +12,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { researchTheme, themeCss } from './theme/tokens';
 import { formatPublished } from './researchPresentation';
 import ResearchSearch from './components/ResearchSearch';
+import LimitedResearchPreviewNotice from './components/LimitedResearchPreviewNotice';
 import { useStaticMarket } from './StaticMarketContext';
 import './research.css';
 import './theme/foundation.css';
@@ -32,12 +33,14 @@ export default function StaticLayout({children}) {
   <header className="leader-header">
    <RouterLink to="/" className="leader-logo"><ShowChartIcon/><span>LEADER <em>RESEARCH</em></span></RouterLink>
    <button className="mobile-header-back" onClick={()=>window.dispatchEvent(new CustomEvent('research:back'))}>← 候補一覧</button>
+   <div id="research-mobile-instrument-context" className="mobile-instrument-context"/>
    <nav className="leader-desktop-nav" aria-label="メインナビゲーション">{NAV_ITEMS.map(({path,label})=><RouterLink key={path} to={path} aria-current={current===path?'page':undefined}>{label}</RouterLink>)}</nav>
    <div className="header-search">{['/','/compare'].includes(location.pathname)&&<ResearchSearch value={search} onChange={changeSearch}/>}</div>
    {!['/','/compare'].includes(location.pathname)&&markets.length>1&&<select className="header-market" aria-label="市場切替" value={market.market} onChange={e=>setSelectedMarket(e.target.value)}>{markets.map(key=><option value={key} key={key}>{manifest.data?.markets?.[key]?.display_name||key}</option>)}</select>}
    <div className="header-dates"><span>分析 {market.as_of_date||'取得中'}</span><span>公開 {formatPublished(manifest.data?.generated_at)}</span></div>
    <IconButton onClick={colorMode.toggleColorMode} aria-label={dark?'ライトモードに切り替え':'ダークモードに切り替え'}>{dark?<Brightness7Icon fontSize="small"/>:<Brightness4Icon fontSize="small"/>}</IconButton>
   </header>
+  <LimitedResearchPreviewNotice />
   <div className="leader-content">{children}</div>
   <nav className="leader-mobile-nav mobile-bottom-nav" aria-label="モバイルナビゲーション">{NAV_ITEMS.map(({path,label,Icon})=><RouterLink key={path} to={path} aria-current={current===path?'page':undefined}><Icon/><span>{label}</span></RouterLink>)}</nav>
  </Box></ThemeProvider>;

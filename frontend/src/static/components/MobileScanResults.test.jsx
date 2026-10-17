@@ -26,3 +26,15 @@ it('labels the technical setup default independently of the quarantined auxiliar
   expect(screen.getByRole('combobox',{name:'詳細スキャンの並び順'})).toHaveTextContent('セットアップ点');
   expect(screen.getByRole('combobox',{name:'詳細スキャンの並び順'})).not.toHaveTextContent('補助スコア');
 });
+it('shows unavailable detector readiness as unknown and retains its reason',()=>{
+  const reason='SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown';
+  renderWithProviders(<MobileScanResults {...props} rows={[{symbol:'AMD',se_setup_ready:false,setup_recalculation:{status:'unavailable',reason}}]}/>);
+  const row=screen.getByTestId('mobile-scan-row');
+  expect(row.querySelector('dl').lastElementChild).toHaveTextContent('準備条件未確認');
+  expect(row).not.toHaveTextContent('未達');
+  expect(row).toHaveTextContent(reason);
+});
+it.each([[true,'通過'],[false,'未達']])('preserves calculated readiness %j as %s',(ready,label)=>{
+  renderWithProviders(<MobileScanResults {...props} rows={[{symbol:'AMD',se_setup_ready:ready,setup_recalculation:{status:'calculated'}}]}/>);
+  expect(screen.getByTestId('mobile-scan-row').querySelector('dl').lastElementChild).toHaveTextContent(`準備条件${label}`);
+});

@@ -142,6 +142,20 @@ class TestUSDIdentity:
         fetcher.assert_not_called()
 
 
+@pytest.fixture(params=[date(2026, 6, 8), date(2026, 6, 14)], ids=["weekday", "weekend"])
+def fx_clock(monkeypatch, request):
+    """Exercise stale/fresh contracts independently of the execution date."""
+    import app.services.fx_service as fx_module
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls.fromordinal(request.param.toordinal())
+
+    monkeypatch.setattr(fx_module, "date", FixedDate)
+    return FixedDate.today()
+
+
 class TestLookupChain:
     def test_fetcher_called_when_cache_and_db_empty(self):
         calls = []
@@ -190,12 +204,12 @@ class TestLookupChain:
         assert quote is not None
         assert quote.source == "ecb"
 
-    def test_stale_database_quote_does_not_block_fresh_fetch(self):
+    def test_stale_database_quote_does_not_block_fresh_fetch(self, fx_clock):
         stale_row = MagicMock()
         stale_row.from_currency = "HKD"
         stale_row.to_currency = "USD"
         stale_row.rate = 0.12
-        stale_row.as_of_date = date.today() - timedelta(days=1)
+        stale_row.as_of_date = FXService._latest_trading_close(fx_clock) - timedelta(days=1)
         stale_row.source = "yfinance"
         calls = []
 
@@ -208,15 +222,15 @@ class TestLookupChain:
         assert quote is not None
         assert quote.rate == 0.128
         assert quote.source == FXService.SOURCE_FETCHER
-        assert quote.as_of_date == date.today()
+        assert quote.as_of_date == fx_clock
         assert calls == ["HKD"]
 
-    def test_stale_database_quote_is_fallback_when_fetch_unavailable(self):
+    def test_stale_database_quote_is_fallback_when_fetch_unavailable(self, fx_clock):
         stale_row = MagicMock()
         stale_row.from_currency = "HKD"
         stale_row.to_currency = "USD"
         stale_row.rate = 0.12
-        stale_row.as_of_date = date.today() - timedelta(days=1)
+        stale_row.as_of_date = FXService._latest_trading_close(fx_clock) - timedelta(days=1)
         stale_row.source = "yfinance"
         svc = _make_service(rate_fetcher=lambda c: None, db_rows=stale_row)
         quote = svc.get_usd_rate("HKD")
@@ -224,12 +238,12 @@ class TestLookupChain:
         assert quote.rate == 0.12
         assert quote.source == "yfinance"
 
-    def test_stale_database_fallback_suppresses_repeated_live_fetches(self):
+    def test_stale_database_fallback_suppresses_repeated_live_fetches(self, fx_clock):
         stale_row = MagicMock()
         stale_row.from_currency = "JPY"
         stale_row.to_currency = "USD"
         stale_row.rate = 0.0064
-        stale_row.as_of_date = date.today() - timedelta(days=1)
+        stale_row.as_of_date = FXService._latest_trading_close(fx_clock) - timedelta(days=1)
         stale_row.source = "yfinance"
         calls = []
 
@@ -279,19 +293,19 @@ class TestLookupChain:
         assert quote.rate == 0.0064
         assert calls == []
 
-    def test_stale_fetch_suppression_still_accepts_fresh_redis_quote(self, monkeypatch):
+    def test_stale_fetch_suppression_still_accepts_fresh_redis_quote(self, monkeypatch, fx_clock):
         stale_quote = FXQuote(
             from_currency="JPY",
             to_currency="USD",
             rate=0.0064,
-            as_of_date=date.today() - timedelta(days=1),
+            as_of_date=FXService._latest_trading_close(fx_clock) - timedelta(days=1),
             source="yfinance",
         )
         fresh_quote = FXQuote(
             from_currency="JPY",
             to_currency="USD",
             rate=0.0065,
-            as_of_date=date.today(),
+            as_of_date=fx_clock,
             source="yfinance",
         )
         calls = []
@@ -305,7 +319,7 @@ class TestLookupChain:
         svc._stale_fallback_retry_after["JPY"] = (
             stale_quote,
             time.monotonic() + 60,
-            svc._latest_trading_close(date.today()),
+            svc._latest_trading_close(fx_clock),
         )
         monkeypatch.setattr(svc, "_read_redis", lambda _currency: fresh_quote)
 
@@ -449,3 +463,96 @@ class TestPrefetch:
         svc._rate_fetcher = lambda c: (calls.append(c), 999)[1]
         svc.get_usd_rate("HKD")
         assert calls == []
+
+
+@pytest.mark.parametrize("cooldown", [False, True], ids=["fetch-unavailable", "retry-suppressed"])
+def test_stale_fallback_keeps_newest_observed_quote(monkeypatch, fx_clock, cooldown):
+    """An older Redis entry must never replace a newer memo or its date."""
+    latest_close = FXService._latest_trading_close(fx_clock)
+    older = FXQuote("JPY", "USD", 0.0060, latest_close - timedelta(days=3), "older-cache")
+    newer = FXQuote("JPY", "USD", 0.0065, latest_close - timedelta(days=1), "newer-cache")
+    fetcher = MagicMock(return_value=None)
+    svc = _make_service(rate_fetcher=fetcher)
+    svc._memo["JPY"] = newer
+    monkeypatch.setattr(svc, "_read_redis", lambda _: older)
+    write = MagicMock()
+    monkeypatch.setattr(svc, "_write_redis", write)
+    if cooldown:
+        svc._stale_fallback_retry_after["JPY"] = (older, time.monotonic() + 60, latest_close)
+
+    amount, quote = svc.convert_to_usd(1_000_000, "JPY")
+
+    assert quote is newer
+    assert amount == 6500
+    assert quote.as_of_date == latest_close - timedelta(days=1)
+    assert not svc._is_fresh_quote_date(quote.as_of_date, today=fx_clock, latest_close=latest_close)
+    if cooldown:
+        fetcher.assert_not_called()
+    else:
+        fetcher.assert_called_once_with("JPY")
+        write.assert_called_once_with(newer)
+
+
+@pytest.mark.parametrize("tier", ["redis", "database"])
+def test_retry_cooldown_accepts_newer_stale_cache_quote(monkeypatch, fx_clock, tier):
+    """Cooldown suppresses upstream retries, not newly available cached evidence."""
+    latest_close = FXService._latest_trading_close(fx_clock)
+    older = FXQuote("JPY", "USD", 0.0060, latest_close - timedelta(days=3), "old")
+    newer = FXQuote("JPY", "USD", 0.0065, latest_close - timedelta(days=1), tier)
+    fetcher = MagicMock(return_value=None)
+    svc = _make_service(rate_fetcher=fetcher)
+    svc._memo["JPY"] = older
+    deadline = time.monotonic() + 60
+    svc._stale_fallback_retry_after["JPY"] = (older, deadline, latest_close)
+    monkeypatch.setattr(svc, "_read_redis", lambda _: newer if tier == "redis" else None)
+    monkeypatch.setattr(svc, "_read_database", lambda _: newer if tier == "database" else None)
+
+    assert svc.get_usd_rate("JPY") is newer
+    assert svc.get_usd_rate("JPY") is newer
+    fetcher.assert_not_called()
+    assert svc._stale_fallback_retry_after["JPY"][1] == deadline
+
+
+@pytest.mark.parametrize("boundary", ["retry-deadline", "trading-day-change"])
+def test_stale_fallback_is_retried_when_suppression_boundary_changes(monkeypatch, boundary):
+    import app.services.fx_service as fx_module
+
+    clock = {"today": date(2026, 6, 8), "monotonic": 100.0}
+
+    class MovingDate(date):
+        @classmethod
+        def today(cls):
+            return clock["today"]
+
+    monkeypatch.setattr(fx_module, "date", MovingDate)
+    monkeypatch.setattr(fx_module.time, "monotonic", lambda: clock["monotonic"])
+    old = FXQuote("JPY", "USD", 0.0060, date(2026, 6, 4), "old-cache")
+    fetcher = MagicMock(side_effect=[None, 0.0065])
+    svc = _make_service(rate_fetcher=fetcher)
+    monkeypatch.setattr(svc, "_read_redis", lambda _: old)
+    monkeypatch.setattr(svc, "_read_database", lambda _: None)
+    monkeypatch.setattr(svc, "_write_redis", MagicMock())
+    persist = MagicMock()
+    monkeypatch.setattr(svc, "_persist_database", persist)
+
+    assert svc.get_usd_rate("JPY") is old
+    deadline = svc._stale_fallback_retry_after["JPY"][1]
+    clock["monotonic"] = deadline - 1
+    assert svc.get_usd_rate("JPY") is old
+    fetcher.assert_called_once_with("JPY")
+
+    if boundary == "retry-deadline":
+        clock["monotonic"] = deadline
+    else:
+        clock["today"] = date(2026, 6, 9)
+        assert clock["monotonic"] < deadline
+
+    quote = svc.get_usd_rate("JPY")
+    assert fetcher.call_count == 2
+    assert [call.args for call in fetcher.call_args_list] == [("JPY",), ("JPY",)]
+    assert quote.rate == 0.0065
+    assert quote.as_of_date == clock["today"]
+    assert "JPY" not in svc._stale_fallback_retry_after
+    persist.assert_called_once_with(quote)
+    assert svc.get_usd_rate("JPY") is quote
+    assert fetcher.call_count == 2

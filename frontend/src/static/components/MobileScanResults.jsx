@@ -1,4 +1,5 @@
 import { canonicalPivot } from '../researchPresentation';
+import { setupReadiness } from '../setupReadiness';
 import { Box, Button, MenuItem, Paper, Select, Stack, Typography } from '@mui/material';
 const value = (n, digits = 2) => Number.isFinite(n) ? n.toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits}).replace(/^-/, "−") : '—';
 
@@ -13,6 +14,7 @@ export default function MobileScanResults({rows, total, page, perPage, sortBy, s
     </Stack>
     {rows.map(row => {
       const pivot = canonicalPivot(row).price;
+      const setup = setupReadiness(row);
       return <Paper component="article" key={row.symbol} variant="outlined" data-testid="mobile-scan-row" sx={{px: 1, pb: 0.5, mb: 0.5, minWidth: 0}}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
           <Button disabled={!isChartEnabled(row.symbol)} onClick={() => onOpenChart(row.symbol)} sx={{fontSize: 16, fontWeight: 700, minHeight: 44, px: 0.5, flexShrink: 0}} aria-label={`${row.symbol} の日次分析`}>{row.symbol} →</Button>
@@ -21,8 +23,9 @@ export default function MobileScanResults({rows, total, page, perPage, sortBy, s
         </Stack>
         <Box component="dl" sx={{display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 1, rowGap: 0.25, m: 0, fontSize: 12, lineHeight: '20px', '& > div': {display: 'flex', justifyContent: 'space-between', gap: 0.5}, '& dt': {color: 'text.secondary'}, '& dd': {m: 0, fontWeight: 600, whiteSpace: 'nowrap'}}}>
           <div><dt>RS推計</dt><dd>{value(row.rs_rating, 0)}</dd></div><div><dt>共通ピボット</dt><dd>{Number.isFinite(pivot) ? `$${value(pivot)}` : '未確認'}</dd></div>
-          <div><dt>出来高50日比</dt><dd>{Number.isFinite(row.se_volume_vs_50d) ? `${value(row.se_volume_vs_50d)}倍` : '未確認'}</dd></div><div><dt>準備条件</dt><dd>{row.se_setup_ready == null ? '未確認' : row.se_setup_ready ? '通過' : '未達'}</dd></div>
+          <div><dt>出来高50日比</dt><dd>{Number.isFinite(row.se_volume_vs_50d) ? `${value(row.se_volume_vs_50d)}倍` : '未確認'}</dd></div><div><dt>準備条件</dt><dd>{setup.state === 'unknown' ? '未確認' : setup.state === 'pass' ? '通過' : '未達'}</dd></div>
         </Box>
+        {row.setup_recalculation?.status === 'unavailable' && <Typography sx={{fontSize:12,color:'text.secondary',overflowWrap:'anywhere'}}>セットアップ：{setup.reason}</Typography>}
       </Paper>;
     })}
     {!rows.length && <Typography sx={{p: 2}}>該当銘柄なし。条件を変更してください。</Typography>}

@@ -6,3 +6,9 @@ describe('design-target geometry, without decision changes',()=>{
  it('ports the broken radar axis and excludes unavailable coordinates',()=>{const g=radarGeometry([{distance:null,rs:90},{distance:0,rs:90,volume:1,state:'zone'}]);expect(g.points).toHaveLength(1);expect((g.x(10)-g.left)/g.pw).toBeCloseTo(.84);expect(g.x(25)).toBe(g.left+g.pw);expect(g.y(100)).toBe(g.top);});
  it('formats numeric meaning consistently',()=>{expect(signed(-2)).toBe('−2.0%');expect(signed(0)).toBe('±0.0%');expect(money(null)).toBe('—');expect(money(1200)).toBe('$1,200.00');});
 });
+
+it('keeps shared currency formatting identical for rounding, signed zero and extreme values',()=>{
+ for(const value of [0,-0,.005,-.005,1234.567,-1234.567,Number.MIN_VALUE,Number.MAX_VALUE,NaN,Infinity,null,undefined,'42']) {
+  expect(money(value)).toBe(Number.isFinite(value)?`$${value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—');
+ }
+});

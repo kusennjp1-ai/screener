@@ -222,8 +222,10 @@ function fixture({ fresh = true, expired = false, sameCode = false, designPassed
   const scripts = join(root, '.github/scripts');
   cpSync(dirname(cli), scripts, { recursive: true });
   cpSync(join(project, 'contracts'), join(root, 'contracts'), { recursive: true });
-  cpSync(join(project, 'frontend/src/static/transport'), join(root, 'frontend/src/static/transport'), { recursive: true });
-  for (const path of ['frontend/package.json', 'frontend/tools/candidate-performance-archive.mjs', 'frontend/src/static/candidatePerformance.js']) write(join(root, path), readFileSync(join(project, path)));
+  // Keep the isolated controller's real transitive frontend module closure.
+  for (const name of ['src', 'tools', 'contracts', 'package.json']) {
+    cpSync(join(project, 'frontend', name), join(root, 'frontend', name), { recursive: true });
+  }
   const pinPath = join(scripts, 'approved-ui-bootstrap.json');
   write(pinPath, jsonBytes({
     site_url: siteUrl, repository, ui_sha: uiSha, ui_files: approvedHashes,
@@ -282,7 +284,7 @@ globalThis.fetch = async (input, options) => {
   };
   const dist = join(root, 'release/frontend/dist');
   const installTransport = (frontend = 'release/frontend') => {
-    for (const name of ['researchTransport.js', 'researchFloat64.js', 'researchHex.js', 'financialHistory.js', 'evidenceTime.js']) {
+    for (const name of ['researchTransport.js', 'researchFloat64.js', 'researchHex.js', 'financialHistory.js', 'reportedGrowth.js', 'evidenceTime.js']) {
       write(join(root, frontend, 'src/static', name), readFileSync(join(project, 'frontend/src/static', name)));
     }
     write(join(root, frontend, 'contracts/native_annual_history_v1.json'), readFileSync(join(project, 'frontend/contracts/native_annual_history_v1.json')));

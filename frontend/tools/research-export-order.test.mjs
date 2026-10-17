@@ -58,3 +58,15 @@ it.each([
     await expect(orderResearchExportRows([{ symbol: 'ZETA' }], path, date)).rejects.toThrow('Invalid research export order anchor');
   });
 });
+
+it('migrates legacy ordering identities without importing any legacy values or pass flags', async () => {
+  const legacy = anchor(['B', 'A']); legacy.version = 'ohlcv-v1';
+  for (const result of legacy.results) result.audit = { ...result.audit, version: 'ohlcv-v1', valid: true, values: { close: 9999 } };
+  const rows = [{ symbol: 'A', current_price: 10 }, { symbol: 'B', current_price: 20 }];
+  await withAnchor(legacy, async path => {
+    const ordered = await orderResearchExportRows(rows, path, date);
+    expect(ordered).toEqual([rows[1], rows[0]]);
+    expect(ordered[0]).toBe(rows[1]); expect(ordered[1]).toBe(rows[0]);
+    expect(ordered.every(row => row.technical_audit === undefined)).toBe(true);
+  });
+});

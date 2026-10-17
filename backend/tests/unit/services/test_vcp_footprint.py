@@ -1,8 +1,12 @@
 """Tests for the Markets 360 VCP footprint adapter."""
+import json
+from itertools import product
 from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.services.markets360.vcp_footprint import compute_vcp_footprint, _EMPTY
 from app.services.markets360.ratings import compute_vcp_score, compute_vcp_pct
@@ -64,8 +68,26 @@ def test_well_formed_on_real_fixtures():
             assert 0.0 <= fp["score"] <= 100.0, name
         if fp["pivot"] is not None:
             assert isinstance(fp["pivot"], (int, float)), name
-        # detected implies the structural gates the legacy detector enforces
-        if fp["detected"]:
+        from app.analysis.patterns.legacy_vcp_detection import VCPDetector
+        from app.services.markets360.vcp_footprint import _ma_tight_base, _vol_contract_base
+
+        df = _read_fixture(name)
+        legacy = VCPDetector().detect_vcp(
+            df.Close.iloc[::-1].reset_index(drop=True),
+            df.Volume.iloc[::-1].reset_index(drop=True),
+        )
+        ma, vcb = _ma_tight_base(df), _vol_contract_base(df)
+        expected_source = (
+            "vcp" if legacy["vcp_detected"] else "ma_tight" if ma is not None
+            else "vol_contract" if vcb is not None else None
+        )
+        assert fp["source"] == expected_source, name
+        assert fp["detected"] is (expected_source is not None), name
+        assert fp["legacy_detected"] is bool(legacy["vcp_detected"]), name
+        assert fp["tight_near_highs"] is bool(legacy["tight_near_highs"]), name
+        json.dumps(fp, allow_nan=False)
+        # Structural gates apply to legacy VCP, not the parallel base paths.
+        if fp["legacy_detected"]:
             assert fp["tight_near_highs"] is True, name
             assert fp["num_contractions"] >= 2, name
 
@@ -199,3 +221,73 @@ def test_vol_contract_base_helper_fires_on_atr_contraction():
     assert hit["pivot"] > 0 and hit["dist"] is not None
     # no prior 2x advance -> the discrimination guard rejects it
     assert _vol_contract_base(_vcb_frame(prior_adv=False)) is None
+
+
+@pytest.mark.parametrize("legacy_hit,ma_hit,vcb_hit", list(product([False, True], repeat=3)))
+def test_route_contract_and_precedence(monkeypatch, legacy_hit, ma_hit, vcb_hit):
+    """All routes and overlaps preserve legacy evidence and select one pivot."""
+    from app.services.markets360 import vcp_footprint as module
+
+    legacy = {
+        "vcp_detected": legacy_hit, "vcp_score": 61.25,
+        "num_bases": 2 if legacy_hit else 1,
+        "bases_depth": [4.0, 8.0] if legacy_hit else [8.0],
+        "contraction_ratio": 1.0, "contracting_volume": legacy_hit,
+        "tight_near_highs": legacy_hit,
+        "pivot_info": {"pivot": 100.0, "distance_pct": 2.0, "ready_for_breakout": True},
+    }
+    monkeypatch.setattr(module.VCPDetector, "detect_vcp", lambda *args: legacy)
+    ma = Mock(return_value={"pivot": 110.0, "dist": 4.0} if ma_hit else None)
+    vcb = Mock(return_value={"pivot": 120.0, "dist": 1.0} if vcb_hit else None)
+    monkeypatch.setattr(module, "_ma_tight_base", ma)
+    monkeypatch.setattr(module, "_vol_contract_base", vcb)
+    fp = compute_vcp_footprint(_frame(np.linspace(20, 100, 200)))
+    source = "vcp" if legacy_hit else "ma_tight" if ma_hit else "vol_contract" if vcb_hit else None
+    assert fp["source"] == source
+    assert fp["detected"] is (source is not None)
+    assert fp["legacy_detected"] is legacy_hit
+    assert fp["tight_near_highs"] is legacy_hit
+    assert fp["volume_dryup"] is legacy_hit
+    assert fp["num_contractions"] == legacy["num_bases"]
+    assert fp["contractions_pct"] == list(reversed(legacy["bases_depth"]))
+    assert fp["score"] == 61.2  # remains legacy quality even on a fallback
+    assert fp["pivot"] == {"vcp": 100.0, "ma_tight": 110.0, "vol_contract": 120.0, None: 100.0}[source]
+    assert fp["distance_to_pivot_pct"] == {"vcp": 2.0, "ma_tight": 4.0, "vol_contract": 1.0, None: 2.0}[source]
+    assert fp["near_pivot"] is (source is not None)
+    assert fp["ready_for_breakout"] is (source in ("vcp", "vol_contract"))
+    assert ma.call_count == int(not legacy_hit)
+    assert vcb.call_count == int(not legacy_hit and not ma_hit)
+    assert set(fp) == set(_EMPTY)
+    json.dumps(fp, allow_nan=False)
+
+
+def test_ftnt_atr_detection_does_not_certify_legacy_vcp():
+    """Price above an old legacy high must remain a legacy failure."""
+    from app.analysis.patterns.legacy_vcp_detection import VCPDetector
+    from app.services.markets360.vcp_footprint import _ma_tight_base, _vol_contract_base
+
+    df = _read_fixture("ftnt.csv")
+    legacy = VCPDetector().detect_vcp(
+        df.Close.iloc[::-1].reset_index(drop=True),
+        df.Volume.iloc[::-1].reset_index(drop=True),
+    )
+    assert df.Close.iloc[-1] == pytest.approx(151.35)
+    assert legacy["recent_high"] == pytest.approx(87.82)
+    assert not legacy["vcp_detected"]
+    assert not legacy["tight_near_highs"]
+    assert _ma_tight_base(df) is None
+    hit = _vol_contract_base(df)
+    assert hit is not None
+    tr = pd.concat([df.High - df.Low, (df.High - df.Close.shift()).abs(),
+                    (df.Low - df.Close.shift()).abs()], axis=1).max(axis=1)
+    atr = (tr / df.Close).rolling(10).mean().iloc[-42:]
+    assert atr.iloc[-1] / atr.max() == pytest.approx(0.65465095)
+    fp = compute_vcp_footprint(df)
+    assert fp["detected"] is True
+    assert fp["source"] == "vol_contract"
+    assert fp["legacy_detected"] is False
+    assert fp["tight_near_highs"] is False
+    assert fp["pivot"] == hit["pivot"]
+    assert fp["distance_to_pivot_pct"] == hit["dist"]
+    assert fp["ready_for_breakout"] is True
+    assert fp["near_pivot"] is True

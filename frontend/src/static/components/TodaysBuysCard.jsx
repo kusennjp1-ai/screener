@@ -9,6 +9,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { C } from '../designTokens';
 import { observationFreshness, observedBarrels, observedPrice, observedPriceBand, pricePosition, signalDateLabel, signedObservationPercent, useObservationClock } from '../technicalObservation';
+import { observedSignalLabel, observedSourceLabel, observationRawValue } from '../observationLabels';
 import SellTiming from './SellTiming';
 
 // This index combines different signal and risk models and lacks the evidence
@@ -28,7 +29,7 @@ function ObservationRow({ entry, freshness, onOpenChart, watched, onToggleWatch,
       sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: `1px solid ${C.track}`, bgcolor: C.panel }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
         <Typography sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16 }}>{entry.symbol}</Typography>
-        <Typography sx={{ fontSize: 12, color: C.grey }} data-testid={`todays-buys-position-${entry.symbol}`}>
+        <Typography sx={{ fontSize: 13, color: C.ink }} data-testid={`todays-buys-position-${entry.symbol}`}>
           {position.label}
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -39,21 +40,37 @@ function ObservationRow({ entry, freshness, onOpenChart, watched, onToggleWatch,
           {watched ? <StarIcon sx={{ fontSize: 18 }} /> : <StarBorderIcon sx={{ fontSize: 18 }} />}
         </IconButton>
       </Box>
-      <Typography sx={{ fontSize: 12, color: C.grey, lineHeight: 1.8 }}>テクニカル観測のみ · 購入条件は未判定</Typography>
-      <Typography sx={{ fontSize: 12, color: C.ink, fontFamily: 'monospace', lineHeight: 1.8 }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.inkStrong, lineHeight: 1.8, mb: 0.5 }}>テクニカル観測のみ · 購入条件は未判定</Typography>
+      <Typography sx={{ fontSize: 14, color: C.inkStrong, fontFamily: 'monospace', lineHeight: 1.8 }}>
         記録終値 {fmt(buy?.last_close)} · シグナル基準値 {fmt(buy?.trigger_price)}
         {position.delta != null ? ` · 基準値比 ${signedObservationPercent(position.delta)}` : ''}
       </Typography>
-      <Typography sx={{ fontSize: 12, color: C.grey, lineHeight: 1.8 }}>
+      <Typography sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8 }}>
         旧モデル参考帯（基準値〜+5%） {fmt(band.lower)}〜{fmt(band.upper)} · {band.position}
       </Typography>
-      <Typography sx={{ fontSize: 12, color: C.grey, lineHeight: 1.8 }}>
-        旧モデル確認数（barrels） {observedBarrels(buy)} · シグナル記録 active: {typeof buy?.active === 'boolean' ? String(buy.active) : '未確認'}
-        {' · 検出元 '}{typeof buy?.vcp_source === 'string' && buy.vcp_source.trim() ? buy.vcp_source : '未確認'}
+      <Typography sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8, mt: 0.5 }}>
+        記録時のシグナル {observedSignalLabel(buy?.active)}
       </Typography>
-      <Typography sx={{ fontSize: 11, color: C.grey, lineHeight: 1.8 }}>
+      <Typography sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8 }}>
+        旧モデルの確認項目 {observedBarrels(buy)} · 検出経路 {observedSourceLabel(buy?.vcp_source)}
+      </Typography>
+      <Typography sx={{ fontSize: 12, color: C.ink, lineHeight: 1.8, mt: 0.5 }}>
         配信基準日 {freshness.date || '未確認'} · シグナル基準日 {signalDateLabel(buy?.signal_as_of, now, market)}
       </Typography>
+      <Box component="details" sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8, overflowWrap: 'anywhere',
+        '& > summary': { cursor: 'pointer', minHeight: 44, py: 1, boxSizing: 'border-box' },
+        '& > summary:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: 2 },
+      }}>
+        <summary>観測記録の説明・元の値</summary>
+        <Typography sx={{ fontSize: 'inherit', lineHeight: 'inherit', mb: 0.5 }}>
+          確認項目はトレンド、買い圧力、ブレイクアウト＋リスク水準の3項目です。内訳はこの記録には含まれません。有効の記録や3項目の一致は、現在の購入条件通過を示しません。
+        </Typography>
+        <Box sx={{ fontFamily: 'monospace' }}>
+          <div>active: {observationRawValue(buy?.active)}</div>
+          <div>barrels_passed: {observationRawValue(buy?.barrels_passed)}</div>
+          <div>vcp_source: {observationRawValue(buy?.vcp_source)}</div>
+        </Box>
+      </Box>
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
         {market === 'US' && <Button component={RouterLink} to={`/?symbol=${encodeURIComponent(entry.symbol)}`} size="small"
           sx={{ '&&': { minHeight: 44 } }} aria-label={`${entry.symbol}の購入条件をResearchで確認`}>
@@ -88,9 +105,9 @@ export default function TodaysBuysCard({ indexData, scanRows, marketAsOf, onOpen
         <Typography component="h2" sx={{ fontWeight: 800, color: C.inkStrong, fontSize: 16 }}>テクニカル観測記録</Typography>
         <Typography sx={{ fontSize: 12, color: C.grey }}>{entries.length}銘柄 · 基準日 {freshness.date || '未確認'}</Typography>
       </Box>
-      <Typography sx={{ fontSize: 12, color: C.grey, mb: 1 }}>{freshness.label}。記録終値とシグナル基準値の比較です。参考帯内・旧モデルの確認数は、現在の購入条件通過を示しません。</Typography>
-      <Typography sx={{ fontSize: 12, color: C.grey, mb: 1 }}>財務・出典・履歴・出来高・市場・最新取引日の確認を含む購入条件はResearchで個別に確認してください。未確認や履歴不足は合格に数えません。</Typography>
-      <Typography sx={{ fontSize: 12, color: C.grey, mb: 1 }} data-testid="todays-buys-market-context">
+      <Typography sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8, mb: 1 }}>{freshness.label}。記録終値とシグナル基準値の比較です。参考帯内・旧モデルの確認数は、現在の購入条件通過を示しません。</Typography>
+      <Typography sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8, mb: 1 }}>財務・出典・履歴・出来高・市場・最新取引日の確認を含む購入条件はResearchで個別に確認してください。未確認や履歴不足は合格に数えません。</Typography>
+      <Typography sx={{ fontSize: 13, color: C.ink, lineHeight: 1.8, mb: 1 }} data-testid="todays-buys-market-context">
         配信された市場区分（スキャン基準日 {signalDateLabel(marketAsOf, now, market)}）: {regimeLabel}{Number.isFinite(regimeRow?.market_distribution_days) ? ` · 分配日 ${regimeRow.market_distribution_days}` : ''}。市場区分の記録は購入条件の通過を示しません。
       </Typography>
       {visible.map(entry => <ObservationRow key={entry.symbol} entry={entry} freshness={freshness}

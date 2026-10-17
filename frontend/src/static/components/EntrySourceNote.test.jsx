@@ -4,6 +4,7 @@ import EntrySourceNote from './EntrySourceNote';
 import ChartDecisionSummary from './ChartDecisionSummary';
 import BookFinancialReview from './BookFinancialReview';
 import {entryPlan} from '../researchEngine';
+import {entryUseSourceContext,BOOK_SOURCE_PAGE_NOTE} from '../bookSourceContext';
 afterEach(cleanup);
 it('warns visibly at +4% even while the unchanged model is inside its5% zone',()=>{
  render(<ChartDecisionSummary row={{symbol:'SOURCE',current_price:104,se_pivot_price:100}} method="minervini" date="2026-10-01"/>);
@@ -12,12 +13,15 @@ it('warns visibly at +4% even while the unchanged model is inside its5% zone',()
  expect(screen.getByText(/アプリ買い上限/)).toHaveTextContent('$105.00');
  expect(screen.getByText(/買いゾーン内（価格位置）/)).toBeInTheDocument();
 });
-it('keeps source scope on demand and never claims the second book was checked',()=>{
+it('names the confirmed pivot-follow source while preserving the existing app limit',()=>{
  const {container}=render(<EntrySourceNote plan={entryPlan({current_price:102,se_pivot_price:100},null,'minervini2')}/>);
  expect(screen.queryByRole('note')).not.toBeInTheDocument();
  expect(container.querySelectorAll('details')).toHaveLength(1);
  expect(container.querySelector('summary')).toHaveTextContent('アプリ設定と書籍の確認範囲');
- expect(screen.getByText(/第2冊の数値指定の根拠にはしていません/)).toBeInTheDocument();
+ expect(container.querySelector('details')).toHaveTextContent('『株式トレード 基本と原則』PDF 245頁');
+ expect(container.querySelector('details')).toHaveTextContent('現在の3%上限はアプリ設定');
+ expect(container.querySelector('details')).toHaveTextContent(entryUseSourceContext());
+ expect(container.querySelector('details')).toHaveTextContent(BOOK_SOURCE_PAGE_NOTE);
 });
 it('omits an empty warning slot when its source details have moved to a shared disclosure',()=>{
  const {container}=render(<EntrySourceNote showDetails={false} plan={entryPlan({current_price:102,se_pivot_price:100},null,'minervini')}/>);
@@ -40,7 +44,7 @@ it.each([false,true])('never describes an extended price as inside the app range
  render(<EntrySourceNote compact={compact} plan={entryPlan({current_price:112.7,se_pivot_price:100},null,'minervini')}/>);
  const warning=screen.getByRole('note');
  expect(warning).toHaveTextContent('書籍の追随目安外');
- expect(warning).toHaveTextContent('アプリの買い上限と、第1冊の約2〜3%目安を超えています');
+ expect(warning).toHaveTextContent('アプリの買い上限と、『株式トレード 基本と原則』のピボット追随目安（約2〜3%）を超えています');
  expect(warning).not.toHaveTextContent('アプリの範囲内');
 });
 it('keeps a short visible comparison warning with its full meaning available to assistive technology',()=>{
@@ -48,9 +52,9 @@ it('keeps a short visible comparison warning with its full meaning available to 
  const warning=screen.getByRole('note');
  expect(warning.querySelector('strong')).toHaveTextContent('△ 書籍の追随目安外');
  expect(warning.querySelector('[aria-hidden="true"]')).toHaveTextContent('約2〜3%超');
- expect(warning.querySelector('.sr-only')).toHaveTextContent('アプリの範囲内ですが、第1冊の約2〜3%目安を超えています');
+ expect(warning.querySelector('.sr-only')).toHaveTextContent('アプリの範囲内ですが、『株式トレード 基本と原則』のピボット追随目安（約2〜3%）を超えています');
 });
-it('keeps the inline source badge explicitly scoped to the first-book warning',async()=>{
+it('keeps the inline source badge explicitly scoped to the existing pivot-follow warning',async()=>{
  const {EntrySourceBadge}=await import('./EntrySourceNote');
  const {rerender}=render(<EntrySourceBadge plan={entryPlan({current_price:103.2,se_pivot_price:100},null,'minervini')}/>);
  expect(screen.getByRole('note',{name:/書籍の追随目安外：アプリの範囲内ですが/})).toHaveTextContent('△ 書籍目安2〜3%超');

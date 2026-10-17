@@ -29,6 +29,8 @@ import MarketPulse from '../components/MarketPulse';
 import BookMarketEvidence from '../components/BookMarketEvidence';
 import BookBreakoutJournal from '../components/BookBreakoutJournal';
 import { breadthSummary, recentBreadth } from '../breadthSummary';
+import MarketIndicatorHistory from '../components/MarketIndicatorHistory';
+import { readMarketHistoryAsset, validateMarketHistoryAssetReference } from '../marketHistoryAsset';
 import '../market.css';
 import { useStaticManifest, fetchStaticJson, resolveStaticMarketEntry } from '../dataClient';
 import { useStaticMarket } from '../StaticMarketContext';
@@ -50,6 +52,29 @@ function StaticBreadthPage() {
     staleTime: 60000,
     placeholderData: () => undefined,
   });
+  const hasHistoryAsset = Object.hasOwn(marketEntry.assets || {}, 'market_indicator_history');
+  const historyReference = marketEntry.assets?.market_indicator_history;
+  const historyReferenceError = useMemo(() => {
+    if (!hasHistoryAsset) return null;
+    try {
+      validateMarketHistoryAssetReference(historyReference, { market: marketEntry.market, asOfDate: marketEntry.as_of_date });
+      return null;
+    } catch (error) { return error.message; }
+  }, [hasHistoryAsset, historyReference, marketEntry.market, marketEntry.as_of_date]);
+  const historyQuery = useQuery({
+    queryKey: ['staticMarketHistory', historyReference?.path, historyReference?.sha256, marketEntry.market, marketEntry.as_of_date, publicationQueryIdentity(marketEntry.publication)],
+    queryFn: async ({ signal }) => readMarketHistoryAsset(await fetchStaticJson(historyReference.path, {
+      sha256: historyReference.sha256, publication: marketEntry.publication, signal,
+    }), { reference: historyReference, market: marketEntry.market, asOfDate: marketEntry.as_of_date }),
+    enabled: selectedTab === 0 && hasHistoryAsset && !historyReferenceError,
+    staleTime: Infinity,
+    placeholderData: () => undefined,
+  });
+  const refreshData = () => {
+    manifestQuery.refetch();
+    breadthQuery.refetch();
+    if (selectedTab === 0 && hasHistoryAsset && !historyReferenceError) historyQuery.refetch();
+  };
   const [timeRange, setTimeRange] = useState('1M');
   // タブはURL（?tab=groups）と同期し、戻る/進むで切り替えを巻き戻せるようにする
   const handleTabChange = useCallback((_event, value) => {
@@ -89,7 +114,7 @@ function StaticBreadthPage() {
   }
 
   if (manifestQuery.isError) {
-    return <Alert severity="error" action={<Button onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>再試行</Button>}>騰落データの読み込みに失敗しました。</Alert>;
+    return <Alert severity="error" action={<Button onClick={refreshData}>再試行</Button>}>騰落データの読み込みに失敗しました。</Alert>;
   }
 
   const unavailable = breadthQuery.isError || breadthQuery.data?.available === false;
@@ -98,11 +123,14 @@ function StaticBreadthPage() {
   const history = recentBreadth(payload.history_90d || [], '3M', current.date).reverse();
   const summary = breadthSummary(current);
   const mismatch = Boolean(marketEntry.as_of_date && current.date !== marketEntry.as_of_date);
+  const historyUnavailable = hasHistoryAsset && (historyReferenceError || historyQuery.isError || !historyQuery.data || mismatch);
+  const historyNotice = hasHistoryAsset ? historyReferenceError || (mismatch ? '保存履歴と騰落データの分析基準日が一致しません。' :
+    historyQuery.isError ? '保存履歴の読み込みまたは整合性確認に失敗しました。' : !historyQuery.data ? '保存履歴を読み込み中です。' : null) : null;
 
   return (
     <Box component="main" className={`market-workbench${selectedTab===2?' sector-workbench':selectedTab===0?' breadth-overview':''}`} data-theme={theme.palette.mode}>
       <ConnectionStatus date={marketEntry.as_of_date} />
-      {selectedTab === 2 ? <div className="sector-page-meta"><span>分析 {marketEntry.as_of_date || '未確認'}</span></div> : <header className="market-page-head"><div><div className="research-kicker">市場の概況</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={() => { manifestQuery.refetch(); breadthQuery.refetch(); }}>データを再確認 ↻</Button></div></header>}
+      {selectedTab === 2 ? <div className="sector-page-meta"><span>分析 {marketEntry.as_of_date || '未確認'}</span></div> : <header className="market-page-head"><div><div className="research-kicker">市場の概況</div><Typography component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, md: 34 }, letterSpacing: '-.04em', mt: 1 }}>市場環境</Typography><Typography color="text.secondary" sx={{ fontSize: 13, mt: .5 }}>{displayName} / 日次スナップショット</Typography></div><div className="market-date"><span>分析基準日</span><strong>{current.date || '未確認'}</strong><Button size="small" onClick={refreshData}>データを再確認 ↻</Button></div></header>}
       {selectedTab !== 2 && (summary.fresh.state !== 'recent' || mismatch) && <Alert severity="warning" sx={{ mb: 2 }}>分析日が古い、未確認、または公開データと一致しません。最新の市場状態として扱わないでください。</Alert>}
       <Tabs
         value={selectedTab}
@@ -122,6 +150,11 @@ function StaticBreadthPage() {
       {selectedTab === 0 && !unavailable && (
         <>
           <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange} />
+          {marketEntry.market === 'US' && <details className="market-disclosure"><summary>市場指標の履歴と未取得項目</summary>
+            {historyNotice && <Alert severity={historyQuery.isError || historyReferenceError || mismatch ? 'warning' : 'info'} sx={{ my: 1 }}>{historyNotice}比較可能な履歴は未取得として表示します。</Alert>}
+            <MarketIndicatorHistory history={hasHistoryAsset ? historyUnavailable ? undefined : historyQuery.data.history : payload.market_indicator_history}
+              provenance={hasHistoryAsset && !historyUnavailable ? historyQuery.data.provenance : undefined} market={marketEntry.market} asOfDate={marketEntry.as_of_date} />
+          </details>}
           {marketEntry.market === 'US' && payload.book_market_evidence && <details className="market-disclosure"><summary>市場判断の根拠 — 新高値・先導株・出来高</summary><BookMarketEvidence evidence={payload.book_market_evidence} expectedDate={marketEntry.as_of_date} /></details>}
           {marketEntry.market === 'US' && <details className="market-disclosure"><summary>ブレイク後の成績を記録する</summary><BookBreakoutJournal /></details>}
           {marketEntry.market === 'US' && !mismatch && payload.book_leadership?.date === current.date && <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>

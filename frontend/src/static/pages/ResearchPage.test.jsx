@@ -5,6 +5,7 @@ import { HashRouter } from 'react-router-dom';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchPage from './ResearchPage';
 import { withAuditFixture } from '../testAuditFixture';
+import { BOOK_SOURCE_PAGE_NOTE, BOOK_SOURCE_SCOPE_NOTE } from '../bookSourceContext';
 
 // Allow actual async query/render completion under concurrent CI load.
 configure({asyncUtilTimeout:5000});
@@ -37,6 +38,15 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const mount = () => render(<QueryClientProvider client={client}><HashRouter><ResearchPage /></HashRouter></QueryClientProvider>);
+
+it('defines physical PDF pages and the limited scope of source verification',async()=>{
+ mount();
+ await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+ const note=screen.getByText(content=>content.includes(BOOK_SOURCE_SCOPE_NOTE)&&content.includes(BOOK_SOURCE_PAGE_NOTE));
+ expect(note).toHaveTextContent('PDFの先頭を1');
+ expect(note).toHaveTextContent('全文精読や全230規則の実装を意味しません');
+ expect(note).not.toHaveTextContent(/Kindle表示|第[12]冊|drive\.google|https?:/);
+});
 
 // 100 synthetic task profiles, NOT 100 human participants or independent opinions.
 // Each profile operates the real component with controlled fixtures. Browser layout

@@ -1,12 +1,12 @@
+import { tradingDays, calendarAt } from './testMarketCalendarFixture.js';
 import { describe, expect, it } from 'vitest';
 import { reviewBookPattern } from './bookPatternReview';
 
 function fixture() {
   const bars = [];
-  for (let t = Date.parse('2025-01-01'); bars.length < 300; t += 86400000) {
-    const d = new Date(t); if ([0, 6].includes(d.getUTCDay())) continue;
+  for (const date of tradingDays('2025-01-01', 300)) {
     const p = 100 + bars.length / 10;
-    bars.push({ date: d.toISOString().slice(0, 10), open: p, high: p + 1, low: p - 1, close: p, volume: 1000 });
+    bars.push({ date, open: p, high: p + 1, low: p - 1, close: p, volume: 1000 });
   }
   const set = (i, low, high, volume = 1000) => Object.assign(bars[i], { open: (low + high) / 2, close: (low + high) / 2, low, high, volume });
   set(229, 198, 200);
@@ -17,7 +17,7 @@ function fixture() {
   const date = bars.at(-1).date;
   const review = { pattern: 'three-c', source: 'reviewed chart', reviewedAt: '2026-09-26T05:00:00Z', advanceStart: bars[100].date,
     baseStart: bars[230].date, troughDate: bars[250].date, cheatStart: bars[270].date, cheatEnd: bars[279].date, breakoutDate: bars[280].date };
-  return { bars, set, date, review, row: { symbol: 'TEST', current_price: bars.at(-1).close }, payload: { symbol: 'TEST', as_of_date: date, bars } };
+  return { bars, set, date, review, row: { symbol: 'TEST', market: 'US', current_price: bars.at(-1).close }, payload: { symbol: 'TEST', as_of_date: date, bars, session_calendar: calendarAt(date) } };
 }
 const run = f => reviewBookPattern(f.row, f.payload, f.date, f.review);
 const find = (r, text) => r.rules.find(rule => rule.label.includes(text));

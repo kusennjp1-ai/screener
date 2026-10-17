@@ -14,8 +14,15 @@ function indexChart(chart, asOfDate, calendar = null) {
   if (!chart || typeof chart.symbol !== 'string' || !chart.symbol.trim() || !Array.isArray(chart.bars)) return null;
   const index = new Map();
   const bars = [];
+  const seen = new Set(), duplicateDates = new Set();
   for (const b of chart.bars) {
-    if (!validBar(b) || (bars.length && b.date <= bars.at(-1).date)) break;
+    if (dateValid(b?.date) && b.date <= asOfDate) {
+      if (seen.has(b.date)) duplicateDates.add(b.date);
+      seen.add(b.date);
+    }
+  }
+  for (const b of chart.bars) {
+    if (!validBar(b) || duplicateDates.has(b.date) || (bars.length && b.date <= bars.at(-1).date)) break;
     if (b.date > asOfDate) break;
     const calendarIndex = calendar?.index.get(b.date);
     // A missing known market session invalidates subsequent rolling windows.
@@ -92,7 +99,11 @@ export function buildBookMarketEvidence({ charts = [], asOfDate, benchmark = nul
   for (const c of charts) { if (seen.has(c?.symbol)) duplicates.add(c?.symbol); seen.add(c?.symbol); }
   const bm = indexChart(benchmark, asOfDate);
   const indexed = charts.filter(c => !duplicates.has(c?.symbol)).map(c => indexChart(c, asOfDate, bm)).filter(Boolean);
-  const dates = [...new Set(indexed.flatMap(c => c.bars.slice(251).map(b => b.date)))].sort().slice(-lookbackSessions);
+  const stockDates = indexed.flatMap(c => c.bars.slice(251).map(b => b.date)).sort();
+  // A short benchmark overlay still identifies sessions after stock coverage
+  // began. It need not have a full year's bars just to retain a missing day.
+  const calendarDates = stockDates.length ? bm?.bars.filter(b => b.date >= stockDates[0]).map(b => b.date) || [] : [];
+  const dates = [...new Set([...stockDates, ...calendarDates])].sort().slice(-lookbackSessions);
   const events = [], series = [];
   let cohort = null;
   for (const date of dates) {
@@ -101,29 +112,33 @@ export function buildBookMarketEvidence({ charts = [], asOfDate, benchmark = nul
     if (cohort === null && ranked.count >= 100) cohort = { date, members: leaders.map(r => ({ symbol: r.symbol, close: r.close })), indexClose: index?.close ?? null };
     const activeCohort = cohort ? cohort.members.map(m => ({ original: m, current: rows.find(r => r.symbol === m.symbol) })).filter(m => m.current) : [];
     const up = rows.filter(r => r.close > r.previousClose), down = rows.filter(r => r.close < r.previousClose);
-    const sum = (list, key) => list.reduce((total, r) => total + r[key], 0);
+    const sum = (list, key) => rows.length ? list.reduce((total, r) => total + r[key], 0) : null;
     const breaks = leaders.filter(r => r.breakoutProxy);
     for (const r of breaks) events.push({ date, symbol: r.symbol, close: r.close, pivotProxy: r.pivotProxy, rs: r.rs,
       volumeRatio: r.volumeRatio, baseDepthProxy: r.baseDepthProxy, source: '20-session-range-proxy', certifiedSetup: false });
     series.push({ date, coverage: rows.length, expectedUniverseSize, coveragePct: expectedUniverseSize ? rows.length / expectedUniverseSize * 100 : null,
       rsUniverseSize: ranked.count, leaderCount: ranked.count >= 100 ? leaders.length : null,
       newHighs: rows.length ? rows.filter(r => r.newHigh).length : null, newLows: rows.length ? rows.filter(r => r.newLow).length : null,
-      advancing: up.length, declining: down.length, unchanged: rows.length - up.length - down.length,
+      advancing: rows.length ? up.length : null, declining: rows.length ? down.length : null, unchanged: rows.length ? rows.length - up.length - down.length : null,
       upVolume: sum(up, 'volume'), downVolume: sum(down, 'volume'), upDollarVolume: sum(up, 'dollarVolume'), downDollarVolume: sum(down, 'dollarVolume'),
       setupProxyCount: ranked.count >= 100 ? leaders.filter(r => r.setupProxy).length : null,
       breakoutProxyCount: ranked.count >= 100 ? breaks.length : null,
       benchmark: index,
       leadersPositiveWhileIndexNegative: ranked.count >= 100 && finite(index?.return20) ? leaders.filter(r => r.return20 > 0 && index.return20 < 0).length : null,
       cohort: cohort ? { selectedAt: cohort.date, size: cohort.members.length, observed: activeCohort.length,
-        below50: activeCohort.filter(m => m.current.below50).length,
-        lostLeaderStatus: ranked.count >= 100 ? activeCohort.filter(m => !m.current.leader).length : null,
+        // Whole-cohort counts require complete observation. A zero among only
+        // the surviving observations does not certify the missing members.
+        below50: activeCohort.length === cohort.members.length ? activeCohort.filter(m => m.current.below50).length : null,
+        lostLeaderStatus: activeCohort.length === cohort.members.length && ranked.count >= 100 ? activeCohort.filter(m => !m.current.leader).length : null,
+        observedBelow50: activeCohort.length ? activeCohort.filter(m => m.current.below50).length : null,
+        observedLostLeaderStatus: activeCohort.length && ranked.count >= 100 ? activeCohort.filter(m => !m.current.leader).length : null,
         meanReturnPct: activeCohort.length ? mean(activeCohort.map(m => change(m.current.close, m.original.close))) : null,
         indexReturnPct: index && positive(cohort.indexClose) ? change(index.close, cohort.indexClose) : null,
         // Missing members stay missing, never silently counted as healthy.
         missing: cohort.members.length - activeCohort.length } : null });
   }
   return { version: BOOK_MARKET_VERSION, as_of_date: asOfDate, series, latest: series.at(-1) ?? null, breakoutEvents: events,
-    currentSnapshotComplete: series.at(-1)?.date === asOfDate,
+    currentSnapshotComplete: series.at(-1)?.date === asOfDate && series.at(-1)?.coverage > 0,
     cohortMembers: cohort?.members.map(m => m.symbol) ?? [],
     sources: [{ book: '株式トレード 基本と原則', recordingSeconds: [405.5, 426.5, 429.5] }],
     universe: { requested: expectedUniverseSize, suppliedCharts: charts.length, usableCharts: indexed.length, duplicateSymbolsExcluded: [...duplicates],
@@ -135,4 +150,28 @@ export function buildBookMarketEvidence({ charts = [], asOfDate, benchmark = nul
       volume: '個別株の上昇／下落日の株数出来高と終値×出来高を別集計。指数は前日比の価格と出来高を直接比較' },
     unknowns: ['過去時点の全上場銘柄・廃止銘柄・当時の業績と決算日', '実際のVCP収縮・ベース境界・買えるセットアップの成立',
       '分割・併合・配当調整の提供元検証。大幅断絶後のデータは除外', '書籍の市場環境判断を完全再現したものではなく自動売買に使用しない'] };
+}
+
+// An empty event array is not evidence of zero when proxy counts are unknown.
+export function breakoutHistoryStatus(evidence) {
+  const series = evidence?.series;
+  if (!Array.isArray(series) || !series.length || !Array.isArray(evidence?.breakoutEvents)) return 'unknown';
+  const days = new Map(), eventCounts = new Map(), eventKeys = new Set();
+  for (const row of series) {
+    if (!dateValid(row?.date) || days.has(row.date)) return 'inconsistent';
+    if (row.breakoutProxyCount != null && (!Number.isSafeInteger(row.breakoutProxyCount) || row.breakoutProxyCount < 0)) return 'inconsistent';
+    days.set(row.date, row);
+  }
+  for (const event of evidence.breakoutEvents) {
+    if (!dateValid(event?.date) || !days.has(event.date) || typeof event.symbol !== 'string' || !event.symbol.trim()) return 'inconsistent';
+    const key = JSON.stringify([event.date, event.symbol]);
+    if (eventKeys.has(key)) return 'inconsistent';
+    eventKeys.add(key);
+    eventCounts.set(event.date, (eventCounts.get(event.date) || 0) + 1);
+  }
+  const known = series.filter(row => Number.isSafeInteger(row?.breakoutProxyCount) && row.breakoutProxyCount >= 0);
+  if (known.some(row => row.breakoutProxyCount !== (eventCounts.get(row.date) || 0))) return 'inconsistent';
+  if (known.length !== series.length) return known.length ? 'partial' : 'unknown';
+  if (evidence.breakoutEvents.length) return 'events';
+  return 'none';
 }

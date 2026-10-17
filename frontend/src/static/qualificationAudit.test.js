@@ -1,18 +1,19 @@
+import calendarFixture from './__fixtures__/nyse-sessions-2024-2026.json';
 import { describe, expect, it } from 'vitest';
 import { auditDailyBars, auditValues, mergeScanRows, rankVerifiedUniverse, RS_METHOD } from './qualificationAudit';
 import { assess, entryChecks } from './researchEngine';
 
 export function historyFixture() {
   const bars = [];
-  for (let d = Date.parse('2025-06-02'), i = 0; bars.length < 280; d += 86400000) {
-    if ([0, 6].includes(new Date(d).getUTCDay())) continue;
-    const close = 50 + i++ * .25;
-    bars.push({ date: new Date(d).toISOString().slice(0, 10), open: close, close, high: close + 1, low: close - 1, volume: 1000000 });
+  // Real provider sessions include holidays and special exchange closures.
+  for (const [i, date] of calendarFixture.sessions.filter(day => day >= '2025-06-02').slice(0, 280).entries()) {
+    const close = 50 + i * .25;
+    bars.push({ date, open: close, close, high: close + 1, low: close - 1, volume: 1000000 });
   }
   const date = bars.at(-1).date;
   const row = { symbol: 'TEST', market: 'US', currency: 'USD', rs_method: RS_METHOD, rs_universe_size: 1000, rs_as_of_date: date, current_price: bars.at(-1).close, rs_rating: 90, composite_rating: 95, eps_rating: 90,
     ibd_group_rank: 10, eps_growth_yy: 30, sales_growth_yy: 30, annual_eps_growth_3y: [30, 30, 30], passes_template: true };
-  return { row, payload: { symbol: row.symbol, as_of_date: date, bars }, date };
+  return { row, payload: { symbol: row.symbol, as_of_date: date, bars, session_calendar: { ...calendarFixture, as_of_date: date, range_end: date, sessions: calendarFixture.sessions.filter(day => day <= date) } }, date };
 }
 
 describe('independent OHLCV verification and adversarial loop', () => {

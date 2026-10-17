@@ -7,11 +7,10 @@ and delegates to the use case.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import MagicMock, patch, call
+from types import SimpleNamespace
+from unittest.mock import MagicMock, call, patch
 
 import pytest
-
-from app.use_cases.scanning.run_bulk_scan import RunBulkScanCommand, RunBulkScanResult
 
 
 @dataclass
@@ -28,12 +27,38 @@ class _FakeResult:
 _WRAPPER_PATH = "app.tasks.scan_tasks"
 
 
+@pytest.fixture(autouse=True)
+def isolated_effects():
+    """Mock the actual lazy-import boundaries, never a live broker/publisher.
+
+    Low-level guards also fail teardown if production catches a leaked call.
+    Keep this isolation local to the wrapper tests, not the whole unit suite.
+    """
+    with (
+        patch("socket.socket.connect", side_effect=AssertionError("real network call")) as connect,
+        patch("socket.socket.connect_ex", side_effect=AssertionError("real network call")) as connect_ex,
+        patch("celery.app.task.Task.apply_async", side_effect=AssertionError("real task dispatch")) as dispatch,
+        patch(
+            "app.services.ui_snapshot_service.UISnapshotService.publish_scan_bootstrap",
+            side_effect=AssertionError("real snapshot publication"),
+        ) as publish_real,
+        patch(f"{_WRAPPER_PATH}.finalize_scan_artifacts.delay", autospec=True) as finalize,
+        patch("app.services.ui_snapshot_service.safe_publish_scan_bootstrap", autospec=True) as publish,
+        patch("app.tasks.cache_tasks.prewarm_chart_cache_for_scan.delay", autospec=True) as prewarm,
+    ):
+        yield SimpleNamespace(finalize=finalize, publish=publish, prewarm=prewarm)
+        connect.assert_not_called()
+        connect_ex.assert_not_called()
+        dispatch.assert_not_called()
+        publish_real.assert_not_called()
+
+
 class TestRunBulkScanViaUseCase:
     """Test the thin wrapper that delegates to RunBulkScanUseCase."""
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_happy_path_returns_correct_dict(self, mock_settings, mock_pipeline):
+    def test_happy_path_returns_correct_dict(self, mock_settings, mock_pipeline, isolated_effects):
         mock_settings.scan_usecase_chunk_size = 25
 
         fake_result = _FakeResult()
@@ -61,6 +86,8 @@ class TestRunBulkScanViaUseCase:
                 task_instance, "scan-001", ["AAPL", "MSFT"], {"include_vcp": True}
             )
 
+        isolated_effects.finalize.assert_called_once_with("scan-001")
+        mock_pipeline.assert_not_called()
         assert result == {
             "scan_id": "scan-001",
             "completed": 10,
@@ -70,9 +97,9 @@ class TestRunBulkScanViaUseCase:
             "scan_path": "use_case",
         }
 
-    @patch(f"{_WRAPPER_PATH}.finalize_scan_artifacts")
+    @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_post_scan_finalization_queued_on_completed(self, mock_settings, mock_finalize):
+    def test_post_scan_finalization_queued_on_completed(self, mock_settings, mock_pipeline, isolated_effects):
         mock_settings.scan_usecase_chunk_size = 25
 
         mock_use_case = MagicMock()
@@ -91,16 +118,18 @@ class TestRunBulkScanViaUseCase:
             from app.tasks.scan_tasks import _run_bulk_scan_via_use_case
             _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], {})
 
-        mock_finalize.delay.assert_called_once_with("scan-001")
+        isolated_effects.finalize.assert_called_once_with("scan-001")
+        mock_pipeline.assert_not_called()
+        isolated_effects.publish.assert_not_called()
+        isolated_effects.prewarm.assert_not_called()
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
-    @patch(f"{_WRAPPER_PATH}.finalize_scan_artifacts")
     @patch(f"{_WRAPPER_PATH}.settings")
     def test_post_scan_pipeline_runs_inline_when_queueing_fails(
-        self, mock_settings, mock_finalize, mock_pipeline
+        self, mock_settings, mock_pipeline, isolated_effects
     ):
         mock_settings.scan_usecase_chunk_size = 25
-        mock_finalize.delay.side_effect = RuntimeError("broker down")
+        isolated_effects.finalize.side_effect = RuntimeError("broker down")
 
         mock_use_case = MagicMock()
         mock_use_case.execute.return_value = _FakeResult(status="completed")
@@ -118,12 +147,12 @@ class TestRunBulkScanViaUseCase:
             from app.tasks.scan_tasks import _run_bulk_scan_via_use_case
             _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], {})
 
-        mock_finalize.delay.assert_called_once_with("scan-001")
+        isolated_effects.finalize.assert_called_once_with("scan-001")
         mock_pipeline.assert_called_once_with("scan-001")
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_post_scan_pipeline_skipped_on_cancelled(self, mock_settings, mock_pipeline):
+    def test_post_scan_pipeline_skipped_on_cancelled(self, mock_settings, mock_pipeline, isolated_effects):
         mock_settings.scan_usecase_chunk_size = 25
 
         mock_use_case = MagicMock()
@@ -143,10 +172,11 @@ class TestRunBulkScanViaUseCase:
             _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], {})
 
         mock_pipeline.assert_not_called()
+        isolated_effects.finalize.assert_not_called()
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_cancel_close_called_even_on_exception(self, mock_settings, mock_pipeline):
+    def test_cancel_close_called_even_on_exception(self, mock_settings, mock_pipeline, isolated_effects):
         mock_settings.scan_usecase_chunk_size = 25
 
         mock_use_case = MagicMock()
@@ -170,11 +200,13 @@ class TestRunBulkScanViaUseCase:
                 _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], {})
 
         mock_cancel_instance.close.assert_called_once()
+        isolated_effects.finalize.assert_not_called()
+        mock_pipeline.assert_not_called()
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
     def test_trigger_source_lookup_failure_still_closes_cancel_token(
-        self, mock_settings, mock_pipeline
+        self, mock_settings, mock_pipeline, isolated_effects
     ):
         """Round 6 Codex P2: if the DB lookup that resolves trigger_source
         raises, the cancellation token must still get closed and the scan
@@ -205,10 +237,12 @@ class TestRunBulkScanViaUseCase:
 
         mock_cancel_instance.close.assert_called_once()
         mock_mark_failed.assert_called_once_with("scan-001")
+        isolated_effects.finalize.assert_not_called()
+        mock_pipeline.assert_not_called()
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_manual_scan_runs_cache_only_true(self, mock_settings, mock_pipeline):
+    def test_manual_scan_runs_cache_only_true(self, mock_settings, mock_pipeline, isolated_effects):
         """Round 5 Codex P2: manual scans must run cache_only=True."""
         mock_settings.scan_usecase_chunk_size = 25
 
@@ -245,6 +279,8 @@ class TestRunBulkScanViaUseCase:
             from app.tasks.scan_tasks import _run_bulk_scan_via_use_case
             _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], {})
 
+        isolated_effects.finalize.assert_called_once_with("scan-001")
+        mock_pipeline.assert_not_called()
         assert captured_cmd is not None
         assert captured_cmd.cache_only is True
         assert captured_cmd.parallel_workers == 2
@@ -252,7 +288,7 @@ class TestRunBulkScanViaUseCase:
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_bootstrap_scan_runs_cache_only_false(self, mock_settings, mock_pipeline):
+    def test_bootstrap_scan_runs_cache_only_false(self, mock_settings, mock_pipeline, isolated_effects):
         """Round 5 Codex P2: bootstrap scans populate the cache and must run
         with cache_only=False — otherwise they'd fail every symbol on cold cache.
         """
@@ -291,6 +327,8 @@ class TestRunBulkScanViaUseCase:
             from app.tasks.scan_tasks import _run_bulk_scan_via_use_case
             _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], {})
 
+        isolated_effects.finalize.assert_called_once_with("scan-001")
+        mock_pipeline.assert_not_called()
         assert captured_cmd is not None
         assert captured_cmd.cache_only is False
         assert captured_cmd.parallel_workers == 2
@@ -298,7 +336,7 @@ class TestRunBulkScanViaUseCase:
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_command_built_with_correct_params(self, mock_settings, mock_pipeline):
+    def test_command_built_with_correct_params(self, mock_settings, mock_pipeline, isolated_effects):
         mock_settings.scan_usecase_chunk_size = 25
 
         captured_cmd = None
@@ -327,6 +365,8 @@ class TestRunBulkScanViaUseCase:
                 {"include_vcp": True}
             )
 
+        isolated_effects.finalize.assert_called_once_with("scan-001")
+        mock_pipeline.assert_not_called()
         assert captured_cmd.scan_id == "scan-001"
         assert captured_cmd.symbols == ["AAPL", "MSFT"]
         assert captured_cmd.criteria == {"include_vcp": True}
@@ -335,7 +375,7 @@ class TestRunBulkScanViaUseCase:
 
     @patch(f"{_WRAPPER_PATH}._run_post_scan_pipeline")
     @patch(f"{_WRAPPER_PATH}.settings")
-    def test_none_criteria_defaults_to_empty_dict(self, mock_settings, mock_pipeline):
+    def test_none_criteria_defaults_to_empty_dict(self, mock_settings, mock_pipeline, isolated_effects):
         """When criteria is None, the wrapper passes {} to the command."""
         mock_settings.scan_usecase_chunk_size = 25
 
@@ -362,6 +402,8 @@ class TestRunBulkScanViaUseCase:
             from app.tasks.scan_tasks import _run_bulk_scan_via_use_case
             _run_bulk_scan_via_use_case(task_instance, "scan-001", ["AAPL"], None)
 
+        isolated_effects.finalize.assert_called_once_with("scan-001")
+        mock_pipeline.assert_not_called()
         assert captured_cmd.criteria == {}
 
 
@@ -372,7 +414,7 @@ class TestPostScanPipeline:
     @patch(f"{_WRAPPER_PATH}.compute_industry_peer_metrics")
     @patch(f"{_WRAPPER_PATH}.cleanup_old_scans")
     def test_calls_peer_metrics_and_cleanup(
-        self, mock_cleanup, mock_peer_metrics, mock_session_local
+        self, mock_cleanup, mock_peer_metrics, mock_session_local, isolated_effects
     ):
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
@@ -383,8 +425,11 @@ class TestPostScanPipeline:
 
         from app.tasks.scan_tasks import _run_post_scan_pipeline
 
-        with patch(f"{_WRAPPER_PATH}.cache_tasks", create=True):
-            _run_post_scan_pipeline("scan-001")
+        _run_post_scan_pipeline("scan-001")
+
+        assert isolated_effects.publish.call_args_list == [call("scan-001"), call()]
+        isolated_effects.prewarm.assert_called_once_with("scan-001", top_n=50)
+        isolated_effects.finalize.assert_not_called()
 
         mock_peer_metrics.assert_called_once_with(mock_db, "scan-001")
         mock_cleanup.assert_called_once_with(mock_db, "all")
@@ -392,7 +437,7 @@ class TestPostScanPipeline:
 
     @patch(f"{_WRAPPER_PATH}.SessionLocal")
     @patch(f"{_WRAPPER_PATH}.compute_industry_peer_metrics")
-    def test_session_closed_on_error(self, mock_peer_metrics, mock_session_local):
+    def test_session_closed_on_error(self, mock_peer_metrics, mock_session_local, isolated_effects):
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
         mock_peer_metrics.side_effect = RuntimeError("db error")
@@ -402,3 +447,54 @@ class TestPostScanPipeline:
         _run_post_scan_pipeline("scan-001")
 
         mock_db.close.assert_called_once()
+
+        mock_peer_metrics.assert_called_once_with(mock_db, "scan-001")
+        isolated_effects.publish.assert_not_called()
+        isolated_effects.prewarm.assert_not_called()
+        isolated_effects.finalize.assert_not_called()
+
+    @pytest.mark.parametrize("failed_boundary", ["publish", "prewarm"])
+    @patch(f"{_WRAPPER_PATH}.cleanup_old_scans")
+    @patch(f"{_WRAPPER_PATH}.compute_industry_peer_metrics")
+    @patch(f"{_WRAPPER_PATH}.SessionLocal")
+    def test_external_failure_is_logged_and_session_closed(
+        self, mock_session_local, mock_peer_metrics, mock_cleanup,
+        isolated_effects, failed_boundary, caplog,
+    ):
+        mock_db = mock_session_local.return_value
+        mock_db.query.return_value.filter.return_value.first.return_value.universe_key = "all"
+        getattr(isolated_effects, failed_boundary).side_effect = RuntimeError("boundary unavailable")
+        from app.tasks.scan_tasks import _run_post_scan_pipeline
+
+        _run_post_scan_pipeline("scan-001")
+
+        mock_peer_metrics.assert_called_once_with(mock_db, "scan-001")
+        mock_cleanup.assert_called_once_with(mock_db, "all")
+        expected_publish = [call("scan-001")] if failed_boundary == "publish" else [call("scan-001"), call()]
+        assert isolated_effects.publish.call_args_list == expected_publish
+        # Snapshot failure must not suppress chart warmup; neither may leak out.
+        isolated_effects.prewarm.assert_called_once_with("scan-001", top_n=50)
+        isolated_effects.finalize.assert_not_called()
+        mock_db.close.assert_called_once_with()
+        message = "Scan snapshot publish failed" if failed_boundary == "publish" else "Chart cache warming failed"
+        assert message in caplog.text
+        assert "boundary unavailable" in caplog.text
+
+    @patch(f"{_WRAPPER_PATH}.cleanup_old_scans")
+    @patch(f"{_WRAPPER_PATH}.compute_industry_peer_metrics")
+    @patch(f"{_WRAPPER_PATH}.SessionLocal")
+    def test_warmup_disabled_still_publishes_snapshots(
+        self, mock_session_local, mock_peer_metrics, mock_cleanup, isolated_effects,
+    ):
+        mock_db = mock_session_local.return_value
+        mock_db.query.return_value.filter.return_value.first.return_value.universe_key = "all"
+        from app.tasks.scan_tasks import _run_post_scan_pipeline
+
+        _run_post_scan_pipeline("scan-001", warm_chart_cache=False)
+
+        mock_peer_metrics.assert_called_once_with(mock_db, "scan-001")
+        mock_cleanup.assert_called_once_with(mock_db, "all")
+        assert isolated_effects.publish.call_args_list == [call("scan-001"), call()]
+        isolated_effects.prewarm.assert_not_called()
+        isolated_effects.finalize.assert_not_called()
+        mock_db.close.assert_called_once_with()

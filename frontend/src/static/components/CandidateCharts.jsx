@@ -10,7 +10,8 @@ import { singleMissingCondition } from '../missingCondition';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 import './comparison.css';
 import { EntrySourceBadge } from './EntrySourceNote';
-import { verifiedVolumeRatio } from '../qualificationAudit';
+import { verifiedVolumeRatio, hasVerifiedDailyBars } from '../qualificationAudit';
+import { PIVOT_FOLLOW_SOURCE_TITLE } from '../bookSourceContext';
 
 const Card = memo(function ComparisonCard({ item, date, generation, method, nearOnly, market, now, sessions, onSelect, paused }) {
   const { row } = item, ref = useRef(null), [visible, setVisible] = useState(false);
@@ -24,7 +25,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
     queryFn: async () => { const data = await fetchStaticChartPayload(row.chart_path, { generation }); if (data.symbol !== row.symbol || data.as_of_date !== date) throw Error('Chart snapshot mismatch'); return data; } });
   const invalidIdentity = query.data && (query.data.symbol !== row.symbol || query.data.as_of_date !== date);
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
-  const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
+  const invalidHistory = !hasVerifiedDailyBars(row, date) || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
   const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
   const volume = verifiedVolumeRatio(row, date);
@@ -35,15 +36,15 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
     <div className="comparison-company"><span className="comparison-company-label" title={nearOnly ? `${row.company_name || ''} · ${missing?.csv || ''}` : row.company_name}>{nearOnly ? missing?.text || '判定資料を再確認' : row.company_name || '企業名未配信'}</span><EntrySourceBadge plan={plan}/><strong>{money(row.current_price)}</strong></div>
     <div className="comparison-canvas" data-active-chart={!invalidHistory && visible && !paused && Boolean(bars?.length)}>
       {query.isError || invalidIdentity ? <Alert severity="warning">銘柄・日付の整合性または取得状態を確認できません。</Alert>
-        : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || '最終日足が分析日と不一致'}。現在の比較チャートには使用しません。</Alert>
           : !row.chart_path ? <Alert severity="info">チャート未配信。買い形状は確認できません。</Alert>
             : query.isSuccess && !bars?.length ? <Alert severity="info">日足データが不足しています。買い形状は確認できません。</Alert>
+        : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || (bars?.length && bars.at(-1).date !== date ? '最終日足が分析日と不一致' : '取引所営業日を含む現行の日足検証が未確認')}。現在の比較チャートには使用しません。</Alert>
               : visible && !paused && bars?.length ? <CandlestickChart key={row.symbol} symbol={row.symbol} priceData={bars} rsLineData={query.data.rs_line || []} rsRatingValue={row.rs_rating} compact researchView comparisonSessions={sessions} interactive={false} pivotPrice={plan.pivot} pivotLabel="共通ピボット" buyCeiling={plan.upper} stopPrice={plan.stopExample} height={smallScreen ? 240 : 220} />
                 : <div className="comparison-skeleton" role="status" aria-label={`${row.symbol} チャートを読み込み中`}><span /><span /><span /></div>}
     </div>
     <dl className="comparison-metrics"><div><dt>アプリ上限</dt><dd className="comparison-upper">{money(plan.upper)}</dd></div><div><dt>損切り例</dt><dd className="comparison-stop">{money(plan.stopExample)}</dd></div><div><dt>RS / 出来高</dt><dd>{Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '—'} · {times(volume)}</dd></div><div><dt>購入条件</dt><dd>{ready.passed}/{ready.total}</dd></div></dl>
     {applicabilityLabel && <p>{applicabilityLabel}。価格・テクニカルは参考表示です。</p>}
-    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? '書籍の追随目安外：第1冊の約2〜3%目安を超えています。' : ''}損切り例 {money(plan.stopExample)}。{applicabilityLabel || `選定 ${item.assessment.passed}/${item.assessment.total}`}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
+    <p id={descriptionId} className="sr-only">{row.company_name}。価格位置：{plan.state}。ピボット比 {signed(plan.distance)}。共通ピボット {money(plan.pivot)}。アプリ上限 {money(plan.upper)}。{plan.sourceContext?.warning ? `書籍の追随目安外：『${PIVOT_FOLLOW_SOURCE_TITLE}』のピボット追随目安（約2〜3%）を超えています。` : ''}損切り例 {money(plan.stopExample)}。{applicabilityLabel || `選定 ${item.assessment.passed}/${item.assessment.total}`}。購入条件 {ready.passed}/{ready.total}、{ready.ready ? '日次条件通過' : `未達・未確認 ${ready.rules.filter(rule => rule.state !== 'pass').length}件`}。日次 {date}、{sessions}営業日。</p>
   </Paper>;
 });
 

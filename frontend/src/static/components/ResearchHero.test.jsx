@@ -1,3 +1,4 @@
+import { withAuditFixture } from '../testAuditFixture';
 import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
@@ -50,7 +51,7 @@ it('keeps collapse usable when storage reads and writes are denied',()=>{
  expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
 });
 it('labels the fixed Minervini overview and never mistakes capped portfolio positions for universe counts',()=>{
- const ranked=Array.from({length:8},(_,i)=>({row:{symbol:`S${i}`,current_price:102,se_pivot_price:100,technical_audit:{valid:true}},assessment:{qualified:i<6}}));
+ const ranked=Array.from({length:8},(_,i)=>({row:withAuditFixture({symbol:`S${i}`,current_price:102,se_pivot_price:100},props.date),assessment:{qualified:i<6}}));
  const plan={...props.plan,dailyPositions:[{symbol:'S0'},{symbol:'S1'}]};
  render(<ResearchHero {...props} ranked={ranked} plan={plan} method="oneil"/>);
  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('選定候補は 6 銘柄。');
@@ -143,4 +144,13 @@ it('keeps the price and financial universes with all verified exclusions in the 
  expect(scope).not.toHaveClass('hero-subtitle');
  expect(scope.closest('.overview-market')).not.toBeNull();
  expect(screen.getByRole('link',{name:'業種の追い風を見る →'})).toBeInTheDocument();
+});
+
+it('does not count legacy raw-valid audits as verified coverage', () => {
+ const row = withAuditFixture({symbol:'OLD',current_price:102,se_pivot_price:100},props.date);
+ const view = render(<ResearchHero {...props} rows={[row]} ranked={[{row,assessment:{qualified:false}}]}/>);
+ expect(screen.getByText(/^日足検証 100(?:\.0)?%$/)).toBeInTheDocument();
+ row.technical_audit={...row.technical_audit,version:'ohlcv-v1',status:undefined};
+ view.rerender(<ResearchHero {...props} rows={[row]} ranked={[{row,assessment:{qualified:false}}]}/>);
+ expect(screen.getByText(/^日足検証 0(?:\.0)?%$/)).toBeInTheDocument();
 });

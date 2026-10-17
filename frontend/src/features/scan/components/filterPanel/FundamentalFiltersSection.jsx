@@ -76,7 +76,7 @@ function FundamentalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="EPS成長"
+            label="EPS 前四半期比"
             minValue={filters.epsGrowth?.min}
             maxValue={filters.epsGrowth?.max}
             onChange={(range) => updateRangeFilter('epsGrowth', range)}
@@ -87,7 +87,7 @@ function FundamentalFiltersSection({
         </Grid>
         <Grid item xs={6} sm={4} md={1.5}>
           <CompactRangeInput
-            label="売上成長"
+            label="売上 前四半期比"
             minValue={filters.salesGrowth?.min}
             maxValue={filters.salesGrowth?.max}
             onChange={(range) => updateRangeFilter('salesGrowth', range)}

@@ -1,4 +1,4 @@
-import { chartHistoryWarning, dateKey, relativeStrengthScale, setResearchRange, researchVolumeBars } from './researchChartModel';
+import { chartHistoryWarning, invalidChartHistory, dateKey, relativeStrengthScale, setResearchRange, researchVolumeBars } from './researchChartModel';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
@@ -111,6 +111,7 @@ function CandlestickChart({
   const [annotationDetail, setAnnotationDetail] = useState(null);
   const showBookAnnotations = annotationDetail ?? !smallScreen;
   const setShowBookAnnotations = value => setAnnotationDetail(typeof value === 'function' ? value(showBookAnnotations) : value);
+  const invalidHistory = useMemo(() => invalidChartHistory(priceData), [priceData]);
   const historyWarning = useMemo(() => chartHistoryWarning(priceData), [priceData]);
   const annotations = useMemo(() => buildBookAnnotations(bookAnnotations && !historyWarning ? priceData : null), [bookAnnotations, priceData, historyWarning]);
   const [windowRange, setWindowRange] = useState(null);
@@ -210,7 +211,7 @@ function CandlestickChart({
   // toggled off. This drives BOTH the reserved-strip layout (price/volume
   // reclaim the strip's space when RS is hidden) and the "RS" label.
   const rsStripShown =
-    showRSLine &&
+    !invalidHistory && showRSLine &&
     (effectiveTimeframe === 'daily' || researchView) &&
     Array.isArray(rsData?.rs_line) &&
     rsData.rs_line.length > 0;
@@ -218,8 +219,10 @@ function CandlestickChart({
   // Transform data - memoized to avoid expensive EMA recalculations on every render
   const chartData = useMemo(() => {
     if (!apiData) return null;
-    return transformToCandlestickData(apiData, effectiveTimeframe);
-  }, [apiData, effectiveTimeframe]);
+    // Never coerce missing OHLCV into zero or leave the previous series behind.
+    // Keep raw daily values available in the separate numeric disclosure.
+    return transformToCandlestickData(invalidHistory ? [] : apiData, effectiveTimeframe);
+  }, [apiData, effectiveTimeframe, invalidHistory]);
 
   // Initialize chart on mount using useLayoutEffect for synchronous DOM access
   useLayoutEffect(() => {
@@ -661,11 +664,11 @@ function CandlestickChart({
   useLayoutEffect(() => {
     const series = epsLineSeriesRef.current;
     if (!series) return;
-    const pts = !bookAnnotations && Array.isArray(epsLine) ? epsLine : [];
+    const pts = !invalidHistory && !bookAnnotations && Array.isArray(epsLine) ? epsLine : [];
     try {
       series.setData(pts.map((p) => ({ time: p.time, value: p.value })));
     } catch { /* series recreated — ignore */ }
-  }, [epsLine, chartData, compact, height, isDarkMode, symbol, bookAnnotations]);
+  }, [epsLine, chartData, compact, height, isDarkMode, symbol, bookAnnotations, invalidHistory]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
@@ -815,7 +818,7 @@ function CandlestickChart({
   return (
     <>
     {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
-    {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
+    {researchView && historyWarning && <Alert severity="warning">{historyWarning} {invalidHistory ? 'チャートは未表示です。日足の数値で未確認の項目を確認してください。' : '自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。'}</Alert>}
     {researchView && !compact && keepResearchChrome && <div className="research-chart-controls" role="group" aria-label="チャート操作" aria-hidden={!hasData} style={{display:hasData?'flex':'none','--chart-control-accent':theme.palette.primary.main,'--chart-control-text':theme.palette.text.primary,'--chart-control-muted':theme.palette.text.secondary,'--chart-control-line':theme.palette.divider,'--chart-control-hover':theme.palette.action.hover,'--chart-control-selected':theme.palette.action.selected}}>
       <div className="research-chart-timeframe" role="group" aria-label="足の種類">{[['daily','日足'],['weekly','週足']].map(([value,label])=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{if(timeframe!==value){isFirstDataLoadRef.current=true;setTimeframe(value);}}}>{label}</button>)}</div>
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <button type="button" key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</button>)}

@@ -114,6 +114,7 @@ it('reopens the same mobile symbol link after returning to the list and follows 
   await waitFor(() => expect(screen.getByRole('region', { name: '銘柄詳細' })).toHaveFocus());
   act(() => window.dispatchEvent(new Event('research:back')));
   expect(container.querySelector('main')).toHaveAttribute('data-mobile-view', 'list');
+  await waitFor(() => expect(screen.getByRole('region', { name: '対象銘柄', exact: true })).toHaveFocus());
   act(() => navigate('/?symbol=TECH'));
   await screen.findByRole('heading', { name: 'TECH' });
   await waitFor(() => expect(screen.getByRole('region', { name: '銘柄詳細' })).toHaveFocus());

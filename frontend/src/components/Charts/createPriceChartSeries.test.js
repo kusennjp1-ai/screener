@@ -13,6 +13,7 @@ vi.mock('lightweight-charts',()=>({
         const scale={applyOptions:vi.fn()};
         const item={options,paneIndex:actualPane,moveToPane:vi.fn(),applyOptions:vi.fn(),priceScale:()=>scale};series.push(item);return item;
       },panes:()=>panes};
+    if(options.addDefaultPane!==false)chart.addPane();
     charts.push(chart);return chart;
   },
   CrosshairMode:{Normal:0},CandlestickSeries:'candle',LineSeries:'line',HistogramSeries:'volume',createSeriesMarkers:()=>({}),
@@ -28,6 +29,8 @@ describe('research chart pane layout',()=>{
     expect(result.volumeSeries.paneIndex).toBe(2);
     expect(result.avgVolumeSeries.paneIndex).toBe(2);
     expect(panes).toHaveLength(3);
+    expect(charts[0].options.addDefaultPane).toBe(false);
+    expect(charts[0].addPane).toHaveBeenCalledTimes(3);
     expect(panes[0].setStretchFactor).toHaveBeenCalledExactlyOnceWith(compact ? .64 : .70);
     expect(panes[1].setStretchFactor).toHaveBeenCalledExactlyOnceWith(compact ? .15 : .12);
     expect(panes[2].setStretchFactor).toHaveBeenCalledExactlyOnceWith(compact ? .21 : .18);
@@ -58,6 +61,7 @@ describe('research chart pane layout',()=>{
   it('retains legacy single-pane ordering, margins, line styles and scale ownership',()=>{
     const result=createPriceChartSeries({},defaults);
     expect(panes).toHaveLength(1);
+    expect(charts[0].options.addDefaultPane).toBeUndefined();
     expect(series.slice(0,3)).toEqual([result.volumeSeries,result.avgVolumeSeries,result.candlestickSeries]);
     for(const item of series)expect(item.paneIndex).toBe(0);
     for(const key of ['sma50Series','sma150Series','sma200Series']){

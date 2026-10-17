@@ -5,6 +5,8 @@ import { useFinancialClock } from './useFinancialClock';
 import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
+import ChartNumericData from './components/ChartNumericData';
+import EvidenceContext from './components/EvidenceContext';
 import { EntrySourceBadge } from './components/EntrySourceNote';
 import { assess, entryPlan } from './researchEngine';
 import { entryReadiness } from './entryReadiness';
@@ -224,7 +226,8 @@ function StaticChartViewerModal({
     ? entryReadiness(stockData, expectedDate || chartPayload?.as_of_date, market || modelMarket([stockData]), now, method)
     : null;
   const mobileUnknown = mobileReadiness?.rules.filter(rule => rule.state === 'unknown').length || 0;
-  const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
+  const mobileMissing = mobileReadiness?.rules.filter(rule => ['fail', 'unknown'].includes(rule.state)).slice(0, 3) || [];
+  const mobileNotApplicable = mobileReadiness?.rules.filter(rule => rule.state === 'not_applicable') || [];
   const pivotLabel = '共通ピボット';
   const chartHeight = fittedChartHeight ?? (isMobile ? MOBILE_EXPANDED_CHART_HEIGHT : MIN_EXPANDED_CHART_HEIGHT);
   // Keep the original 12px hint when nested under the metadata's 11px div rule.
@@ -298,7 +301,8 @@ function StaticChartViewerModal({
               </Box>
               {isMobile && <Box data-testid="mobile-chart-readiness" sx={{gridColumn:compactMobileChrome ? '1 / -1' : '1',gridRow:2,fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
                 <Box sx={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:'0 8px'}}><strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong><EntrySourceBadge plan={plan}/></Box>
-                {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : '日次条件を確認済み。現在価格は発注時に確認。'}</Box>}
+                {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : mobileReadiness.ready ? '日次条件を確認済み。現在価格は発注時に確認。' : null}</Box>}
+                {mobileNotApplicable.length > 0 && <Box component="span" sx={{display:'block',color:'text.secondary'}}>対象外：{mobileNotApplicable.map(rule=>rule.label).join(' ／ ')}</Box>}
               </Box>}
             </Box>
             <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start'}}><CloseIcon /></IconButton>
@@ -325,7 +329,13 @@ function StaticChartViewerModal({
               }}
             >
               {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{instrumentApplicabilityLabel(instrumentApplicability(stockData)) || (rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,method || 'minervini',now).passed}/${assess(stockData,method || 'minervini',now).total}）`)}</summary>
-                {assess(stockData,method || 'minervini',now).rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'対象外':'?'} {r.label}</Typography>)}
+                <Typography sx={{fontSize:12}}>選出の一次条件です。購入条件とは別に確認します。未確認は通過に数えません。</Typography>
+                <EvidenceContext date={expectedDate} generation={generation} evidence={stockData} label="選出データ"/>
+                <Typography sx={{fontSize:12}}>条件ごとの提供元・対象日は個別の根拠を参照してください。記載がない提供元・対象日は未確認です。</Typography>
+                <Box component="ul" aria-label="選定条件の判定内訳" sx={{pl:2.5}}>{assess(stockData,method || 'minervini',now).rules.map(r=><Typography component="li" key={r.label} sx={{fontSize:13,my:1}}>
+                  {r.label}：{r.state==='pass'?'✓ 通過':r.state==='fail'?'× 未達':r.state==='not_applicable'?'対象外':'? 未確認'}{Number.isFinite(r.value)?` · ${r.value.toLocaleString('ja-JP',{maximumFractionDigits:2})}${r.unit || ''}`:''}
+                  {r.evidence && <Typography component="span" sx={{display:'block',fontSize:12}}>{r.evidence}</Typography>}
+                </Typography>)}</Box>
               </Box> : <><StockMetricsSidebar currentFinancialOnly date={expectedDate} now={now} stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
@@ -389,6 +399,7 @@ function StaticChartViewerModal({
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                     />
                   </Box>
+                  {chartPayload?.bars?.length > 0 && <ChartNumericData key={JSON.stringify([currentSymbol, expectedDate, generation, currentEntry?.path])} symbol={currentSymbol} bars={chartPayload.bars} asOfDate={expectedDate} generatedAt={chartPayload.generated_at} currency={stockData?.currency} />}
                   {isMobile && <>
                     <Box component="details" data-testid="mobile-chart-legend" sx={{px:1.5,fontSize:12,borderBottom:1,borderColor:'divider'}}>
                       <summary style={{cursor:'pointer',minHeight:44,lineHeight:'24px',padding:'10px 0',boxSizing:'border-box'}}>チャートの凡例（移動平均線・RS）</summary>

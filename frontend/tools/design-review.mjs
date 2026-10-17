@@ -10,15 +10,27 @@ import { gzipSync } from 'node:zlib';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
+import { recordContinuousSwitchDiagnostic } from './continuous-switch-diagnostic.mjs';
 import { retainProfileSources } from './retain-profile-sources.mjs';
 import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
+import { verifyFinancialCarryCases, financialCarryDesignScreens, financialCarrySha256, prepareFinancialCarryDesignBinding,
+  verifyFinancialCarryMeasurementBinding, observeFinancialCarryUi, sealFinancialCarryDesignReport } from './financial-carry-design-cases.mjs';
 import { verifyDailyObservationCases, dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
 import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 import { recordProductionBootstrapDiagnostic } from './production-bootstrap-diagnostic.mjs';
 
+import { buildLimitedResearchAssessment, LIMITED_RESEARCH_SCOPE } from './limited-research-assessment.mjs';
+
+const limitedAssessment = process.argv.includes('--limited-research-preview');
+const limitationArguments = process.argv.slice(2).filter(value => value.startsWith('--limited-performance-limitations='));
+if (limitationArguments.length > 1 || (!limitedAssessment && limitationArguments.length)) throw Error('Performance limitation input requires one explicit limited assessment mode');
+const approvedLimitations = limitationArguments.length
+  ? JSON.parse(await readFile(resolve(limitationArguments[0].slice('--limited-performance-limitations='.length)), 'utf8')) : [];
+if (!Array.isArray(approvedLimitations) || approvedLimitations.some(value => typeof value !== 'string')) throw Error('Expected exact performance limitation strings');
+
 if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
-const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
+const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || (limitedAssessment ? 'test-results/limited-research-preview' : 'test-results/design-review'));
 await mkdir(output, { recursive: true });
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
@@ -33,7 +45,23 @@ const comparisonMethod = inputBasis === 'same_verified_input'
 const report = { commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   input_basis: inputBasis,
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
+if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
 const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
+const carryProvenancePath = process.env.DESIGN_CARRY_PREVIEW_PROVENANCE;
+let carryBinding;
+if (carryProvenancePath) {
+  try {
+    check(inputBasis === 'same_verified_input', 'Carry previews require identical logical baseline/current data');
+    carryBinding = await prepareFinancialCarryDesignBinding({ provenancePath: resolve(carryProvenancePath), currentRoot, baselineRoot, commit });
+    const { logical_files, physical_files, ...bindingReport } = carryBinding;
+    void logical_files; void physical_files;
+    report.financial_carry_preview = bindingReport;
+  } catch (error) {
+    report.financial_carry_preview = { status: 'binding-failed', publication_authority: 'none', financial_admission: false };
+    check(false, `Carry preview evidence binding failed: ${error.message}`);
+    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+  }
+}
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 async function serve(root) {
   const server = createServer(async (request, response) => {
@@ -159,8 +187,9 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   if (geometry) checkFinancialViewportGeometry(geometry, check, key, viewport);
   if (target) await page.locator(target).screenshot({ path: resolve(output, screenshot) });
   else await page.screenshot({ path: resolve(output, screenshot) });
+  const screenshotHash = financialCarrySha256(await readFile(resolve(output, screenshot)));
   const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
-  report.screens.push({ key, screenshot, ...(target || viewportTargets ? { screenshot_scope: scope, screenshot_target: target || null, metrics_scope: 'original-viewport', ...(geometry ? { viewport_geometry: geometry } : {}) } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
+  report.screens.push({ key, screenshot, sha256: screenshotHash, ...(carryBinding ? { preview_provenance_sha256: carryBinding.provenance_sha256 } : {}), ...(target || viewportTargets ? { screenshot_scope: scope, screenshot_target: target || null, metrics_scope: 'original-viewport', ...(geometry ? { viewport_geometry: geometry } : {}) } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
@@ -210,6 +239,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
   const page = await context.newPage();
   const key = `${viewport.width}/${theme}`;
+  const finishCarryUi = carryBinding && observeFinancialCarryUi({ page, currentUrl: current.url, binding: carryBinding, check, report, viewport, theme });
   page.on('pageerror', error => report.failures.push(`${key}: ${error.message}`));
   try {
     await page.goto(current.url);
@@ -279,12 +309,14 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   }
   await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
+  if (carryBinding) await verifyFinancialCarryCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, binding: carryBinding, output });
   await verifyDailyObservationCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
+  if (finishCarryUi) await finishCarryUi();
   await context.close();
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme), ...dailyObservationDesignScreens(viewport, theme)];
+  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme), ...(carryProvenancePath ? financialCarryDesignScreens(viewport, theme) : []), ...dailyObservationDesignScreens(viewport, theme)];
   for (const screen of screens) {
     const key = `${screen}/${viewport.width}/${theme}`;
     check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
@@ -344,6 +376,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
             await page.getByRole('button', { name: /^オニール/ }).click();
             await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           } }));
+          report.profile_diagnostics.push(await recordContinuousSwitchDiagnostic({ cdp, page, output, url:server.url, readySelector, visible, width:viewport.width }));
         } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
       }
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
@@ -408,6 +441,23 @@ if (radar && report.failures.some(failure => failure.includes('D9'))) {
   }
 }
 await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+if (carryBinding) {
+  try {
+    const finalBinding = await prepareFinancialCarryDesignBinding({ provenancePath: resolve(carryProvenancePath), currentRoot, baselineRoot, commit });
+    verifyFinancialCarryMeasurementBinding(carryBinding, finalBinding);
+    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+    await sealFinancialCarryDesignReport({ report, output, binding: carryBinding });
+  } catch (error) {
+    check(false, `Carry preview evidence finalization failed: ${error.message}`);
+    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+  }
+}
 await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
 console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
+if (limitedAssessment) {
+  const assessment = buildLimitedResearchAssessment(report, approvedLimitations);
+  await writeFile(resolve(output, 'limited-assessment.json'), JSON.stringify(assessment, null, 2));
+  // Local classification is never a Design pass or publication permission.
+  if (assessment.blocking_failures.length) process.exitCode = 1;
+}
 if (report.failures.length) process.exitCode = 1;

@@ -17,6 +17,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
   const chart = createChart(container, {
     width,
     height,
+    // Research panes are added below before any series. Avoid constructing and
+    // sizing an empty full-height default pane that is immediately subdivided.
+    ...(researchView ? { addDefaultPane: false } : {}),
     layout: {
       background: { type: 'solid', color: palette.panel },
       textColor: palette['text-2'],

@@ -3,9 +3,11 @@ import {compressedAuditFiles,financialAuditReader} from './financial-audit-trans
 import {renewalSchema,validateRenewalCandidate,validateRenewalChain,inspectRenewalChain,assertRenewalCarryContinuity} from './financial-source-renewal.mjs';
 import {canonicalPublication,removeCanonical,transportCapable,packPublication,previewPublication,validateTransportPreview,verifyTransportPublication,assertTransportDeclaration} from './static-transport-publication.mjs';
 import {isPerformanceException, isExceptionCandidate, isPackedCandidate, exceptionPolicyFor, parseExceptionUiApproval, validateExceptionCandidate, validateExceptionChecks, verifyExceptionActivation} from './financial-performance-exception.mjs';
+import {isLimitedPreviewApproval,parseLimitedPreviewUiApproval,validateLimitedPreviewChecks,verifyLimitedPreviewFinancialScope} from './limited-research-approval.mjs';
 // Publication authority requires current-main CI and immutable tested artifacts,
 // through strict Design gates or the separate exact performance exception.
-// A preview or source certificate alone never grants that authority.
+// Limited UI preview authority can only retain an existing frozen generation.
+// A preview or source certificate alone never grants source authority.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, closeSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -477,8 +479,16 @@ export function validateFinancialReleaseReceipt(value) {
   validateAssetReference(value.evaluation_projection,value.mode!=='carry'?'source-projection':'carry-projection');
   if(value.source_projection.sha256!==value.lineage.source_projection_sha256)throw Error('Financial source projection changed lineage');
   exact(value.ui,['approved_sha','captured_sha','digest','approval','checks'],'UI');
-  const exception=isPerformanceException(value.ui.approval),performanceExceptionPolicy=exception?exceptionPolicyFor(value.ui.approval):null;
-  if(exception){
+  const limited=isLimitedPreviewApproval(value.ui.approval),exception=isPerformanceException(value.ui.approval),performanceExceptionPolicy=exception?exceptionPolicyFor(value.ui.approval):null;
+  if(limited){
+    // This authority covers a frozen existing generation under a separately
+    // reviewed preview UI. It cannot activate a source or renew its evidence.
+    if(value.mode!=='carry'||value.candidate!==null)throw Error('Limited preview can only carry frozen financial evidence');
+    const approval=parseLimitedPreviewUiApproval(value.ui.approval);
+    if(value.ui.approved_sha!==approval.sha||value.ui.captured_sha!==approval.sha||value.ui.digest!==approval.ui_digest)throw Error('Invalid exact limited preview UI');
+    validateLimitedPreviewChecks(approval,value.ui.checks);
+    verifyLimitedPreviewFinancialScope(value,approval);
+  }else if(exception){
     parseExceptionUiApproval(value.ui.approval);
     if(value.ui.approved_sha!==performanceExceptionPolicy.captured_ui.sha||value.ui.captured_sha!==value.ui.approved_sha||value.ui.digest!==performanceExceptionPolicy.captured_ui.digest)throw Error('Invalid exact financial exception UI');
     validateExceptionChecks(value.ui.approval,value.ui.checks);
@@ -531,7 +541,7 @@ export function verifyFinancialReleaseAssets(root,reference,publication=null) {
     equal(publication.financial_audit_files,financialAuditInventory(root),'complete publication audit inventory');
   }
   if(publication&&(publication.financial_generation!==receipt.financial_generation||publication.financial_lineage_sha256!==receipt.lineage_sha256||publication.ui_sha!==receipt.ui.approved_sha||publication.ui_digest!==receipt.ui.digest||publication.data_inventory_sha256!==inventoryDigest(dataInventory(root))
-    ||(isPerformanceException(publication.approval)||isPerformanceException(receipt.ui.approval))&&digest(publication.approval)!==digest(receipt.ui.approval)))throw Error('Publication and financial release disagree');
+    ||(isPerformanceException(publication.approval)||isPerformanceException(receipt.ui.approval)||isLimitedPreviewApproval(publication.approval)||isLimitedPreviewApproval(receipt.ui.approval))&&digest(publication.approval)!==digest(receipt.ui.approval)))throw Error('Publication and financial release disagree');
   return receipt;
 }
 export function assertFinancialLineageContinuity(live,candidate) {
