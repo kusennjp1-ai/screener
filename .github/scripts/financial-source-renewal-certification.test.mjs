@@ -156,7 +156,8 @@ function automaticFixture(){
   const directory=fixture(),registryPath='contracts/financial_source_renewal_v1.json',repositoryId=1203919607;
   cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
   cpSync(join(root,'.github/workflows'),join(directory,'.github/workflows'),{recursive:true});
-  const git=(...args)=>execFileSync('git',['-C',directory,...args],{encoding:'utf8'}).trim();
+  // Disposable fixtures must not leave detached Git writers racing strict cleanup.
+  const git=(...args)=>execFileSync('git',['-C',directory,'-c','maintenance.auto=false','-c','gc.auto=0',...args],{encoding:'utf8'}).trim();
   const commit=()=>{git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Committed automatic fixture');return {head_sha:git('rev-parse','HEAD'),tree:git('rev-parse','HEAD^{tree}')};};
   let registry={...JSON.parse(readFileSync(join(directory,registryPath))),ci_admission:null};
   const request=JSON.stringify({parsed_by:'the existing renewal request validator after admission'});
@@ -195,6 +196,18 @@ function withAutomaticEnvironment(env,body){
   const previous=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));
   try{Object.assign(process.env,env);return body();}finally{for(const [key,value]of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 }
+
+
+test('automatic fixture Git disables detached maintenance under forced auto thresholds',()=>{
+  const directory=fixture(),trace=join(directory,'trace.jsonl');let f;
+  try{
+    f=withAutomaticEnvironment({GIT_TRACE2_EVENT:trace,GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'maintenance.auto',GIT_CONFIG_VALUE_0:'true',GIT_CONFIG_KEY_1:'gc.auto',GIT_CONFIG_VALUE_1:'1'},()=>automaticFixture());
+    const events=readFileSync(trace,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+    assert.equal(events.filter(event=>event.event==='cmd_name'&&event.name==='commit').length,2,'both real fixture commits must still execute');
+    const detached=events.filter(event=>event.event==='child_start'&&event.argv?.some(arg=>['maintenance','gc','repack','pack-objects'].includes(arg)));
+    assert.deepEqual(detached,[],'fixture setup must not launch Git maintenance writers');
+  }finally{if(f)rmSync(f.directory,{recursive:true,force:true});rmSync(directory,{recursive:true,force:true});}
+});
 
 test('automatic controller retains exact closed admission proof alongside the unchanged CI checks',()=>{
   const f=automaticFixture();try{
