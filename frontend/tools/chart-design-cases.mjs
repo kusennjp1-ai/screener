@@ -102,7 +102,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await page.setViewportSize(shortViewport);
       await capture(page, shortViewport, theme, `case-${symbol}-expanded-short`);
       record.expanded_short_geometry = await dialog.evaluate(expandedChartGeometry);
-      checkExpandedChartGeometry(record.expanded_short_geometry, check, `${key}/expanded-short`, { fullChart: viewport.width >= 900 });
+      checkExpandedChartGeometry(record.expanded_short_geometry, check, `${key}/expanded-short`, { fullChart: true });
       const scroller = dialog.locator('[data-testid="expanded-chart-scroll"]');
       // On a very short viewport the plot must remain readable, and scrolling
       // must expose the real date axis without moving/covering footer controls.

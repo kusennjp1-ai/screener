@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as now } from '../../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../../src/test/fixtures/nativeAnnual.js';
+import { expandedChartGeometry, checkExpandedChartGeometry } from '../../tools/expanded-chart-geometry.mjs';
 
 const generatedAt = '2026-10-03T15:35:00Z';
 const annual = nativeAnnualFixture('CAD', [1, 0, 2, 4]);
@@ -14,7 +15,7 @@ const rows = ['SYNTH', 'OTHER'].map(symbol => withFinancialProof(withAuditFixtur
   ibd_group_rank:null, market_above_50dma:true, market_above_200dma:true, chart_path:`${symbol}.json` }, date)));
 // Synthetic prices for a registry-known fund exercise the existing N/A state.
 rows.push(withAuditFixture({symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF',as_of_date:date,
-  current_price:102,se_pivot_price:100,adv_usd:5e7,rs_rating:95,chart_path:'BITU.json'},date));
+  current_price:102,se_pivot_price:100,adv_usd:5e7,rs_rating:95,chart_path:'BITU.json',research_detail_path:'failed-detail.json'},date));
 const bars = Array.from({length:280}, (_,i) => ({ date:new Date(Date.parse(date)-(279-i)*86400000).toISOString().slice(0,10),
   open:90+i*.04, high:91+i*.04, low:89+i*.04, close:90.5+i*.04, volume:i===279?0:1e6+i*1000 }));
 
@@ -29,6 +30,7 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   });
   await page.route('**/static-data/**', route => {
     const file=new URL(route.request().url()).pathname.split('/').pop(), row=rows.find(r=>r.chart_path===file);
+    if(file==='failed-detail.json')return route.fulfill({status:503,json:{error:'Synthetic detail failure'}});
     const data=file==='manifest.json'?{as_of_date:date,generated_at:generatedAt,research_generation:'synthetic-accessibility',default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'},charts:{path:'index.json'}},pages:{}}}}
       :file==='research.json'?{as_of_date:date,rows}
       :file==='index.json'?{as_of_date:date,symbols:rows.map(r=>({symbol:r.symbol,path:r.chart_path}))}
@@ -112,6 +114,20 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const opener=detail.getByRole('button',{name:'日次チャートを分析'});
   await opener.focus();await page.keyboard.press('Enter');
   const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
+  if(width===375){
+    await page.setViewportSize({width:390,height:568});
+    await expect.poll(async()=>{
+      const failures=[];checkExpandedChartGeometry(await dialog.evaluate(expandedChartGeometry),(pass,message)=>{if(!pass)failures.push(message);},'short-phone initial',{fullChart:true});return failures;
+    }).toEqual([]);
+    await info.attach(`short-phone-initial-${theme}.json`,{body:JSON.stringify(await dialog.evaluate(expandedChartGeometry),null,2),contentType:'application/json'});
+    await page.screenshot({path:info.outputPath(`expanded-short-390x568-${theme}.png`)});
+    await page.setViewportSize({width:390,height:480});
+    await dialog.locator('[data-chart-symbol]').evaluate(node=>node.scrollIntoView({block:'end'}));
+    await expect.poll(async()=>{const geometry=await dialog.evaluate(expandedChartGeometry);return geometry.date_axis_visible&&geometry.date_axis_hit&&geometry.close_visible&&geometry.close_hit&&geometry.footer_controls.every(button=>button.visible&&button.hit);}).toBe(true);
+    await page.screenshot({path:info.outputPath(`expanded-scrolled-390x480-${theme}.png`)});
+    await page.setViewportSize({width,height:812});
+    await dialog.getByTestId('expanded-chart-scroll').evaluate(node=>{node.scrollTop=0;});
+  }
   const conditions=dialog.getByText(/選定条件の詳細（/);
   await conditions.focus();await page.keyboard.press('Space');
   await expect(dialog.getByText(/選出の一次条件です/)).toContainText('購入条件とは別に確認');
@@ -131,14 +147,22 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   await modalNumeric.evaluate(e=>e.scrollIntoView({block:'center'}));
   await page.screenshot({path:info.outputPath(`expanded-numeric-${width}-${theme}.png`)});
   expect((await new AxeBuilder({page}).include('[role="dialog"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
-  if(width===375 && theme==='dark'){
+  if(width===375){
     await dialog.getByRole('button',{name:'次の銘柄',exact:true}).click();
     await expect(dialog).toHaveAccessibleName(/BITU/);
     const readiness=dialog.getByTestId('mobile-chart-readiness');
     await expect(readiness).toContainText('対象外：共通購入モデルへの適合');
     await expect(readiness.getByText(/^未達・未確認：/)).not.toContainText('共通購入モデルへの適合');
     await visibleFocus(readiness,'not-applicable-mobile-summary');
-    await page.screenshot({path:info.outputPath('not-applicable-375-dark.png')});
+    await page.screenshot({path:info.outputPath(`not-applicable-375-${theme}.png`)});
+    await page.setViewportSize({width:390,height:568});
+    await expect(dialog.getByTestId('expanded-chart-warning')).toContainText('未取得の条件は合格扱いにしていません');
+    await expect.poll(async()=>{
+      const geometry=await dialog.evaluate(expandedChartGeometry),failures=[];
+      checkExpandedChartGeometry(geometry,(pass,message)=>{if(!pass)failures.push(message);},'short-phone failed detail');return failures;
+    }).toEqual([]);
+    await page.screenshot({path:info.outputPath(`expanded-failed-detail-390x568-${theme}.png`)});
+    await page.setViewportSize({width,height:812});
   }
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();await visibleFocus(opener,'expanded-chart-focus-return');

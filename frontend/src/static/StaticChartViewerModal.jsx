@@ -270,6 +270,7 @@ function StaticChartViewerModal({
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', scheduleFit); };
   }, [open, isMobile, compactMobileChrome, isLoading, isError, currentSymbol, chartSection]);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
+  const detailWarning = rowDetail.isError && <Alert data-testid="expanded-chart-warning" severity="warning" sx={{flexShrink:0,...(compactMobileChrome && {gridColumn:'1 / -1',gridRow:3})}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>;
 
   return (
     <Modal
@@ -289,14 +290,15 @@ function StaticChartViewerModal({
             bgcolor: 'background.paper',
             display: 'flex',
             flexDirection: 'column',
+            pb: compactMobileChrome ? 'env(safe-area-inset-bottom, 0px)' : 0,
             outline: 'none',
             overflow: 'hidden',
           }}
         >
-          {rowDetail.isError && <Alert severity="warning" sx={{flexShrink:0}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>}
+          {!compactMobileChrome && detailWarning}
           <Box data-testid="expanded-chart-header" sx={{display:compactMobileChrome ? 'grid' : 'flex',gridTemplateColumns:'minmax(0, 1fr) auto',flexShrink:0,alignItems:'center',justifyContent:'space-between',px:2,py:compactMobileChrome ? .5 : 1,borderBottom:1,borderColor:'divider'}}>
             <Box sx={{display:compactMobileChrome ? 'contents' : 'block',minWidth:0,flex:1}}>
-              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
+              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6" sx={compactMobileChrome ? {minHeight:44,display:'flex',alignItems:'center',flexWrap:'wrap',gap:.5,pr:totalCount>1?'100px':0} : undefined}>{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
                 <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
               </Box>
               {isMobile && <Box data-testid="mobile-chart-readiness" sx={{gridColumn:compactMobileChrome ? '1 / -1' : '1',gridRow:2,fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
@@ -305,7 +307,8 @@ function StaticChartViewerModal({
                 {mobileNotApplicable.length > 0 && <Box component="span" sx={{display:'block',color:'text.secondary'}}>対象外：{mobileNotApplicable.map(rule=>rule.label).join(' ／ ')}</Box>}
               </Box>}
             </Box>
-            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start'}}><CloseIcon /></IconButton>
+            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start',...(compactMobileChrome && {width:44,height:44})}}><CloseIcon /></IconButton>
+            {compactMobileChrome && detailWarning}
           </Box>
           <Box
             ref={contentRef}
@@ -418,21 +421,27 @@ function StaticChartViewerModal({
 
           <Box
             data-testid="expanded-chart-footer"
+            data-placement={compactMobileChrome ? 'header' : 'footer'}
+            data-navigation-count={totalCount > 1 ? 2 : 0}
             sx={{
-              position: 'relative',
+              // Keep the same mounted navigation/focus targets. Short phones
+              // use spare title-row space instead of reserving a bottom row
+              // that would cover the readable 300px chart and its date axis.
+              position: compactMobileChrome ? 'absolute' : 'relative',
+              ...(compactMobileChrome && {top:4,right:64}),
               flexShrink: 0,
               zIndex: 1,
-              pt: 1.5,
-              px: 1.5,
+              pt: compactMobileChrome ? 0 : 1.5,
+              px: compactMobileChrome ? 0 : 1.5,
               // ホームインジケータ（下部セーフエリア）を避ける
-              pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
-              bgcolor: 'background.paper',
-              borderTop: 1,
+              pb: compactMobileChrome ? 0 : 'calc(12px + env(safe-area-inset-bottom, 0px))',
+              bgcolor: compactMobileChrome ? 'transparent' : 'background.paper',
+              borderTop: compactMobileChrome ? 0 : 1,
               borderColor: 'divider',
-              display: 'flex',
+              display: compactMobileChrome && totalCount <= 1 ? 'none' : 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              gap: { xs: 1.5, md: 3 },
+              gap: compactMobileChrome ? .5 : { xs: 1.5, md: 3 },
             }}
           >
             {totalCount > 1 ? (
@@ -440,20 +449,22 @@ function StaticChartViewerModal({
                 <Button
                   variant="outlined"
                   size="small"
-                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 14 }} />}
+                  startIcon={compactMobileChrome ? undefined : <ArrowBackIosNewIcon sx={{ fontSize: 14 }} />}
+                  aria-label="前の銘柄"
                   onClick={goPrevious}
-                  sx={{ minWidth: 96 }}
+                  sx={{ minWidth: compactMobileChrome ? 44 : 96, ...(compactMobileChrome && {height:44,p:0}) }}
                 >
-                  前の銘柄
+                  {compactMobileChrome ? '前' : '前の銘柄'}
                 </Button>
                 <Button
                   variant="outlined"
                   size="small"
-                  endIcon={<ArrowForwardIosIcon sx={{ fontSize: 14 }} />}
+                  endIcon={compactMobileChrome ? undefined : <ArrowForwardIosIcon sx={{ fontSize: 14 }} />}
+                  aria-label="次の銘柄"
                   onClick={goNext}
-                  sx={{ minWidth: 96 }}
+                  sx={{ minWidth: compactMobileChrome ? 44 : 96, ...(compactMobileChrome && {height:44,p:0}) }}
                 >
-                  次の銘柄
+                  {compactMobileChrome ? '次' : '次の銘柄'}
                 </Button>
               </>
             ) : null}

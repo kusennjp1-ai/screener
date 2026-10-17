@@ -319,6 +319,57 @@ it('preserves pan mode and keyboard focus as short-phone controls move between r
   unmount(); vi.unstubAllGlobals();
 });
 
+it('uses the same focused 44px navigation targets in short-phone title space without a bottom row', async () => {
+  const heightListeners=new Set(),heightQuery={matches:false,addListener:callback=>heightListeners.add(callback),removeListener:callback=>heightListeners.delete(callback)};
+  vi.stubGlobal('matchMedia',vi.fn(query=>query.includes('max-height')?heightQuery:{matches:true,addListener:vi.fn(),removeListener:vi.fn()}));
+  vi.stubGlobal('fetch',vi.fn());
+  const props={open:true,onClose:vi.fn(),initialSymbol:'FIT',date:'2026-10-01',chartIndex:{symbols:[{symbol:'FIT',path:'charts/FIT.json'},{symbol:'NEXT',path:'charts/NEXT.json'}]}};
+  const payload={symbol:'FIT',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:104}],stock_data:{symbol:'FIT',current_price:104,se_pivot_price:100}};
+  const {unmount}=renderModal(props,payload);
+  await screen.findByTestId('static-candlestick-chart');
+  const next=screen.getByRole('button',{name:'次の銘柄'}),navigation=screen.getByTestId('expanded-chart-footer');
+  act(()=>next.focus());
+  for(const short of [true,false,true]) {
+    act(()=>{heightQuery.matches=short;heightListeners.forEach(callback=>callback());});
+    expect(screen.getByRole('button',{name:'次の銘柄'})).toBe(next);expect(next).toHaveFocus();
+    expect(navigation).toHaveAttribute('data-placement',short?'header':'footer');
+    expect(navigation).toHaveStyle({position:short?'absolute':'relative'});
+    expect(next).toHaveTextContent(short?'次':'次の銘柄');
+    if(short)expect(next).toHaveStyle({minWidth:'44px',height:'44px'});
+    expect(screen.getByText('$104.00 · 2026-10-01 日次終値')).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('未達・未確認');
+  }
+  expect(navigation).toHaveAttribute('data-navigation-count','2');
+  expect(screen.getByRole('button',{name:'チャートを閉じる'})).toHaveStyle({width:'44px',height:'44px'});
+  fireEvent.keyDown(window,{key:'Escape'});expect(props.onClose).toHaveBeenCalledOnce();
+  unmount();vi.unstubAllGlobals();
+});
+
+it('keeps a real failed-detail warning below compact title controls across height changes', async () => {
+  const heightListeners=new Set(),heightQuery={matches:true,addListener:callback=>heightListeners.add(callback),removeListener:callback=>heightListeners.delete(callback)};
+  vi.stubGlobal('matchMedia',vi.fn(query=>query.includes('max-height')?heightQuery:{matches:true,addListener:vi.fn(),removeListener:vi.fn()}));
+  const fetch=vi.fn().mockRejectedValue(new Error('detail unavailable'));
+  vi.stubGlobal('fetch',fetch);
+  const row={symbol:'FAILED',current_price:104,se_pivot_price:100,research_detail_path:'failed-detail.json'};
+  const props={open:true,onClose:vi.fn(),initialSymbol:row.symbol,date:'2026-10-01',researchRows:[row],chartIndex:{symbols:[{symbol:row.symbol,path:'charts/FAILED.json'},{symbol:'NEXT',path:'charts/NEXT.json'}]}};
+  const payload={symbol:row.symbol,as_of_date:props.date,bars:[{date:props.date,close:104}],stock_data:row};
+  const {unmount}=renderModal(props,payload);
+  await screen.findByTestId('static-candlestick-chart');
+  await screen.findByTestId('expanded-chart-warning');
+  expect(fetch).toHaveBeenCalledWith(expect.stringContaining('failed-detail.json'),expect.anything());
+  const next=screen.getByRole('button',{name:'次の銘柄'});act(()=>next.focus());
+  for(const short of [true,false,true]){
+    act(()=>{heightQuery.matches=short;heightListeners.forEach(callback=>callback());});
+    const warning=screen.getByTestId('expanded-chart-warning'),header=screen.getByTestId('expanded-chart-header');
+    expect(warning).toHaveTextContent('詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。');
+    expect(header.contains(warning)).toBe(short);
+    if(short){expect(getComputedStyle(warning).gridColumn.replaceAll(' ','')).toBe('1/-1');expect(getComputedStyle(warning).gridRow).toBe('3');}
+    else expect(warning.nextElementSibling).toBe(header);
+    expect(next).toHaveFocus();expect(screen.getByRole('button',{name:'次の銘柄'})).toBe(next);
+  }
+  unmount();vi.unstubAllGlobals();
+});
+
 it('fits mobile cached opens and resizes without allowing scrolling or below-chart disclosures to shrink the plot', async () => {
   let contentHeight = 678, plotOffset = 136, scheduledFit;
   vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { scheduledFit = callback; return 1; }));

@@ -9,6 +9,7 @@ import './candidateGuidance.css';
 import { entryReadiness } from '../entryReadiness';
 import { verifiedVolumeRatio } from '../qualificationAudit';
 import { signed, times, stateKey, STATES } from '../positionGeometry';
+import { useStickyHeaderClearance } from '../useStickyHeaderClearance';
 const SORTS={rank:'選定・買い位置',distance:'ピボットに近い順',rs:'RSが高い順',volume:'出来高比が高い順',state:'状態'};
 const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(state));
 const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onSelect,onCompare,onMove,now}) {
@@ -35,6 +36,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
 export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false}) {
  const [sort,setSort]=useState('rank'),[page,setPage]=useState(0);
  const scrollRef=useRef(null),pageStartRef=useRef(null);
+ useStickyHeaderClearance(scrollRef,view==='list'&&!compareOnly);
  const ordered=useMemo(()=>{
   if(sort==='rank')return ranked;
   const values=ranked.map(item=>({...item,plan:entryPlan(item.row,null,method)}));
