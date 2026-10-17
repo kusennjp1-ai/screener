@@ -13,6 +13,8 @@ import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as 
 import { assess, researchCsv } from '../src/static/researchEngine.js';
 import { auditDailyBars } from '../src/static/qualificationAudit.js';
 import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
+import { validateResearchParity } from './research-quality.mjs';
+import { setupReadiness } from '../src/static/setupReadiness.js';
 
 const write = async (path, value) => {
   await mkdir(resolve(path, '..'), { recursive: true });
@@ -21,7 +23,7 @@ const write = async (path, value) => {
 const read = async path => JSON.parse(await readFile(path, 'utf8'));
 const symbols = rows => rows.map(row => row.symbol);
 
-async function fixture({ withBreadth = false, withCalendar = true } = {}) {
+async function fixture({ withBreadth = false, withCalendar = true, setupReports = null } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'research-export-order-'));
   const frontend = join(directory, 'frontend'), root = join(frontend, 'public/static-data');
   const bars = [];
@@ -30,7 +32,7 @@ async function fixture({ withBreadth = false, withCalendar = true } = {}) {
     bars.unshift({ date: day, open: close, high: close + 1, low: close - 1, close, volume: 1000000 });
   }
   if (withCalendar) await write(join(root, 'trading-calendar.json'), calendarAt(date));
-  const sourceSymbols = withBreadth ? Array.from({ length: 101 }, (_, index) => `S${String(index).padStart(3, '0')}`) : ['ZETA', 'BETA', 'ALPHA'];
+  const sourceSymbols = setupReports ? setupReports.map((_, index) => `SETUP${index}`) : withBreadth ? Array.from({ length: 101 }, (_, index) => `S${String(index).padStart(3, '0')}`) : ['ZETA', 'BETA', 'ALPHA'];
   const sourceCharts = sourceSymbols.map((symbol, index) => {
     const series = withBreadth ? bars.map((bar, offset) => {
       const close = 100 + offset * (.1 + index / 503) + (index + 1) * (offset % 7) / 1000000;
@@ -48,6 +50,7 @@ async function fixture({ withBreadth = false, withCalendar = true } = {}) {
     volume: 1000000, adv_usd: 100000000, se_setup_score: (index + 1) * 10,
     setup_recalculation: { status: 'calculated', as_of_date: date }, eps_growth_yy: 30 + index, sales_growth_yy: 40 + index,
   }, now, date));
+  if (setupReports) for (const [index, report] of setupReports.entries()) Object.assign(rows[index], report);
   const histories = Object.fromEntries(rows.map(row => [row.symbol, {
     symbol: row.symbol, as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD',
     source: 'Synthetic regression fixture', retrieved_at: new Date(now - 3600000).toISOString(),
@@ -256,4 +259,35 @@ it('excludes a single missing session from the published RS population without a
     expect(targetChart.bars).toEqual(chart.bars);
     expect(targetChart.bars).toHaveLength(279);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+it('preserves calculated and unavailable setup reasons through actual export, compact transport and every profile CSV', async () => {
+  const setupReports = [
+    { se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'not_implemented / outside_early_zone / volume_below_minimum' } },
+    { se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'measured ready' } },
+    { se_setup_ready: false, setup_recalculation: { status: 'unavailable', as_of_date: date, reason: 'detector error' } },
+    { se_setup_ready: false, setup_recalculation: { status: 'unavailable', as_of_date: date } },
+    { se_setup_ready: null, setup_recalculation: { status: 'calculated', as_of_date: date, reason: '=literal reason, "quoted"' } },
+    { se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date } },
+  ];
+  const { directory, root, run, outputs } = await fixture({ setupReports });
+  try {
+    run();
+    const { manifest, index, details } = await outputs();
+    const wire = await read(join(root, manifest.markets.US.assets.research.path));
+    expect(() => validateResearchParity(wire, details, now)).not.toThrow();
+    for (const [offset, row] of index.rows.entries()) {
+      const detail = details[offset];
+      expect(row.setup_recalculation).toEqual(setupReports[offset].setup_recalculation);
+      expect(setupReadiness(row)).toEqual(setupReadiness(detail));
+      for (const method of RESEARCH_METHODS) {
+        expect(researchCsv([{ row }], method, date, now)).toBe(researchCsv([{ row: detail }], method, date, now));
+        expect(assess(row, method, now)).toEqual(assess(detail, method, now));
+      }
+    }
+    expect(index.rows.map(row => setupReadiness(row).state)).toEqual(['fail', 'pass', 'unknown', 'unknown', 'unknown', 'fail']);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

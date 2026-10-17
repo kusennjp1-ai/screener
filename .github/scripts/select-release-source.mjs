@@ -1,3 +1,4 @@
+import {captureOrdinaryCalendarSource,sealOrdinaryCalendarSource,prepareOrdinaryCalendar,bindOrdinaryCalendarBaseline,verifyOrdinaryCalendar} from './ordinary-session-calendar.mjs';
 import {isLimitedPreviewApproval} from './limited-research-approval.mjs';
 import {FINANCIAL_AUDIT_MAX_FILE_BYTES,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
 import {selectRenewalControls,selectRenewalCandidate,verifyRenewalSelection,restoreRenewalCandidate,prepareRenewalReceipt,verifyPreparedRenewalRelease,checkFinalRenewalPayload} from './financial-source-renewal-publisher.mjs';
@@ -288,7 +289,7 @@ async function plan(design = false) {
   }
   const sourceSha = activation?.exception?activation.record.captured_ui.sha:['ui','activation'].includes(decision.mode) || design ? sha : live.uiSha;
   const historyPredecessor = !design && fresh && !migration && !correction && !activation && !renewal && !source.repair ? publishedHistorySource(live, pages) : null;
-  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, ...(historyPredecessor ? {historyPredecessor} : {}), ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
+  const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, offlineCalendarIntent:event.inputs?.ui_only===true||event.inputs?.ui_only==='true', ...(historyPredecessor ? {historyPredecessor} : {}), ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
     ...(!renewal&&!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
   if(state.carry&&ordinaryCarrySelected(state))state.ordinaryCarryAdmission=selectOrdinaryCarryAdmission(state,Date.now());
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
@@ -438,6 +439,7 @@ async function compose() {
     if(state.live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(state.live),receipt.financial_audit_files);
     state.financialPrepared=prepared;writeFileSync(statePath(),JSON.stringify(state));
   }
+  if(state.carry?.calendar)receipt.ordinary_calendar_derivation=state.carry.calendar.proof;
   if(state.publisherTooling){receipt.publisher_tooling=publisherToolingReceipt(state,receipt);writeFileSync(statePath(),JSON.stringify(state));}
   if (state.decision.migration && dataInventoryDigest(dist) !== state.migrationDataDigest) throw Error('Metadata migration changed approved data bytes');
   // The final logical tree is complete before encoding. A data-only release
@@ -556,14 +558,21 @@ async function buildOrdinaryCarry(){
   tool.build={started_at:started,finished_at:assertOrdinaryClock(Date.now()),output_sha256:outputDigest};tool.phase='built';
   writeFileSync(statePath(),JSON.stringify(state));
 }
+function assertCalendarIntent(state){
+  const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
+  const uiOnly=event.inputs?.ui_only===true||event.inputs?.ui_only==='true';
+  if(Boolean(state.offlineCalendarIntent)!==uiOnly)throw Error('Ordinary calendar UI-only intent changed');
+}
 async function prepareCarry() {
   const state=readState();if(!state.carry)throw Error('Missing financial carry plan');
+  assertCalendarIntent(state);
   await publisherToolingBoundary(state,'prepare');
   const frontend=resolve('release/frontend'),root=join(frontend,'public');
   if(ordinaryCarrySelected(state))await prepareOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
   const evaluatedAt=new Date().toISOString();
   const env={...process.env,FINANCIAL_EVALUATED_AT:evaluatedAt};
   for(const key of Object.keys(env))if(key.startsWith('FINANCIAL_CORRECTION_')||key.startsWith('FINANCIAL_GENERATION_CARRY_'))delete env[key];
+  const calendar=await prepareOrdinaryCalendar({state,frontend,root,evidence:join(scratch(),'ordinary-calendar-evidence'),evaluatedAt});
   // Establish the fully prepared new-price baseline once, including normal
   // performance history, before the carry takes exclusive financial ownership.
   execFileSync(process.execPath,['tools/export-research.mjs'],{cwd:frontend,env,stdio:'inherit'});
@@ -582,6 +591,7 @@ async function prepareCarry() {
     prepareCarryHistory({root,targetInput});
   }
   const baseline=join(scratch(),'carry-baseline');rmSync(baseline,{recursive:true,force:true});copyBundleData(root,baseline);
+  bindOrdinaryCalendarBaseline(calendar,baseline,target);
   const previous=state.live.financialRelease;
   const sourceProjection=readFileSync(join(state.carry.sourceRoot,previous.source_projection.path));
   const sourceBase=readFileSync(join(state.carry.sourceRoot,previous.source_base.path));
@@ -597,15 +607,42 @@ async function prepareCarry() {
   // The unchanged selected consumer must accept every full input before this
   // controller exposes a carry plan. The target-only envelope grants no bypass.
   await helper.loadFinancialGenerationCarry({env:carryEnv,rows:targetInput.rows,asOfDate:targetInput.asOfDate});
-  state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt};
+  state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt,...(calendar?{calendar}:{})};
   await publisherToolingBoundary(state,'apply');
   if(ordinaryCarrySelected(state))await bindOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
   writeFileSync(statePath(),JSON.stringify(state));
   if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`${state.ordinaryCarryTooling?'ORDINARY_CARRY_TOOLING=true\n':''}FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
 }
+// Reconstruct only the already-authenticated history/audit preparation on a
+// fresh archive copy. No prices, provider values or financial clocks are added.
+async function replayCalendarPreparedInput(state,root){
+  if(state.historyPredecessor){
+    const predecessor=state.historyPredecessor;
+    if(predecessor.receiptHash!==state.live.receiptHash||predecessor.runId!==state.live.latest.runId||predecessor.attempt!==state.live.latest.attempt||predecessor.manifestHash!==state.live.manifestHash)throw Error('Calendar history predecessor changed');
+    const {prepareHistoryReconciliation,writeHistoryPayloads,commitHistoryCatalogs,restorePackedHistory}=await import('./reconcile-candidate-history.mjs');
+    const history=join(root,'..','authenticated-history');
+    if(predecessor.kind==='packed-live'){
+      if(digest(predecessor.expectedRoot)!==digest(state.live.receipt.transport.root))throw Error('Calendar history transport root changed');
+      await restorePackedHistory({expectedRoot:predecessor.expectedRoot,root:join(history,'static-data')});
+    }else await materialize(predecessor,history,false,resolve('release/frontend'));
+    const plan=await prepareHistoryReconciliation({selectedRoot:join(root,'static-data'),publishedRoot:join(history,'static-data'),selectedAt:state.source.artifact.created_at,publishedAt:new Date(state.live.latest.completed).toISOString()});
+    if(digest(plan.summary)!==digest(Object.fromEntries(Object.keys(plan.summary).map(key=>[key,state.historyReconciliation?.[key]]))))throw Error('Calendar history reconciliation changed');
+    writeHistoryPayloads(plan);commitHistoryCatalogs(plan);
+  }else if(!state.source.receiptHash)throw Error('Calendar source lost authenticated history');
+  const audits=financialAuditInventory(state.carry.sourceRoot);
+  if(digest(audits)!==digest(requiredFinancialAuditFiles(state.live)))throw Error('Calendar retained financial audit authority changed');
+  for(const [path,hash]of Object.entries(audits)){
+    const target=join(root,path);mkdirSync(join(target,'..'),{recursive:true});
+    if(existsSync(target)&&sha256(readFileSync(target))!==hash)throw Error('Calendar source conflicts with retained financial audit');
+    cpSync(join(state.carry.sourceRoot,path),target);
+  }
+}
 async function carryAssessment(state,root) {
+  assertCalendarIntent(state);
   const bytes=readFileSync(state.carry.projectionPath);if(sha256(bytes)!==state.carry.projectionSha256)throw Error('Carried projection changed');
   const carry=JSON.parse(bytes),frontend=resolve('release/frontend');
+  if(state.carry.calendar&&(carry.financial_evaluated_at!==state.carry.calendar.proof.evaluated_at||carry.bindings.target_base_sha256!==state.carry.calendar.proof.target_base_sha256))throw Error('Calendar and financial projection clock/target differ');
+  await verifyOrdinaryCalendar({state,frontend,root,restoreSource:destination=>materialize(state.source,destination,false,frontend),restorePreparedInput:destination=>replayCalendarPreparedInput(state,destination)});
   const {compatibility,equality}=await verifyCarriedBundle({baselineRoot:state.carry.baseline,root,frontendRoot:frontend,carry,evaluatedAt:Date.now(),excludePaths:state.financialPrepared?.added||[]});
   return {carry,compatibility,equality};
 }
@@ -635,6 +672,7 @@ async function prepareFinancialReleaseReceipt(state,dist,publication) {
 }
 async function verifyPreparedFinancialRelease(state,live,dist=resolve('release/frontend/dist')) {
   const publication=parsePublicationReceipt(readFileSync(join(dist,'publication.json')));
+  if(digest(publication.ordinary_calendar_derivation??null)!==digest(state.carry?.calendar?.proof??null))throw Error('Ordinary calendar publication proof changed');
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
   if(!publication.financial_audit_files)throw Error('Prepared financial publication lost its complete audit inventory');
   if(live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(live),publication.financial_audit_files);
@@ -774,7 +812,7 @@ async function runCommand(command) {
   }
   if (command === 'plan') await plan();
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);}} }
+  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); const restoredState=readState(); const calendarSource=await captureOrdinaryCalendarSource({state:restoredState,frontend:resolve('release/frontend'),root:resolve('release/frontend/public')}); if(calendarSource){restoredState.ordinaryCalendarSource=calendarSource;writeFileSync(statePath(),JSON.stringify(restoredState));output({offline_session_calendar:true});} await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);const sealed=readState();sealOrdinaryCalendarSource({state:sealed,root:resolve('release/frontend/public')});writeFileSync(statePath(),JSON.stringify(sealed));}} }
   else if(command==='prepare-carry')await prepareCarry();
   else if(command==='ordinary-carry-build'){if(process.argv.length!==3)throw Error('Ordinary build accepts no caller arguments');await buildOrdinaryCarry();}
   else if(['publisher-build-before','publisher-build-after'].includes(command)){

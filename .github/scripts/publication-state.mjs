@@ -1,3 +1,4 @@
+import {validateOrdinaryCalendarProof} from './ordinary-session-calendar.mjs';
 import {isLimitedPreviewApproval,verifyLimitedPreviewUiApproval,verifyLimitedPreviewFinancialScope} from './limited-research-approval.mjs';
 import {validateOrdinaryCarryReceipt} from './ordinary-carry-tooling.mjs';
 import {validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
@@ -127,6 +128,7 @@ export function validateReceipt(receipt) {
       || !/^[a-f0-9]{64}$/.test(receipt.financial_generation || '') || !/^[a-f0-9]{64}$/.test(receipt.data_inventory_sha256 || '')) throw Error('Invalid publication financial correction reference');
   }
   if(receipt.financial_audit_files!==undefined){validateFinancialAuditFiles(receipt.financial_audit_files);if(!receipt.financial_release||receipt.financial_audit_files[receipt.financial_release.path]!==receipt.financial_release.sha256)throw Error('Financial audit inventory lost the active release');}
+  if(Object.hasOwn(receipt,'ordinary_calendar_derivation'))validateOrdinaryCalendarProof(receipt.ordinary_calendar_derivation,receipt);
   if(Object.hasOwn(receipt,'ordinary_carry_tooling'))validateOrdinaryCarryReceipt(receipt.ordinary_carry_tooling,receipt);
   if(Object.hasOwn(receipt,'publisher_tooling'))validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);
   if(Object.hasOwn(receipt,'transport'))validateTransportDescriptor(receipt.transport,receipt);

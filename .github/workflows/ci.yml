@@ -185,6 +185,12 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p test_run_retained_price_source.py
           node --test --test-concurrency=2 .github/scripts/retained-price-ci-admission.test.mjs .github/scripts/retained-price-admission-inventory.test.mjs .github/scripts/retained-price-source-admission.test.mjs .github/scripts/retained-price-source-driver.test.mjs .github/scripts/retained-price-live-inventory.test.mjs .github/scripts/retained-price-repository-inventory.test.mjs .github/scripts/retained-price-source-baseline.test.mjs .github/scripts/retained-price-source-browser.test.mjs .github/scripts/retained-price-source-readers.test.mjs .github/scripts/retained-price-source-workflow.test.mjs .github/scripts/retained-price-publisher-tooling.test.mjs
 
+      - name: Offline ordinary calendar carry contracts
+        run: |
+          python3 -m venv "$RUNNER_TEMP/session-calendar-runtime"
+          "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m pip install -r .github/scripts/session-calendar-requirements.txt
+          SESSION_CALENDAR_PYTHON="$RUNNER_TEMP/session-calendar-runtime/bin/python" node --test --test-concurrency=1 .github/scripts/ordinary-session-calendar.test.mjs
+
       - name: Journal-backed renewal publisher lifecycle
         env:
           NODE_OPTIONS: --max-old-space-size=3072
