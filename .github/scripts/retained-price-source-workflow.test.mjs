@@ -15,7 +15,7 @@ const staticWorkflow=read('static-site.yml'),combine=job(staticWorkflow,'combine
 // pure admission helper or a parallel hand-written routing implementation.
 function actualStaticGraph(t,{eventName,repair='false',schedule='',market='us',pricesOnly='false',selectFailure=false}={}){
   const directory=mkdtempSync(join(tmpdir(),'static-price-graph-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
-  const selected=job(staticWorkflow,'select-markets'),pick=selected.slice(selected.indexOf('      - id: pick\n'));
+  const selected=job(staticWorkflow,'select-markets'),pick=selected.slice(selected.indexOf('      - id: pick\n')).split('\n      - ',1)[0];
   const body=pick.slice(pick.indexOf('        run: |\n')+'        run: |\n'.length).split('\n').map(line=>line.startsWith('          ')?line.slice(10):line).join('\n');
   const output=join(directory,'outputs');execFileSync('bash',['-e','-o','pipefail','-c',body],{env:{PATH:process.env.PATH,EVENT_NAME:eventName,PRICE_REPAIR:repair,SCHEDULE:schedule,MARKET_GROUP:market,PRICES_ONLY:pricesOnly,GITHUB_OUTPUT:output},stdio:'pipe'});
   const outputs=Object.fromEntries(readFileSync(output,'utf8').trim().split('\n').map(line=>{const i=line.indexOf('=');return[line.slice(0,i),line.slice(i+1)];}));

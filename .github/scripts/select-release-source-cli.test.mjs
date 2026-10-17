@@ -13,7 +13,7 @@ const releaseCli = fileURLToPath(new URL('./select-release-source.mjs', import.m
 const previewUrl = new URL('./financial-candidate-preview.mjs', import.meta.url).href;
 const sha = 'a'.repeat(40);
 
-function fixture(t, { currentSha = sha, preload = '', systemTools = false } = {}) {
+function fixture(t, { currentSha = sha, preload = '', systemTools = false, runtimeHook = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'release-source-cli-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = join(root, 'bin'), event = join(root, 'event.json'), output = join(root, 'output');
@@ -45,7 +45,7 @@ process.stdout.write(JSON.stringify(api[endpoint]));
     invoke(command = 'plan', eventName = 'workflow_dispatch') {
       // Start the real entrypoint in a fresh process: importing its exports in
       // the test runner would complete evaluation before dispatch and hide this bug.
-      return spawnSync(process.execPath, ['--import', hook, releaseCli, command], {
+      return spawnSync(process.execPath, [...(runtimeHook ? ['--import', hook] : []), releaseCli, command], {
         cwd: root, encoding: 'utf8', timeout: 10000,
         env: { PATH: systemTools ? `${bin}:${process.env.PATH}` : bin, RUNNER_TEMP: root, GITHUB_EVENT_PATH: event, GITHUB_EVENT_NAME: eventName,
           GITHUB_REPOSITORY: bootstrap.repository, RELEASE_SHA: sha, GITHUB_OUTPUT: output },
@@ -138,6 +138,20 @@ test('prepare-only correction recheck remains outside the hosted payload guard',
 
 const previewRecord={schema:'design-financial-carry-preview-v1',publication_authority:'none',financial_admission:false,
   ui_sha:sha,baseline_sha:'b'.repeat(40),source_financial_generation:'c'.repeat(64),financial_generation:'d'.repeat(64),financial_lineage_sha256:'e'.repeat(64),logical_data_inventory_sha256:'f'.repeat(64)};
+
+test('ordinary carry build rejects runtime hooks before reading state or producing effects', t => {
+  const f = fixture(t), before = completeInventory(f.root);
+  assert.equal(existsSync(join(f.root, 'verified-publication/state.json')), false);
+  const result = f.invoke('ordinary-carry-build');
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Ordinary carry does not accept runtime hooks/);
+  assert.equal(result.stdout, '');
+  assert.equal(existsSync(f.trace), false);
+  assert.equal(existsSync(f.output), false);
+  assert.deepEqual(completeInventory(f.root), before);
+});
+
 for(const command of ['restore','prepare-carry','ordinary-carry-build','publisher-build-before','publisher-build-after','compose','recheck']){
   test(`publisher ${command} rejects Design and preview markers before any effect`, t=>{
     for(const state of [
@@ -152,7 +166,9 @@ for(const command of ['restore','prepare-carry','ordinary-carry-build','publishe
       {decision:{mode:'data'},source:{publication:previewRecord}},
       {decision:{mode:'data'},correction:{record:previewRecord}},
     ]){
-      const f=fixture(t),directory=join(f.root,'verified-publication');mkdirSync(directory);
+      // Keep this probe hook-free so ordinary-carry-build reaches the preview
+      // guard; runtime-hook rejection is tested separately above.
+      const f=fixture(t,{runtimeHook:false}),directory=join(f.root,'verified-publication');mkdirSync(directory);
       writeFileSync(join(directory,'state.json'),JSON.stringify(state));
       writeFileSync(f.event,JSON.stringify({workflow_run:{path:'.github/workflows/ci.yml'}}));
       // Include representative authority controls so a rejected preview must

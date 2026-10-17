@@ -1,0 +1,7 @@
+{
+  "schema_version": "ordinary-carry-ci-request-v1",
+  "plan_id": "oct17-oct16-carry-single-projection-v4-ci-v1",
+  "identity_sha256": "83dda639b609fdbfa261c48f664b487bce19d1ffbb58e3ec1918d3c3faf4b354",
+  "enabled": false,
+  "activation": null
+}

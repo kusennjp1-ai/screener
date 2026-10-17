@@ -22,7 +22,7 @@ import {canonicalPublication,removeCanonical,transportCapable,packPublication,as
 import {readRepairRequest,repairControllerRoot,authenticateRepairSource,assertRepairPredecessor,verifyRepairRestore,authorityExports} from './retained-price-source-admission.mjs';
 import {PRICE_REPAIR_STEP} from './retained-price-ci-admission.mjs';
 import {publisherToolingBoundary,publisherToolingReceipt,validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
-import {ordinaryCarrySelected,selectOrdinaryCarryAdmission,assertOrdinaryClock,prepareOrdinaryCarry,bindOrdinaryCarry,checkOrdinaryCarry,withOrdinaryExporter,beginOrdinaryComposition,completeOrdinaryComposition,validateOrdinaryCarryReceipt,assertOrdinaryReceiptBinding} from './ordinary-carry-tooling.mjs';
+import {ORDINARY_CI_IDENTITY,readVerifiedOrdinaryCiAdmission,ordinaryCiContext,ordinaryCarrySelected,selectOrdinaryCarryAdmission,assertOrdinaryClock,prepareOrdinaryCarry,bindOrdinaryCarry,checkOrdinaryCarry,withOrdinaryExporter,beginOrdinaryComposition,completeOrdinaryComposition,validateOrdinaryCarryReceipt,assertOrdinaryReceiptBinding} from './ordinary-carry-tooling.mjs';
 
 const scratch = () => join(process.env.RUNNER_TEMP || '/tmp', 'verified-publication');
 const statePath = () => join(scratch(), 'state.json');
@@ -81,6 +81,20 @@ export function chooseExport(live, pages, repo, api = githubApi, load = loadExpo
     }
   }
   return null;
+}
+
+// This only rejects a normal newest-source selection. It never pins a fallback
+// artifact, supplies CI authority, or changes ordinary source eligibility.
+export function assertOrdinaryCiSource(source){
+  const a=source?.artifact;
+  const selected={artifact_id:a?.id,artifact_bytes:a?.size_in_bytes,artifact_sha256:a?.digest?.slice(7),run_id:source?.runId,run_attempt:source?.attempt,
+    head_sha:a?.workflow_run?.head_sha,created_at:a?.created_at,manifest_sha256:source?.manifestHash,price_observations_sha256:source?.priceObservationsDigest,as_of_date:source?.manifest?.markets?.US?.as_of_date};
+  const expected=ORDINARY_CI_IDENTITY.source;
+  if(!source||source.repair||source.receiptHash||source.publication||Object.keys(selected).length!==Object.keys(expected).length||Object.entries(expected).some(([key,value])=>selected[key]!==value)
+    ||a.digest!==`sha256:${expected.artifact_sha256}`||a.name!==`static-site-data-${expected.run_id}-${expected.run_attempt}`||a.workflow_run?.id!==expected.run_id){
+    throw Error('Newest eligible ordinary export differs from the exact admitted CI source');
+  }
+  return source;
 }
 
 export function chooseFiniteExport(live,pages,repo,identity,api=githubApi,load=loadExportManifest){
@@ -220,15 +234,16 @@ export function isFinancialRequestActive(request,live){
   return releases.some(receipt=>digest(receipt.lineage.source)===digest(request.correction.source)&&digest(receipt.lineage.certificate)===digest(request.source_validation.certificate));
 }
 
-async function plan(design = false) {
+async function plan(design = false, ordinaryCiProof = null) {
   mkdirSync(scratch(), { recursive: true });
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  if(ordinaryCiProof&&(design||event.inputs?.limited_research_preview||event.inputs?.financial_source_renewal||event.inputs?.financial_correction||event.inputs?.ui_only))throw Error('Ordinary CI carry cannot select another publication intent');
   if(!design&&event.inputs?.limited_research_preview){
     const {planLimited}=await import('./limited-research-publisher.mjs');
     const state=await planLimited({event,mainSha:process.env.RELEASE_SHA});writeFileSync(statePath(),JSON.stringify(state));
     output({publish:true,sha:state.sourceSha,mode:'limited',limited_research_preview:true,published_input:true});return;
   }
-  const renewalControls=selectRenewalControls({input:event.inputs?.financial_source_renewal,event,design,correction:Boolean(event.inputs?.financial_correction),uiOnly:event.inputs?.ui_only});
+  const renewalControls=ordinaryCiProof?null:selectRenewalControls({input:event.inputs?.financial_source_renewal,event,design,correction:Boolean(event.inputs?.financial_correction),uiOnly:event.inputs?.ui_only});
   const sha = process.env.RELEASE_SHA;
   const intent = parseCorrectionIntent(event.inputs?.financial_correction);
   if (intent && (design || process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || event.inputs?.ui_only === true || event.inputs?.ui_only === 'true')) throw Error('Correction requires its exclusive typed manual mode');
@@ -242,6 +257,7 @@ async function plan(design = false) {
   const pages = githubApi(`repos/${repository()}/actions/artifacts?per_page=100`, true);
   const releaseRequest=!design&&!intent&&!renewalControls?readFinancialReleaseRequest():null;
   const alreadyActive=isFinancialRequestActive(releaseRequest,live);
+  if(ordinaryCiProof&&releaseRequest&&!alreadyActive)throw Error('Ordinary CI carry conflicts with a pending financial activation');
   let activation=null;
   if(releaseRequest&&!alreadyActive){
     const pin=readFinancialActivationCandidate();
@@ -263,6 +279,13 @@ async function plan(design = false) {
   const migration = !renewalControls && !intent && !activation && !design && !live.receipt && Boolean(live.legacyArtifact);
   const fresh = migration || intent || activation || renewalControls ? null : gated.finitePriceSource
     ? chooseFiniteExport(live,pages,repository(),gated.finitePriceSource) : chooseExport(live, pages, repository());
+  if(ordinaryCiProof){
+    if(migration||intent||activation||renewalControls||gated.finitePriceSource)throw Error('Ordinary CI carry requires its exclusive ordinary source route');
+    assertOrdinaryCiSource(fresh);
+    // Keep the authentic workflow_run event and real current-main gate result.
+    // The separately verified request only narrows the UI to the live approval.
+    decision.mode='data';delete decision.approval;
+  }
   if (migration) { decision.mode = 'data'; decision.migration = true; }
   const duplicate = !renewalControls && !intent && !activation && !design && !migration && !fresh && (decision.mode === 'data' || live.uiSha === sha);
   if (duplicate) { output({ publish: false }); console.log('No advancing data or newly verified UI to publish.'); return; }
@@ -291,11 +314,12 @@ async function plan(design = false) {
   const historyPredecessor = !design && fresh && !migration && !correction && !activation && !renewal && !source.repair ? publishedHistorySource(live, pages) : null;
   const state = { live, source, decision, sourceSha, controllerSha: sha, uiDirectory, offlineCalendarIntent:event.inputs?.ui_only===true||event.inputs?.ui_only==='true', ...(historyPredecessor ? {historyPredecessor} : {}), ...(correction ? { correction } : {}),...(activation?{activation}:{}),...(renewal?{renewal}:{}),
     ...(!renewal&&!activation&&!correction&&!design&&live.financialRelease?{carry:{}}:{}) };
-  if(state.carry&&ordinaryCarrySelected(state))state.ordinaryCarryAdmission=selectOrdinaryCarryAdmission(state,Date.now());
+  if(ordinaryCiProof&&(!state.carry||!ordinaryCarrySelected(state)||sourceSha!==ORDINARY_CI_IDENTITY.ui_sha||live.uiSha!==ORDINARY_CI_IDENTITY.ui_sha||live.uiDigest!==ORDINARY_CI_IDENTITY.ui_digest||live.identity!==ORDINARY_CI_IDENTITY.predecessor.identity||live.receiptHash!==ORDINARY_CI_IDENTITY.predecessor.receipt_sha256))throw Error('Ordinary CI carry lost its exact approved UI or predecessor');
+  if(state.carry&&ordinaryCarrySelected(state))state.ordinaryCarryAdmission=selectOrdinaryCarryAdmission(state,Date.now(),ordinaryCiProof);
   if(state.carry&&isPerformanceException(live.approval))state.carry.controllerChecks=verifyCorrectionChecks(repository(),sha);
   writeFileSync(statePath(), JSON.stringify(state));
   if (design && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN=${source.runId}\n`);
-  output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(renewal?{renewal:true}:{}),...(state.carry?{carry:true}:{}) });
+  output({ publish: true, sha: sourceSha, mode: decision.mode, migration, ...(!fresh && !migration && !correction && !activation && !design ? { published_input: true } : {}), ...(correction ? { correction: true, correction_prepare_only: true } : {}),...(activation?{activation:true}:{}),...(renewal?{renewal:true}:{}),...(state.carry?{carry:true}:{}),...(state.ordinaryCarryAdmission?.ci_admission?{ordinary_ci:true}:{}) });
   console.log(`${decision.mode} publication uses UI ${sourceSha} and artifact ${source.artifact.id} (${fresh ? 'checked export' : 'verified live input'})`);
 }
 async function recheck() {
@@ -315,6 +339,10 @@ async function recheck() {
   if(state.activation&&!state.activation.exception&&(gated.mode!=='ui'||digest(gated.approval)!==digest(state.activation.approval)||!financialReleasePolicy.activation_enabled))throw Error('Activation current-main gates changed');
   const live = await livePublication({ repository: repository() });
   if (live.identity !== state.live.identity) throw Error('Live UI or data changed; discard this superseded publication');
+  if(state.ordinaryCarryAdmission?.ci_admission){
+    const request=readFinancialReleaseRequest();
+    if(request&&!isFinancialRequestActive(request,live))throw Error('Ordinary CI carry financial activation changed');
+  }
   if(state.source.repair){
     const authenticated=authenticateRepairSource({source:state.source,api:githubApi,root:repairControllerRoot()});assertRepairPredecessor(live,authenticated.request.value);
     if(!state.sourceRecovery?.verification_file||!state.carry?.priceSourceProof)throw Error('Finite repair lost independently replayed source or ordinary financial carry');
@@ -322,7 +350,7 @@ async function recheck() {
     await verifyRetainedRestoreBinding({root:repairControllerRoot(),source:state.source,record:state.sourceRecovery,live,authority:authorityExports(),api:githubApi});
   }
   await publisherToolingBoundary(state,'recheck');
-  if(ordinaryCarrySelected(state))await checkOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
+  if(ordinaryCarrySelected(state))await checkOrdinaryCarry(state,await ordinaryContext(state),ordinaryPaths(state));
   const physical=resolve('release/frontend/dist'),receipt = validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json'))));
   if(state.publisherTooling){validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);if(digest(receipt.publisher_tooling)!==digest(publisherToolingReceipt(state,receipt)))throw Error('Final publisher tooling receipt changed');}
   else if(receipt.publisher_tooling)throw Error('Unexpected publisher tooling receipt');
@@ -364,10 +392,14 @@ async function recheck() {
   }finally{removeCanonical(physical,logical);}
   if(state.renewal)await checkFinalRenewalPayload(physical,{request:state.renewal.request,projection:verifiedRenewalProjection,frontendRoot:resolve('frontend'),renewalState:state.renewal,expectedLive:live});
   if(state.ordinaryCarryTooling){
-    await checkOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
+    if(state.ordinaryCarryAdmission?.ci_admission){
+      const pages=githubApi(`repos/${repository()}/actions/artifacts?per_page=100`,true);
+      assertOrdinaryCiSource(chooseExport(live,pages,repository()));
+    }
+    await checkOrdinaryCarry(state,await ordinaryContext(state),ordinaryPaths(state));
     if(digest(validateReceipt(parsePublicationReceipt(readFileSync(join(physical,'publication.json')))).ordinary_carry_tooling)!==digest(state.ordinaryCarryTooling.receipt))throw Error('Ordinary receipt changed during final verification');
     if(ordinaryReceiptBefore!==sha256(readFileSync(join(physical,'publication.json')))||ordinaryPhysicalBefore!==ordinaryOutputDigest(physical)||inventoryDigest(uiInventory(physical))!==state.live.uiDigest)throw Error('Ordinary physical publication changed during final verification');
-    state.ordinaryCarryTooling.phase='rechecked';state.ordinaryCarryTooling.rechecked_at=assertOrdinaryClock(Date.now());
+    state.ordinaryCarryTooling.phase='rechecked';state.ordinaryCarryTooling.rechecked_at=assertOrdinaryClock(Date.now(),state);
   }
   if(state.publisherTooling||state.ordinaryCarryTooling)writeFileSync(statePath(),JSON.stringify(state));
 }
@@ -396,7 +428,7 @@ async function compose() {
   const state = readState(), dist = resolve('release/frontend/dist');
   if(state.limited){const {composeLimited}=await import('./limited-research-publisher.mjs');await composeLimited(state);writeFileSync(statePath(),JSON.stringify(state));return;}
   await publisherToolingBoundary(state,'compose');
-  const ordinaryProof=ordinaryCarrySelected(state)?await beginOrdinaryComposition(state,ordinaryContext(state),ordinaryPaths(state),()=>ordinaryOutputDigest(dist)):null;
+  const ordinaryProof=ordinaryCarrySelected(state)?await beginOrdinaryComposition(state,await ordinaryContext(state),ordinaryPaths(state),()=>ordinaryOutputDigest(dist)):null;
   if (state.decision.migration) {
     rmSync(dist, { recursive: true, force: true });
     mkdirSync(dist, { recursive: true });
@@ -451,9 +483,9 @@ async function compose() {
   }else assertTransportDeclaration(dist,receipt);
   if(ordinaryProof){
     const physicalBefore=ordinaryOutputDigest(dist);
-    receipt.ordinary_carry_tooling=await completeOrdinaryComposition(ordinaryProof,state,ordinaryContext(state),ordinaryPaths(state),receipt,()=>inventoryDigest(uiInventory(dist)));
+    receipt.ordinary_carry_tooling=await completeOrdinaryComposition(ordinaryProof,state,await ordinaryContext(state),ordinaryPaths(state),receipt,()=>inventoryDigest(uiInventory(dist)));
     if(physicalBefore!==ordinaryOutputDigest(dist))throw Error('Ordinary packed publication changed during composition verification');
-    assertOrdinaryClock(Date.now());
+    assertOrdinaryClock(Date.now(),state);
     writeFileSync(statePath(),JSON.stringify(state));
   }
   validateReceipt(receipt);
@@ -523,7 +555,8 @@ function copyBundleData(source,destination) {
 }
 // The narrow ordinary entrypoint accepts no alternate runtime or caller knobs.
 function ordinaryPaths(state){return {frontend:resolve('release/frontend'),zip:join(artifactDirectory(state.source.artifact),'artifact.zip'),tar:join(artifactDirectory(state.source.artifact),'artifact.tar')};}
-function ordinaryContext(state){
+async function ordinaryContext(state){
+  if(state.ordinaryCarryAdmission?.ci_admission)return ordinaryCiContext(state);
   if(process.execArgv.length||process.env.NODE_OPTIONS||process.env.NODE_PATH)throw Error('Ordinary carry does not accept runtime hooks');
   if(repository()!=='kusennjp1-ai/screener'||process.env.GITHUB_EVENT_NAME!=='workflow_dispatch'||process.env.GITHUB_REF!=='refs/heads/main')throw Error('Ordinary carry requires its explicit main dispatch');
   const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
@@ -541,10 +574,10 @@ function ordinaryContext(state){
 function ordinaryOutputDigest(root){return sha256(JSON.stringify({data:dataInventoryDigest(root),ui:inventoryDigest(uiInventory(root))}));}
 async function buildOrdinaryCarry(){
   const state=readState();if(!ordinaryCarrySelected(state))throw Error('No admitted ordinary carry source');
-  const paths=ordinaryPaths(state),context=ordinaryContext(state);
+  const paths=ordinaryPaths(state),context=await ordinaryContext(state);
   await checkOrdinaryCarry(state,context,paths);
   if(state.ordinaryCarryTooling.phase!=='prepared')throw Error('Ordinary build cannot repeat or resume an interrupted build');
-  const tool=state.ordinaryCarryTooling;tool.phase='building';const started=assertOrdinaryClock(Date.now());writeFileSync(statePath(),JSON.stringify(state));
+  const tool=state.ordinaryCarryTooling;tool.phase='building';const started=assertOrdinaryClock(Date.now(),state);writeFileSync(statePath(),JSON.stringify(state));
   const buildEnv={...process.env};for(const key of ['GH_TOKEN','GITHUB_TOKEN'])delete buildEnv[key];
   const run=script=>execFileSync(process.execPath,[script],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});
   await withOrdinaryExporter(paths.frontend,path=>run(path));
@@ -553,9 +586,9 @@ async function buildOrdinaryCarry(){
   execFileSync(process.execPath,['node_modules/vite/bin/vite.js','build'],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});
   run('tools/check-data-quality.mjs');
   const dist=join(paths.frontend,'dist'),outputDigest=ordinaryOutputDigest(dist);
-  await checkOrdinaryCarry(state,ordinaryContext(state),paths);
+  await checkOrdinaryCarry(state,await ordinaryContext(state),paths);
   if(outputDigest!==ordinaryOutputDigest(dist))throw Error('Ordinary build output changed during verification');
-  tool.build={started_at:started,finished_at:assertOrdinaryClock(Date.now()),output_sha256:outputDigest};tool.phase='built';
+  tool.build={started_at:started,finished_at:assertOrdinaryClock(Date.now(),state),output_sha256:outputDigest};tool.phase='built';
   writeFileSync(statePath(),JSON.stringify(state));
 }
 function assertCalendarIntent(state){
@@ -568,9 +601,10 @@ async function prepareCarry() {
   assertCalendarIntent(state);
   await publisherToolingBoundary(state,'prepare');
   const frontend=resolve('release/frontend'),root=join(frontend,'public');
-  if(ordinaryCarrySelected(state))await prepareOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
+  if(ordinaryCarrySelected(state))await prepareOrdinaryCarry(state,await ordinaryContext(state),ordinaryPaths(state));
   const evaluatedAt=new Date().toISOString();
   const env={...process.env,FINANCIAL_EVALUATED_AT:evaluatedAt};
+  if(state.ordinaryCarryAdmission?.ci_admission)for(const key of ['GH_TOKEN','GITHUB_TOKEN'])delete env[key];
   for(const key of Object.keys(env))if(key.startsWith('FINANCIAL_CORRECTION_')||key.startsWith('FINANCIAL_GENERATION_CARRY_'))delete env[key];
   const calendar=await prepareOrdinaryCalendar({state,frontend,root,evidence:join(scratch(),'ordinary-calendar-evidence'),evaluatedAt});
   // Establish the fully prepared new-price baseline once, including normal
@@ -609,7 +643,7 @@ async function prepareCarry() {
   await helper.loadFinancialGenerationCarry({env:carryEnv,rows:targetInput.rows,asOfDate:targetInput.asOfDate});
   state.carry={...state.carry,baseline,projectionPath,projectionSha256:sha256(bytes),targetBaseSha256:sha256(target),evaluatedAt,...(calendar?{calendar}:{})};
   await publisherToolingBoundary(state,'apply');
-  if(ordinaryCarrySelected(state))await bindOrdinaryCarry(state,ordinaryContext(state),ordinaryPaths(state));
+  if(ordinaryCarrySelected(state))await bindOrdinaryCarry(state,await ordinaryContext(state),ordinaryPaths(state));
   writeFileSync(statePath(),JSON.stringify(state));
   if(process.env.GITHUB_ENV)appendFileSync(process.env.GITHUB_ENV,`${state.ordinaryCarryTooling?'ORDINARY_CARRY_TOOLING=true\n':''}FINANCIAL_GENERATION_CARRY_PROJECTION=${projectionPath}\nFINANCIAL_GENERATION_CARRY_SHA256=${sha256(bytes)}\nFINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE=${previous.lineage_sha256}\nFINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY=${state.live.identity}\nFINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256=${sha256(target)}\nFINANCIAL_EVALUATED_AT=${evaluatedAt}\n`);
 }
@@ -802,17 +836,30 @@ function assertPublisherState(state) {
     ||['designCarryPreview','design_carry_preview','designPreview'].some(key=>Object.hasOwn(state||{},key)))throw Error('Design preview state cannot enter publisher commands');
 }
 async function runCommand(command) {
+  if(command==='ordinary-carry-build'&&(process.execArgv.length||process.env.NODE_OPTIONS||process.env.NODE_PATH))throw Error('Ordinary carry does not accept runtime hooks');
   // Reject Design/preview provenance before quota records, downloads, exporter
   // boundaries, payload composition, or any publication recheck can run.
   if(publisherCommands.has(command))assertPublisherState(readState());
-  if(process.env.GITHUB_EVENT_NAME==='workflow_run'&&['plan','restore','compose','recheck'].includes(command)){
+  // Reserve the dated request before legacy quota, renewal, or source paths.
+  // A routing output grants no authority: every command obtains a fresh full
+  // admission and checks the saved immutable proof before touching its inputs.
+  let ordinaryCiProof=null;
+  if(['plan','restore','prepare-carry','ordinary-carry-build','compose','recheck','publisher-build-before','publisher-build-after'].includes(command)){
+    const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
+    ordinaryCiProof=await readVerifiedOrdinaryCiAdmission({event,now:Date.now()});
+    if(command!=='plan'){
+      const state=readState(),saved=state.ordinaryCarryAdmission?.ci_admission;
+      if(Boolean(saved)!==Boolean(ordinaryCiProof)||(saved&&digest(saved)!==digest(ordinaryCiProof)))throw Error('Ordinary CI admission changed across the publication boundary');
+    }
+  }
+  if(!ordinaryCiProof&&process.env.GITHUB_EVENT_NAME==='workflow_run'&&['plan','restore','compose','recheck'].includes(command)){
     const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
     const automatic=event.workflow_run?.path==='.github/workflows/ci.yml'&&(command==='plan'||Boolean(readState().renewal));
     if(automatic&&renewalCiLocalContext({phase:'publish',event}).eligible.status==='eligible')enforceRenewalQuota('publish',command);
   }
-  if (command === 'plan') await plan();
+  if (command === 'plan') await plan(false,ordinaryCiProof);
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); const restoredState=readState(); const calendarSource=await captureOrdinaryCalendarSource({state:restoredState,frontend:resolve('release/frontend'),root:resolve('release/frontend/public')}); if(calendarSource){restoredState.ordinaryCalendarSource=calendarSource;writeFileSync(statePath(),JSON.stringify(restoredState));output({offline_session_calendar:true});} await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);const sealed=readState();sealOrdinaryCalendarSource({state:sealed,root:resolve('release/frontend/public')});writeFileSync(statePath(),JSON.stringify(sealed));}} }
+  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); const restoredState=readState(); const calendarSource=await captureOrdinaryCalendarSource({state:restoredState,frontend:resolve('release/frontend'),root:resolve('release/frontend/public')}); if(calendarSource){restoredState.ordinaryCalendarSource=calendarSource;writeFileSync(statePath(),JSON.stringify(restoredState));output({offline_session_calendar:true});} await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);const sealed=readState();if(sealed.ordinaryCarryAdmission?.ci_admission)await ordinaryContext(sealed);sealOrdinaryCalendarSource({state:sealed,root:resolve('release/frontend/public')});writeFileSync(statePath(),JSON.stringify(sealed));}} }
   else if(command==='prepare-carry')await prepareCarry();
   else if(command==='ordinary-carry-build'){if(process.argv.length!==3)throw Error('Ordinary build accepts no caller arguments');await buildOrdinaryCarry();}
   else if(['publisher-build-before','publisher-build-after'].includes(command)){

@@ -41,6 +41,8 @@ jobs:
       actions: read
     outputs:
       renewal: ${{ steps.route.outputs.renewal }}
+      ordinary_hold: ${{ steps.ordinary-route.outputs.ordinary_hold }}
+      ordinary_ci: ${{ steps.ordinary-route.outputs.ordinary_ci }}
       price_wait: ${{ steps.price-route.outputs.price_wait }}
       price_source: ${{ steps.price-route.outputs.price_source }}
     steps:
@@ -51,7 +53,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Reserve the exact ordinary carry request before other routes
+        id: ordinary-route
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ordinary-carry-tooling.mjs ci-route
+      - name: '${{ steps.ordinary-route.outputs.ordinary_hold_marker }}'
+        if: steps.ordinary-route.outputs.ordinary_hold == 'true'
+        run: ':'
       - name: Route the finite price activation before any publication
+        if: steps.ordinary-route.outputs.ordinary_hold != 'true' && steps.ordinary-route.outputs.ordinary_ci != 'true'
         id: price-route
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,7 +71,7 @@ jobs:
         if: steps.price-route.outputs.price_wait == 'true'
         run: ':'
       - name: Resolve only the exact admitted renewal route
-        if: steps.price-route.outputs.price_wait != 'true' && steps.price-route.outputs.price_source != 'true'
+        if: steps.ordinary-route.outputs.ordinary_hold != 'true' && steps.ordinary-route.outputs.ordinary_ci != 'true' && steps.price-route.outputs.price_wait != 'true' && steps.price-route.outputs.price_source != 'true'
         id: route
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,7 +81,7 @@ jobs:
         run: ':'
   publish:
     needs: renewal_route
-    if: needs.renewal_route.result == 'success' && needs.renewal_route.outputs.price_wait != 'true' && (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
+    if: needs.renewal_route.result == 'success' && needs.renewal_route.outputs.ordinary_hold != 'true' && needs.renewal_route.outputs.price_wait != 'true' && (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ needs.renewal_route.outputs.price_source == 'true' && 110 || 360 }}
     environment:
@@ -99,6 +110,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Prepare the clean ordinary CI controller worktree
+        if: needs.renewal_route.outputs.ordinary_ci == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ordinary-carry-tooling.mjs ci-prepare-controller
+      - name: Verify exact ordinary carry CI admission
+        id: ordinary-admission
+        if: needs.renewal_route.outputs.ordinary_ci == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ordinary-carry-tooling.mjs ci-admit
       - name: Admit exact successful main CI renewal
         timeout-minutes: 5
         if: needs.renewal_route.outputs.renewal == 'true'
@@ -197,7 +219,7 @@ jobs:
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
       - name: Prepare independently verifiable book evidence
-        if: ${{ steps.plan.outputs.limited_research_preview != 'true' && steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && !inputs.ui_only }}
+        if: ${{ steps.plan.outputs.ordinary_ci != 'true' && steps.plan.outputs.limited_research_preview != 'true' && steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && !inputs.ui_only }}
         working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
@@ -220,7 +242,7 @@ jobs:
           node tools/export-research.mjs
           python tools/export-entry-context.py
       - name: Prepare workbench using verified published evidence
-        if: ${{ steps.plan.outputs.limited_research_preview != 'true' && steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && inputs.ui_only && steps.restore.outputs.offline_session_calendar != 'true' }}
+        if: ${{ steps.plan.outputs.ordinary_ci != 'true' && steps.plan.outputs.limited_research_preview != 'true' && steps.restore.outputs.offline_recovery_verified != 'true' && steps.plan.outputs.publish == 'true' && steps.plan.outputs.migration != 'true' && steps.plan.outputs.correction != 'true' && steps.plan.outputs.activation != 'true' && steps.plan.outputs.renewal != 'true' && steps.plan.outputs.published_input != 'true' && inputs.ui_only && steps.restore.outputs.offline_session_calendar != 'true' }}
         working-directory: release/frontend
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
