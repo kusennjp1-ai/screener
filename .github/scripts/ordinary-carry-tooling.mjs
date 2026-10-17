@@ -324,6 +324,7 @@ export function ordinaryCiReadApi(endpoint,paginate=false){
   assert(suffix===''||/^\/git\/(?:ref\/heads\/main|commits\/[a-f0-9]{40}|trees\/[a-f0-9]{40}\?recursive=1)$/.test(suffix)
     ||/^\/contents\/\.github\/ordinary-carry-oct17-request\.json\?ref=[a-f0-9]{40}$/.test(suffix)
     ||/^\/actions\/runs\/\d+(?:\/attempts\/1)?(?:\/jobs\?per_page=100)?$/.test(suffix)
+    ||/^\/actions\/runs\/\d+\/artifacts\?per_page=100$/.test(suffix)
     ||/^\/actions\/workflows\/(?:294252465|364666954|ci\.yml)\/runs\?branch=main&(?:event=push&)?head_sha=[a-f0-9]{40}&per_page=100$/.test(suffix),'Unlisted ordinary GitHub GET');
   // Existing Actions authentication only. The hostname and read method cannot
   // come from the request, event, environment host setting, or a URL redirect.
@@ -426,24 +427,55 @@ function ciCaller(api,execution,activation,now){
 }
 const ciHoldPrefix='Hold ordinary carry v4-ci';
 function ciHoldMarker(requestHash,triggerId){assert(hash(requestHash)&&positive(triggerId));return `${ciHoldPrefix} ${requestHash} ${triggerId}/1`;}
-function ciHoldTrigger(api,id,now,{historical=false}={}){
+// This exact workflow contains only a ':' marker on its existing no-export
+// branch. Its event-derived name supplies the parent edge absent from run REST
+// metadata; a successful workflow_run alone never proves a hold.
+const CI_STATIC_HOLD_WORKFLOW_BLOB='5496e4c947e728c4c122b69ac8bd8ce03964d72c';
+function ciStaticNoExportHold(api,run,now,{historical=false,head,parentCI=null}={}){
+  assert(gitHash(head)&&run.head_sha===head&&run.status==='completed'&&run.conclusion==='success','Static ordinary hold is not the exact successful head');
+  const files=ciTree(api,ciCommit(api,head).tree.sha);same(files['.github/workflows/static-site.yml'],{sha:CI_STATIC_HOLD_WORKFLOW_BLOB,mode:'100644'},'Static no-export marker workflow changed');
+  const jobs=ciJobs(api,run.id),names=['select-markets','ensure_daily_price_release','build-market','combine-and-build','promote-daily-source'];
+  assert(jobs.length===names.length&&names.every(name=>jobs.filter(j=>j.name===name).length===1)&&jobs.every(j=>j.head_sha===head&&j.status==='completed'),'Static no-export job inventory changed');
+  const selected=jobs.find(j=>j.name==='select-markets');assert(selected.conclusion==='success'&&ciTime(selected.started_at)>=ciTime(run.run_started_at)&&ciTime(selected.completed_at)>=ciTime(selected.started_at)&&ciTime(selected.completed_at)<=ciTime(run.updated_at),'Static no-export selection failed');
+  assert(jobs.filter(j=>j!==selected).every(j=>j.conclusion==='skipped'&&(j.steps??[]).length===0),'Static no-export hold ran a data/provider job');
+  const steps=selected.steps;assert(Array.isArray(steps),'Missing static no-export steps');
+  const markers=steps.filter(s=>s.name?.startsWith('Ordinary no-export CI '));assert(markers.length===1,'Missing or duplicate static parent-CI marker');
+  const marker=markers[0],match=/^Ordinary no-export CI ([1-9]\d*)\/1\/([a-f0-9]{40})$/.exec(marker.name);
+  assert(match&&positive(Number(match[1]))&&match[2]===head,'Invalid static parent-CI marker');
+  const required=['Admit only the finite exact-main price CI trigger',`Run ASIA='["HK","IN","JP","KR","TW","CN","SG","MY","AU"]'`,marker.name];
+  const skipped="Run python - <<'PY'",optional=['Set up job','Run actions/checkout@v4','Run actions/setup-node@v4','Post Run actions/setup-node@v4','Post Run actions/checkout@v4','Complete job'];
+  assert(new Set(steps.map(s=>s.name)).size===steps.length&&steps.every(s=>[...required,skipped,...optional].includes(s.name)&&s.status==='completed'&&['success','skipped'].includes(s.conclusion)),'Unexpected static no-export step');
+  for(const name of required){const matches=steps.filter(s=>s.name===name);assert(matches.length===1&&matches[0].conclusion==='success','Static no-export step did not succeed');}
+  assert(steps.filter(s=>s.name===skipped&&s.conclusion==='skipped').length===1,'Static no-export hold ran ordinary source policy');
+  for(const step of steps.filter(s=>s.conclusion==='success'))assert(ciTime(step.started_at)>=ciTime(selected.started_at)&&ciTime(step.completed_at)>=ciTime(step.started_at)&&ciTime(step.completed_at)<=ciTime(selected.completed_at),'Static no-export step chronology changed');
+  const pick=steps.find(s=>s.name===required[1]);assert(ciTime(marker.started_at)>=ciTime(pick.completed_at),'Static parent-CI marker predates no-export selection');
+  const parent=ciExactRun(api,Number(match[1]),CI_WORKFLOW,head,'push',{historical,now});assert(!historical||parentCI,'Missing recorded static parent CI');
+  if(parentCI){if(historical)ciHistoricalTriggerMatch(ciTriggerSummary(parent),parentCI);else same(ciTriggerSummary(parent),parentCI,'Static hold is not the admitted parent CI');}
+  const parentCompleted=parentCI?.completed_at??parent.updated_at;assert(parent.status==='completed'&&['success','failure','cancelled','timed_out','action_required','neutral','skipped','stale','startup_failure'].includes(parent.conclusion)&&ciTime(parentCompleted)<=ciTime(run.created_at),'Static no-export parent CI is not terminal before its child');
+  const artifacts=ciInventory(api,`${CI_PREFIX}/actions/runs/${run.id}/artifacts?per_page=100`,'artifacts',()=>{});assert(artifacts.length===0,'Static no-export hold produced an artifact');
+  return run;
+}
+function ciHoldTrigger(api,id,now,{historical=false,head,parentCI=null}={}){
   const latest=api(`${CI_PREFIX}/actions/runs/${id}`);assert(positive(latest?.workflow_id)&&gitHash(latest.head_sha),'Missing ordinary hold trigger');
+  if(latest.path==='.github/workflows/static-site.yml'&&latest.workflow_id===294257497&&latest.event==='workflow_run'){
+    const run=ciExactRun(api,id,{id:294257497,path:latest.path},head,'workflow_run',{now,historical});return ciStaticNoExportHold(api,run,now,{historical,head,parentCI});
+  }
   const allowed=latest.path===CI_WORKFLOW.path&&latest.workflow_id===CI_WORKFLOW.id&&latest.event==='push'||latest.path==='.github/workflows/design-acceptance.yml'&&latest.workflow_id===371793291&&latest.event==='push'||latest.path==='.github/workflows/static-site.yml'&&latest.workflow_id===294257497&&['schedule','workflow_dispatch'].includes(latest.event);
   assert(allowed,'Unlisted ordinary hold trigger');const run=ciExactRun(api,id,{id:latest.workflow_id,path:latest.path},latest.head_sha,latest.event,{now,historical});assert(run.status==='completed'&&['success','failure','cancelled','timed_out','action_required','neutral','skipped','stale','startup_failure'].includes(run.conclusion)&&ciTime(run.updated_at)<=now,'Ordinary hold trigger is not terminal');return run;
 }
-function ciPriorHold(api,listed,head,requestHash,now,{historical=false,recordedTrigger=null}={}){
+function ciPriorHold(api,listed,head,requestHash,now,{historical=false,recordedTrigger=null,parentCI=null}={}){
   const run=ciExactRun(api,listed.id,CI_PUBLISHER,head,'workflow_run',{now,historical});if(!historical)same(ciRunSnapshot(listed),ciRunSnapshot(run),'Ordinary prior hold listing changed');assert(run.status==='completed'&&run.conclusion==='success','Earlier ordinary attempt may have been admitted');
   const all=ciJobs(api,run.id),routes=all.filter(j=>j.name===CI_ROUTE_JOB),publishes=all.filter(j=>j.name==='publish');assert(all.length===2&&routes.length===1&&publishes.length===1&&all.every(j=>j.head_sha===head&&j.status==='completed')&&routes[0].conclusion==='success'&&publishes[0].conclusion==='skipped'&&(publishes[0].steps??[]).length===0,'Earlier ordinary caller is not a proven hold');
   const markers=routes[0].steps?.filter(s=>s.name.startsWith(ciHoldPrefix+' '));assert(markers?.length===1&&markers[0].status==='completed'&&markers[0].conclusion==='success','Missing positive ordinary hold marker');
   const match=/^Hold ordinary carry v4-ci ([a-f0-9]{64}) (\d+)\/1$/.exec(markers[0].name);assert(match&&match[1]===requestHash,'Ordinary hold request binding changed');
-  const actualTrigger=ciHoldTrigger(api,Number(match[2]),now,{historical});if(historical)ciHistoricalTriggerMatch(ciTriggerSummary(actualTrigger),recordedTrigger);const trigger=historical?{...actualTrigger,updated_at:recordedTrigger.completed_at}:actualTrigger;assert(ciTime(trigger.updated_at)<=ciTime(run.created_at)&&ciTime(routes[0].started_at)>=ciTime(run.run_started_at)&&ciTime(markers[0].started_at)>=ciTime(routes[0].started_at)&&ciTime(markers[0].completed_at)>=ciTime(markers[0].started_at)&&ciTime(markers[0].completed_at)<=ciTime(routes[0].completed_at)&&ciTime(routes[0].completed_at)<=ciTime(run.updated_at),'Ordinary hold chronology changed');
+  const actualTrigger=ciHoldTrigger(api,Number(match[2]),now,{historical,head,parentCI});if(historical)ciHistoricalTriggerMatch(ciTriggerSummary(actualTrigger),recordedTrigger);const trigger=historical?{...actualTrigger,updated_at:recordedTrigger.completed_at}:actualTrigger;assert(ciTime(trigger.updated_at)<=ciTime(run.created_at)&&ciTime(routes[0].started_at)>=ciTime(run.run_started_at)&&ciTime(markers[0].started_at)>=ciTime(routes[0].started_at)&&ciTime(markers[0].completed_at)>=ciTime(markers[0].started_at)&&ciTime(markers[0].completed_at)<=ciTime(routes[0].completed_at)&&ciTime(routes[0].completed_at)<=ciTime(run.updated_at),'Ordinary hold chronology changed');
   assert(!routes[0].steps.some(s=>s.name===ORDINARY_CI_ADMISSION_STEP&&s.conclusion==='success'),'Earlier ordinary hold admitted publication');return {run_id:run.id,run_attempt:1,route_job_id:routes[0].id,publish_job_id:publishes[0].id,marker:markers[0].name,trigger:ciTriggerSummary(trigger)};
 }
-function ciReplay(api,own,activation,requestHash,now){
+function ciReplay(api,own,activation,requestHash,now,parentCI){
   const head=activation.executing.sha,all=ciInventory(api,`${CI_PREFIX}/actions/workflows/${CI_PUBLISHER.id}/runs?branch=main&head_sha=${head}&per_page=100`,'workflow_runs',r=>assert(r.workflow_id===CI_PUBLISHER.id&&r.path===CI_PUBLISHER.path&&r.head_sha===head&&r.head_branch==='main'&&ciSameRepo(r)&&positive(r.run_attempt),'Wrong ordinary caller inventory'));
   assert(all.some(r=>r.id===own.id),'Own ordinary caller missing from complete inventory');const prior=[];
   for(const listed of all){if(listed.id===own.id){same(ciRunSnapshot(listed),ciRunSnapshot(own),'Own ordinary caller listing changed');continue;}
-    if(listed.id<own.id){assert(ciTime(listed.created_at)<=ciTime(own.created_at),'Ordinary prior caller creation changed');prior.push(ciPriorHold(api,listed,head,requestHash,now));}
+    if(listed.id<own.id){assert(ciTime(listed.created_at)<=ciTime(own.created_at),'Ordinary prior caller creation changed');prior.push(ciPriorHold(api,listed,head,requestHash,now,{parentCI}));}
     else{const next=ciExactRun(api,listed.id,CI_PUBLISHER,head,'workflow_run',{now});same(ciRunSnapshot(listed),ciRunSnapshot(next),'Ordinary successor changed');assert(ciTime(next.created_at)>=ciTime(own.created_at)&&next.status==='queued'&&next.conclusion===null&&ciJobs(api,next.id).length===0,'Ordinary successor already started or reran');}}
   return prior.sort((a,b)=>a.run_id-b.run_id);
 }
@@ -459,7 +491,7 @@ export async function routeOrdinaryCi({root=process.cwd(),event,execution=ordina
   if(!request.value.enabled)return {ordinary_hold:true,ordinary_ci:false,ordinary_hold_marker:`Hold disabled ordinary carry v4-ci ${request.sha256}`};
   await ciNoConflicts(root);const verified=verifyOrdinaryCiActivation({root,api,now}),trigger=ciEvent(event),own=ciCaller(api,execution,verified.activation,now);
   if(trigger.path!==CI_WORKFLOW.path||trigger.head_sha!==verified.activation.executing.sha||trigger.event!=='push'||trigger.conclusion!=='success'){
-    const exact=ciHoldTrigger(api,trigger.id,now);same(ciRunSnapshot(trigger),ciRunSnapshot(exact),'Ordinary hold event changed');assert(ciTime(exact.updated_at)<=ciTime(own.created_at),'Ordinary caller predates hold trigger');return {ordinary_hold:true,ordinary_ci:false,ordinary_hold_marker:ciHoldMarker(verified.request_sha256,trigger.id)};
+    const exact=ciHoldTrigger(api,trigger.id,now,{head:verified.activation.executing.sha});same(ciRunSnapshot(trigger),ciRunSnapshot(exact),'Ordinary hold event changed');assert(ciTime(exact.updated_at)<=ciTime(own.created_at),'Ordinary caller predates hold trigger');return {ordinary_hold:true,ordinary_ci:false,ordinary_hold_marker:ciHoldMarker(verified.request_sha256,trigger.id)};
   }
   ciVerifyCi(api,verified.activation.executing.sha,trigger,now);assert(ciTime(trigger.updated_at)<=ciTime(own.created_at),'Ordinary caller predates CI');return {ordinary_hold:false,ordinary_ci:true,ordinary_hold_marker:''};
 }
@@ -486,7 +518,11 @@ export function prepareOrdinaryCiController(){
   execFileSync('git',['worktree','add','--detach',root,head],{cwd:workspace,stdio:'pipe',timeout:60000});ciLocalTree(root);
   assert(process.env.GITHUB_ENV,'Missing ordinary environment output');appendFileSync(process.env.GITHUB_ENV,`ORDINARY_CI_CONTROLLER_ROOT=${root}\n`);return {prepared:true,head};
 }
-function ciProofPath(){const temp=process.env.RUNNER_TEMP;assert(typeof temp==='string'&&resolve(temp)===temp&&realpathSync(temp)===temp&&lstatSync(temp).isDirectory(),'Unsafe ordinary proof directory');return join(temp,CI_PROOF_FILE);}
+function ciProofPath({allowMissing=false}={}){
+  const temp=process.env.RUNNER_TEMP;assert(typeof temp==='string'&&resolve(temp)===temp,'Unsafe ordinary proof directory');
+  let stat;try{stat=lstatSync(temp);}catch(error){if(allowMissing&&error.code==='ENOENT')return null;throw error;}
+  assert(realpathSync(temp)===temp&&stat.isDirectory(),'Unsafe ordinary proof directory');return join(temp,CI_PROOF_FILE);
+}
 export function validateOrdinaryCiProof(proof){
   closed(proof,['schema_version','plan_id','identity_sha256','request_sha256','request','activation','trigger','checks','caller','admitted_at','prior_holds'],'Invalid closed ordinary CI proof');
   assert(proof.schema_version==='ordinary-carry-ci-proof-v1'&&proof.plan_id===ORDINARY_CI_IDENTITY.amendment_id&&proof.identity_sha256===ordinaryCiIdentityDigest()&&hash(proof.request_sha256),'Unreviewed ordinary CI proof');validateOrdinaryCiRequest(proof.request);assert(proof.request.enabled,'Disabled request cannot mint ordinary receipt');
@@ -512,11 +548,15 @@ export async function verifyOrdinaryCiAdmission({root=ordinaryCiControllerRoot()
   const job=published[0];assert(routes[0].head_sha===verified.activation.executing.sha&&ciTime(routes[0].started_at)>=ciTime(own.run_started_at)&&ciTime(routes[0].completed_at)>=ciTime(routes[0].started_at)&&ciTime(routes[0].completed_at)<=ciTime(job.started_at),'Ordinary routing job chronology changed');assert(job.head_sha===verified.activation.executing.sha&&job.status==='in_progress'&&job.conclusion===null&&ciTime(job.started_at)>=ciTime(own.run_started_at)&&ciTime(job.started_at)<=now,'Ordinary publish job is not active');
   const steps=job.steps?.filter(s=>s.name===ORDINARY_CI_ADMISSION_STEP);assert(steps?.length===1,'Ordinary admission step is not unique');const step=steps[0];assert(ciTime(step.started_at)>=ciTime(job.started_at)&&ciTime(step.started_at)<=now,'Ordinary admission step clock changed');
   if(expected)assert(step.status==='completed'&&step.conclusion==='success'&&ciTime(step.completed_at)>=ciTime(step.started_at)&&ciTime(step.completed_at)<=now,'Ordinary admission step did not complete');else assert(step.status==='in_progress'&&step.conclusion===null&&now<=ciTime(ORDINARY_CI_IDENTITY.admit_before),'Ordinary initial admission already finished or expired');
-  const proof={schema_version:'ordinary-carry-ci-proof-v1',plan_id:ORDINARY_CI_IDENTITY.amendment_id,identity_sha256:ordinaryCiIdentityDigest(),...verified,...ci,caller:{run_id:own.id,run_attempt:1,head_sha:own.head_sha,workflow_id:own.workflow_id,path:own.path,event:own.event,created_at:own.created_at,run_started_at:own.run_started_at,job_id:job.id,job_started_at:job.started_at},admitted_at:new Date(ciTime(step.started_at)).toISOString(),prior_holds:ciReplay(api,own,verified.activation,verified.request_sha256,now)};
+  const proof={schema_version:'ordinary-carry-ci-proof-v1',plan_id:ORDINARY_CI_IDENTITY.amendment_id,identity_sha256:ordinaryCiIdentityDigest(),...verified,...ci,caller:{run_id:own.id,run_attempt:1,head_sha:own.head_sha,workflow_id:own.workflow_id,path:own.path,event:own.event,created_at:own.created_at,run_started_at:own.run_started_at,job_id:job.id,job_started_at:job.started_at},admitted_at:new Date(ciTime(step.started_at)).toISOString(),prior_holds:ciReplay(api,own,verified.activation,verified.request_sha256,now,ci.trigger)};
   validateOrdinaryCiProof(proof);if(expected)same(proof,expected,'Ordinary admission proof changed');assert(ciTime(proof.admitted_at)<=now,'Future ordinary admission');verifiedCiProofs.add(proof);activeCiProofs.set(digest(proof),{proof,verified_at:now});return proof;
 }
 export async function readVerifiedOrdinaryCiAdmission({root=ordinaryCiControllerRoot(),event,execution=ordinaryCiExecution(),api=ordinaryCiReadApi,now=Date.now()}={}){
-  const request=readOrdinaryCiRequest(root),path=ciProofPath(),raw=ciMaybeRegular(path,1024**2);
+  const request=readOrdinaryCiRequest(root);assert(!request||request.value.enabled,'Ordinary request/proof missing or disabled');
+  // Legacy callers without this request may not have created their scratch
+  // directory yet. Only that absent-request case may have no proof directory;
+  // enabled requests and orphaned proof files keep the strict boundary.
+  const path=ciProofPath({allowMissing:!request}),raw=path===null?null:ciMaybeRegular(path,1024**2);
   if(!request&&!raw)return null;assert(request?.value.enabled&&raw,'Ordinary request/proof missing or disabled');const proof=validateOrdinaryCiProof(JSON.parse(raw));assert(sha(request.raw)===proof.request_sha256,'Ordinary proof request bytes changed');return verifyOrdinaryCiAdmission({root,event,execution,api,now,expected:proof});
 }
 export async function ordinaryCiContext(state){
@@ -537,7 +577,7 @@ function verifyOrdinaryCiHistorical(proof,{api=ordinaryCiReadApi,composedAt}={})
   let admittedStep;for(const name of [ORDINARY_CI_ADMISSION_STEP,'Deploy to GitHub Pages']){const steps=matches[0].steps?.filter(s=>s.name===name);assert(steps?.length===1&&steps[0].status==='completed'&&steps[0].conclusion==='success'&&ciTime(steps[0].started_at)>=ciTime(matches[0].started_at)&&ciTime(steps[0].completed_at)>=ciTime(steps[0].started_at)&&ciTime(steps[0].completed_at)<=ciTime(matches[0].completed_at)&&ciTime(matches[0].completed_at)<=ciTime(own.updated_at),'Historical ordinary publication step missing');if(name===ORDINARY_CI_ADMISSION_STEP){admittedStep=steps[0];assert(proof.admitted_at===new Date(ciTime(steps[0].started_at)).toISOString()&&ciTime(proof.admitted_at)<=ciTime(steps[0].completed_at),'Historical ordinary admission clock changed');}else assert(ciTime(steps[0].started_at)>=ciTime(admittedStep.completed_at)&&ciTime(composedAt)>=ciTime(proof.admitted_at)&&ciTime(steps[0].started_at)>=ciTime(composedAt),'Historical deployment predates admission/composition');}
   const inventory=ciInventory(api,`${CI_PREFIX}/actions/workflows/${CI_PUBLISHER.id}/runs?branch=main&head_sha=${proof.activation.executing.sha}&per_page=100`,'workflow_runs',r=>assert(r.workflow_id===CI_PUBLISHER.id&&r.path===CI_PUBLISHER.path&&r.head_sha===proof.activation.executing.sha&&r.head_branch==='main'&&ciSameRepo(r)&&positive(r.run_attempt),'Wrong historical ordinary caller inventory'));
   assert(inventory.some(r=>r.id===own.id),'Historical ordinary caller omitted');const prior=inventory.filter(r=>r.id<own.id).sort((a,b)=>a.id-b.id);same(prior.map(r=>r.id),proof.prior_holds.map(h=>h.run_id),'Historical ordinary prior callers changed');
-  for(let i=0;i<prior.length;i++){const actual=ciPriorHold(api,prior[i],proof.activation.executing.sha,proof.request_sha256,now,{historical:true,recordedTrigger:proof.prior_holds[i].trigger}),recorded=proof.prior_holds[i];ciHistoricalTriggerMatch(actual.trigger,recorded.trigger);same({...actual,trigger:recorded.trigger},recorded,'Historical ordinary hold proof changed');}
+  for(let i=0;i<prior.length;i++){const actual=ciPriorHold(api,prior[i],proof.activation.executing.sha,proof.request_sha256,now,{historical:true,recordedTrigger:proof.prior_holds[i].trigger,parentCI:proof.trigger}),recorded=proof.prior_holds[i];ciHistoricalTriggerMatch(actual.trigger,recorded.trigger);same({...actual,trigger:recorded.trigger},recorded,'Historical ordinary hold proof changed');}
   return true;
 }
 function ciRejectRuntimeHooks(){if(process.execArgv.length||process.env.NODE_OPTIONS||process.env.NODE_PATH)throw Error('Ordinary CI rejects runtime hooks');}

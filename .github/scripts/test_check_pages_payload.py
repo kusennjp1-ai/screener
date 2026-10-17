@@ -376,7 +376,7 @@ class WorkflowScopeTests(unittest.TestCase):
                     "run('tools/record-candidate-history.mjs');",
                     "execFileSync(process.execPath,['node_modules/vite/bin/vite.js','build'],{cwd:paths.frontend,env:buildEnv,stdio:'inherit'});",
                     "run('tools/check-data-quality.mjs');",
-                    "await checkOrdinaryCarry(state,ordinaryContext(state),paths);",
+                    "await checkOrdinaryCarry(state,await ordinaryContext(state),paths);",
                 ]
                 positions = [body.index(command) if command in body else -1 for command in ordinary_commands]
                 self.assertNotIn(-1, positions)
