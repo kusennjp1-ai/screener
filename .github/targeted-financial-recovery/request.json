@@ -1,13 +1,13 @@
 {
-  "schema_version": "financial-targeted-recovery-execution-v4",
-  "operation_id": "targeted-nvda-aaoi-20261017t071531z-289570b8",
-  "created_at": "2026-10-17T07:15:31Z",
-  "expires_at": "2026-10-17T08:15:31Z",
+  "schema_version": "financial-targeted-recovery-execution-v5",
+  "operation_id": "targeted-nvda-aaoi-20261017t080926z-d18d059d",
+  "created_at": "2026-10-17T08:09:26Z",
+  "expires_at": "2026-10-17T09:09:26Z",
   "controller": {
-    "parent_sha": "8c2185b1dc89e5473e7c20595628c2ae4a73be66",
-    "parent_tree": "892581e69bae4611bb887d170655a3165732add4"
+    "parent_sha": "8d0032aeb71730482cb2979c9ec19b799eefb43c",
+    "parent_tree": "525683c0fd03407cf9714be2607693fc8dcbc6ba"
   },
-  "expected_run_number": 8,
+  "expected_run_number": 9,
   "source": {
     "run_id": 37478731832,
     "run_attempt": 1,
@@ -85,6 +85,19 @@
   "publication_authority": "none",
   "financial_admission": false,
   "abort_continuity": {
+    "run8": {
+      "schema_version": "financial-prepared-pre-provider-abort-v1",
+      "run_id": 39013437787,
+      "run_attempt": 1,
+      "run_number": 8,
+      "head_sha": "49ca70d2c09dac84ce2ae1100617f9aba3a78527",
+      "request_sha256": "13bbc9b0edff90a99f28d111bab483c0f61c9f2efc4f739548dff1e859b08d63",
+      "job_id": 117340568549,
+      "job_log_sha256": "37a202f5d7d992b2f61f154715ffd4758f9e2a652c3ecb65805019c9bbd7f1b0",
+      "artifact_id": 12093719779,
+      "artifact_bytes": 29737343,
+      "artifact_sha256": "3518d1a73c0ec4999fdaa67d6deafd7a19157e69a15f5a184b645aa1cf9c34f5"
+    },
     "run7": {
       "schema_version": "financial-pre-provider-abort-v1",
       "run_id": 38997227416,
