@@ -1,0 +1,29 @@
+{
+  "schema_version": "reviewed-job-log-diagnostic-request-v1",
+  "operation_id": "log-diagnostic-2171153f-7fb2-4826-8dac-159af491af3b",
+  "created_at": "2026-10-17T03:21:43Z",
+  "expires_at": "2026-10-17T03:51:43Z",
+  "controller": {
+    "parent_sha": "391493d6fa10202beb594e360f5747028c9549ff",
+    "parent_tree": "f65ca85aa271095dd90b172b315b7b5fa2d60981"
+  },
+  "expected_run_number": 1,
+  "expected_run_attempt": 1,
+  "target": {
+    "repository": "kusennjp1-ai/screener",
+    "run_id": 38993132263,
+    "run_number": 6,
+    "run_attempt": 1,
+    "head_sha": "12b4e4dba9c847d754b7ec3b47b234984386a1f4",
+    "job_id": 117279659374,
+    "bytes": 59325,
+    "sha256": "47dabe41056aeb89eb17d2408bb120c10998868eaf4ccfb17597026b6ccfc462"
+  },
+  "limits": {
+    "helper_calls": 1,
+    "caller_retries": 0,
+    "provider_getter_calls": 0,
+    "timeout_seconds": 30,
+    "max_bytes": 1048576
+  }
+}
