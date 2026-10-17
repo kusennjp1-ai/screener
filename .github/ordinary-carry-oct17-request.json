@@ -2,6 +2,10 @@
   "schema_version": "ordinary-carry-ci-request-v1",
   "plan_id": "oct17-oct16-carry-single-projection-v4-ci-v1",
   "identity_sha256": "83dda639b609fdbfa261c48f664b487bce19d1ffbb58e3ec1918d3c3faf4b354",
-  "enabled": false,
-  "activation": null
+  "enabled": true,
+  "activation": {
+    "reviewed_parent_sha": "dd31753ff25591553b114f403f78a4077bc5c8fe",
+    "reviewed_parent_tree": "0f99f0fb1221d39c5ce12a8da477dde7ce90d544",
+    "disabled_request_sha256": "3016f5139eec6bdb25760a9c0e1ca5ab2666a9d917f471ab1a3a7bd06aa935b3"
+  }
 }
