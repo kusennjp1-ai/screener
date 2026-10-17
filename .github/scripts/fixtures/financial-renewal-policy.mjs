@@ -3,6 +3,7 @@
 import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {renewalPolicy,renewalPolicyPath} from '../financial-source-renewal.mjs';
+import {ORDINARY_CI_REQUEST_PATH} from '../ordinary-carry-tooling.mjs';
 
 export const disabledRenewalRegistry=()=>({...structuredClone(renewalPolicy),publication_enabled:false,
   ci_admission:null,reviewed_controllers:[],reviewed_consumer_transitions:[]});
@@ -10,4 +11,7 @@ export const disabledRenewalRegistry=()=>({...structuredClone(renewalPolicy),pub
 export function resetRenewalFixtureControls(root){
   writeFileSync(join(root,renewalPolicyPath),JSON.stringify(disabledRenewalRegistry()));
   for(const key of ['request','pin','intent'])rmSync(join(root,renewalPolicy[`${key}_path`]),{force:true});
+  // A separate dated ordinary operation must not leak from archived HEAD into
+  // this disposable synthetic renewal controller. Production keeps its hold.
+  rmSync(join(root,ORDINARY_CI_REQUEST_PATH),{force:true});
 }

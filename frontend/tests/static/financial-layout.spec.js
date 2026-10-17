@@ -44,6 +44,13 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
   await expect(page.locator('.research-detail .research-chart canvas').first()).toBeVisible();
   expect((await page.getByTestId('home-hero').boundingBox()).height).toBeLessThanOrEqual(320);
   expect((await page.locator('.research-detail .research-chart canvas').first().boundingBox()).y).toBeLessThanOrEqual(540);
+  const sourceLine=page.locator('.research-symbol-head .symbol-context');
+  const qualification=page.getByLabel('価格位置と購入条件');
+  await expect(sourceLine).toBeVisible();await expect(qualification).toBeVisible();
+  const sourceBounds=await sourceLine.boundingBox(),qualificationBounds=await qualification.boundingBox();
+  expect(qualificationBounds.y).toBeGreaterThanOrEqual(sourceBounds.y+sourceBounds.height);
+  expect(await qualification.evaluate(node=>node.scrollWidth<=node.clientWidth && node.scrollHeight<=node.clientHeight)).toBe(true);
+  expect((await page.locator('.research-symbol-head .watch-button').boundingBox()).height).toBeGreaterThanOrEqual(44);
   expect((await page.getByRole('link',{name:'業種の追い風を見る →'}).boundingBox()).height).toBeGreaterThanOrEqual(44);
  }else{
   const visible=await page.locator('.candidate-row').evaluateAll(rows=>{

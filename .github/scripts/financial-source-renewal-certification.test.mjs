@@ -11,6 +11,7 @@ import {contract,dataInventory,digest} from './financial-correction.mjs';
 import {bootstrap,inventoryDigest,sha256,uiInventory} from './publication-state.mjs';
 import {renewalPolicy,consumerCodeInventory,validateRenewalRegistry} from './financial-source-renewal.mjs';
 import {resetRenewalFixtureControls} from './fixtures/financial-renewal-policy.mjs';
+import {ORDINARY_CI_IDENTITY,ORDINARY_CI_REQUEST_PATH,ordinaryCiIdentityDigest,readVerifiedOrdinaryCiAdmission} from './ordinary-carry-tooling.mjs';
 import {assertCertificationSourceTrustPreserved,renewalCandidateMembers,restorePriorRenewalSource,retainApprovedRenewalUi,verifyRenewalCertifierController,verifyRenewalCertificationBounds,verifySealedRenewalArchive} from './financial-source-renewal-certification.mjs';
 
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'../..');
@@ -21,6 +22,27 @@ const fixtureContracts=directory=>{
   // Load the real controller's complete frontend module closure in isolated CLI fixtures.
   for(const name of ['src','tools','contracts','package.json'])cpSync(join(root,'frontend',name),join(directory,'frontend',name),{recursive:true});
 };
+// Renewal lifecycles archive committed HEAD. Keep its unrelated dated ordinary
+// control out of the disposable renewal input, without touching the source or
+// changing the production guard that reserves a real disabled request.
+for(const phase of ['absent','disabled','enabled','malformed'])test('renewal fixture isolates '+phase+' committed ordinary control only in its disposable copy',async()=>{
+  const directory=fixture();try{
+    const source=join(directory,'source'),copy=join(directory,'copy'),path=join(source,ORDINARY_CI_REQUEST_PATH);
+    cpSync(join(root,'contracts'),join(source,'contracts'),{recursive:true});
+    const code=join(source,'.github/scripts/unchanged-runtime.mjs'),bytes='export const productionGuard = true;\n';write(code,bytes);
+    const request={schema_version:'ordinary-carry-ci-request-v1',plan_id:ORDINARY_CI_IDENTITY.amendment_id,identity_sha256:ordinaryCiIdentityDigest(),enabled:phase==='enabled',activation:phase==='enabled'?{reviewed_parent_sha:'a'.repeat(40),reviewed_parent_tree:'b'.repeat(40),disabled_request_sha256:'c'.repeat(64)}:null};
+    const raw=phase==='absent'?null:phase==='malformed'?'{broken':JSON.stringify(request);if(raw!==null)write(path,raw);
+    const sourcePolicy=readFileSync(join(source,'contracts/financial_source_renewal_v1.json'));
+    cpSync(source,copy,{recursive:true});resetRenewalFixtureControls(copy);
+    assert.equal(existsSync(join(copy,ORDINARY_CI_REQUEST_PATH)),false);
+    assert.equal(raw===null?existsSync(path):readFileSync(path,'utf8'),raw===null?false:raw);
+    assert.deepEqual(readFileSync(join(source,'contracts/financial_source_renewal_v1.json')),sourcePolicy);
+    assert.equal(readFileSync(code,'utf8'),bytes);assert.equal(readFileSync(join(copy,'.github/scripts/unchanged-runtime.mjs'),'utf8'),bytes);
+    for(const key of ['request','pin','intent'])assert.equal(existsSync(join(copy,renewalPolicy[`${key}_path`])),false);
+    if(phase==='disabled')await assert.rejects(()=>readVerifiedOrdinaryCiAdmission({root:source,api(){assert.fail('disabled request must stop before API');}}),/Ordinary request\/proof missing or disabled/);
+  }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
 function bundle(root,html){
   write(join(root,'index.html'),html);write(join(root,'sw.js'),`worker ${html}`);
   write(join(root,'assets/chunk.js'),`chunk ${html}`);write(join(root,'static-data/manifest.json'),'{}');
