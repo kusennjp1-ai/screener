@@ -61,3 +61,37 @@ test('browser timing preserves nonzero exit and never logs false completion',()=
   assert.match(run(0),/browser-measurements start[^]*browser fixture[^]*browser-measurements complete/);
   assert.throws(()=>run(17),error=>error.status===17&&/browser-measurements start/.test(String(error.stdout))&&!/browser-measurements complete/.test(String(error.stdout)));
 });
+
+test('Design has one isolated pinned offline calendar runtime before candidate preparation',()=>{
+  const setup=workflow.indexOf('      - uses: actions/setup-python@v5'),install=workflow.indexOf('Install isolated offline exchange calendar runtime'),prepare=workflow.indexOf('Prepare the certified financial candidate');
+  assert.ok(setup>=0&&install>setup&&prepare>install);
+  assert.doesNotMatch(workflow.slice(setup,install),/\n\s+if:/);
+  assert.match(workflow,/session-calendar-runtime\/bin\/python.*pip install -r \.github\/scripts\/session-calendar-requirements\.txt/);
+  assert.match(workflow,/SESSION_CALENDAR_PYTHON=\$RUNNER_TEMP\/session-calendar-runtime\/bin\/python/);
+  const requirements=readFileSync(new URL('./session-calendar-requirements.txt',import.meta.url),'utf8');
+  assert.match(requirements,/pandas-market-calendars==5\.4\.0/);
+  assert.match(requirements,/exchange-calendars==4\.11\.2/);
+  assert.doesNotMatch(requirements,/yfinance|curl_cffi/);
+});
+test('calendar derivation runs only after source verification and before baseline hashing, including replay',()=>{
+  const helper=adapter.slice(adapter.indexOf('async function prepareBaseline'),adapter.indexOf('async function coverage'));
+  assert.ok(helper.indexOf('prepareDesignSessionCalendar(frontend,root,evaluatedAt)')>=0);
+  assert.ok(helper.indexOf('prepareDesignSessionCalendar')<helper.indexOf('exporter(frontend,root'));
+  const prepare=adapter.slice(adapter.indexOf('export async function prepareDesignCarryPreview'),adapter.indexOf('export async function verifyDesignCarryPreview'));
+  assert.ok(prepare.indexOf("'selected source'")<prepare.indexOf('await prepareBaseline'));
+  assert.ok(prepare.indexOf('await prepareBaseline')<prepare.indexOf("copyData(root,join(evidence,'baseline'))"));
+  const verify=adapter.slice(adapter.indexOf('export async function verifyDesignCarryPreview'));
+  assert.match(verify,/prepareBaseline\(\{root:replay,frontend:frontendRoot,evidence,state,evaluatedAt:record\.timestamps\.prepared_at\}\)/);
+  assert.ok(verify.indexOf('await prepareBaseline')<verify.indexOf('Design complete nonfinancial baseline changed'));
+  assert.match(adapter,/source_input_sha256:dataInventoryDigest\(raw\)/);
+  assert.match(adapter,/baseline_sha256:dataInventoryDigest\(join\(evidence,'baseline'\)\)/);
+});
+test('non-carry Design derives once before shared input copy and never calls the price-provider mode',()=>{
+  const calendar=workflow.indexOf('tools/export-book-benchmark.py --calendar-only');
+  const carry=workflow.indexOf('design-financial-carry.mjs prepare'),copy=workflow.indexOf('cp -a frontend/public/static-data');
+  assert.ok(calendar>carry&&calendar<copy);
+  assert.match(workflow.slice(calendar,copy),/--root public\/static-data --evaluated-at/);
+  assert.equal((workflow.match(/export-book-benchmark\.py/g)||[]).length,1);
+  assert.match(workflow,/env -u GH_TOKEN -u GITHUB_TOKEN \"\$SESSION_CALENDAR_PYTHON\" -I tools\/export-book-benchmark\.py/);
+  assert.doesNotMatch(workflow.slice(calendar,copy),/--allow-unavailable/);
+});

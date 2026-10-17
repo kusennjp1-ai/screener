@@ -40,9 +40,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - uses: actions/setup-python@v5
-        if: hashFiles('.github/financial-release-request.json') != ''
         with:
           python-version: '3.11'
+      - name: Install isolated offline exchange calendar runtime
+        run: |
+          python -m venv "$RUNNER_TEMP/session-calendar-runtime"
+          "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m pip install -r .github/scripts/session-calendar-requirements.txt
+          echo "SESSION_CALENDAR_PYTHON=$RUNNER_TEMP/session-calendar-runtime/bin/python" >> "$GITHUB_ENV"
       - name: Install certified offline projection dependencies
         if: hashFiles('.github/financial-release-request.json') != ''
         run: |
@@ -109,7 +113,9 @@ jobs:
             node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare "$RUNNER_TEMP/design-input-provenance.json" "$RUNNER_TEMP/design-baseline" 2>&1 | tee "$RUNNER_TEMP/design-carry-prepare.log"
             echo "Design stage: $(date -u +%FT%TZ) carry-prepare complete"
             if ! node --input-type=module -e 'import fs from "node:fs"; process.exit(JSON.parse(fs.readFileSync(process.argv[1])).schema === "design-financial-carry-preview-v1" ? 0 : 1)' "$RUNNER_TEMP/design-input-provenance.json"; then
-              (cd frontend && node tools/export-research.mjs && node tools/record-candidate-history.mjs && node tools/check-data-quality.mjs)
+              # Derive sessions only on the candidate copy, never in the retained archive.
+              # Both comparison UIs receive these same dated calendar bytes below.
+              (cd frontend && env -u GH_TOKEN -u GITHUB_TOKEN "$SESSION_CALENDAR_PYTHON" -I tools/export-book-benchmark.py --calendar-only --root public/static-data --evaluated-at "$(date -u +%FT%TZ)" && node tools/export-research.mjs && node tools/record-candidate-history.mjs && node tools/check-data-quality.mjs)
             fi
             node .github/scripts/select-release-source.mjs check-design-data
             rm -rf "$RUNNER_TEMP/design-baseline/frontend/public/static-data"

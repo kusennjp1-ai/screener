@@ -112,6 +112,11 @@ function withState(f,mutate,check){return withFile(f.statePath,bytes=>{const sta
 
 test('offline packed limited capture restores, composes and rechecks only its frozen original data',{timeout:240000},async()=>{
   const f=await fixture();try{
+    const originalAudit=read(join(f.frozen,'qualification-audit.json')).results[0].audit;
+    assert.equal(originalAudit.valid,true);assert.equal(originalAudit.status,'verified');
+    assert.equal(originalAudit.version,'ohlcv-v2-session-calendar');
+    assert.equal(originalAudit.bars,260);
+    assert.ok(originalAudit.window_52w.observations>=250);
     f.command('plan');assert.equal(f.state().decision.mode,'limited');
     f.command('restore');assert.deepEqual(dataInventory(f.dist),dataInventory(f.frozen));assert.deepEqual(uiInventory(f.dist),f.uiFiles);
     assert.deepEqual(dataInventory(join(f.root,'release/frontend/public')),dataInventory(f.frozen),'existing data-quality checks read the same frozen public data');

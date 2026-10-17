@@ -119,6 +119,15 @@ export function stageDesignReplayReferences(repoRoot,scratch){
   equal(completeInventory(target),expected,'copied replay references');
   return inventoryDigest(expected);
 }
+// Runs only on the derived candidate/replay copy, after original source identity
+// has been checked. The fixed evaluation time makes the included calendar bytes
+// reproducible; baseline/output inventory hashes retain their complete lineage.
+export function prepareDesignSessionCalendar(frontend,root,evaluatedAt){
+  if(!process.env.SESSION_CALENDAR_PYTHON)throw Error('Design requires its isolated offline calendar runtime');
+  return execFileSync(process.env.SESSION_CALENDAR_PYTHON,['-I',join(frontend,'tools/export-book-benchmark.py'),
+    '--calendar-only','--root',join(root,'static-data'),'--evaluated-at',evaluatedAt],
+    {env:safeEnvironment(evaluatedAt),encoding:'utf8',maxBuffer:1024*1024});
+}
 async function prepareBaseline({root,frontend,evidence,state,evaluatedAt}){
   const plan=await prepareHistoryReconciliation({selectedRoot:join(root,'static-data'),publishedRoot:join(evidence,'predecessor/static-data'),selectedAt:state.source.artifact.created_at,publishedAt:new Date(state.live.latest.completed).toISOString()});
   writeHistoryPayloads(plan);commitHistoryCatalogs(plan);
@@ -128,6 +137,7 @@ async function prepareBaseline({root,frontend,evidence,state,evaluatedAt}){
     if(existsSync(target)){if(fileHash(target)!==audits[path])throw Error('Conflicting Design audit source');}
     else cpSync(join(evidence,'financial-source',path),target,{errorOnExist:true,force:false});
   }
+  prepareDesignSessionCalendar(frontend,root,evaluatedAt);
   exporter(frontend,root,safeEnvironment(evaluatedAt));
   const target=await readCarryTargetBase({root,frontendRoot:frontend});prepareCarryHistory({root,targetInput:target});
   return {target,history:plan.summary};

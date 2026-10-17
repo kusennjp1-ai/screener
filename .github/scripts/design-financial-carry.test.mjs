@@ -3,11 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync,symlinkSync,linkSync,renameSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync,symlinkSync,linkSync,renameSync,chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {DESIGN_CARRY_SCHEMA,assertDesignCarryState,validateDesignCarryPreview,verifyDesignCarryPreview,readDesignHistoryResponse,stageDesignReplayReferences} from './design-financial-carry.mjs';
+import {DESIGN_CARRY_SCHEMA,assertDesignCarryState,validateDesignCarryPreview,verifyDesignCarryPreview,readDesignHistoryResponse,stageDesignReplayReferences,prepareDesignSessionCalendar} from './design-financial-carry.mjs';
 import {bootstrap,validateReceipt} from './publication-state.mjs';
 import {validateCandidateRecord,validateFinancialReleaseReceipt} from './financial-release-activation.mjs';
 const H='a'.repeat(64),S='b'.repeat(40),identity=`1/1/${H}/${H}`;
@@ -86,4 +86,23 @@ test('actual verifier stages checked references before replay export without cha
   const stage=verifier.indexOf('stageDesignReplayReferences(repoRoot,scratch)'),prepare=verifier.indexOf('const prepared=await prepareBaseline');
   assert.ok(stage>=0&&prepare>stage);
   assert.ok(source.includes("'data/ibd_reference'"));
+});
+
+test('calendar preparation fails closed without the isolated runtime',()=>{
+  const saved=process.env.SESSION_CALENDAR_PYTHON;
+  delete process.env.SESSION_CALENDAR_PYTHON;
+  try{assert.throws(()=>prepareDesignSessionCalendar('/candidate/frontend','/candidate/frontend/public','2026-10-17T00:00:00Z'),/isolated offline calendar runtime/);}
+  finally{if(saved!==undefined)process.env.SESSION_CALENDAR_PYTHON=saved;}
+});
+
+test('calendar wrapper binds isolated Python, candidate root and replay clock without credentials',t=>{
+  const directory=mkdtempSync(join(tmpdir(),'design-calendar-command-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const executable=join(directory,'python-fixture'),output=join(directory,'invocation.json');
+  writeFileSync(executable,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(output)},JSON.stringify({args:process.argv.slice(2),token:process.env.GH_TOKEN??null,options:process.env.NODE_OPTIONS??null}));\n`);chmodSync(executable,0o755);
+  const keys=['SESSION_CALENDAR_PYTHON','GH_TOKEN','NODE_OPTIONS'],saved=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  Object.assign(process.env,{SESSION_CALENDAR_PYTHON:executable,GH_TOKEN:'synthetic-secret-must-not-escape',NODE_OPTIONS:'--invalid-fixture-hook'});
+  try{
+    prepareDesignSessionCalendar('/checked/frontend','/derived/public','2026-10-17T00:00:00Z');
+    assert.deepEqual(JSON.parse(readFileSync(output)),{args:['-I','/checked/frontend/tools/export-book-benchmark.py','--calendar-only','--root','/derived/public/static-data','--evaluated-at','2026-10-17T00:00:00Z'],token:null,options:null});
+  }finally{for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}}
 });

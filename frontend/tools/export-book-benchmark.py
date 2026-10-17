@@ -10,7 +10,9 @@ import argparse
 from datetime import date, datetime, timedelta, timezone
 import json
 import math
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from zoneinfo import ZoneInfo
 
 
@@ -75,10 +77,34 @@ def export_session_calendar(root: Path, manifest, mcal, target, now=None):
                 "sessions": sessions, "generated_at": now.isoformat(),
                 "completed_session_close": schedule.iloc[-1]["market_close"].isoformat()}
     destination = root / "trading-calendar.json"
-    temporary = destination.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(calendar, allow_nan=False, separators=(",", ":")), encoding="utf-8")
-    temporary.replace(destination)
+    # An authenticated input may already contain a similarly named file. Use
+    # exclusive fresh staging, never overwrite or follow a fixed .tmp path.
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=root, prefix=".trading-calendar-", suffix=".tmp", delete=False) as output:
+        temporary = Path(output.name)
+        output.write(json.dumps(calendar, allow_nan=False, separators=(",", ":")))
+        os.fchmod(output.fileno(), 0o644)  # Preserve ordinary public-asset readability.
+    try:
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
     return calendar
+
+
+
+def export_calendar_only(root: Path, evaluated_at: str):
+    """Offline derivation for a candidate copy; never fetch or alter price evidence."""
+    import pandas_market_calendars as mcal
+
+    evaluated = datetime.fromisoformat(evaluated_at.replace("Z", "+00:00"))
+    if evaluated.tzinfo is None or evaluated > datetime.now(timezone.utc):
+        raise ValueError("Calendar derivation requires a fixed, nonfuture timezone-aware evaluation time")
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    market_day = manifest.get("markets", {}).get("US", {}).get("as_of_date")
+    target_day = market_day or manifest.get("as_of_date")
+    if market_day and manifest.get("as_of_date", market_day) != market_day:
+        raise ValueError("Calendar manifest and US price dates disagree")
+    target = date.fromisoformat(target_day)
+    return export_session_calendar(root, manifest, mcal, target, evaluated)
 
 
 def export_benchmark(root: Path):
@@ -136,7 +162,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1] / "public" / "static-data")
     parser.add_argument("--allow-unavailable", action="store_true", help="Publish explicitly missing optional evidence instead of retaining an old benchmark")
+    parser.add_argument("--calendar-only", action="store_true", help="Derive only offline exchange sessions on an unpublished candidate copy; never acquire prices")
+    parser.add_argument("--evaluated-at", help="Fixed timezone-aware derivation timestamp, required for --calendar-only replay")
     args = parser.parse_args()
+    if args.calendar_only:
+        if not args.evaluated_at or args.allow_unavailable:
+            parser.error("--calendar-only requires --evaluated-at and forbids --allow-unavailable")
+        result = export_calendar_only(args.root, args.evaluated_at)
+        print(json.dumps({"path": str(args.root / "trading-calendar.json"), "as_of_date": result["as_of_date"],
+                          "sessions": len(result["sessions"]), "provider": result["provider"],
+                          "provider_version": result["provider_version"], "generated_at": result["generated_at"]}))
+        raise SystemExit(0)
+    if args.evaluated_at:
+        parser.error("--evaluated-at is only valid with --calendar-only")
     try:
         result = export_benchmark(args.root)
     except Exception as error:

@@ -52,9 +52,17 @@ function projection(source) {
   return {base,value,bytes:JSON.stringify(value,null,2)};
 }
 
+// Real provider sessions are independent from the synthetic fixture prices.
+const fixtureCalendar=JSON.parse(readFileSync(new URL('../../../frontend/src/static/__fixtures__/nyse-sessions-2024-2026.json',import.meta.url),'utf8'));
+function calendar(date){
+  const {schema_version,market,exchange,provider,provider_version,range_start}=fixtureCalendar;
+  const sessions=fixtureCalendar.sessions.filter(day=>day<=date);
+  assert.equal(sessions.at(-1),date,'lifecycle price date must be a verified NYSE session');
+  return {schema_version,market,exchange,provider,provider_version,range_start,as_of_date:date,range_end:date,sessions};
+}
 function bars(date,price) {
-  const dates=[];
-  for(let time=Date.parse(date);dates.length<260;time-=day){const weekday=new Date(time).getUTCDay();if(weekday!==0&&weekday!==6)dates.unshift(new Date(time).toISOString().slice(0,10));}
+  const dates=calendar(date).sessions.slice(-260);
+  assert.equal(dates.length,260,'lifecycle fixture needs complete observed history');
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
@@ -104,6 +112,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     write(join(dataRoot,'scan.json'),{as_of_date:date,initial_rows:[value],preview_rows:[value],chunks:[{path:'chunk.json'}]});
     write(join(dataRoot,'chunk.json'),{as_of_date:date,rows:[value]});
     write(join(dataRoot,'charts-index.json'),{market:'US',symbols:[{symbol:'OWNED',path:'charts/OWNED.json'}]});
+    write(join(dataRoot,'trading-calendar.json'),calendar(date));
     const chart={symbol:'OWNED',market:'US',as_of_date:date,bars:bars(date,price),stock_data:value,fundamentals:{...value},eps_line:[]};
     write(join(dataRoot,'charts/OWNED.json'),chart);write(join(dataRoot,'raw/OWNED.json'),chart);
     if(!omitAcquiredHistory)write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
