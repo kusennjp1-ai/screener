@@ -22,7 +22,7 @@ describe('audit remediation contracts', () => {
     expect(canonicalPivot(null).price).toBeNull();
   });
   it('filters already evaluated rows without replacing their evidence', () => {
-    const ranked = [{row:{symbol:'A',technical_audit:{valid:true}},assessment:{qualified:true}}, {row:{symbol:'B'},assessment:{qualified:false}}];
+    const ranked = [{row:withAuditFixture({symbol:'A',current_price:100}),assessment:{qualified:true}}, {row:{symbol:'B'},assessment:{qualified:false}}];
     expect(filterRanked(ranked,{coverage:'verified'})[0]).toBe(ranked[0]);
     expect(filterRanked(ranked,{coverage:'unverified'})).toEqual([ranked[1]]);
     expect(filterRanked(ranked,{search:'b',qualifiedOnly:true})).toEqual([]);
@@ -56,4 +56,12 @@ describe('audit remediation contracts', () => {
     const far = {...base,symbol:'FAR',se_pivot_price:85,rs_rating:99,technical_audit:{...base.technical_audit,symbol:'FAR'}};
     expect(rankCandidates([far,base],'minervini')[0].row.symbol).toBe('NEAR');
   });
+});
+
+it('excludes legacy raw-valid audits from verified coverage', () => {
+  const row = withAuditFixture({ symbol: 'OLD', current_price: 102 });
+  row.technical_audit.version = 'ohlcv-v1'; delete row.technical_audit.status;
+  const ranked = [{ row, assessment: { qualified: false } }];
+  expect(filterRanked(ranked, { coverage: 'verified' })).toEqual([]);
+  expect(filterRanked(ranked, { coverage: 'unverified' })).toEqual(ranked);
 });

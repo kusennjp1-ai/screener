@@ -35,7 +35,7 @@ export function researchListRow(row) {
     volumeRatio: row.entry_evidence.volumeRatio,
   };
   if (row.technical_audit) out.technical_audit = {
-    ...pick(row.technical_audit, ['version', 'symbol', 'as_of_date', 'bars', 'errors', 'valid']),
+    ...pick(row.technical_audit, ['version', 'status', 'symbol', 'as_of_date', 'bars', 'errors', 'valid', 'window_52w']),
     values: pick(row.technical_audit.values, ['close', 'sma50', 'sma150', 'sma200', 'sma200_21ago', 'aboveLow', 'belowHigh', 'volumeRatio', 'change', 'momentum']),
   };
   if (row.financial_history) out.financial_history = {

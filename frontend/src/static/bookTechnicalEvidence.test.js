@@ -1,16 +1,15 @@
+import { tradingDays, calendarAt } from './testMarketCalendarFixture.js';
 import { describe, expect, it } from 'vitest';
 import { buildBookTechnicalEvidence } from './bookTechnicalEvidence';
 
 function fixture(count = 320) {
   const bars = [];
-  for (let t = Date.parse('2025-01-01'); bars.length < count; t += 86400000) {
-    const date = new Date(t);
-    if ([0, 6].includes(date.getUTCDay())) continue;
+  for (const date of tradingDays('2025-01-01', count)) {
     const close = 100 + bars.length / 10;
-    bars.push({ date: date.toISOString().slice(0, 10), open: close, high: close + 1, low: close - 1, close, volume: 1000 });
+    bars.push({ date, open: close, high: close + 1, low: close - 1, close, volume: 1000 });
   }
   const date = bars.at(-1).date;
-  return { row: { symbol: 'TEST', current_price: bars.at(-1).close }, payload: { symbol: 'TEST', as_of_date: date, bars }, date,
+  return { row: { symbol: 'TEST', market: 'US', current_price: bars.at(-1).close }, payload: { symbol: 'TEST', as_of_date: date, bars, session_calendar: calendarAt(date) }, date,
     benchmark: { symbol: 'SPY', as_of_date: date, bars: bars.map(b => ({ date: b.date, close: 100 })) } };
 }
 const run = (f, options = {}) => buildBookTechnicalEvidence(f.row, f.payload, f.date, { benchmark: f.benchmark, ...options });

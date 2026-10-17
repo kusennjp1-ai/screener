@@ -9,6 +9,7 @@ import { institutionalGrowth } from './institutionalEvidence.js';
 import { singleMissingCondition } from './missingCondition.js';
 import { entrySourceContext } from './bookSourceContext.js';
 import { evidenceTimestamp, newYorkDate, validClock, validEvidenceDay } from './evidenceTime.js';
+import { setupReadiness } from './setupReadiness.js';
 // Public rules, independent estimates. Never substitute QoQ for YoY or missing for zero.
 export const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // One application parameter for the price gauge, rule list and daily readiness.
@@ -33,11 +34,11 @@ export function researchCsv(ranked, method, date, now = Date.now()) {
     if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version'];
+  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'setup_readiness_state', 'setup_readiness_reason'];
   const lines = ranked.map(({row})=>({row,assessment:assess(row,method,now)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
     a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication', a.method_status || (a.failed ? 'fail' : a.unknown ? 'unknown' : 'pass'), a.applicability_reason || '', instrumentApplicability(r).version,
     currentFinancialHistory(r.financial_history, r.symbol, date, now, r).annual.length ? r.financial_history.annual_currency || r.financial_history.currency : '',
-    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION]);
+    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION, setupReadiness(r).state, setupReadiness(r).reason]);
   const preview = limitedResearchPreviewCsvMetadata();
   return [[...header, ...preview.headers], ...lines.map(line => [...line, ...preview.values])].map(line => line.map(cell).join(',')).join('\r\n');
 }
@@ -77,9 +78,9 @@ export function assess(input, method = 'minervini', now = Date.now()) {
   if (!['minervini', 'minervini2', 'oneil', 'ibd'].includes(method)) throw Error('Unknown research method');
   const lowThreshold = method === 'minervini2' ? 25 : 30;
   const v = auditValues(row);
-  const rs = row.rs_method === RS_METHOD && row.rs_universe_size >= 100 && row.rs_as_of_date === row.technical_audit?.as_of_date ? rating(row.rs_rating) : null;
+  const rs = Object.keys(v).length && row.rs_method === RS_METHOD && row.rs_universe_size >= 100 && row.rs_as_of_date === row.technical_audit?.as_of_date ? rating(row.rs_rating) : null;
   const display = n => finite(n) ? n.toFixed(2) : '未確認';
-  const integrity = rule('日足の銘柄・日付・価格整合性（252本以上）', Object.keys(v).length ? true : row.technical_audit?.errors?.length ? false : null, x => x, '', true);
+  const integrity = rule('日足の銘柄・取引所営業日・価格整合性（252本以上）', Object.keys(v).length ? true : row.technical_audit?.status === 'unknown' ? null : row.technical_audit?.errors?.length ? false : null, x => x, '', true);
   integrity.evidence = row.technical_audit?.errors?.join(' / ') || `基準日 ${row.technical_audit?.as_of_date || '未確認'}・${row.technical_audit?.bars || 0}本`;
   const trend = [
     compoundComparison('株価 > SMA150・SMA200', [[v.close, v.sma150], [v.close, v.sma200]], `${display(v.close)} > ${display(v.sma150)} / ${display(v.sma200)}`),
@@ -87,8 +88,8 @@ export function assess(input, method = 'minervini', now = Date.now()) {
     comparison('SMA200が21営業日前より上（1か月の上向き判定）', [v.sma200, v.sma200_21ago], (a, b) => a > b, `${display(v.sma200)} > ${display(v.sma200_21ago)}`),
     compoundComparison('SMA50 > SMA150・SMA200', [[v.sma50, v.sma150], [v.sma50, v.sma200]], `${display(v.sma50)} > ${display(v.sma150)} / ${display(v.sma200)}`),
     comparison('株価 > SMA50', [v.close, v.sma50], (a, b) => a > b, `${display(v.close)} > ${display(v.sma50)}`),
-    rule(`252日安値から ≥ ${lowThreshold}%（日中安値）`, v.aboveLow, x => x >= lowThreshold, '%'),
-    rule('252日高値からの距離 ≤ 25%（日中高値）', v.belowHigh, x => x >= 0 && x <= 25, '%'),
+    rule(`52週安値から ≥ ${lowThreshold}%（日中安値）`, v.aboveLow, x => x >= lowThreshold, '%'),
+    rule('52週高値からの距離 ≤ 25%（日中高値）', v.belowHigh, x => x >= 0 && x <= 25, '%'),
     { ...rule('RS 推計 ≥ 70（公開日足の共通母集団）', rs, x => x >= 70), evidence: `${row.rs_universe_size || 0}銘柄・${row.rs_as_of_date || '基準日未確認'} / 独自推計` },
   ];
   // Three annual YoY rates, not an endpoint CAGR that can hide a down year.
@@ -110,7 +111,7 @@ export function assess(input, method = 'minervini', now = Date.now()) {
     rule('RS 推計 ≥ 85', rs, v => v >= 85),
     rule('EPS 推計 ≥ 80', rating(row.eps_rating), v => v >= 80),
     rule('業種順位 推計 ≤ 20', row.ibd_group_rank, v => Number.isInteger(v) && v >= 1 && v <= 20),
-    rule('252日高値からの距離 ≤ 15%（日足再計算）', v.belowHigh, v => v >= 0 && v <= 15, '%'),
+    rule('52週高値からの距離 ≤ 15%（日足再計算）', v.belowHigh, v => v >= 0 && v <= 15, '%'),
     rule('四半期 EPS 前年同期比 ≥ 25%（厳格成長条件）', row.eps_growth_yy, v => v >= 25, '%'),
     rule('売上高 前年同期比 ≥ 25%（厳格成長条件）', row.sales_growth_yy, v => v >= 25, '%'),
     currentHistory ? rule('直近3年の EPS 成長履歴が揃う', currentHistory.annualComplete, v => v === true, '', true) : rule('直近3年の EPS 成長履歴が揃う', annualMinimum, () => true, '%'),
@@ -135,7 +136,7 @@ export function assess(input, method = 'minervini', now = Date.now()) {
 
 // Generated from the same rule function; unresolved inputs remain explicit. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v8-financial-current-annual-decimal-metadata';
+export const RULE_SUMMARY_VERSION = 'research-summary-v9-financial-current-session-calendar-52w';
 export function assessmentSummary(row, method, now = Date.now()) {
   // Packed summaries and orders from legacy bundles are observations, not
   // authority for current decisions. Preparation recomputes once per epoch.
@@ -147,10 +148,11 @@ export function assessmentSummary(row, method, now = Date.now()) {
 export function entryChecks(row, method = 'minervini') {
   const v = auditValues(row), pivot = canonicalPivot(row).price;
   const zone = entryZonePercent(method);
+  const setup = setupReadiness(row);
   return [
     comparison(`ピボット以上・${zone}%以内`, [v.close, pivot], (p, b) => p >= b && p <= b * (1 + zone / 100)),
     risingVolume('上昇日の出来高 ≥ 直前50日平均の1.4倍（アプリの代理閾値）', v),
-    rule('セットアップ準備完了（検出器）', row.se_setup_ready, x => x === true, '', true),
+    { ...rule('セットアップ準備完了（検出器）', setup.value, x => x === true, '', true), evidence: setup.reason },
     rule('市場：上昇トレンド確認（アプリの保守的制約）', typeof row.market_regime === 'string' ? row.market_regime === 'confirmed_uptrend' : null, x => x === true, '', true),
   ];
 }

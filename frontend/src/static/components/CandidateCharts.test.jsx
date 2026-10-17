@@ -15,7 +15,7 @@ beforeEach(()=>{
 afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
 function mount(audit,lastDate=date) {
   fetchStaticChartPayload.mockResolvedValue({symbol:'CASE',as_of_date:date,bars:[{date:lastDate,close:100}],rs_line:[]});
-  const row={symbol:'CASE',current_price:100,chart_path:'case.json',technical_audit:audit};
+  const row={symbol:'CASE',current_price:100,chart_path:'case.json',technical_audit:{...withAuditFixture({symbol:'CASE',current_price:100},date).technical_audit,...audit}};
   return render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,plan:{state:'未判定'},assessment:{passed:0,total:9}}]} date={date} method="minervini" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()} /></QueryClientProvider>);
 }
 it('renders an identity-matched chart when the current daily history is verified',async()=>{
@@ -40,7 +40,7 @@ it('uses the same audited daily volume as the checklist and candidate list',()=>
 });
 it('renders six cards, preserves canonical three-percent levels and changes the shared period together',async()=>{
   fetchStaticChartPayload.mockImplementation(path=>Promise.resolve({symbol:path.split('.')[0],as_of_date:date,bars:[{date,open:100,close:100,high:101,low:99,volume:1000}],rs_line:[]}));
-  const ordered=Array.from({length:7},(_,i)=>({row:{symbol:`CASE${i}`,current_price:100,chart_path:`CASE${i}.json`,technical_audit:{valid:true}},plan:{state:'買いゾーン内',pivot:100,upper:103,stopExample:93,distance:0},assessment:{passed:9,total:9}}));
+  const ordered=Array.from({length:7},(_,i)=>({row:withAuditFixture({symbol:`CASE${i}`,current_price:100,chart_path:`CASE${i}.json`},date),plan:{state:'買いゾーン内',pivot:100,upper:103,stopExample:93,distance:0},assessment:{passed:9,total:9}}));
   const onSelect=vi.fn();
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={ordered} date={date} method="minervini2" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={onSelect}/></QueryClientProvider>);
   await waitFor(()=>expect(screen.getAllByTestId('price-chart')).toHaveLength(6));
@@ -61,7 +61,7 @@ it('reports absent data instead of converting it into a zero or a chart',async()
   fetchStaticChartPayload.mockResolvedValue({symbol:'CASE',as_of_date:date,bars:[],rs_line:[]});
   const row={symbol:'CASE',chart_path:'case.json',technical_audit:{valid:true}};
   render(<QueryClientProvider client={new QueryClient()}><CandidateCharts ordered={[{row,plan:{state:'未判定'},assessment:{passed:0,total:9}}]} date={date} method="minervini" market={{}} onSelect={vi.fn()}/></QueryClientProvider>);
-  expect(await screen.findByRole('alert')).toHaveTextContent('日足データが不足しています');
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('日足データが不足しています'));
   expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
   expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
 });
@@ -91,4 +91,10 @@ it('keeps an unknown condition, the source warning and price together without a 
  expect(within(line).getByRole('note',{name:/書籍の追随目安外：アプリの範囲内ですが/})).toHaveTextContent('△ 書籍目安2〜3%超');
  expect(card.querySelector('.entry-source-note')).toBeNull();
  expect(within(card).getByRole('button',{name:'UNKNOWN を分析'})).toHaveAccessibleDescription(/購入条件.*未達・未確認/);
+});
+
+it('does not display a legacy raw-valid history as a verified comparison', async () => {
+  mount({ valid: true, version: 'ohlcv-v1', status: undefined });
+  expect(await screen.findByRole('alert')).toHaveTextContent('現行の日足検証が未確認');
+  expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
 });

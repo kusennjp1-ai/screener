@@ -1,3 +1,4 @@
+import { calendarAt } from '../src/static/testMarketCalendarFixture.js';
 // @vitest-environment node
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,15 +21,15 @@ const write = async (path, value) => {
 const read = async path => JSON.parse(await readFile(path, 'utf8'));
 const symbols = rows => rows.map(row => row.symbol);
 
-async function fixture({ withBreadth = false } = {}) {
+async function fixture({ withBreadth = false, withCalendar = true } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'research-export-order-'));
   const frontend = join(directory, 'frontend'), root = join(frontend, 'public/static-data');
   const bars = [];
-  for (let time = Date.parse(date); bars.length < 280; time -= 86400000) {
-    if ([0, 6].includes(new Date(time).getUTCDay())) continue;
+  for (const day of calendarAt(date).sessions.slice(-280).reverse()) {
     const close = 100 - bars.length * .1;
-    bars.unshift({ date: new Date(time).toISOString().slice(0, 10), open: close, high: close + 1, low: close - 1, close, volume: 1000000 });
+    bars.unshift({ date: day, open: close, high: close + 1, low: close - 1, close, volume: 1000000 });
   }
+  if (withCalendar) await write(join(root, 'trading-calendar.json'), calendarAt(date));
   const sourceSymbols = withBreadth ? Array.from({ length: 101 }, (_, index) => `S${String(index).padStart(3, '0')}`) : ['ZETA', 'BETA', 'ALPHA'];
   const sourceCharts = sourceSymbols.map((symbol, index) => {
     const series = withBreadth ? bars.map((bar, offset) => {
@@ -40,7 +41,7 @@ async function fixture({ withBreadth = false } = {}) {
       const close = Math.max(...series.slice(-21, -1).map(bar => bar.high)) * 1.01;
       Object.assign(series.at(-1), { open: close, close, high: close + 1, low: close - 1, volume: 2000000 + index * 137 });
     }
-    return { symbol, market: 'US', as_of_date: date, bars: series };
+    return { session_calendar: calendarAt(date), symbol, market: 'US', as_of_date: date, bars: series };
   });
   const rows = sourceSymbols.map((symbol, index) => withFinancialProof({
     symbol, company_name: `${symbol} Corporation`, quoteType: 'EQUITY', currency: 'USD', current_price: sourceCharts[index].bars.at(-1).close,
@@ -208,4 +209,51 @@ it.each(['malformed JSON', 'duplicate identities'])('rejects %s in an existing a
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+it('keeps verified calendar coverage through export, compact transport, detail and chart re-audit', async () => {
+  const { directory, run, outputs } = await fixture({ withBreadth: true });
+  try {
+    run();
+    const result = await outputs();
+    expect(result.index.rows.every(row => row.technical_audit.status === 'verified')).toBe(true);
+    expect(result.index.rows.every(row => row.rs_universe_size === 101)).toBe(true);
+    expect(result.index.rows.some(row => assess(row).qualified)).toBe(true);
+    for (const [index, row] of result.details.entries()) {
+      expect(auditDailyBars(row, result.charts[index], date)).toEqual(row.technical_audit);
+      expect(row.technical_audit.window_52w.from).toBe('2025-10-03');
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('fails closed on absent independent calendar despite old chart and scan certification', async () => {
+  const { directory, run, outputs } = await fixture({ withBreadth: true, withCalendar: false });
+  try {
+    run();
+    const result = await outputs();
+    for (const row of result.index.rows) {
+      expect(row.technical_audit.status).toBe('unknown');
+      expect(row.technical_audit.valid).toBe(false);
+      expect(row.rs_rating).toBeNull(); expect(row.rs_universe_size).toBe(0);
+      expect(assess(row).unknown).toBe(9); expect(assess(row).qualified).toBe(false);
+    }
+    expect(result.charts.every(chart => chart.session_calendar === null)).toBe(true);
+    const csv = researchCsv(result.index.rows.map(row => ({ row })), 'minervini', date, now);
+    expect(csv).not.toContain('"pass"'); expect(csv).toContain('"unknown"');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('excludes a single missing session from the published RS population without altering prices', async () => {
+  const { directory, root, run, outputs } = await fixture({ withBreadth: true });
+  try {
+    const path = join(root, 'charts/S100.json'), chart = await read(path);
+    chart.bars.splice(150, 1); await write(path, chart);
+    run();
+    const result = await outputs(), target = result.index.rows.find(row => row.symbol === 'S100');
+    expect(target.technical_audit.status).toBe('unknown'); expect(target.rs_rating).toBeNull();
+    expect(result.index.rows.every(row => row.rs_universe_size === 100)).toBe(true);
+    const targetChart = result.charts.find(chart => chart.symbol === 'S100');
+    expect(targetChart.bars).toEqual(chart.bars);
+    expect(targetChart.bars).toHaveLength(279);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

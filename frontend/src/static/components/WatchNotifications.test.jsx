@@ -1,9 +1,10 @@
+import { withAuditFixture } from '../testAuditFixture';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import WatchNotifications from './WatchNotifications';
 import { WATCH_NOTIFICATION_KEY } from '../watchNotifications';
 
-const row = (price, date) => ({ symbol: 'CASE', current_price: price, se_pivot_price: 100, technical_audit: { valid: true, as_of_date: date } });
+const row = (price, date) => withAuditFixture({ symbol: 'CASE', current_price: price, se_pivot_price: 100 }, date);
 beforeEach(() => { localStorage.clear(); });
 afterEach(() => { vi.unstubAllGlobals(); });
 it('shows daily changes while asking permission only after the explicit notification action', async () => {

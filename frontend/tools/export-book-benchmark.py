@@ -38,16 +38,60 @@ def validate_bars(bars, expected_sessions, as_of_date):
             raise ValueError(f"Invalid SPY volume at {bar['date']}")
 
 
+def export_session_calendar(root: Path, manifest, mcal, target, now=None):
+    """Publish provider sessions independently of whether any SPY prices arrive."""
+    now = now or datetime.now(timezone.utc)
+    start = target - timedelta(days=730)
+    entry = manifest.get("markets", {}).get("US", manifest)
+    index_path = entry.get("assets", {}).get("charts", {}).get("path")
+    # Price dates only widen the requested calendar interval. They never define
+    # which days were sessions, so missing prices cannot erase an expected day.
+    if index_path:
+        root = root.resolve()
+        def read_payload(relative):
+            path = (root / relative).resolve()
+            if not path.is_relative_to(root):
+                raise ValueError("Calendar input path escapes static-data root")
+            return json.loads(path.read_text(encoding="utf-8"))
+        index = read_payload(index_path)
+        for item in index.get("symbols", []):
+            try:
+                chart = read_payload(item["path"])
+            except FileNotFoundError:
+                continue
+            first = next(iter(chart.get("bars", [])), {})
+            try:
+                first_day = date.fromisoformat(first.get("date", ""))
+            except (ValueError, TypeError, AttributeError):
+                continue
+            start = min(start, first_day)
+    schedule = mcal.get_calendar("NYSE").schedule(start_date=start, end_date=target)
+    sessions = [stamp.date().isoformat() for stamp in schedule.index]
+    if not sessions or sessions[-1] != target.isoformat() or schedule.iloc[-1]["market_close"].to_pydatetime() > now:
+        raise ValueError("Calendar target is not a completed NYSE session")
+    calendar = {"schema_version": "market-sessions-v1", "market": "US", "exchange": "XNYS",
+                "provider": "pandas_market_calendars", "provider_version": mcal.__version__,
+                "as_of_date": target.isoformat(), "range_start": start.isoformat(), "range_end": target.isoformat(),
+                "sessions": sessions, "generated_at": now.isoformat(),
+                "completed_session_close": schedule.iloc[-1]["market_close"].isoformat()}
+    destination = root / "trading-calendar.json"
+    temporary = destination.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(calendar, allow_nan=False, separators=(",", ":")), encoding="utf-8")
+    temporary.replace(destination)
+    return calendar
+
+
 def export_benchmark(root: Path):
     # Imports here keep validation tests independent from network dependencies.
     import pandas_market_calendars as mcal
-    import yfinance as yf
 
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     target = date.fromisoformat(manifest["as_of_date"])
     today = datetime.now(ZoneInfo("America/New_York")).date()
     if target > today:
         raise ValueError("Manifest as_of_date is in the future")
+    export_session_calendar(root, manifest, mcal, target)
+    import yfinance as yf
     start = target - timedelta(days=730)
     schedule = mcal.get_calendar("NYSE").schedule(start_date=start, end_date=target)
     expected = [stamp.date().isoformat() for stamp in schedule.index]

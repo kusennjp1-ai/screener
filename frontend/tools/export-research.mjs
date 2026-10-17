@@ -57,6 +57,8 @@ if(correction) Object.assign(manifest,correctionMeta);
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
 const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
+let sessionCalendar = null;
+try { sessionCalendar = await read('trading-calendar.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 let benchmark = null, financials = null, entryContext = null, currentFinancials = null, institutional = null;
 try { institutional = await read('institutional-holdings.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { currentFinancials = await read('financial-history.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -82,7 +84,11 @@ for (const row of merged) {
   if (paths.has(row.symbol)) {
     try { chart = await read(paths.get(row.symbol)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  if (chart) availableCharts.add(row.symbol);
+  if (chart) {
+    availableCharts.add(row.symbol);
+    // Always replace old embedded evidence with this export's independent calendar.
+    chart.session_calendar = sessionCalendar;
+  }
   const audit = auditDailyBars(row, chart, scan.as_of_date);
   row.week_52_high_distance=audit.valid ? -audit.values.belowHigh : null;
   row.week_52_low_distance=audit.valid ? audit.values.aboveLow : null;
@@ -91,8 +97,8 @@ for (const row of merged) {
   if (audit.valid) {
     const comparison = new Map((benchmark?.bars || []).map(b=>[b.date,b.close]));
     chart.rs_line = chart.bars.filter(b=>comparison.get(b.date)>0).map(b=>({time:b.date,value:b.close/comparison.get(b.date)}));
-    await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
   }
+  if (chart) await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
   const recent60 = audit.valid ? chart.bars.slice(-60) : [];
   const range60 = recent60.length === 60 ? (Math.max(...recent60.map(b=>b.high))/Math.min(...recent60.map(b=>b.low))-1)*100 : null;
   row.price_activity = {range60pct:range60,lowRange:range60 != null && range60 < 5};

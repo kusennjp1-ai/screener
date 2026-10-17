@@ -1,9 +1,10 @@
+import { hasVerifiedDailyBars } from './qualificationAudit.js';
 import { entryPlan, quoteStatus } from './researchEngine.js';
 export const WATCH_NOTIFICATION_KEY = 'research-watch-notifications-v1';
 export const WATCH_NOTIFICATION_PREFERENCE = 'research-watch-notifications-enabled';
 const actionableStates = new Set(['ピボット待ち', '買いゾーン内', '買いゾーン超過']);
 export const emptyWatchState = () => ({ version: 1, observations: {}, events: [], seen: [] });
-const usable = (row, asOf) => row?.technical_audit?.valid === true && row.technical_audit.as_of_date === asOf;
+const usable = (row, asOf) => Boolean(asOf) && hasVerifiedDailyBars(row, asOf);
 export function watchStorage() { try { return globalThis.localStorage; } catch { return null; } }
 
 export function readWatchState(storage) {

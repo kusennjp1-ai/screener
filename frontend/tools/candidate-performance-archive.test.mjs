@@ -1,3 +1,4 @@
+import { calendarAt } from '../src/static/testMarketCalendarFixture.js';
 import { afterEach, expect, it } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -71,11 +72,10 @@ it('checks the compressed archive hash before reading saved results', async () =
   await expect(readPerformanceArchive(root, now)).rejects.toThrow('integrity');
 });
 it('exports then reuses mature observations without current chart or benchmark data', async () => {
-  const root = await temp(), day = new Date(`${asOf}T00:00:00Z`), history = [];
-  while (history.length < 260) { if (![0, 6].includes(day.getUTCDay())) history.unshift(day.toISOString().slice(0, 10)); day.setUTCDate(day.getUTCDate() - 1); }
+  const root = await temp(), history = calendarAt(asOf).sessions.slice(-260);
   const bars = history.map((date, i) => ({ date, open: 100 + i / 10, high: 101 + i / 10, low: 99 + i / 10, close: 100 + i / 10, volume: 1000000 }));
-  await writeFile(join(root, 'CASE.json'), JSON.stringify({ symbol: 'CASE', as_of_date: asOf, bars }));
-  const row = { symbol: 'CASE', current_price: bars.at(-1).close, chart_path: 'CASE.json', technical_audit: { valid: true } };
+  await writeFile(join(root, 'CASE.json'), JSON.stringify({ symbol: 'CASE', as_of_date: asOf, bars, session_calendar: calendarAt(asOf) }));
+  const row = { symbol: 'CASE', market: 'US', current_price: bars.at(-1).close, chart_path: 'CASE.json', technical_audit: { valid: true } };
   const entry = { as_of_date: asOf, assets: {} }, manifest = { generated_at: new Date(now).toISOString() };
   const preClose = await exportCandidatePerformance({ root, snapshots: [snapshot], rows: [row], prices, entry, manifest, now: Date.parse('2026-09-28T19:00:00Z') });
   expect(preClose.summary.minervini[5]).toMatchObject({ n: 0, pending: 1, median_return_pct: null, median_spy_return_pct: null, observed_sessions_max: 4 });

@@ -1,15 +1,14 @@
+import { tradingDays, calendarAt } from './testMarketCalendarFixture.js';
 import { describe, expect, it } from 'vitest';
 import { diagnoseBookChart } from './bookChartDiagnostics';
 
 function fixture() {
   const bars = [];
-  for (let t = Date.parse('2025-05-01'); bars.length < 280; t += 86400000) {
-    const date = new Date(t);
-    if ([0, 6].includes(date.getUTCDay())) continue;
-    bars.push({ date: date.toISOString().slice(0, 10), open: 100, high: 101, low: 99, close: 100, volume: 1000 });
+  for (const date of tradingDays('2025-05-01', 280)) {
+    bars.push({ date, open: 100, high: 101, low: 99, close: 100, volume: 1000 });
   }
-  const date = bars.at(-1).date, row = { symbol: 'TEST', current_price: 100 };
-  return { row, date, payload: { symbol: 'TEST', as_of_date: date, bars,
+  const date = bars.at(-1).date, row = { symbol: 'TEST', market: 'US', current_price: 100 };
+  return { row, date, payload: { symbol: 'TEST', as_of_date: date, bars, session_calendar: calendarAt(date),
     rs_line: bars.map((b, i) => ({ time: b.date, value: 1 + i / 1000 })) } };
 }
 const run = f => diagnoseBookChart(f.row, f.payload, f.date);

@@ -1,3 +1,4 @@
+import { hasVerifiedDailyBars } from '../qualificationAudit.js';
 import { useFinancialClock } from '../useFinancialClock';
 import { mergeFinancialDetail } from '../financialCurrent';
 import ConnectionStatus from '../components/ConnectionStatus';
@@ -80,7 +81,7 @@ export default function ResearchPage({compareOnly=false}) {
   const radarRanked=useMemo(()=>filterRanked(bundle.data?.rankings?.minervini||[],{liquidOnly:liquid}),[bundle.data,liquid]);
   // Coverage is independent of method; all exported rankings share one universe.
   const coverageRows = radarRanked;
-  const verifiedCount = useMemo(() => coverageRows.filter(r => r.row.technical_audit?.valid === true).length, [coverageRows]);
+  const verifiedCount = useMemo(() => coverageRows.filter(r => hasVerifiedDailyBars(r.row, bundle.data?.date)).length, [coverageRows, bundle.data?.date]);
   const temporal = researchBundleTemporal(bundle.data);
   const sessionCurrentAt = useMemo(() => temporal ? sessionCurrentFromIntervals(temporal.session_intervals, bundle.data?.date) : prepareSessionCurrent(rows, bundle.data?.date), [temporal, rows, bundle.data?.date]);
   const readinessBoundaryAt = useMemo(() => temporal ? readinessTimelineFromBoundaries(temporal.readiness_boundaries) : prepareReadinessTimeline(rows), [temporal, rows]);

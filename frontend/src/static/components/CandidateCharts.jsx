@@ -10,7 +10,7 @@ import { singleMissingCondition } from '../missingCondition';
 import { money, signed, times, stateKey, STATES } from '../positionGeometry';
 import './comparison.css';
 import { EntrySourceBadge } from './EntrySourceNote';
-import { verifiedVolumeRatio } from '../qualificationAudit';
+import { verifiedVolumeRatio, hasVerifiedDailyBars } from '../qualificationAudit';
 import { PIVOT_FOLLOW_SOURCE_TITLE } from '../bookSourceContext';
 
 const Card = memo(function ComparisonCard({ item, date, generation, method, nearOnly, market, now, sessions, onSelect, paused }) {
@@ -25,7 +25,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
     queryFn: async () => { const data = await fetchStaticChartPayload(row.chart_path, { generation }); if (data.symbol !== row.symbol || data.as_of_date !== date) throw Error('Chart snapshot mismatch'); return data; } });
   const invalidIdentity = query.data && (query.data.symbol !== row.symbol || query.data.as_of_date !== date);
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
-  const invalidHistory = row.technical_audit?.valid === false || (bars?.length && bars.at(-1).date !== date);
+  const invalidHistory = !hasVerifiedDailyBars(row, date) || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
   const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
   const volume = verifiedVolumeRatio(row, date);
@@ -36,9 +36,9 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
     <div className="comparison-company"><span className="comparison-company-label" title={nearOnly ? `${row.company_name || ''} · ${missing?.csv || ''}` : row.company_name}>{nearOnly ? missing?.text || '判定資料を再確認' : row.company_name || '企業名未配信'}</span><EntrySourceBadge plan={plan}/><strong>{money(row.current_price)}</strong></div>
     <div className="comparison-canvas" data-active-chart={!invalidHistory && visible && !paused && Boolean(bars?.length)}>
       {query.isError || invalidIdentity ? <Alert severity="warning">銘柄・日付の整合性または取得状態を確認できません。</Alert>
-        : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || '最終日足が分析日と不一致'}。現在の比較チャートには使用しません。</Alert>
           : !row.chart_path ? <Alert severity="info">チャート未配信。買い形状は確認できません。</Alert>
             : query.isSuccess && !bars?.length ? <Alert severity="info">日足データが不足しています。買い形状は確認できません。</Alert>
+        : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || (bars?.length && bars.at(-1).date !== date ? '最終日足が分析日と不一致' : '取引所営業日を含む現行の日足検証が未確認')}。現在の比較チャートには使用しません。</Alert>
               : visible && !paused && bars?.length ? <CandlestickChart key={row.symbol} symbol={row.symbol} priceData={bars} rsLineData={query.data.rs_line || []} rsRatingValue={row.rs_rating} compact researchView comparisonSessions={sessions} interactive={false} pivotPrice={plan.pivot} pivotLabel="共通ピボット" buyCeiling={plan.upper} stopPrice={plan.stopExample} height={smallScreen ? 240 : 220} />
                 : <div className="comparison-skeleton" role="status" aria-label={`${row.symbol} チャートを読み込み中`}><span /><span /><span /></div>}
     </div>
