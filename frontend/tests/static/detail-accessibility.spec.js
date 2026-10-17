@@ -116,10 +116,15 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
   if(width===375){
     await page.setViewportSize({width:390,height:568});
-    await expect.poll(async()=>{
-      const failures=[];checkExpandedChartGeometry(await dialog.evaluate(expandedChartGeometry),(pass,message)=>{if(!pass)failures.push(message);},'short-phone initial',{fullChart:true});return failures;
-    }).toEqual([]);
-    await info.attach(`short-phone-initial-${theme}.json`,{body:JSON.stringify(await dialog.evaluate(expandedChartGeometry),null,2),contentType:'application/json'});
+    let initialGeometry;
+    try {
+      await expect.poll(async()=>{
+        initialGeometry=await dialog.evaluate(expandedChartGeometry);
+        const failures=[];checkExpandedChartGeometry(initialGeometry,(pass,message)=>{if(!pass)failures.push(message);},'short-phone initial',{fullChart:true});return failures;
+      }).toEqual([]);
+    } finally {
+      await info.attach(`short-phone-initial-${theme}.json`,{body:JSON.stringify(initialGeometry??{unavailable:true,reason:'Geometry evaluation did not complete'},null,2),contentType:'application/json'});
+    }
     await page.screenshot({path:info.outputPath(`expanded-short-390x568-${theme}.png`)});
     await page.setViewportSize({width:390,height:480});
     await dialog.locator('[data-chart-symbol]').evaluate(node=>node.scrollIntoView({block:'end'}));

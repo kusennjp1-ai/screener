@@ -291,6 +291,8 @@ function StaticChartViewerModal({
             display: 'flex',
             flexDirection: 'column',
             pb: compactMobileChrome ? 'env(safe-area-inset-bottom, 0px)' : 0,
+            // Preserve 44px targets while reclaiming the toolbar's outer 8px.
+            ...(compactMobileChrome && {'& .research-chart-controls':{padding:'0 4px'}}),
             outline: 'none',
             overflow: 'hidden',
           }}

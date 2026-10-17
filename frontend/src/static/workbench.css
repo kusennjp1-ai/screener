@@ -34,10 +34,15 @@ html:has(.research-workbench){scroll-padding-top:72px}
 /* Keep all 50 page rows searchable/focusable in DOM; defer only off-screen
    rendering. The intrinsic height matches the existing fixed row geometry. */
 .candidate-scroll [role=listitem]{content-visibility:auto;contain-intrinsic-block-size:auto 51px}
-/* Fix the desktop list's outer size so clearance padding cannot grow a short
-   list and push its sticky containing-block position upward again. */
-@media(min-width:701px){.research-grid[data-view=list]>.research-list:not(.compare-only){height:calc(100dvh - 56px)}}
-.candidate-scroll{padding-top:var(--candidate-header-clearance,0px);scroll-padding-top:calc(28px + var(--candidate-header-clearance,0px))}
+/* Preserve the original grid extent even when a boundary cap shortens its
+   sidebar. This also prevents feedback with a short/empty detail or list. */
+@media(min-width:701px){
+ .research-grid[data-view=list]:has(>.research-list:not(.compare-only)){min-height:calc(100dvh - 56px)}
+ .research-grid[data-view=list]>.research-list:not(.compare-only){height:calc(100dvh - 56px);max-height:var(--candidate-board-max-height,calc(100dvh - 56px))}
+}
+.candidate-scroll{scroll-padding-top:calc(28px + var(--candidate-header-clearance,0px))}
+/* Spacing belongs to the list, not the scrollport padding edge used by sticky. */
+.candidate-scroll>[role=list]{padding-top:var(--candidate-header-clearance,0px)}
 .candidate-columns{top:var(--candidate-header-clearance,0px)}
 .leader-shell .candidate-row:focus-visible{outline-offset:-3px}
 @media(max-width:700px){.candidate-scroll [role=listitem]{contain-intrinsic-block-size:auto 70px}}

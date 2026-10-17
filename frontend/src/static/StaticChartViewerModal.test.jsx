@@ -12,6 +12,7 @@ import { staticChartKeys } from './chartClient';
 
 // Vitest stubs CSS imports in this suite, so read the actual cascade input.
 const workbenchCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'workbench.css'), 'utf8');
+const chartControlsCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../components/Charts/researchChartControls.css'), 'utf8');
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -258,6 +259,7 @@ describe('StaticChartViewerModal', () => {
 });
 
 it.each([false, true])('keeps the complete mobile warning and swipe controls when short-viewport reflow is %s', async short => {
+  render(<style>{chartControlsCss}</style>);
   vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: query.includes('max-height') ? short : true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
   vi.stubGlobal('fetch', vi.fn());
   const props = { open:true, onClose:vi.fn(), initialSymbol:'FIT', date:'2026-10-01', chartIndex:{symbols:[{symbol:'FIT',path:'charts/FIT.json'}]} };
@@ -268,6 +270,13 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   // including a late-loaded stylesheet. RTL cleans up this style node.
   expect(workbenchCss).toContain('.chart-research-meta>div{margin:0!important;font-size:11px}');
   render(<style>{workbenchCss}</style>);
+  const controls=document.createElement('div');controls.className='research-chart-controls';
+  const target=document.createElement('button');controls.append(target);screen.getByTestId('static-candlestick-chart').append(controls);
+  expect(getComputedStyle(controls).paddingTop).toBe(short?'0px':'4px');
+  expect(getComputedStyle(controls).paddingBottom).toBe(short?'0px':'4px');
+  expect(getComputedStyle(controls).paddingLeft).toBe('4px');expect(getComputedStyle(controls).paddingRight).toBe('4px');
+  expect(getComputedStyle(target).minHeight).toBe('44px');
+  expect(getComputedStyle(controls).gap).toBe('2px');
   const header = screen.getByTestId('expanded-chart-header');
   const readiness = screen.getByTestId('mobile-chart-readiness');
   const interaction = screen.getByTestId('mobile-chart-interaction');
