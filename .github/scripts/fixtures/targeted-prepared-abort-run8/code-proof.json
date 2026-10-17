@@ -1,0 +1,27 @@
+{
+  ".github/scripts/run-statement-targeted-cycle.py": {
+    "fixture": "cycle.py.txt",
+    "blob_sha": "53f12044ba046525588a269d95e5eba72cd5bb29",
+    "sha256": "2069c618893da1d8de6129de23740b9f2ae16b742f9beaac39a147e8215aec98"
+  },
+  ".github/scripts/run-statement-targeted-recovery.mjs": {
+    "fixture": "caller.mjs.txt",
+    "blob_sha": "5a6fb9e741e90653f0b8464d466ea79ea2f7b5e0",
+    "sha256": "11885c536dd50df63e8d4bc92f48ebf7000a52fc8923df02b57c26594631e8bc"
+  },
+  ".github/scripts/run-statement-recovery-cycle.py": {
+    "fixture": "recovery-cycle.py.txt",
+    "blob_sha": "9658d1f2f5ab00f110d26622e5c94c32b37fbc9f",
+    "sha256": "2ffceb9b9f98f77857a404d75d7196062b4ba99b1949ed1b4c65d2acc7ef5b44"
+  },
+  ".github/workflows/financial-statement-recovery.yml": {
+    "fixture": "workflow.yml.txt",
+    "blob_sha": "a0529f3003858855ffc1c20a4395cbcb3d6434cd",
+    "sha256": "bc3cac4bfafe7e590b2e40a517278dad38f99c8ddbd269f2efa87bcebd6ca107"
+  },
+  ".github/targeted-financial-recovery/request.json": {
+    "fixture": "request.json",
+    "blob_sha": "07d06303988a6091b7a80499062ef79bdbd3108d",
+    "sha256": "13bbc9b0edff90a99f28d111bab483c0f61c9f2efc4f739548dff1e859b08d63"
+  }
+}

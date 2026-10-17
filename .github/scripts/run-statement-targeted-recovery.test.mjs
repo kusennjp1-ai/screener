@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {existsSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {branch,requestPath,validateRequest,verifyActivation,authenticateRecovery,checkPriceIdentity,boundedFile,executeWithRecheck,extractCanonical} from './run-statement-targeted-recovery.mjs';
+import {branch,requestPath,validateRequest,verifyActivation,authenticateRecovery,checkPriceIdentity,boundedFile,executeWithRecheck,extractCanonical,stageEvent} from './run-statement-targeted-recovery.mjs';
 import {repository,recoveryWorkflow} from './restore-statement-source.mjs';
 import {run8ReplacementSchema,reviewedAbort7,reviewedAbort6,reviewedAbort} from './verify-statement-pre-provider-abort.mjs';
 const h='a'.repeat(64),code='b'.repeat(40),currentSha='c'.repeat(40),now=Date.parse('2026-10-16T09:00:00Z');
@@ -182,3 +182,62 @@ test('canonical extraction refuses existing destinations and symlinked destinati
   assert.throws(()=>extractCanonical(archive,join(dir,'linked/nested')),/Linked canonical destination/);assert.equal(existsSync(join(output,'nested')),false);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('only the provider-incapable middle full replay is removed; first and final proofs remain in order',()=>{
+ const script=readFileSync(new URL('./run-statement-targeted-recovery.mjs',import.meta.url),'utf8');
+ const body=script.slice(script.indexOf('export async function run('));
+ assert.equal((body.match(/await livePublication\(/g)||[]).length,2);
+ assert.doesNotMatch(body,/finalLive|finalPages/);
+ const first=body.indexOf('const live=await livePublication('),prepare=body.indexOf("reportStage('local-preparation-started')"),
+  handoff=body.indexOf("reportStage('provider-handshake-started')"),last=body.indexOf('readyLive=await livePublication('),
+  finalInventory=body.indexOf('const readyPages=api('),finalPrice=body.indexOf('checkPriceIdentity(request,chooseExport(readyLive,'),readiness=body.indexOf("reportStage('provider-handshake-completed')");
+ assert.ok(first>=0&&first<prepare&&prepare<handoff&&handoff<last&&last<finalInventory&&finalInventory<finalPrice&&finalPrice<readiness);
+ assert.match(body.slice(0,prepare),/validateRequest\(request\);verifyActivation\(request,context\);recovery=authenticateRecovery\(request,context,api\)/);
+ const final=body.slice(handoff,readiness);
+ assert.equal((final.match(/authenticateRecovery\(request,context,api\)/g)||[]).length,2);
+ for(const path of ['base.json','cohort.json','request.json'])assert.ok(final.includes(`join(inputs,'${path}')`));
+ assert.match(final,/Prepared authenticated input changed/);
+ const cycle=readFileSync(new URL('./run-statement-targeted-cycle.py',import.meta.url),'utf8');
+ assert.ok(cycle.indexOf('provider_invocation = authenticator()')<cycle.indexOf('result, code = collector('));
+ assert.ok(cycle.indexOf('allowance = helpers.bounded_acquisition_budget(job_started_at, now=ready_at)')<cycle.indexOf('result, code = collector('));
+ assert.match(cycle,/acquisition_budget_seconds=allowance, max_statement_getter_calls=4/);
+ assert.match(readFileSync(new URL('./run-statement-recovery-cycle.py',import.meta.url),'utf8'),/min\(1080, 1500 - elapsed - 420\)/);
+});
+
+test('stage observations are closed diagnostics, with no data, URL, credential or authority fields',()=>{
+ const at='2026-10-17T07:50:00.000Z';
+ for(const stage of ['request-proof-started','request-proof-completed','initial-live-proof-started','initial-live-proof-completed',
+  'canonical-preparation-started','canonical-preparation-completed','local-preparation-started','provider-handshake-started',
+  'final-live-proof-started','final-live-proof-completed','provider-handshake-completed','collection-completed'])
+  assert.deepEqual(stageEvent(stage,at),{schema_version:'financial-targeted-stage-v1',stage,observed_at:at});
+ for(const stage of ['token=secret','https://example.invalid','',null,{},'provider-request'])assert.throws(()=>stageEvent(stage,at),/Invalid bounded stage/);
+ for(const clock of ['secret',null,'2026-02-30T07:50:00.000Z','2026-10-17T07:50:00Z'])assert.throws(()=>stageEvent('final-live-proof-started',clock),/Invalid bounded stage/);
+});
+
+test('a delayed full final proof cannot release the waiting child early',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'targeted-final-proof-'));let entered,release;
+ const pending=new Promise(r=>entered=r),proof=new Promise(r=>release=r),marker=join(dir,'collector-marker');
+ const child=`const fs=require('node:fs');fs.writeSync(3,'recheck\\n');let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',()=>{const v=JSON.parse(s);if(v.current!==true)process.exit(2);fs.writeFileSync(${JSON.stringify(marker)},'crossed');});`;
+ try{
+  const running=executeWithRecheck(process.execPath,['-e',child],{cwd:dir,env:{PATH:process.env.PATH},timeout:3000,
+   authenticate:async()=>{entered();await proof;return {current:true};}});
+  await pending;assert.equal(existsSync(marker),false);release();await running;assert.equal(readFileSync(marker,'utf8'),'crossed');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('failed final proof, changed current state or budget exhaustion leaves zero child collector crossings',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'targeted-final-stop-')),marker=join(dir,'collector-marker');
+ const child=`const fs=require('node:fs');fs.writeSync(3,'recheck\\n');let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',()=>{if(s)fs.writeFileSync(${JSON.stringify(marker)},'crossed');});`;
+ try{
+  for(const reason of ['Live publication changed while reading it','A new deployment completed while reading Pages',
+   'Current canonical price source differs from request','Recovery branch advanced during activation',
+   'Prepared authenticated input changed','Bounded refresh setup exhausted the acquisition allowance']){
+   await assert.rejects(executeWithRecheck(process.execPath,['-e',child],{cwd:dir,env:{PATH:process.env.PATH},timeout:3000,
+    authenticate:async()=>{throw Error(reason);}}),error=>error.message===reason);
+   assert.equal(existsSync(marker),false);
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+// Exercise the exact final callback and real validators through a real child pipe.
+import './final-provider-boundary.cases.mjs';

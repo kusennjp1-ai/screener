@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {checkedStorageLocation,downloadReviewedJobLog,readReviewedJobLog,reviewedJobLogDiagnostic,maximumLogBytes,operationTimeoutMs} from './download-reviewed-job-log.mjs';
 
-const job=117274547210,otherJob=117279659374,thirdJob=117292325413;
+const job=117274547210,otherJob=117279659374,thirdJob=117292325413,fourthJob=117340568549;
 const signed='https://productionresultssa8.blob.core.windows.net/actions-results/job/log.txt?sig=mock-signed-secret';
 const env={GH_TOKEN:'ghs_mock_private_token',GITHUB_ACTIONS:'true',GITHUB_REPOSITORY:'kusennjp1-ai/screener',
   GITHUB_API_URL:'https://api.github.com',GITHUB_SERVER_URL:'https://github.com'};
@@ -69,8 +69,8 @@ async function rejectsTransfer(specs,expectedCalls=2,extra={}){
   assert.ok(mock.calls.every(call=>!call.response||call.response.destroyed));
 }
 
-test('all three reviewed jobs preserve exact BOM, ESC, invalid UTF8, CRLF and LF bytes in regular file',async()=>{
-  for(const jobId of [job,otherJob,thirdJob])await withFile(async({fd,file})=>{
+test('all four reviewed jobs preserve exact BOM, ESC, invalid UTF8, CRLF and LF bytes in regular file',async()=>{
+  for(const jobId of [job,otherJob,thirdJob,fourthJob])await withFile(async({fd,file})=>{
     const mock=transport([redirect,{headers:{'Content-Length':String(raw.length)},chunks:[raw.subarray(0,2),raw.subarray(2,8),raw.subarray(8)]}]);
     assert.equal(await downloadReviewedJobLog(jobId,fd,{env,request:mock.request}),raw.length);
     const result=readFileSync(file);
@@ -108,7 +108,7 @@ test('finite documented storage hosts accepted; unknown and disguised origins re
 });
 
 test('unreviewed IDs and non-workflow/unsafe credential contexts fail before requests',async()=>{
-  for(const jobId of [0,1,'117274547210','117292325413',null,NaN,117274547211,117279659375,117292325412,117292325414])await withFile(async({fd})=>{
+  for(const jobId of [0,1,'117274547210','117292325413','117340568549',null,NaN,117274547211,117279659375,117292325412,117292325414,117340568548,117340568550])await withFile(async({fd})=>{
     let calls=0;
     await assert.rejects(downloadReviewedJobLog(jobId,fd,{env,request:()=>{calls++;}}),safeError);
     assert.equal(calls,0);

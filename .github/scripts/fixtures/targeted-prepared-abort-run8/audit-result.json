@@ -1,0 +1,122 @@
+{
+  "checked_at": "2026-10-17T07:48:02.784954+00:00",
+  "run_id": 39013437787,
+  "run_attempt": 1,
+  "run_number": 8,
+  "head_sha": "49ca70d2c09dac84ce2ae1100617f9aba3a78527",
+  "job_id": 117340568549,
+  "artifact_id": 12093719779,
+  "artifact_bytes": 29737343,
+  "artifact_sha256": "3518d1a73c0ec4999fdaa67d6deafd7a19157e69a15f5a184b645aa1cf9c34f5",
+  "job_log_sha256": "37a202f5d7d992b2f61f154715ffd4758f9e2a652c3ecb65805019c9bbd7f1b0",
+  "zip": {
+    "members": 8448,
+    "uncompressed_bytes": 203671975,
+    "maximum_member_bytes": 4963082
+  },
+  "bounded_extraction": "passed existing extractSourceArchive",
+  "source4_archive_byte_inventory_exact": true,
+  "archive_files_preserved": 8431,
+  "original_inputs_exact": true,
+  "full_archive_load": "passed",
+  "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+  "objects": 8417,
+  "receipts": 4154,
+  "attempts": 4182,
+  "new_acquisitions": 0,
+  "new_attempts": 0,
+  "cohort_count": 1894,
+  "cohort_order_exact": true,
+  "request_sha256": "13bbc9b0edff90a99f28d111bab483c0f61c9f2efc4f739548dff1e859b08d63",
+  "invocation_authenticated_at": "2026-10-17T07:35:31.877Z",
+  "provider_invocation_authenticated_at": "2026-10-17T07:41:41.937Z",
+  "invocation_same_except_clock": true,
+  "plan_sha256": "787f0d607eb6679f31dca4f480f8a666ffd318a77d3dd2d8c97597b8ce54a40f",
+  "planning_report_sha256": "224c6e5bbf7640d7480aabad2eb26abc85c040b8b22609ba6f9c1597afdc7e74",
+  "deterministic_plan_report_replay": "exact match at retained evaluation clock",
+  "cache_sha256": "82e0b25681c7f006e59da00ac04060a0c70c147c5d60cee6f11d13b09e0bae76",
+  "cache_replay": "exact all5 files",
+  "selected_symbols": [
+    "NVDA",
+    "AAOI"
+  ],
+  "selected_getters": 4,
+  "holds": {
+    "ALH": [
+      {
+        "target": "eps",
+        "state": "ready",
+        "cause": "eps_proof_gap"
+      },
+      {
+        "target": "sales",
+        "state": "ready",
+        "cause": "sales_proof_gap"
+      },
+      {
+        "target": "annual_history",
+        "state": "retry_decision_required",
+        "cause": "annual_history_source_period_missing"
+      }
+    ],
+    "AVT": [
+      {
+        "target": "eps",
+        "state": "ready",
+        "cause": "eps_proof_gap"
+      },
+      {
+        "target": "sales",
+        "state": "ready",
+        "cause": "sales_proof_gap"
+      },
+      {
+        "target": "annual_history",
+        "state": "retry_decision_required",
+        "cause": "annual_history_source_period_missing"
+      }
+    ],
+    "FUTU": [
+      {
+        "target": "eps",
+        "state": "ready",
+        "cause": "eps_proof_gap"
+      },
+      {
+        "target": "sales",
+        "state": "ready",
+        "cause": "sales_proof_gap"
+      },
+      {
+        "target": "annual_history",
+        "state": "retry_decision_required",
+        "cause": "annual_history_source_period_missing"
+      }
+    ]
+  },
+  "cycle_phase": "prepared",
+  "batch_directory_present": false,
+  "job_started_at": "2026-10-17T07:23:19Z",
+  "observed_failure_at": "2026-10-17T07:41:44.0796945Z",
+  "failure_line": 363,
+  "first_collector_line": 375,
+  "elapsed_at_provider_auth_seconds": 1102.937,
+  "setup_acquisition_envelope_seconds": 1080,
+  "finalization_reserve_seconds": 420,
+  "provider_getters_consumed": 0,
+  "provider_transport_requests": 0,
+  "runtime_environment_fabricated": false,
+  "collector_or_cycle_run_invoked_by_audit": false,
+  "remote_writes": 0,
+  "code_sha256": {
+    ".github/scripts/run-statement-targeted-cycle.py": "2069c618893da1d8de6129de23740b9f2ae16b742f9beaac39a147e8215aec98",
+    ".github/scripts/run-statement-recovery-cycle.py": "2ffceb9b9f98f77857a404d75d7196062b4ba99b1949ed1b4c65d2acc7ef5b44",
+    ".github/scripts/run-statement-targeted-recovery.mjs": "11885c536dd50df63e8d4bc92f48ebf7000a52fc8923df02b57c26594631e8bc",
+    "backend/app/services/statement_artifact_archive.py": "da335c5e315da99405473d4eff5ff43098310541e4e89898467f3814aae9b3fe",
+    "backend/app/services/financial_statement_batch.py": "179e2585167e6498dfcce948cc30e0b913bd7f9c12829329314076cee2c686bf",
+    "backend/app/services/statement_refresh_planning.py": "1e5ecf69b3c436320ff885f85a72a7ef67ce390282f40f88769ebf3c4e4ed770",
+    "backend/app/scripts/prepare_statement_targeted_preflight.py": "8c0407a29657401d60960b48b8fb88b92b6931e36efdcfb98508ad97288ac045"
+  },
+  "duration_seconds": 76.04,
+  "qualification": "Zero-provider conclusion combines authenticated exact code control flow, full job traceback, absent batch output, exact unchanged source4 archive/receipts/attempts, and retained prepared handshake. No runtime validator or collector was invoked locally."
+}

@@ -13,7 +13,7 @@ import {assertPriceObservationBounds,extractPriceObservations,priceObservationDi
 import {repository,recoveryWorkflow,recoverySource,checkedArtifact,extractSourceArchive} from './restore-statement-source.mjs';
 import {researchPath} from './prepare-statement-cohort.mjs';
 import {prepareRecoveryPreflightInputs} from './prepare-statement-recovery-preflight.mjs';
-import {replacementSchema,chainedReplacementSchema,run8ReplacementSchema,isReplacementRequest,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
+import {replacementSchema,chainedReplacementSchema,run8ReplacementSchema,run9ReplacementSchema,isReplacementRequest,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
 
 export const branch='improve/mandatory-financial-source-recovery';
 export const requestPath='.github/targeted-financial-recovery/request.json';
@@ -21,6 +21,16 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const positive=value=>Number.isSafeInteger(value)&&value>0;
+const reportedStages=new Set(['request-proof-started','request-proof-completed','initial-live-proof-started','initial-live-proof-completed',
+  'canonical-preparation-started','canonical-preparation-completed','local-preparation-started','provider-handshake-started',
+  'final-live-proof-started','final-live-proof-completed','provider-handshake-completed','collection-completed']);
+// Diagnostic timestamps never grant authority or reset any request/job clock.
+export function stageEvent(stage,at=new Date().toISOString()){
+  if(!reportedStages.has(stage)||typeof at!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(at)||!Number.isFinite(Date.parse(at))||new Date(at).toISOString()!==at)throw Error('Invalid bounded stage observation');
+  return {schema_version:'financial-targeted-stage-v1',stage,observed_at:at};
+}
+const reportStage=stage=>console.log(JSON.stringify(stageEvent(stage)));
+
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function exact(value,keys,label){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join('|')!==[...keys].sort().join('|'))throw Error(`Invalid closed ${label}`);}
 function git(args,cwd=root){return execFileSync('git',args,{cwd,encoding:'utf8',maxBuffer:1024**2,timeout:30000}).trim();}
@@ -32,7 +42,7 @@ export function boundedFile(path,maximum){
 export function validateRequest(value,now=Date.now()){
   const replacement=isReplacementRequest(value);
   exact(value,['schema_version','operation_id','created_at','expires_at','controller','expected_run_number','source','price_source','selection','limits','publication_authority','financial_admission',...(replacement?['abort_continuity']:[])],'execution request');
-  if(!['financial-targeted-recovery-execution-v1',replacementSchema,chainedReplacementSchema,run8ReplacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
+  if(!['financial-targeted-recovery-execution-v1',replacementSchema,chainedReplacementSchema,run8ReplacementSchema,run9ReplacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
     ||typeof value.operation_id!=='string'||!/^targeted-nvda-aaoi-[a-z0-9-]{1,64}$/.test(value.operation_id))throw Error('Invalid artifact-only operation');
   if(replacement)validateAbortContinuity(value);
   const start=Date.parse(value.created_at),end=Date.parse(value.expires_at);
@@ -74,9 +84,9 @@ function sourceInventory(run,api){
   if(!Number.isSafeInteger(list.total_count)||list.total_count<0||list.total_count>100||!Array.isArray(list.artifacts)||list.artifacts.length!==list.total_count)throw Error('Incomplete source artifacts');
   return list.artifacts;
 }
-export function authenticateRecovery(request,context,api=githubApi,readLog=readAbortJobLog){
+export function authenticateRecovery(request,context,api=githubApi,readLog=readAbortJobLog,readArtifact=undefined){
   let state=recoverySource(context,api);
-  if(isReplacementRequest(request))state=authenticateAbortContinuity(request,state,api,readLog);
+  if(isReplacementRequest(request))state=authenticateAbortContinuity(request,state,api,readLog,readArtifact);
   const {current,run,initial}=state;
   const attempt=api(`repos/${repository}/actions/runs/${context.id}/attempts/1`);
   if(initial||current.run_number!==request.expected_run_number||!same([attempt.id,attempt.run_attempt,attempt.head_sha,attempt.head_branch,attempt.path,attempt.event,attempt.status,attempt.workflow_id,attempt.repository?.id,attempt.head_repository?.id,attempt.repository?.full_name,attempt.head_repository?.full_name,attempt.run_number],
@@ -173,7 +183,9 @@ export function executeWithRecheck(command,args,{cwd,env,authenticate,timeout=25
 
 export async function run({workspace,jobStartedAt,context,api=githubApi}){
   const requestBytes=boundedFile(join(root,requestPath),16384),request=validateRequest(JSON.parse(requestBytes));
+  reportStage('request-proof-started');
   verifyActivation(request,context);let recovery=authenticateRecovery(request,context,api);
+  reportStage('request-proof-completed');
   workspace=resolve(workspace);
   if(workspace===root||workspace.startsWith(root+sep)||root.startsWith(workspace+sep))throw Error('Acquisition workspace must be outside controller');
   for(let part=dirname(workspace);;part=dirname(part)){if(lstatSync(part).isSymbolicLink())throw Error('Linked workspace');if(part===dirname(part))break;}
@@ -187,10 +199,13 @@ export async function run({workspace,jobStartedAt,context,api=githubApi}){
   const provenance={schema_version:'financial-source-restore-v1',kind:'recovery_archive',repository,run_id:recovery.run.id,run_attempt:recovery.run.run_attempt,head_sha:recovery.run.head_sha,artifact_id:recovery.artifact.id,artifact_sha256:request.source.artifact_sha256};
   writeFileSync(join(restored,'restored.json'),JSON.stringify(provenance),{flag:'wx'});
   const load=(artifact)=>JSON.parse(boundedFile(join(downloadBounded(artifact,join(workspace,`companion-${artifact.id}`),'source.json',64*1024**2),'source.json'),64*1024**2));
+  reportStage('initial-live-proof-started');
   const live=await livePublication({repository,api});
+  reportStage('initial-live-proof-completed');
   const pages=api(`repos/${repository}/actions/artifacts?per_page=100`,true);
   // Authenticate the currently selectable ordinary source, never pick a favorable older export.
   const source=chooseExport(live,pages,repository,api,load);checkPriceIdentity(request,source,pages);
+  reportStage('canonical-preparation-started');
   const directory=downloadBounded(source.artifact,join(workspace,'price'),'artifact.tar',2*1024**3),archive=join(directory,'artifact.tar');
   verifyArchive(source,archive);extractCanonical(archive,join(workspace,'canonical'));
   const canonical=join(workspace,'canonical/static-data'),observations=extractPriceObservations({dataRoot:canonical,manifest:source.manifest});
@@ -205,31 +220,40 @@ export async function run({workspace,jobStartedAt,context,api=githubApi}){
     bindings:{canonical_manifest_sha256:p.manifest_sha256,canonical_research_sha256:p.research_sha256,source_archive_manifest_sha256:s.archive_manifest_sha256,source_base_sha256:s.base_sha256,source_cohort_sha256:s.cohort_sha256}});
   const cohortBytes=Buffer.from(JSON.stringify(result.cohort));
   writeFileSync(join(inputs,'base.json'),result.baseBytes,{flag:'wx'});writeFileSync(join(inputs,'cohort.json'),cohortBytes,{flag:'wx'});writeFileSync(join(inputs,'request.json'),requestBytes,{flag:'wx'});
-  // Reauthenticate immediately before bounded local preparation/provider work.
+  reportStage('canonical-preparation-completed');
+  // This phase can only prepare local bytes. Reauthenticate its request and
+  // recovery identity here; the complete live/latest-source proof follows ALL
+  // local preparation in the mandatory provider handshake below.
   validateRequest(request);verifyActivation(request,context);recovery=authenticateRecovery(request,context,api);
-  const finalPages=api(`repos/${repository}/actions/artifacts?per_page=100`,true),finalLive=await livePublication({repository,api});
   const cachedLoad=artifact=>JSON.parse(boundedFile(join(workspace,`companion-${artifact.id}`,'source.json'),64*1024**2));
-  checkPriceIdentity(request,chooseExport(finalLive,finalPages,repository,api,cachedLoad),finalPages);
   const invocation={schema_version:'financial-targeted-recovery-invocation-v1',request_sha256:sha256(requestBytes),authenticated_at:new Date().toISOString(),repository,workflow:recoveryWorkflow,event:'push',branch,
     run_id:context.id,run_attempt:1,run_number:recovery.current.run_number,head_sha:context.sha,controller_parent_sha:request.controller.parent_sha,controller_parent_tree:request.controller.parent_tree,
     source:s,price_source:p,base_sha256:sha256(result.baseBytes),cohort_sha256:sha256(cohortBytes),publication_authority:'none',financial_admission:false};
   writeFileSync(join(inputs,'invocation.json'),JSON.stringify(invocation),{flag:'wx'});
   const env={...process.env,PYTHONDONTWRITEBYTECODE:'1',PYTHONPATH:join(root,'backend')};
   for(const key of ['GH_TOKEN','GITHUB_TOKEN','PYTHONSTARTUP','PYTHONHOME'])delete env[key];
+  reportStage('local-preparation-started');
   await executeWithRecheck('python3',[join(root,'.github/scripts/run-statement-targeted-cycle.py'),'--inputs',inputs,'--restored',restored,'--request',join(root,requestPath),
     '--output',join(workspace,'financial-recovery'),'--job-started-at',jobStartedAt],{cwd:root,env,authenticate:async()=>{
+      reportStage('provider-handshake-started');
       // Real API observations after expensive full-archive preparation. This
       // creates another authentication receipt, never a retimed execution intent.
       validateRequest(request);verifyActivation(request,context);authenticateRecovery(request,context,api);
-      const readyPages=api(`repos/${repository}/actions/artifacts?per_page=100`,true),readyLive=await livePublication({repository,api});
+      reportStage('final-live-proof-started');
+      const readyLive=await livePublication({repository,api});
+      reportStage('final-live-proof-completed');
+      // Obtain the latest inventory AFTER the potentially slow full live proof.
+      const readyPages=api(`repos/${repository}/actions/artifacts?per_page=100`,true);
       checkPriceIdentity(request,chooseExport(readyLive,readyPages,repository,api,cachedLoad),readyPages);
       if(sha256(boundedFile(join(inputs,'base.json'),32*1024**2))!==invocation.base_sha256
         ||sha256(boundedFile(join(inputs,'cohort.json'),1024**2))!==invocation.cohort_sha256
         ||sha256(boundedFile(join(inputs,'request.json'),16384))!==invocation.request_sha256)throw Error('Prepared authenticated input changed');
       // Slow price reads cannot make an older branch/predecessor observation look fresh.
       validateRequest(request);verifyActivation(request,context);authenticateRecovery(request,context,api);
+      reportStage('provider-handshake-completed');
       return {...invocation,authenticated_at:new Date().toISOString()};
     }});
+  reportStage('collection-completed');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const [workspace,jobStartedAt]=process.argv.slice(2);if(!workspace||!jobStartedAt)throw Error('Usage: run-statement-targeted-recovery.mjs NEW_WORKSPACE JOB_STARTED_AT');

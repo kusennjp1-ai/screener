@@ -1,0 +1,40 @@
+{
+  "authenticated_at": "2026-10-17T07:41:41.937Z",
+  "base_sha256": "1c0395098046e5027712e050fd53e1338cb234be175dff935d1185206b7c56ab",
+  "branch": "improve/mandatory-financial-source-recovery",
+  "cohort_sha256": "d87d6dff21fedb461fe25a08ca5313ac07fe6bd1a6965ac3fcbd6ddbfd4a5c4c",
+  "controller_parent_sha": "8c2185b1dc89e5473e7c20595628c2ae4a73be66",
+  "controller_parent_tree": "892581e69bae4611bb887d170655a3165732add4",
+  "event": "push",
+  "financial_admission": false,
+  "head_sha": "49ca70d2c09dac84ce2ae1100617f9aba3a78527",
+  "price_source": {
+    "artifact_id": 12088584402,
+    "artifact_sha256": "ee761e1e5a3f5118d1062e0c9d9bfb65b936d28aeff670788e1479449e6bdf77",
+    "companion_id": 12088534556,
+    "companion_sha256": "e49e0b18891bc2ee4b1b87f72cb8b9dd968eaa9a0b49ec6acf8abf6ac2de030f",
+    "head_sha": "8cf7d9b231a5926696d261da51a4bab531f33cfa",
+    "manifest_sha256": "1990d4141b02a1f465561e9ac87ed9565639949f2bde6ce31b1ca56c4fd7f049",
+    "research_sha256": "d5e5f5ed9dbd6358d0e1311e12f9e16a6aeacd4c8ef4a3f1c6b491adf4432a3e",
+    "run_attempt": 1,
+    "run_id": 38990637900
+  },
+  "publication_authority": "none",
+  "repository": "kusennjp1-ai/screener",
+  "request_sha256": "13bbc9b0edff90a99f28d111bab483c0f61c9f2efc4f739548dff1e859b08d63",
+  "run_attempt": 1,
+  "run_id": 39013437787,
+  "run_number": 8,
+  "schema_version": "financial-targeted-recovery-invocation-v1",
+  "source": {
+    "archive_manifest_sha256": "2593d2c737724da007a72091b7b85d6007530e0fb6fc7e4e0765d75692b007d0",
+    "artifact_id": 11420873789,
+    "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
+    "base_sha256": "2524eeac36bcb79d3ebe75f7f57d5672e91e1dafcd80a23d180ae39de867b932",
+    "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580",
+    "head_sha": "4715b218cc25720d1d3be455930554e1e6282136",
+    "run_attempt": 1,
+    "run_id": 37478731832
+  },
+  "workflow": ".github/workflows/financial-statement-recovery.yml"
+}

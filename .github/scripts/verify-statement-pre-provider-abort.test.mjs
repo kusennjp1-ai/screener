@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {fstatSync,ftruncateSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,symlinkSync,unlinkSync,writeFileSync,writeSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -554,4 +554,192 @@ test('v4 activation is request-only M after exactly one run7 code-only child, in
     writeFileSync(join(dir,spentRequestPath),JSON.stringify(r));git(['add','.']);const addedHead=git(['commit-tree',git(['write-tree']),'-p',removedParent,'-m','Readded request']);
     assert.throws(()=>verifyReplacementActivation({...r,controller:{...r.controller,parent_sha:removedParent}},{...context,sha:addedHead},dir),/only modify/);
   }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+// Run8 retained a prepared artifact. Its proof is deliberately distinct from
+// the three empty-artifact aborts above and never changes completed source4.
+import {run9ReplacementSchema,reviewedPreparedAbort8,readPreparedAbortArtifact,verifyPreparedAbortArtifactBytes} from './verify-statement-pre-provider-abort.mjs';
+import {preparedAbortFixture,preparedAbortRequest,run8Fixture} from './fixtures/targeted-prepared-abort-run8/offline-fixture.mjs';
+const preparedTerminal=JSON.parse(run8Fixture('terminal.json'));
+
+test('run8 immutable code, full log and prepared audit bind the exact guard-before-collector failure',()=>{
+  const log8=run8Fixture('job.log'),old8=run8Fixture('request.json'),commit=run8Fixture('activation.commit');
+  assert.equal(log8.length,84586);assert.equal(hash(log8),reviewedPreparedAbort8.job_log_sha256);
+  assert.equal(hash(old8),reviewedPreparedAbort8.request_sha256);assert.equal(gitObject('commit',commit),reviewedPreparedAbort8.head_sha);
+  const trees=JSON.parse(run8Fixture('git-trees.json')),proof=JSON.parse(run8Fixture('code-proof.json')),entries={};
+  assert.equal(commit.toString().match(/^tree ([a-f0-9]{40})$/m)[1],'19d995aaa270712f015a5a5e6b47f23522a110fb');
+  assert.equal(commit.toString().match(/^tree ([a-f0-9]{40})$/m)[1],trees[''].sha);
+  assert.deepEqual([...commit.toString().matchAll(/^parent ([a-f0-9]{40})$/gm)].map(m=>m[1]),[JSON.parse(old8).controller.parent_sha]);
+  for(const [path,tree]of Object.entries(trees)){
+    const bytes=Buffer.from(tree.content,'base64');assert.equal(gitObject('tree',bytes),tree.sha);entries[path]=treeEntries(bytes);
+  }
+  for(const path of Object.keys(trees).filter(Boolean)){
+    const slash=path.lastIndexOf('/'),parent=slash<0?'':path.slice(0,slash),name=path.slice(slash+1);
+    assert.deepEqual(entries[parent][name],{mode:'40000',sha:trees[path].sha});
+  }
+  for(const [path,item]of Object.entries(proof)){
+    const bytes=run8Fixture(item.fixture),slash=path.lastIndexOf('/');
+    assert.equal(hash(bytes),item.sha256);assert.equal(gitObject('blob',bytes),item.blob_sha);
+    assert.deepEqual(entries[path.slice(0,slash)][path.slice(slash+1)],{mode:'100644',sha:item.blob_sha});
+  }
+  const code=run8Fixture('cycle.py.txt').toString(),lines=code.split('\n');
+  assert.match(lines[362],/allowance = helpers.bounded_acquisition_budget/);
+  assert.match(lines[374],/result, code = collector\(/);assert.equal(code.match(/result, code = collector\(/g).length,1);
+  assert.match(log8.toString(),/run-statement-targeted-cycle\.py", line 363, in run/);
+  assert.match(log8.toString(),/Bounded refresh setup exhausted the acquisition allowance; finalization reserve is retained/);
+  const cycle8=JSON.parse(run8Fixture('cycle.json')),audit=JSON.parse(run8Fixture('audit-result.json'));
+  assert.equal(cycle8.phase,'prepared');assert.equal(cycle8.archive_manifest_sha256,reviewedSource.archive_manifest_sha256);
+  assert.equal(cycle8.request_sha256,reviewedPreparedAbort8.request_sha256);assert.equal(cycle8.published,false);
+  assert.equal(audit.artifact_sha256,reviewedPreparedAbort8.artifact_sha256);assert.equal(audit.artifact_bytes,reviewedPreparedAbort8.artifact_bytes);
+  assert.deepEqual([audit.archive_files_preserved,audit.objects,audit.receipts,audit.attempts,audit.cohort_count],[8431,8417,4154,4182,1894]);
+  assert.equal(audit.source4_archive_byte_inventory_exact,true);assert.equal(audit.cohort_order_exact,true);assert.equal(audit.batch_directory_present,false);
+  const invocation=JSON.parse(run8Fixture('invocation.json')),provider=JSON.parse(run8Fixture('provider-invocation.json'));
+  assert.equal(invocation.authenticated_at,'2026-10-17T07:35:31.877Z');assert.equal(provider.authenticated_at,'2026-10-17T07:41:41.937Z');
+  const withoutClock=({authenticated_at,...rest})=>rest;assert.deepEqual(withoutClock(invocation),withoutClock(provider));
+  assert.deepEqual(invocation.source,reviewedSource);assert.equal(preparedTerminal.jobs.jobs[0].completed_at,'2026-10-17T07:41:58Z');
+  assert.equal(preparedTerminal.jobs.jobs[0].steps.at(-1).completed_at,'2026-10-17T07:41:53Z');
+});
+
+test('v5 permits only the exact prepared8 plus fixed historical7/6/5 chain with unchanged source4',()=>{
+  const r=preparedAbortRequest();assert.doesNotThrow(()=>validateAbortContinuity(r));
+  assert.equal(validateRequest(r,Date.parse('2026-10-17T08:01:00Z')).schema_version,run9ReplacementSchema);
+  const mutations=[r=>r.expected_run_number=8,r=>r.expected_run_number=10,r=>r.schema_version=run8ReplacementSchema,
+    r=>r.abort_continuity.run8={...reviewedAbort7},r=>delete r.abort_continuity.run8,r=>r.abort_continuity.run9={...reviewedPreparedAbort8},
+    r=>r.abort_continuity.run8.schema_version='financial-pre-provider-abort-v1',r=>r.source.run_id=reviewedPreparedAbort8.run_id,
+    r=>r.source.artifact_id=reviewedPreparedAbort8.artifact_id,r=>r.created_at='2026-10-17T07:41:58Z',
+    r=>r.operation_id=JSON.parse(run8Fixture('request.json')).operation_id,
+    ...['run8','run7','run6','run5'].flatMap(key=>[r=>delete r.abort_continuity[key],r=>r.abort_continuity[key].extra=true,
+      r=>r.abort_continuity[key].run_attempt=2,r=>r.abort_continuity[key].head_sha='f'.repeat(40),r=>r.abort_continuity[key].job_log_sha256='f'.repeat(64)]),
+    ...['artifact_id','artifact_bytes','artifact_sha256'].map(key=>r=>r.abort_continuity.run8[key]='changed')];
+  for(const change of mutations){const value=preparedAbortRequest();change(value);assert.throws(()=>validateAbortContinuity(value));}
+});
+
+test('v5 exact metadata, job, history, spent request and complete log fail closed before artifact bytes',()=>{
+  const prefix=`${apiRoot}/actions/runs/${reviewedPreparedAbort8.run_id}`,artifacts=prefix+'/artifacts?per_page=100',jobs=prefix+'/attempts/1/jobs?per_page=100';
+  const request8=`${apiRoot}/contents/${spentRequestPath}?ref=${reviewedPreparedAbort8.head_sha}`;
+  const changes=[
+    f=>f.endpoints[prefix].run_attempt=2,f=>f.endpoints[prefix].status='in_progress',f=>f.endpoints[prefix].conclusion='cancelled',
+    f=>f.endpoints[prefix+'/attempts/1'].head_sha='f'.repeat(40),f=>f.endpoints[prefix].repository.id++,
+    f=>f.endpoints[prefix].workflow_id++,f=>f.endpoints[jobs].total_count=2,f=>f.endpoints[jobs].jobs[0].id++,
+    f=>f.endpoints[jobs].jobs[0].completed_at='2026-10-17T07:41:53Z',f=>f.endpoints[jobs].jobs[0].steps[7].conclusion='success',
+    f=>f.endpoints[jobs].jobs[0].steps.splice(6,1),f=>f.endpoints[request8].content=Buffer.from('{}').toString('base64'),
+    f=>f.endpoints[artifacts]={total_count:0,artifacts:[]},f=>f.endpoints[artifacts].total_count=2,
+    f=>f.endpoints[artifacts].artifacts.push(structuredClone(f.endpoints[artifacts].artifacts[0])),
+    ...['id','size_in_bytes','digest','name','created_at'].map(key=>f=>f.endpoints[artifacts].artifacts[0][key]='wrong'),
+    f=>f.endpoints[artifacts].artifacts[0].expired=true,
+    ...['id','head_sha','head_branch','repository_id','head_repository_id'].map(key=>f=>f.endpoints[artifacts].artifacts[0].workflow_run[key]='wrong'),
+    ...[reviewedPreparedAbort8,reviewedAbort7,reviewedAbort6,reviewedAbort,reviewedSource].map(identity=>f=>{
+      f.endpoints[f.inventoryPath].workflow_runs=f.endpoints[f.inventoryPath].workflow_runs.filter(run=>run.id!==identity.run_id);f.endpoints[f.inventoryPath].total_count--;}),
+    ...[39013437786,38997227415,38993132262,38991458565,39013437791].map(id=>f=>{
+      f.endpoints[f.inventoryPath].workflow_runs.push({...structuredClone(terminal.source),id,run_number:10,head_sha:'e'.repeat(40)});f.endpoints[f.inventoryPath].total_count++;}),
+  ];
+  for(const change of changes){const f=preparedAbortFixture();change(f);let bytesRead=false;
+    assert.throws(()=>authenticateAbortContinuity(preparedAbortRequest(),f.state,f.api,f.readLog,()=>{bytesRead=true;throw Error('Unexpected bytes read');}));
+    assert.equal(bytesRead,false);
+  }
+  for(const bad of [Buffer.alloc(0),run8Fixture('job.log').subarray(1),run8Fixture('job.log').toString()]){
+    const f=preparedAbortFixture();let bytesRead=false;
+    assert.throws(()=>authenticateAbortContinuity(preparedAbortRequest(),f.state,f.api,()=>bad,()=>{bytesRead=true;}),/log/);
+    assert.equal(bytesRead,false);
+  }
+});
+
+test('v5 real artifact bytes are mandatory: empty, truncated, wrong-sized, digest-only and same-size corrupt values fail',()=>{
+  for(const invalid of [undefined,null,{sha256:reviewedPreparedAbort8.artifact_sha256,size:reviewedPreparedAbort8.artifact_bytes},
+      Buffer.alloc(0),Buffer.alloc(reviewedPreparedAbort8.artifact_bytes-1),Buffer.alloc(reviewedPreparedAbort8.artifact_bytes),
+      Buffer.alloc(reviewedPreparedAbort8.artifact_bytes+1)]){
+    assert.throws(()=>verifyPreparedAbortArtifactBytes(invalid),/artifact bytes/);
+  }
+  assert.throws(()=>readPreparedAbortArtifact(reviewedSource.artifact_id),/Unreviewed/);
+  const f=preparedAbortFixture();let reads=0;
+  assert.throws(()=>authenticateAbortContinuity(preparedAbortRequest(),f.state,f.api,f.readLog,id=>{
+    assert.equal(id,reviewedPreparedAbort8.artifact_id);reads++;return Buffer.alloc(0);}),/artifact bytes/);
+  assert.equal(reads,1);assert.deepEqual(f.logCalls,[reviewedPreparedAbort8.job_id]);
+  assert.ok(!f.calls.includes(`${apiRoot}/actions/runs/${reviewedSource.run_id}/artifacts?per_page=100`));
+});
+
+test('v5 activation is request-only after one exact run8 code-only child with byte-identical spent request',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'prepared-abort8-replacement-'));
+  const git=(args,input)=>execFileSync('git',args,{cwd:dir,input,encoding:'utf8',stdio:['pipe','pipe','pipe']}).trim();
+  try{
+    git(['init','-q']);git(['config','user.name','Offline Fixture']);git(['config','user.email','fixture@example.invalid']);
+    assert.equal(git(['hash-object','-w','-t','commit','--stdin'],run8Fixture('activation.commit')),reviewedPreparedAbort8.head_sha);
+    mkdirSync(join(dir,'.github/targeted-financial-recovery'),{recursive:true});writeFileSync(join(dir,spentRequestPath),run8Fixture('request.json'));
+    writeFileSync(join(dir,'controller.txt'),'reviewed repair');git(['add','.']);const tree=git(['write-tree']);
+    const parent=git(['commit-tree',tree,'-p',reviewedPreparedAbort8.head_sha,'-m','Reviewed code-only repair']);git(['update-ref','HEAD',parent]);
+    const request=preparedAbortRequest();request.controller={parent_sha:parent,parent_tree:tree};writeFileSync(join(dir,spentRequestPath),JSON.stringify(request));git(['add','.']);
+    const head=git(['commit-tree',git(['write-tree']),'-p',parent,'-m','Hypothetical offline activation']);git(['update-ref','HEAD',head]);
+    const context={repository,event:'push',branch:abortBranch,attempt:1,sha:head,id:39013437790};
+    assert.doesNotThrow(()=>verifyActivation(request,context,dir));writeFileSync(join(dir,'.git/shallow'),parent+'\n');
+    assert.doesNotThrow(()=>verifyActivation(request,context,dir));
+    git(['reset','--hard',parent]);writeFileSync(join(dir,spentRequestPath),run8Fixture('request.json').toString()+' ');git(['add','.']);
+    const changedParent=git(['commit-tree',git(['write-tree']),'-p',reviewedPreparedAbort8.head_sha,'-m','Changed spent request']);
+    writeFileSync(join(dir,spentRequestPath),JSON.stringify(request));git(['add','.']);
+    const changed=git(['commit-tree',git(['write-tree']),'-p',changedParent,'-m','Invalid replacement']);
+    assert.throws(()=>verifyReplacementActivation({...request,controller:{parent_sha:changedParent,parent_tree:tree}},{...context,sha:changed},dir),/spent request/);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('prepared ZIP transport is file-only, privately bounded and cleans up on success, truncation and error',()=>{
+  const temporaryRoot=mkdtempSync(join(tmpdir(),'prepared-transport-test-'));
+  const check=(command,args,options)=>{
+    assert.equal(command,'python3');assert.match(args[1],/resource\.setrlimit\(resource\.RLIMIT_FSIZE,\(limit,limit\)\)/);
+    assert.equal(args[2],String(reviewedPreparedAbort8.artifact_bytes));
+    assert.equal(args[3],`${apiRoot}/actions/artifacts/${reviewedPreparedAbort8.artifact_id}/zip`);
+    assert.equal(options.timeout,60000);assert.equal(options.maxBuffer,65536);
+    assert.equal(options.stdio[0],'ignore');assert.equal(typeof options.stdio[1],'number');assert.equal(options.stdio[2],'pipe');
+    const info=fstatSync(options.stdio[1]);assert.equal(info.mode&0o777,0o600);assert.equal(info.size,0);
+    return options.stdio[1];
+  };
+  try{
+    const bytes=readPreparedAbortArtifact(reviewedPreparedAbort8.artifact_id,{temporaryRoot,execute:(...args)=>{
+      const descriptor=check(...args);ftruncateSync(descriptor,reviewedPreparedAbort8.artifact_bytes);writeSync(descriptor,Buffer.from('PK'),0,2,0);
+    }});
+    // This exercises transport only. These dummy bytes explicitly fail proof.
+    assert.equal(bytes.length,reviewedPreparedAbort8.artifact_bytes);assert.equal(bytes.subarray(0,2).toString(),'PK');
+    assert.throws(()=>verifyPreparedAbortArtifactBytes(bytes),/artifact bytes/);assert.deepEqual(readdirSync(temporaryRoot),[]);
+    for(const size of [0,1,reviewedPreparedAbort8.artifact_bytes-1,reviewedPreparedAbort8.artifact_bytes+1]){
+      assert.throws(()=>readPreparedAbortArtifact(reviewedPreparedAbort8.artifact_id,{temporaryRoot,execute:(...args)=>{
+        ftruncateSync(check(...args),size);}}),/download failed/);assert.deepEqual(readdirSync(temporaryRoot),[]);
+    }
+    assert.throws(()=>readPreparedAbortArtifact(reviewedPreparedAbort8.artifact_id,{temporaryRoot,execute:(...args)=>{
+      check(...args);throw Error('private transport details must not escape');}}),error=>error.message==='Reviewed prepared abort artifact download failed');
+    assert.deepEqual(readdirSync(temporaryRoot),[]);
+  }finally{rmSync(temporaryRoot,{recursive:true,force:true});}
+});
+
+test('prepared transport applies its actual child file-size cap without contacting GitHub',()=>{
+  const temporaryRoot=mkdtempSync(join(tmpdir(),'prepared-fsize-test-'));
+  try{
+    assert.throws(()=>readPreparedAbortArtifact(reviewedPreparedAbort8.artifact_id,{temporaryRoot,execute:(command,args,options)=>{
+      // Replace only gh exec with local overflow writes. The real production
+      // resource-limit prefix and inherited file descriptor run unmodified.
+      const local=[...args];local[1]=local[1].replace("os.execvp('gh',['gh','api',sys.argv[2]])", "os.write(1,b'x'*limit);os.write(1,b'y')");
+      assert.notEqual(local[1],args[1]);
+      assert.throws(()=>execFileSync(command,local,options));
+      assert.equal(fstatSync(options.stdio[1]).size,reviewedPreparedAbort8.artifact_bytes);
+      throw Error('Local overflow was rejected');
+    }}),/download failed/);
+    assert.deepEqual(readdirSync(temporaryRoot),[]);
+  }finally{rmSync(temporaryRoot,{recursive:true,force:true});}
+});
+
+test('prepared transport rejects linked roots or ancestors before execution and substituted/unlinked files after execution',()=>{
+  const temporaryRoot=mkdtempSync(join(tmpdir(),'prepared-path-test-'));
+  try{
+    const target=join(temporaryRoot,'target'),linked=join(temporaryRoot,'linked');mkdirSync(target);mkdirSync(join(target,'nested'));symlinkSync(target,linked);
+    for(const root of [linked,join(linked,'nested')]){
+      let called=false;assert.throws(()=>readPreparedAbortArtifact(reviewedPreparedAbort8.artifact_id,{temporaryRoot:root,execute:()=>{called=true;}}),/download failed/);
+      assert.equal(called,false);assert.deepEqual(readdirSync(join(target,'nested')),[]);assert.deepEqual(readdirSync(target),['nested']);
+    }
+    for(const substitute of [false,true]){
+      const transportRoot=join(temporaryRoot,substitute?'substituted':'unlinked');mkdirSync(transportRoot);
+      assert.throws(()=>readPreparedAbortArtifact(reviewedPreparedAbort8.artifact_id,{temporaryRoot:transportRoot,execute:(_command,_args,options)=>{
+        const path=join(transportRoot,readdirSync(transportRoot)[0],'artifact.zip');
+        ftruncateSync(options.stdio[1],reviewedPreparedAbort8.artifact_bytes);
+        if(substitute){renameSync(path,path+'.moved');writeFileSync(path,'replacement');}else unlinkSync(path);
+      }}),/download failed/);
+      assert.deepEqual(readdirSync(transportRoot),[]);
+    }
+  }finally{rmSync(temporaryRoot,{recursive:true,force:true});}
 });

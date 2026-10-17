@@ -634,3 +634,86 @@ def test_provider_process_rejects_accidentally_inherited_authentication_token(ca
         case.run(collector=lambda *a, **k: pytest.fail("Unexpected collector"))
     assert not case.output.exists()
     assert case.h.calls == []
+
+
+def run9_replacement_request():
+    path = Path(__file__).resolve().parents[3] / ".github/scripts/fixtures/targeted-prepared-abort-run8/request.json"
+    request = json.loads(path.read_bytes())
+    request.update(schema_version=cycle.RUN9_REPLACEMENT_REQUEST_SCHEMA, operation_id="targeted-nvda-aaoi-offline-run9",
+                   created_at="2026-10-17T08:00:00Z", expires_at="2026-10-17T09:00:00Z", expected_run_number=9,
+                   abort_continuity={"run8": dict(cycle.REVIEWED_PREPARED_ABORT8), "run7": dict(cycle.REVIEWED_ABORT7),
+                                     "run6": dict(cycle.REVIEWED_ABORT6), "run5": dict(cycle.REVIEWED_ABORT)})
+    return request
+
+
+def test_v5_binds_prepared_abort8_but_preserves_completed_source4_and_every_limit():
+    request = run9_replacement_request()
+    selected = cycle.validate_request(request, now=batch.clock("2026-10-17T08:01:00Z"))
+    assert list(selected) == ["NVDA", "AAOI"]
+    assert request["source"] == cycle.REVIEWED_SOURCE
+    assert request["source"]["run_id"] == 37478731832
+    assert request["limits"] == cycle.LIMITS
+    assert request["abort_continuity"]["run8"]["schema_version"] == "financial-prepared-pre-provider-abort-v1"
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda r: r.update(expected_run_number=8), lambda r: r.update(expected_run_number=10),
+    lambda r: r.update(expected_run_number=True), lambda r: r.update(schema_version=cycle.RUN8_REPLACEMENT_REQUEST_SCHEMA),
+    lambda r: r.update(schema_version=cycle.REQUEST_SCHEMA), lambda r: r.pop("abort_continuity"),
+    lambda r: r["abort_continuity"].update(run9=dict(cycle.REVIEWED_PREPARED_ABORT8)),
+    lambda r: r["abort_continuity"].update(run8=dict(cycle.REVIEWED_ABORT7)),
+    lambda r: r["abort_continuity"]["run8"].update(schema_version="financial-pre-provider-abort-v1"),
+    lambda r: r["abort_continuity"]["run8"].update(artifact_id=True),
+    lambda r: r["abort_continuity"]["run8"].update(artifact_id=12093719780),
+    lambda r: r["abort_continuity"]["run8"].update(artifact_bytes=29737344),
+    lambda r: r["abort_continuity"]["run8"].update(artifact_sha256="f" * 64),
+    lambda r: r["abort_continuity"]["run8"].update(phase="completed"),
+    lambda r: r["source"].update(run_id=39013437787),
+    lambda r: r["source"].update(artifact_id=12093719779),
+    lambda r: r.update(created_at="2026-10-17T07:41:53Z"),
+    lambda r: r.update(created_at="2026-10-17T07:41:58Z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t071531z-289570b8"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t025809z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t015500z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t013151z"),
+    lambda r: r["limits"].update(max_statement_getter_calls=5),
+    lambda r: r["limits"].update(max_transport_requests=1001),
+    lambda r: r["limits"].update(acquisition_budget_seconds=1081),
+    lambda r: r["limits"].update(caller_retries=1),
+    lambda r: r.update(financial_admission=True), lambda r: r.update(publication_authority="publish"),
+])
+def test_v5_rejects_generalized_skips_artifact_free_claims_spent_operations_and_expanded_work(mutation):
+    request = run9_replacement_request()
+    mutation(request)
+    with pytest.raises((ValueError, KeyError)):
+        cycle.validate_request(request, now=batch.clock("2026-10-17T08:01:00Z"))
+
+
+@pytest.mark.parametrize("key", ["run8", "run7", "run6", "run5"])
+@pytest.mark.parametrize("mutation", [
+    lambda r, key: r["abort_continuity"].pop(key),
+    lambda r, key: r["abort_continuity"][key].update(extra=True),
+    lambda r, key: r["abort_continuity"][key].update(run_attempt=True),
+    lambda r, key: r["abort_continuity"][key].update(run_attempt=2),
+    lambda r, key: r["abort_continuity"][key].update(head_sha="f" * 40),
+    lambda r, key: r["abort_continuity"][key].update(job_log_sha256="f" * 64),
+    lambda r, key: r["abort_continuity"][key].update(request_sha256="f" * 64),
+])
+def test_v5_checks_every_fixed_historical_identity(key, mutation):
+    request = run9_replacement_request()
+    mutation(request, key)
+    with pytest.raises((ValueError, KeyError)):
+        cycle.validate_request(request, now=batch.clock("2026-10-17T08:01:00Z"))
+
+
+def test_prepared_cycle_cannot_replace_completed_source_at_provider_boundary(case):
+    # The source-cycle condition remains unconditional, including when prepared
+    # predecessor continuity is handled by the parent. No fake completed phase.
+    source_cycle = json.loads((case.files / "cycle.json").read_bytes())
+    source_cycle["phase"] = "prepared"
+    write(case.files / "cycle.json", source_cycle)
+    calls = []
+    with pytest.raises(ValueError, match="authenticated completed source cycle"):
+        case.run(collector=lambda *args, **kwargs: calls.append(True))
+    assert calls == []
+    assert not case.output.exists()

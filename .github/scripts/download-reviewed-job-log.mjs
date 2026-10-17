@@ -1,4 +1,4 @@
-// File-only transport for three reviewed abort logs. Never render response bytes.
+// File-only transport for four reviewed abort logs. Never render response bytes.
 // GitHub documents the initial 302 and one-minute download URL:
 // https://docs.github.com/en/rest/actions/workflow-jobs#download-job-logs-for-a-workflow-run
 // Its runner reference lists Azure Blob storage for job logs, and the finite
@@ -18,7 +18,7 @@ import {performance} from 'node:perf_hooks';
 export const maximumLogBytes=1024**2;
 export const operationTimeoutMs=30000;
 const repository='kusennjp1-ai/screener';
-const reviewedJobs=new Set([117274547210,117279659374,117292325413]);
+const reviewedJobs=new Set([117274547210,117279659374,117292325413,117340568549]);
 const storageHosts=new Set(Array.from({length:20},(_,i)=>`productionresultssa${i}.blob.core.windows.net`));
 const scriptPath=fileURLToPath(import.meta.url);
 // The diagnostic wire format is exactly six bytes: version, stage, cause,
