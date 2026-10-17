@@ -1,0 +1,39 @@
+name: Reviewed Job Log Diagnostic
+
+on:
+  push:
+    branches: [improve/reviewed-job-log-diagnostic-20261017]
+    # This file does not exist in the controller commit. A separately approved,
+    # fresh request-only child is the sole activation; no financial request edit.
+    paths: [.github/targeted-financial-recovery/log-diagnostic.json]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: financial-statement-recovery
+  cancel-in-progress: false
+
+jobs:
+  reviewed-log-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check diagnostic guards offline
+        run: node --test .github/scripts/download-reviewed-job-log.test.mjs .github/scripts/run-reviewed-job-log-diagnostic.test.mjs
+      - name: Authenticate the separate request and read one reviewed job log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/run-reviewed-job-log-diagnostic.mjs
+
+# Zero provider getters. No packages, retry, dispatch, schedule, archive work,
+# publication, state mutation, network changes or artifact-body upload. Retained
+# job output contains one bounded JSON report, never the downloaded log bytes.

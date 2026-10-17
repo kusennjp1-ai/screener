@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {checkedStorageLocation,downloadReviewedJobLog,readReviewedJobLog,maximumLogBytes,operationTimeoutMs} from './download-reviewed-job-log.mjs';
+import {checkedStorageLocation,downloadReviewedJobLog,readReviewedJobLog,reviewedJobLogDiagnostic,maximumLogBytes,operationTimeoutMs} from './download-reviewed-job-log.mjs';
 
 const job=117274547210,otherJob=117279659374;
 const signed='https://productionresultssa8.blob.core.windows.net/actions-results/job/log.txt?sig=mock-signed-secret';
@@ -16,7 +16,8 @@ const env={GH_TOKEN:'ghs_mock_private_token',GITHUB_ACTIONS:'true',GITHUB_REPOSI
   GITHUB_API_URL:'https://api.github.com',GITHUB_SERVER_URL:'https://github.com'};
 const raw=Buffer.from([0xef,0xbb,0xbf,0x1b,0x5b,0x33,0x31,0x6d,0x78,0x0d,0x0a,0x79,0x0a,0xff,0x00]);
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
-const safeError=error=>error.message==='Reviewed job log download failed'
+const safePattern=/^Reviewed job log download failed(?: \(stage=(?:unknown|input|environment|file|api-request|api-response|redirect|storage-request|storage-response|storage-headers|body|worker|result|cleanup); cause=(?:rejected|invalid-input|environment-rejected|routing-or-trust-override|tls-override|unsafe-file|request-error|dns-error|tls-error|http-status|invalid-status|invalid-headers|unapproved-location|invalid-body|write-failed|incomplete-body|timeout|worker-failed|worker-start-failed|invalid-diagnostic|cleanup-failed); host=(?:none|github-api|reviewed-storage|rejected-redirect); status=(?:0|[1-5][0-9]{2})\))?$/;
+const safeError=error=>safePattern.test(error.message)
   &&!String(error.stack).includes(env.GH_TOKEN)&&!String(error.stack).includes('mock-signed-secret');
 
 // No http server, listen(), real request, provider, or external dependency.
@@ -28,10 +29,10 @@ function transport(specs){
     const req=new EventEmitter();
     req.destroy=()=>{req.destroyed=true;};
     req.end=()=>queueMicrotask(()=>{
-      if(spec.requestError){req.emit('error',Error(`${env.GH_TOKEN} ${signed}`));return;}
+      if(spec.requestError){req.emit('error',Object.assign(Error(`${env.GH_TOKEN} ${signed}`),{code:spec.code}));return;}
       if(spec.stallBeforeHeaders)return;
       const response=new PassThrough();
-      response.statusCode=spec.status??200;
+      response.statusCode=Object.hasOwn(spec,'status')?spec.status:200;
       response.rawHeaders=spec.rawHeaders??Object.entries(spec.headers??{}).flat();
       response.complete=false;
       calls.at(-1).response=response;
@@ -186,7 +187,7 @@ test('only an empty private regular file descriptor can receive a response',asyn
   });
 });
 
-test('sync wrapper gives child only file fd, bounded deadline and minimum environment; cleans success',()=>{
+test('sync wrapper gives child only private body/diagnostic fds, bounded deadline and minimum environment; cleans success',()=>{
   const root=mkdtempSync(join(tmpdir(),'reviewed-wrapper-test-'));
   let calls=0;
   try{
@@ -199,7 +200,10 @@ test('sync wrapper gives child only file fd, bounded deadline and minimum enviro
       assert.deepEqual(options.env,env);
       assert.ok(!args.join(' ').includes(env.GH_TOKEN));assert.ok(!args.join(' ').includes(signed));
       assert.deepEqual(options.stdio.slice(0,3),['ignore','ignore','ignore']);
+      assert.equal(options.stdio.length,5);
       const st=fstatSync(options.stdio[3]);assert.ok(st.isFile());assert.equal(st.nlink,1);assert.equal(st.mode&0o777,0o600);
+      const report=fstatSync(options.stdio[4]);assert.ok(report.isFile());assert.equal(report.nlink,1);assert.equal(report.mode&0o777,0o600);
+      assert.equal(report.size,0);assert.notEqual(st.ino,report.ino);
       writeSync(options.stdio[3],raw);
       return {status:0,signal:null};
     }});
@@ -252,4 +256,210 @@ test('direct worker refuses invalid context silently without stdin/stdout body t
   const script=fileURLToPath(new URL('./download-reviewed-job-log.mjs',import.meta.url));
   const child=spawnSync(process.execPath,[script,'--file-worker',String(job),'50'],{env:{},input:raw,timeout:1000});
   assert.equal(child.status,1);assert.equal(child.stdout.length,0);assert.equal(child.stderr.length,0);
+});
+
+
+const messageFor=(stage,cause,host='none',status=0)=>
+  `Reviewed job log download failed (stage=${stage}; cause=${cause}; host=${host}; status=${status})`;
+async function assertTransferDiagnostic(specs,expected){
+  const mock=transport(specs);
+  await withFile(async({fd})=>{
+    await assert.rejects(downloadReviewedJobLog(job,fd,{env,request:mock.request}),error=>{
+      assert.ok(safeError(error));assert.equal(error.message,expected);return true;
+    });
+  });
+  assert.equal(mock.calls.length,specs.length);
+  assert.ok(mock.calls.every(call=>call.req.destroyed));
+}
+
+test('fixed diagnostics distinguish API/storage HTTP status without revealing headers or bodies',async()=>{
+  for(const status of [100,200,301,401,403,404,429,500,599]){
+    await assertTransferDiagnostic([{status,headers:{Location:signed,'X-Secret':env.GH_TOKEN},chunks:[Buffer.from(signed)]}],
+      messageFor('api-response','http-status','github-api',status));
+    if(status!==200)await assertTransferDiagnostic([redirect,{status,headers:{Location:signed,'X-Secret':env.GH_TOKEN},chunks:[Buffer.from(signed)]}],
+      messageFor('storage-response','http-status','reviewed-storage',status));
+  }
+});
+
+test('malicious and non-HTTP statuses are discarded rather than coerced or printed',async()=>{
+  const poisonous={toString(){throw Error(signed);},valueOf(){throw Error(env.GH_TOKEN);}};
+  for(const status of [undefined,null,false,true,-1,0,99,600,65535,Infinity,NaN,403.5,'403',signed,env.GH_TOKEN,poisonous]){
+    await assertTransferDiagnostic([{status}],messageFor('api-response','invalid-status','github-api'));
+    await assertTransferDiagnostic([redirect,{status}],messageFor('storage-response','invalid-status','reviewed-storage'));
+  }
+});
+
+test('malicious redirects and headers produce only fixed rejected-location/header categories',async()=>{
+  for(const location of [`https://${env.GH_TOKEN}.invalid/private?sig=leak`,signed+'#'+env.GH_TOKEN,
+    'https://productionresultssa20.blob.core.windows.net/log?sig=leak','https://user:'+env.GH_TOKEN+'@evil.invalid',
+    '\n'+signed,undefined,[],{toString(){throw Error(signed);}}]){
+    await assertTransferDiagnostic([{status:302,rawHeaders:location===undefined?[]:['Location',location]}],
+      messageFor('redirect',location!==undefined&&typeof location!=='string'?'invalid-headers':'unapproved-location',
+        location!==undefined&&typeof location!=='string'?'github-api':'rejected-redirect',302));
+  }
+  await assertTransferDiagnostic([{status:302,rawHeaders:['Location',signed,'location',signed]}],
+    messageFor('redirect','invalid-headers','github-api',302));
+  await assertTransferDiagnostic([redirect,{headers:{'Content-Encoding':signed,'Content-Length':env.GH_TOKEN}}],
+    messageFor('storage-headers','invalid-headers','reviewed-storage',200));
+});
+
+test('exception messages and unknown error codes cannot escape the fixed cause mapping',async()=>{
+  for(const [code,cause] of [['ENOTFOUND','dns-error'],['EAI_AGAIN','dns-error'],['CERT_HAS_EXPIRED','tls-error'],
+    ['ERR_TLS_CERT_ALTNAME_INVALID','tls-error'],['UNABLE_TO_VERIFY_LEAF_SIGNATURE','tls-error'],
+    [env.GH_TOKEN,'request-error'],[signed,'request-error'],[{},'request-error'],[undefined,'request-error']]){
+    await assertTransferDiagnostic([{requestError:true,code}],messageFor('api-request',cause,'github-api'));
+    await assertTransferDiagnostic([redirect,{requestError:true,code}],messageFor('storage-request',cause,'reviewed-storage'));
+  }
+  await withFile(async({fd})=>{
+    await assert.rejects(downloadReviewedJobLog(job,fd,{env,request(){throw Error(`${env.GH_TOKEN} ${signed}`);}}),
+      error=>safeError(error)&&error.message===messageFor('api-request','request-error','github-api'));
+  });
+});
+
+test('environment rejections report categories without values, keys, or credentials',()=>{
+  for(const [change,cause] of [[{HTTPS_PROXY:signed},'routing-or-trust-override'],
+    [{NODE_EXTRA_CA_CERTS:env.GH_TOKEN},'routing-or-trust-override'],
+    [{NODE_TLS_REJECT_UNAUTHORIZED:'0'},'tls-override'],[{GH_TOKEN:signed},'environment-rejected']]){
+    let calls=0;
+    assert.throws(()=>readReviewedJobLog(job,{env:{...env,...change},spawn(){calls++;}}),error=>
+      safeError(error)&&error.message===messageFor('environment',cause));
+    assert.equal(calls,0);
+  }
+});
+
+// Protocol fixtures are independent of the implementation: version=1;
+// api-response=5, http-status=9, github-api=1; status occupies bytes 4..5.
+const apiDeniedRecord=Buffer.from([1,5,9,1,1,147]); // HTTP 403
+function wrapperRecord(bytes,{status=1,signal=null,error,alter,stdout,stderr}={}){
+  const root=mkdtempSync(join(tmpdir(),'reviewed-diagnostic-test-'));
+  try{
+    assert.throws(()=>readReviewedJobLog(job,{tempRoot:root,env,spawn:(_command,_args,options)=>{
+      assert.deepEqual(options.stdio.slice(0,3),['ignore','ignore','ignore']);
+      if(bytes!==null)writeSync(options.stdio[4],bytes);
+      if(status===0)writeSync(options.stdio[3],raw);
+      alter?.(options,root);
+      return {status,signal,error,stdout,stderr};
+    }}),caught=>{
+      assert.ok(safeError(caught));wrapperRecord.last=caught.message;return true;
+    });
+    assert.deepEqual(readdirSync(root),[]);
+    return wrapperRecord.last;
+  }finally{rmSync(root,{recursive:true,force:true});}
+}
+
+test('parent accepts one exact six-byte closed-schema failure and ignores stdout/stderr',()=>{
+  assert.equal(wrapperRecord(apiDeniedRecord,{stdout:Buffer.from(signed),stderr:Buffer.from(env.GH_TOKEN)}),
+    messageFor('api-response','http-status','github-api',403));
+  for(const status of [0,100,599]){
+    const record=Buffer.from(apiDeniedRecord);record.writeUInt16BE(status,4);
+    assert.equal(wrapperRecord(record),messageFor('api-response','http-status','github-api',status));
+  }
+});
+
+test('parent rejects malformed, oversized, unknown-enum and invalid-status diagnostic data',()=>{
+  const invalid=[null,Buffer.alloc(0),apiDeniedRecord.subarray(0,5),Buffer.concat([apiDeniedRecord,Buffer.from([0])]),
+    Buffer.from(signed),Buffer.from(env.GH_TOKEN),Buffer.alloc(1024*1024)];
+  for(const [index,value] of [[0,0],[0,2],[1,255],[2,255],[3,255]]){
+    const record=Buffer.from(apiDeniedRecord);record[index]=value;invalid.push(record);
+  }
+  for(const status of [1,99,600,65535]){const record=Buffer.from(apiDeniedRecord);record.writeUInt16BE(status,4);invalid.push(record);}
+  for(const record of invalid)assert.equal(wrapperRecord(record),messageFor('worker','invalid-diagnostic'));
+});
+
+test('success status cannot carry diagnostic bytes and abnormal exits cannot supply trusted diagnostics',()=>{
+  assert.equal(wrapperRecord(apiDeniedRecord,{status:0}),messageFor('worker','invalid-diagnostic'));
+  for(const exit of [2,-1,null,NaN,signed,env.GH_TOKEN])
+    assert.equal(wrapperRecord(apiDeniedRecord,{status:exit}),messageFor('worker','worker-failed'));
+  assert.equal(wrapperRecord(apiDeniedRecord,{signal:signed}),messageFor('worker','worker-failed'));
+  assert.equal(wrapperRecord(apiDeniedRecord,{error:Error(`${signed} ${env.GH_TOKEN}`)}),messageFor('worker','worker-start-failed'));
+});
+
+test('unsafe diagnostic modes, replaced paths and first-failure cleanup remain fail closed',()=>{
+  assert.equal(wrapperRecord(apiDeniedRecord,{alter:(_options,root)=>{
+    const directory=readdirSync(root)[0];chmodSync(join(root,directory,'diagnostic'),0o644);
+  }}),messageFor('worker','invalid-diagnostic'));
+  assert.equal(wrapperRecord(apiDeniedRecord,{alter:(_options,root)=>{
+    const directory=readdirSync(root)[0],path=join(root,directory,'diagnostic');
+    unlinkSync(path);symlinkSync('body',path);
+  }}),messageFor('worker','invalid-diagnostic'));
+  // Closing the body descriptor makes wrapper cleanup fail, after a valid
+  // worker diagnosis has already been recovered. The first cause must survive.
+  assert.equal(wrapperRecord(apiDeniedRecord,{alter:options=>closeSync(options.stdio[3])}),
+    messageFor('api-response','http-status','github-api',403));
+});
+
+test('real worker writes only a fixed diagnostic to fd4 for offline preflight failures',async()=>{
+  const script=fileURLToPath(new URL('./download-reviewed-job-log.mjs',import.meta.url));
+  for(const [childEnv,args,expected] of [[{},[String(job),'50'],[1,2,2,0,0,0]],
+    [env,['1','50'],[1,1,1,0,0,0]],[env,[String(job),'0'],[1,1,1,0,0,0]],
+    [{...env,HTTPS_PROXY:signed},[String(job),'50'],[1,2,3,0,0,0]]]){
+    await withFile(async({fd,root})=>{
+      const reportPath=join(root,'report'),report=openSync(reportPath,'wx+',0o600);
+      try{
+        const child=spawnSync(process.execPath,[script,'--file-worker',...args],{
+          env:childEnv,stdio:['ignore','pipe','pipe',fd,report],timeout:2000,
+        });
+        assert.equal(child.status,1);assert.equal(child.stdout.length,0);assert.equal(child.stderr.length,0);
+        assert.deepEqual(readFileSync(reportPath),Buffer.from(expected));assert.equal(fstatSync(fd).size,0);
+      }finally{closeSync(report);}
+    });
+  }
+});
+
+test('real child offline transport preserves exact fd3 bytes and inherited minimal environment',async()=>{
+  const moduleUrl=new URL('./download-reviewed-job-log.mjs',import.meta.url).href;
+  const fixture=`
+    import assert from 'node:assert/strict';
+    import {EventEmitter} from 'node:events';
+    import {PassThrough} from 'node:stream';
+    import {downloadReviewedJobLog} from ${JSON.stringify(moduleUrl)};
+    const expectedEnv=${JSON.stringify(env)};
+    for(const [key,value] of Object.entries(expectedEnv))assert.equal(process.env[key],value);
+    assert.equal(process.env.EXTRA_SECRET,undefined);
+    const bytes=Buffer.from(${JSON.stringify([...raw])});
+    let calls=0;
+    const request=(url,options,callback)=>{
+      const call=++calls;
+      assert.ok(call<=2);assert.equal(options.rejectUnauthorized,true);assert.equal(options.agent,false);
+      if(call===1)assert.equal(options.headers.Authorization,'Bearer '+expectedEnv.GH_TOKEN);
+      else assert.equal(options.headers.Authorization,undefined);
+      const req=new EventEmitter();req.destroy=()=>{};
+      req.end=()=>queueMicrotask(()=>{
+        const response=new PassThrough();response.statusCode=call===1?302:200;
+        response.rawHeaders=call===1?['Location',${JSON.stringify(signed)}]:['Content-Length',String(bytes.length)];
+        callback(response);
+        queueMicrotask(()=>{if(!response.destroyed){response.complete=true;response.end(bytes);}});
+      });return req;
+    };
+    assert.equal(await downloadReviewedJobLog(${job},3,{request}),bytes.length);
+    assert.equal(calls,2);
+  `;
+  const root=mkdtempSync(join(tmpdir(),'reviewed-real-child-test-'));
+  try{
+    let calls=0;
+    const result=readReviewedJobLog(job,{tempRoot:root,env:{...env,EXTRA_SECRET:'do-not-inherit'},spawn:(command,_args,options)=>{
+      calls++;
+      // A test-only ordinary child imports the existing dependency-injected
+      // transport. There is no production switch, preload or live HTTPS call.
+      const child=spawnSync(command,['--input-type=module','-e',fixture],options);
+      assert.equal(child.status,0);return child;
+    }});
+    assert.equal(calls,1);assert.deepEqual(result,raw);assert.equal(digest(result),digest(raw));
+    assert.deepEqual(readdirSync(root),[]);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('structured diagnostic extraction accepts only module-created records and returns immutable copies',()=>{
+  for(const error of [null,undefined,signed,Error(signed),
+    {message:messageFor('api-response','http-status','github-api',403),diagnostic:{stage:'api-response',cause:'http-status',host:'github-api',status:403}},
+    {get message(){throw Error(env.GH_TOKEN);},get diagnostic(){throw Error(signed);}}])
+    assert.equal(reviewedJobLogDiagnostic(error),null);
+  assert.throws(()=>readReviewedJobLog(job,{env:{...env,HTTPS_PROXY:signed}}),error=>{
+    const first=reviewedJobLogDiagnostic(error),second=reviewedJobLogDiagnostic(error);
+    assert.deepEqual(first,{stage:'environment',cause:'routing-or-trust-override',host:'none',status:0});
+    assert.ok(Object.isFrozen(first));assert.notEqual(first,second);
+    assert.throws(()=>{first.cause=signed;},TypeError);
+    assert.deepEqual(reviewedJobLogDiagnostic(error),second);return true;
+  });
 });
