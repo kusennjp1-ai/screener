@@ -225,3 +225,43 @@ def test_display_stop_uses_the_50dma_when_it_is_tighter_than_the_max_loss():
     ma50 = float(close[-50:].mean())
     assert plan["stop_level"] == pytest.approx(round(ma50, 2), rel=1e-6)
     assert plan["stop_level"] > last * (1 - MAX_LOSS_PCT)  # tighter than the cap
+
+
+@pytest.mark.parametrize("missing_close,expected_up_days,expected_active", [
+    (False, 9, True),
+    (True, 7, False),
+])
+def test_climax_up_days_require_adjacent_observed_closes(
+    missing_close, expected_up_days, expected_active, caplog,
+):
+    """A missing close must not turn a multi-session move into an up day."""
+    close = np.concatenate([
+        np.full(190, 50.0),
+        [150, 151, 152, 153, 154, 155, 155, 164, 173, 174],
+    ])
+    if missing_close:
+        close[-3] = np.nan
+    out = detect_climax_run(_frame(close, open_=close))
+
+    assert out["up_days_10"] == expected_up_days
+    assert out["active"] is expected_active
+    assert ("up_day_frenzy" in out["flags"]) is expected_active
+    plan = compute_sell_plan(_frame(close, open_=close))
+    assert plan["action"] == ("sell_into_strength" if expected_active else "hold")
+    assert "extended_above_200dma" in out["flags"]
+    assert "climax-run detection failed" not in caplog.text
+
+
+def test_climax_largest_daily_gain_does_not_bridge_missing_close(caplog):
+    close = np.concatenate([
+        np.linspace(20, 140, 190),
+        [140, 139, 140, 139, 140, 139, 140, np.nan, 160, 159],
+    ])
+    out = detect_climax_run(_frame(close, open_=close))
+
+    assert out["extension_200dma_pct"] > 70
+    assert out["up_days_10"] == 3
+    assert out["flags"] == ["extended_above_200dma"]
+    assert out["active"] is False
+    assert "climax-run detection failed" not in caplog.text
+    assert compute_sell_plan(_frame(close, open_=close))["action"] == "hold"

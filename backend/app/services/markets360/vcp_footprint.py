@@ -14,19 +14,28 @@ we reverse here and expose a compact, JSON-friendly footprint the M360 scanner
 and chart can consume without knowing the legacy orientation quirk.
 
 Output (all keys always present; ``None``/``False`` on insufficient data):
-  detected            VCP structurally present (tightening pullbacks near highs)
-  score               0-100 composite quality
-  num_contractions    distinct pullbacks (T-count) in the base
-  contraction_ratio   fraction of successive pullbacks that tightened
-  contractions_pct    each pullback depth %, oldest -> newest
-  volume_dryup        volume contracting across the base
-  tight_near_highs    price coiled within ~5% of the base high
-  pivot               buy-point price (resistance to break)
+  detected            any supported base path detected
+  legacy_detected     legacy tightening-pullback VCP detected
+  source              selected path: vcp, ma_tight, vol_contract, or None
+                      (first match in that order; not all matching paths)
+  score               legacy 0-100 composite quality, not selected-path quality
+  num_contractions    legacy distinct pullbacks (T-count) in the base
+  contraction_ratio   legacy fraction of successive pullbacks that tightened
+  contractions_pct    legacy pullback depth %, oldest -> newest
+  volume_dryup        legacy volume contracting across the base
+  tight_near_highs    legacy price 0..5% below its base high
+  pivot               selected-path buy point (legacy diagnostic if undetected)
   distance_to_pivot_pct  +ve = still below pivot, -ve = already through it
   ready_for_breakout  VCP detected AND coiled within 3% under the pivot
   near_pivot          VCP detected AND within 8% under / 5% over the pivot
                       (the 5% chase limit — Minervini never buys further past
                       the buy point)
+
+Legacy evidence stays legacy even when a parallel path is selected: neither
+``detected`` nor a parallel ``source`` implies legacy tightness, pullback count,
+or volume dry-up. Only ``legacy_detected`` (equivalently source='vcp') implies
+the legacy structural gates. MA/ATR paths use their own gates and pivot below;
+they do not certify a legacy VCP. Existing diagnostic fields retain their meaning.
 
 Both pivot states are gated on ``detected``: proximity to a recent high with no
 contraction structure is not a setup, and ungated flags fired on ~96% of random
@@ -181,6 +190,7 @@ MAX_PAST_PIVOT_PCT = 5.0
 
 _EMPTY: Dict[str, object] = {
     "detected": False,
+    "legacy_detected": False,
     "score": None,
     "num_contractions": 0,
     "contraction_ratio": None,
@@ -229,7 +239,8 @@ def compute_vcp_footprint(
 
     pivot = _f(pivot_info.get("pivot"))
     dist = _f(pivot_info.get("distance_pct"))  # +ve => current price below pivot
-    detected = bool(legacy.get("vcp_detected", False))
+    legacy_detected = bool(legacy.get("vcp_detected", False))
+    detected = legacy_detected
     ma_source = False
     vcb_source = False
     if not detected:
@@ -275,6 +286,7 @@ def compute_vcp_footprint(
     ]
     return {
         "detected": detected,
+        "legacy_detected": legacy_detected,
         "score": round(score, 1) if score is not None else None,
         "num_contractions": int(legacy.get("num_bases", 0) or 0),
         "contraction_ratio": _f(legacy.get("contraction_ratio")),
