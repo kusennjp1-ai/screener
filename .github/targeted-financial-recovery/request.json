@@ -1,13 +1,13 @@
 {
-  "schema_version": "financial-targeted-recovery-execution-v3",
-  "operation_id": "targeted-nvda-aaoi-20261017t025809z",
-  "created_at": "2026-10-17T02:58:09Z",
-  "expires_at": "2026-10-17T03:58:09Z",
+  "schema_version": "financial-targeted-recovery-execution-v4",
+  "operation_id": "targeted-nvda-aaoi-20261017t071531z-289570b8",
+  "created_at": "2026-10-17T07:15:31Z",
+  "expires_at": "2026-10-17T08:15:31Z",
   "controller": {
-    "parent_sha": "ae1c2a83060d4c42accdea7244f311178ae4d7d1",
-    "parent_tree": "b3fcd0c1583b7195eaa7add9b50b2fddb316c237"
+    "parent_sha": "8c2185b1dc89e5473e7c20595628c2ae4a73be66",
+    "parent_tree": "892581e69bae4611bb887d170655a3165732add4"
   },
-  "expected_run_number": 7,
+  "expected_run_number": 8,
   "source": {
     "run_id": 37478731832,
     "run_attempt": 1,
@@ -19,15 +19,15 @@
     "cohort_sha256": "36a83c34c33b0158f1d246226d8d538797c6c6e6494669c6feacefa82da12580"
   },
   "price_source": {
-    "run_id": 38835669174,
+    "run_id": 38990637900,
     "run_attempt": 1,
     "head_sha": "8cf7d9b231a5926696d261da51a4bab531f33cfa",
-    "artifact_id": 12024303013,
-    "artifact_sha256": "1deb7c0d947563f5dd185b9b25b72efe669cb03f44e22aa12250b4de729c405a",
-    "companion_id": 12024153503,
-    "companion_sha256": "cb4b0abfc55abd22555cd294c8cac7a1d3b7ac5c6e95e68ed0a50e56ea536fa2",
-    "manifest_sha256": "9c0456ac49abdd293073fc1869b4c53ec2b07d4e4e24415edf03ca40a6fdf627",
-    "research_sha256": "88fb66f9410a46c81c72cb7b9218fbd234624f7ac410308a305a38c57e6bf2f0"
+    "artifact_id": 12088584402,
+    "artifact_sha256": "ee761e1e5a3f5118d1062e0c9d9bfb65b936d28aeff670788e1479449e6bdf77",
+    "companion_id": 12088534556,
+    "companion_sha256": "e49e0b18891bc2ee4b1b87f72cb8b9dd968eaa9a0b49ec6acf8abf6ac2de030f",
+    "manifest_sha256": "1990d4141b02a1f465561e9ac87ed9565639949f2bde6ce31b1ca56c4fd7f049",
+    "research_sha256": "d5e5f5ed9dbd6358d0e1311e12f9e16a6aeacd4c8ef4a3f1c6b491adf4432a3e"
   },
   "selection": [
     {
@@ -85,6 +85,16 @@
   "publication_authority": "none",
   "financial_admission": false,
   "abort_continuity": {
+    "run7": {
+      "schema_version": "financial-pre-provider-abort-v1",
+      "run_id": 38997227416,
+      "run_attempt": 1,
+      "run_number": 7,
+      "head_sha": "b6378b8077b51f18d63e6dbb4d221ac47144bee4",
+      "request_sha256": "846a0d2a07e2a43b6eee3837f19dfb01e233866a8b3e1912a57d025d3a043e00",
+      "job_id": 117292325413,
+      "job_log_sha256": "5ce16137dfe39a063a3f0903031eb93bdb1f792a08dee1549c97bdf3b152ae56"
+    },
     "run6": {
       "schema_version": "financial-pre-provider-abort-v1",
       "run_id": 38993132263,
