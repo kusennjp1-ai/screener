@@ -88,9 +88,12 @@ function workflowEnvironment(env){
   if(Object.entries(env).some(([key,value])=>value!==undefined&&value!==''
     &&(/^(?:https?|all|no)_proxy$/i.test(key)||overrides.includes(key))))throw failure(diagnostic('environment','routing-or-trust-override'));
   if(env.NODE_TLS_REJECT_UNAUTHORIZED==='0')throw failure(diagnostic('environment','tls-override'));
+  // Credentials are opaque: constrain only nonempty length and header-safe
+  // visible ASCII, without assumptions about prefixes, separators or claims.
   if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_REPOSITORY!==repository
     ||env.GITHUB_SERVER_URL!=='https://github.com'||env.GITHUB_API_URL!=='https://api.github.com'
-    ||typeof env.GH_TOKEN!=='string'||!(/^[A-Za-z0-9_]+$/).test(env.GH_TOKEN)||env.GH_TOKEN.length>4096)throw failure(diagnostic('environment','environment-rejected'));
+    ||typeof env.GH_TOKEN!=='string'||env.GH_TOKEN.length===0||env.GH_TOKEN.length>4096
+    ||(/[^\x21-\x7e]/).test(env.GH_TOKEN))throw failure(diagnostic('environment','environment-rejected'));
   // Do not inherit debug, preload, proxy, TLS override, or unrelated secret env.
   return Object.fromEntries(['GH_TOKEN','GITHUB_ACTIONS','GITHUB_REPOSITORY','GITHUB_SERVER_URL','GITHUB_API_URL'].map(k=>[k,env[k]]));
 }

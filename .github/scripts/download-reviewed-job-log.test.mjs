@@ -319,7 +319,7 @@ test('exception messages and unknown error codes cannot escape the fixed cause m
 test('environment rejections report categories without values, keys, or credentials',()=>{
   for(const [change,cause] of [[{HTTPS_PROXY:signed},'routing-or-trust-override'],
     [{NODE_EXTRA_CA_CERTS:env.GH_TOKEN},'routing-or-trust-override'],
-    [{NODE_TLS_REJECT_UNAUTHORIZED:'0'},'tls-override'],[{GH_TOKEN:signed},'environment-rejected']]){
+    [{NODE_TLS_REJECT_UNAUTHORIZED:'0'},'tls-override'],[{GH_TOKEN:signed+'\r\n'},'environment-rejected']]){
     let calls=0;
     assert.throws(()=>readReviewedJobLog(job,{env:{...env,...change},spawn(){calls++;}}),error=>
       safeError(error)&&error.message===messageFor('environment',cause));
@@ -462,4 +462,92 @@ test('structured diagnostic extraction accepts only module-created records and r
     assert.throws(()=>{first.cause=signed;},TypeError);
     assert.deepEqual(reviewedJobLogDiagnostic(error),second);return true;
   });
+});
+
+
+const opaqueMockTokens=[
+  '!', // One-character lower bound; credentials are not parsed for format.
+  env.GH_TOKEN,
+  'ghs_123456_eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJnaXRodWIifQ.mock-signature_with-punctuation',
+  'mock+/=:._-credential',
+  Array.from({length:94},(_,index)=>String.fromCharCode(0x21+index)).join(''),
+  'x'.repeat(4096),
+];
+
+test('opaque legacy and JWT-like mock credentials reach only the GitHub API Authorization header',async()=>{
+  for(const token of opaqueMockTokens)await withFile(async({fd,file})=>{
+    const mock=transport([redirect,{headers:{'Content-Length':String(raw.length)}}]);
+    assert.equal(await downloadReviewedJobLog(job,fd,{env:{...env,GH_TOKEN:token},request:mock.request}),raw.length);
+    assert.equal(mock.calls.length,2);
+    const [api,storage]=mock.calls;
+    assert.equal(api.url.hostname,'api.github.com');
+    assert.equal(api.options.headers.Authorization,`Bearer ${token}`);
+    assert.equal(api.url.search,'');
+    assert.deepEqual(storage.options.headers,{'User-Agent':'screener-reviewed-job-log','Accept-Encoding':'identity'});
+    assert.equal(storage.url.href,signed);
+    assert.deepEqual(readFileSync(file),raw);
+    assert.equal(digest(readFileSync(file)),digest(raw));
+  });
+});
+
+test('opaque credentials remain byte-for-byte intact only in the minimal worker environment',()=>{
+  for(const token of opaqueMockTokens){
+    let calls=0;
+    const result=readReviewedJobLog(job,{env:{...env,GH_TOKEN:token,EXTRA_SECRET:'not-inherited'},spawn:(_command,args,options)=>{
+      calls++;
+      assert.deepEqual(options.env,{...env,GH_TOKEN:token});
+      assert.ok(!args.some(arg=>arg.includes(token)));
+      assert.deepEqual(options.stdio.slice(0,3),['ignore','ignore','ignore']);
+      writeSync(options.stdio[3],raw);return {status:0,signal:null};
+    }});
+    assert.equal(calls,1);assert.deepEqual(result,raw);
+  }
+});
+
+test('empty, oversized, non-string, whitespace, control and Unicode credentials fail before any request or worker',async()=>{
+  const disallowedCharacters=[
+    ...Array.from({length:33},(_,index)=>String.fromCharCode(index)),
+    ...Array.from({length:129},(_,index)=>String.fromCharCode(0x7f+index)),
+    '\u1680','\u2000','\u2001','\u2002','\u2003','\u2004','\u2005','\u2006','\u2007','\u2008','\u2009','\u200a',
+    '\u200b','\u2028','\u2029','\u202f','\u205f','\u3000','\ufeff','漢','🔐','\ud800',
+  ];
+  const invalid=[undefined,null,false,true,0,1,{},[],Buffer.from('mock'),'', 'x'.repeat(4097),
+    ...disallowedCharacters.flatMap(character=>[character+'mock','mock'+character,'mo'+character+'ck'])];
+  await withFile(async({fd})=>{
+    for(const token of invalid){
+      let requests=0,spawns=0;
+      const rejected=error=>safeError(error)&&error.message===messageFor('environment','environment-rejected');
+      await assert.rejects(downloadReviewedJobLog(job,fd,{env:{...env,GH_TOKEN:token},request(){requests++;}}),rejected);
+      assert.throws(()=>readReviewedJobLog(job,{env:{...env,GH_TOKEN:token},spawn(){spawns++;}}),rejected);
+      assert.equal(requests,0);assert.equal(spawns,0);assert.equal(fstatSync(fd).size,0);
+    }
+  });
+});
+
+test('opaque mock credentials and arbitrary errors never enter diagnostics or returned log bytes',async()=>{
+  for(const token of opaqueMockTokens){
+    for(const failingRequest of [1,2])await withFile(async({fd,file})=>{
+      const mock=transport([redirect]);
+      let calls=0;
+      const request=(url,options,callback)=>{
+        calls++;
+        if(calls===1)assert.equal(options.headers.Authorization,`Bearer ${token}`);
+        else assert.equal(options.headers.Authorization,undefined);
+        if(calls===failingRequest)throw Error(`${token} ${signed}`);
+        return mock.request(url,options,callback);
+      };
+      await assert.rejects(downloadReviewedJobLog(job,fd,{env:{...env,GH_TOKEN:token},request}),error=>{
+        assert.ok(safeError(error));
+        assert.equal(error.message,messageFor(failingRequest===1?'api-request':'storage-request','request-error',
+          failingRequest===1?'github-api':'reviewed-storage'));
+        assert.ok(!String(error.stack).includes(token));
+        assert.ok(!JSON.stringify(reviewedJobLogDiagnostic(error)).includes(token));return true;
+      });
+      assert.equal(calls,failingRequest);assert.equal(readFileSync(file).length,0);
+    });
+    assert.throws(()=>readReviewedJobLog(job,{env:{...env,GH_TOKEN:token},spawn(){throw Error(`${token} ${signed}`);}}),error=>{
+      assert.ok(safeError(error));assert.ok(!String(error.stack).includes(token));
+      assert.equal(error.message,messageFor('worker','worker-start-failed'));return true;
+    });
+  }
 });
