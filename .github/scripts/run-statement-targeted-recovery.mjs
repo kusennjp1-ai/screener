@@ -12,7 +12,7 @@ import {assertPriceObservationBounds,extractPriceObservations,priceObservationDi
 import {repository,recoveryWorkflow,recoverySource,checkedArtifact,extractSourceArchive} from './restore-statement-source.mjs';
 import {researchPath} from './prepare-statement-cohort.mjs';
 import {prepareRecoveryPreflightInputs} from './prepare-statement-recovery-preflight.mjs';
-import {replacementSchema,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
+import {replacementSchema,chainedReplacementSchema,isReplacementRequest,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
 
 export const branch='improve/mandatory-financial-source-recovery';
 export const requestPath='.github/targeted-financial-recovery/request.json';
@@ -29,9 +29,9 @@ export function boundedFile(path,maximum){
   return readFileSync(path);
 }
 export function validateRequest(value,now=Date.now()){
-  const replacement=value?.schema_version===replacementSchema;
+  const replacement=isReplacementRequest(value);
   exact(value,['schema_version','operation_id','created_at','expires_at','controller','expected_run_number','source','price_source','selection','limits','publication_authority','financial_admission',...(replacement?['abort_continuity']:[])],'execution request');
-  if(!['financial-targeted-recovery-execution-v1',replacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
+  if(!['financial-targeted-recovery-execution-v1',replacementSchema,chainedReplacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
     ||typeof value.operation_id!=='string'||!/^targeted-nvda-aaoi-[a-z0-9-]{1,64}$/.test(value.operation_id))throw Error('Invalid artifact-only operation');
   if(replacement)validateAbortContinuity(value);
   const start=Date.parse(value.created_at),end=Date.parse(value.expires_at);
@@ -62,7 +62,7 @@ export function verifyActivation(request,context,cwd=root){
   if(git(['rev-list','--parents','-n','1','HEAD'],cwd)!==`${context.sha} ${request.controller.parent_sha}`
     ||git(['rev-parse',`${request.controller.parent_sha}^{tree}`],cwd)!==request.controller.parent_tree)throw Error('Activation is not a single child of the reviewed controller');
   // A code change must receive a separate review before a request-only activation.
-  if(request.schema_version===replacementSchema)verifyReplacementActivation(request,context,cwd);
+  if(isReplacementRequest(request))verifyReplacementActivation(request,context,cwd);
   else if(git(['diff','--name-status',request.controller.parent_sha,context.sha],cwd)!==`A\t${requestPath}`)throw Error('Activation may only add the new execution request');
   const bytes=boundedFile(join(cwd,requestPath),16384);
   if(!same(JSON.parse(bytes),request)||sha256(execFileSync('git',['show',`${context.sha}:${requestPath}`],{cwd,maxBuffer:16384}))!==sha256(bytes))throw Error('Request bytes differ from the committed activation');
@@ -75,7 +75,7 @@ function sourceInventory(run,api){
 }
 export function authenticateRecovery(request,context,api=githubApi,readLog=readAbortJobLog){
   let state=recoverySource(context,api);
-  if(request.schema_version===replacementSchema)state=authenticateAbortContinuity(request,state,api,readLog);
+  if(isReplacementRequest(request))state=authenticateAbortContinuity(request,state,api,readLog);
   const {current,run,initial}=state;
   const attempt=api(`repos/${repository}/actions/runs/${context.id}/attempts/1`);
   if(initial||current.run_number!==request.expected_run_number||!same([attempt.id,attempt.run_attempt,attempt.head_sha,attempt.head_branch,attempt.path,attempt.event,attempt.status,attempt.workflow_id,attempt.repository?.id,attempt.head_repository?.id,attempt.repository?.full_name,attempt.head_repository?.full_name,attempt.run_number],

@@ -157,6 +157,59 @@ def test_v2_request_rejects_skipping_renewal_expanded_work_or_evidence_changes(m
         cycle.validate_request(request, now=batch.clock("2026-10-17T02:00:00Z"))
 
 
+
+def chained_replacement_request():
+    path = Path(__file__).resolve().parents[3] / ".github/scripts/fixtures/targeted-abort-run6/request.json"
+    request = json.loads(path.read_bytes())
+    request.update(schema_version=cycle.CHAINED_REPLACEMENT_REQUEST_SCHEMA, operation_id="targeted-nvda-aaoi-new-run7",
+                   created_at="2026-10-17T02:10:00Z", expires_at="2026-10-17T03:10:00Z", expected_run_number=7,
+                   abort_continuity={"run6": dict(cycle.REVIEWED_ABORT6), "run5": dict(cycle.REVIEWED_ABORT)})
+    return request
+
+
+def test_v3_request_binds_only_exact_run6_run5_aborts_and_original_source():
+    request = chained_replacement_request()
+    selected = cycle.validate_request(request, now=batch.clock("2026-10-17T02:20:00Z"))
+    assert list(selected) == ["NVDA", "AAOI"]
+    assert request["source"] == cycle.REVIEWED_SOURCE
+    assert request["limits"] == cycle.LIMITS
+    assert request["limits"]["max_statement_getter_calls"] == 4
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda r: r.update(expected_run_number=6),
+    lambda r: r.update(expected_run_number=8),
+    lambda r: r.update(expected_run_number=True),
+    lambda r: r.update(schema_version=cycle.REPLACEMENT_REQUEST_SCHEMA),
+    lambda r: r.update(schema_version=cycle.REQUEST_SCHEMA),
+    lambda r: r.pop("abort_continuity"),
+    lambda r: r["abort_continuity"].update(run4=dict(cycle.REVIEWED_ABORT)),
+    lambda r: r["abort_continuity"].pop("run5"),
+    lambda r: r["abort_continuity"].pop("run6"),
+    lambda r: r.update(abort_continuity=[dict(cycle.REVIEWED_ABORT6), dict(cycle.REVIEWED_ABORT)]),
+    lambda r: r["abort_continuity"].update(run6=dict(cycle.REVIEWED_ABORT), run5=dict(cycle.REVIEWED_ABORT6)),
+    lambda r: r["abort_continuity"]["run6"].update(extra=True),
+    lambda r: r["abort_continuity"]["run6"].update(run_attempt=2),
+    lambda r: r["abort_continuity"]["run6"].update(run_attempt=True),
+    lambda r: r["abort_continuity"]["run5"].update(run_attempt=True),
+    lambda r: r["abort_continuity"]["run6"].update(job_id=117279659375),
+    lambda r: r["abort_continuity"]["run5"].update(job_log_sha256="f" * 64),
+    lambda r: r["abort_continuity"]["run6"].update(request_sha256="f" * 64),
+    lambda r: r["source"].update(run_id=38991458566),
+    lambda r: r["source"].update(cohort_sha256="f" * 64),
+    lambda r: r.update(created_at="2026-10-17T02:01:05Z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t013151z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t015500z"),
+    lambda r: r["limits"].update(max_statement_getter_calls=5),
+    lambda r: r["limits"].update(caller_retries=1),
+    lambda r: r.update(financial_admission=True),
+])
+def test_v3_request_rejects_expanded_chain_spent_operations_and_changed_evidence(mutation):
+    request = chained_replacement_request()
+    mutation(request)
+    with pytest.raises((ValueError, KeyError)):
+        cycle.validate_request(request, now=batch.clock("2026-10-17T02:20:00Z"))
+
 def test_full_cycle_uses_only_four_getters_and_retains_complete_source(case, capsys):
     seen = []
     def injected(plan, base, output, **kwargs):

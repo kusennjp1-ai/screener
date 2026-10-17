@@ -1,7 +1,7 @@
 # Bounded artifact-only financial recovery
 
 This repair does not activate acquisition. It preserves the exact consumed
-run-5 `request.json`; a code-only commit does not match the workflow's activation
+run-6 `request.json`; a code-only commit does not match the workflow's activation
 path filter. Do not delete that request or rerun its workflow.
 The original recovery branch, workflow identity, read-only token permissions,
 non-cancelling global serial group, pinned free transport and 25-minute job cap
@@ -10,14 +10,17 @@ are preserved. The expired first-200 request/admission is not consulted.
 ## Separate review before activation
 
 1. Save and review this controller as one code-only child of the existing recovery
-   head `afba716470995a59c41043f982e1c09f987b1c53`. Never replace that
+   head `12b4e4dba9c847d754b7ec3b47b234984386a1f4`. Never replace that
    branch with a PR99 UI tree. Run the offline caller/collector/archive/planner/
    retention tests. No provider call is needed for this review.
 2. Re-read the complete recovery inventory. The only supported continuation is
-   run 6 -> exact pre-provider abort `38991458566/1` (run 5) -> retained source
-   `37478731832/1` (run 4), artifact `11420873789`. Run 5 failed before its only
-   provider-child call; its pinned complete job log, immutable head/request,
-   exact terminal attempt/job/steps and empty artifact inventory must all agree.
+   run 7 -> exact pre-provider abort `38993132263/1` (run 6) -> exact
+   pre-provider abort `38991458566/1` (run 5) -> retained source
+   `37478731832/1` (run 4), artifact `11420873789`. Both aborted before the provider
+   child: run 5 in the inherited live verifier; run 6 during initial source
+   authentication, before workspace creation. Both pinned complete job logs,
+   immutable heads/requests, exact terminal attempts/jobs/steps and empty
+   artifact inventories must agree.
    Empty artifacts or an arbitrary failure alone never permit skipping a run.
    Run 4 also failed, although its cycle and original receipts were retained.
    Any rerun, intervening/newer execution, changed proof, missing original source
@@ -35,17 +38,37 @@ are preserved. The expired first-200 request/admission is not consulted.
    request or reuse the preflight/first-200 intent. Do not alter target receipts,
    hold states or limits to make a request pass.
 5. Review and save a single child commit that **only modifies** `request.json`
-   with the new closed v2 request. The repair parent must retain the exact old
-   request bytes and have the aborted activation as its sole parent.
+   with the new closed v3 request. The repair parent must retain the exact old
+   run-6 request bytes and have the exact run-6 activation as its sole parent.
    This push is the consequential acquisition activation. It must be separately
    authorized. The caller checks its exact clean checkout, single parent/tree,
    replacement-only diff, genuine in-progress push run and attempt 1, expected run
    number, unique run for that head, current branch head and serial predecessor.
    Any run/rerun consumes this activation; a failure is not retry permission.
 
-No new activation request is supplied by this repair. The v2 template deliberately
+No new activation request is supplied by this repair. The v3 template deliberately
 has missing current clocks/controller identity and cannot execute. Missing controls
-fail closed. The old v1 ordinary predecessor path still rejects absent artifacts.
+fail closed. The old v1 ordinary predecessor path still rejects absent artifacts. V2 remains
+closed to its original run-6 proof; v3 permits exactly the two reviewed aborts
+and rejects run 8, arbitrary chains, reordered/omitted aborts and replayed operations.
+
+## File-only authentication of historical logs
+
+Run 6 encountered GitHub CLI's non-JSON terminal escape-sequence guard when
+reading run 5's log. Redirection does not remove that text guard. This repair
+uses GitHub's documented job-log GET/302/download flow for exactly the two
+reviewed job IDs; it does not enable escape-sequence output or change CLI,
+network or credential settings.
+
+The existing short-lived workflow token is used only for api.github.com. The
+signed storage request is separate and credential-free, restricted to reviewed
+HTTPS storage origins. Unexpected redirects, hosts, status codes, encodings,
+excess bytes or timeouts fail closed. One operation is bounded to 30 seconds
+and 1 MiB with no retries. The exclusive temporary file is removed on success
+or failure. Raw bytes, credentials and signed URLs are never emitted to logs.
+BOM, ANSI bytes and line endings are retained unchanged for the same pinned
+SHA256 comparison. A successful download does not itself authenticate an abort;
+all run, job, request, inventory and chronology checks remain required.
 
 ## Existing publication-verifier compatibility
 

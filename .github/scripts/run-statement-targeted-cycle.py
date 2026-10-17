@@ -27,10 +27,15 @@ from app.services.statement_retention_budget import StatementRetentionBudget
 
 REQUEST_SCHEMA = "financial-targeted-recovery-execution-v1"
 REPLACEMENT_REQUEST_SCHEMA = "financial-targeted-recovery-execution-v2"
+CHAINED_REPLACEMENT_REQUEST_SCHEMA = "financial-targeted-recovery-execution-v3"
 REVIEWED_ABORT = {"schema_version": "financial-pre-provider-abort-v1", "run_id": 38991458566,
     "run_attempt": 1, "run_number": 5, "head_sha": "afba716470995a59c41043f982e1c09f987b1c53",
     "request_sha256": "7f0bd22ed8fcedb703c9c851b0891512d52dd8c7b781bb2ab8a85c3b6fd06c1d",
     "job_id": 117274547210, "job_log_sha256": "acf29622ccbd3933c1e220ca8f41b1c77beae3320a4f63bdb580a07078066f87"}
+REVIEWED_ABORT6 = {"schema_version": "financial-pre-provider-abort-v1", "run_id": 38993132263,
+    "run_attempt": 1, "run_number": 6, "head_sha": "12b4e4dba9c847d754b7ec3b47b234984386a1f4",
+    "request_sha256": "cf059634ca8e29f3bf4a8ab70ec14a6e9cf76ee76ad3948d0ac619a30def13ca",
+    "job_id": 117279659374, "job_log_sha256": "47dabe41056aeb89eb17d2408bb120c10998868eaf4ccfb17597026b6ccfc462"}
 REVIEWED_SOURCE = {"run_id": 37478731832, "run_attempt": 1,
     "head_sha": "4715b218cc25720d1d3be455930554e1e6282136", "artifact_id": 11420873789,
     "artifact_sha256": "266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd",
@@ -67,29 +72,36 @@ def positive(value):
 
 
 def validate_request(request, *, now):
-    replacement = isinstance(request, dict) and request.get("schema_version") == REPLACEMENT_REQUEST_SCHEMA
+    chained = isinstance(request, dict) and request.get("schema_version") == CHAINED_REPLACEMENT_REQUEST_SCHEMA
+    replacement = isinstance(request, dict) and request.get("schema_version") in (
+        REPLACEMENT_REQUEST_SCHEMA, CHAINED_REPLACEMENT_REQUEST_SCHEMA)
     fields = ("schema_version", "operation_id", "created_at", "expires_at", "controller",
                     "expected_run_number", "source", "price_source", "selection", "limits",
                     "publication_authority", "financial_admission")
     exact(request, fields + (("abort_continuity",) if replacement else ()), "execution request")
-    if (request["schema_version"] not in (REQUEST_SCHEMA, REPLACEMENT_REQUEST_SCHEMA) or request["publication_authority"] != "none"
+    if (request["schema_version"] not in (REQUEST_SCHEMA, REPLACEMENT_REQUEST_SCHEMA, CHAINED_REPLACEMENT_REQUEST_SCHEMA) or request["publication_authority"] != "none"
             or request["financial_admission"] is not False):
         raise ValueError("Only a new acquisition-only execution request is accepted")
     if replacement:
         # This is a second boundary check. Current GitHub continuity and the
         # exact spent request/log remain authenticated by the parent handshake.
-        exact(request["abort_continuity"], REVIEWED_ABORT, "reviewed pre-provider abort")
-        if (request["abort_continuity"] != REVIEWED_ABORT or request["source"] != REVIEWED_SOURCE
-                or type(request["expected_run_number"]) is not int or request["expected_run_number"] != 6
-                or any(type(request["abort_continuity"][key]) is not int for key in ("run_id", "run_attempt", "run_number", "job_id"))):
-            raise ValueError("Only the reviewed run5 abort may precede run6")
+        binding = {"run6": REVIEWED_ABORT6, "run5": REVIEWED_ABORT} if chained else REVIEWED_ABORT
+        exact(request["abort_continuity"], binding, "reviewed pre-provider abort continuity")
+        if (request["abort_continuity"] != binding or request["source"] != REVIEWED_SOURCE
+                or type(request["expected_run_number"]) is not int or request["expected_run_number"] != (7 if chained else 6)):
+            raise ValueError("Only the exact reviewed abort continuity may precede this replacement")
+        identities = (request["abort_continuity"]["run6"], request["abort_continuity"]["run5"]) if chained else (request["abort_continuity"],)
+        for identity in identities:
+            if any(type(identity[key]) is not int for key in ("run_id", "run_attempt", "run_number", "job_id")):
+                raise ValueError("Reviewed abort identities require exact integer values")
     if not isinstance(request["operation_id"], str) or not re.fullmatch(r"targeted-nvda-aaoi-[a-z0-9-]{1,64}", request["operation_id"]):
         raise ValueError("Invalid finite operation identity")
     if any(not isinstance(request[key], str) or not request[key].endswith("Z") for key in ("created_at", "expires_at")):
         raise ValueError("Explicit UTC execution clocks are required")
     created, expires = batch.clock(request["created_at"]), batch.clock(request["expires_at"])
-    if replacement and (created <= batch.clock("2026-10-17T01:37:34Z")
-                        or request["operation_id"] == "targeted-nvda-aaoi-20261017t013151z"):
+    if replacement and (created <= batch.clock("2026-10-17T02:01:05Z" if chained else "2026-10-17T01:37:34Z")
+                        or request["operation_id"] == "targeted-nvda-aaoi-20261017t013151z"
+                        or (chained and request["operation_id"] == "targeted-nvda-aaoi-20261017t015500z")):
         raise ValueError("A spent operation cannot be renewed")
     if not created <= now < expires or not timedelta(0) < expires - created <= timedelta(hours=2):
         raise ValueError("Execution request must be current and finite")
