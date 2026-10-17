@@ -6,13 +6,14 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {githubApi} from './publication-gate.mjs';
 import {sha256,downloadArtifact} from './publication-state.mjs';
 import {preparePublicationVerifier} from './targeted-publication-verifier.mjs';
+import {loadPinnedResearchDecoder} from './pinned-research-decoder.mjs';
 import {chooseExport,verifyArchive} from './select-release-source.mjs';
 import {uniqueArtifact} from './select-published-runs.mjs';
 import {assertPriceObservationBounds,extractPriceObservations,priceObservationDigest} from './price-observations.mjs';
 import {repository,recoveryWorkflow,recoverySource,checkedArtifact,extractSourceArchive} from './restore-statement-source.mjs';
 import {researchPath} from './prepare-statement-cohort.mjs';
 import {prepareRecoveryPreflightInputs} from './prepare-statement-recovery-preflight.mjs';
-import {replacementSchema,chainedReplacementSchema,isReplacementRequest,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
+import {replacementSchema,chainedReplacementSchema,run8ReplacementSchema,isReplacementRequest,validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation,readAbortJobLog} from './verify-statement-pre-provider-abort.mjs';
 
 export const branch='improve/mandatory-financial-source-recovery';
 export const requestPath='.github/targeted-financial-recovery/request.json';
@@ -31,7 +32,7 @@ export function boundedFile(path,maximum){
 export function validateRequest(value,now=Date.now()){
   const replacement=isReplacementRequest(value);
   exact(value,['schema_version','operation_id','created_at','expires_at','controller','expected_run_number','source','price_source','selection','limits','publication_authority','financial_admission',...(replacement?['abort_continuity']:[])],'execution request');
-  if(!['financial-targeted-recovery-execution-v1',replacementSchema,chainedReplacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
+  if(!['financial-targeted-recovery-execution-v1',replacementSchema,chainedReplacementSchema,run8ReplacementSchema].includes(value.schema_version)||value.publication_authority!=='none'||value.financial_admission!==false
     ||typeof value.operation_id!=='string'||!/^targeted-nvda-aaoi-[a-z0-9-]{1,64}$/.test(value.operation_id))throw Error('Invalid artifact-only operation');
   if(replacement)validateAbortContinuity(value);
   const start=Date.parse(value.created_at),end=Date.parse(value.expires_at);
@@ -110,16 +111,37 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 `,zip,expectedFile,String(maximum)],{stdio:'pipe',timeout:30000});
   return downloadArtifact(artifact,directory,repository,expectedFile);
 }
-function extractCanonical(archive,destination){
-  execFileSync('python3',['-c',`import pathlib,tarfile,sys
+export function extractCanonical(archive,destination){
+  // Ordinary US scan chunks can exceed 32 MiB (the reviewed source reaches
+  // 92,795,011 bytes). Copy this exact path family opaquely, never parse it in
+  // JavaScript. All other members keep the original 32 MiB ceiling.
+  execFileSync('python3',['-c',`import pathlib,re,resource,tarfile,sys
+resource.setrlimit(resource.RLIMIT_AS,(256*1024**2,256*1024**2))
 with tarfile.open(sys.argv[1]) as t:
- members=t.getmembers();assert len(members)<=30000 and sum(m.size for m in members)<=2*1024**3,'Unbounded canonical archive'
- assert all(m.size<=32*1024**2 for m in members),'Oversized canonical member'
- root=pathlib.Path(sys.argv[2]);root.mkdir(exist_ok=False)
- for m in members:
+ total=0;seen=set();members=[]
+ for count,m in enumerate(t,1):
+  total+=m.size
+  assert count<=30000 and 0<=total<=2*1024**3,'Unbounded canonical archive'
   n=m.name
+  assert len(n.encode('utf-8'))<=1024,'Unbounded canonical path'
   while n.startswith('./'):n=n[2:]
-  if n=='static-data' or n.startswith('static-data/'):t.extract(m,root,filter='data')
+  n=n.rstrip('/')
+  assert (m.isfile() or m.isdir()) and not m.issparse(),'Links or special archive entries are forbidden'
+  if not n or n=='.':
+   assert m.isdir() and m.size==0,'Invalid canonical root entry'
+   continue
+  parts=n.split('/')
+  assert not n.startswith('/') and '\\\\' not in n and all(p not in ('','.', '..') for p in parts) and n not in seen,'Unsafe or duplicate archive path'
+  assert len(parts)<=32 and all(len(p.encode('utf-8'))<=255 for p in parts),'Unbounded canonical path'
+  seen.add(n)
+  limit=128*1024**2 if re.fullmatch(r'static-data/markets/us/scan/chunks/chunk-[0-9]{4}\\.json',n) else 32*1024**2
+  assert 0<=m.size<=limit and (not m.isdir() or m.size==0),'Oversized canonical member'
+  if n=='static-data' or n.startswith('static-data/'):members.append(m)
+ # Validate the entire archive before writing any member. tarfile copies each
+ # regular file in fixed-size blocks; metadata and buffers share the AS cap.
+ root=pathlib.Path(sys.argv[2]);assert not any(p.is_symlink() for p in (root,*root.parents)),'Linked canonical destination'
+ root.mkdir(exist_ok=False);t.copybufsize=1024**2
+ for m in members:t.extract(m,root,filter='data')
 `,archive,destination],{stdio:'pipe',timeout:120000});
 }
 // The provider child never receives the GitHub token. Only a fixed, one-shot
@@ -157,6 +179,7 @@ export async function run({workspace,jobStartedAt,context,api=githubApi}){
   for(let part=dirname(workspace);;part=dirname(part)){if(lstatSync(part).isSymbolicLink())throw Error('Linked workspace');if(part===dirname(part))break;}
   mkdirSync(workspace,{recursive:false});
   const livePublication=await preparePublicationVerifier(join(workspace,'publication-verifier'));
+  const pinnedDecoder=await loadPinnedResearchDecoder(join(workspace,'publication-verifier'));
   const restored=join(workspace,'source');mkdirSync(restored);const zip=join(restored,'source.zip'),fd=openSync(zip,'wx');
   try{execFileSync('gh',['api',`repos/${repository}/actions/artifacts/${recovery.artifact.id}/zip`],{stdio:['ignore',fd,'pipe'],timeout:120000});}finally{closeSync(fd);}
   if(lstatSync(zip).size!==recovery.artifact.size_in_bytes||sha256(boundedFile(zip,128*1024**2))!==request.source.artifact_sha256)throw Error('Original source ZIP mismatch');
@@ -178,7 +201,7 @@ export async function run({workspace,jobStartedAt,context,api=githubApi}){
   const inputs=join(workspace,'inputs');mkdirSync(inputs);
   const result=prepareRecoveryPreflightInputs({manifestBytes:boundedFile(join(canonical,'manifest.json'),1024**2),
     indexBytes:boundedFile(join(canonical,researchPath(source.manifest)),10*1024**2),sourceBaseBytes:boundedFile(join(files,'base.json'),32*1024**2),
-    sourceCohortBytes:boundedFile(join(files,'cohort.json'),1024**2),observedAt:new Date().toISOString(),
+    sourceCohortBytes:boundedFile(join(files,'cohort.json'),1024**2),observedAt:new Date().toISOString(),pinnedDecoder,
     bindings:{canonical_manifest_sha256:p.manifest_sha256,canonical_research_sha256:p.research_sha256,source_archive_manifest_sha256:s.archive_manifest_sha256,source_base_sha256:s.base_sha256,source_cohort_sha256:s.cohort_sha256}});
   const cohortBytes=Buffer.from(JSON.stringify(result.cohort));
   writeFileSync(join(inputs,'base.json'),result.baseBytes,{flag:'wx'});writeFileSync(join(inputs,'cohort.json'),cohortBytes,{flag:'wx'});writeFileSync(join(inputs,'request.json'),requestBytes,{flag:'wx'});

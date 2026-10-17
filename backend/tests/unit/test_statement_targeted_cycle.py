@@ -210,6 +210,86 @@ def test_v3_request_rejects_expanded_chain_spent_operations_and_changed_evidence
     with pytest.raises((ValueError, KeyError)):
         cycle.validate_request(request, now=batch.clock("2026-10-17T02:20:00Z"))
 
+
+def run8_replacement_request():
+    path = Path(__file__).resolve().parents[3] / ".github/scripts/fixtures/targeted-abort-run7/request.json"
+    request = json.loads(path.read_bytes())
+    request.update(schema_version=cycle.RUN8_REPLACEMENT_REQUEST_SCHEMA, operation_id="targeted-nvda-aaoi-new-run8",
+                   created_at="2026-10-17T03:10:00Z", expires_at="2026-10-17T04:10:00Z", expected_run_number=8,
+                   abort_continuity={"run7": dict(cycle.REVIEWED_ABORT7), "run6": dict(cycle.REVIEWED_ABORT6),
+                                     "run5": dict(cycle.REVIEWED_ABORT)})
+    return request
+
+
+def test_v4_request_binds_only_run7_run6_run5_aborts_and_original_source():
+    request = run8_replacement_request()
+    selected = cycle.validate_request(request, now=batch.clock("2026-10-17T03:20:00Z"))
+    assert list(selected) == ["NVDA", "AAOI"]
+    assert request["source"] == cycle.REVIEWED_SOURCE
+    assert request["limits"] == cycle.LIMITS
+    assert request["limits"] == {"max_symbols": 2, "max_statement_getter_calls": 4, "max_transport_requests": 1000,
+                                 "acquisition_budget_seconds": 1080, "caller_retries": 0}
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda r: r.update(expected_run_number=7),
+    lambda r: r.update(expected_run_number=9),
+    lambda r: r.update(expected_run_number=True),
+    lambda r: r.update(schema_version=cycle.CHAINED_REPLACEMENT_REQUEST_SCHEMA),
+    lambda r: r.update(schema_version=cycle.REPLACEMENT_REQUEST_SCHEMA),
+    lambda r: r.update(schema_version=cycle.REQUEST_SCHEMA),
+    lambda r: r.update(schema_version="financial-targeted-recovery-execution-v5"),
+    lambda r: r.pop("abort_continuity"),
+    lambda r: r["abort_continuity"].update(run8=dict(cycle.REVIEWED_ABORT7)),
+    lambda r: r["abort_continuity"].update(run4=dict(cycle.REVIEWED_SOURCE)),
+    lambda r: r.update(abort_continuity=[dict(cycle.REVIEWED_ABORT7), dict(cycle.REVIEWED_ABORT6), dict(cycle.REVIEWED_ABORT)]),
+    lambda r: r["abort_continuity"].update(run7=dict(cycle.REVIEWED_ABORT6), run6=dict(cycle.REVIEWED_ABORT7)),
+    lambda r: r["source"].update(run_id=38997227416),
+    lambda r: r["source"].update(cohort_sha256="f" * 64),
+    lambda r: r.update(created_at="2026-10-17T03:03:22Z"),
+    lambda r: r.update(created_at="2026-10-17T03:03:21Z"),
+    lambda r: r.update(created_at="2026-10-17T03:21:00Z"),
+    lambda r: r.update(expires_at="2026-10-17T03:20:00Z"),
+    lambda r: r.update(expires_at="2026-10-17T05:10:01Z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t013151z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t015500z"),
+    lambda r: r.update(operation_id="targeted-nvda-aaoi-20261017t025809z"),
+    lambda r: r["limits"].update(max_symbols=3),
+    lambda r: r["limits"].update(max_statement_getter_calls=5),
+    lambda r: r["limits"].update(max_transport_requests=1001),
+    lambda r: r["limits"].update(acquisition_budget_seconds=1081),
+    lambda r: r["limits"].update(caller_retries=1),
+    lambda r: r["selection"][0].update(symbol="FUTU"),
+    lambda r: r["selection"].reverse(),
+    lambda r: r.update(financial_admission=True),
+    lambda r: r.update(publication_authority="publish"),
+])
+def test_v4_request_rejects_expanded_chain_spent_operations_authority_and_work(mutation):
+    request = run8_replacement_request()
+    mutation(request)
+    with pytest.raises((ValueError, KeyError)):
+        cycle.validate_request(request, now=batch.clock("2026-10-17T03:20:00Z"))
+
+
+@pytest.mark.parametrize("key", ["run7", "run6", "run5"])
+@pytest.mark.parametrize("mutation", [
+    lambda r, key: r["abort_continuity"].pop(key),
+    lambda r, key: r["abort_continuity"][key].update(extra=True),
+    lambda r, key: r["abort_continuity"][key].update(run_attempt=2),
+    lambda r, key: r["abort_continuity"][key].update(run_attempt=True),
+    lambda r, key: r["abort_continuity"][key].update(run_id=38997227417),
+    lambda r, key: r["abort_continuity"][key].update(head_sha="f" * 40),
+    lambda r, key: r["abort_continuity"][key].update(job_id=117292325414),
+    lambda r, key: r["abort_continuity"][key].update(job_log_sha256="f" * 64),
+    lambda r, key: r["abort_continuity"][key].update(request_sha256="f" * 64),
+])
+def test_v4_request_rejects_each_changed_or_omitted_abort_identity(key, mutation):
+    request = run8_replacement_request()
+    mutation(request, key)
+    with pytest.raises((ValueError, KeyError)):
+        cycle.validate_request(request, now=batch.clock("2026-10-17T03:20:00Z"))
+
+
 def test_full_cycle_uses_only_four_getters_and_retains_complete_source(case, capsys):
     seen = []
     def injected(plan, base, output, **kwargs):

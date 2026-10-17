@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {prepareRecoveryPreflightInputs,planningArguments} from './prepare-statement-recovery-preflight.mjs';
 import {encodeResearchIndex} from '../../frontend/src/static/researchTransport.js';
+import {decodePinnedResearchIndex,loadPinnedResearchDecoder,pinnedResearchDecoderFiles} from './pinned-research-decoder.mjs';
 
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const bytes=value=>Buffer.from(JSON.stringify(value));
@@ -39,6 +40,33 @@ test('preserves every original member and order without admitting new liquid nam
 
 test('canonical column transport preserves the exact same original full cohort',()=>{
   assert.deepEqual(prepareRecoveryPreflightInputs(fixture({wire:true})).cohort.symbols,['AAOI','NVDA']);
+});
+
+test('v2 requires the pinned producer capability and cannot fall back or relabel',()=>{
+  const input=fixture({wire:true}),raw=JSON.parse(input.indexBytes);
+  raw.schema='research-table-v2';raw.column_encoding='sparse-binary-and-signed-zero-v1';
+  input.indexBytes=bytes(raw);rebind(input,'canonical_research_sha256','indexBytes');
+  for(const pinnedDecoder of [undefined,null,{},()=>{}, {decodeResearchIndex:()=>({rows:[row('NVDA')]})}]){
+    assert.throws(()=>prepareRecoveryPreflightInputs({...input,pinnedDecoder}),/verified pinned research decoder/);
+  }
+  assert.equal(JSON.parse(input.indexBytes).schema,'research-table-v2');
+  assert.throws(()=>decodePinnedResearchIndex({},raw),/verified pinned research decoder/);
+});
+
+test('a supplied forged capability cannot bypass the supported legacy offline decoder',()=>{
+  for(const wire of [false,true])assert.throws(()=>prepareRecoveryPreflightInputs({...fixture({wire}),pinnedDecoder:{}}),/verified pinned research decoder/);
+});
+
+test('pinned decoder rejects missing, altered or linked source bytes before importing code',async()=>{
+  const root=mkdtempSync(join(tmpdir(),'pinned-research-guard-'));
+  try{
+    await assert.rejects(loadPinnedResearchDecoder(root),/ENOENT/);
+    const relative=Object.keys(pinnedResearchDecoderFiles)[0],path=join(root,relative);
+    mkdirSync(dirname(path),{recursive:true});writeFileSync(path,"throw Error('untrusted module executed');\n");
+    await assert.rejects(loadPinnedResearchDecoder(root),/Pinned research decoder bytes differ/);
+    const target=join(root,'unchanged-source');writeFileSync(target,'untrusted');rmSync(path);symlinkSync(target,path);
+    await assert.rejects(loadPinnedResearchDecoder(root),/Linked pinned research decoder input/);
+  }finally{rmSync(root,{recursive:true,force:true});}
 });
 
 test('zero current liquid members cannot remove the original full source cohort',()=>{

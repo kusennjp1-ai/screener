@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {linkSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {existsSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {branch,requestPath,validateRequest,verifyActivation,authenticateRecovery,checkPriceIdentity,boundedFile,executeWithRecheck} from './run-statement-targeted-recovery.mjs';
+import {branch,requestPath,validateRequest,verifyActivation,authenticateRecovery,checkPriceIdentity,boundedFile,executeWithRecheck,extractCanonical} from './run-statement-targeted-recovery.mjs';
 import {repository,recoveryWorkflow} from './restore-statement-source.mjs';
+import {run8ReplacementSchema,reviewedAbort7,reviewedAbort6,reviewedAbort} from './verify-statement-pre-provider-abort.mjs';
 const h='a'.repeat(64),code='b'.repeat(40),currentSha='c'.repeat(40),now=Date.parse('2026-10-16T09:00:00Z');
 const request=()=>({schema_version:'financial-targeted-recovery-execution-v1',operation_id:'targeted-nvda-aaoi-example',created_at:'2026-10-16T08:59:00Z',expires_at:'2026-10-16T10:00:00Z',controller:{parent_sha:code,parent_tree:code},expected_run_number:5,
  source:{run_id:10,run_attempt:1,head_sha:code,artifact_id:20,artifact_sha256:h,archive_manifest_sha256:h,base_sha256:h,cohort_sha256:h},
@@ -91,4 +92,93 @@ test('missing, malformed, repeated or denied readiness stops before collection',
  }
  await assert.rejects(executeWithRecheck(process.execPath,['-e',"require('node:fs').writeSync(3,'recheck\\n');process.stdin.resume()"],{cwd:process.cwd(),env:{PATH:process.env.PATH},authenticate:async()=>{throw Error('Remote predecessor changed');},timeout:2000}),/Remote predecessor changed/);
  await assert.rejects(executeWithRecheck(process.execPath,['-e','setTimeout(()=>{},1000)'],{cwd:process.cwd(),env:{PATH:process.env.PATH},authenticate:async()=>assert.fail('No readiness'),timeout:30}),/timed out/);
+});
+
+
+test('v4 retains the same finite artifact-only request and two-symbol acquisition boundaries',()=>{
+ const old=JSON.parse(readFileSync(new URL('./fixtures/targeted-abort-run7/request.json',import.meta.url)));
+ const r={...old,schema_version:run8ReplacementSchema,operation_id:'targeted-nvda-aaoi-new-run8',
+  expected_run_number:8,created_at:'2026-10-17T03:10:00Z',expires_at:'2026-10-17T04:10:00Z',
+  abort_continuity:{run7:{...reviewedAbort7},run6:{...reviewedAbort6},run5:{...reviewedAbort}}};
+ const now=Date.parse('2026-10-17T03:20:00Z');
+ assert.equal(validateRequest(r,now).limits.max_statement_getter_calls,4);
+ const mutations=[r=>r.financial_admission=true,r=>r.publication_authority='publish',r=>r.provider_execution=true,
+  r=>r.created_at='2026-10-17T03:21:00Z',r=>r.expires_at='2026-10-17T03:20:00Z',r=>r.expires_at='2026-10-17T05:10:01Z',
+  r=>r.limits.max_symbols=3,r=>r.limits.max_statement_getter_calls=5,r=>r.limits.max_transport_requests=1001,
+  r=>r.limits.acquisition_budget_seconds=1081,r=>r.limits.caller_retries=1,r=>r.selection[0].symbol='FUTU',
+  r=>r.selection.reverse(),r=>r.selection[0].targets=['eps'],r=>r.price_source.research_sha256='bad'];
+ for(const mutate of mutations){const value=structuredClone(r);mutate(value);assert.throws(()=>validateRequest(value,now));}
+});
+
+// Sparse test TARs exercise real size limits without allocating large JS buffers
+// or writing gigabytes. The production extractor must still stream file bytes.
+function canonicalArchive(directory,members){
+ const archive=join(directory,'fixture.tar'),spec=join(directory,'members.json');writeFileSync(spec,JSON.stringify(members));
+ execFileSync('python3',['-c',`import json,sys,tarfile
+with open(sys.argv[1]) as f:members=json.load(f)
+with open(sys.argv[2],'wb') as f:
+ for spec in members:
+  body=spec.get('body','').encode();m=tarfile.TarInfo(spec['name']);m.size=spec.get('size',len(body));m.type=spec.get('type','0').encode();m.linkname=spec.get('linkname','')
+  f.write(m.tobuf(format=tarfile.PAX_FORMAT));f.write(body);f.seek(m.size-len(body)+(-m.size%512),1)
+ f.write(bytes(10240))
+`,spec,archive],{stdio:'pipe',timeout:30000});return archive;
+}
+const scanChunk='./static-data/markets/us/scan/chunks/chunk-0001.json';
+test('canonical extraction streams exact US scan chunks through 128 MiB, keeps ordinary 32 MiB, and never parses them',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'canonical-copy-'));try{
+  const archive=canonicalArchive(dir,[{name:'.',type:'5'},{name:'./static-data/manifest.json',body:'{}'},
+   {name:scanChunk,size:128*1024**2},{name:'./static-data/ordinary.json',size:32*1024**2},{name:'./outside.json',body:'ignored'}]);
+  const output=join(dir,'output');extractCanonical(archive,output);
+  assert.equal(lstatSync(join(output,scanChunk)).size,128*1024**2);
+  assert.equal(lstatSync(join(output,'static-data/ordinary.json')).size,32*1024**2);
+  assert.equal(readFileSync(join(output,'static-data/manifest.json'),'utf8'),'{}');assert.equal(existsSync(join(output,'outside.json')),false);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('canonical member ceilings reject oversize chunks, other markets, lookalike paths, and all ordinary members before writes',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'canonical-size-'));try{
+  const invalid=[{name:scanChunk,size:128*1024**2+1},
+   ...['./static-data/ordinary.json','./outside.json','./static-data/markets/hk/scan/chunks/chunk-0001.json',
+    './static-data/markets/us/scan/chunks/chunk-00001.json','./static-data/markets/us/scan/chunks/chunk-0001xjson',
+    './static-data/markets/us/scan/chunks/chunk-0001.json/extra'].map(name=>({name,size:32*1024**2+1}))];
+  for(const [i,member]of invalid.entries()){
+   const archive=canonicalArchive(dir,[{name:'./static-data/manifest.json',body:'{}'},member]),output=join(dir,`output-${i}`);
+   assert.throws(()=>extractCanonical(archive,output),/Oversized canonical member/);assert.equal(existsSync(output),false);
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('canonical extraction retains finite total and member-count caps, including ignored files',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'canonical-total-'));try{
+  for(const [i,members]of [Array.from({length:17},(_,i)=>({name:`./static-data/markets/us/scan/chunks/chunk-${String(i).padStart(4,'0')}.json`,size:128*1024**2})),
+   Array.from({length:30001},(_,i)=>({name:`./ignored-${i}`}))].entries()){
+   const archive=canonicalArchive(dir,members),output=join(dir,`output-${i}`);
+   assert.throws(()=>extractCanonical(archive,output),/Unbounded canonical archive/);assert.equal(existsSync(output),false);
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('canonical extraction rejects traversal, aliases, duplicates, links, special files, and bounded-path violations before writes',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'canonical-path-'));try{
+  const invalid=[{name:'../escape'},{name:'/absolute'},{name:'./static-data/../escape'},{name:'./static-data//alias'},
+   {name:'./static-data/back\\slash'},{name:scanChunk,type:'2',linkname:'/tmp/escape'},
+   {name:scanChunk,type:'1',linkname:'./static-data/manifest.json'},{name:'./ignored-fifo',type:'6'},
+   {name:'./ignored-device',type:'3'},{name:'./static-data/'+('a/'.repeat(32))+'file'},
+   {name:'./static-data/'+('a'.repeat(256))},{name:'./'.repeat(520)+'static-data/file'},
+   {name:'././static-data/manifest.json'},{name:'./static-data/manifest.json/'},{name:'.',type:'2',linkname:'/tmp'}];
+  for(const [i,member]of invalid.entries()){
+   const archive=canonicalArchive(dir,[{name:'./static-data/manifest.json',body:'{}'},member]),output=join(dir,`output-${i}`);
+   assert.throws(()=>extractCanonical(archive,output),/Unsafe or duplicate|Links or special|Unbounded canonical path/);assert.equal(existsSync(output),false);
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('canonical extraction enforces its 256 MiB address-space cap on hostile TAR extended headers',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'canonical-memory-'));try{
+  const archive=canonicalArchive(dir,[{name:'./huge-pax-header',type:'x',size:300*1024**2}]),output=join(dir,'output');
+  assert.throws(()=>extractCanonical(archive,output),/MemoryError|Cannot allocate memory/);assert.equal(existsSync(output),false);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('canonical extraction refuses existing destinations and symlinked destination ancestors',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'canonical-destination-'));try{
+  const archive=canonicalArchive(dir,[{name:'./static-data/manifest.json',body:'{}'}]),output=join(dir,'output');mkdirSync(output);
+  assert.throws(()=>extractCanonical(archive,output),/FileExistsError/);symlinkSync(output,join(dir,'linked'));
+  assert.throws(()=>extractCanonical(archive,join(dir,'linked/nested')),/Linked canonical destination/);assert.equal(existsSync(join(output,'nested')),false);
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

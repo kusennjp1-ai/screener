@@ -1,0 +1,185 @@
+{
+  "abort": {
+    "id": 38997227416,
+    "run_attempt": 1,
+    "run_number": 7,
+    "head_sha": "b6378b8077b51f18d63e6dbb4d221ac47144bee4",
+    "head_branch": "improve/mandatory-financial-source-recovery",
+    "path": ".github/workflows/financial-statement-recovery.yml",
+    "event": "push",
+    "workflow_id": 374552819,
+    "status": "completed",
+    "conclusion": "failure",
+    "run_started_at": "2026-10-17T03:02:12Z",
+    "repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    },
+    "head_repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    }
+  },
+  "attempt": {
+    "id": 38997227416,
+    "run_attempt": 1,
+    "run_number": 7,
+    "head_sha": "b6378b8077b51f18d63e6dbb4d221ac47144bee4",
+    "head_branch": "improve/mandatory-financial-source-recovery",
+    "path": ".github/workflows/financial-statement-recovery.yml",
+    "event": "push",
+    "workflow_id": 374552819,
+    "status": "completed",
+    "conclusion": "failure",
+    "run_started_at": "2026-10-17T03:02:12Z",
+    "repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    },
+    "head_repository": {
+      "id": 1203919607,
+      "full_name": "kusennjp1-ai/screener"
+    }
+  },
+  "jobs": {
+    "total_count": 1,
+    "jobs": [
+      {
+        "id": 117292325413,
+        "run_id": 38997227416,
+        "workflow_name": "Financial Statement Recovery",
+        "head_branch": "improve/mandatory-financial-source-recovery",
+        "run_url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/runs/38997227416",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOR8Ja988AAAAbTyraJQ",
+        "head_sha": "b6378b8077b51f18d63e6dbb4d221ac47144bee4",
+        "url": "https://api.github.com/repos/kusennjp1-ai/screener/actions/jobs/117292325413",
+        "html_url": "https://github.com/kusennjp1-ai/screener/actions/runs/38997227416/job/117292325413",
+        "status": "completed",
+        "conclusion": "failure",
+        "created_at": "2026-10-17T03:02:13Z",
+        "started_at": "2026-10-17T03:02:14Z",
+        "completed_at": "2026-10-17T03:03:22Z",
+        "name": "statement-recovery",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-17T03:02:15Z",
+            "completed_at": "2026-10-17T03:02:16Z"
+          },
+          {
+            "name": "Start the bounded job clock",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-17T03:02:16Z",
+            "completed_at": "2026-10-17T03:02:16Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-17T03:02:16Z",
+            "completed_at": "2026-10-17T03:02:19Z"
+          },
+          {
+            "name": "Run actions/setup-node@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-17T03:02:19Z",
+            "completed_at": "2026-10-17T03:02:20Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-17T03:02:20Z",
+            "completed_at": "2026-10-17T03:02:20Z"
+          },
+          {
+            "name": "Install the reviewed statement transport",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-17T03:02:20Z",
+            "completed_at": "2026-10-17T03:02:29Z"
+          },
+          {
+            "name": "Check acquisition bounds and source restoration offline",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-17T03:02:29Z",
+            "completed_at": "2026-10-17T03:03:16Z"
+          },
+          {
+            "name": "Authenticate the new finite request and collect only due NVDA and AAOI",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8,
+            "started_at": "2026-10-17T03:03:16Z",
+            "completed_at": "2026-10-17T03:03:20Z"
+          },
+          {
+            "name": "Retain partial source progress and original pilot receipts",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-17T03:03:20Z",
+            "completed_at": "2026-10-17T03:03:20Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 16,
+            "started_at": "2026-10-17T03:03:20Z",
+            "completed_at": "2026-10-17T03:03:20Z"
+          },
+          {
+            "name": "Post Run actions/setup-node@v4",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 17,
+            "started_at": "2026-10-17T03:03:20Z",
+            "completed_at": "2026-10-17T03:03:20Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 18,
+            "started_at": "2026-10-17T03:03:20Z",
+            "completed_at": "2026-10-17T03:03:20Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 19,
+            "started_at": "2026-10-17T03:03:20Z",
+            "completed_at": "2026-10-17T03:03:20Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/kusennjp1-ai/screener/check-runs/117292325413",
+        "labels": [
+          "ubuntu-latest"
+        ],
+        "runner_id": 1000005057,
+        "runner_name": "GitHub Actions 1000005057",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      }
+    ]
+  },
+  "artifacts": {
+    "total_count": 0,
+    "artifacts": []
+  }
+}

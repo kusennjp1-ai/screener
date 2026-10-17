@@ -1,0 +1,22 @@
+{
+  ".github/scripts/run-statement-targeted-recovery.mjs": {
+    "fixture": "caller.mjs.txt",
+    "sha256": "cc1bc4666ce1612cbc3ffa4f52fc4f866b7470337e07918085a63be6c9f02c94",
+    "blob_sha": "fce39c53c9d49c30c681962da46ccb86419f2526"
+  },
+  ".github/scripts/download-reviewed-job-log.mjs": {
+    "fixture": "helper.mjs.txt",
+    "sha256": "2a0709e2fbf752f622500151d9d312b1b90de60274543152e4c2b8c66f8e67e4",
+    "blob_sha": "8cf6b657dcf6e4d11e781657c46fcfb47f3ccd8b"
+  },
+  ".github/workflows/financial-statement-recovery.yml": {
+    "fixture": "workflow.yml.txt",
+    "sha256": "bc3cac4bfafe7e590b2e40a517278dad38f99c8ddbd269f2efa87bcebd6ca107",
+    "blob_sha": "a0529f3003858855ffc1c20a4395cbcb3d6434cd"
+  },
+  ".github/targeted-financial-recovery/request.json": {
+    "fixture": "request.json",
+    "sha256": "846a0d2a07e2a43b6eee3837f19dfb01e233866a8b3e1912a57d025d3a043e00",
+    "blob_sha": "ddcb70424315399ab4efe217ebf19a9161bda7f0"
+  }
+}

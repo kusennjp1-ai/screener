@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {repository,recoveryWorkflow} from './restore-statement-source.mjs';
-import {replacementSchema,chainedReplacementSchema,reviewedAbort,reviewedAbort6,reviewedSource,abortBranch,spentRequestPath,
+import {replacementSchema,chainedReplacementSchema,run8ReplacementSchema,reviewedAbort,reviewedAbort6,reviewedAbort7,reviewedSource,abortBranch,spentRequestPath,
   validateAbortContinuity,authenticateAbortContinuity,verifyReplacementActivation} from './verify-statement-pre-provider-abort.mjs';
 import {authenticateRecovery,validateRequest,verifyActivation} from './run-statement-targeted-recovery.mjs';
 
@@ -336,6 +336,220 @@ test('v3 activation is request-only M after exactly one run6 code-only child, in
     assert.throws(()=>verifyReplacementActivation({...r,controller:{...r.controller,parent_sha:badParent}},{...context,sha:badHead},dir),/spent request/);
     git(['reset','--hard',parent]);git(['rm','-q',spentRequestPath]);
     const removedParent=git(['commit-tree',git(['write-tree']),'-p',reviewedAbort6.head_sha,'-m','Deleted spent request']);
+    mkdirSync(join(dir,'.github/targeted-financial-recovery'),{recursive:true});
+    writeFileSync(join(dir,spentRequestPath),JSON.stringify(r));git(['add','.']);const addedHead=git(['commit-tree',git(['write-tree']),'-p',removedParent,'-m','Readded request']);
+    assert.throws(()=>verifyReplacementActivation({...r,controller:{...r.controller,parent_sha:removedParent}},{...context,sha:addedHead},dir),/only modify/);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+const fixture7=name=>readFileSync(new URL(`./fixtures/targeted-abort-run7/${name}`,import.meta.url));
+const old7Bytes=fixture7('request.json'),old7=JSON.parse(old7Bytes),log7=Buffer.from(JSON.parse(fixture7('job-log.json')).content,'base64');
+const terminal7=JSON.parse(fixture7('terminal.json'));
+const request7Path=`${apiRoot}/contents/${spentRequestPath}?ref=${reviewedAbort7.head_sha}`;
+const artifacts7Path=`${apiRoot}/actions/runs/${reviewedAbort7.run_id}/artifacts?per_page=100`;
+const jobs7Path=`${apiRoot}/actions/runs/${reviewedAbort7.run_id}/attempts/1/jobs?per_page=100`;
+const run8Request=()=>({...structuredClone(old7),schema_version:run8ReplacementSchema,operation_id:'targeted-nvda-aaoi-new-run8',
+  expected_run_number:8,created_at:'2026-10-17T03:10:00Z',expires_at:'2026-10-17T04:10:00Z',
+  abort_continuity:{run7:{...reviewedAbort7},run6:{...reviewedAbort6},run5:{...reviewedAbort}}});
+function run8FixtureApi(){
+  const f=chainFixtureApi(),abort=structuredClone(terminal7.abort);
+  const current={...structuredClone(abort),id:38997227420,head_sha:'f'.repeat(40),run_number:8,status:'in_progress',conclusion:null,run_started_at:'2026-10-17T03:20:00Z'};
+  f.state={initial:false,current:structuredClone(current),run:structuredClone(abort)};
+  f.endpoints[inventoryPath]={total_count:5,workflow_runs:[current,abort,structuredClone(terminal6.abort),structuredClone(terminal.abort),structuredClone(terminal.source)]};
+  f.endpoints[artifacts7Path]=structuredClone(terminal7.artifacts);
+  f.endpoints[jobs7Path]=structuredClone(terminal7.jobs);
+  f.endpoints[request7Path]={type:'file',path:spentRequestPath,size:old7Bytes.length,encoding:'base64',content:old7Bytes.toString('base64')};
+  for(const run of [current,abort])for(const suffix of ['', '/attempts/1'])f.endpoints[`${apiRoot}/actions/runs/${run.id}${suffix}`]=structuredClone(run);
+  f.endpoints[`${apiRoot}/actions/runs/${abort.id}/attempts/1`]=structuredClone(terminal7.attempt);
+  f.endpoints[`${apiRoot}/git/ref/heads/${abortBranch}`]={object:{sha:current.head_sha}};
+  f.readLog=id=>{f.logs.push(id);assert.ok([reviewedAbort7.job_id,reviewedAbort6.job_id,reviewedAbort.job_id].includes(id));return Buffer.from(id===reviewedAbort7.job_id?log7:id===reviewedAbort6.job_id?log6:log);};
+  f.context={id:current.id,sha:current.head_sha,branch:abortBranch,attempt:1,event:'push',repository};
+  return f;
+}
+const gitObject=(type,bytes)=>createHash('sha1').update(`${type} ${bytes.length}\0`).update(bytes).digest('hex');
+function treeEntries(bytes){
+  const entries={};let offset=0;
+  while(offset<bytes.length){
+    const space=bytes.indexOf(32,offset),nul=bytes.indexOf(0,space);
+    assert.ok(space>offset&&nul>space&&nul+21<=bytes.length);
+    const mode=bytes.subarray(offset,space).toString(),name=bytes.subarray(space+1,nul).toString();
+    assert.ok(!Object.hasOwn(entries,name));entries[name]={mode,sha:bytes.subarray(nul+1,nul+21).toString('hex')};offset=nul+21;
+  }
+  return entries;
+}
+test('run7 exact full log and immutable commit/tree-bound code prove only the initial pre-provider abort',()=>{
+  assert.equal(log7.length,67609);assert.equal(hash(log7),reviewedAbort7.job_log_sha256);
+  assert.equal(hash(old7Bytes),reviewedAbort7.request_sha256);assert.equal(old7.schema_version,chainedReplacementSchema);
+  assert.deepEqual(old7.source,reviewedSource);assert.deepEqual(old7.abort_continuity,{run6:reviewedAbort6,run5:reviewedAbort});
+  assert.deepEqual(old7.selection,old.selection);assert.deepEqual(old7.limits,old.limits);
+  assert.deepEqual(terminal7.abort,terminal7.attempt);assert.deepEqual(terminal7.artifacts,{total_count:0,artifacts:[]});
+  const commit=fixture7('activation.commit'),trees=JSON.parse(fixture7('git-trees.json')),proof=JSON.parse(fixture7('code-proof.json'));
+  assert.equal(gitObject('commit',commit),reviewedAbort7.head_sha);
+  assert.equal(commit.toString().match(/^tree ([a-f0-9]{40})$/m)[1],trees[''].sha);
+  assert.deepEqual([...commit.toString().matchAll(/^parent ([a-f0-9]{40})$/gm)].map(m=>m[1]),[old7.controller.parent_sha]);
+  const entries={};
+  for(const [path,tree]of Object.entries(trees)){
+    const bytes=Buffer.from(tree.content,'base64');assert.equal(tree.encoding,'base64');assert.equal(gitObject('tree',bytes),tree.sha);
+    entries[path]=treeEntries(bytes);
+  }
+  for(const path of Object.keys(trees).filter(Boolean)){
+    const slash=path.lastIndexOf('/'),parent=slash<0?'':path.slice(0,slash),name=path.slice(slash+1);
+    assert.deepEqual(entries[parent][name],{mode:'40000',sha:trees[path].sha});
+  }
+  assert.deepEqual(Object.keys(proof).sort(),['.github/scripts/download-reviewed-job-log.mjs','.github/scripts/run-statement-targeted-recovery.mjs',spentRequestPath,recoveryWorkflow].sort());
+  for(const [path,item]of Object.entries(proof)){
+    const bytes=fixture7(item.fixture),slash=path.lastIndexOf('/');
+    assert.equal(hash(bytes),item.sha256);assert.equal(gitObject('blob',bytes),item.blob_sha);
+    assert.deepEqual(entries[path.slice(0,slash)][path.slice(slash+1)],{mode:'100644',sha:item.blob_sha});
+  }
+  const caller=fixture7('caller.mjs.txt').toString(),lines=caller.split('\n'),workflow=fixture7('workflow.yml.txt').toString();
+  assert.match(lines[153],/verifyActivation\(request,context\);let recovery=authenticateRecovery\(request,context,api\)/);
+  assert.match(lines[157],/mkdirSync\(workspace/);assert.match(lines[158],/await preparePublicationVerifier/);
+  assert.match(lines[160],/repos\/\$\{repository\}\/actions\/artifacts\/\$\{recovery\.artifact\.id\}\/zip/);
+  assert.match(lines[195],/await executeWithRecheck\('python3'/);
+  assert.equal(caller.match(/await executeWithRecheck\(/g).length,1);
+  assert.equal(workflow.match(/node \.github\/scripts\/run-statement-targeted-recovery\.mjs\s/g).length,1);
+  assert.match(log7.toString(),/Error: Reviewed job log download failed/);
+  assert.match(log7.toString(),/at readReviewedJobLog .*download-reviewed-job-log\.mjs:183:19/);
+  assert.match(log7.toString(),/at readAbortJobLog .*verify-statement-pre-provider-abort\.mjs:85:10/);
+  assert.match(log7.toString(),/at authenticateTerminalAbort .*verify-statement-pre-provider-abort\.mjs:124:13/);
+  assert.match(log7.toString(),/at authenticateAbortContinuity .*verify-statement-pre-provider-abort\.mjs:158:14/);
+  assert.match(log7.toString(),/at authenticateRecovery .*run-statement-targeted-recovery\.mjs:78:42/);
+  assert.match(log7.toString(),/at run .*run-statement-targeted-recovery\.mjs:154:50/);
+});
+test('v4 integrates only run8 -> abort7 -> abort6 -> abort5 -> source4 and keeps source artifacts bounded by abort5',()=>{
+  const f=run8FixtureApi(),r=run8Request();
+  assert.equal(validateRequest(r,Date.parse('2026-10-17T03:20:00Z')).schema_version,run8ReplacementSchema);
+  const result=authenticateRecovery(r,f.context,f.api,f.readLog);
+  assert.deepEqual(result.aborts.map(run=>run.id),[reviewedAbort7.run_id,reviewedAbort6.run_id,reviewedAbort.run_id]);
+  assert.equal(result.abort.id,reviewedAbort.run_id);assert.equal(result.run.id,reviewedSource.run_id);
+  assert.equal(result.run.conclusion,'failure');assert.equal(result.artifact.id,reviewedSource.artifact_id);
+  assert.deepEqual(f.logs,[reviewedAbort7.job_id,reviewedAbort6.job_id,reviewedAbort.job_id]);
+  for(const identity of [reviewedAbort7,reviewedAbort6,reviewedAbort]){
+    for(const suffix of ['', '/attempts/1','/artifacts?per_page=100','/attempts/1/jobs?per_page=100']){
+      assert.ok(f.calls.includes(`${apiRoot}/actions/runs/${identity.run_id}${suffix}`));
+    }
+    assert.ok(f.calls.includes(`${apiRoot}/contents/${spentRequestPath}?ref=${identity.head_sha}`));
+  }
+  for(const created of ['2026-10-17T01:34:42Z','2026-10-17T01:50:00Z','2026-10-17T02:10:00Z','2026-10-17T03:10:00Z']){
+    f.endpoints[`${apiRoot}/actions/runs/${reviewedSource.run_id}/artifacts?per_page=100`].artifacts[0].created_at=created;
+    assert.throws(()=>authenticateRecovery(r,f.context,f.api,f.readLog),/prior attempt interval/);
+  }
+});
+test('v4 fixed shape rejects other runs, arbitrary skips, extended chains, all spent operations and changed retained source',()=>{
+  const mutations=[r=>r.expected_run_number=7,r=>r.expected_run_number=9,r=>r.expected_run_number=true,
+    r=>r.schema_version=chainedReplacementSchema,r=>r.schema_version=replacementSchema,r=>r.schema_version='financial-targeted-recovery-execution-v5',
+    r=>delete r.abort_continuity,r=>delete r.abort_continuity.run7,r=>delete r.abort_continuity.run6,r=>delete r.abort_continuity.run5,
+    r=>r.abort_continuity.run8={...reviewedAbort7},r=>r.abort_continuity.run4={...reviewedSource},
+    r=>r.abort_continuity=[reviewedAbort7,reviewedAbort6,reviewedAbort],
+    r=>{[r.abort_continuity.run7,r.abort_continuity.run6]=[r.abort_continuity.run6,r.abort_continuity.run7];},
+    r=>r.source.run_id=reviewedAbort7.run_id,r=>r.source.cohort_sha256='e'.repeat(64),
+    r=>r.created_at='2026-10-17T03:03:22Z',r=>r.created_at='invalid',
+    ...[old,old6,old7].map(old=>r=>r.operation_id=old.operation_id),
+    ...['run7','run6','run5'].flatMap(key=>[r=>r.abort_continuity[key].extra=true,r=>r.abort_continuity[key].run_attempt=2,
+      r=>r.abort_continuity[key].run_attempt=true,r=>r.abort_continuity[key].head_sha='e'.repeat(40),
+      r=>r.abort_continuity[key].job_id++,r=>r.abort_continuity[key].request_sha256='e'.repeat(64),
+      r=>r.abort_continuity[key].job_log_sha256='e'.repeat(64)])];
+  for(const mutate of mutations){const r=run8Request();mutate(r);assert.throws(()=>validateAbortContinuity(r));}
+});
+test('v4 individually reauthenticates all three terminal aborts and rejects changed jobs, artifacts, requests and attempts',()=>{
+  for(const identity of [reviewedAbort7,reviewedAbort6,reviewedAbort]){
+    const runPath=`${apiRoot}/actions/runs/${identity.run_id}`,jobsPath=runPath+'/attempts/1/jobs?per_page=100',artifactsPath=runPath+'/artifacts?per_page=100';
+    const requestPath=`${apiRoot}/contents/${spentRequestPath}?ref=${identity.head_sha}`;
+    const mutations=[
+      ['rerun',f=>f.endpoints[runPath].run_attempt=2],['live',f=>f.endpoints[runPath].status='in_progress'],
+      ['cancelled',f=>f.endpoints[runPath].conclusion='cancelled'],['wrong attempt',f=>f.endpoints[runPath+'/attempts/1'].head_sha='e'.repeat(40)],
+      ['foreign workflow',f=>f.endpoints[runPath].workflow_id++],['foreign repo',f=>f.endpoints[runPath].repository.id++],
+      ['foreign head repo',f=>f.endpoints[runPath+'/attempts/1'].head_repository.full_name='other/repo'],
+      ['attempt clock',f=>f.endpoints[runPath+'/attempts/1'].run_started_at='2026-10-17T03:00:00Z'],
+      ['inventory head',f=>f.endpoints[inventoryPath].workflow_runs.find(run=>run.id===identity.run_id).head_sha='e'.repeat(40)],
+      ['nonempty artifacts',f=>f.endpoints[artifactsPath]={total_count:1,artifacts:[{id:1}]}],
+      ['incomplete artifacts',f=>delete f.endpoints[artifactsPath].total_count],
+      ['incomplete jobs',f=>f.endpoints[jobsPath].total_count=2],['duplicate jobs',f=>f.endpoints[jobsPath].jobs.push(f.endpoints[jobsPath].jobs[0])],
+      ['wrong job',f=>f.endpoints[jobsPath].jobs[0].id++],['wrong job attempt',f=>f.endpoints[jobsPath].jobs[0].run_attempt=2],
+      ['wrong job head',f=>f.endpoints[jobsPath].jobs[0].head_sha='e'.repeat(40)],['wrong job branch',f=>f.endpoints[jobsPath].jobs[0].head_branch='main'],
+      ['job success',f=>f.endpoints[jobsPath].jobs[0].conclusion='success'],['job completion',f=>f.endpoints[jobsPath].jobs[0].completed_at='2026-10-17T03:03:23Z'],
+      ['job start',f=>f.endpoints[jobsPath].jobs[0].started_at='2026-10-17T03:02:13Z'],
+      ['missing offline tests',f=>f.endpoints[jobsPath].jobs[0].steps.splice(6,1)],['wrong failed step',f=>f.endpoints[jobsPath].jobs[0].steps[7].conclusion='success'],
+      ['added step',f=>f.endpoints[jobsPath].jobs[0].steps.push({...f.endpoints[jobsPath].jobs[0].steps[7]})],
+      ['step chronology',f=>f.endpoints[jobsPath].jobs[0].steps[7].completed_at='2026-10-16T00:00:00Z'],
+      ['changed spent request',f=>f.endpoints[requestPath].content=Buffer.from('{}').toString('base64')],
+      ['unavailable spent request',f=>f.endpoints[requestPath].encoding='none'],
+    ];
+    for(const [name,mutate]of mutations){const f=run8FixtureApi();mutate(f);assert.throws(()=>authenticateRecovery(run8Request(),f.context,f.api,f.readLog),undefined,`run${identity.run_number}: ${name}`);}
+  }
+});
+test('v4 proves all four immediate edges and rejects live, intervening, newer, duplicate and incomplete histories',()=>{
+  const add=(f,run)=>{f.endpoints[inventoryPath].workflow_runs.push(run);f.endpoints[inventoryPath].total_count++;};
+  const other=(id,number,change={})=>({...structuredClone(terminal.source),id,run_number:number,head_sha:'e'.repeat(40),...change});
+  const mutations=[
+    f=>add(f,other(38997227421,9)),f=>add(f,other(38997227421,9,{status:'queued',conclusion:null})),
+    f=>add(f,other(38997227418,9)),f=>add(f,other(38997227415,9)), // current->abort7 and abort7->abort6
+    f=>add(f,other(38993132262,9)),f=>add(f,other(38991458565,9)), // abort6->abort5 and abort5->source4
+    f=>add(f,other(37478731831,3,{status:'in_progress',conclusion:null})),
+    ...[reviewedAbort7,reviewedAbort6,reviewedAbort].flatMap(identity=>[
+      f=>add(f,other(37478731831,identity.run_number)),f=>add(f,other(37478731831,3,{head_sha:identity.head_sha})),
+      f=>add(f,structuredClone(f.endpoints[inventoryPath].workflow_runs.find(run=>run.id===identity.run_id))),
+      f=>{f.endpoints[inventoryPath].workflow_runs=f.endpoints[inventoryPath].workflow_runs.filter(run=>run.id!==identity.run_id);f.endpoints[inventoryPath].total_count--;}]),
+    f=>f.endpoints[inventoryPath].total_count=101,f=>f.endpoints[inventoryPath].total_count--,
+    f=>f.endpoints[`${apiRoot}/actions/runs/${reviewedSource.run_id}`].run_attempt=2,
+    f=>f.endpoints[`${apiRoot}/actions/runs/${reviewedSource.run_id}/attempts/1`].head_sha='e'.repeat(40),
+    f=>f.endpoints[`${apiRoot}/actions/runs/${f.context.id}/attempts/1`].run_attempt=2,
+    f=>f.endpoints[`${apiRoot}/git/ref/heads/${abortBranch}`].object.sha=reviewedAbort7.head_sha,
+  ];
+  for(const mutate of mutations){const f=run8FixtureApi();mutate(f);assert.throws(()=>authenticateRecovery(run8Request(),f.context,f.api,f.readLog));}
+  const f=run8FixtureApi();f.state.current.run_started_at='2026-10-17T03:03:22Z';
+  f.endpoints[inventoryPath].workflow_runs[0].run_started_at=f.state.current.run_started_at;
+  assert.throws(()=>authenticateAbortContinuity(run8Request(),f.state,f.api,f.readLog),/terminal abort job/);
+});
+test('v4 requires all complete logs and unchanged retained work before source artifact access',()=>{
+  for(const [identity,original]of [[reviewedAbort7,log7],[reviewedAbort6,log6],[reviewedAbort,log]]){
+    for(const altered of [Buffer.alloc(0),original.subarray(0,original.length-1),Buffer.from(original).fill(0,10,11),original.toString()]){
+      const f=run8FixtureApi();assert.throws(()=>authenticateRecovery(run8Request(),f.context,f.api,id=>id===identity.job_id?altered:f.readLog(id)),/log/);
+      assert.ok(!f.calls.includes(`${apiRoot}/actions/runs/${reviewedSource.run_id}/artifacts?per_page=100`));
+    }
+    const f=run8FixtureApi();assert.throws(()=>authenticateRecovery(run8Request(),f.context,f.api,id=>{if(id===identity.job_id)throw Error('Missing reviewed log');return f.readLog(id);}),/Missing reviewed log/);
+  }
+  for(const mutate of [r=>r.selection[0].receipts[0].receipt_sha256='e'.repeat(64),r=>r.limits.max_statement_getter_calls=5,r=>r.limits.caller_retries=1]){
+    const f=run8FixtureApi(),r=run8Request();mutate(r);assert.throws(()=>authenticateRecovery(r,f.context,f.api,f.readLog),/retained work/);
+    assert.ok(!f.calls.includes(`${apiRoot}/actions/runs/${reviewedSource.run_id}/artifacts?per_page=100`));
+  }
+});
+
+test('v4 activation is request-only M after exactly one run7 code-only child, including shallow checkout',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'abort7-replacement-'));
+  const git=(args,input)=>execFileSync('git',args,{cwd:dir,input,encoding:'utf8',stdio:['pipe','pipe','pipe']}).trim();
+  try{
+    git(['init','-q']);git(['config','user.name','Offline Fixture']);git(['config','user.email','fixture@example.invalid']);
+    assert.equal(git(['hash-object','-w','-t','commit','--stdin'],fixture7('activation.commit')),reviewedAbort7.head_sha);
+    assert.equal(git(['hash-object','-w','-t','commit','--stdin'],fixture('activation.commit')),reviewedAbort.head_sha);
+    assert.equal(git(['hash-object','-w','-t','commit','--stdin'],fixture6('activation.commit')),reviewedAbort6.head_sha);
+    mkdirSync(join(dir,'.github/targeted-financial-recovery'),{recursive:true});writeFileSync(join(dir,spentRequestPath),old7Bytes);
+    writeFileSync(join(dir,'controller.txt'),'reviewed repair');git(['add','.']);
+    const tree=git(['write-tree']),parent=git(['commit-tree',tree,'-p',reviewedAbort7.head_sha,'-m','Reviewed run7 code-only repair']);
+    git(['update-ref','HEAD',parent]);const r=run8Request();r.controller={parent_sha:parent,parent_tree:tree};
+    writeFileSync(join(dir,spentRequestPath),JSON.stringify(r));git(['add','.']);
+    const head=git(['commit-tree',git(['write-tree']),'-p',parent,'-m','New finite run8 request']);git(['update-ref','HEAD',head]);
+    const context={repository,event:'push',branch:abortBranch,attempt:1,sha:head,id:38997227421};
+    assert.doesNotThrow(()=>verifyActivation(r,context,dir));
+    writeFileSync(join(dir,'.git/shallow'),parent+'\n');assert.doesNotThrow(()=>verifyActivation(r,context,dir));
+    for(const change of [{attempt:2},{branch:'main'},{event:'workflow_dispatch'}])assert.throws(()=>verifyReplacementActivation(r,{...context,...change},dir));
+    writeFileSync(join(dir,'extra.txt'),'x');assert.throws(()=>verifyActivation(r,context,dir),/clean/);rmSync(join(dir,'extra.txt'));
+    writeFileSync(join(dir,'controller.txt'),'mixed code');git(['add','.']);
+    const mixed=git(['commit-tree',git(['write-tree']),'-p',parent,'-m','Mixed activation']);
+    assert.throws(()=>verifyReplacementActivation(r,{...context,sha:mixed},dir),/only modify/);
+    for(const previous of [reviewedAbort.head_sha,reviewedAbort6.head_sha,parent]){
+      git(['reset','--hard',parent]);const wrongParent=git(['commit-tree',tree,'-p',previous,'-m','Wrong repair ancestry']);
+      writeFileSync(join(dir,spentRequestPath),JSON.stringify(r));git(['add','.']);
+      const wrongHead=git(['commit-tree',git(['write-tree']),'-p',wrongParent,'-m','Replacement']);
+      assert.throws(()=>verifyReplacementActivation({...r,controller:{...r.controller,parent_sha:wrongParent}},{...context,sha:wrongHead},dir),/code-only child/);
+    }
+    git(['reset','--hard',parent]);writeFileSync(join(dir,spentRequestPath),old7Bytes.toString()+' ');git(['add','.']);
+    const badParent=git(['commit-tree',git(['write-tree']),'-p',reviewedAbort7.head_sha,'-m','Changed spent run7 request']);
+    writeFileSync(join(dir,spentRequestPath),JSON.stringify(r));git(['add','.']);const badHead=git(['commit-tree',git(['write-tree']),'-p',badParent,'-m','Replacement']);
+    assert.throws(()=>verifyReplacementActivation({...r,controller:{...r.controller,parent_sha:badParent}},{...context,sha:badHead},dir),/spent request/);
+    git(['reset','--hard',parent]);git(['rm','-q',spentRequestPath]);
+    const removedParent=git(['commit-tree',git(['write-tree']),'-p',reviewedAbort7.head_sha,'-m','Deleted spent request']);
     mkdirSync(join(dir,'.github/targeted-financial-recovery'),{recursive:true});
     writeFileSync(join(dir,spentRequestPath),JSON.stringify(r));git(['add','.']);const addedHead=git(['commit-tree',git(['write-tree']),'-p',removedParent,'-m','Readded request']);
     assert.throws(()=>verifyReplacementActivation({...r,controller:{...r.controller,parent_sha:removedParent}},{...context,sha:addedHead},dir),/only modify/);

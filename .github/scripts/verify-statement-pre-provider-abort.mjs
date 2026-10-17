@@ -1,4 +1,4 @@
-// Two closed reviewed terminal-abort proofs, not a search/fallback/retry mechanism.
+// Three closed reviewed terminal-abort proofs, not a search/fallback/retry mechanism.
 // The immutable run5 head binds the reviewed caller (sha256 7209f92cc72de912b29789ebccbb41450e2e9bf74f559a93984e5a16b2488374)
 // and workflow (sha256 53005ef466d31fb2ba362cc4a4d0c49cdbcc29bbde3f889730e6c1e6b52bc207).
 // That caller's line159 awaits livePublication before its only provider-child
@@ -12,7 +12,8 @@ import {readReviewedJobLog} from './download-reviewed-job-log.mjs';
 
 export const replacementSchema='financial-targeted-recovery-execution-v2';
 export const chainedReplacementSchema='financial-targeted-recovery-execution-v3';
-export const isReplacementRequest=request=>[replacementSchema,chainedReplacementSchema].includes(request?.schema_version);
+export const run8ReplacementSchema='financial-targeted-recovery-execution-v4';
+export const isReplacementRequest=request=>[replacementSchema,chainedReplacementSchema,run8ReplacementSchema].includes(request?.schema_version);
 export const spentRequestPath='.github/targeted-financial-recovery/request.json';
 export const abortBranch='improve/mandatory-financial-source-recovery';
 export const reviewedAbort=Object.freeze({schema_version:'financial-pre-provider-abort-v1',
@@ -26,6 +27,14 @@ export const reviewedAbort6=Object.freeze({schema_version:'financial-pre-provide
   run_id:38993132263,run_attempt:1,run_number:6,head_sha:'12b4e4dba9c847d754b7ec3b47b234984386a1f4',
   request_sha256:'cf059634ca8e29f3bf4a8ab70ec14a6e9cf76ee76ad3948d0ac619a30def13ca',
   job_id:117279659374,job_log_sha256:'47dabe41056aeb89eb17d2408bb120c10998868eaf4ccfb17597026b6ccfc462'});
+// The immutable run7 caller (sha256 cc1bc4666ce1612cbc3ffa4f52fc4f866b7470337e07918085a63be6c9f02c94)
+// authenticates at line154 before mkdir158, the live verifier159, source restore,
+// and the only provider child196. Its exact complete log proves that call threw;
+// the generic download error does not establish its underlying transport cause.
+export const reviewedAbort7=Object.freeze({schema_version:'financial-pre-provider-abort-v1',
+  run_id:38997227416,run_attempt:1,run_number:7,head_sha:'b6378b8077b51f18d63e6dbb4d221ac47144bee4',
+  request_sha256:'846a0d2a07e2a43b6eee3837f19dfb01e233866a8b3e1912a57d025d3a043e00',
+  job_id:117292325413,job_log_sha256:'5ce16137dfe39a063a3f0903031eb93bdb1f792a08dee1549c97bdf3b152ae56'});
 export const reviewedSource=Object.freeze({run_id:37478731832,run_attempt:1,
   head_sha:'4715b218cc25720d1d3be455930554e1e6282136',artifact_id:11420873789,
   artifact_sha256:'266b2118cefe4a51dcf0981b4e60c35ba76524e1f35cf9633f8c26691f68d2bd',
@@ -38,6 +47,9 @@ const abort5Proof=Object.freeze({identity:reviewedAbort,completedAt:'2026-10-17T
 const abort6Proof=Object.freeze({identity:reviewedAbort6,completedAt:'2026-10-17T02:01:05Z',
   startedAt:'2026-10-17T01:59:35Z',runStartedAt:'2026-10-17T01:59:32Z',logLength:59325,
   schema:replacementSchema,operation:'targeted-nvda-aaoi-20261017t015500z'});
+const abort7Proof=Object.freeze({identity:reviewedAbort7,completedAt:'2026-10-17T03:03:22Z',
+  startedAt:'2026-10-17T03:02:14Z',runStartedAt:'2026-10-17T03:02:12Z',logLength:67609,
+  schema:chainedReplacementSchema,operation:'targeted-nvda-aaoi-20261017t025809z'});
 const workflowId=374552819,repositoryId=1203919607;
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const positive=value=>Number.isSafeInteger(value)&&value>0;
@@ -45,14 +57,18 @@ const same=isDeepStrictEqual;
 const finiteDate=value=>typeof value==='string'&&value.endsWith('Z')&&Number.isFinite(Date.parse(value));
 
 export function validateAbortContinuity(request){
-  const chained=request.schema_version===chainedReplacementSchema;
-  const binding=chained?{run6:reviewedAbort6,run5:reviewedAbort}:reviewedAbort;
-  const proof=chained?abort6Proof:abort5Proof;
-  if(!isReplacementRequest(request)||request.expected_run_number!==(chained?7:6)
+  const run8=request.schema_version===run8ReplacementSchema;
+  const chained=run8||request.schema_version===chainedReplacementSchema;
+  const binding=run8?{run7:reviewedAbort7,run6:reviewedAbort6,run5:reviewedAbort}
+    :chained?{run6:reviewedAbort6,run5:reviewedAbort}:reviewedAbort;
+  const proof=run8?abort7Proof:chained?abort6Proof:abort5Proof;
+  if(!isReplacementRequest(request)||request.expected_run_number!==(run8?8:chained?7:6)
     ||!same(request.abort_continuity,binding)||!same(request.source,reviewedSource)
     ||request.operation_id===abort5Proof.operation||(chained&&request.operation_id===abort6Proof.operation)
+    ||(run8&&request.operation_id===abort7Proof.operation)
     ||!finiteDate(request.created_at)||Date.parse(request.created_at)<=Date.parse(proof.completedAt)){
-    throw Error(chained?'Only the exact reviewed run6 -> run5 pre-provider aborts may precede run7'
+    throw Error(run8?'Only the exact reviewed run7 -> run6 -> run5 pre-provider aborts may precede run8'
+      :chained?'Only the exact reviewed run6 -> run5 pre-provider aborts may precede run7'
       :'Only the exact reviewed run5 pre-provider abort may precede run6');
   }
 }
@@ -81,13 +97,13 @@ function readSpentRequest(api,identity){
   return JSON.parse(bytes);
 }
 export function readAbortJobLog(jobId){
-  if(jobId!==reviewedAbort.job_id&&jobId!==reviewedAbort6.job_id)throw Error('Unreviewed abort job');
+  if(jobId!==reviewedAbort.job_id&&jobId!==reviewedAbort6.job_id&&jobId!==reviewedAbort7.job_id)throw Error('Unreviewed abort job');
   return readReviewedJobLog(jobId);
 }
 function expectedAbort(identity){
   return {id:identity.run_id,attempt:1,sha:identity.head_sha,number:identity.run_number,status:'completed',conclusion:'failure'};
 }
-// Only the two private, immutable reviewed proofs can reach this helper. No
+// Only the three private, immutable reviewed proofs can reach this helper. No
 // request-provided IDs, list traversal, recursive fallback or extra skip exists.
 function authenticateTerminalAbort(request,abort,next,proof,api,readLog){
   const {identity,completedAt,startedAt,runStartedAt,logLength,schema,operation}=proof;
@@ -127,21 +143,23 @@ function authenticateTerminalAbort(request,abort,next,proof,api,readLog){
   if(old.schema_version!==schema||old.expected_run_number!==identity.run_number||old.operation_id!==operation
     ||!same(old.source,request.source)||!same(old.selection,request.selection)||!same(old.limits,request.limits)
     ||old.operation_id===request.operation_id||old.publication_authority!=='none'||old.financial_admission!==false)throw Error('Replacement renews a spent operation or changes retained work');
-  if(identity===reviewedAbort6)validateAbortContinuity(old);
+  if(identity===reviewedAbort6||identity===reviewedAbort7)validateAbortContinuity(old);
 }
 
 // recoverySource first authenticates the current attempt and its actual immediate
-// predecessor. These are exactly run6 -> abort5 -> source4 OR the separately
-// reviewed run7 -> abort6 -> abort5 -> source4. This cannot admit any other chain.
+// predecessor. The only additions are the separately reviewed run7 -> abort6 ->
+// abort5 -> source4 and run8 -> abort7 -> abort6 -> abort5 -> source4. No other chain is admitted.
 export function authenticateAbortContinuity(request,state,api,readLog=readAbortJobLog){
   validateAbortContinuity(request);
   if(state.initial||!state.current||!state.run)throw Error('Abort continuity requires an authenticated recovery predecessor');
-  const chained=request.schema_version===chainedReplacementSchema,identity=chained?reviewedAbort6:reviewedAbort;
-  const current=checkedRun(state.current,{id:state.current.id,attempt:1,sha:state.current.head_sha,number:chained?7:6,status:'in_progress',conclusion:null});
+  const run8=request.schema_version===run8ReplacementSchema,chained=run8||request.schema_version===chainedReplacementSchema;
+  const identity=run8?reviewedAbort7:chained?reviewedAbort6:reviewedAbort;
+  const current=checkedRun(state.current,{id:state.current.id,attempt:1,sha:state.current.head_sha,number:run8?8:chained?7:6,status:'in_progress',conclusion:null});
   if(!positive(current.id)||current.id<=identity.run_id||!(/^[a-f0-9]{40}$/).test(current.head_sha??''))throw Error('Invalid replacement run identity');
   const predecessor=checkedRun(state.run,expectedAbort(identity));
   const inventory=api(`repos/${repository}/actions/workflows/financial-statement-recovery.yml/runs?event=push&per_page=100`);
-  const runs=inventory?.workflow_runs,required=chained?[current.id,reviewedAbort6.run_id,reviewedAbort.run_id,reviewedSource.run_id]
+  const runs=inventory?.workflow_runs,required=run8?[current.id,reviewedAbort7.run_id,reviewedAbort6.run_id,reviewedAbort.run_id,reviewedSource.run_id]
+    :chained?[current.id,reviewedAbort6.run_id,reviewedAbort.run_id,reviewedSource.run_id]
     :[current.id,reviewedAbort.run_id,reviewedSource.run_id];
   if(!Array.isArray(runs)||!Number.isSafeInteger(inventory.total_count)||inventory.total_count<required.length||inventory.total_count>100
     ||runs.length!==inventory.total_count||new Set(runs.map(run=>run.id)).size!==runs.length
@@ -151,20 +169,23 @@ export function authenticateAbortContinuity(request,state,api,readLog=readAbortJ
     ||serial.some(run=>run.id!==current.id&&run.status!=='completed')||serial.some(run=>run.id>current.id)
     ||previousRecoveryRun(runs,current.id,abortBranch)?.id!==predecessor.id
     ||previousRecoveryRun(runs,reviewedAbort.run_id,abortBranch)?.id!==reviewedSource.run_id
-    ||(chained&&previousRecoveryRun(runs,reviewedAbort6.run_id,abortBranch)?.id!==reviewedAbort.run_id))throw Error('Intervening, live, duplicate or newer recovery execution');
+    ||(chained&&previousRecoveryRun(runs,reviewedAbort6.run_id,abortBranch)?.id!==reviewedAbort.run_id)
+    ||(run8&&previousRecoveryRun(runs,reviewedAbort7.run_id,abortBranch)?.id!==reviewedAbort6.run_id))throw Error('Intervening, live, duplicate or newer recovery execution');
   sameRun(current,runs.find(run=>run.id===current.id));
   sameRun(predecessor,runs.find(run=>run.id===predecessor.id));
   const abort=chained?checkedRun(runs.find(run=>run.id===reviewedAbort.run_id),expectedAbort(reviewedAbort)):predecessor;
-  if(chained)authenticateTerminalAbort(request,predecessor,current,abort6Proof,api,readLog);
-  authenticateTerminalAbort(request,abort,chained?predecessor:current,abort5Proof,api,readLog);
+  const abort6=run8?checkedRun(runs.find(run=>run.id===reviewedAbort6.run_id),expectedAbort(reviewedAbort6)):predecessor;
+  if(run8)authenticateTerminalAbort(request,predecessor,current,abort7Proof,api,readLog);
+  if(chained)authenticateTerminalAbort(request,abort6,run8?predecessor:current,abort6Proof,api,readLog);
+  authenticateTerminalAbort(request,abort,chained?abort6:current,abort5Proof,api,readLog);
   const expectedSource={id:reviewedSource.run_id,attempt:1,sha:reviewedSource.head_sha,number:4,status:'completed',conclusion:'failure'};
   const source=checkedRun(api(`repos/${repository}/actions/runs/${reviewedSource.run_id}/attempts/1`),expectedSource);
   sameRun(source,checkedRun(api(`repos/${repository}/actions/runs/${reviewedSource.run_id}`),expectedSource));
   sameRun(source,runs.find(run=>run.id===source.id));
   if(Date.parse(source.run_started_at)>=Date.parse(abort.run_started_at))throw Error('Source and abort chronology changed');
   // Keep the original source's artifact interval bounded by its true successor,
-  // abort5, never by the later abort6 or current execution.
-  return {...state,run:source,abort,...(chained?{aborts:[predecessor,abort]}:{})};
+  // abort5, never by the later abort6, abort7 or current execution.
+  return {...state,run:source,abort,...(run8?{aborts:[predecessor,abort6,abort]}:chained?{aborts:[predecessor,abort]}:{})};
 }
 
 // Called in addition to the existing clean checkout, exact HEAD, single-child
@@ -174,7 +195,8 @@ export function verifyReplacementActivation(request,context,cwd){
   validateAbortContinuity(request);
   const git=args=>execFileSync('git',args,{cwd,encoding:'utf8',maxBuffer:1024**2,timeout:30000}).trim();
   const parent=request.controller.parent_sha;
-  const identity=request.schema_version===chainedReplacementSchema?reviewedAbort6:reviewedAbort;
+  const identity=request.schema_version===run8ReplacementSchema?reviewedAbort7
+    :request.schema_version===chainedReplacementSchema?reviewedAbort6:reviewedAbort;
   if(context.attempt!==1||context.branch!==abortBranch||context.event!=='push'||context.repository!==repository
     ||git(['diff','--name-status',parent,context.sha])!==`M\t${spentRequestPath}`)throw Error('Replacement must only modify the execution request');
   const commit=git(['cat-file','commit',parent]),parents=[...commit.split('\n\n',1)[0].matchAll(/^parent ([a-f0-9]{40})$/gm)].map(match=>match[1]);

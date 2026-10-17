@@ -8,6 +8,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {PUBLIC_DATA_ROOT,researchPath} from './prepare-statement-cohort.mjs';
 import {decodeResearchIndex} from '../../frontend/src/static/researchTransport.js';
 import {rankCandidates} from '../../frontend/src/static/researchEngine.js';
+import {decodePinnedResearchIndex,loadPinnedResearchDecoder} from './pinned-research-decoder.mjs';
 
 const repositoryRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -26,7 +27,7 @@ function regular(path,maximum){
   return readFileSync(path);
 }
 
-export function prepareRecoveryPreflightInputs({manifestBytes,indexBytes,sourceBaseBytes,sourceCohortBytes,bindings,observedAt}){
+export function prepareRecoveryPreflightInputs({manifestBytes,indexBytes,sourceBaseBytes,sourceCohortBytes,bindings,observedAt,pinnedDecoder}){
   exact(bindings,fields,'preflight bindings');
   for(const key of fields)if(!digest(bindings[key]))throw Error('Invalid preflight digest');
   bound(manifestBytes,bindings.canonical_manifest_sha256,'Canonical manifest');
@@ -41,7 +42,11 @@ export function prepareRecoveryPreflightInputs({manifestBytes,indexBytes,sourceB
     ||new Set(original.symbols).size!==original.symbols.length)throw Error('Invalid retained complete cohort');
   if(manifestBytes.length>1024**2||indexBytes.length>10*1024**2)throw Error('Canonical input exceeds bound');
   if(typeof observedAt!=='string'||!observedAt.endsWith('Z')||!Number.isFinite(Date.parse(observedAt)))throw Error('Explicit UTC observation is required');
-  const manifest=JSON.parse(manifestBytes),path=researchPath(manifest),index=decodeResearchIndex(JSON.parse(indexBytes));
+  const manifest=JSON.parse(manifestBytes),path=researchPath(manifest),raw=JSON.parse(indexBytes);
+  // The existing raw/v1 offline API stays explicit. V2 must use the producer's
+  // exact verified decoder, never a schema relabel or legacy fallback.
+  const index=pinnedDecoder!==undefined||raw?.schema==='research-table-v2'
+    ? decodePinnedResearchIndex(pinnedDecoder,raw):decodeResearchIndex(raw);
   if(path!==`research-index-${hash(indexBytes).slice(0,16)}.json`)throw Error('Canonical research content path mismatch');
   if(!day(index.as_of_date)||index.as_of_date>observedAt.slice(0,10)||manifest.as_of_date!==index.as_of_date
     ||manifest.markets.US.as_of_date!==index.as_of_date)throw Error('Canonical snapshot dates disagree');
@@ -84,7 +89,7 @@ export function planningArguments({source,output,archiveSha,observedAt}){
 
 async function main(){
   const args=process.argv.slice(2);
-  if(args.length!==4)throw Error('Usage: node prepare-statement-recovery-preflight.mjs CANONICAL_STATIC_DATA SOURCE_FILES HASH_BINDINGS_JSON NEW_OUTPUT');
+  if(args.length!==4&&args.length!==5)throw Error('Usage: node prepare-statement-recovery-preflight.mjs CANONICAL_STATIC_DATA SOURCE_FILES HASH_BINDINGS_JSON NEW_OUTPUT [EXACT_PINNED_PRODUCER_CHECKOUT]');
   const [canonical,source,bindingsPath,output]=args.map(value=>resolve(value));
   for(let part=dirname(output);;part=dirname(part)){
     if(!lstatSync(part).isDirectory()||lstatSync(part).isSymbolicLink())throw Error('Invalid preflight output parent');
@@ -97,7 +102,8 @@ async function main(){
   const sourceBaseBytes=regular(join(source,'base.json'),32*1024**2),sourceCohortBytes=regular(join(source,'cohort.json'),1024**2);
   bound(regular(join(source,'archive/manifest.json'),32*1024**2),bindings.source_archive_manifest_sha256,'Original archive manifest');
   const observedAt=new Date().toISOString();
-  const result=prepareRecoveryPreflightInputs({manifestBytes,indexBytes,sourceBaseBytes,sourceCohortBytes,bindings,observedAt});
+  const pinnedDecoder=args[4]===undefined?undefined:await loadPinnedResearchDecoder(args[4]);
+  const result=prepareRecoveryPreflightInputs({manifestBytes,indexBytes,sourceBaseBytes,sourceCohortBytes,bindings,observedAt,pinnedDecoder});
   mkdirSync(output,{recursive:false});
   const write=(name,value)=>writeFileSync(join(output,name),JSON.stringify(value,null,2),{flag:'wx'});
   writeFileSync(join(output,'base.json'),result.baseBytes,{flag:'wx'});write('cohort.json',result.cohort);
