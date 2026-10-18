@@ -86,6 +86,22 @@ describe('research rules and financial data integrity', () => {
     expect(assess({}, 'oneil').qualified).toBe(false);
     expect(assess({}, 'ibd').unknown).toBe(10);
   });
+  it.each([
+    ['missing', undefined], ['null', null], ['NaN', NaN],
+    ['positive infinity', Infinity], ['negative infinity', -Infinity],
+  ])('withdraws an EPS pass when the scalar or its source proof becomes %s', (_label, value) => {
+    const valid = withFinancialProof({ eps_growth_yy: 30 });
+    expect(assess(valid, 'oneil', FINANCIAL_TEST_NOW).rules[0].state).toBe('pass');
+    for (const target of ['scalar', 'proof']) {
+      const row = structuredClone(valid);
+      const holder = target === 'scalar' ? row : row.financial_current.p[1];
+      const key = target === 'scalar' ? 'eps_growth_yy' : 0;
+      if (value === undefined) delete holder[key];
+      else holder[key] = value;
+      expect(assess(row, 'oneil', FINANCIAL_TEST_NOW).rules[0].state).toBe('unknown');
+    }
+    expect(assess(valid, 'oneil', FINANCIAL_TEST_NOW).rules[0].state).toBe('pass');
+  });
   it('keeps a known zero distinct from absent data', () => {
     expect(assess(withFinancialProof({ eps_growth_yy: 0 }), 'oneil', FINANCIAL_TEST_NOW).rules[0].state).toBe('fail');
     expect(assess({ rs_rating: NaN }, 'ibd').rules[1].state).toBe('unknown');
