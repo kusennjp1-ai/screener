@@ -46,6 +46,7 @@ export default function ResearchPage({compareOnly=false}) {
   const workbench=useWorkbench(entry);
   const [personalKey, setPersonalKey] = useState('');
   const [search, setSearch] = useState(() => params.get('symbol') || '');
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const [strict, setStrict] = useState(false);
   const [nearOnly, setNearOnly] = useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
@@ -213,6 +214,17 @@ export default function ResearchPage({compareOnly=false}) {
   const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
   const disconnect = useCallback(()=>setPersonalKey(''),[]);
   const openFilters = useCallback(()=>setFiltersOpen(true),[]);
+  function resetFilters() {
+    setSearch('');
+    // Remount only the search input to cancel even an uncommitted debounce.
+    setSearchResetKey(value => value + 1);
+    setStrict(false);
+    setNearOnly(false);
+    setOnlyWatch(false);
+    setSector('');
+    setCoverage('all');
+    setLiquid(true);
+  }
   const toggleNear = useCallback(()=>{setNearOnly(value=>!value);setStrict(false);},[]);
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
   const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
@@ -235,7 +247,7 @@ export default function ResearchPage({compareOnly=false}) {
     {detailFreshness&&freshnessNotice}
     <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>
-      <ResearchSearch value={search} onChange={setSearch}/>
+      <ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/>
       {methodControls}
       <FormControlLabel control={<Switch checked={strict} onChange={e=>{setStrict(e.target.checked);if(e.target.checked)setNearOnly(false);}}/>} label="全条件通過のみ"/>
       <FormControlLabel control={<Switch checked={nearOnly} onChange={e=>{setNearOnly(e.target.checked);if(e.target.checked)setStrict(false);}}/>} label="あと1条件"/>
@@ -245,6 +257,8 @@ export default function ResearchPage({compareOnly=false}) {
       <p>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。未確認は合格に数えません。</p>
       <label className="sector-filter">検証状況 <select aria-label="検証状況" value={coverage} onChange={e=>setCoverage(e.target.value)}><option value="all">全銘柄</option><option value="verified">日足検証済み</option><option value="unverified">判定資料不足</option></select></label>
       <FormControlLabel control={<Switch checked={liquid} onChange={e=>setLiquid(e.target.checked)}/>} label="流動性：株価 $10以上・平均売買代金 $2,000万以上"/>
+      <Button onClick={resetFilters} aria-describedby="research-filter-reset-note" sx={{ minHeight: 44 }}>検索・絞り込みを初期化</Button>
+      <Typography id="research-filter-reset-note" variant="caption" color="text.secondary">投資手法は維持し、流動性条件をオンに戻します。</Typography>
       <Button onClick={download} disabled={!ranked.length}>全検索結果をCSV保存 ↓</Button>
       <Button component="a" href={`${import.meta.env.BASE_URL}qualification-audit.json`} download>全銘柄の検証記録 ↓</Button>
       <Button onClick={()=>{manifest.refetch?.();if(bundle.isError)bundle.refetch();}}>データを再確認 ↻</Button>
