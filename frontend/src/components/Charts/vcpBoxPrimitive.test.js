@@ -44,3 +44,16 @@ it('keeps captions clear of wide candle bodies after zooming in', () => {
   // The label is retained in another safe horizontal slot, not over the body.
   expect(ctx.fillText).toHaveBeenCalledTimes(1);
 });
+
+it('skips offscreen candle price conversions but keeps partially visible bar slots', () => {
+  const positions = { a: -20.001, b: -20, c: 0, d: 300, e: 320, f: 320.001, g: null };
+  const candles = Object.keys(positions).map((time, i) => ({ time, high: 100 + i, low: 80 + i }));
+  const priceToCoordinate = vi.fn(price => 200 - price);
+  const primitive = new VcpBoxPrimitive([{ start: 'c', end: 'd', high: 150, low: 120, label: 'C1' }], candles);
+  primitive.attached({
+    chart: { timeScale: () => ({ width: () => 300, options: () => ({ barSpacing: 40 }), timeToCoordinate: time => positions[time] }) },
+    series: { priceToCoordinate }, requestUpdate: vi.fn(),
+  });
+  expect(priceToCoordinate.mock.calls.map(([price]) => price)).toEqual([101, 81, 102, 82, 103, 83, 104, 84, 150, 120]);
+  expect(primitive.paneViews()[0]._candles.map(candle => candle.x)).toEqual([-40, -20, 280, 300]);
+});
