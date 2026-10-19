@@ -787,3 +787,14 @@ PR99はc789647/draft/open/未mergeをread-only確認。68aedd0と今回修正は
 - 対象44/全frontend258files3625成功、lint0errors既存6warnings、build18.11s成功/実static-data export skip。初回新testの週次EMA50長さの誤前提を訂正して再確認。backend redlineはpytest不在で起動不能、Golden含め今回成功とはしない。外部依存取得なし。
 - 財務5ケースの入力・identity/clock/receipt/generation条件と保存証拠棚卸しを完了。実source artifact/manifest/receiptのbytes不足。ログにあるhashやprepared_atをsource更新/承認と扱わない。
 - 自己レビューのみ。候補はローカル保存してpush前に返す。新取得/認証/ネットワーク/admission/時刻改変/欠損補完/閾値緩和/新run/merge/公開なし。詳しい根拠はpr99-local-performanceを既存Library成果物へ保存。
+
+
+### 2026-10-19 — PR99 researchView単独切替の更新漏れを独立回帰で固定（未push）
+
+- 実装候補71c6d86を保持し、productionのCandlestickChart/candlestickDataは変更せず、既存reuse harnessへ独立4ケースを追加。日足/週足×書籍ON/OFF、同一参照の入力で通常→研究→通常。チャート再作成後の価格/出来高/SMA/EMA/RS/EPS、非空の自動注記、帯/購入点/pivot/研究levelsの値・回数を固定。
+- 新chartへの各setData/必要primitive attach/pivot作成は1回、旧chart removeは1回。同じpropsの親rerender3回とhover state更新で追加の系列/注記更新なし。初期の週足選択のみ日足→週足の2設定を明記。chart API mockの結果であり実Canvas描画回数や実ブラウザーループ検証ではない。
+- 正の同一回帰を親d5/EMA省略のみ/依存追加のみ/候補で実行。前2構成は各4失敗（切替後setData期待1回、実際0回）、後2構成は各4成功。実装を上書きせず別名copyで切り分け、比較用7filesはSHA確認後撤去。前回の厳密等価性4失敗は保持し、今回を既存更新漏れの修正として扱う。
+- 非描画EMA省略は計算削減、修正の直接原因はmemoへの両flag依存追加。chartData変更が新chartのデータ・注記effectを再実行する。表示完全不変という説明を訂正。追加の推測最適化なし。
+- 最終対象36成功、全frontend258files/3629成功（224.06s）、lint0errors/既存6warnings、build13.05s成功（実static-data export skip/既存chunk警告）。初回追加testの閉じ括弧不足とlint診断引数だけを訂正し、生log保持。最終testで4構成を再確認。
+- 直前追加検証で公式PyPI→隔離Python3.12.14のruntime+test依存導入成功、Red line275/Golden43成功。今回はbackend無変更なので再実行せず結果を継承。GoldenはRed lineにも含まれる。CIのPython3.11/server依存と同一性は主張しない。
+- 実装・財務鮮度/unknown・品質/閾値・D9基準は無変更。自己レビューのみ。最新Design詳細/実画像、実ブラウザー、fresh財務source、未push候補のexact CIは未確認のまま。GitHub照会/取得/新run/認証・ネットワーク設定変更/push/merge/公開なし。差分・再現source/bundle・raw logsはpr99-transition-regressionとして既存Libraryへ永続保存。

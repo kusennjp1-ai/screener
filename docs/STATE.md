@@ -1,24 +1,25 @@
-# STATE — PR99 ローカル性能候補（push前）
+# STATE — PR99 研究モード切替の回帰固定（未push）
 
-更新2026-10-19。基点d5a428c1d0dfa2c22347b8d631c2de58851a3a28。branch review/pr98-ui-integration-32ee9c2。今回の明示指示により新候補はpushせず返す。
+更新2026-10-19。branch review/pr98-ui-integration-32ee9c2。未push実装候補71c6d863a73a38b3e02861874a098a755fcc65f0のparentはd5a428c1d0dfa2c22347b8d631c2de58851a3a28。今回も明示指示によりpushしない。
 
-## 現在の変更
+## 現在の変更と根拠
 
-- researchView/bookAnnotationsで描画しないEMA10/20/50の履歴生成を省く。通常modeは既定計算を維持し、mode切替で復元する。価格・出来高・SMA・判定・鮮度・公開gateは不変。
-- 保存済みLLY/QQQ各186本、daily/weeklyの描画対象全出力・通常mode全出力・入力hashがbefore/after一致。dailyの未描画点生成481→0。
-- 12対24新Node24.19プロセス、各1500回のdaily変換中央値LLY29.00→21.10ms、QQQ28.41→11.46ms。weeklyは混在し速度改善を主張しない。実ブラウザー735msの原因解消・P1/Q1/D9合格の証明ではない。
-- 対象44、frontend全258files/3625成功。lint0errors/既存6warnings。build18.11秒成功、実static-data exportは不在でskip。backend redline/Golden再実行はpytest不在で未完了。追加取得なし。
+- 候補の2つの効果を区別する。研究/書籍モードの未描画EMA10/20/50生成省略は計算削減。memoに両フラグを追加した変更は、researchViewだけを変えた時に再作成されたchartへ価格・出来高等を渡し直す既存更新漏れの修正である。表示完全不変とは言わない。
+- 今回はCandlestickChart.reuse.test.jsxへ独立4ケース（日足/週足×書籍注記OFF/ON）を追加。実装2ファイルは71c6d86から変更なし。同じ入力参照・bookAnnotationsを維持し、通常→研究→通常の切替を検査する。
+- 旧d5とEMA省略だけは各4件失敗（新chartへsetData 1回を期待、実際0回）。依存配列変更だけと候補は各4件成功。同じ正の期待値で比較し、前回の厳密等価性4失敗を合格化していない。
+- 各切替後の価格/出来高/SMA/EMA/RS/EPSの必要更新と、非空の書籍注記・帯・購入点・pivotの再設定は1回。同じpropsのrerender×3とホバーのstate更新で追加の系列更新/注記attach/chart生成なし。旧chartは各1回remove。初期の週足選択だけは日足→週足の2回設定を明記して保持。
+- jsdom/chart API mockでの呼出し確認であり、実Canvas描画回数・ブラウザーイベント循環・実ピクセル検証ではない。
+
+## 検証
+
+- 新規4ケースと4構成の切り分け完了。対象36件成功。全frontend258files/3629成功（224.06秒）。lint0errors/既存6warnings。build成功、実static-data exportは不在でskip、既存chunk警告あり。
+- 前段で隔離Python3.12.14 venvへ公式PyPIからruntime+test依存を導入し、Red line275（17.97秒）/Golden43（4.65秒）成功。GoldenはRed lineにも含まれる。今回backend無変更のため再実行していない。CI Python3.11/server依存との完全同一性は未実証。
+- 以前の変換480ケース/1920 assertionsは一致。保存LLY/QQQ各186本のdaily未描画EMA点481→0。純JSの改善約0.005–0.011ms/変換、weekly混在は、735msの実切替やP1/Q1/D9の原因解消を証明しない。
 
 ## 公開・証拠の状態
 
-- 既存remote PR99はd5、最後の保存確認2026-10-19 18:05UTCでdraft/open/unmerged。CI39286575063は4job成功。Design39286575062はbuild成功後に計測/review失敗。今回候補のexact CIは未実行。
-- 新runログ・report・profile/trace・画像bytesは未取得。実ピクセル未確認。Forbidden取得とCLI401は停止したまま。認証/ネットワーク設定・別経路・新run・merge/公開なし。
-- D9の207点、初回同期描画、実size/DPR、元50ms条件は維持。純JS記録sink計測はブラウザーrender/layout/Canvasの代用ではない。
-- 財務5ケースの入力チェックリストと保存証拠棚卸しを完了。旧ログ由来のreceipt/manifest hashはあるが実source bytesはない。期限切れunknown検証はfreshカテゴリーの代替ではない。ordinary carryは無効かつ10月17日期限切れ。
-
-## 継続要件
-
-- 以前の4冊要旨/Oneil比較診断/市場履歴実装を保持。原本全230規則照合、実3期売上加速接続、不足5市場指標producer、実配信bundle/画面受入れ、継続収集等は未完了。
-- この候補は自己レビューのみ。push前レビュー後のexact CIと正規実画像/性能証拠が必要。ローカルChromium sandbox回避はしない。
-- 詳細・生ログ・再現scriptは /workspace/pr99-local-performance/。財務条件はFINANCIAL-INPUT-CHECKLIST-ja.md、静的解析はSTATIC-PERFORMANCE-REVIEW-ja.md。Libraryの既存PR99成果物へ追加保存する。
-- bd未導入。旧docsの過去監査点数・n=0・未push記載を現在の結果として使わない。新しい根拠なしの追加推測修正は行わない。
+- 最後のremote保存確認は2026-10-19 18:05UTC、PR99 head d5、draft/open/unmerged。既存CI39286575063は4job成功。Design39286575062はbuild成功後に計測/review失敗。未push候補のexact SHA CIは未実行。
+- 最新Designの詳細ログ/report/profile/trace/画像bytesは未取得。実ピクセル未確認。以前のForbidden/CLI401の経路は再試行しない。今回は新取得/認証変更/ネットワーク設定変更/新run/merge/公開なし。
+- D9の207点・初回同期描画・実size/DPR・元50ms基準、品質/鮮度/必須unknownと財務の判定基準は維持。期限切れunknownは正当動作でfreshカテゴリーの代替ではない。ordinary carryは無効かつ10月17日期限切れ。
+- 財務5ケースの実source/manifest/receipt bytes、実画面受入れ、原本全230規則照合、実3期売上加速接続、不足5市場producer・継続収集等は未完了。
+- 自己レビューのみ。local Chromiumのsandboxを回避しない。最新詳細はpr99-transition-regression/、前段はpr99-backend-review/evidence/とpr99-local-performance/へ保存し、既存Library PR99成果物を更新する。bd未導入。

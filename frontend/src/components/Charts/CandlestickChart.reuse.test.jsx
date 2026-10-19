@@ -13,6 +13,18 @@ const bars=price=>[
 ];
 const rs=value=>[{time:'2026-09-21',value},{time:'2026-09-22',value:value+1}];
 const longBars=Array.from({length:260},(_,index)=>({date:new Date(Date.UTC(2025,0,index+1)).toISOString().slice(0,10),open:100,high:103,low:98,close:100,volume:1000}));
+// The shrinking-pullback/breakout shape from bookAnnotations.test.js, using
+// trading dates so the regression also exercises nonempty automatic guides.
+function annotatedBars(){
+  const points=[[0,50],[60,100],[70,80],[80,98],[88,88],[96,96],[104,91],[110,99]];
+  const dates=[],day=new Date('2025-01-01T00:00:00Z');
+  while(dates.length<111){if(![0,6].includes(day.getUTCDay()))dates.push(day.toISOString().slice(0,10));day.setUTCDate(day.getUTCDate()+1);}
+  return dates.map((date,i)=>{
+    let k=1;while(points[k][0]<i)k++;
+    const [a,x]=points[k-1],[b,y]=points[k],close=x+(y-x)*(i-a)/(b-a);
+    return {date,open:close,high:close+.2,low:close-.2,close,volume:10000-i*40};
+  });
+}
 beforeEach(()=>{
   instances.length=0;
   resizeObservers.length=0;
@@ -54,6 +66,76 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it.each([['daily',false],['daily',true],['weekly',false],['weekly',true]])(
+    'reapplies data once on research-only round trips (%s, book=%s)',async(timeframe,bookAnnotations)=>{
+      const priceData=annotatedBars(),line=priceData.map((p,i)=>({time:p.date,value:70+i/100}));
+      const vcpBoxes=[{start:priceData[60].date,end:priceData.at(-1).date,high:100.2,low:79.8,label:'Base'}];
+      const bands={pressure_history:priceData.map(()=>1)},buyPoints=[{time:priceData[108].date,type:'buy_point',price:96.2}];
+      // Keep all input references and bookAnnotations fixed; only researchView
+      // changes. Changing both flags would hide the original dependency bug.
+      const props={priceData,rsLineData:line,epsLine:line,bookAnnotations,vcpBoxes,bands,buyPoints};
+      const view=setup({...props,researchView:false});
+      if(timeframe==='weekly')fireEvent.click(screen.getByRole('button',{name:'週足'}));
+      const initial=instances[0],prices=initial.candlestickSeries.setData.mock.lastCall[0];
+      const volume=initial.volumeSeries.setData.mock.lastCall[0],initialWrites=timeframe==='weekly'?2:1;
+      expect(prices).toHaveLength(timeframe==='weekly'?23:111);
+      if(timeframe==='daily')expect(prices).toEqual(priceData.map(({date,...bar})=>({time:date,open:bar.open,high:bar.high,low:bar.low,close:bar.close})));
+      else expect(prices.at(-1)).toEqual({time:'2025-06-04',open:priceData[108].open,high:99.2,low:priceData[108].low,close:99});
+      for(const [phase,researchView] of [false,true,false].entries()){
+        if(phase)view.update({...props,researchView});
+        const instance=instances.at(-1),writes=phase?1:initialWrites;
+        const assertUpdates=()=>{
+          expect(factory).toHaveBeenCalledTimes(phase+1);
+          for(const key of seriesKeys)expect(instance[key].setData).toHaveBeenCalledTimes(writes);
+          expect(instance.candlestickSeries.setData).toHaveBeenLastCalledWith(prices);
+          const actualVolume=instance.volumeSeries.setData.mock.lastCall[0];
+          expect(actualVolume.map(({time,value})=>({time,value}))).toEqual(volume.map(({time,value})=>({time,value})));
+          if(!researchView)expect(actualVolume).toEqual(volume);
+          const window=timeframe==='weekly'?10:50,average=instance.avgVolumeSeries.setData.mock.lastCall[0];
+          expect(average).toHaveLength(volume.length-window+(researchView?0:1));
+          const tail=researchView?volume.slice(-window-1,-1):volume.slice(-window);
+          expect(average.at(-1).value).toBeCloseTo(tail.reduce((sum,p)=>sum+p.value,0)/window);
+          for(const key of ['sma50Series','sma150Series','sma200Series'])expect(instance[key].setData.mock.lastCall[0]).toEqual(initial[key].setData.mock.lastCall[0]);
+          expect(instance.sma50Series.setData.mock.lastCall[0]).toHaveLength(timeframe==='weekly'?14:62);
+          for(const key of ['ema10Series','ema20Series','ema50Series']){
+            const expected=researchView||bookAnnotations?[]:initial[key].setData.mock.lastCall[0];
+            expect(instance[key].setData).toHaveBeenLastCalledWith(expected);
+          }
+          expect(instance.epsLineSeries.setData).toHaveBeenLastCalledWith(bookAnnotations?[]:line);
+          const dates=new Set(prices.map(p=>p.time));
+          expect(instance.rsLineSeries.setData).toHaveBeenLastCalledWith(timeframe==='daily'?line:researchView?line.filter(p=>dates.has(p.time)):[]);
+          const primitives=instance.candlestickSeries.attachPrimitive.mock.calls.map(([p])=>p);
+          for(const type of ['VcpBoxPrimitive','BandStripPrimitive','BuyPointPrimitive','TradeLevelsPrimitive']){
+            const matches=primitives.filter(p=>p.constructor.name===type);
+            expect(matches).toHaveLength(type==='TradeLevelsPrimitive'?(researchView?1:0):writes);
+          }
+          const vcp=primitives.findLast(p=>p.constructor.name==='VcpBoxPrimitive');
+          expect(vcp._candles).toEqual(prices);
+          if(bookAnnotations&&timeframe==='weekly')expect(vcp._boxes).toEqual([]);
+          else {
+            expect(vcp._boxes.length).toBeGreaterThan(0);
+            if(bookAnnotations){expect(vcp._boxes.some(p=>p.curve)).toBe(true);expect(vcp._boxes.some(p=>p.arrow)).toBe(true);}
+            else expect(vcp._boxes.map(({start,end,high,low})=>({start,end,high,low}))).toEqual(vcpBoxes.map(({start,end,high,low})=>({start,end,high,low})));
+          }
+          expect(primitives.findLast(p=>p.constructor.name==='BandStripPrimitive')).toMatchObject({_bands:bands,_barTimes:prices.map(p=>p.time)});
+          expect(primitives.findLast(p=>p.constructor.name==='BuyPointPrimitive')).toMatchObject({_points:buyPoints,_barTimes:prices.map(p=>p.time)});
+          expect(instance.candlestickSeries.createPriceLine).toHaveBeenCalledTimes(writes);
+          expect(instance.candlestickSeries.createPriceLine.mock.lastCall[0].price).toBe(bookAnnotations&&timeframe==='daily'?96.2:101);
+          expect(instance.chart.remove).not.toHaveBeenCalled();
+        };
+        assertUpdates();
+        // A parent rerender and a hover-induced legend update must not rewrite
+        // series, reattach guides, or create another chart. act flushes effects.
+        for(let repeat=0;repeat<3;repeat++)view.update({...props,researchView});
+        const onHover=instance.chart.subscribeCrosshairMove.mock.lastCall[0];
+        act(()=>onHover({time:prices[0].time,seriesData:new Map([[instance.candlestickSeries,{...prices[0],close:prices[0].close+.1}]])}));
+        await act(async()=>{});
+        assertUpdates();
+        for(const previous of instances.slice(0,-1))expect(previous.chart.remove).toHaveBeenCalledTimes(1);
+      }
+      expect(instances.map(i=>i.candlestickSeries.setData.mock.calls.length)).toEqual([initialWrites,1,1]);
+      expect(requestAnimationFrame).not.toHaveBeenCalled();
+    });
   it.each([[true,false],[false,true],[true,true]])('restores EMA data when leaving research=%s/book=%s without changing plotted prices', (researchView,bookAnnotations)=>{
     const props={priceData:longBars,researchView,bookAnnotations};
     const view=setup(props),hidden=instances.at(-1);
