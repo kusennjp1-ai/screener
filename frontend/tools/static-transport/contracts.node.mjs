@@ -276,7 +276,7 @@ test('large recovered members compare every source byte across decoder chunks an
   const base = await mkdtemp(join(tmpdir(), 'static-transport-large-member-'));
   t.after(() => rm(base, { recursive: true, force: true }));
   const source = join(base, 'source'), output = join(base, 'packed');
-  // Cross both the former 16 KiB and current 256 KiB output boundaries, with
+  // Cross both the default 16 KiB and previously enlarged 256 KiB boundaries, with
   // a nonaligned tail. This is a byte-level codec fixture, not financial data.
   const original = Buffer.alloc(2 * 256 * 1024 + 31, 65);
   for (const [path, bytes] of [['static-data/manifest.json', manifest], [dataPath, original]]) {
