@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CandlestickChart from './CandlestickChart';
+import { transformToCandlestickData } from './candlestickData';
 
 const { instances, factory, resizeObservers } = vi.hoisted(() => ({ instances: [], factory: vi.fn(), resizeObservers: [] }));
 vi.mock('./createPriceChartSeries', () => ({ createPriceChartSeries: factory }));
@@ -53,6 +54,20 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it.each([[true,false],[false,true],[true,true]])('restores EMA data when leaving research=%s/book=%s without changing plotted prices', (researchView,bookAnnotations)=>{
+    const props={priceData:longBars,researchView,bookAnnotations};
+    const view=setup(props),hidden=instances.at(-1);
+    const expected=transformToCandlestickData(longBars);
+    for(const key of ['ema10','ema20','ema50'])expect(hidden[`${key}Series`].setData.mock.lastCall[0]).toEqual([]);
+    expect(hidden.candlestickSeries.setData.mock.lastCall[0]).toEqual(expected.candlesticks);
+    for(const key of ['sma50','sma150','sma200'])expect(hidden[`${key}Series`].setData.mock.lastCall[0]).toEqual(expected[key]);
+    view.update({...props,researchView:false,bookAnnotations:false});
+    const ordinary=instances.at(-1);
+    for(const key of ['ema10','ema20','ema50'])expect(ordinary[`${key}Series`].setData.mock.lastCall[0]).toEqual(expected[key]);
+    expect(ordinary.candlestickSeries.setData.mock.lastCall[0]).toEqual(expected.candlesticks);
+    view.update(props);
+    for(const key of ['ema10','ema20','ema50'])expect(instances.at(-1)[`${key}Series`].setData.mock.lastCall[0]).toEqual([]);
+  });
   it.each([null,undefined,'not-a-number',NaN,Infinity])('clears every plotted series and legend for invalid numeric %s, then recovers',value=>{
     const props={priceData:longBars,bookAnnotations:false,epsLine:[{time:'2026-09-22',value:123}]};
     const view=setup(props),instance=instances[0];

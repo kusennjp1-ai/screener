@@ -776,3 +776,14 @@ PR99はc789647/draft/open/未mergeをread-only確認。68aedd0と今回修正は
 - 最終全Vitest244files/3429（226.39秒）、core122、UI64、独立9556＋940、backend275、Golden43成功。28依存と保護1975files一致。独立可搬copyで再現。関連件数は重複。lint0errors/既存6warnings、build成功/既存chunk警告。旧中断suiteの重複logは最終証拠に使わず別logで再実行。既存fund testのcount対象だけ元7行へ限定しpass/failなしassert維持。
 - browser4成功、375/1440明暗・合成のみ・外部遮断、32画像。UI4枚/root2枚目視。実static-data不在、実series/本番Design/CI未検証。Node24/Python3.12はCI版と異なる。PDF要旨は親確認済みのものを使い原本再取得なし。
 - 財務capture/admission/ルール・固定exporter・publisher pin・公開条件・認証は不変。原典全体再現とはしない。本番加速枝、実データ検証、既存市場履歴の不足producerは残件。bd不在、push/PR/merge/Actions/provider取得/公開なし。成果物はoneil-source-diagnostics-20261013の新Library項目として保存。
+
+
+### 2026-10-19 — PR99の方式切替/D9静的レビュー、未描画EMA生成省略（push前）
+
+- d5a428c基点。取得済み旧run39234087551と現ソースから経路を確認。PC切替735/599/614ms、D9初回85.2/79.3msの未達を保持。新run39286575062のprofile/trace/画像未取得で、原因確定を主張しない。
+- 方式切替は既存rankingsのfilter、表示50行readiness、選択銘柄の詳細/chart更新を含む。D9は207点・論理sizeで同期描画→実CSS size通知を維持。実ブラウザー寄与未確定のためD9コードと基準は変更なし。
+- CandlestickChartが常に捨てるresearch/book用EMA10/20/50だけを生成しない最小変更。通常defaultとmode復元を維持。保存済みLLY/QQQ186本×daily/weeklyで描画対象・通常全出力・入力hash一致、daily未描画点481→0。
+- 他テスト後12対24新Node24.19プロセス、1500回daily変換中央値LLY29.00→21.10ms/QQQ28.41→11.46ms。weeklyは1.017/0.979倍で改善としない。各最初の呼出し・全sample・同時実行中の探索結果も保存。P1/Q1/D9受入れの代用ではない。
+- 対象44/全frontend258files3625成功、lint0errors既存6warnings、build18.11s成功/実static-data export skip。初回新testの週次EMA50長さの誤前提を訂正して再確認。backend redlineはpytest不在で起動不能、Golden含め今回成功とはしない。外部依存取得なし。
+- 財務5ケースの入力・identity/clock/receipt/generation条件と保存証拠棚卸しを完了。実source artifact/manifest/receiptのbytes不足。ログにあるhashやprepared_atをsource更新/承認と扱わない。
+- 自己レビューのみ。候補はローカル保存してpush前に返す。新取得/認証/ネットワーク/admission/時刻改変/欠損補完/閾値緩和/新run/merge/公開なし。詳しい根拠はpr99-local-performanceを既存Library成果物へ保存。

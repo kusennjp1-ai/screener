@@ -221,8 +221,8 @@ function CandlestickChart({
     if (!apiData) return null;
     // Never coerce missing OHLCV into zero or leave the previous series behind.
     // Keep raw daily values available in the separate numeric disclosure.
-    return transformToCandlestickData(invalidHistory ? [] : apiData, effectiveTimeframe);
-  }, [apiData, effectiveTimeframe, invalidHistory]);
+    return transformToCandlestickData(invalidHistory ? [] : apiData, effectiveTimeframe, { includeEMA: !bookAnnotations && !researchView });
+  }, [apiData, effectiveTimeframe, invalidHistory, bookAnnotations, researchView]);
 
   // Initialize chart on mount using useLayoutEffect for synchronous DOM access
   useLayoutEffect(() => {
