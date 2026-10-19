@@ -40,6 +40,19 @@ function bundleFixture(){const root=mkdtempSync(join(tmpdir(),'financial-correct
  for(const base of [before,after])for(const [path,value]of Object.entries(files))put(base,path,value);
  return {root,before,after,frontend,put,change(path,fn){const file=join(after,path),value=JSON.parse(readFileSync(file,'utf8'));fn(value);put(after,path,value);},check:()=>compareCorrectionData(before,after,frontend,{financial_generation:H,symbols:{AAA:{}}}),cleanup:()=>rmSync(root,{recursive:true,force:true})};}
 test('semantic inventory accepts financial-only canonical ownership changes',async()=>{const f=bundleFixture();try{for(const path of ['static-data/research-index-aaaaaaaaaaaaaaaa.json','static-data/scan.json','static-data/research-details/AAA-aaaaaaaaaaaaaaaa.json','static-data/charts/AAA.json'])f.change(path,value=>{const row=value.rows?.[0]||value.initial_rows?.[0]||value.stock_data||value;row.eps_growth_yy=25;row.financial_history={annual:[]};row.financial_generation=H;});await f.check();}finally{f.cleanup();}});
+test('comparison retains the pre-optimization semantic and complete inventory digests',async()=>{
+ const f=bundleFixture();
+ try{
+  // Recorded by the unchanged comparator at 1b17d9b, not recomputed with the
+  // candidate's serializer: persisted carry assessments must remain identical.
+  assert.deepEqual(await f.check(),{
+   semantic_sha256:'ef4d74921140f0755c11e3147b62366c4d19893b5e6c1a7fa7d2741d9914f2dd',
+   universe_sha256:'7589348579c8aa6cc02f8922477cafb4ab35ea9b765abaf397faae6ec610b966',
+   before_inventory_sha256:'9e5fc292ca05bb2dbeefaa978e1beff5611fda7e8cb58f48612f022f983c0967',
+   after_inventory_sha256:'9e5fc292ca05bb2dbeefaa978e1beff5611fda7e8cb58f48612f022f983c0967',
+  });
+ }finally{f.cleanup();}
+});
 for(const [path,change]of [
  ['static-data/charts/AAA.json',v=>v.bars[0].close=101],['static-data/charts/AAA.json',v=>v.bars[0].volume=1001],['static-data/charts/AAA.json',v=>v.bars.unshift({date:'2026-10-01',close:90})],
  ['static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].current_price=101],['static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].adv_usd=1],['static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows=[]],

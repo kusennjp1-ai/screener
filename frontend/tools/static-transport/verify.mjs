@@ -122,7 +122,9 @@ async function verifyInto({ packed, expectedRoot, source, restore, signal, onPro
       let sink = new Writable({ write(chunk, encoding, callback) { callback(); } });
       if (restore) { const target = join(restore, path); await mkdir(dirname(target), { recursive: true }); sink = createWriteStream(target, { flags: 'wx' }); }
       const stages = [createReadStream(join(packed, entry.assetPath)), encodedMeter];
-      const framing = entry.kind === 'gzip' ? singleGzipFraming() : null, inflater = framing ? createInflateRaw() : null;
+      // Amortize stream callbacks and direct source reads for large members.
+      // Every decoded byte still passes the same caps, hash, CRC and comparison.
+      const framing = entry.kind === 'gzip' ? singleGzipFraming() : null, inflater = framing ? createInflateRaw({ chunkSize: 256 * 1024 }) : null;
       if (framing) { stages.push(framing.stream, inflater); compressedFiles++; }
       await pipeline(...stages, decodedMeter, sink, { signal });
       framing?.validate(inflater, encodedBytes, decodedBytes, decodedCrc);

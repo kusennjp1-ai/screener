@@ -272,6 +272,31 @@ test('independent Node verifier rejects re-pinned truncated gzip, bad CRC and ba
   }
 });
 
+test('large recovered members compare every source byte across decoder chunks and restore atomically', async t => {
+  const base = await mkdtemp(join(tmpdir(), 'static-transport-large-member-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const source = join(base, 'source'), output = join(base, 'packed');
+  // Cross both the former 16 KiB and current 256 KiB output boundaries, with
+  // a nonaligned tail. This is a byte-level codec fixture, not financial data.
+  const original = Buffer.alloc(2 * 256 * 1024 + 31, 65);
+  for (const [path, bytes] of [['static-data/manifest.json', manifest], [dataPath, original]]) {
+    await mkdir(dirname(join(source, path)), { recursive: true }); await writeFile(join(source, path), bytes);
+  }
+  const packed = await pack({ source, output, bindings });
+  const restore = join(base, 'restored');
+  const result = await verify({ packed: output, expectedRoot: packed.expectedRoot, source, restore });
+  assert.equal(result.allOriginalBytesEqual, true);
+  assert.deepEqual(await readFile(join(restore, dataPath)), original);
+  for (const offset of [16 * 1024 - 1, 16 * 1024, 256 * 1024 - 1, 256 * 1024, original.length - 1]) {
+    const changed = Buffer.from(original); changed[offset] ^= 1;
+    await writeFile(join(source, dataPath), changed);
+    const rejected = join(base, `rejected-${offset}`);
+    await assert.rejects(verify({ packed: output, expectedRoot: packed.expectedRoot, source, restore: rejected }), /Recovered byte mismatch/);
+    await assert.rejects(access(rejected));
+    assert.deepEqual((await readdir(base)).filter(path => path.startsWith('.static-transport-restore-')), []);
+  }
+});
+
 test('inventory membership is checked independently of otherwise valid byte pins', async t => {
   const f = await fixture(t), inventory = JSON.parse(new TextDecoder().decode(f.routes.get(f.root.logicalInventory.path)));
   delete inventory.files[dataPath];

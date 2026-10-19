@@ -63,7 +63,11 @@ function mismatchLocation({path:parts,searchLimited=false}) {
   if(searchLimited)return ` (diagnostic search limit reached at ${path}; mismatch unresolved)`;
   return truncated?` (mismatch diagnostic truncated at ${path})`:` at ${path}`;
 }
-const equal = (a, b, label) => { if (canonical(a) !== canonical(b)) throw Error(`Correction changed ${label}${mismatchDetail(a,b)}`); };
+const equal = (a, b, label) => {
+  const original = canonical(a);
+  if (original !== canonical(b)) throw Error(`Correction changed ${label}${mismatchDetail(a,b)}`);
+  return original;
+};
 export function parseCorrectionIntent(input) {
   if (input == null || input === '') return null;
   if (typeof input !== 'string' || Buffer.byteLength(input) > 8192) throw Error('Expected bounded typed financial correction intent');
@@ -233,7 +237,10 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
   const pair=(before,after,label,transform=value=>sanitize(value))=>{
     if (!safePath(before)||!safePath(after)) throw Error('Unsafe correction asset reference');
     handledBefore.add(before); handledAfter.add(after);
-    const original=read(beforeRoot,before),next=read(afterRoot,after);preservedFinancialAudit(original,next);const a=transform(original), b=transform(next); equal(a,b,label); semantic[label]=digest(a);
+    const original=read(beforeRoot,before),next=read(afterRoot,after);preservedFinancialAudit(original,next);const a=transform(original), b=transform(next);
+    // Hash the exact bytes just compared, without canonicalizing the same
+    // potentially large chart/history graph a third time.
+    semantic[label]=sha256(equal(a,b,label));
   };
   const bm=read(beforeRoot,'static-data/manifest.json'), am=read(afterRoot,'static-data/manifest.json');
   const normalizeManifest=value=>{ const out=sanitize(value); delete out.research_generation; for(const entry of Object.values(out.markets||{})) for(const key of ['research','workbench','workbench_summary']) if(entry.assets?.[key]) { delete entry.assets[key].sha256; delete entry.assets[key].snapshot_id; delete entry.assets[key].source_research_sha256; } return out; };
