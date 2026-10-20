@@ -183,10 +183,26 @@ export function dataInventory(root, excluded = []) {
 const owned = new Set([...contract.financial_fields,...contract.financial_context_fields,...contract.financial_derived_fields]);
 const metadata = new Set(['financial_generation','financial_evaluated_at','financial_knowledge_basis','financial_point_in_time','financial_source_publication_date','financial_policy_version']);
 const hashedPath = value => typeof value === 'string' ? value.replace(/-[a-f0-9]{16}(?=\.json(?:\.gz)?$)/,'-CONTENT') : value;
-function publicationInputView(row, capture) {
-  const expected=capture?.(row);
-  if(!expected)return null;
+function publicationInputView(row, capture, carriedScope=null) {
   const input=row.financial_publication_input;
+  let observed=null,audit=row;
+  const date=input?.binding?.as_of_date;
+  if(carriedScope&&date?.present===true&&date.value!==row.as_of_date&&row.financial_current?.a===date.value&&input.binding.proof?.value?.a===date.value) {
+    const scope=input.binding.scope;
+    // Only the original absent scope or this exact observed price identity may
+    // follow an already admitted carry. Explicit unknown/conflicting scopes
+    // never acquire the containing row's identity through normalization.
+    if(scope?.present===false||scope?.present===true&&scope.value?.symbol===row.symbol&&scope.value?.market===row.market&&scope.value?.as_of_date===date.value) {
+      observed=carriedScope(row,{symbol:row.symbol,market:row.market,as_of_date:date.value});
+      if(observed)audit={...row,as_of_date:date.value};
+    }
+  }
+  if(carriedScope&&(!Object.hasOwn(row,'financial_publication_input')||date?.value===row.as_of_date)) {
+    const scope=row.financial_identity?.observed_scope;
+    if(scope&&typeof scope==='object')observed=carriedScope(row,scope);
+  }
+  const expected=capture?.(audit);
+  if(!expected)return null;
   if(Object.hasOwn(row,'financial_publication_input')) {
     exact(input,['version','binding','slots'],'publication input');
     equal(input.version,expected.version,'publication input version');
@@ -211,24 +227,28 @@ function publicationInputView(row, capture) {
   // Retain the protected binding here instead of ignoring the whole snapshot.
   const binding=Object.fromEntries(Object.entries(expected.binding).filter(([key])=>key!=='proof'&&!metadata.has(key)));
   binding.identity=Object.fromEntries(Object.entries(binding.identity).filter(([key])=>!owned.has(key)));
+  if(observed) {
+    binding.as_of_date={present:true,value:observed.as_of_date};
+    if(binding.scope.present===true)binding.scope={present:true,value:{...binding.scope.value,as_of_date:observed.as_of_date}};
+  }
   // A legacy row may not have a snapshot or observed scope yet. Materialize
   // only a comparison view; never backfill an input into the published row.
   if(binding.scope.present===false)binding.scope={present:true,value:Object.fromEntries(['symbol','market','as_of_date'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]]))};
   return {version:expected.version,binding};
 }
-function stripped(value, row=false, cohort=null, parentSymbol=null, parentMarket='US', captureInput=null) {
-  if (Array.isArray(value)) return value.map(child => stripped(child,false,cohort,parentSymbol,parentMarket,captureInput));
+function stripped(value, row=false, cohort=null, parentSymbol=null, parentMarket='US', captureInput=null, carriedScope=null) {
+  if (Array.isArray(value)) return value.map(child => stripped(child,false,cohort,parentSymbol,parentMarket,captureInput,carriedScope));
   if (!value || typeof value!=='object') return value;
   const isRow = row || typeof value.symbol==='string';
   const symbol=value.symbol||parentSymbol;
   const market=value.market||parentMarket;
   const permitted=!cohort||market==='US'&&cohort.has(symbol);
   const contextual={...value};
-  const input=isRow&&permitted&&captureInput?publicationInputView(value,captureInput):null;
+  const input=isRow&&permitted&&captureInput?publicationInputView(value,captureInput,carriedScope):null;
   if(input!==null)contextual.financial_publication_input=input;
   if(isRow&&permitted)for(const key of ['screener_results','screener_details','screeners'])if(contextual[key]&&typeof contextual[key]==='object'&&!Array.isArray(contextual[key]))contextual[key]=Object.fromEntries(Object.entries(contextual[key]).filter(([name])=>!(/^(minervini|canslim|ipo|custom)$/i.test(name))));
   return Object.fromEntries(Object.entries(contextual).filter(([key]) => !metadata.has(key) && !(isRow && ['method_summary','financial_current_state'].includes(key)) && !(isRow && permitted && owned.has(key))).map(([key,child]) => [key,
-    key==='financial_publication_input'&&input!==null?child:['chart_path','research_detail_path','path','list_path'].includes(key) ? hashedPath(child) : stripped((key==='fundamentals'||key==='stock_data')&&child&&typeof child==='object'?{...Object.fromEntries(['symbol','market','as_of_date'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]])),...child}:child,key==='fundamentals'||key==='stock_data',cohort,symbol,market,captureInput)]));
+    key==='financial_publication_input'?child:['chart_path','research_detail_path','path','list_path'].includes(key) ? hashedPath(child) : stripped((key==='fundamentals'||key==='stock_data')&&child&&typeof child==='object'?{...Object.fromEntries(['symbol','market','as_of_date'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]])),...child}:child,key==='fundamentals'||key==='stock_data',cohort,symbol,market,captureInput,carriedScope)]));
 }
 function preservedFinancialAudit(before,after) {
   if(Array.isArray(before)) {
@@ -263,24 +283,29 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
   let contextMarket='US';
   const publicationInputModule=join(frontendRoot,'src/static/financialPublicationInput.js');
   const captureInput=existsSync(publicationInputModule)?(await import(pathToFileURL(publicationInputModule).href)).captureFinancialPublicationInput:null;
-  const sanitize=(value,row=false)=>stripped(value,row,cohort,null,contextMarket,captureInput);
-  const protectedRows=rows=>rowMap(rows,sanitize);
+  const carryModule=join(frontendRoot,'tools/financial-generation-carry.mjs');
+  const carryScope=projection.schema_version==='financial-generation-carry-v1'&&existsSync(carryModule)?(await import(pathToFileURL(carryModule).href)).observedFinancialCarryScope:null;
+  // This helper returns a scope only for the same carry object admitted by the
+  // preceding compatibility check. A clone or a schema flag grants no scope.
+  const carriedScope=carryScope?(row,prior)=>carryScope(projection,row,prior):null;
+  const sanitize=(value,row=false,before=false)=>stripped(value,row,cohort,null,contextMarket,captureInput,before?carriedScope:null);
+  const protectedRows=(rows,before=false)=>rowMap(rows,row=>sanitize(row,true,before));
   const transport=await import(pathToFileURL(join(frontendRoot,'src/static/researchTransport.js')).href);
   const beforeFiles=dataInventory(beforeRoot), afterFiles=dataInventory(afterRoot), handledBefore=new Set(),handledAfter=new Set();
   // This check is independent of active pointers: a forged current pointer may
   // never turn an existing historical file into a permitted rewrite.
   for(const [path,hash] of Object.entries(beforeFiles)) if(path.startsWith('static-data/candidate-history/') && afterFiles[path]!==hash)throw Error(`Correction changed immutable historical snapshot: ${path}`);
   const semantic={};
-  const pair=(before,after,label,transform=value=>sanitize(value))=>{
+  const pair=(before,after,label,transform=(value,before)=>sanitize(value,false,before))=>{
     if (!safePath(before)||!safePath(after)) throw Error('Unsafe correction asset reference');
     handledBefore.add(before); handledAfter.add(after);
-    const original=read(beforeRoot,before),next=read(afterRoot,after);preservedFinancialAudit(original,next);const a=transform(original), b=transform(next);
+    const original=read(beforeRoot,before),next=read(afterRoot,after);preservedFinancialAudit(original,next);const a=transform(original,true), b=transform(next,false);
     // Hash the exact bytes just compared, without canonicalizing the same
     // potentially large chart/history graph a third time.
     semantic[label]=sha256(equal(a,b,label));
   };
   const bm=read(beforeRoot,'static-data/manifest.json'), am=read(afterRoot,'static-data/manifest.json');
-  const normalizeManifest=value=>{ const out=sanitize(value); delete out.research_generation; for(const entry of Object.values(out.markets||{})) for(const key of ['research','workbench','workbench_summary']) if(entry.assets?.[key]) { delete entry.assets[key].sha256; delete entry.assets[key].snapshot_id; delete entry.assets[key].source_research_sha256; } return out; };
+  const normalizeManifest=(value,before)=>{ const out=sanitize(value,false,before); delete out.research_generation; for(const entry of Object.values(out.markets||{})) for(const key of ['research','workbench','workbench_summary']) if(entry.assets?.[key]) { delete entry.assets[key].sha256; delete entry.assets[key].snapshot_id; delete entry.assets[key].source_research_sha256; } return out; };
   pair('static-data/manifest.json','static-data/manifest.json','market/date and manifest scope',normalizeManifest);
   for(const [market,be] of Object.entries(bm.markets||{})) {
     contextMarket=market;
@@ -288,8 +313,8 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
     if(market!=='US'){equal(be,ae,`${market} untouched market`);continue;}
     const beforeResearch=read(beforeRoot,`static-data/${be.assets.research.path}`),afterResearch=read(afterRoot,`static-data/${ae.assets.research.path}`);
     const br=transport.decodeResearchIndex(beforeResearch),ar=transport.decodeResearchIndex(afterResearch);
-    pair(`static-data/${be.assets.research.path}`,`static-data/${ae.assets.research.path}`,`${market} research rows`,value=>({as_of_date:value.as_of_date,rows:protectedRows(transport.decodeResearchIndex(value).rows)}));
-    semantic[`${market} universe`]=digest(Object.keys(protectedRows(br.rows)));
+    pair(`static-data/${be.assets.research.path}`,`static-data/${ae.assets.research.path}`,`${market} research rows`,(value,before)=>({as_of_date:value.as_of_date,rows:protectedRows(transport.decodeResearchIndex(value).rows,before)}));
+    semantic[`${market} universe`]=digest(Object.keys(protectedRows(br.rows,true)));
     if(ar.rows.length!==br.rows.length)throw Error('Correction changed full universe');
     const bci=read(beforeRoot,`static-data/${be.assets.charts.path}`),aci=read(afterRoot,`static-data/${ae.assets.charts.path}`);
     pair(`static-data/${be.assets.charts.path}`,`static-data/${ae.assets.charts.path}`,`${market} chart inventory`);
@@ -297,7 +322,7 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
     if(charts.size!==(aci.symbols||[]).length)throw Error('Duplicate correction chart identity');
     for(const item of bci.symbols||[]) {
       const next=charts.get(item.symbol);if(!next)throw Error('Correction dropped chart');
-      pair(`static-data/${item.path}`,`static-data/${next.path}`,`${market} full chart ${item.symbol}`,value=>{const out=sanitize(value);if(market==='US'&&cohort.has(item.symbol))delete out.eps_line;return out;});
+      pair(`static-data/${item.path}`,`static-data/${next.path}`,`${market} full chart ${item.symbol}`,(value,before)=>{const out=sanitize(value,false,before);if(market==='US'&&cohort.has(item.symbol))delete out.eps_line;return out;});
     }
     const afterRows=new Map(ar.rows.map(row=>[row.symbol,row]));
     for(const row of br.rows) if(row.research_detail_path) pair(`static-data/${row.research_detail_path}`,`static-data/${afterRows.get(row.symbol)?.research_detail_path}`,`${market} detail ${row.symbol}`);
@@ -307,15 +332,15 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
       const bs=read(beforeRoot,bp),as=read(afterRoot,ap);
       // Preserve exact canonical byte equality without retaining both full raw
       // and sanitized scan universes plus their giant canonical map strings.
-      const visitRows=(root,scan,handled,visit)=>{
+      const visitRows=(root,scan,handled,visit,before=false)=>{
         const seen=new Set(),chunkMetadata=[];
         const rows=values=>{for(const row of values){if(typeof row?.symbol!=='string'||seen.has(row.symbol))throw Error('Correction universe is incomplete or duplicated');seen.add(row.symbol);visit(row);}};
         if(!scan.chunks?.length)rows(scan.initial_rows||[]);
-        for(const item of scan.chunks||[]){const path=`static-data/${item.path}`;handled.add(path);const payload=read(root,path);rows(payload.rows||[]);const metadata={...payload};delete metadata.rows;chunkMetadata.push(sanitize(metadata));}
+        for(const item of scan.chunks||[]){const path=`static-data/${item.path}`;handled.add(path);const payload=read(root,path);rows(payload.rows||[]);const metadata={...payload};delete metadata.rows;chunkMetadata.push(sanitize(metadata,false,before));}
         return chunkMetadata;
       };
       const priorRows=new Map();
-      const beforeMetadata=visitRows(beforeRoot,bs,handledBefore,row=>priorRows.set(row.symbol,canonical(sanitize(row,true))));
+      const beforeMetadata=visitRows(beforeRoot,bs,handledBefore,row=>priorRows.set(row.symbol,canonical(sanitize(row,true,true))),true);
       const afterMetadata=visitRows(afterRoot,as,handledAfter,row=>{
         if(!priorRows.has(row.symbol))throw Error(`Correction changed ${market} scan ${key} rows and metadata${mismatchLocation({path:['rows',row.symbol]})}`);
         const next=sanitize(row,true),prior=priorRows.get(row.symbol);
@@ -327,12 +352,12 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
       });
       if(priorRows.size)throw Error(`Correction changed ${market} scan ${key} rows and metadata${mismatchLocation({path:['rows',priorRows.keys().next().value]})}`);
       equal(beforeMetadata,afterMetadata,`${market} scan ${key} rows and metadata`);
-      pair(bp,ap,`${market} scan ${key} metadata`,value=>{const out=sanitize(value);delete out.initial_rows;delete out.chunks;delete out.preview_rows;delete out.default_filtered_rows_total;if(out.preset_screens)out.preset_screens=out.preset_screens.map(({match_count,...screen})=>{void match_count;return screen;});return out;});
+      pair(bp,ap,`${market} scan ${key} metadata`,(value,before)=>{const out=sanitize(value,false,before);delete out.initial_rows;delete out.chunks;delete out.preview_rows;delete out.default_filtered_rows_total;if(out.preset_screens)out.preset_screens=out.preset_screens.map(({match_count,...screen})=>{void match_count;return screen;});return out;});
     }
     for(const asset of ['workbench','workbench_summary']) if(be.assets?.[asset]) {
       const bp=`static-data/${be.assets[asset].path}`,ap=`static-data/${ae.assets[asset].path}`;
-      pair(bp,ap,`${market} ${asset} protected history`,value=>{
-        const out=sanitize(value);for(const key of ['snapshot_id','source_research_sha256','current_snapshot'])delete out[key];if(out.details){delete out.details.sha256;delete out.details.snapshot_id;delete out.details.source_research_sha256;}if(out.sectors?.groups)out.sectors.groups=out.sectors.groups.map(({rates,...group})=>{void rates;return group;});
+      pair(bp,ap,`${market} ${asset} protected history`,(value,before)=>{
+        const out=sanitize(value,false,before);for(const key of ['snapshot_id','source_research_sha256','current_snapshot'])delete out[key];if(out.details){delete out.details.sha256;delete out.details.snapshot_id;delete out.details.source_research_sha256;}if(out.sectors?.groups)out.sectors.groups=out.sectors.groups.map(({rates,...group})=>{void rates;return group;});
         return out;
       });
       const current=read(afterRoot,ap).current_snapshot;
@@ -343,8 +368,8 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
   const portfolioKeys=['date','capital','market','allocationCap','blockers','positions','readiness','dailyPositions','candidateCount','invested','cash','exposure','risk','decision','executionExposure','executionCash'];
   for(const path of ['research-daily.json','portfolio-model.json','qualification-audit.json','static-data/financial-history.json']) if(beforeFiles[path]||afterFiles[path]) {
     if(!beforeFiles[path]||!afterFiles[path])throw Error(`Correction changed derived asset presence: ${path}`);
-    pair(path,path,`protected derived metadata ${path}`,value=>{
-      const out=sanitize(value);
+    pair(path,path,`protected derived metadata ${path}`,(value,before)=>{
+      const out=sanitize(value,false,before);
       if(path==='research-daily.json') {delete out.candidates;delete out.ibd_comparison;}
       if(path==='portfolio-model.json') for(const key of portfolioKeys)delete out[key];
       if(path==='qualification-audit.json') out.results=out.results.map(({methods,...row})=>{void methods;return row;});
@@ -366,7 +391,7 @@ export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot,
       // Only actual source charts and source scan chunks may have changed owner
       // fields; benchmark/sector/home/history files never enter this exception.
       const a=read(beforeRoot,path),b=read(afterRoot,path);
-      if(Array.isArray(a.bars)&&a.symbol===b.symbol&&a.symbol) {preservedFinancialAudit(a,b);const left=sanitize(a),right=sanitize(b);if((a.market||'US')==='US'&&cohort.has(a.symbol)){delete left.eps_line;delete right.eps_line;}equal(left,right,`source chart ${path}`);continue;}
+      if(Array.isArray(a.bars)&&a.symbol===b.symbol&&a.symbol) {preservedFinancialAudit(a,b);const left=sanitize(a,false,true),right=sanitize(b);if((a.market||'US')==='US'&&cohort.has(a.symbol)){delete left.eps_line;delete right.eps_line;}equal(left,right,`source chart ${path}`);continue;}
     }
     throw Error(`Correction changed unowned data file: ${path}`);
   }
