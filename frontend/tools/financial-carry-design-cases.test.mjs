@@ -7,7 +7,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FINANCIAL_CARRY_DESIGN_CASES, financialCarryDesignScreens, financialCarryCaseSource, financialCarrySha256,
-  verifyFinancialCarryClock, verifyFinancialCarryIdentity, verifyFinancialCarryCsv, verifyFinancialCarryObservation,
+  verifyFinancialCarryClock, verifyFinancialCarryIdentity, verifyFinancialCarryExclusion, verifyFinancialCarryCsv, verifyFinancialCarryObservation,
   financialCarryBrowserBootstrap, verifyFinancialCarryTransportBinding, prepareFinancialCarryDesignBinding, verifyFinancialCarryMeasurementBinding,
   observeFinancialCarryUi, sealFinancialCarryDesignReport } from './financial-carry-design-cases.mjs';
 import { bootstrap } from '../../.github/scripts/publication-state.mjs';
@@ -15,6 +15,7 @@ import { FINANCIAL_DESIGN_CASES, financialDesignScreens, financialCaseSource } f
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../src/test/fixtures/nativeAnnual.js';
 import { projectFinancialRow } from '../src/static/financialCurrent.js';
+import { captureFinancialPublicationInput } from '../src/static/financialPublicationInput.js';
 import { researchCsv, assess, rankCandidates } from '../src/static/researchEngine.js';
 import { encodeResearchIndex, decodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
 import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
@@ -61,6 +62,23 @@ describe('supplemental carry evidence never replaces fresh acceptance', () => {
       expect(JSON.stringify(raw)).toBe(before);
       expect(() => financialCaseSource(projected, value, date, now)).toThrow('unavailable or expired');
     }
+  });
+
+  it('requires the approved exclusion for every method after serialization as well as unknown annual values', () => {
+    const raw = { ...row(), financial_generation: 'a'.repeat(64), financial_evaluated_at: now,
+      financial_knowledge_basis: 'current_observation_at_source_capture', financial_point_in_time: false,
+      financial_source_publication_date: null, financial_policy_version: 'financial-correction-native-annual-v1',
+      financial_historical: { values: { eps_growth_yy: 999, sales_growth_yy: 999 } } };
+    const json = value => JSON.parse(JSON.stringify(value));
+    const lost = json(projectFinancialRow(raw, { now, asOfDate: date }));
+    expect(assess(lost, 'oneil', now).rules.find(rule => rule.label.includes('3年')).state).toBe('unknown');
+    expect(() => verifyFinancialCarryExclusion(lost, item('NVDA'), now)).toThrow('approved unknown exclusion');
+    raw.financial_publication_input = captureFinancialPublicationInput(raw);
+    const retained = json(projectFinancialRow(raw, { now, asOfDate: date }));
+    expect(Object.keys(verifyFinancialCarryExclusion(retained, item('NVDA'), now))).toEqual(RESEARCH_METHODS);
+    expect(financialCarryCaseSource(retained, item('NVDA'), date, now).financial_exclusions).toMatchObject({
+      minervini: { status: 'excluded_unknown' }, minervini2: { status: 'excluded_unknown' },
+      oneil: { status: 'excluded_unknown' }, ibd: { status: 'excluded_unknown' } });
   });
 
   it('rejects current evidence, missing/replaced history, wrong identities and invented case names', () => {

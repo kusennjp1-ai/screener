@@ -17,6 +17,7 @@ const record = value => value !== null && typeof value === 'object' && !Array.is
 export function researchListRow(row) {
   const out = { ...row };
   const needsFinancialExceptionInputs = row.market === 'US' && FINANCIAL_PUBLICATION_EXCEPTION.symbols.includes(row.symbol);
+  if (!needsFinancialExceptionInputs) delete out.financial_publication_input;
   // Evidence envelopes and raw history belong to immutable on-demand detail.
   delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
   // These five decisions also reject contradictory original scalars. Dropping

@@ -8,11 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { CORRECTION_FIELDS, overlayFinancialCorrection, overlayFinancialChart, validateCorrectionProjection } from './financial-correction-overlay.mjs';
 import { FINANCIAL_GENERATION_CARRY_SCHEMA, FINANCIAL_GENERATION_CARRY_ENV, createFinancialGenerationCarry, validateFinancialGenerationCarry, readFinancialGenerationCarry, loadFinancialGenerationCarry, verifyCarryCompatibility } from './financial-generation-carry.mjs';
-import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, currentFinancialHistory } from '../src/static/financialCurrent.js';
+import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, currentFinancialHistory, mergeFinancialDetail } from '../src/static/financialCurrent.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../src/test/fixtures/nativeAnnual.js';
-import { decodeResearchIndex, encodeResearchIndex } from '../src/static/researchTransport.js';
-import { assess } from '../src/static/researchEngine.js';
+import { decodeResearchIndex, encodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
+import { assess, rankCandidates } from '../src/static/researchEngine.js';
+import { filterRanked } from '../src/static/researchPresentation.js';
+import { prepareResearchBundle } from '../src/static/researchPreprocess.js';
+import { financialPublicationException } from '../src/static/financialPublicationException.js';
+import { preparePortfolioRows, buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { exportWorkbench } from './export-workbench.mjs';
 import { readCarryTargetBase, verifyCarriedBundle } from '../../.github/scripts/financial-generation-carry-controller.mjs';
@@ -27,12 +31,12 @@ const digest = value => hash(JSON.stringify(canonical(value)));
 const write = async (path, value) => { await mkdir(resolve(path, '..'), { recursive: true }); await writeFile(path, typeof value === 'string' ? value : JSON.stringify(value)); };
 const read = async path => JSON.parse(await readFile(path, 'utf8'));
 const row = (symbol, date = originalDate) => ({ symbol, market: 'US', as_of_date: date, company_name: `${symbol} Corporation`, quoteType: 'EQUITY', rs_rating: 90, current_price: 100, adv_usd: 30000000, current_volume: 1000000, composite_score: 99, eps_growth_yy: 999, eps_rating: 99, code33: true, screener_results: { canslim: { score: 99, passes: true }, volume_breakthrough: { score: 50 } } });
-function inputs({ now = buildTime, date = targetDate, annualAgeHours = 1, quarterAgeHours = 1, currency = 'CAD' } = {}) {
-  const base = { market: 'US', as_of_date: originalDate, rows: ['OWNED', 'NULL', 'MISMATCH', 'NOIDENTITY', 'DROPPED', 'OUTSIDE'].map(symbol => row(symbol)) };
+function inputs({ now = buildTime, date = targetDate, annualAgeHours = 1, quarterAgeHours = 1, currency = 'CAD', ownedSymbol = 'OWNED' } = {}) {
+  const base = { market: 'US', as_of_date: originalDate, rows: [ownedSymbol, 'NULL', 'MISMATCH', 'NOIDENTITY', 'DROPPED', 'OUTSIDE'].map(symbol => row(symbol)) };
   delete base.rows.find(row => row.symbol === 'NOIDENTITY').company_name;
   const sourceBase = JSON.stringify(base), symbols = {};
   const annualObserved = originalTime - annualAgeHours * 3600000, quarterObserved = originalTime - quarterAgeHours * 3600000;
-  for (const symbol of ['OWNED', 'NULL', 'MISMATCH', 'NOIDENTITY', 'DROPPED']) {
+  for (const symbol of [ownedSymbol, 'NULL', 'MISMATCH', 'NOIDENTITY', 'DROPPED']) {
     const owned = symbol !== 'NULL', proofRow = withFinancialProof({ symbol, ...(owned ? { eps_growth_qq: 30, eps_growth_yy: 40 } : {}) }, originalTime, originalDate);
     const values = Object.fromEntries(CORRECTION_FIELDS.map(field => [field, proofRow[field] ?? null]));
     values.eps_growth_quarterly = values.eps_growth_qq; values.eps_growth_annual = values.eps_growth_yy;
@@ -59,7 +63,7 @@ function inputs({ now = buildTime, date = targetDate, annualAgeHours = 1, quarte
     receipt_inventory: inventory, receipt_inventory_sha256: digest(inventory), symbols,
   };
   validateCorrectionProjection(source);
-  const target = { market: 'US', as_of_date: date, rows: ['OWNED', 'NULL', 'MISMATCH', 'NOIDENTITY', 'OUTSIDE', 'NEW'].map(symbol => ({ ...row(symbol, date), current_price: 120, adv_usd: 35000000 })) };
+  const target = { market: 'US', as_of_date: date, rows: [ownedSymbol, 'NULL', 'MISMATCH', 'NOIDENTITY', 'OUTSIDE', 'NEW'].map(symbol => ({ ...row(symbol, date), current_price: 120, adv_usd: 35000000 })) };
   target.rows.find(row => row.symbol === 'MISMATCH').company_name = 'A Different Issuer';
   delete target.rows.find(row => row.symbol === 'NOIDENTITY').company_name;
   const sourceProjection = JSON.stringify(source, null, 2), targetBase = JSON.stringify(target);
@@ -68,6 +72,97 @@ function inputs({ now = buildTime, date = targetDate, annualAgeHours = 1, quarte
 const projected = (carry, targetRow, now = buildTime) => projectFinancialRow(overlayFinancialCorrection(targetRow, carry), { now });
 const targetRows = options => JSON.parse(options.targetBase).rows;
 const envFor = (path, carry, raw = JSON.stringify(carry)) => ({ FINANCIAL_GENERATION_CARRY_PROJECTION: path, FINANCIAL_GENERATION_CARRY_SHA256: hash(raw), FINANCIAL_GENERATION_CARRY_SOURCE_LINEAGE: carry.bindings.source_lineage_sha256, FINANCIAL_GENERATION_CARRY_PREVIOUS_IDENTITY: carry.bindings.previous_publication_identity, FINANCIAL_GENERATION_CARRY_TARGET_BASE_SHA256: carry.bindings.target_base_sha256, FINANCIAL_EVALUATED_AT: carry.financial_evaluated_at });
+
+// Synthetic source receipts through the real carry/export/worker boundaries;
+// these tests do not claim to replay a retained CI acquisition.
+for (const symbol of ['NVDA', 'FUTU', 'AAOI', 'ALH', 'AVT']) for (const technicalPass of [true, false]) for (const legacyScalar of [999, null]) {
+  it(`keeps ${symbol} excluded after expired current projection (technical=${technicalPass}, predecessor=${legacyScalar})`, () => {
+    const now = Date.parse('2026-10-20T14:00:00Z'), date = '2026-10-16';
+    const options = inputs({ now, date, ownedSymbol: symbol, currency: symbol === 'FUTU' ? 'HKD' : 'USD' });
+    const target = JSON.parse(options.targetBase), index = target.rows.findIndex(row => row.symbol === symbol);
+    target.rows[index] = withAuditFixture({ ...target.rows[index], eps_growth_yy: legacyScalar, sales_growth_yy: legacyScalar,
+      currency: 'USD', current_price: 101, se_pivot_price: 100, rs_rating: technicalPass ? 95 : 65, adv_usd: 50000000,
+      gics_sector: 'Technology', se_pattern_confidence: 85, ibd_group_rank: 10, market_regime: 'confirmed_uptrend',
+      market_above_50dma: true, market_above_200dma: true, passes_template: technicalPass }, date);
+    options.targetBase = JSON.stringify(target); options.targetBaseSha256 = hash(options.targetBase);
+    const carry = createFinancialGenerationCarry(options), raw = overlayFinancialCorrection(target.rows[index], carry);
+    const first = projectFinancialRow(raw, { now, asOfDate: date });
+    const wire = JSON.parse(JSON.stringify(encodeResearchIndex({ as_of_date: date, rows: [first] })));
+    const decoded = decodeResearchIndex(wire).rows[0];
+    const prepared = prepareResearchBundle([wire], date, { now, generation: carry.financial_generation }).rows[0];
+    const detail = JSON.parse(JSON.stringify(first));
+    const merged = mergeFinancialDetail(prepared, detail, { now, asOfDate: date, generation: carry.financial_generation });
+    expect(raw.eps_growth_yy).toBe(40); expect(first.eps_growth_yy).toBeNull();
+    expect(first.financial_current_state.fields.eps_growth_yy.reason).toBe('stale_source');
+    expect(first.financial_historical.values.eps_growth_yy).toBe(legacyScalar);
+    for (const current of [raw, first, detail, decoded, prepared, merged]) {
+      expect(financialPublicationException(current, { date, now })).toMatchObject({ status: 'excluded_unknown', qualified: false, satisfies_fresh_category: false });
+      expect(current.financial_current).toEqual(raw.financial_current);
+      expect(current.financial_history).toEqual(raw.financial_history);
+      expect(current.financial_publication_input).toEqual(raw.financial_publication_input);
+      for (const method of RESEARCH_METHODS) {
+        expect(assess(current, method, now)).toMatchObject({ qualified: false, financial_exclusion: { status: 'excluded_unknown' } });
+        const ranked = rankCandidates([current], method, { now });
+        expect(filterRanked(ranked, { qualifiedOnly: true })).toEqual([]);
+        expect(filterRanked(ranked, { nearOnly: true })).toEqual([]);
+      }
+      const portfolio = preparePortfolioRows([current], now), plan = buildPortfolioPlan([current], date, 100000, now, portfolio);
+      expect(portfolio.primary).toBe(0); expect(portfolio.strict).toBe(0);
+      expect(plan.positions).toEqual([]); expect(plan.dailyPositions).toEqual([]);
+    }
+    expect(merged.eps_growth_yy).toBeNull();
+    // General projection remains destructive and does not trust this input to
+    // restore a scalar, proof freshness, or a source-valid state.
+    expect(projectFinancialRow(merged, { now, asOfDate: date }).financial_current_state.fields.eps_growth_yy.source_validated).not.toBe(true);
+  });
+}
+
+it('keeps expired comparison-only inputs excluded through the exact existing proof rewrite', () => {
+  const now = Date.parse('2026-10-20T14:00:00Z'), date = '2026-10-16';
+  const options = inputs({ now, date, ownedSymbol: 'NVDA', currency: 'USD' }), source = JSON.parse(options.sourceProjection);
+  const proof = source.symbols.NVDA.financial_current;
+  proof.r = proof.r.slice(0, 1) + 'f' + proof.r.slice(2); proof.p['1'][6] = 'l';
+  validateCorrectionProjection(source);
+  options.sourceProjection = JSON.stringify(source); options.sourceProjectionSha256 = hash(options.sourceProjection);
+  const carry = createFinancialGenerationCarry(options), raw = overlayFinancialCorrection(targetRows(options)[0], carry);
+  const current = JSON.parse(JSON.stringify(projectFinancialRow(raw, { now, asOfDate: date })));
+  expect(raw.financial_current.r[1]).toBe('f'); expect(current.financial_current.r[1]).toBe('7');
+  expect(current.financial_current.p).not.toHaveProperty('1');
+  expect(current.financial_publication_input.binding.proof.value).toEqual(raw.financial_current);
+  expect(financialPublicationException(current, { date, now })).toMatchObject({ status: 'excluded_unknown' });
+  const later = Date.parse('2027-01-10T14:00:00Z');
+  expect(projectFinancialRow(raw, { now: later, asOfDate: date }).financial_current.r[1]).toBe('a');
+  expect(financialPublicationException(current, { date, now: later })).toMatchObject({ status: 'excluded_unknown' });
+  const mutated = structuredClone(current); mutated.financial_current.r = '1' + mutated.financial_current.r.slice(1);
+  delete mutated.financial_current.p['0'];
+  expect(financialPublicationException(mutated, { date, now })).toBeNull();
+  expect(current.eps_growth_yy).toBeNull();
+});
+
+it('checks staggered reference expiry transitions individually without admitting future rewrites', () => {
+  const options = inputs({ ownedSymbol: 'NVDA', currency: 'USD' }), source = JSON.parse(options.sourceProjection);
+  const item = source.symbols.NVDA, proof = item.financial_current;
+  item.financial_values.sales_growth_yy = 40;
+  proof.r = proof.r.slice(0, 1) + 'f' + proof.r[2] + 'f' + proof.r.slice(4);
+  proof.p['1'][6] = 'l'; proof.p['1'][5] = proof.p['1'][4] + 2 * day;
+  proof.p['3'] = [...proof.p['1']]; proof.p['3'][2] = 'Total Revenue'; proof.p['3'][6] = 'X'; proof.p['3'][5] += 3 * day;
+  validateCorrectionProjection(source);
+  options.sourceProjection = JSON.stringify(source); options.sourceProjectionSha256 = hash(options.sourceProjection);
+  const carry = createFinancialGenerationCarry(options), raw = overlayFinancialCorrection(targetRows(options)[0], carry);
+  const json = value => JSON.parse(JSON.stringify(value)), midway = originalTime + 3 * day, later = Date.parse('2027-01-10T14:00:00Z');
+  const first = json(projectFinancialRow(raw, { now: buildTime, asOfDate: targetDate }));
+  const partial = json(projectFinancialRow(first, { now: midway, asOfDate: targetDate }));
+  expect(partial.financial_current.r[1]).toBe('7'); expect(partial.financial_current.r[3]).toBe('f');
+  expect(financialPublicationException(partial, { date: targetDate, now: midway })).toMatchObject({ status: 'excluded_unknown' });
+  expect(financialPublicationException(partial, { date: targetDate, now: later })).toMatchObject({ status: 'excluded_unknown' });
+  const future = structuredClone(partial);
+  future.financial_current.r = future.financial_current.r.slice(0, 3) + '7' + future.financial_current.r.slice(4);
+  delete future.financial_current.p['3'];
+  expect(financialPublicationException(future, { date: targetDate, now: midway })).toBeNull();
+  const notReported = structuredClone(partial);
+  notReported.financial_current.r = notReported.financial_current.r.slice(0, 1) + 'a' + notReported.financial_current.r.slice(2);
+  expect(financialPublicationException(notReported, { date: targetDate, now: midway })).toBeNull();
+});
 
 it('advances prices, date and partial universe without renewing original financial evidence', () => {
   const options = inputs(), before = structuredClone(options), source = JSON.parse(options.sourceProjection), carry = createFinancialGenerationCarry(options);
@@ -207,6 +302,36 @@ async function exportFixture(options = inputs(), { withPrior = false, chartForRo
   execFileSync(process.execPath, [exporter], { cwd: frontend, env, encoding: 'utf8' });
   return { directory, frontend, root, carry, env, baselineRoot };
 }
+
+it('regenerates the five-symbol current-input audit from source across exported surfaces', async () => {
+  const now = Date.parse('2026-10-20T14:00:00Z'), date = '2026-10-16';
+  const { directory, root, carry } = await exportFixture(inputs({ now, date, ownedSymbol: 'NVDA', currency: 'USD' }));
+  try {
+    await verifyCarryCompatibility({ root, carry, evaluatedAt: now });
+    const manifestPath = join(root, 'manifest.json'), manifestBytes = await readFile(manifestPath);
+    const manifest = JSON.parse(manifestBytes), researchPath = join(root, manifest.markets.US.assets.research.path);
+    const researchBytes = await readFile(researchPath), index = decodeResearchIndex(JSON.parse(researchBytes));
+    const listed = index.rows.find(row => row.symbol === 'NVDA');
+    expect(financialPublicationException(listed, { now, date })).toMatchObject({ status: 'excluded_unknown' });
+    for (const path of [join(root, listed.research_detail_path), join(root, 'raw/NVDA.json')]) {
+      const original = await readFile(path);
+      for (const mutate of [row => { delete row.financial_publication_input; },
+        row => { row.financial_publication_input.slots.eps_growth_yy.value = 99; }]) {
+        const changed = JSON.parse(original); mutate(changed.stock_data || changed); await write(path, changed);
+        await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: now })).rejects.toThrow(/financial_publication_input mismatch/);
+        await writeFile(path, original);
+      }
+    }
+    const changed = structuredClone(index); delete changed.rows.find(row => row.symbol === 'NVDA').financial_publication_input;
+    const content = JSON.stringify(encodeResearchIndex(changed));
+    await writeFile(researchPath, content); manifest.research_generation = hash(content); await write(manifestPath, manifest);
+    // Update the enclosing content digest to reach the independent source
+    // comparison rather than treating an earlier byte mismatch as this check.
+    await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: now })).rejects.toThrow(/research\/NVDA\/financial_publication_input mismatch/);
+    await writeFile(researchPath, researchBytes); await writeFile(manifestPath, manifestBytes);
+    await verifyCarryCompatibility({ root, carry, evaluatedAt: now });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 it('exports advancing carry across all aliases and records the final daily observation', async () => {
   const { directory, frontend, root, carry, env } = await exportFixture(inputs({ annualAgeHours: 60 }));

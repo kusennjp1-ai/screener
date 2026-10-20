@@ -5,11 +5,12 @@ import { isDeepStrictEqual } from 'node:util';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decodeResearchIndex, researchListRow } from '../src/static/researchTransport.js';
+import { decodeResearchIndex, researchListRow, RESEARCH_METHODS } from '../src/static/researchTransport.js';
 import { currentFinancialHistory, mergeFinancialDetail, projectFinancialRow, FINANCIAL_FIELDS } from '../src/static/financialCurrent.js';
 import { annualHistoryMetadataValid, financialHistoryDeadlines } from '../src/static/financialHistory.js';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../src/static/financialEvidencePresentation.js';
 import { assess, researchCsv } from '../src/static/researchEngine.js';
+import { isFinancialPublicationExclusion, FINANCIAL_PUBLICATION_EXCEPTION } from '../src/static/financialPublicationException.js';
 import { entryReadiness } from '../src/static/entryReadiness.js';
 import { modelMarket } from '../src/static/portfolioPlan.js';
 import { FINANCIAL_DESIGN_CASES, financialDesignScreens, parseFinancialCsv } from './financial-design-cases.mjs';
@@ -49,6 +50,19 @@ export function verifyFinancialCarryIdentity(summary, detail, item, date) {
     isDeepStrictEqual(researchListRow(summary).financial_history, researchListRow(detail).financial_history), 'Browser detail and research financial history differ');
 }
 
+export function verifyFinancialCarryExclusion(row, item, now) {
+  namedCase(item);
+  const exclusions = Object.fromEntries(RESEARCH_METHODS.map(method => {
+    const result = assess(row, method, now), exclusion = result.financial_exclusion;
+    requireValue(result.qualified === false && isFinancialPublicationExclusion(exclusion) && exclusion.symbol === item.symbol,
+      `${item.symbol}/${method}: expired carry must retain the approved unknown exclusion`);
+    return [method, exclusion];
+  }));
+  requireValue(Object.values(exclusions).every(value => isDeepStrictEqual(value, exclusions[RESEARCH_METHODS[0]])),
+    `${item.symbol}: financial exclusions differ across methods`);
+  return exclusions;
+}
+
 export function financialCarryCaseSource(row, item, date, now = Date.now()) {
   namedCase(item);
   requireValue(row?.symbol === item.symbol && row.as_of_date === date && row.market === 'US', `${item.symbol}: carry source identity/date mismatch`);
@@ -73,7 +87,9 @@ export function financialCarryCaseSource(row, item, date, now = Date.now()) {
     `${item.symbol}: expired carry cannot restore financial values or availability`);
   const annualRule = assess(current, 'oneil', now).rules.find(rule => rule.label.includes('3年'));
   requireValue(annualRule?.state === 'unknown', `${item.symbol}: expired annual rule must remain unknown`);
+  const exclusions = verifyFinancialCarryExclusion(current, item, now);
   return { category: item.category, evidence_kind: 'expired-original-source', satisfies_fresh_category: false,
+    financial_exclusions: exclusions,
     selected_history_json_sha256: financialCarrySha256(JSON.stringify(data)), current_use_proof_json_sha256: financialCarrySha256(JSON.stringify(current.financial_current ?? null)),
     original_annual_periods: data.annual.length, original_source: data.source, original_observed_at: data.annual_source?.observed_at || data.retrieved_at,
     original_history_deadlines: deadlines.map(time => new Date(time).toISOString()), currency: data.annual_currency || data.currency,
@@ -92,6 +108,9 @@ export function verifyFinancialCarryCsv({ bytes, summary, item, date, browserNow
   const canonical = parseFinancialCsv(researchCsv([{ row: summary }], 'oneil', date, now));
   requireValue(same(exported.headers, canonical.headers), 'CSV labels differ from canonical export');
   requireValue(same(matches[0], canonical.rows[0]), 'Downloaded CSV values/states differ from current source');
+  const exclusion = verifyFinancialCarryExclusion(summary, item, now).oneil;
+  requireValue(matches[0].qualified === 'false' && matches[0].financial_exclusion_policy === exclusion.policy &&
+    matches[0].financial_exclusion_reason === exclusion.reason, 'CSV must retain the approved unknown exclusion');
   requireValue(annualState === 'unknown' && matches[0].annual_eps_rule_state === annualState && matches[0].annual_eps_reporting_currency === '', 'CSV must withhold expired annual values/currency and preserve unknown state');
   return { sha256: financialCarrySha256(bytes), bytes: bytes.length, headers: exported.headers, row: matches[0],
     observed_browser_at: new Date(browserNow).toISOString(), source: 'actual browser download' };
@@ -318,7 +337,15 @@ export async function verifyFinancialCarryCases({ page, viewport, theme, capture
         verifyFinancialCarryClock(evaluatedAt, browserNow, 'Rendered financial');
         const selected = mergeFinancialDetail(summary, detail, { now, asOfDate: date, generation, detailGeneration: generation,
           expectedDetailPath: summary.research_detail_path, detailPath: summary.research_detail_path });
+        record.financial_exclusions = Object.fromEntries(Object.entries({ summary, detail, selected }).map(([name, row]) =>
+          [name, verifyFinancialCarryExclusion(row, item, now)]));
         record.source = financialCarryCaseSource(selected, item, date, now);
+        const exclusionNote = page.locator('.symbol-qualification-context[data-financial-exclusion][data-qualification="excluded"]');
+        await ready(exclusionNote);
+        check(await exclusionNote.getAttribute('data-financial-exclusion') === FINANCIAL_PUBLICATION_EXCEPTION.version &&
+          (await exclusionNote.innerText()).includes(FINANCIAL_PUBLICATION_EXCEPTION.label), `${key}: approved unknown exclusion is not displayed`);
+        record.exclusion_note = { policy: await exclusionNote.getAttribute('data-financial-exclusion'), text: await exclusionNote.innerText(),
+          source: 'rendered DOM; pixel review remains separate' };
         record.observed_browser_at = new Date(browserNow).toISOString();
         record.financial_evaluated_at = evaluatedAt;
         record.loaded_detail_path = summary.research_detail_path;

@@ -2,6 +2,7 @@ import { projectFinancialRow, currentFinancialHistory } from './financialCurrent
 import { annualHistoryMetadataValid } from './financialHistory.js';
 import { evidenceTimestamp, validClock, validEvidenceDay } from './evidenceTime.js';
 import { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
+import { financialPublicationInput } from './financialPublicationInput.js';
 export { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
 
 const symbols = new Set(FINANCIAL_PUBLICATION_EXCEPTION.symbols);
@@ -23,16 +24,19 @@ export function financialPublicationException(input, { date, now = Date.now() } 
   if (input.market !== 'US' || !validClock(now) || !validEvidenceDay(date) || date > new Date(now).toISOString().slice(0, 10) ||
       (input.as_of_date != null && input.as_of_date !== date) ||
       (input.technical_audit?.as_of_date != null && input.technical_audit.as_of_date !== date)) return null;
-  const current = projectFinancialRow(input, { now, asOfDate: date });
+  const audit = Object.hasOwn(input, 'financial_publication_input') ? financialPublicationInput(input, { date, now }) : null;
+  if (Object.hasOwn(input, 'financial_publication_input') && !audit) return null;
+  const scalarInput = audit?.input || input;
+  const current = audit?.current || projectFinancialRow(scalarInput, { now, asOfDate: date });
   let missingScalar = false;
   for (const name of fields) {
-    if (!empty(input[name]) && !finite(input[name])) return null;
+    if (!empty(scalarInput[name]) && !finite(scalarInput[name])) return null;
     const state = current.financial_current_state?.fields[name];
     if (!state) return null;
     if (state.availability === 'unknown') {
       if (state.reason === 'nonpositive_comparison_base' && state.source_validated) continue;
       if (state.reason === 'missing_or_invalid_value') {
-        if (!empty(input[name]) || !empty(current.financial_historical?.values?.[name])) return null;
+        if (!empty(scalarInput[name]) || (!audit && !empty(current.financial_historical?.values?.[name]))) return null;
       } else if (!absenceReasons.has(state.reason)) return null;
       missingScalar = true;
     }
