@@ -183,17 +183,52 @@ export function dataInventory(root, excluded = []) {
 const owned = new Set([...contract.financial_fields,...contract.financial_context_fields,...contract.financial_derived_fields]);
 const metadata = new Set(['financial_generation','financial_evaluated_at','financial_knowledge_basis','financial_point_in_time','financial_source_publication_date','financial_policy_version']);
 const hashedPath = value => typeof value === 'string' ? value.replace(/-[a-f0-9]{16}(?=\.json(?:\.gz)?$)/,'-CONTENT') : value;
-function stripped(value, row=false, cohort=null, parentSymbol=null, parentMarket='US') {
-  if (Array.isArray(value)) return value.map(child => stripped(child,false,cohort,parentSymbol,parentMarket));
+function publicationInputView(row, capture) {
+  const expected=capture?.(row);
+  if(!expected)return null;
+  const input=row.financial_publication_input;
+  if(Object.hasOwn(row,'financial_publication_input')) {
+    exact(input,['version','binding','slots'],'publication input');
+    equal(input.version,expected.version,'publication input version');
+    exact(input.binding,Object.keys(expected.binding),'publication input binding');
+    exact(input.slots,Object.keys(expected.slots),'publication input slots');
+    const slot=value=>{
+      if(value?.present===false)exact(value,['present'],'publication input absent slot');
+      else if(value?.present===true&&Object.hasOwn(value,'value'))exact(value,['present','value'],'publication input value slot');
+      else {exact(value,['present','unsupported'],'publication input unsupported slot');if(value.present!==true||value.unsupported!==true)throw Error('Invalid publication input unsupported slot');}
+    };
+    slot(input.binding.proof);
+    for(const value of Object.values(input.slots))slot(value);
+    const {proof:originalProof,...binding}=input.binding;
+    const {proof:projectedProof,...expectedBinding}=expected.binding;
+    void originalProof;void projectedProof;
+    equal(binding,expectedBinding,'publication input row binding');
+  }
+  // This gate protects nonfinancial semantics. The preceding source phase
+  // independently re-mints the complete snapshot, including its original
+  // scalar slots and proof, from the authenticated projection. Those finance
+  // inputs may change on renewal just like their existing owned row fields.
+  // Retain the protected binding here instead of ignoring the whole snapshot.
+  const binding=Object.fromEntries(Object.entries(expected.binding).filter(([key])=>key!=='proof'&&!metadata.has(key)));
+  binding.identity=Object.fromEntries(Object.entries(binding.identity).filter(([key])=>!owned.has(key)));
+  // A legacy row may not have a snapshot or observed scope yet. Materialize
+  // only a comparison view; never backfill an input into the published row.
+  if(binding.scope.present===false)binding.scope={present:true,value:Object.fromEntries(['symbol','market','as_of_date'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]]))};
+  return {version:expected.version,binding};
+}
+function stripped(value, row=false, cohort=null, parentSymbol=null, parentMarket='US', captureInput=null) {
+  if (Array.isArray(value)) return value.map(child => stripped(child,false,cohort,parentSymbol,parentMarket,captureInput));
   if (!value || typeof value!=='object') return value;
   const isRow = row || typeof value.symbol==='string';
   const symbol=value.symbol||parentSymbol;
   const market=value.market||parentMarket;
   const permitted=!cohort||market==='US'&&cohort.has(symbol);
   const contextual={...value};
+  const input=isRow&&permitted&&captureInput?publicationInputView(value,captureInput):null;
+  if(input!==null)contextual.financial_publication_input=input;
   if(isRow&&permitted)for(const key of ['screener_results','screener_details','screeners'])if(contextual[key]&&typeof contextual[key]==='object'&&!Array.isArray(contextual[key]))contextual[key]=Object.fromEntries(Object.entries(contextual[key]).filter(([name])=>!(/^(minervini|canslim|ipo|custom)$/i.test(name))));
   return Object.fromEntries(Object.entries(contextual).filter(([key]) => !metadata.has(key) && !(isRow && ['method_summary','financial_current_state'].includes(key)) && !(isRow && permitted && owned.has(key))).map(([key,child]) => [key,
-    ['chart_path','research_detail_path','path','list_path'].includes(key) ? hashedPath(child) : stripped((key==='fundamentals'||key==='stock_data')&&child&&typeof child==='object'?{...Object.fromEntries(['symbol','market','as_of_date'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]])),...child}:child,key==='fundamentals'||key==='stock_data',cohort,symbol,market)]));
+    key==='financial_publication_input'&&input!==null?child:['chart_path','research_detail_path','path','list_path'].includes(key) ? hashedPath(child) : stripped((key==='fundamentals'||key==='stock_data')&&child&&typeof child==='object'?{...Object.fromEntries(['symbol','market','as_of_date'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]])),...child}:child,key==='fundamentals'||key==='stock_data',cohort,symbol,market,captureInput)]));
 }
 function preservedFinancialAudit(before,after) {
   if(Array.isArray(before)) {
@@ -226,7 +261,9 @@ export async function verifyConsumerCapability(frontendRoot) {
 export async function compareCorrectionData(beforeRoot, afterRoot, frontendRoot, projection) {
   const cohort=new Set(Object.keys(projection.symbols||{}));
   let contextMarket='US';
-  const sanitize=(value,row=false)=>stripped(value,row,cohort,null,contextMarket);
+  const publicationInputModule=join(frontendRoot,'src/static/financialPublicationInput.js');
+  const captureInput=existsSync(publicationInputModule)?(await import(pathToFileURL(publicationInputModule).href)).captureFinancialPublicationInput:null;
+  const sanitize=(value,row=false)=>stripped(value,row,cohort,null,contextMarket,captureInput);
   const protectedRows=rows=>rowMap(rows,sanitize);
   const transport=await import(pathToFileURL(join(frontendRoot,'src/static/researchTransport.js')).href);
   const beforeFiles=dataInventory(beforeRoot), afterFiles=dataInventory(afterRoot), handledBefore=new Set(),handledAfter=new Set();

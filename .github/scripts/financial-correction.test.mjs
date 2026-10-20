@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { captureFinancialPublicationInput } from '../../frontend/src/static/financialPublicationInput.js';
 import { contract, parseCorrectionIntent, verifyCorrectionSource, verifyCorrectionChecks, assertCorrectionProgress, compareCorrectionData, verifyConsumerCapability, validateCorrectionReceipt } from './financial-correction.mjs';
 const H='a'.repeat(64), SHA='b'.repeat(40), repo='kusennjp1-ai/screener';
 const source=()=>({repository:repo,workflow:contract.source_workflow,head_sha:SHA,run_id:12,run_attempt:2,artifact_id:99,artifact_name:`financial-statement-recovery-${SHA}-2`,artifact_sha256:H,archive_manifest_sha256:H,acquisition_base_sha256:H,cohort_sha256:H});
@@ -40,6 +42,76 @@ function bundleFixture(){const root=mkdtempSync(join(tmpdir(),'financial-correct
  for(const base of [before,after])for(const [path,value]of Object.entries(files))put(base,path,value);
  return {root,before,after,frontend,put,change(path,fn){const file=join(after,path),value=JSON.parse(readFileSync(file,'utf8'));fn(value);put(after,path,value);},check:()=>compareCorrectionData(before,after,frontend,{financial_generation:H,symbols:{AAA:{}}}),cleanup:()=>rmSync(root,{recursive:true,force:true})};}
 test('semantic inventory accepts financial-only canonical ownership changes',async()=>{const f=bundleFixture();try{for(const path of ['static-data/research-index-aaaaaaaaaaaaaaaa.json','static-data/scan.json','static-data/research-details/AAA-aaaaaaaaaaaaaaaa.json','static-data/charts/AAA.json'])f.change(path,value=>{const row=value.rows?.[0]||value.initial_rows?.[0]||value.stock_data||value;row.eps_growth_yy=25;row.financial_history={annual:[]};row.financial_generation=H;});await f.check();}finally{f.cleanup();}});
+function publicationFixture({snapshotBefore=true}={}) {
+ const f=bundleFixture(),frontend=fileURLToPath(new URL('../../frontend',import.meta.url));
+ const paths=['static-data/research-index-aaaaaaaaaaaaaaaa.json','static-data/research-details/AAA-aaaaaaaaaaaaaaaa.json','static-data/scan.json','static-data/charts/AAA.json','static-data/charts-index-aaaaaaaaaaaaaaaa.json'];
+ const visit=(value,after)=>{
+  if(Array.isArray(value)){for(const item of value)visit(item,after);return;}
+  if(!value||typeof value!=='object')return;
+  if(value.symbol==='AAA') {
+   value.symbol='NVDA';
+   if(!Array.isArray(value.bars)&&!value.path){
+    Object.assign(value,{as_of_date:'2026-10-02',company_name:'NVIDIA Corporation',eps_growth_yy:after?25:10,sales_growth_yy:after?30:15,
+     financial_generation:(after?'b':'a').repeat(64),financial_evaluated_at:after?200:100,
+     financial_current:{v:2,t:after?200:100,r:'01010',p:{}},financial_identity:{observed_scope:{symbol:'NVDA',market:'US',as_of_date:'2026-10-02'},receipt:after?'new':'old'}});
+    if(after||snapshotBefore)value.financial_publication_input=captureFinancialPublicationInput(value);
+   }
+  }
+  for(const [key,child]of Object.entries(value))if(key!=='financial_publication_input')visit(child,after);
+ };
+ for(const base of [f.before,f.after])for(const path of paths){const value=JSON.parse(readFileSync(join(base,path)));visit(value,base===f.after);f.put(base,path,value);}
+ return {...f,check:(symbols={NVDA:{}})=>compareCorrectionData(f.before,f.after,frontend,{financial_generation:H,symbols})};
+}
+test('renewal comparison retains protected binding while source-owned proof, slots and metadata change',async()=>{
+ const f=publicationFixture();try{await f.check();}finally{f.cleanup();}
+});
+test('first snapshot introduction only creates a protected comparison view',async()=>{
+ const f=publicationFixture({snapshotBefore:false});try{
+  const path=join(f.before,'static-data/research-index-aaaaaaaaaaaaaaaa.json'),before=readFileSync(path);
+  await f.check();assert.deepEqual(readFileSync(path),before);
+  assert.equal(Object.hasOwn(JSON.parse(before).rows[0],'financial_publication_input'),false);
+ }finally{f.cleanup();}
+});
+for(const [label,mutate]of[
+ ['version',v=>v.version=2],['root key',v=>v.unowned=true],['binding key',v=>v.binding.unowned=true],
+ ['symbol',v=>v.binding.symbol.value='FUTU'],['market',v=>v.binding.market.value='JP'],['date',v=>v.binding.as_of_date.value='2026-10-03'],
+ ['issuer',v=>v.binding.identity.company_name.value='Other issuer'],['scope',v=>v.binding.scope.value.as_of_date='2026-10-03'],
+ ['generation',v=>v.binding.financial_generation.value='c'.repeat(64)],['clock',v=>v.binding.financial_evaluated_at.value=201],
+ ['missing scalar',v=>delete v.slots.sales_growth_yy],['extra scalar',v=>v.slots.unowned={present:false}],
+ ['slot shape',v=>v.slots.eps_growth_yy.extra=true],['unsupported shape',v=>v.slots.eps_growth_yy={present:true,unsupported:false}],
+ ['proof slot shape',v=>v.binding.proof.unowned=true],
+])test(`renewal comparison rejects snapshot ${label} mutation`,async()=>{
+ const f=publicationFixture();try{f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>mutate(v.rows[0].financial_publication_input));await assert.rejects(()=>f.check());}finally{f.cleanup();}
+});
+for(const [label,mutate]of[
+ ['issuer',v=>v.company_name='Other issuer'],['date',v=>v.as_of_date='2026-10-03'],['price',v=>v.current_price=101],
+ ['observed price scope',v=>v.financial_identity.observed_scope.as_of_date='2026-10-03'],
+])test(`renewal comparison rejects synchronized ${label} and snapshot changes`,async()=>{
+ const f=publicationFixture();try{f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>{mutate(v.rows[0]);v.rows[0].financial_publication_input=captureFinancialPublicationInput(v.rows[0]);});await assert.rejects(()=>f.check());}finally{f.cleanup();}
+});
+test('snapshot normalization is not granted outside the correction cohort',async()=>{
+ const f=publicationFixture();try{await assert.rejects(()=>f.check({}));}finally{f.cleanup();}
+});
+for(const [label,mutate]of[['non-US',row=>row.market='JP'],['other US symbol',row=>row.symbol='OTHER']])test(`snapshot remains protected for ${label} rows`,async()=>{
+ const f=publicationFixture();try{
+  for(const base of [f.before,f.after]){const path='static-data/research-index-aaaaaaaaaaaaaaaa.json',value=JSON.parse(readFileSync(join(base,path)));mutate(value.rows[0]);f.put(base,path,value);}
+  await assert.rejects(()=>f.check({NVDA:{},OTHER:{}}));
+ }finally{f.cleanup();}
+});
+test('policy-rejected original scalar values remain source inputs, not a comparator policy bypass',async()=>{
+ const f=publicationFixture();try{f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>{const row=v.rows[0];row.financial_current.r='11111';row.eps_growth_yy=false;row.financial_publication_input=captureFinancialPublicationInput(row);});await f.check();}finally{f.cleanup();}
+});
+test('chart aliases use the existing inherited price identity without adding published own fields',async()=>{
+ const f=publicationFixture();try{
+  for(const base of [f.before,f.after]){
+   const path='static-data/charts/AAA.json',chart=JSON.parse(readFileSync(join(base,path))),alias=structuredClone(chart.stock_data);
+   chart.as_of_date='2026-10-02';delete alias.symbol;delete alias.market;delete alias.as_of_date;
+   chart.fundamentals=alias;f.put(base,path,chart);
+  }
+  const path=join(f.after,'static-data/charts/AAA.json'),before=readFileSync(path);await f.check();assert.deepEqual(readFileSync(path),before);
+  f.change('static-data/charts/AAA.json',v=>v.fundamentals.financial_publication_input.binding.market.value='JP');await assert.rejects(()=>f.check());
+ }finally{f.cleanup();}
+});
 test('comparison retains the pre-optimization semantic and complete inventory digests',async()=>{
  const f=bundleFixture();
  try{
