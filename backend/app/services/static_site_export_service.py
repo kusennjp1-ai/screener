@@ -405,8 +405,8 @@ class StaticSiteExportService:
         if skipped_chart_symbols:
             preview = ", ".join(skipped_chart_symbols[:5])
             warnings.append(
-                f"Static charts skipped {len(skipped_chart_symbols)} {market} symbols without cached "
-                f"{STATIC_CHART_PERIOD} price history" + (f": {preview}" if preview else "")
+                f"Static charts skipped {len(skipped_chart_symbols)} {market} symbols without usable cached "
+                f"2y price history through {latest_run.as_of_date.isoformat()}" + (f": {preview}" if preview else "")
             )
 
         breadth_path = path_prefix / "breadth.json"
@@ -813,6 +813,7 @@ class StaticSiteExportService:
         # Market benchmark (fetched once) drives the per-symbol RS line + blue dots.
         market = self._run_market(run) or STATIC_DEFAULT_MARKET
         benchmark_symbol, benchmark_df = self._get_market_benchmark_history(market, period="2y")
+        benchmark_df = self._chart_history_through(benchmark_df, run.as_of_date)
 
         entries: list[dict[str, Any]] = []
         skipped_symbols: list[str] = []
@@ -822,10 +823,13 @@ class StaticSiteExportService:
 
         def _chart_prices(symbols):
             if omissions is None:
-                return self._price_cache.get_many_cached_only(symbols, period="2y")
-            return self._price_cache.get_many_cached_only(
-                symbols, period="2y", miss_reasons=cache_miss_reasons,
-            )
+                cached = self._price_cache.get_many_cached_only(symbols, period="2y")
+            else:
+                cached = self._price_cache.get_many_cached_only(
+                    symbols, period="2y", miss_reasons=cache_miss_reasons,
+                )
+            return {symbol: self._chart_history_through(frame, run.as_of_date)
+                    for symbol, frame in cached.items()}
 
         def _skip_chart(symbol) -> None:
             skipped_symbols.append(symbol)
@@ -2223,6 +2227,18 @@ class StaticSiteExportService:
                 row.get("symbol") or "",
             ),
         )
+
+    @staticmethod
+    def _chart_history_through(data: pd.DataFrame | None, snapshot_date: date) -> pd.DataFrame | None:
+        """Bound cached inputs before any chart/indicator calculation.
+
+        Cache reads can include sessions newer than the published scan. Keep
+        their original listing-calendar dates and values, and leave the cache
+        untouched. Missing sessions and stale/short histories remain missing.
+        """
+        if data is None or data.empty:
+            return data
+        return data.loc[data.index.date <= snapshot_date].copy()
 
     @staticmethod
     def _static_chart_cutoff(index) -> datetime:
