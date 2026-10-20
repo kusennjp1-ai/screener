@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { isDeepStrictEqual } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,7 +15,9 @@ import { FINANCIAL_DESIGN_CASES, financialDesignScreens, financialCaseSource } f
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../src/test/fixtures/nativeAnnual.js';
 import { projectFinancialRow } from '../src/static/financialCurrent.js';
-import { researchCsv } from '../src/static/researchEngine.js';
+import { researchCsv, assess, rankCandidates } from '../src/static/researchEngine.js';
+import { encodeResearchIndex, decodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
+import { buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 
 // Synthetic unit fixtures only. The production harness has no fixture route,
 // source substitution, historical clock override, or invented receipt data.
@@ -99,6 +102,51 @@ describe('supplemental carry evidence never replaces fresh acceptance', () => {
     changed.financial_history.quarterly[0].eps += 1;
     expect(() => verifyFinancialCarryIdentity(summary, changed, item('NVDA'), date)).toThrow('history differ');
     detail.financial_history.annual[0].eps += 1;
+    expect(() => verifyFinancialCarryIdentity(summary, detail, item('NVDA'), date)).toThrow('history differ');
+  });
+
+  it('compares every expired case after the real mixed-universe transport roundtrip', () => {
+    const details = FINANCIAL_CARRY_DESIGN_CASES.map(value => row(value.symbol));
+    const ordinary = row('OTHER');
+    const before = JSON.stringify(details);
+    // Ordinary rows use compact histories. Their columns establish a different
+    // property insertion order when the full five-symbol histories are decoded.
+    const wire = JSON.parse(JSON.stringify(encodeResearchIndex({ as_of_date: date, rows: [ordinary, ...details] })));
+    const summaries = decodeResearchIndex(wire).rows.slice(1);
+    for (const [index, detail] of details.entries()) {
+      const summary = summaries[index], value = item(detail.symbol);
+      expect(JSON.stringify(summary.financial_history)).not.toBe(JSON.stringify(detail.financial_history));
+      expect(isDeepStrictEqual(summary.financial_history, detail.financial_history)).toBe(true);
+      expect(() => verifyFinancialCarryIdentity(summary, detail, value, date)).not.toThrow();
+      expect(financialCarryCaseSource(summary, value, date, now).annual_rule_state).toBe('unknown');
+      for (const method of RESEARCH_METHODS) {
+        expect(assess(summary, method, now)).toEqual(assess(detail, method, now));
+        expect(assess(summary, method, now)).toMatchObject({ qualified: false,
+          financial_exclusion: { status: 'excluded_unknown', label: '財務未確認・判定対象外' } });
+        expect(rankCandidates([summary], method, { qualifiedOnly: true, now })).toEqual([]);
+      }
+      const plan = buildPortfolioPlan([summary], date, 100000, now);
+      expect(plan.positions).toEqual([]); expect(plan.dailyPositions).toEqual([]);
+    }
+    expect(JSON.stringify(details)).toBe(before);
+  });
+
+  it.each([
+    ['receipt', value => { value.annual_source.receipt_sha256 = 'c'.repeat(64); }],
+    ['clock', value => { value.retrieved_at = '2026-10-05T11:00:00.000Z'; }],
+    ['currency', value => { value.currency = 'JPY'; }],
+    ['period', value => { value.annual[0].end = '2021-12-31'; }],
+    ['EPS', value => { value.annual[0].eps += .0000000000001; }],
+    ['array order', value => { value.annual.reverse(); }],
+    ['quarterly omission', value => { delete value.quarterly; }],
+    ['nested presence', value => { value.quarterly_retrieved_at = undefined; }],
+    ['signed zero', value => { value.annual[0].revenue = -0; }],
+  ])('rejects changed %s after transport reconstruction despite reordered object keys', (_, mutate) => {
+    const detail = row();
+    detail.financial_history.annual[0].revenue = 0;
+    const wire = JSON.parse(JSON.stringify(encodeResearchIndex({ as_of_date: date, rows: [row('OTHER'), detail] })));
+    const summary = decodeResearchIndex(wire).rows[1];
+    mutate(summary.financial_history);
     expect(() => verifyFinancialCarryIdentity(summary, detail, item('NVDA'), date)).toThrow('history differ');
   });
 

@@ -1,6 +1,7 @@
 // Supplemental evidence only. These cases never satisfy the original fresh
 // categories, change a financial helper, or choose replacement symbols.
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,11 +42,11 @@ export function verifyFinancialCarryIdentity(summary, detail, item, date) {
   requireValue(summary.market === 'US' && (!detail.market || detail.market === summary.market), 'Browser financial market mismatch');
   requireValue(Number.isFinite(summary.financial_current?.t) && same(detail.financial_current, summary.financial_current),
     'Browser detail and research financial proofs do not match');
-  // Compare the lossless decision-input projection. These five cases retain
-  // full history because their availability exception also validates quarterly cells;
-  // exact full detail bytes remain independently pinned by the asset observer.
+  // Transport reconstructs object keys in shared column order. Compare every
+  // retained value, own field and array position without treating that key order
+  // as a data change. Exact detail bytes stay pinned by the asset observer.
   requireValue(summary.financial_history && detail.financial_history &&
-    same(researchListRow(summary).financial_history, researchListRow(detail).financial_history), 'Browser detail and research financial history differ');
+    isDeepStrictEqual(researchListRow(summary).financial_history, researchListRow(detail).financial_history), 'Browser detail and research financial history differ');
 }
 
 export function financialCarryCaseSource(row, item, date, now = Date.now()) {
