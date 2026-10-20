@@ -1,4 +1,5 @@
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
+import { summarizeContinuousSwitch } from './continuous-switch-summary.mjs';
 
 // Supplementary evidence only. Start profiling before navigation,
 // then retain the original ready/two-frame/click/two-frame sequence without a
@@ -42,7 +43,8 @@ export async function recordContinuousSwitchDiagnostic({ cdp, page, output, url,
       }))), name);
       if (!phases?.click_dispatch) throw Error('Continuous diagnostic missed method click');
     } });
-    return { ...result, continuous_switch: phases };
+    return { ...result, continuous_switch: phases,
+      continuous_switch_summary: summarizeContinuousSwitch(phases, result.observations) };
   } finally {
     // Outside the recorded endpoint; also release the listener if clicking fails.
     await page.evaluate(() => {
