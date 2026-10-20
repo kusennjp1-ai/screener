@@ -1,6 +1,15 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
+import { observeCandidateOrigin, recordCandidateOriginFailure } from './candidate-origin-observation.js';
+
+const failedOrigins=new WeakMap();
+test.afterEach(async({page},info)=>{
+  const fixture=failedOrigins.get(info);
+  failedOrigins.delete(info);
+  // The runner has registered the original assertion before this hook starts.
+  if(fixture)await recordCandidateOriginFailure({page,fixture,info});
+});
 
 const date='2026-09-29';
 const rows=Array.from({length:101},(_,index)=>withAuditFixture({
@@ -194,14 +203,17 @@ for(const width of [1440,390])test(`offscreen candidates keep height, focus and 
       port.append(document.querySelector('.candidate-columns').cloneNode(true));
       const list=document.createElement('div');list.setAttribute('role','list');list.append(document.querySelector('.candidate-scroll [role=listitem]').cloneNode(true));port.append(list);fixture.append(port);document.body.append(fixture);
     });
-    const origin=await page.locator('[data-clearance-origin-fixture]').evaluate(node=>{
-      const port=node.querySelector('.candidate-scroll'),list=port.querySelector('[role=list]'),columns=port.querySelector('.candidate-columns'),row=list.querySelector('.candidate-row');
-      const p=port.getBoundingClientRect(),c=columns.getBoundingClientRect(),r=row.getBoundingClientRect();
-      return {padding:getComputedStyle(port).paddingTop,listPadding:getComputedStyle(list).paddingTop,portTop:p.top,columnsTop:c.top,columnsBottom:c.bottom,rowTop:r.top,rowHeight:r.height,hits:[.1,.5,.9].every(x=>[.05,.5,.95].every(y=>row.contains(document.elementFromPoint(r.left+r.width*x,r.top+r.height*y))))};
-    });
-    await info.attach('candidate-nonzero-scroll-origin.json',{body:JSON.stringify(origin,null,2),contentType:'application/json'});
-    expect(origin.padding).toBe('0px');expect(origin.listPadding).toBe('6px');
-    expect(origin.columnsTop-origin.portTop).toBe(6);expect(origin.rowTop).toBe(origin.columnsBottom);expect(origin.rowHeight).toBe(51);expect(origin.hits).toBe(true);
+    const fixture=page.locator('[data-clearance-origin-fixture]');
+    let origin,passed=false;
+    try {
+      origin=await fixture.evaluate(observeCandidateOrigin);
+      await info.attach('candidate-nonzero-scroll-origin.json',{body:JSON.stringify(origin,null,2),contentType:'application/json'});
+      expect(origin.padding).toBe('0px');expect(origin.listPadding).toBe('6px');
+      expect(origin.columnsTop-origin.portTop).toBe(6);expect(origin.rowTop).toBe(origin.columnsBottom);expect(origin.rowHeight).toBe(51);expect(origin.hits).toBe(true);
+      passed=true;
+    } finally {
+      if(!passed)failedOrigins.set(info,fixture);
+    }
     await page.screenshot({path:info.outputPath('candidate-nonzero-scroll-origin.png')});
     await page.locator('[data-clearance-origin-fixture]').evaluate(node=>node.remove());
   }
