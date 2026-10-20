@@ -27,7 +27,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
   const bars = invalidIdentity ? null : query.data?.bars, ready = entryReadiness(row, date, market, now ?? Date.now(), method);
   const invalidHistory = !hasVerifiedDailyBars(row, date) || (bars?.length && bars.at(-1).date !== date);
   const [stateLabel, mark, tone] = STATES[stateKey(plan.state)];
-  const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
+  const applicabilityLabel = item.assessment.financial_exclusion?.label || instrumentApplicabilityLabel(instrumentApplicability(row));
   const volume = verifiedVolumeRatio(row, date);
   const missing = nearOnly ? singleMissingCondition(assess(row, method, now)) : null;
   return <Paper ref={ref} component="article" variant="outlined" className="comparison-card" data-method={method} aria-label={`${row.symbol} 比較チャート`}>

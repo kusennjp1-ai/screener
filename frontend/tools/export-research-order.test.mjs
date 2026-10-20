@@ -23,7 +23,7 @@ const write = async (path, value) => {
 const read = async path => JSON.parse(await readFile(path, 'utf8'));
 const symbols = rows => rows.map(row => row.symbol);
 
-async function fixture({ withBreadth = false, withCalendar = true, setupReports = null } = {}) {
+async function fixture({ withBreadth = false, withCalendar = true, setupReports = null, financiallyUnavailableSymbols = [] } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'research-export-order-'));
   const frontend = join(directory, 'frontend'), root = join(frontend, 'public/static-data');
   const bars = [];
@@ -33,6 +33,7 @@ async function fixture({ withBreadth = false, withCalendar = true, setupReports 
   }
   if (withCalendar) await write(join(root, 'trading-calendar.json'), calendarAt(date));
   const sourceSymbols = setupReports ? setupReports.map((_, index) => `SETUP${index}`) : withBreadth ? Array.from({ length: 101 }, (_, index) => `S${String(index).padStart(3, '0')}`) : ['ZETA', 'BETA', 'ALPHA'];
+  if (financiallyUnavailableSymbols.length) sourceSymbols.splice(-financiallyUnavailableSymbols.length, financiallyUnavailableSymbols.length, ...financiallyUnavailableSymbols);
   const sourceCharts = sourceSymbols.map((symbol, index) => {
     const series = withBreadth ? bars.map((bar, offset) => {
       const close = 100 + offset * (.1 + index / 503) + (index + 1) * (offset % 7) / 1000000;
@@ -51,7 +52,7 @@ async function fixture({ withBreadth = false, withCalendar = true, setupReports 
     setup_recalculation: { status: 'calculated', as_of_date: date }, eps_growth_yy: 30 + index, sales_growth_yy: 40 + index,
   }, now, date));
   if (setupReports) for (const [index, report] of setupReports.entries()) Object.assign(rows[index], report);
-  const histories = Object.fromEntries(rows.map(row => [row.symbol, {
+  const histories = Object.fromEntries(rows.filter(row => !financiallyUnavailableSymbols.includes(row.symbol)).map(row => [row.symbol, {
     symbol: row.symbol, as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD',
     source: 'Synthetic regression fixture', retrieved_at: new Date(now - 3600000).toISOString(),
     annual: [2022, 2023, 2024, 2025].map((year, index) => ({ end: `${year}-12-31`, eps: 2 ** index })), quarterly: [],
@@ -226,6 +227,36 @@ it('keeps verified calendar coverage through export, compact transport, detail a
       expect(auditDailyBars(row, result.charts[index], date)).toEqual(row.technical_audit);
       expect(row.technical_audit.window_52w.from).toBe('2025-10-03');
     }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('preserves a passing technical template while excluding the five unavailable financial histories through export and worker preparation', async () => {
+  const unavailable = ['NVDA', 'FUTU', 'AAOI', 'ALH', 'AVT'];
+  const { directory, root, rows, sourceCharts, run, outputs } = await fixture({ withBreadth: true, financiallyUnavailableSymbols: unavailable });
+  try {
+    const financialBytes = await readFile(join(root, 'financial-history.json'));
+    run();
+    const result = await outputs(), prepared = prepareResearchBundle([result.index], date, { now });
+    for (const symbol of unavailable) {
+      const index = result.index.rows.findIndex(row => row.symbol === symbol);
+      for (const row of [result.index.rows[index], result.details[index], result.charts[index].stock_data]) {
+        expect(row.passes_template).toBe(true);
+      }
+      // Chart stock_data is a light scan row; canonical rule inputs live in the list/detail.
+      for (const row of [result.index.rows[index], result.details[index]]) {
+        expect(assess(row, 'minervini', now)).toMatchObject({ passed: 9, total: 9, qualified: false, templateMismatch: false, financial_exclusion: { symbol } });
+      }
+      const detail = result.details[index];
+      expect(detail.method_summary.minervini).toMatchObject({ qualified: false, templateMismatch: false, financial_exclusion: { symbol } });
+      expect(detail.financial_current).toEqual(rows.find(row => row.symbol === symbol).financial_current);
+      expect(result.charts[index].bars).toEqual(sourceCharts.find(chart => chart.symbol === symbol).bars);
+      for (const method of RESEARCH_METHODS) {
+        expect(prepared.rankings[method].find(item => item.row.symbol === symbol).assessment)
+          .toMatchObject({ qualified: false, financial_exclusion: { symbol } });
+      }
+    }
+    expect(result.index.rows.some(row => !unavailable.includes(row.symbol) && assess(row, 'minervini', now).qualified)).toBe(true);
+    expect(await readFile(join(root, 'financial-history.json'))).toEqual(financialBytes);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

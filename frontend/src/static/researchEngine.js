@@ -3,6 +3,7 @@ import { ANNUAL_REPORTED_LIMITATION, annualComparisonText, annualAvailabilityTex
 import { reportedGrowthAtLeast } from './reportedGrowth.js';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability.js';
 import { projectFinancialRow, currentFinancialHistory } from './financialCurrent.js';
+import { financialPublicationException } from './financialPublicationException.js';
 import { canonicalPivot } from './researchPresentation.js';
 import { auditValues, RS_METHOD } from './qualificationAudit.js';
 import { institutionalGrowth } from './institutionalEvidence.js';
@@ -26,7 +27,7 @@ export function snapshotFreshness(date, now = Date.now()) {
 }
 
 // CSV aggregate semantics are versioned separately from unchanged rule/ranking semantics.
-export const METHOD_STATUS_VERSION = 'research-method-status-v2-logical-and';
+export const METHOD_STATUS_VERSION = 'research-method-status-v3-financial-exclusion';
 export function researchCsv(ranked, method, date, now = Date.now()) {
   const cell = value => {
     let text = String(value ?? '');
@@ -34,11 +35,11 @@ export function researchCsv(ranked, method, date, now = Date.now()) {
     if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'setup_readiness_state', 'setup_readiness_reason'];
+  const header = ['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'setup_readiness_state', 'setup_readiness_reason', 'financial_exclusion_policy', 'financial_exclusion_reason'];
   const lines = ranked.map(({row})=>({row,assessment:assess(row,method,now)})).map(({ row: r, assessment: a }) => [date, r.symbol, method, a.qualified, a.passed, a.total, a.unknown, r.rs_rating, r.current_price, canonicalPivot(r).price,
-    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication', a.method_status || (a.failed ? 'fail' : a.unknown ? 'unknown' : 'pass'), a.applicability_reason || '', instrumentApplicability(r).version,
+    a.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '), a.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '), singleMissingCondition(a)?.csv || '', validClock(now) ? new Date(now).toISOString() : '', 'current_at_evaluation_not_historical_publication', a.method_status || (a.failed ? 'fail' : a.financial_exclusion || a.unknown ? 'unknown' : 'pass'), a.applicability_reason || '', instrumentApplicability(r).version,
     currentFinancialHistory(r.financial_history, r.symbol, date, now, r).annual.length ? r.financial_history.annual_currency || r.financial_history.currency : '',
-    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION, setupReadiness(r).state, setupReadiness(r).reason]);
+    a.rules.find(rule => rule.label.includes('3年'))?.state || '', a.rules.find(rule => rule.label.includes('3年'))?.evidence || '', a.failed, a.unknown, METHOD_STATUS_VERSION, setupReadiness(r).state, setupReadiness(r).reason, a.financial_exclusion?.policy || '', a.financial_exclusion?.reason || '']);
   const preview = limitedResearchPreviewCsvMetadata();
   return [[...header, ...preview.headers], ...lines.map(line => [...line, ...preview.values])].map(line => line.map(cell).join(',')).join('\r\n');
 }
@@ -127,16 +128,18 @@ export function assess(input, method = 'minervini', now = Date.now()) {
     item.evidence = `${item.evidence ? `${item.evidence}。` : currentHistory ? `${[annualAvailabilityText(currentHistory), ...currentHistory.annualComparisons.map(annualComparisonText)].join('。')}。` : ''}${typeof row.financial_history.source === 'string' ? row.financial_history.source : '出典未確認'} / 報告希薄化EPS・${row.financial_history.annual_currency || row.financial_history.currency || '通貨未確認'} / 取得 ${typeof (row.financial_history.annual_source?.observed_at || row.financial_history.retrieved_at) === 'string' ? row.financial_history.annual_source?.observed_at || row.financial_history.retrieved_at : '未確認'}。取得時点データで、過去時点の公表確認ではありません。${ANNUAL_REPORTED_LIMITATION}`;
   }
   const failed = rules.filter(r => r.state === 'fail').length;
+  const financialExclusion = financialPublicationException(row, { now });
   const templatePass = trend.every(r => r.state === 'pass') && integrity.state === 'pass';
   return { rules, passed, failed, unknown: rules.length - passed - failed - notApplicable, total: rules.length,
     ...(blocked ? { notApplicable, method_status: applicability.status, applicability_reason: applicability.reason, applicability_label: instrumentApplicabilityLabel(applicability) } : {}),
     templateMismatch: integrity.state === 'pass' && typeof row.passes_template === 'boolean' && row.passes_template !== templatePass,
-    qualified: !blocked && passed === rules.length, score: Math.round(passed / rules.length * 100) };
+    ...(financialExclusion ? { financial_exclusion: financialExclusion } : {}),
+    qualified: !blocked && !financialExclusion && passed === rules.length, score: Math.round(passed / rules.length * 100) };
 }
 
 // Generated from the same rule function; unresolved inputs remain explicit. Details and CSV
 // retain complete, independently recomputed rule evidence.
-export const RULE_SUMMARY_VERSION = 'research-summary-v9-financial-current-session-calendar-52w';
+export const RULE_SUMMARY_VERSION = 'research-summary-v10-financial-current-session-calendar-52w-five-financial-exclusion';
 export function assessmentSummary(row, method, now = Date.now()) {
   // Packed summaries and orders from legacy bundles are observations, not
   // authority for current decisions. Preparation recomputes once per epoch.

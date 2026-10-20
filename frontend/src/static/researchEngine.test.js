@@ -166,10 +166,10 @@ describe('versioned CSV selection outcome', () => {
     const ranked = rankCandidates([input], 'oneil', { now });
     const before = structuredClone(ranked);
     const { header, rows: [record] } = records(researchCsv(ranked, 'oneil', date, now));
-    expect(header).toEqual(['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'setup_readiness_state', 'setup_readiness_reason']);
+    expect(header).toEqual(['as_of_date', 'symbol', 'method', 'qualified', 'passed', 'total', 'unknown', 'rs_estimate', 'daily_price', 'pivot', 'failed_rules', 'unknown_rules', 'missing_condition', 'financial_evaluated_at', 'financial_semantics', 'method_status', 'applicability_reason', 'applicability_version', 'annual_eps_reporting_currency', 'annual_eps_rule_state', 'annual_eps_rule_evidence', 'failed_count', 'unknown_count', 'method_status_version', 'setup_readiness_state', 'setup_readiness_reason', 'financial_exclusion_policy', 'financial_exclusion_reason']);
     expect(record).toMatchObject({ method_status: state, qualified: String(passed === 8), passed: String(passed), total: '8',
       failed_count: String(failed), unknown_count: String(unknown), unknown: String(unknown),
-      method_status_version: 'research-method-status-v2-logical-and', rs_estimate: '95', daily_price: '100', pivot: '99' });
+      method_status_version: 'research-method-status-v3-financial-exclusion', rs_estimate: '95', daily_price: '100', pivot: '99' });
     expect(record.method_status_version).toBe(METHOD_STATUS_VERSION);
     expect(record.failed_rules).toBe(assessment.rules.filter(rule => rule.state === 'fail').map(rule => rule.label).join(' / '));
     expect(record.unknown_rules).toBe(assessment.rules.filter(rule => rule.state === 'unknown').map(rule => rule.label).join(' / '));

@@ -8,6 +8,7 @@ import { entryReadiness } from '../src/static/entryReadiness.js';
 import { modelMarket } from '../src/static/portfolioPlan.js';
 import { scrollFinancialViewport } from './financial-viewport-geometry.mjs';
 import { createDesignAssetObserver } from './design-static-assets.mjs';
+import { FINANCIAL_PUBLICATION_EXCEPTION, financialPublicationException } from '../src/static/financialPublicationException.js';
 
 // Selected from the receipt-replayed 2026-10-04 native annual projection:
 // NVDA: ordinary USD; FUTU: HKD annualDilutedEPS receipt; AAOI: negative
@@ -114,6 +115,24 @@ export function limitedFinancialCaseSource(row, item, date, now = Date.now()) {
     qualified: assessment.qualified, unknown: assessment.unknown };
 }
 
+// Ordinary Design accepts only the reviewed five-symbol absence/expiry policy.
+// Contradictions remain failures; existing limited-preview/performance modes
+// are not enabled, and all required views and browser checks still run.
+export function publicationFinancialCaseSource(row, item, date, now = Date.now()) {
+  const exclusion = financialPublicationException(row, { date, now });
+  if (!exclusion) return financialCaseSource(row, item, date, now);
+  requireValue(['oneil', 'ibd', 'minervini', 'minervini2'].every(method => !assess(row, method, now).qualified),
+    `${item.symbol}: unavailable financial evidence must exclude every qualification`);
+  return { ...limitedFinancialCaseSource(row, item, date, now), publication_exception: exclusion };
+}
+
+export function verifyFinancialDetailClock(summary, detail) {
+  const bothMissing = summary.financial_current == null && detail.financial_current == null;
+  requireValue((bothMissing && FINANCIAL_PUBLICATION_EXCEPTION.symbols.includes(summary.symbol)) ||
+    (detail.financial_current?.t === summary.financial_current?.t && Number.isFinite(detail.financial_current?.t)),
+  'Browser detail and research financial generations do not match');
+}
+
 // Parse the actual browser download, including quoted commas/newlines. This
 // report is an export audit; it is not a screenshot or a visual review score.
 export function parseFinancialCsv(text) {
@@ -190,6 +209,7 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
   if (!financialDesignScreens(viewport, theme).length) return;
   const staticUrl = path => new URL(`static-data/${path}`, currentUrl).href;
   report.financial_cases ||= [];
+  report.financial_publication_exception_policy = FINANCIAL_PUBLICATION_EXCEPTION;
   let assets;
   try {
     assets = await createDesignAssetObserver({ baseURL: currentUrl });
@@ -222,8 +242,7 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const { value: detail, observation } = await assets.observeJson(page, summary.research_detail_path, () => financialTab.click());
         record.loaded_detail_transport = observation;
         requireValue(detail.symbol === item.symbol && detail.as_of_date === date, 'Browser detail symbol/date mismatch');
-        requireValue(detail.financial_current?.t === summary.financial_current?.t && Number.isFinite(detail.financial_current?.t),
-          'Browser detail and research financial generations do not match');
+        verifyFinancialDetailClock(summary, detail);
         const panel = page.getByRole('region', { name: '財務の判定根拠', exact: true });
         await ready(panel);
         const panelText = await panel.innerText();
@@ -233,7 +252,13 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const selected = mergeFinancialDetail(summary, detail, { now, asOfDate: date, generation, detailGeneration: generation,
           expectedDetailPath: summary.research_detail_path, detailPath: summary.research_detail_path });
         record.source = report.assessment_mode === 'limited-research-preview-v1'
-          ? limitedFinancialCaseSource(selected, item, date, now) : financialCaseSource(selected, item, date, now);
+          ? limitedFinancialCaseSource(selected, item, date, now) : publicationFinancialCaseSource(selected, item, date, now);
+        if (record.source.publication_exception) {
+          const notice = page.locator('.research-symbol-head [data-financial-exclusion]');
+          check(await notice.getAttribute('data-financial-exclusion') === record.source.publication_exception.policy &&
+            await notice.getAttribute('data-qualification') === 'excluded' &&
+            (await notice.innerText()).includes(record.source.publication_exception.label), `${key}: financial exclusion must be visible and explicit`);
+        }
         record.financial_evaluated_at = evaluatedAt;
         record.loaded_detail_path = summary.research_detail_path;
         check(panelText.includes(`価格の基準日 ${date}`) && panelText.includes('基準日当時に公表済みだったことの証明ではありません'), `${key}: source observation and price/publication clocks are not separated`);
@@ -264,7 +289,7 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           await disclosure.locator('summary').click();
           requireValue(await disclosure.evaluate(node => node.open), 'Annual history disclosure did not open');
           const table = disclosure.getByRole('table', { name: '年次の希薄化EPS', exact: true });
-          if (report.assessment_mode === 'limited-research-preview-v1' && !record.source.annual.length) {
+          if ((report.assessment_mode === 'limited-research-preview-v1' || record.source.publication_exception) && !record.source.annual.length) {
             check(await table.count() === 0, `${key}: unavailable annual history must not render a numeric table`);
             check((await disclosure.innerText()).includes(record.source.history_unavailable_text), `${key}: current unavailable history explanation mismatch`);
             record.history_cells = [];

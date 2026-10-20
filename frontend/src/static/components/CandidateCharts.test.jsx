@@ -5,6 +5,7 @@ import CandidateCharts from './CandidateCharts';
 import { withAuditFixture } from '../testAuditFixture';
 import { fetchStaticChartPayload } from '../chartClient';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
+import { assess } from '../researchEngine';
 
 vi.mock('../chartClient',()=>({staticChartKeys:{payload:(symbol,path)=>[symbol,path]},fetchStaticChartPayload:vi.fn()}));
 vi.mock('../../components/Charts/CandlestickChart',()=>({default:vi.fn(()=> <div data-testid="price-chart"/>)}));
@@ -97,4 +98,15 @@ it('does not display a legacy raw-valid history as a verified comparison', async
   mount({ valid: true, version: 'ohlcv-v1', status: undefined });
   expect(await screen.findByRole('alert')).toHaveTextContent('現行の日足検証が未確認');
   expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
+});
+it('shows the financial exclusion in comparison cards and their accessible description',()=>{
+ const now=Date.parse(`${date}T22:00:00Z`);
+ const row=withAuditFixture({symbol:'NVDA',company_name:'Financial evidence unavailable',market:'US',current_price:102,se_pivot_price:100,rs_rating:95},date);
+ const assessment=assess(row,'minervini',now);
+ expect(assessment).toMatchObject({passed:9,total:9,qualified:false,financial_exclusion:{symbol:'NVDA'}});
+ render(<QueryClientProvider client={new QueryClient()}><CandidateCharts ordered={[{row,assessment}]} date={date} method="minervini" market={{}} now={now} onSelect={vi.fn()}/></QueryClientProvider>);
+ const card=screen.getByRole('article',{name:'NVDA 比較チャート'});
+ expect(card.querySelector('p:not(.sr-only)')).toHaveTextContent('財務未確認・判定対象外');
+ expect(within(card).getByRole('button',{name:'NVDA を分析'})).toHaveAccessibleDescription(/財務未確認・判定対象外/);
+ expect(card.querySelector('p.sr-only')).not.toHaveTextContent('選定 9/9');
 });

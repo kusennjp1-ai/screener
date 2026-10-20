@@ -143,7 +143,9 @@ const compactRows = new Map();
 const currentDetails=new Set();
 const currentCharts=new Set();
 for (const row of rows.values()) {
-  row.passes_template=row.technical_audit.valid ? assess(row,'minervini',evaluatedAt).qualified : null;
+  const template = row.technical_audit.valid ? assess(row,'minervini',evaluatedAt) : null;
+  // Financial availability excludes qualification without changing the measured trend template.
+  row.passes_template=template ? !template.method_status && template.passed===template.total : null;
   row.method_summary = {version:RULE_SUMMARY_VERSION,evaluated_at:evaluatedAt,next_expiry_at:financialNextExpiry([row],evaluatedAt)};
   for (const method of ['minervini','minervini2','oneil','ibd']) {
     const {rules,...summary} = assess(row,method,evaluatedAt); row.method_summary[method] = summary;

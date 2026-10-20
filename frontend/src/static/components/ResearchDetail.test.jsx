@@ -14,6 +14,16 @@ vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
+it('labels missing financial evidence for the five-symbol exception and retains unknown purchase exclusion',()=>{
+ const selected={...row,symbol:'NVDA',market:'US',as_of_date:props.date};
+ const {container}=render(<ResearchDetail {...props} selected={selected}/>);
+ const notice=container.querySelector('.research-symbol-head [data-financial-exclusion]');
+ expect(notice).toHaveTextContent('財務未確認・判定対象外');
+ expect(notice).toHaveAttribute('data-qualification','excluded');
+ fireEvent.click(screen.getByRole('tab',{name:'購入条件'}));
+ expect(screen.getByRole('tabpanel')).toHaveTextContent('財務未確認・判定対象外');
+ expect(assess(selected,'minervini',props.now).qualified).toBe(false);
+});
 it.each(['MSM','ADI'])('keeps price-position context and the actual incomplete counts visible before the chart for %s',symbol=>{
  const selected={...row,symbol},readiness=entryReadiness(selected,props.date,props.market,props.now,props.method);
  const {container}=render(<ResearchDetail {...props} selected={selected}/>);

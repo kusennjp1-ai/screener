@@ -18,7 +18,7 @@ export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearO
     (!sector || sectorKey(r.gics_sector)===sector) &&
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || (corporateFinancialsAllowed(r) && a.qualified)) && (!watchlist || watchlist.includes(r.symbol)) &&
-    (!nearOnly || (corporateFinancialsAllowed(r) && a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
+    (!nearOnly || (corporateFinancialsAllowed(r) && !a.financial_exclusion && a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
     (!query || `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query)) &&
     (coverage === 'all' || (coverage === 'verified') === (hasVerifiedDailyBars(r))));
 }
