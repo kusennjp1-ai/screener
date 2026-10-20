@@ -36,6 +36,8 @@ from .cache.price_cache_freshness import PriceCacheFreshnessPolicy
 from .cache.market_cache_policy import MarketAwareCachePolicy, market_cache_policy
 from .cache.price_cache_warmup import PriceCacheWarmupStore
 from .cache.price_history_integrity import coherent_history, requires_full_history
+from .cache.price_history_integrity import _coherent_history_decision
+from .cache.price_history_diagnostics import observe, observed_coherent_batch
 from .errors import CacheRefreshError
 from .redis_pool import get_redis_client, get_bulk_redis_client, is_redis_enabled
 
@@ -244,6 +246,7 @@ class PriceCacheService:
         period: str = "2y",
         *,
         miss_reasons: dict[str, str] | None = None,
+        observations: dict | None = None,
     ) -> Dict[str, Optional[pd.DataFrame]]:
         """
         Get price data for multiple symbols from cache ONLY.
@@ -263,7 +266,11 @@ class PriceCacheService:
         Returns:
             Dict mapping symbol to DataFrame (or None if not cached)
         """
-        if miss_reasons is None:
+        if observations is not None:
+            results = self._get_many_from_database(
+                symbols, period, miss_reasons=miss_reasons, observations=observations,
+            )
+        elif miss_reasons is None:
             results = self._get_many_from_database(symbols, period)
         else:
             results = self._get_many_from_database(symbols, period, miss_reasons=miss_reasons)
@@ -365,6 +372,7 @@ class PriceCacheService:
         period: str,
         *,
         miss_reasons: dict[str, str] | None = None,
+        observations: dict | None = None,
     ) -> Dict[str, tuple[Optional[pd.DataFrame], Optional[date]]]:
         """
         Bulk fetch from database for multiple symbols.
@@ -437,6 +445,9 @@ class PriceCacheService:
 
                     if not prices or len(prices) < 50:
                         results[symbol] = (None, None)
+                        observe(observations, "cache_read", symbol=symbol, rows=prices,
+                                status="no_rows_in_window" if not prices else "insufficient_rows",
+                                period=period, start_date=str(start_date), end_date=str(end_date))
                         if miss_reasons is not None:
                             miss_reasons[symbol] = "no_rows_in_window" if not prices else "insufficient_rows"
                         continue
@@ -455,7 +466,15 @@ class PriceCacheService:
                     df.set_index('Date', inplace=True)
 
                     last_date = prices[-1].date
-                    coherent = coherent_history(df)
+                    if observations is None:
+                        coherent = coherent_history(df)
+                        rejection = None
+                    else:
+                        coherent, rejection = _coherent_history_decision(df)
+                    observe(observations, "cache_read", symbol=symbol, rows=prices,
+                            status="accepted" if coherent else "incoherent_history",
+                            rejection=rejection, period=period,
+                            start_date=str(start_date), end_date=str(end_date))
                     results[symbol] = (df, last_date) if coherent else (None, None)
                     if miss_reasons is not None:
                         if coherent:
@@ -478,6 +497,9 @@ class PriceCacheService:
 
         except Exception as e:
             logger.error(f"Error in bulk database query: {e}", exc_info=True)
+            for symbol in symbols:
+                observe(observations, "cache_read_aborted", symbol=symbol,
+                        status="bulk_read_error", exception_type=type(e).__name__)
             if miss_reasons is not None:
                 # The existing failure contract discards even earlier chunks.
                 # Reasons must describe the all-None result, not partial hits.
@@ -1543,6 +1565,8 @@ class PriceCacheService:
         batch_data: Dict[str, pd.DataFrame],
         also_store_db: bool = True,
         market: str | None = None,
+        *,
+        observations: dict | None = None,
     ) -> int:
         """
         Store multiple symbols' price data in cache using Redis pipeline.
@@ -1557,8 +1581,14 @@ class PriceCacheService:
         Returns:
             Number of symbols successfully cached
         """
-        batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
+        if observations is None:
+            batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
+        else:
+            batch_data = observed_coherent_batch(batch_data, observations, "cache_prepare")
         if not batch_data:
+            if also_store_db:
+                observe(observations, "db_commit", status="not_attempted_no_coherent_history",
+                        committed_rows=0)
             return 0
 
         stored = 0
@@ -1632,11 +1662,16 @@ class PriceCacheService:
 
         # Batch DB writes
         if also_store_db:
-            self._store_batch_in_database(batch_data)
+            if observations is None:
+                self._store_batch_in_database(batch_data)
+            else:
+                self._store_batch_in_database(batch_data, observations=observations)
 
         return stored
 
-    def _store_batch_in_database(self, batch_data: Dict[str, pd.DataFrame]) -> None:
+    def _store_batch_in_database(
+        self, batch_data: Dict[str, pd.DataFrame], *, observations: dict | None = None,
+    ) -> None:
         """
         Store multiple symbols' price data in database in a single transaction.
 
@@ -1646,11 +1681,21 @@ class PriceCacheService:
         Args:
             batch_data: Dict mapping symbol to price DataFrame
         """
-        batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
+        if observations is None:
+            batch_data = {symbol:data for symbol,data in batch_data.items() if coherent_history(data)}
+        else:
+            batch_data = observed_coherent_batch(batch_data, observations, "db_prepare")
         if not batch_data:
+            observe(observations, "db_commit", status="not_attempted_no_coherent_history",
+                    committed_rows=0)
             return
 
-        db = self._session_factory()
+        try:
+            db = self._session_factory()
+        except Exception as error:
+            observe(observations, "db_session", status="raised",
+                    exception_type=type(error).__name__)
+            raise
 
         try:
             symbols = list(batch_data.keys())
@@ -1716,6 +1761,8 @@ class PriceCacheService:
                             rows_to_update.append(price_dict)
                     except Exception as e:
                         logger.warning(f"Error preparing row for {symbol}: {e}")
+                        observe(observations, "db_row_prepare", symbol=symbol,
+                                status="skipped", exception_type=type(e).__name__)
 
             # Bulk insert in conservative chunks to keep statement size bounded.
             if rows_to_insert:
@@ -1730,7 +1777,12 @@ class PriceCacheService:
                     db.bulk_update_mappings(StockPrice, chunk)
 
             if rows_to_insert or rows_to_update:
+                observe(observations, "db_commit", status="attempted",
+                        insert_rows=len(rows_to_insert), update_rows=len(rows_to_update))
                 db.commit()
+                observe(observations, "db_commit", status="committed",
+                        committed_rows=len(rows_to_insert) + len(rows_to_update),
+                        insert_rows=len(rows_to_insert), update_rows=len(rows_to_update))
                 logger.info(
                     "Batch persisted %d price rows for %d symbols (%d inserts, %d historical/latest updates)",
                     len(rows_to_insert) + len(rows_to_update),
@@ -1739,14 +1791,28 @@ class PriceCacheService:
                     len(rows_to_update),
                 )
             else:
+                observe(observations, "db_commit", status="not_needed", committed_rows=0)
                 logger.debug(f"No new rows to persist for batch of {len(batch_data)} symbols")
 
         except Exception as e:
             logger.error(f"Error in batch database write: {e}", exc_info=True)
-            db.rollback()
+            observe(observations, "db_commit", status="failed",
+                    committed_rows=None, exception_type=type(e).__name__)
+            try:
+                db.rollback()
+            except Exception as error:
+                observe(observations, "db_rollback", status="raised", committed_rows=None,
+                        exception_type=type(error).__name__)
+                raise
+            observe(observations, "db_rollback", status="returned", committed_rows=None)
 
         finally:
-            db.close()
+            try:
+                db.close()
+            except Exception as error:
+                observe(observations, "db_close", status="raised",
+                        exception_type=type(error).__name__)
+                raise
 
     @staticmethod
     def _market_for_symbol(

@@ -15,6 +15,7 @@ from app.config import settings
 from app.models.stock import StockPrice
 from app.services.price_cache_service import PriceCacheService
 from app.services.static_site_export_service import StaticSiteExportService
+from app.services.cache.price_history_diagnostics import new_observations
 import app.services.static_site_export_service as export_module
 
 
@@ -101,8 +102,9 @@ def test_no_rows_reason_means_requested_window_not_absence_from_database(cached_
 
 
 @pytest.mark.parametrize("failed_chunk", [2, 3])
+@pytest.mark.parametrize("pipeline_details", [False, True])
 def test_later_chunk_failure_overwrites_all_reasons_like_existing_all_none_result(
-    cached_prices, monkeypatch, failed_chunk,
+    cached_prices, monkeypatch, failed_chunk, pipeline_details,
 ):
     cache = cached_prices
     cache.seed("HIT", 50)
@@ -122,10 +124,16 @@ def test_later_chunk_failure_overwrites_all_reasons_like_existing_all_none_resul
     assert count == failed_chunk
     count = 0
     reasons = {"HIT": "stale", "UNRELATED": "untouched"}
-    observed = cache.service.get_many_cached_only(symbols, miss_reasons=reasons)
+    trace = new_observations("US", "partial-read") if pipeline_details else None
+    observed = cache.service.get_many_cached_only(
+        symbols, miss_reasons=reasons,
+        **({"observations":trace} if trace is not None else {}),
+    )
     assert count == failed_chunk
     assert observed == plain == dict.fromkeys(symbols)
     assert reasons == {**dict.fromkeys(symbols, "bulk_read_error"), "UNRELATED": "untouched"}
+    if trace is not None:
+        assert {e["symbol"] for e in trace["events"] if e["stage"]=="cache_read_aborted"} == set(symbols)
 
 
 def test_empty_input_never_opens_session(cached_prices, monkeypatch):
@@ -169,8 +177,9 @@ def test_chart_attempt_clears_previous_reasons_even_when_setup_fails(
     assert omissions == {"US": {}, "HK": {"OTHER": "no_rows_in_window"}}
 
 
+@pytest.mark.parametrize("pipeline_details", [False, True])
 def test_chart_diagnostics_cover_all_passes_without_changing_any_published_bytes(
-    cached_prices, monkeypatch, tmp_path,
+    cached_prices, monkeypatch, tmp_path, pipeline_details,
 ):
     cache = cached_prices
     for symbol in ("PRIMARY_OK", "PRESET_OK", "GROUP_OK", "COVERAGE_OK"):
@@ -196,7 +205,10 @@ def test_chart_diagnostics_cover_all_passes_without_changing_any_published_bytes
     omissions = {"US": {"STALE": "previous_run"}, "HK": {"UNCHANGED": "no_rows_in_window"}}
 
     def export(destination, sink):
-        service = StaticSiteExportService(cache.factory, chart_omissions=sink)
+        service = StaticSiteExportService(
+            cache.factory, chart_omissions=sink,
+            pipeline_observations=new_observations("US", "bytes") if sink is not None and pipeline_details else None,
+        )
         monkeypatch.setattr(service, "_get_market_benchmark_history", lambda *_a, **_k: ("SPY", pd.DataFrame()))
         monkeypatch.setattr(service, "_serialize_scan_row", lambda row: {"symbol": row.symbol})
         # Keep this test focused on chart selection/serialization, without the
@@ -209,8 +221,8 @@ def test_chart_diagnostics_cover_all_passes_without_changing_any_published_bytes
         ):
             monkeypatch.setattr(service, name, lambda *_a, _result=result, **_k: _result.copy() if isinstance(_result, dict) else _result)
         serialize = service._serialize_chart_bars
-        monkeypatch.setattr(service, "_serialize_chart_bars", lambda frame:
-                            [] if frame is not None and frame["Close"].iloc[0] == 77.0 else serialize(frame))
+        monkeypatch.setattr(service, "_serialize_chart_bars", lambda frame, **kwargs:
+                            [] if frame is not None and frame["Close"].iloc[0] == 77.0 else serialize(frame, **kwargs))
         return service._export_chart_bundle(
             output_dir=destination, generated_at="2026-10-14T00:00:00Z", run=run, rows=rows,
             serialized_rows=[{"symbol": row.symbol} for row in rows], groups_payload=groups,

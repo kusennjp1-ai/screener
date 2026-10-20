@@ -25,6 +25,7 @@ from app.domain.markets.key_markets import key_market_instruments
 from app.infra.db.models.feature_store import FeatureRun, FeatureRunPointer
 from app.infra.db.repositories.feature_store_repo import SqlFeatureStoreRepository
 from app.services.static_financial_evidence import add_static_financial_metadata, subset_static_financial_current
+from app.services.cache.price_history_diagnostics import observe, scoped
 from app.models.stock import StockPrice
 from app.schemas.groups import (
     ConstituentStock,
@@ -168,6 +169,7 @@ class StaticSiteExportService:
         session_factory: sessionmaker,
         *,
         chart_omissions: dict[str, dict[str, str]] | None = None,
+        pipeline_observations: dict | None = None,
     ) -> None:
         """Optionally collect chart omission reasons by market and symbol.
 
@@ -176,6 +178,7 @@ class StaticSiteExportService:
         """
         self._session_factory = session_factory
         self._chart_omissions = chart_omissions
+        self._pipeline_observations = pipeline_observations
         self._ui_snapshot_service = UISnapshotService(session_factory)
         self._price_cache = get_price_cache()
         self._fundamentals_cache = get_fundamentals_cache()
@@ -823,26 +826,45 @@ class StaticSiteExportService:
 
         def _chart_prices(symbols):
             if omissions is None:
-                cached = self._price_cache.get_many_cached_only(symbols, period="2y")
+                cached = self._price_cache.get_many_cached_only(
+                    symbols, period="2y",
+                    **({"observations": self._pipeline_observations}
+                       if self._pipeline_observations is not None else {}),
+                )
             else:
                 cached = self._price_cache.get_many_cached_only(
                     symbols, period="2y", miss_reasons=cache_miss_reasons,
+                    **({"observations": self._pipeline_observations}
+                       if self._pipeline_observations is not None else {}),
                 )
-            return {symbol: self._chart_history_through(frame, run.as_of_date)
-                    for symbol, frame in cached.items()}
+            bounded = {symbol: self._chart_history_through(frame, run.as_of_date)
+                       for symbol, frame in cached.items()}
+            if self._pipeline_observations is not None:
+                for symbol, frame in bounded.items():
+                    observe(self._pipeline_observations, "chart_snapshot", symbol=symbol,
+                            frame=frame, snapshot_date=run.as_of_date, row_count=0)
+            return bounded
 
         def _skip_chart(symbol) -> None:
             skipped_symbols.append(symbol)
+            observe(self._pipeline_observations, "chart_output", symbol=symbol,
+                    status="omitted", reason=cache_miss_reasons.get(symbol, "no_serializable_bars"))
             if omissions is not None:
                 # A usable SQL frame can still serialize to zero chart bars.
                 omissions[symbol] = cache_miss_reasons.get(symbol, "no_serializable_bars")
 
         def _emit_chart(symbol, *, rank, stock_data, price_df, fundamentals_value) -> None:
             """Serialize + write one chart payload, recording it in ``entries`` (or skip)."""
-            bars = self._serialize_chart_bars(price_df)
+            bars = self._serialize_chart_bars(
+                price_df,
+                **({"observations": scoped(self._pipeline_observations, symbol=symbol)}
+                   if self._pipeline_observations is not None else {}),
+            )
             if not bars:
                 _skip_chart(symbol)
                 return
+            observe(self._pipeline_observations, "chart_serialize", symbol=symbol,
+                    status="nonempty", bar_count=len(bars))
             # The independently cached fundamentals cannot borrow a scan's
             # source proof, even when their financial numbers happen to match.
             stock_data = add_static_financial_metadata(
@@ -2655,11 +2677,14 @@ class StaticSiteExportService:
                 continue
         return boxes
 
-    def _serialize_chart_bars(self, data) -> list[dict[str, Any]]:
+    def _serialize_chart_bars(self, data, *, observations=None) -> list[dict[str, Any]]:
         if data is None or getattr(data, "empty", True):
             return []
 
-        filtered = data[data.index >= self._static_chart_cutoff(data.index)]
+        cutoff = self._static_chart_cutoff(data.index)
+        filtered = data[data.index >= cutoff]
+        observe(observations, "chart_display", frame=filtered, cutoff=cutoff,
+                input_rows=len(data))
         if filtered.empty:
             return []
 

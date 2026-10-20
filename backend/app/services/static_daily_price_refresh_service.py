@@ -8,6 +8,9 @@ from typing import Any, Callable
 from app.models.stock_universe import StockUniverse
 from app.services.bulk_data_fetcher import BulkDataFetcher
 from app.services.price_history_coverage import classify_price_history
+from app.services.cache.price_history_diagnostics import (
+    observe, observe_fetch_failure, observe_missing_responses, scoped,
+)
 from app.services.price_refresh_planning import (
     NO_HISTORY_PRICE_BOOTSTRAP_PERIOD,
     STALE_PRICE_TOP_UP_PERIOD,
@@ -77,6 +80,7 @@ class StaticDailyPriceRefreshService:
         fetcher: BulkDataFetcher,
         batch_size_for_market: Callable[[str | None], int] = static_daily_price_refresh_batch_size,
         sleep: Callable[[float], None] | None = None,
+        observations: dict | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._price_cache = price_cache
@@ -87,6 +91,7 @@ class StaticDailyPriceRefreshService:
 
             sleep = time.sleep
         self._sleep = sleep
+        self._observations = observations
 
     def refresh(
         self,
@@ -126,6 +131,14 @@ class StaticDailyPriceRefreshService:
         db_fresh_symbols = list(coverage.fresh)
         stale_symbols = list(coverage.stale)
         no_history_symbols = list(coverage.no_history)
+        if self._observations is not None:
+            for status, symbols_in_group in (
+                ("fresh", coverage.fresh), ("stale", coverage.stale),
+                ("no_history", coverage.no_history), ("unsupported", skipped_symbols),
+            ):
+                for symbol in symbols_in_group:
+                    observe(self._observations, "refresh_coverage", symbol=symbol,
+                            status=status, as_of_date=as_of_date)
 
         if not stale_symbols and not no_history_symbols:
             print(
@@ -227,19 +240,29 @@ class StaticDailyPriceRefreshService:
                 f"{len(batch_symbols):,} symbols from Yahoo ({period}).",
                 flush=True,
             )
-            batch_results = self._fetcher.fetch_prices_in_batches(
-                batch_symbols,
-                period=period,
-                start_batch_size=batch_size,
-                market=market,
-            )
+            trace = scoped(self._observations, source="refresh", batch=batch_index, period=period)
+            try:
+                batch_results = self._fetcher.fetch_prices_in_batches(
+                    batch_symbols,
+                    period=period,
+                    start_batch_size=batch_size,
+                    market=market,
+                )
+            except Exception as error:
+                for symbol in batch_symbols:
+                    observe(trace, "refresh_fetch", symbol=symbol, status="raised",
+                            exception_type=type(error).__name__)
+                raise
+            observe_missing_responses(trace, batch_symbols, batch_results)
             batch_to_store: dict[str, Any] = {}
             for symbol, payload in batch_results.items():
                 price_data = payload.get("price_data")
                 if not payload.get("has_error") and price_data is not None and not price_data.empty:
+                    observe(trace, "refresh_fetch", symbol=symbol, frame=price_data, status="received")
                     batch_to_store[symbol] = price_data
                     refreshed_count += 1
                 else:
+                    observe_fetch_failure(trace, symbol, payload)
                     failed_count += 1
                     if _is_rate_limit_failure(payload):
                         rate_limited.append(symbol)
@@ -248,6 +271,7 @@ class StaticDailyPriceRefreshService:
                     batch_to_store,
                     also_store_db=True,
                     market=market,
+                    **({"observations": trace} if self._observations is not None else {}),
                 )
             print(
                 f"[static-daily prices] Batch {batch_index}/{total_group_batches} complete: "

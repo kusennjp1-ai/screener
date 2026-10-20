@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 import socket
 import sys
+import shutil
 from types import SimpleNamespace
 
 import pytest
 
 import app.scripts.export_static_site as script
 from app.services.static_site_export_service import StaticSiteExportService, STATIC_SITE_SCHEMA_VERSION
+from app.services.cache.price_history_diagnostics import new_observations, observe, load_prior_observations
 
 
 @pytest.fixture(autouse=True)
@@ -269,3 +271,96 @@ def test_combiner_ignores_separately_uploaded_diagnostic_artifact(tmp_path):
     assert sorted(p.relative_to(output).as_posix() for p in output.rglob("*.json")) == [
         "manifest.json", "markets/us/manifest.market.json",
     ]
+
+
+def test_pipeline_seed_and_refresh_survive_clean_without_changing_published_bytes(monkeypatch, tmp_path):
+    published = b'{"same":"published bytes"}\n'
+    prior = new_observations("US", "123")
+    prior["input"] = {"market":"US", "sha256":"a"*64, "source_revision":"fixed-seed",
+                      "download_hash_verified":True}
+    observe(prior, "db_commit", status="committed", committed_rows=50)
+    class Export:
+        def __init__(self, _factory, *, chart_omissions, pipeline_observations=None):
+            self.omissions, self.pipeline = chart_omissions, pipeline_observations
+        def export(self, output, **kwargs):
+            assert kwargs["clean"] is True
+            if self.pipeline is not None:
+                assert any(e["stage"]=="db_commit" for e in self.pipeline["events"])
+                assert any(e["stage"]=="refresh_fetch" for e in self.pipeline["events"])
+            shutil.rmtree(output)
+            destination = output / "markets/us/charts/index.json"
+            destination.parent.mkdir(parents=True)
+            destination.write_bytes(published)
+            self.omissions["US"] = {"NEW":"no_rows_in_window"}
+            return _result(output)
+    def refresh(*, market, observations=None):
+        observe(observations, "refresh_fetch", symbol="NEW", status="failed", failure_kind="transient")
+        return {}
+    monkeypatch.setattr(script, "StaticSiteExportService", Export)
+    monkeypatch.setattr(script, "_run_prices_only_refresh", refresh)
+    outputs = []
+    for enabled in [False, True]:
+        output = tmp_path / str(enabled)
+        script._write_chart_omission_diagnostics(
+            output, "US", {"US":{"OLD":"insufficient_rows"}}, export_completed=True,
+            pipeline_observations=prior,
+        )
+        flags = ["--market","US","--prices-only"]
+        if enabled:
+            flags += ["--price-pipeline-diagnostics","--price-diagnostic-run-id","123",
+                      "--price-diagnostic-input-sha256","a"*64,
+                      "--price-diagnostic-source-revision","fixed-seed"]
+        _argv(monkeypatch, output, *flags)
+        assert script.main() == 0
+        outputs.append({p.relative_to(output/"markets").as_posix():p.read_bytes()
+                        for p in (output/"markets").rglob("*.json")})
+        report = json.loads(_report_path(output).read_text())
+        assert report["omissions"] == {"NEW":"no_rows_in_window"}
+        assert report["export_completed"] is True
+        if enabled:
+            trace = report["pipeline_observations"]
+            assert trace["input"] == prior["input"]
+            assert [e["stage"] for e in trace["events"]] == ["db_commit","prior_link","refresh_fetch"]
+        else:
+            assert "pipeline_observations" not in report
+    assert outputs[0] == outputs[1]
+
+
+@pytest.mark.parametrize("failure_type", [RuntimeError, script.NoPublishedStaticMarketArtifact])
+def test_pipeline_refresh_failure_is_preserved_and_not_caught_as_export_failure(monkeypatch, tmp_path, failure_type):
+    failure = failure_type("injected refresh failure")
+    def refresh(*, market, observations=None):
+        observe(observations, "refresh_fetch", symbol="A", status="received")
+        raise failure
+    monkeypatch.setattr(script, "_run_prices_only_refresh", refresh)
+    for enabled in [False, True]:
+        output = tmp_path / str(enabled)
+        flags = ["--market","US","--prices-only"]
+        if enabled:
+            flags.append("--price-pipeline-diagnostics")
+        _argv(monkeypatch, output, *flags)
+        with pytest.raises(failure_type) as raised:
+            script.main()
+        assert raised.value is failure
+        report = json.loads(_report_path(output).read_text())
+        assert report["export_completed"] is report["chart_bundle_started"] is False
+        if enabled:
+            assert report["pipeline_observations"]["events"][0]["stage"] == "refresh_fetch"
+
+
+@pytest.mark.parametrize("mismatch", ["run_id", "sha256", "source_revision", "market"])
+def test_pipeline_does_not_reuse_unbound_earlier_evidence(tmp_path, mismatch):
+    prior = new_observations("US", "previous-run" if mismatch=="run_id" else "same-run")
+    prior["input"] = {
+        "market":"US", "sha256":("b" if mismatch=="sha256" else "a")*64,
+        "source_revision":"old" if mismatch=="source_revision" else "fixed-seed",
+    }
+    prior["events"] = [{"stage":"seed_prepare","symbol":"PRIVATE_OLD_EVIDENCE"}]
+    report = {"market":"HK" if mismatch=="market" else "US","pipeline_observations":prior}
+    path = _report_path(tmp_path); path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(report))
+    current = new_observations("US", "same-run")
+    load_prior_observations(tmp_path,current,sha256="a"*64,source_revision="fixed-seed")
+    assert "PRIVATE_OLD_EVIDENCE" not in json.dumps(current)
+    assert "input" not in current
+    assert current["events"] == [{"stage":"prior_link","status":"context_mismatch"}]

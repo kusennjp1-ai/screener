@@ -3,25 +3,31 @@ import numpy as np
 import pandas as pd
 
 
-def coherent_history(data):
+def _coherent_history_decision(data):
+    """Return the existing decision and its first rejection, without new checks."""
     if data is None or data.empty:
-        return False
+        return False, "empty_history"
     required = ['Open', 'High', 'Low', 'Close', 'Volume']
     if any(c not in data for c in required):
-        return False
+        return False, "missing_columns"
     values = data[required]
     if not np.isfinite(values.to_numpy(dtype=float)).all():
-        return False
+        return False, "nonfinite_values"
     if not data.index.is_unique or not data.index.is_monotonic_increasing:
-        return False
+        return False, "invalid_index"
     ratios=data['Close'].iloc[1:].to_numpy()/data['Close'].iloc[:-1].to_numpy()
     # Quarantine discontinuities; do not infer a split ratio from the price gap.
     # Same boundary as publication validation; a provider must supply history.
     if not ((ratios > .55) & (ratios < 1.8)).all():
-        return False
-    return bool((data['Low'] > 0).all() and (data['Volume'] >= 0).all()
+        return False, "price_discontinuity"
+    valid = bool((data['Low'] > 0).all() and (data['Volume'] >= 0).all()
                 and (data['High'] >= data[['Open','Close','Low']].max(axis=1)).all()
                 and (data['Low'] <= data[['Open','Close']].min(axis=1)).all())
+    return valid, None if valid else "invalid_ohlcv"
+
+
+def coherent_history(data):
+    return _coherent_history_decision(data)[0]
 
 
 def requires_full_history(cached, recent):

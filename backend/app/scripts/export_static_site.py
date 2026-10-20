@@ -18,6 +18,7 @@ from app.domain.markets import market_registry
 from app.scripts._runtime import prepare_runtime, repo_root
 from app.services.breadth_calculator_service import BreadthCalculatorService
 from app.services.bulk_data_fetcher import BulkDataFetcher
+from app.services.cache.price_history_diagnostics import new_observations, load_prior_observations
 from app.services.ibd_industry_service import IBDIndustryService
 from app.services.static_daily_price_refresh_service import (
     StaticDailyPriceRefreshService,
@@ -84,7 +85,7 @@ PRICES_ONLY_CLOSE_BUFFER_MINUTES = 5
 PRICES_ONLY_REFRESH_SYMBOL_LIMIT = 1200
 
 
-def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
+def _run_prices_only_refresh(*, market: str, observations=None) -> dict[str, Any]:
     """Refresh today's prices without rebuilding the scan snapshot.
 
     Used by the fast post-close publish: the subsequent ``service.export``
@@ -102,7 +103,8 @@ def _run_prices_only_refresh(*, market: str) -> dict[str, Any]:
             "as_of_date": as_of.isoformat(),
             "refresh_symbol_subset": len(symbols) if symbols is not None else None,
             "price_refresh": _refresh_static_daily_prices(
-                as_of_date=as_of, market=market, symbols=symbols
+                as_of_date=as_of, market=market, symbols=symbols,
+                **({"observations": observations} if observations is not None else {}),
             ),
         }
 
@@ -190,6 +192,7 @@ def _write_chart_omission_diagnostics(
     chart_omissions: dict[str, dict[str, str]],
     *,
     export_completed: bool,
+    pipeline_observations: dict | None = None,
 ) -> Path:
     """Write a separate CI diagnostic, never a published market asset.
 
@@ -220,6 +223,11 @@ def _write_chart_omission_diagnostics(
                              for reason in CHART_OMISSION_REASONS},
         "omissions": reasons,
     }
+    if pipeline_observations is not None:
+        if (pipeline_observations.get("market") != market
+                or pipeline_observations.get("schema_version") != "price-pipeline-observations-v1"):
+            raise ValueError("Invalid price pipeline observation context")
+        payload["pipeline_observations"] = pipeline_observations
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
@@ -240,11 +248,14 @@ def _try_write_chart_omission_diagnostics(
     chart_omissions: dict[str, dict[str, str]],
     *,
     export_completed: bool,
+    pipeline_observations: dict | None = None,
 ) -> None:
     """Keep diagnostic I/O failures independent of the export's outcome."""
     try:
         _write_chart_omission_diagnostics(
             output_dir, market, chart_omissions, export_completed=export_completed,
+            **({"pipeline_observations": pipeline_observations}
+               if pipeline_observations is not None else {}),
         )
     except Exception:
         try:
@@ -258,12 +269,14 @@ def _refresh_static_daily_prices(
     as_of_date: date,
     market: str | None = None,
     symbols: list[str] | None = None,
+    observations=None,
 ) -> dict[str, Any]:
     service = StaticDailyPriceRefreshService(
         session_factory=SessionLocal,
         price_cache=get_price_cache(),
         fetcher=BulkDataFetcher(),
         batch_size_for_market=_static_daily_price_refresh_batch_size,
+        **({"observations": observations} if observations is not None else {}),
     )
     return service.refresh(as_of_date=as_of_date, market=market, symbols=symbols)
 
@@ -478,6 +491,7 @@ def _run_daily_refresh(
     skip_fundamentals_refresh: bool = False,
     build_mode: Literal["price_delta", "full"] = STATIC_BUILD_MODE_PRICE_DELTA,
     hydrate_published_snapshot: bool = False,
+    observations=None,
 ) -> tuple[dict[str, Any], list[str]]:
     from app.interfaces.tasks.feature_store_tasks import (
         _enrich_feature_run_with_composite_rating,
@@ -531,6 +545,7 @@ def _run_daily_refresh(
             price_refresh_results[selected_market] = _refresh_static_daily_prices(
                 as_of_date=as_of_by_market[selected_market],
                 market=selected_market,
+                **({"observations": observations} if observations is not None else {}),
             )
         results["price_refresh"] = (
             price_refresh_results[selected_markets[0]]
@@ -769,6 +784,11 @@ def main() -> int:
         action="store_true",
         help="Do not delete the output directory before exporting.",
     )
+    parser.add_argument("--price-pipeline-diagnostics", action="store_true",
+                        help="Add opt-in price stages to the existing chart omission sidecar.")
+    parser.add_argument("--price-diagnostic-run-id", default=None)
+    parser.add_argument("--price-diagnostic-input-sha256", default=None)
+    parser.add_argument("--price-diagnostic-source-revision", default=None)
     args = parser.parse_args()
 
     if args.combine_artifacts_dir and args.refresh_daily:
@@ -783,6 +803,8 @@ def main() -> int:
         raise SystemExit("--prices-only cannot be used together with --combine-artifacts-dir")
     if args.prices_only and not args.market:
         raise SystemExit("--prices-only requires --market")
+    if args.price_pipeline_diagnostics and not args.market:
+        raise SystemExit("--price-pipeline-diagnostics requires --market")
 
     refresh_warnings: list[str] = []
     selected_market_non_publishable_snapshot: dict[str, Any] | None = None
@@ -800,86 +822,102 @@ def main() -> int:
     else:
         chart_omissions: dict[str, dict[str, str]] = {}
         export_completed = False
+        pipeline = (new_observations(args.market, args.price_diagnostic_run_id)
+                    if args.price_pipeline_diagnostics else None)
+        load_prior_observations(
+            Path(args.output_dir), pipeline,
+            sha256=args.price_diagnostic_input_sha256,
+            source_revision=args.price_diagnostic_source_revision,
+        )
         if args.market:
             # Invalidate an older successful report before runtime/refresh can
             # fail or return early (including --no-clean and non-trading days).
             _try_write_chart_omission_diagnostics(
                 Path(args.output_dir), args.market, chart_omissions,
                 export_completed=False,
+                **({"pipeline_observations": pipeline} if pipeline is not None else {}),
             )
-        prepare_runtime()
-
-        if args.prices_only:
-            prices_only_result = _run_prices_only_refresh(market=args.market)
-            print("Prices-only refresh complete:")
-            for name, result_item in prices_only_result.items():
-                print(f"  - {name}: {result_item}")
-
-        if args.refresh_daily:
-            refresh_results, refresh_warnings = _run_daily_refresh(
-                market=args.market,
-                skip_universe_refresh=args.skip_universe_refresh,
-                skip_fundamentals_refresh=args.skip_fundamentals_refresh,
-                build_mode=args.build_mode,
-                hydrate_published_snapshot=args.hydrate_published_snapshot,
-            )
-            print("Daily refresh complete:")
-            for name, result_item in refresh_results.items():
-                print(f"  - {name}: {result_item}")
-            for warning in refresh_warnings:
-                print(f"  - warning: {warning}")
-
-            selected_market_non_publishable_snapshot = _selected_market_non_publishable_snapshot(
-                refresh_results,
-                args.market,
-            )
-            if _snapshot_skipped_not_trading_day(selected_market_non_publishable_snapshot):
-                print(
-                    f"Static site export skipped for market {args.market} because it is not a trading day."
-                )
-                return STATIC_EXPORT_SKIPPED_EXIT_CODE
-
         try:
-            service = (
-                StaticSiteExportService(SessionLocal, chart_omissions=chart_omissions)
-                if args.market else StaticSiteExportService(SessionLocal)
-            )
-            result = service.export(
-                Path(args.output_dir),
-                clean=not args.no_clean,
-                markets=((args.market,) if args.market else None),
-                write_manifest=args.market is None,
-            )
-            export_completed = True
-        except NoPublishedStaticMarketArtifact:
+            prepare_runtime()
+
             if args.prices_only:
-                print(
-                    f"Prices-only export skipped for market {args.market}: no published "
-                    "feature run exists yet (a full build must land first)."
+                prices_only_result = _run_prices_only_refresh(
+                    market=args.market, **({"observations": pipeline} if pipeline is not None else {}),
                 )
-                return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
-            if (
-                args.market is not None
-                and args.refresh_daily
-                and selected_market_non_publishable_snapshot is not None
-            ):
-                _write_market_diagnostics(
-                    Path(args.output_dir),
+                print("Prices-only refresh complete:")
+                for name, result_item in prices_only_result.items():
+                    print(f"  - {name}: {result_item}")
+
+            if args.refresh_daily:
+                refresh_results, refresh_warnings = _run_daily_refresh(
+                    market=args.market,
+                    skip_universe_refresh=args.skip_universe_refresh,
+                    skip_fundamentals_refresh=args.skip_fundamentals_refresh,
+                    build_mode=args.build_mode,
+                    hydrate_published_snapshot=args.hydrate_published_snapshot,
+                    **({"observations": pipeline} if pipeline is not None else {}),
+                )
+                print("Daily refresh complete:")
+                for name, result_item in refresh_results.items():
+                    print(f"  - {name}: {result_item}")
+                for warning in refresh_warnings:
+                    print(f"  - warning: {warning}")
+
+                selected_market_non_publishable_snapshot = _selected_market_non_publishable_snapshot(
+                    refresh_results,
                     args.market,
-                    selected_market_non_publishable_snapshot,
                 )
-                print(
-                    f"Static site export skipped for market {args.market}; "
-                    "no current artifact was produced, diagnostics were uploaded, "
-                    "and the combine job can use fallback artifacts."
+                if _snapshot_skipped_not_trading_day(selected_market_non_publishable_snapshot):
+                    print(
+                        f"Static site export skipped for market {args.market} because it is not a trading day."
+                    )
+                    return STATIC_EXPORT_SKIPPED_EXIT_CODE
+
+            try:
+                service = (
+                    StaticSiteExportService(
+                        SessionLocal, chart_omissions=chart_omissions,
+                        **({"pipeline_observations": pipeline} if pipeline is not None else {}),
+                    )
+                    if args.market else StaticSiteExportService(SessionLocal)
                 )
-                return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
-            raise
+                result = service.export(
+                    Path(args.output_dir),
+                    clean=not args.no_clean,
+                    markets=((args.market,) if args.market else None),
+                    write_manifest=args.market is None,
+                )
+                export_completed = True
+            except NoPublishedStaticMarketArtifact:
+                if args.prices_only:
+                    print(
+                        f"Prices-only export skipped for market {args.market}: no published "
+                        "feature run exists yet (a full build must land first)."
+                    )
+                    return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
+                if (
+                    args.market is not None
+                    and args.refresh_daily
+                    and selected_market_non_publishable_snapshot is not None
+                ):
+                    _write_market_diagnostics(
+                        Path(args.output_dir),
+                        args.market,
+                        selected_market_non_publishable_snapshot,
+                    )
+                    print(
+                        f"Static site export skipped for market {args.market}; "
+                        "no current artifact was produced, diagnostics were uploaded, "
+                        "and the combine job can use fallback artifacts."
+                    )
+                    return STATIC_EXPORT_NO_CURRENT_ARTIFACT_EXIT_CODE
+                raise
         finally:
             if args.market:
                 _try_write_chart_omission_diagnostics(
                     Path(args.output_dir), args.market, chart_omissions,
                     export_completed=export_completed,
+                    **({"pipeline_observations": pipeline} if pipeline is not None else {}),
                 )
 
     print("Static site export complete:")
