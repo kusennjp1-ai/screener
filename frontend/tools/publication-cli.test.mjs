@@ -284,7 +284,7 @@ globalThis.fetch = async (input, options) => {
   };
   const dist = join(root, 'release/frontend/dist');
   const installTransport = (frontend = 'release/frontend') => {
-    for (const name of ['researchTransport.js', 'researchFloat64.js', 'researchHex.js', 'financialHistory.js', 'reportedGrowth.js', 'evidenceTime.js']) {
+    for (const name of ['researchTransport.js', 'researchFloat64.js', 'researchHex.js', 'financialHistory.js', 'financialPublicationExceptionPolicy.js', 'reportedGrowth.js', 'evidenceTime.js']) {
       write(join(root, frontend, 'src/static', name), readFileSync(join(project, 'frontend/src/static', name)));
     }
     write(join(root, frontend, 'contracts/native_annual_history_v1.json'), readFileSync(join(project, 'frontend/contracts/native_annual_history_v1.json')));

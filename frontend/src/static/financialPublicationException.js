@@ -1,14 +1,9 @@
 import { projectFinancialRow, currentFinancialHistory } from './financialCurrent.js';
 import { annualHistoryMetadataValid } from './financialHistory.js';
 import { evidenceTimestamp, validClock, validEvidenceDay } from './evidenceTime.js';
+import { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
+export { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
 
-// Explicitly approved availability exception, not financial qualification.
-// It grants no source, price, performance, screenshot or publication authority.
-export const FINANCIAL_PUBLICATION_EXCEPTION = Object.freeze({
-  version: 'five-symbol-financial-unknown-v1',
-  symbols: Object.freeze(['NVDA', 'FUTU', 'AAOI', 'ALH', 'AVT']),
-  label: '財務未確認・判定対象外',
-});
 const symbols = new Set(FINANCIAL_PUBLICATION_EXCEPTION.symbols);
 const fields = ['eps_growth_yy', 'sales_growth_yy'];
 const absenceReasons = new Set(['missing_evidence', 'stale_source', 'stale_reporting_period']);

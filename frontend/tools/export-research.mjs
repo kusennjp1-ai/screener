@@ -188,6 +188,9 @@ scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
 const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
 const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1',as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
+  // Transport retains only the two original scalar inputs used by the five
+  // named exceptions. All other historical provenance remains detail-only.
+  if (Object.hasOwn(row, 'financial_historical')) summary.financial_historical = row.financial_historical;
   // Full provenance remains in detail; readiness reasons are also CSV inputs.
   if(row.price_quality) summary.price_quality={status:row.price_quality.status,as_of_date:row.price_quality.as_of_date};
   if(row.setup_recalculation) summary.setup_recalculation={status:row.setup_recalculation.status,as_of_date:row.setup_recalculation.as_of_date,reason:row.setup_recalculation.reason};

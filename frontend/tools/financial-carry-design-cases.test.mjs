@@ -86,12 +86,18 @@ describe('supplemental carry evidence never replaces fresh acceptance', () => {
     }
   });
 
-  it('permits the unchanged compact list history while checking all retained annual/source fields', () => {
-    const summary = row(), detail = structuredClone(summary);
-    delete summary.financial_history.quarterly;
+  it('requires the same full history inputs for the five named availability exceptions', () => {
+    const detail = row();
     detail.financial_history.quarterly = [{ end: '2026-06-30', eps: 1, revenue: 20 }];
     detail.financial_history.annual.forEach(point => { point.revenue = 100; point.netIncome = null; });
+    const summary = structuredClone(detail);
     expect(() => verifyFinancialCarryIdentity(summary, detail, item('NVDA'), date)).not.toThrow();
+    const omitted = structuredClone(summary);
+    delete omitted.financial_history.quarterly;
+    expect(() => verifyFinancialCarryIdentity(omitted, detail, item('NVDA'), date)).toThrow('history differ');
+    const changed = structuredClone(detail);
+    changed.financial_history.quarterly[0].eps += 1;
+    expect(() => verifyFinancialCarryIdentity(summary, changed, item('NVDA'), date)).toThrow('history differ');
     detail.financial_history.annual[0].eps += 1;
     expect(() => verifyFinancialCarryIdentity(summary, detail, item('NVDA'), date)).toThrow('history differ');
   });

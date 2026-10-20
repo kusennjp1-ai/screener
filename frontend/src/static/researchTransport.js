@@ -1,4 +1,5 @@
 import { annualHistoryMetadataValid } from './financialHistory.js';
+import { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
 import { encodeResearchFloat64, decodeResearchFloat64 } from './researchFloat64.js';
@@ -15,8 +16,14 @@ const pick = (value, fields) => value && Object.fromEntries(fields.filter(key =>
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function researchListRow(row) {
   const out = { ...row };
+  const needsFinancialExceptionInputs = row.market === 'US' && FINANCIAL_PUBLICATION_EXCEPTION.symbols.includes(row.symbol);
   // Evidence envelopes and raw history belong to immutable on-demand detail.
   delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
+  // These five decisions also reject contradictory original scalars. Dropping
+  // them after projection would turn a rejected detail into a list exception.
+  if (needsFinancialExceptionInputs && record(row.financial_historical?.values)) {
+    out.financial_historical = { values: pick(row.financial_historical.values, ['eps_growth_yy', 'sales_growth_yy']) };
+  }
   if (record(row.institutional_evidence)) {
     // Preserve the validator's dates/unit, not just a precomputed pass flag.
     out.institutional_evidence = pick(row.institutional_evidence, ['symbol', 'status', 'unit', 'publication_cutoff']);
@@ -38,7 +45,9 @@ export function researchListRow(row) {
     ...pick(row.technical_audit, ['version', 'status', 'symbol', 'as_of_date', 'bars', 'errors', 'valid', 'window_52w']),
     values: pick(row.technical_audit.values, ['close', 'sma50', 'sma150', 'sma200', 'sma200_21ago', 'aboveLow', 'belowHigh', 'volumeRatio', 'change', 'momentum']),
   };
-  if (row.financial_history) out.financial_history = {
+  // The exception validates quarterly cells as well as annual metadata. Keep
+  // its complete history input; the rest of the universe retains the compact form.
+  if (row.financial_history && !needsFinancialExceptionInputs) out.financial_history = {
     ...pick(row.financial_history, ['symbol', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source', 'schema_version', 'annual_currency', 'quarterly_currency', 'quarterly_retrieved_at', 'annual_source']),
     // Do not strip contradictory per-cell currency/unit metadata into valid proof.
     annual: !annualHistoryMetadataValid(row.financial_history, row.symbol) ? row.financial_history.annual

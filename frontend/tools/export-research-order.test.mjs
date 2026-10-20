@@ -23,7 +23,7 @@ const write = async (path, value) => {
 const read = async path => JSON.parse(await readFile(path, 'utf8'));
 const symbols = rows => rows.map(row => row.symbol);
 
-async function fixture({ withBreadth = false, withCalendar = true, setupReports = null, financiallyUnavailableSymbols = [] } = {}) {
+async function fixture({ withBreadth = false, withCalendar = true, setupReports = null, financiallyUnavailableSymbols = [], rejectedFinancialSymbols = [] } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'research-export-order-'));
   const frontend = join(directory, 'frontend'), root = join(frontend, 'public/static-data');
   const bars = [];
@@ -51,6 +51,11 @@ async function fixture({ withBreadth = false, withCalendar = true, setupReports 
     volume: 1000000, adv_usd: 100000000, se_setup_score: (index + 1) * 10,
     setup_recalculation: { status: 'calculated', as_of_date: date }, eps_growth_yy: 30 + index, sales_growth_yy: 40 + index,
   }, now, date));
+  for (const row of rows.filter(row => rejectedFinancialSymbols.includes(row.symbol))) {
+    const reasons = row.financial_current.r.split('');
+    for (const index of [1, 3]) { reasons[index] = '1'; delete row.financial_current.p[index]; }
+    row.financial_current.r = reasons.join('');
+  }
   if (setupReports) for (const [index, report] of setupReports.entries()) Object.assign(rows[index], report);
   const histories = Object.fromEntries(rows.filter(row => !financiallyUnavailableSymbols.includes(row.symbol)).map(row => [row.symbol, {
     symbol: row.symbol, as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD',
@@ -257,6 +262,49 @@ it('preserves a passing technical template while excluding the five unavailable 
     }
     expect(result.index.rows.some(row => !unavailable.includes(row.symbol) && assess(row, 'minervini', now).qualified)).toBe(true);
     expect(await readFile(join(root, 'financial-history.json'))).toEqual(financialBytes);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('preserves rejected scalar and quarterly inputs through the actual export list selection', async () => {
+  const unavailable = ['NVDA', 'FUTU', 'AAOI', 'ALH', 'AVT'];
+  const { directory, root, rows, histories, run, outputs } = await fixture({ withBreadth: true,
+    financiallyUnavailableSymbols: unavailable, rejectedFinancialSymbols: ['AVT'] });
+  try {
+    run();
+    const baseline = new Map((await outputs()).index.rows.map(row => [row.symbol, row]));
+    // Synthetic contradictory input must stay rejected; omitting its nonempty
+    // quarterly cells would incorrectly grant the unavailable-history exception.
+    histories.AAOI = { symbol: 'AAOI', as_of_date: date, status: 'unavailable', basis: 'reported_diluted_eps',
+      currency: 'USD', source: 'Synthetic rejected history', retrieved_at: new Date(now - 3600000).toISOString(),
+      annual: [], quarterly: [{ end: '2026-06-30', eps: 2 }] };
+    await write(join(root, 'financial-history.json'), { as_of_date: date, results: histories });
+    const originalHistory = await readFile(join(root, 'financial-history.json'));
+    const originalRows = structuredClone(rows);
+    run();
+    const result = await outputs();
+    const wire = await read(join(root, result.manifest.markets.US.assets.research.path));
+    for (const clock of [now, now + 10 * 86400000]) {
+      expect(() => validateResearchParity(wire, result.details, clock)).not.toThrow();
+    }
+    for (const symbol of unavailable) {
+      const index = result.index.rows.findIndex(row => row.symbol === symbol);
+      for (const row of [result.index.rows[index], result.details[index]]) for (const method of RESEARCH_METHODS) {
+        const assessment = assess(row, method, now);
+        if (['AVT', 'AAOI'].includes(symbol)) expect(assessment).not.toHaveProperty('financial_exclusion');
+        else expect(assessment).toMatchObject({ qualified: false, financial_exclusion: { symbol, label: '財務未確認・判定対象外' } });
+      }
+    }
+    const avt = result.index.rows.find(row => row.symbol === 'AVT');
+    const originalAvt = rows.find(row => row.symbol === 'AVT');
+    expect(avt.financial_historical.values).toEqual({ eps_growth_yy: originalAvt.eps_growth_yy, sales_growth_yy: originalAvt.sales_growth_yy });
+    expect(result.index.rows.find(row => row.symbol === 'AAOI').financial_history).toEqual(histories.AAOI);
+    for (const row of result.index.rows.filter(row => !unavailable.includes(row.symbol))) {
+      expect(row).not.toHaveProperty('financial_historical');
+      expect(row.financial_history).not.toHaveProperty('quarterly');
+      for (const method of RESEARCH_METHODS) expect(assess(row, method, now)).toEqual(assess(baseline.get(row.symbol), method, now));
+    }
+    expect(await readFile(join(root, 'financial-history.json'))).toEqual(originalHistory);
+    expect(rows).toEqual(originalRows);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

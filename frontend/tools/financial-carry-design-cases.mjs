@@ -41,8 +41,8 @@ export function verifyFinancialCarryIdentity(summary, detail, item, date) {
   requireValue(summary.market === 'US' && (!detail.market || detail.market === summary.market), 'Browser financial market mismatch');
   requireValue(Number.isFinite(summary.financial_current?.t) && same(detail.financial_current, summary.financial_current),
     'Browser detail and research financial proofs do not match');
-  // The unchanged transport intentionally omits quarterly cells and annual
-  // revenue from list rows. Compare its own lossless decision-input projection;
+  // Compare the lossless decision-input projection. These five cases retain
+  // full history because their availability exception also validates quarterly cells;
   // exact full detail bytes remain independently pinned by the asset observer.
   requireValue(summary.financial_history && detail.financial_history &&
     same(researchListRow(summary).financial_history, researchListRow(detail).financial_history), 'Browser detail and research financial history differ');
