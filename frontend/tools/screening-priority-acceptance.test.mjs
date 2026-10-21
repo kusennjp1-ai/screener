@@ -1,5 +1,6 @@
+// @vitest-environment node
 // Synthetic report and byte fixtures only; no browser/pixel/price pass claim.
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync, chmodSync } from 'node:fs';
@@ -84,7 +85,7 @@ test('current byte review is required when timing is deferred', () => {
 });
 
 async function filesFixture(t, scope='ordinary') {
-  const root=mkdtempSync(join(tmpdir(),'screening-acceptance-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const root=mkdtempSync(join(tmpdir(),'screening-acceptance-'));t.onTestFinished(()=>rmSync(root,{recursive:true,force:true}));
   const currentRoot=join(root,'frontend/dist'), baselineRoot=join(root,'design-baseline/frontend/dist'), output=join(root,'frontend/test-results/design-review');
   mkdirSync(join(currentRoot,'static-data'),{recursive:true});mkdirSync(output,{recursive:true});
   write(join(currentRoot,'index.html'),'<title>Synthetic acceptance fixture</title>');
