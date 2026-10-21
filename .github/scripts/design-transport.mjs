@@ -13,6 +13,12 @@ const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
 const positive=value=>Number.isSafeInteger(value)&&value>0;
 const carryPreviewSchema='design-financial-carry-preview-v1';
 
+// Runner timestamps distinguish stages without changing the evaluation clock.
+// Keep stdout reserved for the CLI's single JSON result.
+function diagnostic(stage,state) {
+  try{console.error(`[design-transport] ${stage} ${state}`);}catch{}
+}
+
 function assertCarryBinding(record,revision,generation,logicalDigest) {
   if(record.schema!==carryPreviewSchema||record.publication_authority!=='none'||record.financial_admission!==false
     ||record.ui_sha!==revision||!sha(record.baseline_sha)||!hash(record.source_financial_generation)
@@ -54,8 +60,10 @@ export async function prepareDesignTransport({dist,provenancePath,repoRoot=proce
     // Only the explicit closed preview contract may enter this independent
     // evidence replay. Ordinary Design never manufactures a carry generation.
     const {verifyDesignCarryPreview}=await import('./design-financial-carry.mjs');
+    diagnostic('carry-prepack','start');
     verifiedCarry=await verifyDesignCarryPreview({provenancePath,root:dist,baselineRoot:comparison.root,repoRoot,frontendRoot});
     assertCarryBinding(verifiedCarry,revision,generation,logicalDigest);
+    diagnostic('carry-prepack','complete');
     lineage=verifiedCarry.financial_lineage_sha256;
   }else{
     if(state.decision?.mode!=='design'||state.sourceSha!==revision||state.controllerSha!==revision||state.activation||state.correction||state.carry
@@ -71,24 +79,30 @@ export async function prepareDesignTransport({dist,provenancePath,repoRoot=proce
   if(sha256(readFileSync(provenancePath))!==sha256(provenanceBytes)||dataInventoryDigest(dist)!==logicalDigest
     ||sha256(readFileSync(join(dist,'static-data/manifest.json')))!==sha256(manifestBytes))throw Error('Design input changed during verification');
   const publication=previewPublication({uiSha:revision,uiDigest:inventoryDigest(uiInventory(dist)),manifestSha256:sha256(manifestBytes)});
+  diagnostic('pack','start');
   await packPublication({root:dist,frontendRoot,publication,bindings:{sourceCommit:revision,appCommit:revision,candidateId:sha256(provenanceBytes),financialGeneration:generation,financialLineageSha256:lineage}});
   if(sha256(readFileSync(provenancePath))!==sha256(provenanceBytes))throw Error('Design input provenance changed during packing');
   validateTransportPreview(publication);
+  diagnostic('pack','complete');
   // Canonical data is verifier-owned output, not checkout code. Keep it out of
   // codeIdentity's untracked-input scope without exempting any checkout path.
   const temporary=mkdtempSync(join(tmpdir(),'.design-transport-roundtrip-'));
   try{
     const checkout=realpathSync(repoRoot),scratch=realpathSync(temporary);
     if(scratch===checkout||scratch.startsWith(checkout+sep))throw Error('Design transport scratch must stay outside the checked repository');
+    diagnostic('canonical-roundtrip','start');
     const canonical=await canonicalPublication({root:dist,frontendRoot,publication,restore:join(temporary,'logical')});
     if(publication.transport.logical_data_inventory_sha256!==logicalDigest||dataInventoryDigest(canonical)!==logicalDigest)throw Error('Packed Design round-trip logical data inventory changed');
     if(comparison&&(dataInventoryDigest(comparison.root)!==comparison.digest||dataInventoryDigest(canonical)!==comparison.digest))throw Error('Packed Design differs from the raw comparison baseline');
+    diagnostic('canonical-roundtrip','complete');
     // Replaying at the real post-pack clock also catches expiry transitions
     // while encoding. Nothing in this branch grants publication authority.
     if(verifiedCarry){
       const {verifyDesignCarryPreview}=await import('./design-financial-carry.mjs');
+      diagnostic('carry-postpack','start');
       const current=await verifyDesignCarryPreview({provenancePath,root:canonical,baselineRoot:comparison.root,repoRoot,frontendRoot});
       if(JSON.stringify(current)!==JSON.stringify(verifiedCarry))throw Error('Design carry provenance changed during packing');
+      diagnostic('carry-postpack','complete');
     }
   }finally{rmSync(temporary,{recursive:true,force:true});}
   if(sha256(readFileSync(provenancePath))!==sha256(provenanceBytes))throw Error('Design input provenance changed during round-trip verification');

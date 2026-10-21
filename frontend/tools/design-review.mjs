@@ -46,7 +46,12 @@ const report = { commit, measured_at: new Date().toISOString(), source_run: proc
   input_basis: inputBasis,
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
 if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
-const check = (condition, detail) => { if (!condition) report.failures.push(detail); };
+const check = (condition, detail) => {
+  if (!condition) {
+    report.failures.push(detail);
+    try { console.error(`[design-failure ${report.failures.length}] ${JSON.stringify(detail)}`); } catch { /* Logging cannot change the gate. */ }
+  }
+};
 const carryProvenancePath = process.env.DESIGN_CARRY_PREVIEW_PROVENANCE;
 let carryBinding;
 if (carryProvenancePath) {
@@ -232,6 +237,7 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   check((await page.evaluate(objectiveMetrics)).runningAnimations === 0, `${key}: animations remain with reduced motion`);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   console.log(`Captured ${key}; ${report.failures.length} objective failures recorded so far.`);
+  try { console.error(`[design-capture-failures] ${JSON.stringify({ key, failures: report.failures })}`); } catch { /* Keep the original report and capture path. */ }
   await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
 }
 
