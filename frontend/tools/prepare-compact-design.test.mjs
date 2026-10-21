@@ -9,7 +9,7 @@ afterEach(async()=>{await Promise.all(roots.splice(0).map(path=>rm(path,{recursi
 async function fixture() {const root=await mkdtemp(join(tmpdir(),'compact-design-'));roots.push(root);const source=join(root,'source'),target=join(root,'target');await mkdir(source);return {source,target};}
 async function put(source,path,text='data') {const parts=path.split('/');if(parts.length>1)await mkdir(join(source,...parts.slice(0,-1)),{recursive:true});await writeFile(join(source,path),text);}
 it('retains original reports and every screenshot plus only the named diagnostics, byte for byte',async()=>{
- const {source,target}=await fixture();const original=['report.json','summary.md','financial-carry-evidence.json','home.png','detail.png','diagnostic-initial-1440.cpuprofile','diagnostic-method-1440.cpuprofile'];
+ const {source,target}=await fixture();const original=['report.json','summary.md','financial-carry-evidence.json','screening-priority-assessment.json','screening-priority-completion.json','home.png','detail.png','diagnostic-initial-1440.cpuprofile','diagnostic-method-1440.cpuprofile'];
  for(const path of new Set([...original,...COMPACT_DIAGNOSTICS]))await put(source,path,`bytes:${path}`);
  for(const path of ['unbounded.trace.json','profile-sources/huge.map','radar-diagnostic/benchmark.js'])await put(source,path);
  const result=await prepareCompactDesign(source,target);

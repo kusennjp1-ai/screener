@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 export const COMPACT_TOTAL_LIMIT = 128 * 1024 * 1024;
 export const COMPACT_FILE_LIMIT = 32 * 1024 * 1024;
 export const DIAGNOSTIC_FILE_LIMIT = 16 * 1024 * 1024;
-export const COMPACT_REPORTS = ['report.json', 'summary.md', 'financial-carry-evidence.json'];
+export const COMPACT_REPORTS = ['report.json', 'summary.md', 'financial-carry-evidence.json', 'screening-priority-assessment.json', 'screening-priority-completion.json'];
 export const COMPACT_DIAGNOSTICS = [
   'diagnostic-initial-1440.cpuprofile', 'diagnostic-method-1440.cpuprofile',
   'diagnostic-initial-1440.trace.json', 'diagnostic-method-1440.trace.json',

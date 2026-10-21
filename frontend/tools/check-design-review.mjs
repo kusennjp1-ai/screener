@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { screeningPriorityBinding, checkedScreeningPriority, requireWarningReviewImages } from './screening-priority-acceptance.mjs';
 
 const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 const directory = resolve(root, 'docs/design-review');
@@ -20,7 +21,16 @@ for (const name of reports) {
   const actual = JSON.parse(await readFile(resolve('test-results/design-review/report.json'), 'utf8'));
   const reviewedKeys = new Set(review.screens.map(screen => screen.key));
   if (!actual.screens.length || actual.screens.some(screen => !reviewedKeys.has(screen.key))) throw Error('The subjective review does not cover every captured screen/theme/viewport');
-  if (actual.failures.length) throw Error('Objective design/performance failures remain; subjective scores cannot override them');
+  const policyOptions = { report: actual, output: resolve('test-results/design-review'), currentRoot: resolve('dist'),
+    baselineRoot: resolve(process.env.RUNNER_TEMP || '.', 'design-baseline/frontend/dist'), inputBasis: process.env.DESIGN_INPUT_BASIS || actual.input_basis };
+  const binding = screeningPriorityBinding({ ...policyOptions, commit: actual.commit, limited: Boolean(actual.assessment_mode) });
+  if (binding) {
+    const assessment = checkedScreeningPriority(policyOptions);
+    if (assessment.blocking_failures.length) throw Error('Objective functional/design failures remain; subjective scores cannot override them');
+    if (assessment.warnings.length) requireWarningReviewImages(review, actual);
+    for (const warning of assessment.warnings) console.warn(`::warning title=Deferred measured timing::${warning}`);
+    console.log(`Screening policy ${assessment.policy}: strict_result=${assessment.strict_result}; performance=${assessment.performance_acceptance}; functional=${assessment.functional_acceptance}.`);
+  } else if (actual.failures.length) throw Error('Objective design/performance failures remain; subjective scores cannot override them');
   console.log(`Design score gate passed: ${name}, ${review.screens.length} reviewed captures. Scores are a documented internal review, not an award or human-user survey.`);
   reviewed = true;
   break;

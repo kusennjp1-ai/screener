@@ -15,11 +15,18 @@ test('limited assessment is separate, manual, exact-main, read-only and never de
   assert.match(assessment,/ref: \$\{\{ inputs.ui_sha \}\}/);assert.match(assessment,/persist-credentials: false/);
 });
 
-test('default full Design workflow remains strict and never adopts limited assessment semantics',()=>{
+test('full Design never adopts limited-preview authority and candidate/unknown scope remains strict',()=>{
   assert.doesNotMatch(design,/limited-research|continue-on-error/);
   assert.match(design,/run: node tools\/check-design-review\.mjs/);
-  assert.match(read('../../frontend/tools/check-design-review.mjs'),/if \(actual.failures.length\) throw Error/);
+  const checker=read('../../frontend/tools/check-design-review.mjs');
+  assert.match(checker,/if \(actual.failures.length\)/);
+  assert.match(checker,/checkedScreeningPriority/);
+  assert.match(checker,/assessment.blocking_failures.length/);
+  assert.match(checker,/requireWarningReviewImages\(review, actual\)/);
   assert.match(read('../../frontend/tools/design-review.mjs'),/if \(report.failures.length\) process.exitCode = 1;/);
+  const policy=read('../../frontend/tools/screening-priority-acceptance.mjs');
+  assert.match(policy,/limited \|\| env.FINANCIAL_CANDIDATE_DIR \|\| inputBasis !== 'same_verified_input'/);
+  assert.match(policy,/Only bound ordinary\/carry Design may defer measured timing failures/);
 });
 
 test('capture builds exact UI against frozen published data with no provider, exporter, carry, or correction path',()=>{

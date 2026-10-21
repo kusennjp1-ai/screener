@@ -21,6 +21,7 @@ import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchma
 import { recordProductionBootstrapDiagnostic } from './production-bootstrap-diagnostic.mjs';
 
 import { buildLimitedResearchAssessment, LIMITED_RESEARCH_SCOPE } from './limited-research-assessment.mjs';
+import { screeningPriorityBinding, finishScreeningPriority } from './screening-priority-acceptance.mjs';
 
 const limitedAssessment = process.argv.includes('--limited-research-preview');
 const limitationArguments = process.argv.slice(2).filter(value => value.startsWith('--limited-performance-limitations='));
@@ -54,6 +55,8 @@ const check = (condition, detail) => {
 };
 const carryProvenancePath = process.env.DESIGN_CARRY_PREVIEW_PROVENANCE;
 let carryBinding;
+let priorityBinding;
+const completedGroups = [];
 if (carryProvenancePath) {
   try {
     check(inputBasis === 'same_verified_input', 'Carry previews require identical logical baseline/current data');
@@ -66,6 +69,11 @@ if (carryProvenancePath) {
     check(false, `Carry preview evidence binding failed: ${error.message}`);
     await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
   }
+}
+try {
+  priorityBinding = screeningPriorityBinding({ currentRoot, baselineRoot, commit, inputBasis, limited: limitedAssessment });
+} catch (error) {
+  check(false, `Screening acceptance input binding failed: ${error.message}`);
 }
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 async function serve(root) {
@@ -319,6 +327,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   await verifyDailyObservationCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   if (finishCarryUi) await finishCarryUi();
   await context.close();
+  completedGroups.push(`${viewport.width}/${theme}`);
 }
 for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
@@ -466,4 +475,15 @@ if (limitedAssessment) {
   // Local classification is never a Design pass or publication permission.
   if (assessment.blocking_failures.length) process.exitCode = 1;
 }
-if (report.failures.length) process.exitCode = 1;
+if (priorityBinding) {
+  try {
+    const assessment = finishScreeningPriority({ report, output, before: priorityBinding, currentRoot, baselineRoot, inputBasis, completedGroups });
+    for (const warning of assessment.warnings) console.warn(`::warning title=Deferred timing under ${assessment.policy}::${warning}`);
+    console.log(JSON.stringify({ policy: assessment.policy, strict_result: assessment.strict_result, performance_acceptance: assessment.performance_acceptance, functional_acceptance: assessment.functional_acceptance, policy_exit: assessment.policy_exit }));
+    process.exitCode = assessment.policy_exit;
+  } catch (error) {
+    check(false, `Screening acceptance finalization failed: ${error.message}`);
+    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+    process.exitCode = 1;
+  }
+} else if (report.failures.length) process.exitCode = 1;
