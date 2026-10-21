@@ -22,6 +22,9 @@ if(wire.schema && (wireRaw.length>8000000 || gzipSync(wireRaw).length>1000000)) 
 const quality=await read('data-quality.json');
 validateResearchListSummaries(wire,index.rows,evaluatedAt);
 if(!quality.total || quality.as_of_date!==index.as_of_date || quality.verified/quality.total<.9) {
+  try {
+    writeSync(2, `Daily verification diagnostics: ${JSON.stringify({as_of_date:quality.as_of_date,research_as_of_date:index.as_of_date,total:quality.total,verified:quality.verified,required_verified_fraction:.9,reasons:quality.reasons})}\n`);
+  } catch { /* Diagnostics must not replace the existing failure. */ }
   throw Error(`Daily verification below 90%: ${quality.verified}/${quality.total}. Keep last good publication and repair the source; never relax selection criteria.`);
 }
 console.log(`Quality gate passed: ${quality.verified}/${quality.total} verified; declared financial evaluation ${new Date(evaluatedAt).toISOString()}.`);
