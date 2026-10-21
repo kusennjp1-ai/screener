@@ -25,9 +25,9 @@
 .comparison-skeleton { height:100%; display:grid; grid-template-rows:1fr 30px 40px; gap:8px; padding:8px 0; box-sizing:border-box; }
 .comparison-skeleton span { background:var(--surface-2); border-radius:4px; }
 .candidate-comparison .candidate-pagination { gap:8px; min-height:44px; padding:0; margin-left:auto; }
-.candidate-comparison .candidate-pagination button,.comparison-attribution { min-height:44px; }
+.candidate-comparison .candidate-pagination button,.comparison-attribution,.comparison-notice { min-height:44px; }
 .candidate-comparison .candidate-pagination button { min-width:44px; padding:4px 8px; font-size:12px; }
-.comparison-attribution { display:flex; align-items:center; color:var(--text-3); font-size:11px; }
+.comparison-attribution,.comparison-notice { display:flex; align-items:center; color:var(--text-3); font-size:11px; }
 @media(min-width:1280px) {
   .candidate-comparison .comparison-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
