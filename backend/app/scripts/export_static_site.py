@@ -789,7 +789,24 @@ def main() -> int:
     parser.add_argument("--price-diagnostic-run-id", default=None)
     parser.add_argument("--price-diagnostic-input-sha256", default=None)
     parser.add_argument("--price-diagnostic-source-revision", default=None)
+    parser.add_argument("--price-diagnostic-sidecar-root", default=None,
+                        help="Keep opt-in pipeline details outside uploaded static diagnostics.")
     args = parser.parse_args()
+
+    from app.scripts.price_diagnostic_summary import static_ci_context, prior_binding, log_private_trace
+
+    context = None
+    if (not args.combine_artifacts_dir and not args.price_pipeline_diagnostics
+            and not any((args.price_diagnostic_run_id, args.price_diagnostic_input_sha256,
+                         args.price_diagnostic_source_revision, args.price_diagnostic_sidecar_root))):
+        context = static_ci_context(args.market, output_dir=args.output_dir)
+    if context is not None:
+        args.price_pipeline_diagnostics = True
+        args.price_diagnostic_run_id = context.run_id
+        args.price_diagnostic_sidecar_root = str(context.root)
+        binding = prior_binding(context)
+        if binding is not None:
+            args.price_diagnostic_input_sha256, args.price_diagnostic_source_revision = binding
 
     if args.combine_artifacts_dir and args.refresh_daily:
         raise SystemExit("--combine-artifacts-dir cannot be used together with --refresh-daily")
@@ -805,6 +822,14 @@ def main() -> int:
         raise SystemExit("--prices-only requires --market")
     if args.price_pipeline_diagnostics and not args.market:
         raise SystemExit("--price-pipeline-diagnostics requires --market")
+    private_trace_root = None
+    if args.price_diagnostic_sidecar_root:
+        if not args.price_pipeline_diagnostics:
+            raise SystemExit("--price-diagnostic-sidecar-root requires --price-pipeline-diagnostics")
+        private_trace_root = Path(args.price_diagnostic_sidecar_root).resolve()
+        public_root = Path(args.output_dir).resolve()
+        if private_trace_root.is_relative_to(public_root) or public_root.is_relative_to(private_trace_root):
+            raise SystemExit("Private price diagnostics must be outside the static output tree")
 
     refresh_warnings: list[str] = []
     selected_market_non_publishable_snapshot: dict[str, Any] | None = None
@@ -825,18 +850,27 @@ def main() -> int:
         pipeline = (new_observations(args.market, args.price_diagnostic_run_id)
                     if args.price_pipeline_diagnostics else None)
         load_prior_observations(
-            Path(args.output_dir), pipeline,
+            private_trace_root or Path(args.output_dir), pipeline,
             sha256=args.price_diagnostic_input_sha256,
             source_revision=args.price_diagnostic_source_revision,
         )
+        def write_chart_diagnostics(completed):
+            _try_write_chart_omission_diagnostics(
+                Path(args.output_dir), args.market, chart_omissions,
+                export_completed=completed,
+                **({"pipeline_observations": pipeline}
+                   if pipeline is not None and private_trace_root is None else {}),
+            )
+            if private_trace_root is not None:
+                _try_write_chart_omission_diagnostics(
+                    private_trace_root, args.market, chart_omissions,
+                    export_completed=completed, pipeline_observations=pipeline,
+                )
+
         if args.market:
             # Invalidate an older successful report before runtime/refresh can
             # fail or return early (including --no-clean and non-trading days).
-            _try_write_chart_omission_diagnostics(
-                Path(args.output_dir), args.market, chart_omissions,
-                export_completed=False,
-                **({"pipeline_observations": pipeline} if pipeline is not None else {}),
-            )
+            write_chart_diagnostics(False)
         try:
             prepare_runtime()
 
@@ -914,11 +948,9 @@ def main() -> int:
                 raise
         finally:
             if args.market:
-                _try_write_chart_omission_diagnostics(
-                    Path(args.output_dir), args.market, chart_omissions,
-                    export_completed=export_completed,
-                    **({"pipeline_observations": pipeline} if pipeline is not None else {}),
-                )
+                write_chart_diagnostics(export_completed)
+            if context is not None:
+                log_private_trace(context)
 
     print("Static site export complete:")
     print(f"  - output_dir: {result.output_dir}")

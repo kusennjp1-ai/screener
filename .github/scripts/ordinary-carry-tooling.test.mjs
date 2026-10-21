@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,existsSync,rmSync,symlinkSync,chmodSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,existsSync,rmSync,symlinkSync,chmodSync,statSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {ORDINARY_CARRY as P,OCT10_ORDINARY_CARRY as LEGACY,OCT11_ORDINARY_CARRY_V2 as RETIRED,OCT11_ORDINARY_CARRY_V3,ORDINARY_ENTRY,HISTORY_PATH,ordinaryCarrySelected,selectOrdinaryCarryAdmission,assertOrdinaryClock,validateOrdinaryContext,ordinaryExporterBytes,withOrdinaryExporter,materializeOrdinaryHistory,validateOrdinaryCarryReceipt,assertOrdinaryReceiptBinding,completeOrdinaryComposition,ordinaryAwaitSnapshot,beginOrdinaryComposition} from './ordinary-carry-tooling.mjs';
@@ -45,7 +45,39 @@ const amendedFixture=readFileSync(new URL('./fixtures/publisher-export-research-
 const original=Buffer.from(amendedFixture.replace('    canonicalChart=overlayFinancialChart(await read(paths.get(symbol)),correction,symbol);\n    if (!carry) canonicalChart=projectFinancialPayload(canonicalChart,{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});','    canonicalChart=projectFinancialPayload(overlayFinancialChart(await read(paths.get(symbol)),correction,symbol),{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});'));
 function temporaryFrontend(){const root=mkdtempSync(join(tmpdir(),'ordinary-tooling-test-'));mkdirSync(join(root,'tools'));writeFileSync(join(root,'tools/export-research.mjs'),original);return root;}
 test('exact original exporter yields exact reviewed amendment',()=>{assert.equal(sha(ordinaryExporterBytes(original)),P.temporary_exporter_sha256);assert.throws(()=>ordinaryExporterBytes(Buffer.concat([original,Buffer.from('\n')])));});
-for(const mode of ['success','throw','await-mutate','await-replace','await-mode'])test('temporary exporter cleanup and identity: '+mode,async()=>{const frontend=temporaryFrontend();try{const call=()=>withOrdinaryExporter(frontend,async path=>{assert.equal(sha(readFileSync(path)),P.temporary_exporter_sha256);await Promise.resolve();if(mode==='throw')throw Error('export failed');if(mode==='await-mutate')writeFileSync(path,'changed');if(mode==='await-replace'){const bytes=readFileSync(path);rmSync(path);writeFileSync(path,bytes);}if(mode==='await-mode')chmodSync(path,0o755);return 'ok';});if(mode==='success')assert.equal(await call(),'ok');else await assert.rejects(call());assert(!existsSync(join(frontend,'tools',ORDINARY_ENTRY)));assert.equal(sha(readFileSync(join(frontend,'tools/export-research.mjs'))),P.original_exporter_sha256);}finally{rmSync(frontend,{recursive:true,force:true});}});
+for(const mode of ['success','throw','await-mutate','await-replace','await-mode'])test('temporary exporter cleanup and identity: '+mode,async()=>{
+  // Model the CI creation precondition. Do not let umask0077 make mutation
+  // cases pass by rejecting before their callback has actually run.
+  const previousUmask=process.umask(0o022),frontend=temporaryFrontend();let entered=false;
+  try{
+    const call=()=>withOrdinaryExporter(frontend,async path=>{
+      entered=true;
+      assert.equal(sha(readFileSync(path)),P.temporary_exporter_sha256);
+      assert.equal(statSync(path).mode&0o777,0o644);
+      await Promise.resolve();
+      if(mode==='throw')throw Error('export failed');
+      if(mode==='await-mutate')writeFileSync(path,'changed');
+      if(mode==='await-replace'){const bytes=readFileSync(path);rmSync(path);writeFileSync(path,bytes);}
+      if(mode==='await-mode')chmodSync(path,0o755);
+      return 'ok';
+    });
+    if(mode==='success')assert.equal(await call(),'ok');else await assert.rejects(call());
+    assert.equal(entered,true);
+    assert(!existsSync(join(frontend,'tools',ORDINARY_ENTRY)));
+    assert.equal(sha(readFileSync(join(frontend,'tools/export-research.mjs'))),P.original_exporter_sha256);
+  }finally{process.umask(previousUmask);rmSync(frontend,{recursive:true,force:true});}
+});
+
+test('restrictive umask still rejects temporary exporter mode before execution and cleans it',async()=>{
+  const previousUmask=process.umask(0o077),frontend=temporaryFrontend();let entered=false;
+  try{
+    await assert.rejects(()=>withOrdinaryExporter(frontend,async()=>{entered=true;}),error=>
+      error.code==='ERR_ASSERTION'&&error.actual===0o600&&error.expected===0o644);
+    assert.equal(entered,false);
+    assert(!existsSync(join(frontend,'tools',ORDINARY_ENTRY)));
+    assert.equal(sha(readFileSync(join(frontend,'tools/export-research.mjs'))),P.original_exporter_sha256);
+  }finally{process.umask(previousUmask);rmSync(frontend,{recursive:true,force:true});}
+});
 test('preexisting temporary exporter is rejected without overwrite',async()=>{const f=temporaryFrontend(),p=join(f,'tools',ORDINARY_ENTRY);try{writeFileSync(p,'occupied');await assert.rejects(withOrdinaryExporter(f,()=>{}));assert.equal(readFileSync(p,'utf8'),'occupied');}finally{rmSync(f,{recursive:true,force:true});}});
 test('empty history derives only exact dated empty bytes and never overwrites',()=>{const root=mkdtempSync(join(tmpdir(),'ordinary-history-'));try{mkdirSync(join(root,'static-data'));const d=materializeOrdinaryHistory(root);assert.equal(d.baseline_sha256,sha(readFileSync(join(root,HISTORY_PATH))));assert.deepEqual(JSON.parse(readFileSync(join(root,HISTORY_PATH))),{as_of_date:P.source.as_of_date,results:{}});assert.throws(()=>materializeOrdinaryHistory(root));}finally{rmSync(root,{recursive:true,force:true});}});
 test('empty history refuses linked parent',()=>{const root=mkdtempSync(join(tmpdir(),'ordinary-history-link-'));try{mkdirSync(join(root,'outside'));symlinkSync(join(root,'outside'),join(root,'static-data'));assert.throws(()=>materializeOrdinaryHistory(root));assert(!existsSync(join(root,'outside/financial-history.json')));}finally{rmSync(root,{recursive:true,force:true});}});

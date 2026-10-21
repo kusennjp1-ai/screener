@@ -364,3 +364,81 @@ def test_pipeline_does_not_reuse_unbound_earlier_evidence(tmp_path, mismatch):
     assert "PRIVATE_OLD_EVIDENCE" not in json.dumps(current)
     assert "input" not in current
     assert current["events"] == [{"stage":"prior_link","status":"context_mismatch"}]
+
+
+@pytest.mark.parametrize("mode", [[], ["--prices-only"], ["--refresh-daily"]])
+def test_private_trace_survives_clean_but_is_never_in_uploaded_or_published_output(monkeypatch, tmp_path, mode):
+    private = tmp_path / "runner-private"
+    public = tmp_path / "static-data"
+    original_bytes = b'{"unchanged":"market data"}\n'
+    prior = new_observations("US", "repo:run:attempt:US:checkout")
+    prior["input"] = {"market": "US", "sha256": "a" * 64,
+                      "source_revision": "daily_prices_us:20261017230242", "download_hash_verified": True}
+    observe(prior, "db_commit", source="seed_import", status="committed", committed_rows=42)
+    script._write_chart_omission_diagnostics(private, "US", {}, export_completed=False, pipeline_observations=prior)
+
+    class Export:
+        def __init__(self, _factory, *, chart_omissions, pipeline_observations):
+            self.omissions, self.trace = chart_omissions, pipeline_observations
+
+        def export(self, output, **kwargs):
+            assert self.trace["input"] == prior["input"]
+            assert any(event["stage"] == "prior_link" for event in self.trace["events"])
+            shutil.rmtree(output)
+            path = output / "markets/us/charts/index.json"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(original_bytes)
+            self.omissions["US"] = {"MISSING": "incoherent_history"}
+            observe(self.trace, "chart_output", symbol="PRIVATE_TRACE_MARKER", status="omitted", reason="incoherent_history")
+            return _result(output)
+
+    monkeypatch.setattr(script, "StaticSiteExportService", Export)
+    monkeypatch.setattr(script, "_run_prices_only_refresh", lambda **_kwargs: {})
+    monkeypatch.setattr(script, "_run_daily_refresh", lambda **_kwargs: ({}, []))
+    _argv(monkeypatch, public, "--market", "US", *mode, "--price-pipeline-diagnostics",
+          "--price-diagnostic-sidecar-root", str(private), "--price-diagnostic-run-id", prior["run_id"],
+          "--price-diagnostic-input-sha256", "a" * 64, "--price-diagnostic-source-revision", prior["input"]["source_revision"])
+    assert script.main() == 0
+    artifact = json.loads(_report_path(public).read_text())
+    assert "pipeline_observations" not in artifact
+    assert artifact["omissions"] == {"MISSING": "incoherent_history"}
+    assert (public / "markets/us/charts/index.json").read_bytes() == original_bytes
+    assert all(b"PRIVATE_TRACE_MARKER" not in path.read_bytes() for path in public.rglob("*.json"))
+    trace = json.loads(_report_path(private).read_text())["pipeline_observations"]
+    assert trace["input"] == prior["input"]
+    assert any(event.get("symbol") == "PRIVATE_TRACE_MARKER" for event in trace["events"])
+
+
+@pytest.mark.parametrize("exception_type", [RuntimeError, KeyboardInterrupt])
+def test_private_trace_is_separated_even_when_export_is_interrupted(monkeypatch, tmp_path, exception_type):
+    failure = exception_type("original interruption")
+    private, public = tmp_path / "private", tmp_path / "public"
+
+    class Export:
+        def __init__(self, _factory, *, chart_omissions, pipeline_observations):
+            self.trace = pipeline_observations
+
+        def export(self, *_args, **_kwargs):
+            observe(self.trace, "refresh_fetch", symbol="PRIVATE_TRACE_MARKER", status="received")
+            raise failure
+
+    monkeypatch.setattr(script, "StaticSiteExportService", Export)
+    _argv(monkeypatch, public, "--market", "US", "--price-pipeline-diagnostics",
+          "--price-diagnostic-sidecar-root", str(private))
+    with pytest.raises(exception_type) as raised:
+        script.main()
+    assert raised.value is failure
+    assert "pipeline_observations" not in json.loads(_report_path(public).read_text())
+    assert json.loads(_report_path(private).read_text())["export_completed"] is False
+    assert b"PRIVATE_TRACE_MARKER" not in _report_path(public).read_bytes()
+
+
+@pytest.mark.parametrize("relative", [".", "private", "../"])
+def test_private_trace_root_cannot_overlap_static_output(monkeypatch, tmp_path, relative):
+    public = tmp_path / "public"
+    private = public / relative
+    _argv(monkeypatch, public, "--market", "US", "--price-pipeline-diagnostics",
+          "--price-diagnostic-sidecar-root", str(private))
+    with pytest.raises(SystemExit, match="outside the static output tree"):
+        script.main()
+    assert not list(tmp_path.rglob("*.json"))
