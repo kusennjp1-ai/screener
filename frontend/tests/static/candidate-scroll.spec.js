@@ -206,6 +206,12 @@ for(const width of [1440,390])test(`offscreen candidates keep height, focus and 
     const fixture=page.locator('[data-clearance-origin-fixture]');
     let origin,passed=false;
     try {
+      // This synthetic clone is new to the document: wait for its auto-skipped
+      // subtree to render, never for the nine-point hit-test itself to pass.
+      await expect.poll(
+        () => fixture.locator('.candidate-row').evaluate(row => row.checkVisibility({contentVisibilityAuto: true})),
+        {timeout: 1000, message: 'Cloned candidate row must leave the content-visibility skipped state'},
+      ).toBe(true);
       origin=await fixture.evaluate(observeCandidateOrigin);
       await info.attach('candidate-nonzero-scroll-origin.json',{body:JSON.stringify(origin,null,2),contentType:'application/json'});
       expect(origin.padding).toBe('0px');expect(origin.listPadding).toBe('6px');
