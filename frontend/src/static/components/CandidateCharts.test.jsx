@@ -71,16 +71,32 @@ it.each([['minervini2','5/7',103,false],['minervini','6/7',105,true]])('keeps %s
  const {withAuditFixture}=await import('../testAuditFixture');
  const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
   chart_path:'LIMIT.json',entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
- fetchStaticChartPayload.mockResolvedValue({symbol:'LIMIT',as_of_date:date,bars:[{date,close:104}],rs_line:[]});
+ // Coherent synthetic OHLCV is required before reference prices are displayed.
+ fetchStaticChartPayload.mockResolvedValue({symbol:'LIMIT',as_of_date:date,bars:[{date,open:103,high:105,low:102,close:104,volume:1000}],rs_line:[]});
  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,assessment:{passed:9,total:9}}]} date={date} method={method} market={{cap:.5,label:'上昇'}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
  const card=screen.getByRole('article',{name:'LIMIT 比較チャート'});
+ const legend=within(card).getByLabelText('価格・RS・出来高の凡例');
+ for(const selector of ['.comparison-upper','.comparison-pivot','.comparison-stop'])expect(legend.querySelector(selector)).toHaveTextContent(/^—$/);
+ expect(within(card).queryByTestId('price-chart')).not.toBeInTheDocument();
+ await within(card).findByTestId('price-chart');
  expect(within(card).getByText(`$${upper}.00`)).toBeInTheDocument();
  expect(within(card).getByText(score)).toBeInTheDocument();
  const description=card.querySelector('p.sr-only');
  expect(description).toHaveTextContent('アプリ上限');
  if(sourceWarning){expect(description).toHaveTextContent('書籍の追随目安外：『株式トレード 基本と原則』のピボット追随目安（約2〜3%）');expect(within(card).getByRole('note')).toBeInTheDocument();}
  else expect(description).not.toHaveTextContent('書籍の追随目安外');
- await screen.findByTestId('price-chart');
+});
+
+it('keeps reference-price placeholders for incomplete OHLCV after the payload resolves',async()=>{
+ const row=withAuditFixture({symbol:'INCOMPLETE',current_price:104,chart_path:'INCOMPLETE.json'},date);
+ fetchStaticChartPayload.mockResolvedValue({symbol:'INCOMPLETE',as_of_date:date,bars:[{date,close:104}],rs_line:[]});
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,plan:{state:'買いゾーン超過',pivot:100,upper:103,stopExample:96.72,distance:4},assessment:{passed:9,total:9}}]} date={date} method="minervini2" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
+ const card=screen.getByRole('article',{name:'INCOMPLETE 比較チャート'});
+ // The chart is mocked in this suite; its readiness is not valid-OHLCV evidence.
+ await within(card).findByTestId('price-chart');
+ const legend=within(card).getByLabelText('価格・RS・出来高の凡例');
+ for(const selector of ['.comparison-upper','.comparison-pivot','.comparison-stop'])expect(legend.querySelector(selector)).toHaveTextContent(/^—$/);
+ for(const price of ['$103.00','$100.00','$96.72','$0.00'])expect(within(legend).queryByText(price)).not.toBeInTheDocument();
 });
 
 it('keeps an unknown condition, the source warning and price together without a separate warning row',()=>{

@@ -50,9 +50,10 @@ describe('bounded financial Design capture contract', () => {
   it('keeps new captures in the ordinary screenshot and subjective-review accounting', () => {
     const harness = readFileSync(new URL('./design-review.mjs', import.meta.url), 'utf8');
     const checker = readFileSync(new URL('./check-design-review.mjs', import.meta.url), 'utf8');
-    expect(harness).toContain('await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });');
+    expect(harness).toContain('await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, output });');
     expect(harness).toContain('...financialDesignScreens(viewport, theme)');
-    expect(harness).toContain('report.screens.push({ key, screenshot,');
+    expect(harness).toContain('const screenEvidence = { key, screenshot,');
+    expect(harness).toContain('report.screens.push(screenEvidence);');
     expect(harness).toContain("metrics_scope: 'original-viewport'");
     expect(harness).toContain('viewport_geometry: geometry');
     expect(harness.indexOf('checkFinancialViewportGeometry(geometry')).toBeLessThan(harness.indexOf('else await page.screenshot'));

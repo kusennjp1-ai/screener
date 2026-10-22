@@ -171,7 +171,7 @@ describe('supplemental carry evidence never replaces fresh acceptance', () => {
   it('keeps fresh harness and objective gates active and independently accounts for supplemental captures', () => {
     const harness = readFileSync(new URL('./design-review.mjs', import.meta.url), 'utf8');
     const cases = readFileSync(new URL('./financial-carry-design-cases.mjs', import.meta.url), 'utf8');
-    expect(harness).toContain('await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });');
+    expect(harness).toContain('await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, output });');
     expect(harness).toContain('...financialDesignScreens(viewport, theme)');
     expect(harness).toContain('carryProvenancePath ? financialCarryDesignScreens(viewport, theme) : []');
     expect(harness).toContain('if (report.failures.length) process.exitCode = 1;');

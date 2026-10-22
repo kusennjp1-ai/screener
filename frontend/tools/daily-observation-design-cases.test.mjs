@@ -19,7 +19,8 @@ describe('required Daily observation capture contract', () => {
     expect(harness).toContain('...dailyObservationDesignScreens(viewport, theme)');
     expect(harness.indexOf(call)).toBeGreaterThan(harness.indexOf('await verifyFinancialCases('));
     expect(harness.indexOf(call)).toBeLessThan(harness.indexOf('const median ='));
-    expect(harness).toContain('report.screens.push({ key, screenshot,');
+    expect(harness).toContain('const screenEvidence = { key, screenshot,');
+    expect(harness).toContain('report.screens.push(screenEvidence);');
     const helper = readFileSync(new URL('./daily-observation-design-cases.mjs', import.meta.url), 'utf8');
     expect(helper).toContain("await capture(page, viewport, theme, screen, { scope: 'scrolled-viewport', viewportTargets });");
     expect(helper).toContain('await scrollFinancialViewport(page, viewportTargets)');
