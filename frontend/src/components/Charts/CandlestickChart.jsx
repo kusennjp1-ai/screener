@@ -61,6 +61,9 @@ function CandlestickChart({
   // Only a parent that renders the complete, visible price/RS/volume legend
   // may opt out of this component's default in-flow legend.
   externalResearchLegend = false,
+  // Ordinary detail pages keep the plot in its existing first-screen position.
+  // Expanded viewers retain the default above-plot legend for height measurement.
+  researchLegendBelow = false,
   compactResearchChrome = false,
   hideTimeframeToggle = false,
   hideOhlcLegend = false,
@@ -837,6 +840,19 @@ function CandlestickChart({
         {[[50,chartData?.sma50],[150,chartData?.sma150],[200,chartData?.sma200]].map(([period,points])=>{const value=points?.at(-1)?.value, delta=(chartData?.candlesticks.at(-1)?.close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
       </Box>;
 
+  // Keep every numeric legend in normal flow, never over the plotted data.
+  // Only the ordinary detail caller moves it below; modal sizing stays unchanged.
+  const researchLegend = researchView && hasData && !externalResearchLegend && <Box data-testid="chart-pane-legend" role="group" aria-label="価格・RS・出来高の凡例" sx={{display:'flex',flexWrap:'wrap',columnGap:compact ? .75 : 1.5,rowGap:0,px:compact || compactResearchChrome ? .5 : 1.5,py:.25,color:'text.secondary','& > span':{fontSize:11,lineHeight:compactResearchChrome ? 1.35 : 1.5}}}>
+      {finalBar && <Typography component="span" data-testid="chart-final-bar-legend" sx={{order:compactResearchChrome ? 2 : 0,color:'text.primary'}}>
+        <span aria-hidden="true" style={{color:finalBar.close >= finalBar.open ? chartPalette.up : chartPalette.down}}>⋯ </span>最終{effectiveTimeframe === 'weekly' ? '週足 バー日' : '日足'} {dateKey(finalBar.time)} 終値 {formatPrice(finalBar.close)}
+      </Typography>}
+      {referenceLegend.map(level => <Typography component="span" key={level.key} data-testid={`chart-level-legend-${level.key}`} sx={{color:level.color}}>
+        <Box component="span" aria-hidden="true" sx={{display:'inline-block',width:10,mr:.5,verticalAlign:'middle',borderTop:`1px ${level.dashed ? 'dashed' : 'solid'} currentColor`}} />{level.label} {formatPrice(level.price)}
+      </Typography>)}
+      <Typography component="span" sx={{fontSize:11,order:compactResearchChrome ? 1 : 0,color:chartPalette.accent}}>RS{compact || compactResearchChrome ? rsStripShown ? compactResearchChrome ? `線${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : '' : ' 未配信' : ` · ${rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}`}</Typography>
+      <Typography component="span" sx={{fontSize:11,order:compactResearchChrome ? 3 : 0}}>出来高{!compact && ` · 破線は${effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均`}</Typography>
+    </Box>;
+
   return (
     <>
     {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
@@ -858,19 +874,7 @@ function CandlestickChart({
     {researchView && !compact && !smallScreen && !hideOhlcLegend && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
       始 {legendData.open.toFixed(2)} · 高 {legendData.high.toFixed(2)} · 安 {legendData.low.toFixed(2)} · 終 {legendData.close.toFixed(2)}
     </Typography>}
-    {/* Keep measurement legends outside the canvas: the narrow RS and volume
-        panes have no empty percentage band safe for an opaque text overlay.
-        The expanded viewer includes this row in its measured plot offset. */}
-    {researchView && hasData && !externalResearchLegend && <Box data-testid="chart-pane-legend" role="group" aria-label="価格・RS・出来高の凡例" sx={{display:'flex',flexWrap:'wrap',columnGap:compact ? .75 : 1.5,rowGap:0,px:compact || compactResearchChrome ? .5 : 1.5,py:.25,color:'text.secondary','& > span':{fontSize:11,lineHeight:compactResearchChrome ? 1.35 : 1.5}}}>
-      {finalBar && <Typography component="span" data-testid="chart-final-bar-legend" sx={{order:compactResearchChrome ? 2 : 0,color:finalBar.close >= finalBar.open ? chartPalette.up : chartPalette.down}}>
-        <span aria-hidden="true">⋯ </span>最終{effectiveTimeframe === 'weekly' ? '週足 バー日' : '日足'} {dateKey(finalBar.time)} 終値 {formatPrice(finalBar.close)}
-      </Typography>}
-      {referenceLegend.map(level => <Typography component="span" key={level.key} data-testid={`chart-level-legend-${level.key}`} sx={{color:level.color}}>
-        <Box component="span" aria-hidden="true" sx={{display:'inline-block',width:10,mr:.5,verticalAlign:'middle',borderTop:`1px ${level.dashed ? 'dashed' : 'solid'} currentColor`}} />{level.label} {formatPrice(level.price)}
-      </Typography>)}
-      <Typography component="span" sx={{fontSize:11,order:compactResearchChrome ? 1 : 0,color:chartPalette.accent}}>RS{compact || compactResearchChrome ? rsStripShown ? compactResearchChrome ? `線${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : '' : ' 未配信' : ` · ${rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}`}</Typography>
-      <Typography component="span" sx={{fontSize:11,order:compactResearchChrome ? 3 : 0}}>出来高{!compact && ` · 破線は${effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均`}</Typography>
-    </Box>}
+    {!researchLegendBelow && researchLegend}
     <Box
       sx={{
         width: '100%',
@@ -1113,6 +1117,7 @@ function CandlestickChart({
         </Box>
       )}
     </Box>
+    {researchLegendBelow && researchLegend}
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
         {!researchView && <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>}
         {!researchView && <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : researchView ? '簡易表示：ベース候補の枠と共通ピボット。図解ボタンで収縮区間・過去の上抜けを表示します。' : '自動注記を非表示にしています。'}</Typography>}

@@ -8,7 +8,7 @@ const compact = workflow.split('      - name: Preserve compact Design review scr
 describe('compact Design review artifact', () => {
   it('uploads only a successfully bounded staging directory, including failed measurement runs', () => {
     expect(compact).toBeDefined();
-    expect(compact).toContain("        if: always() && steps.compact.outcome == 'success'\n");
+    expect(compact).toContain("        if: (always() && steps.compact.outcome == 'success') && steps.prior.outputs.reuse != 'true'\n");
     expect(compact).toContain('        uses: actions/upload-artifact@v4\n');
     expect(compact).toContain('          name: design-review-compact-${{ github.sha }}-${{ github.run_attempt }}\n');
     expect(compact).toContain('          path: ${{ runner.temp }}/design-review-compact/\n');
@@ -17,14 +17,14 @@ describe('compact Design review artifact', () => {
     expect(compact).not.toMatch(/include-hidden-files|continue-on-error|\*\*/);
     const stage = workflow.split('      - name: Stage bounded compact Design evidence\n')[1].split('      - name: Preserve compact Design')[0];
     expect(stage).toContain('        id: compact\n');
-    expect(stage).toContain('        if: always()\n');
+    expect(stage).toContain("        if: (always()) && steps.prior.outputs.reuse != 'true'\n");
     expect(stage).toContain('run: node frontend/tools/prepare-compact-design.mjs frontend/test-results/design-review "${{ runner.temp }}/design-review-compact"');
   });
 
   it('preserves the separate complete evidence artifact and its retention', () => {
     const full = workflow.split('      - name: Preserve all results even when a budget fails\n')[1]
       .split('      # Keep the normal review download')[0];
-    expect(full).toBe(`        if: always()
+    expect(full).toBe(`        if: (always()) && steps.prior.outputs.reuse != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: design-acceptance-\${{ github.sha }}

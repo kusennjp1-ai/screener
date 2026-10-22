@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CandlestickChart from './CandlestickChart';
 import { transformToCandlestickData } from './candlestickData';
 import CandidateCharts from '../../static/components/CandidateCharts';
+import ResearchChart from '../../static/components/ResearchChart';
+import { entryPlan } from '../../static/researchEngine';
+import { ThemeProvider, createTheme, getContrastRatio } from '@mui/material/styles';
+import { palettes, researchTheme } from '../../static/theme/tokens';
+import axe from 'axe-core';
 import { readFileSync } from 'node:fs';
 import { singleMissingCondition } from '../../static/missingCondition';
 import { fetchStaticChartPayload } from '../../static/chartClient';
@@ -77,6 +82,65 @@ function setup(props={}){
   const view=render(wrap(props));
   return {...view,update:next=>view.rerender(wrap(next))};
 }
+describe('CI479 readable legends without displacing the detail plot',()=>{
+  it('preserves native description-list semantics and rejects the former role override',async()=>{
+    vi.stubGlobal('IntersectionObserver',class{constructor(callback){this.callback=callback;}observe(target){this.callback([{target,isIntersecting:true}]);}disconnect(){}});
+    const date='2026-09-22';
+    fetchStaticChartPayload.mockResolvedValue({symbol:'LIST',as_of_date:date,bars:bars(100),rs_line:rs(10)});
+    const ordered=[{row:{symbol:'LIST',current_price:101,rs_rating:72,chart_path:'list.json'},plan:{state:'買いゾーン内',pivot:100,upper:105,stopExample:95},assessment:{passed:1,total:1}}];
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><CandidateCharts ordered={ordered} date={date} method="minervini" market={{}} onSelect={vi.fn()}/></QueryClientProvider>);
+    await screen.findByTestId('comparison-final-bar-legend');
+    const legend=screen.getByLabelText('価格・RS・出来高の凡例');
+    expect(legend.tagName).toBe('DL');
+    expect(legend).not.toHaveAttribute('role');
+    // The existing axe-core dependency checks this structural rule in jsdom;
+    // color contrast and real geometry still require the full browser CI.
+    const options={runOnly:{type:'rule',values:['dlitem']}};
+    expect((await axe.run(legend,options)).violations).toEqual([]);
+    legend.setAttribute('role','group');
+    try {expect((await axe.run(legend,options)).violations.map(item=>item.id)).toContain('dlitem');}
+    finally {legend.removeAttribute('role');}
+  });
+  it.each([['light',true],['light',false],['dark',true],['dark',false]])('uses accessible final-close text and a separate matching swatch (%s, up=%s)',(mode,up)=>{
+    const data=bars(100);
+    if(!up)data[1].close=99;
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<ThemeProvider theme={createTheme(researchTheme(mode))}><QueryClientProvider client={client}><CandlestickChart symbol="CONTRAST" researchView priceData={data} pivotPrice={100} buyCeiling={105} stopPrice={95}/></QueryClientProvider></ThemeProvider>);
+    const label=screen.getByTestId('chart-final-bar-legend');
+    const color=getComputedStyle(label).color;
+    for(const surface of ['surface','panel','ground'])expect(getContrastRatio(color,palettes[mode][surface])).toBeGreaterThanOrEqual(4.5);
+    const swatch=label.querySelector('[aria-hidden="true"]');
+    expect(getComputedStyle(swatch).color).toBe(up ? mode==='light'?'rgb(18, 150, 107)':'rgb(72, 214, 160)' : mode==='light'?'rgb(210, 69, 90)':'rgb(240, 112, 122)');
+    expect(label).toHaveTextContent(`最終日足 2026-09-22 終値 ${up?'101.00':'99.00'}`);
+    expect(instances[0].candlestickSeries.setData.mock.lastCall[0].at(-1).close).toBe(up?101:99);
+  });
+  it.each([false,true])('keeps desktop detail legends after the plot without moving mobile legends (mobile=%s)',async mobile=>{
+    vi.stubGlobal('matchMedia',vi.fn(query=>({matches:mobile,media:query,onchange:null,addListener:vi.fn(),removeListener:vi.fn(),addEventListener:vi.fn(),removeEventListener:vi.fn(),dispatchEvent:vi.fn()})));
+    const date='2026-09-22',data=bars(100);
+    fetchStaticChartPayload.mockResolvedValue({symbol:'DETAIL',as_of_date:date,bars:data,rs_line:rs(10)});
+    entryPlan.mockReturnValue({upper:105,stopExample:95});
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    const view=render(<QueryClientProvider client={client}><ResearchChart symbol="DETAIL" date={date} generation="ci479" entry={{path:'detail.json'}} row={{se_pivot_price:100}} onExpand={vi.fn()} rsRating={88}/></QueryClientProvider>);
+    const legend=await screen.findByTestId('chart-pane-legend');
+    const plot=view.container.querySelector('[data-chart-symbol]');
+    expect(mobile ? plot.parentElement.previousElementSibling : plot.parentElement.nextElementSibling).toBe(legend);
+    expect(plot.parentElement).not.toContainElement(legend);
+    expect(getComputedStyle(plot.parentElement).height).toBe(mobile ? '360px' : '440px');
+    expect(getComputedStyle(legend).position).not.toBe('absolute');
+    expect(getComputedStyle(legend).overflow).not.toBe('hidden');
+    expect(legend).toHaveTextContent('最終日足 2026-09-22 終値 101.00');
+    expect(legend).toHaveTextContent('上限 105.00');
+    expect(legend).toHaveTextContent('ピボット 100.00');
+    expect(legend).toHaveTextContent('損切り例 95.00');
+    expect(legend).toHaveTextContent('出来高 · 破線は50日平均');
+    expect(screen.getByRole('button',{name:'日次チャートを分析'})).toBeVisible();
+    expect(legend).toBeVisible();
+    expect(screen.getAllByTestId('chart-pane-legend')).toHaveLength(1);
+    expect(legend.compareDocumentPosition(view.container.querySelector('.chart-numeric-data')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A DOM placement contract, not a jsdom claim about the CI y<=540 budget.
+  });
+});
 describe('validated static chart instance reuse',()=>{
   it.each([[false,300],[false,360],[false,440],[true,230]])(
     'keeps RS and volume legends in flow before the plot (compact=%s, height=%s)',(compact,height)=>{
@@ -418,7 +482,11 @@ describe('comparison parent and loaded plot height contract',()=>{
       const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
       const view=render(<QueryClientProvider client={client}><CandidateCharts ordered={ordered} nearOnly={nearOnly} date={date} method="minervini" market={{}} onSelect={vi.fn()}/></QueryClientProvider>);
       const finalLegend=await screen.findByTestId('comparison-final-bar-legend');
-      const legend=screen.getByRole('group',{name:'価格・RS・出来高の凡例'});
+      const legend=screen.getByLabelText('価格・RS・出来高の凡例');
+      expect(legend.tagName).toBe('DL');
+      expect(legend).not.toHaveAttribute('role');
+      expect(legend.querySelectorAll('dt')).toHaveLength(5);
+      expect(legend.querySelectorAll('dd')).toHaveLength(5);
       const wrapper=view.container.querySelector('.comparison-canvas');
       const plot=wrapper.querySelector('[data-chart-symbol]');
       expect(wrapper).toHaveAttribute('data-active-chart','true');

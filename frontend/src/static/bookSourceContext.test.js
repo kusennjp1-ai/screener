@@ -26,7 +26,8 @@ describe('confirmed named sources versus unchanged application conditions', () =
     ['minervini2', '株式トレード 基本と原則', '221–222', '25'],
   ])('attributes %s to its confirmed title and physical PDF pages', (method, title, pages, low) => {
     const text = trendTemplateSourceContext(method);
-    for (const item of [`『${title}』`, `PDF ${pages}頁`, `52週安値より${low}%以上`, '52週高値から25%以内', 'RS順位70以上', '近似判定8件', '独自の日足品質確認1件', '21営業日前', '252営業日', '傾き・RSとの同等性は未検証']) expect(text).toContain(item);
+    for (const item of [`『${title}』`, `PDF ${pages}頁`, `52週安値より${low}%以上`, '52週高値から25%以内', 'RS順位70以上', '近似判定8件', '独自の日足品質確認1件', '21営業日前', '52暦週', '252本以上の日足', '取引所営業日との一致', '傾き・RSとの同等性は未検証']) expect(text).toContain(item);
+    expect(text).not.toContain('52週を252営業日とする窓');
     expect(text).not.toMatch(/第[12]冊|25%指定は未確認|Kindle/);
   });
   it.each(['oneil', 'ibd'])('does not attribute a Minervini trend template to %s', method => {

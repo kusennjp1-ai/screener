@@ -232,37 +232,51 @@ for(const validate of [validateCandidateRecord,parseFinancialActivationCandidate
 
     def test_workflow_keeps_success_only_sealing_and_failure_only_diagnostics(self):
         text = (diagnostic.REPO / ".github/workflows/design-acceptance.yml").read_text()
-        blocks = {block.splitlines()[0]: block for block in text.split("      - name: ")[1:]}
+        named = text.split("      - name: ")[1:]
+        blocks = {block.splitlines()[0]: block for block in named}
+        self.assertEqual(len(blocks), len(named), "Duplicate named workflow steps")
         prepare = "steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true'"
-        guard = "if: (failure() || cancelled()) && " + prepare
+        fresh = "steps.prior.outputs.reuse != 'true'"
+        guard = "if: ((failure() || cancelled()) && " + prepare
         package = blocks["Package UNAPPROVED financial diagnostics after unsuccessful Design"]
         upload = blocks["Retain UNAPPROVED financial diagnostics for review only"]
-        self.assertIn(guard + "\n", package)
-        self.assertIn(guard + " && steps.financial_diagnostic.outcome == 'success'\n", upload)
+        self.assertIn(guard + ") && " + fresh + "\n", package)
+        self.assertIn(guard + " && steps.financial_diagnostic.outcome == 'success') && " + fresh + "\n", upload)
         self.assertIn("retention-days: 14", upload)
         self.assertIn("compression-level: 0", upload)
         self.assertIn("name: unapproved-financial-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}", upload)
         self.assertNotIn("continue-on-error", package + upload)
-        for name in ("Seal the exact tested financial candidate", "Retain the exact tested financial candidate"):
-            self.assertIn("if: success() && steps.financial.outputs.candidate == 'true'", blocks[name])
+        sealed = [blocks[name] for name in ("Seal the exact tested financial candidate", "Retain the exact tested financial candidate")]
+        for block in sealed:
+            self.assertIn("if: (success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && " + fresh + "\n", block)
+            self.assertNotIn("continue-on-error", block)
         self.assertLess(text.index("Require reviewed screenshots and four design scores"), text.index("Package UNAPPROVED"))
         self.assertLess(text.index("Retain UNAPPROVED"), text.index("Seal the exact tested"))
-        def evaluates(block, failed, cancelled, prepared, candidate, packaged):
-            condition = next(line.strip().removeprefix("if: ") for line in block.splitlines() if line.strip().startswith("if: "))
+        def evaluates(block, failed, cancelled, prepared, candidate, packaged, reused, preview):
+            conditions = [line.strip().removeprefix("if: ") for line in block.splitlines() if line.strip().startswith("if: ")]
+            self.assertEqual(len(conditions), 1, "Each step must have one condition")
+            condition = conditions[0]
             for token, value in (("failure()", failed), ("cancelled()", cancelled),
+                                 ("success()", not failed and not cancelled),
                                  ("steps.financial.outcome == 'success'", prepared),
                                  ("steps.financial.outputs.candidate == 'true'", candidate),
-                                 ("steps.financial_diagnostic.outcome == 'success'", packaged)):
+                                 ("steps.financial_diagnostic.outcome == 'success'", packaged),
+                                 ("steps.prior.outputs.reuse != 'true'", not reused),
+                                 ("env.DESIGN_CARRY_PREVIEW_PROVENANCE == ''", not preview)):
                 condition = condition.replace(token, str(value))
             return eval(condition.replace("&&", "and").replace("||", "or"), {"__builtins__": {}})
         for status in ("success", "failure", "cancelled"):
             for prepared in (False, True):
                 for candidate in (False, True):
                     for packaged in (False, True):
-                        inputs = (status == "failure", status == "cancelled", prepared, candidate, packaged)
-                        expected = status != "success" and prepared and candidate
-                        self.assertEqual(evaluates(package, *inputs), expected)
-                        self.assertEqual(evaluates(upload, *inputs), expected and packaged)
+                        for reused in (False, True):
+                            for preview in (False, True):
+                                inputs = (status == "failure", status == "cancelled", prepared, candidate, packaged, reused, preview)
+                                expected = status != "success" and prepared and candidate and not reused
+                                self.assertEqual(evaluates(package, *inputs), expected)
+                                self.assertEqual(evaluates(upload, *inputs), expected and packaged)
+                                for block in sealed:
+                                    self.assertEqual(evaluates(block, *inputs), status == "success" and candidate and not reused and not preview)
 
     def test_cli_records_compressed_archive_size_and_checks_actual_head(self):
         env = {**os.environ, "GITHUB_WORKSPACE": str(diagnostic.REPO), "RUNNER_TEMP": str(self.base),

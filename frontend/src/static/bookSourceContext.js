@@ -27,7 +27,7 @@ export function entrySourceContext(method, modelZone, distance) {
 }
 
 export function trendTemplateSourceContext(method) {
-  const approximation = 'SMAの採用、1か月上向きを21営業日前との比較で判定すること、52週を252営業日とする窓、独自RSの計算・母集団はアプリの近似です。原典の傾き・RSとの同等性は未検証です。';
+  const approximation = 'SMAの採用、1か月上向きを21営業日前との比較で判定すること、独自RSの計算・母集団はアプリの近似です。52週高値・安値は分析基準日から52暦週の範囲で計算し、別途252本以上の日足と取引所営業日との一致を確認します。原典の傾き・RSとの同等性は未検証です。';
   const current = 'この画面の9件は近似判定8件と独自の日足品質確認1件です。';
   if (method === 'minervini') return `『${growthTitle}』のトレンドテンプレート8条件を確認（PDF 151–152頁）。原典は52週安値より30%以上、52週高値から25%以内、RS順位70以上を含む一次選定で、購入判断とは別です。${current}${approximation}`;
   if (method === 'minervini2') return `『${PIVOT_FOLLOW_SOURCE_TITLE}』のトレンドテンプレート8条件を確認（PDF 221–222頁）。原典は52週安値より25%以上、52週高値から25%以内、RS順位70以上を含む一次選定で、購入判断とは別です。${current}${approximation}`;

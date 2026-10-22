@@ -171,7 +171,20 @@ test('active source restoration uses exact live immutable bytes without an expir
   await restorePublishedFinancialSource(live,out,fetcher);assert.equal(calls.length,3);assert.equal(readFileSync(join(out,f.result.receipt.source_projection.path),'utf8'),readFileSync(join(f.root,f.result.receipt.source_projection.path),'utf8'));
   await assert.rejects(()=>restorePublishedFinancialSource(live,out,async()=>({ok:true,arrayBuffer:async()=>Buffer.from('changed')})),/disagree/);
 }finally{f.cleanup();rmSync(out,{recursive:true,force:true});}});
-test('workflow measures corrected dist directly and seals only after both unchanged design checks',()=>{const text=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8');assert.match(text,/ln -s "\$FINANCIAL_CANDIDATE_DIR\/corrected" "\$source\/dist"/);assert.ok(text.indexOf('name: Seal the exact tested financial candidate')>text.indexOf('name: Require reviewed screenshots and four design scores of at least 8.0'));assert.match(text,/name: Seal the exact tested financial candidate\n\s+if: success\(\)/);assert.match(text,/permissions:\n  contents: read\n  actions: read/);});
+test('workflow measures corrected dist directly and seals only after both unchanged design checks',()=>{
+  const text=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8');
+  assert.match(text,/ln -s "\$FINANCIAL_CANDIDATE_DIR\/corrected" "\$source\/dist"/);
+  assert.ok(text.indexOf('name: Seal the exact tested financial candidate')>text.indexOf('name: Require reviewed screenshots and four design scores of at least 8.0'));
+  for(const name of ['Seal the exact tested financial candidate','Retain the exact tested financial candidate']){
+    const blocks=text.split('      - name: ').slice(1).filter(block=>block.split('\n')[0]===name);
+    assert.equal(blocks.length,1,name);
+    const conditions=[...blocks[0].matchAll(/^        if: (.*)$/gm)];
+    assert.equal(conditions.length,1,name);
+    assert.equal(conditions[0][1],"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && steps.prior.outputs.reuse != 'true'");
+    assert.doesNotMatch(blocks[0],/continue-on-error/);
+  }
+  assert.match(text,/permissions:\n  contents: read\n  actions: read/);
+});
 test('financial receipt composition has read-only GitHub API authentication and no provider preparation',()=>{const text=readFileSync(new URL('../workflows/research-ui-release.yml',import.meta.url),'utf8');assert.match(text,/name: Preserve approved UI bytes or record verified new UI\n\s+if:.*\n\s+env:\n\s+GH_TOKEN: \$\{\{ github.token \}\}\n\s+run: node .github\/scripts\/select-release-source.mjs compose/);assert.match(text,/FINANCIAL_ACTIVATION: \$\{\{ steps.plan.outputs.activation \}\}/);assert.match(text,/\[ "\$FINANCIAL_ACTIVATION" != true \]/);});
 
 // A limited preview changes UI authority only. These synthetic fixtures retain
