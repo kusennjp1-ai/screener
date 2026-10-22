@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
+import pandas as pd
+
+from app.models.stock import StockPrice
 from app.models.stock_universe import StockUniverse
 from app.services.bulk_data_fetcher import BulkDataFetcher
+from app.services.cache.price_history_integrity import coherent_history, requires_full_history
 from app.services.price_history_coverage import classify_price_history
 from app.services.cache.price_history_diagnostics import (
     observe, observe_fetch_failure, observe_missing_responses, scoped,
@@ -92,6 +96,7 @@ class StaticDailyPriceRefreshService:
             sleep = time.sleep
         self._sleep = sleep
         self._observations = observations
+        self._full_history_attempted: set[str] = set()
 
     def refresh(
         self,
@@ -107,6 +112,7 @@ class StaticDailyPriceRefreshService:
         through chart payloads there, and refreshing the full ~10k universe
         cost 52 of its 84 pipeline minutes (C57 measurement).
         """
+        self._full_history_attempted.clear()
         with self._session_factory() as db:
             if symbols is not None:
                 active_symbols = list(symbols)
@@ -254,24 +260,27 @@ class StaticDailyPriceRefreshService:
                             exception_type=type(error).__name__)
                 raise
             observe_missing_responses(trace, batch_symbols, batch_results)
+            batch_results = self._guard_incremental_results(
+                batch_symbols, batch_results, period=period,
+                batch_size=batch_size, market=market, observations=trace,
+            )
             batch_to_store: dict[str, Any] = {}
+            db_batch_to_store: dict[str, Any] = {}
             for symbol, payload in batch_results.items():
                 price_data = payload.get("price_data")
                 if not payload.get("has_error") and price_data is not None and not price_data.empty:
                     observe(trace, "refresh_fetch", symbol=symbol, frame=price_data, status="received")
                     batch_to_store[symbol] = price_data
+                    db_batch_to_store[symbol] = payload.get("_db_price_data", price_data)
                     refreshed_count += 1
                 else:
                     observe_fetch_failure(trace, symbol, payload)
                     failed_count += 1
-                    if _is_rate_limit_failure(payload):
+                    if not payload.get("full_history_attempted") and _is_rate_limit_failure(payload):
                         rate_limited.append(symbol)
             if batch_to_store:
-                self._price_cache.store_batch_in_cache(
-                    batch_to_store,
-                    also_store_db=True,
-                    market=market,
-                    **({"observations": trace} if self._observations is not None else {}),
+                self._store_validated_batch(
+                    batch_to_store, db_batch_to_store, market=market, observations=trace,
                 )
             print(
                 f"[static-daily prices] Batch {batch_index}/{total_group_batches} complete: "
@@ -280,6 +289,143 @@ class StaticDailyPriceRefreshService:
                 flush=True,
             )
         return refreshed_count, failed_count, rate_limited
+
+    def _store_validated_batch(self, cache_data, db_data, *, market, observations=None):
+        kwargs = {"observations": observations} if self._observations is not None else {}
+        if any(db_data[symbol] is not frame for symbol, frame in cache_data.items()):
+            # DB cache reads omit Adj Close. Do not overwrite untouched provider
+            # fields with values synthesized by concatenating the cached frame.
+            self._price_cache.store_batch_in_cache(
+                cache_data, also_store_db=False, market=market, **kwargs,
+            )
+            self._price_cache._store_batch_in_database(db_data, **kwargs)
+        else:
+            self._price_cache.store_batch_in_cache(
+                cache_data, also_store_db=True, market=market, **kwargs,
+            )
+
+    def _guard_incremental_results(
+        self, symbols, results, *, period, batch_size, market, observations=None,
+    ):
+        """Validate selected top-ups before either cache can be overwritten.
+
+        This does not expand refresh selection or declare short listings fit
+        for publication. A full-history retry is bounded to one per symbol per
+        refresh, and must replace every known session in the cache's 2y window.
+        """
+        # Provider responses cannot add symbols outside the requested batch.
+        results = {symbol: results[symbol] for symbol in symbols if symbol in results}
+        if period != STATIC_DAILY_PRICE_REFRESH_PERIOD:
+            return results
+        received = {
+            symbol: payload for symbol, payload in results.items()
+            if not payload.get("has_error") and payload.get("price_data") is not None
+            and not payload["price_data"].empty
+        }
+        if not received:
+            return results
+
+        def reject(symbol, reason):
+            results[symbol] = {
+                "has_error": True, "price_data": None, "error": reason,
+                "full_history_attempted": symbol in self._full_history_attempted,
+            }
+            observe(observations, "cache_prepare", symbol=symbol,
+                    status="rejected", rejection=reason)
+
+        try:
+            cached = self._price_cache.get_many_cached_only(
+                list(received), period=STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD,
+            )
+        except Exception:
+            for symbol in received:
+                reject(symbol, "cached_history_read_failed")
+            return results
+
+        fallback = []
+        for symbol, payload in received.items():
+            previous, recent = cached.get(symbol), payload["price_data"]
+            try:
+                needs_full = requires_full_history(previous, recent)
+                if not needs_full:
+                    left, right = previous.copy(), recent.copy()
+                    left.index = pd.to_datetime(left.index).tz_localize(None)
+                    right.index = pd.to_datetime(right.index).tz_localize(None)
+                    merged = pd.concat([left, right])
+                    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+                    # Cached SQL histories omit Adj Close. Do not introduce a
+                    # partial optional price column into the full Redis history.
+                    if "Adj Close" not in previous.columns and "Adj Close" in merged.columns:
+                        merged = merged.drop(columns=["Adj Close"])
+                    # Keep full history in Redis as well as validating DB upserts.
+                    if coherent_history(merged):
+                        results[symbol] = {
+                            **payload, "price_data": merged, "_db_price_data": recent,
+                        }
+                        continue
+            except Exception:
+                # A malformed or hidden cache is not permission to write a delta.
+                pass
+            if symbol in self._full_history_attempted:
+                reject(symbol, "full_history_retry_exhausted")
+            else:
+                fallback.append(symbol)
+        if not fallback:
+            return results
+
+        # Cached-only reads intentionally hide short/incoherent histories.
+        # Read dates, not an invented cleaned history, so a full response cannot
+        # leave an omitted corrupt row behind in the upsert-only database.
+        try:
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=730)
+            required = {
+                symbol: set(pd.to_datetime(received[symbol]["price_data"].index)
+                            .tz_localize(None).normalize())
+                for symbol in fallback
+            }
+            with self._session_factory() as db:
+                rows = db.query(StockPrice.symbol, StockPrice.date).filter(
+                    StockPrice.symbol.in_(fallback),
+                    StockPrice.date >= start_date,
+                    StockPrice.date <= end_date,
+                ).all()
+            for symbol, row_date in rows:
+                required[symbol].add(pd.Timestamp(row_date).normalize())
+        except Exception:
+            for symbol in fallback:
+                reject(symbol, "retained_history_dates_unavailable")
+            return results
+
+        self._full_history_attempted.update(fallback)
+        trace = scoped(observations, period=STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD,
+                       source="refresh")
+        try:
+            full_results = self._fetcher.fetch_prices_in_batches(
+                fallback, period=STATIC_DAILY_PRICE_BOOTSTRAP_PERIOD,
+                start_batch_size=batch_size, market=market,
+            )
+        except Exception:
+            for symbol in fallback:
+                reject(symbol, "full_history_fetch_failed")
+            return results
+        observe_missing_responses(trace, fallback, full_results)
+        for symbol in fallback:
+            payload = full_results.get(symbol, {})
+            frame = payload.get("price_data")
+            try:
+                valid = not payload.get("has_error") and coherent_history(frame)
+                supplied = (set(pd.to_datetime(frame.index).tz_localize(None).normalize())
+                            if valid else set())
+                valid = valid and required[symbol].issubset(supplied)
+            except Exception:
+                valid = False
+            if not valid:
+                reject(symbol, "full_history_invalid_or_incomplete")
+                continue
+            results[symbol] = {**payload, "full_history_attempted": True}
+            observe(trace, "refresh_fetch", symbol=symbol, frame=frame, status="received")
+        return results
 
     def _retry_rate_limited_failures(
         self,
@@ -327,17 +473,23 @@ class StaticDailyPriceRefreshService:
                 start_batch_size=STATIC_RATE_LIMITED_RETRY_BATCH_SIZE,
                 market=market,
             )
+            retry_results = self._guard_incremental_results(
+                unique_symbols, retry_results, period=period,
+                batch_size=STATIC_RATE_LIMITED_RETRY_BATCH_SIZE, market=market,
+                observations=self._observations,
+            )
             recovered_payload: dict[str, Any] = {}
+            recovered_db_payload: dict[str, Any] = {}
             for symbol, payload in retry_results.items():
                 price_data = payload.get("price_data")
                 if not payload.get("has_error") and price_data is not None and not price_data.empty:
                     recovered_payload[symbol] = price_data
+                    recovered_db_payload[symbol] = payload.get("_db_price_data", price_data)
                     recovered += 1
             if recovered_payload:
-                self._price_cache.store_batch_in_cache(
-                    recovered_payload,
-                    also_store_db=True,
-                    market=market,
+                self._store_validated_batch(
+                    recovered_payload, recovered_db_payload, market=market,
+                    observations=self._observations,
                 )
         still_failed = attempted - recovered
         print(
@@ -352,3 +504,4 @@ class StaticDailyPriceRefreshService:
             "wait_seconds": STATIC_RATE_LIMITED_RETRY_WAIT_SECONDS,
             "batch_size": STATIC_RATE_LIMITED_RETRY_BATCH_SIZE,
         }
+
